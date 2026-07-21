@@ -1,8 +1,6 @@
-import child_process from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import util from 'node:util';
-import shellQuote from 'shell-quote';
+import { execa } from 'execa';
 import yoctoSpinner from 'yocto-spinner';
 
 import { getPackageManager } from '../commands/utils';
@@ -11,7 +9,6 @@ import { logger } from './logger';
 import type { PackageManager } from './package-manager';
 import type { Template } from './template-utils';
 
-const exec = util.promisify(child_process.exec);
 const INTERRUPT_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
 
 function startSpinner(text: string, signal?: AbortSignal, silent = false) {
@@ -49,6 +46,7 @@ export async function cloneTemplate(options: CloneTemplateOptions): Promise<stri
   const projectPath = targetDir ? path.resolve(targetDir, projectName) : path.resolve(projectName);
 
   const spinner = startSpinner(`Cloning template "${template.title}"...`, signal, silent);
+  let ownsProjectPath = false;
 
   try {
     // Check if directory already exists
@@ -57,22 +55,20 @@ export async function cloneTemplate(options: CloneTemplateOptions): Promise<stri
       throw new Error(`Directory ${projectName} already exists`);
     }
 
+    ownsProjectPath = true;
+
     // Clone the repository without git history
     await cloneRepositoryWithoutGit(template.githubUrl, projectPath, branch, signal);
 
     // Update package.json with new project name
     await updatePackageJson(projectPath, projectName);
 
-    // Preserve the existing generic behavior of copying the template's environment example.
-    const envExamplePath = path.join(projectPath, '.env.example');
-    if (await fileExists(envExamplePath)) {
-      const envPath = path.join(projectPath, '.env');
-      await fs.copyFile(envExamplePath, envPath);
-    }
-
     spinner?.success(`Template "${template.title}" cloned successfully to ${projectName}`);
     return projectPath;
   } catch (error) {
+    if (ownsProjectPath) {
+      await fs.rm(projectPath, { recursive: true, force: true });
+    }
     spinner?.error(`Failed to clone template: ${error instanceof Error ? error.message : 'Unknown error'}`);
     throw error;
   }
@@ -87,15 +83,6 @@ async function directoryExists(dirPath: string): Promise<boolean> {
   }
 }
 
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(filePath);
-    return stat.isFile();
-  } catch {
-    return false;
-  }
-}
-
 async function cloneRepositoryWithoutGit(
   repoUrl: string,
   targetPath: string,
@@ -103,43 +90,39 @@ async function cloneRepositoryWithoutGit(
   signal?: AbortSignal,
 ): Promise<void> {
   signal?.throwIfAborted();
-  await fs.mkdir(targetPath, { recursive: true });
 
   try {
     // First try using degit if available (similar to Next.js)
     const degitRepo = repoUrl.replace('https://github.com/', '');
     // If branch is specified, append it to the degit repo (format: owner/repo#branch)
     const degitRepoWithBranch = branch ? `${degitRepo}#${branch}` : degitRepo;
-    const degitCommand = shellQuote.quote(['npx', 'degit', degitRepoWithBranch, targetPath]);
-    await exec(degitCommand, {
+    await execa('npx', ['degit', degitRepoWithBranch, targetPath], {
       cwd: process.cwd(),
-      ...(signal ? { signal } : {}),
+      ...(signal ? { cancelSignal: signal } : {}),
     });
     signal?.throwIfAborted();
 
     if ((await fs.readdir(targetPath)).length === 0) {
       throw new Error('degit completed without cloning template files');
     }
-  } catch (error) {
-    if (signal?.aborted) throw error;
+  } catch {
+    if (signal?.aborted) signal.throwIfAborted();
 
     // Degit can leave partial output behind, so reset only this clone-owned destination before the fallback.
     await fs.rm(targetPath, { recursive: true, force: true });
-    await fs.mkdir(targetPath, { recursive: true });
 
     // Fallback to git clone + remove .git
     try {
-      const gitArgs = ['git', 'clone'];
+      const gitArgs = ['clone'];
       // Add branch flag if specified
       if (branch) {
         gitArgs.push('--branch', branch);
       }
       gitArgs.push(repoUrl, targetPath);
 
-      const gitCommand = shellQuote.quote(gitArgs);
-      await exec(gitCommand, {
+      await execa('git', gitArgs, {
         cwd: process.cwd(),
-        ...(signal ? { signal } : {}),
+        ...(signal ? { cancelSignal: signal } : {}),
       });
       signal?.throwIfAborted();
 
@@ -149,7 +132,7 @@ async function cloneRepositoryWithoutGit(
         await fs.rm(gitDir, { recursive: true, force: true });
       }
     } catch (gitError) {
-      if (signal?.aborted) throw gitError;
+      if (signal?.aborted) signal.throwIfAborted();
       throw new Error(`Failed to clone repository: ${gitError instanceof Error ? gitError.message : 'Unknown error'}`);
     }
   }
@@ -186,13 +169,11 @@ export async function installDependencies(
     // Use provided package manager or detect from environment/globally
     const pm = packageManager || getPackageManager();
 
-    const installCommand = shellQuote.quote([pm, 'install']);
-
-    await exec(installCommand, {
+    await execa(pm, ['install'], {
       cwd: projectPath,
       timeout,
       killSignal: 'SIGTERM',
-      ...(signal ? { signal } : {}),
+      ...(signal ? { cancelSignal: signal } : {}),
     });
 
     spinner?.success('Dependencies installed successfully');

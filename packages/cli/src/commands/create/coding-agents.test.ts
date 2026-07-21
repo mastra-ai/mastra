@@ -33,7 +33,9 @@ describe('detectCodingAgentSkills', () => {
     const directory = await createTemporaryDirectory();
     await createExecutable(directory, executable);
 
-    await expect(detectCodingAgentSkills({ env: { PATH: directory }, platform: 'linux' })).resolves.toEqual([skill]);
+    await expect(detectCodingAgentSkills({ env: { PATH: directory }, platform: 'linux' })).resolves.toEqual([
+      [executable, skill],
+    ]);
   });
 
   it.each(['codex', 'cursor-agent', 'gemini', 'opencode'] as const)(
@@ -44,8 +46,8 @@ describe('detectCodingAgentSkills', () => {
       await createExecutable(directory, executable);
 
       await expect(detectCodingAgentSkills({ env: { PATH: directory }, platform: 'linux' })).resolves.toEqual([
-        'claude-code',
-        'universal',
+        ['claude', 'claude-code'],
+        [executable, 'universal'],
       ]);
     },
   );
@@ -63,7 +65,12 @@ describe('detectCodingAgentSkills', () => {
 
     await expect(
       detectCodingAgentSkills({ env: { PATH: `${first}${path.delimiter}${second}` }, platform: 'darwin' }),
-    ).resolves.toEqual(['claude-code', 'droid', 'pi', 'universal']);
+    ).resolves.toEqual([
+      ['claude', 'claude-code'],
+      ['droid', 'droid'],
+      ['pi', 'pi'],
+      ['codex', 'universal'],
+    ]);
   });
 
   it('requires POSIX executable mode and ignores missing entries and non-files', async () => {
@@ -76,7 +83,7 @@ describe('detectCodingAgentSkills', () => {
         env: { PATH: `${path.join(directory, 'missing')}${path.delimiter}${directory}` },
         platform: 'linux',
       }),
-    ).resolves.toEqual(['universal']);
+    ).resolves.toEqual([['', 'universal']]);
   });
 
   it('uses semicolons for Windows PATH and treats executable names and extensions case-insensitively', async () => {
@@ -90,7 +97,10 @@ describe('detectCodingAgentSkills', () => {
         env: { PATH: `${first};${second}`, PATHEXT: 'exe;.CmD;EXE' },
         platform: 'win32',
       }),
-    ).resolves.toEqual(['claude-code', 'droid']);
+    ).resolves.toEqual([
+      ['claude', 'claude-code'],
+      ['droid', 'droid'],
+    ]);
   });
 
   it.each([undefined, '', '   '])('uses the default Windows PATHEXT when PATHEXT is %j', async pathExt => {
@@ -99,7 +109,7 @@ describe('detectCodingAgentSkills', () => {
 
     await expect(
       detectCodingAgentSkills({ env: { PATH: directory, PATHEXT: pathExt }, platform: 'win32' }),
-    ).resolves.toEqual(['pi']);
+    ).resolves.toEqual([['pi', 'pi']]);
   });
 
   it('does not split Windows PATH on the host POSIX delimiter', async () => {
@@ -109,7 +119,7 @@ describe('detectCodingAgentSkills', () => {
 
     await expect(
       detectCodingAgentSkills({ env: { PATH: `${first}:${second}`, PATHEXT: '.EXE' }, platform: 'win32' }),
-    ).resolves.toEqual(['universal']);
+    ).resolves.toEqual([['', 'universal']]);
   });
 
   it('requires Windows candidates to be regular files but not POSIX-executable', async () => {
@@ -119,17 +129,19 @@ describe('detectCodingAgentSkills', () => {
 
     await expect(
       detectCodingAgentSkills({ env: { PATH: directory, PATHEXT: '.exe;.com' }, platform: 'win32' }),
-    ).resolves.toEqual(['droid']);
+    ).resolves.toEqual([['droid', 'droid']]);
   });
 
   it('falls back to universal for missing, empty, or unsupported PATH contents', async () => {
     const directory = await createTemporaryDirectory();
     await createExecutable(directory, 'unsupported');
 
-    await expect(detectCodingAgentSkills({ env: {}, platform: 'linux' })).resolves.toEqual(['universal']);
-    await expect(detectCodingAgentSkills({ env: { PATH: '' }, platform: 'linux' })).resolves.toEqual(['universal']);
+    await expect(detectCodingAgentSkills({ env: {}, platform: 'linux' })).resolves.toEqual([['', 'universal']]);
+    await expect(detectCodingAgentSkills({ env: { PATH: '' }, platform: 'linux' })).resolves.toEqual([
+      ['', 'universal'],
+    ]);
     await expect(detectCodingAgentSkills({ env: { PATH: directory }, platform: 'linux' })).resolves.toEqual([
-      'universal',
+      ['', 'universal'],
     ]);
   });
 });

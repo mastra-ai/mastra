@@ -161,7 +161,7 @@ beforeEach(async () => {
   vi.mocked(clone.installDependencies).mockResolvedValue();
 
   const codingAgents = await import('./coding-agents');
-  vi.mocked(codingAgents.detectCodingAgentSkills).mockResolvedValue(['universal']);
+  vi.mocked(codingAgents.detectCodingAgentSkills).mockResolvedValue([['', 'universal']]);
   const skills = await import('../init/skills-install');
   vi.mocked(skills.installMastraSkills).mockResolvedValue({ success: true, agents: ['universal'] });
   const commandUtils = await import('../utils.js');
@@ -858,7 +858,10 @@ describe('create skills and git automation', () => {
     const codingAgents = await import('./coding-agents');
     const skills = await import('../init/skills-install');
     const commandUtils = await import('../utils.js');
-    vi.mocked(codingAgents.detectCodingAgentSkills).mockResolvedValueOnce(['claude-code', 'universal']);
+    vi.mocked(codingAgents.detectCodingAgentSkills).mockResolvedValueOnce([
+      ['claude', 'claude-code'],
+      ['', 'universal'],
+    ]);
     vi.mocked(skills.installMastraSkills).mockResolvedValueOnce({
       success: true,
       agents: ['claude-code', 'universal'],
@@ -880,7 +883,7 @@ describe('create skills and git automation', () => {
     });
     expect(publishStagedProject).toHaveBeenCalledBefore(vi.mocked(skills.installMastraSkills));
     expect(skills.installMastraSkills).toHaveBeenCalledBefore(vi.mocked(commandUtils.gitInit));
-    expect(prompts.log.success).toHaveBeenCalledWith('Installed skills for claude-code, universal. Initialized git.');
+    expect(prompts.log.success).toHaveBeenCalledWith('Installed skills for Claude Code, Universal. Initialized git.');
   });
 
   it.each([
@@ -938,7 +941,7 @@ describe('create skills and git automation', () => {
     });
 
     expect(commandUtils.gitInit).toHaveBeenCalledOnce();
-    expect(prompts.log.warn).toHaveBeenCalledWith('Could not install skills for universal. Initialized git.');
+    expect(prompts.log.warn).toHaveBeenCalledWith('Could not install skills for Universal. Initialized git.');
     expect(prompts.outro).toHaveBeenCalledOnce();
   });
 
@@ -1003,7 +1006,7 @@ describe('create skills and git automation', () => {
     ).resolves.toBeUndefined();
 
     expect(publishStagedProject).toHaveBeenCalledOnce();
-    expect(prompts.log.warn).toHaveBeenCalledWith('Installed skills for universal. Could not initialize git.');
+    expect(prompts.log.warn).toHaveBeenCalledWith('Installed skills for Universal. Could not initialize git.');
     expect(prompts.outro).toHaveBeenCalledOnce();
   });
 });

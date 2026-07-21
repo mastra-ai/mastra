@@ -14,6 +14,7 @@ import { installMastraSkills } from '../init/skills-install';
 import { writeObservabilityEnv } from '../init/utils.js';
 import { getPackageManager, gitInit, isGitInitialized } from '../utils.js';
 import { detectCodingAgentSkills } from './coding-agents';
+import type { AgentResult } from './coding-agents';
 import {
   CREATE_LLM_PROVIDERS,
   configureCreateCommand,
@@ -160,7 +161,7 @@ async function promptForProvider(): Promise<CreateLLMProvider> {
 
 async function promptForObservabilityOptIn(): Promise<boolean> {
   const choice = await p.select({
-    message: `Connect this project to the Mastra platform? View traces and deploy when you're ready`,
+    message: `Enable Mastra platform observability? (opens auth flow)`,
     options: [
       { value: 'yes', label: 'Yes' },
       { value: 'no', label: 'No' },
@@ -417,7 +418,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
   if (platformSetup?.status === 'cancelled') {
     p.log.info('Skipping Mastra platform setup.');
   } else if (observabilityEnabled) {
-    p.log.success('Template cloned and dependencies installed while Mastra platform setup was in progress.');
+    p.log.success('Default template cloned and dependencies installed.');
   }
 
   const postSetup = await runPostCreateSetup({
@@ -481,14 +482,16 @@ export const create = async (args: CreateOptions): Promise<void> => {
       `${color.green('Success!')}\n\n${apiKeySummary}${observabilitySummary ? `\n\n${observabilitySummary}` : ''}`,
     );
   } else if (mode === 'template') {
-    p.note(`${color.green('Success!')}\n\nAdd any required environment variables in your ${color.cyan('.env')} file.`);
+    p.note(
+      `${color.green('Success!')}\n\nCreate a ${color.cyan('.env')} file if the template requires environment variables.`,
+    );
   }
 
   postCreate({ projectName, packageManager });
 };
 
 interface PostCreateSetupResult {
-  skillsAgents: string[];
+  skillsAgents: AgentResult[0][];
   skillsOutcome: 'installed' | 'failed' | 'opted_out';
   gitOutcome: 'initialized' | 'failed' | 'opted_out' | 'parent_worktree' | 'target_worktree';
   hasFailure: boolean;
@@ -505,13 +508,16 @@ async function runPostCreateSetup({
   initializeGit: boolean;
   invocationIsGitWorktree: boolean;
 }): Promise<PostCreateSetupResult> {
-  let skillsAgents: string[] = [];
+  let skillsAgents: AgentResult[] = [];
   let skillsOutcome: PostCreateSetupResult['skillsOutcome'] = 'opted_out';
 
   if (installSkills) {
     try {
       skillsAgents = await detectCodingAgentSkills();
-      const result = await installMastraSkills({ directory: projectPath, agents: skillsAgents });
+      const result = await installMastraSkills({
+        directory: projectPath,
+        agents: skillsAgents.map(([_, skill]) => skill),
+      });
       skillsOutcome = result.success ? 'installed' : 'failed';
     } catch {
       skillsOutcome = 'failed';
@@ -535,15 +541,26 @@ async function runPostCreateSetup({
   }
 
   return {
-    skillsAgents,
+    skillsAgents: skillsAgents.map(([executable, _]) => executable),
     skillsOutcome,
     gitOutcome,
     hasFailure: skillsOutcome === 'failed' || gitOutcome === 'failed',
   };
 }
 
+const AGENT_MAP: Record<AgentResult[0], string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  'cursor-agent': 'Cursor',
+  droid: 'Droid',
+  gemini: 'Gemini',
+  opencode: 'OpenCode',
+  pi: 'Pi',
+  '': 'Universal',
+};
+
 function formatPostCreateSetup(result: PostCreateSetupResult): string {
-  const agents = result.skillsAgents.join(', ');
+  const agents = result.skillsAgents.map(agent => AGENT_MAP[agent]).join(', ');
   const skillsSummary =
     result.skillsOutcome === 'opted_out'
       ? 'Skipped skills (--no-skills).'

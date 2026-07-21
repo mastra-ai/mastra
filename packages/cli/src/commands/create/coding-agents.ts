@@ -9,7 +9,12 @@ interface DetectCodingAgentSkillsOptions {
   platform?: NodeJS.Platform;
 }
 
-const EXECUTABLE_SKILLS: ReadonlyArray<readonly [executable: string, skill: CodingAgentSkill]> = [
+export type AgentResult = [
+  executable: 'claude' | 'droid' | 'pi' | 'codex' | 'cursor-agent' | 'gemini' | 'opencode' | '',
+  skill: CodingAgentSkill,
+];
+
+const EXECUTABLE_SKILLS: ReadonlyArray<AgentResult> = [
   ['claude', 'claude-code'],
   ['droid', 'droid'],
   ['pi', 'pi'],
@@ -24,23 +29,23 @@ const DEFAULT_WINDOWS_PATHEXT = '.COM;.EXE;.BAT;.CMD';
 export async function detectCodingAgentSkills({
   env = process.env,
   platform = process.platform,
-}: DetectCodingAgentSkillsOptions = {}): Promise<CodingAgentSkill[]> {
+}: DetectCodingAgentSkillsOptions = {}): Promise<AgentResult[]> {
   const pathDirectories = (env.PATH ?? '')
     .split(platform === 'win32' ? ';' : path.delimiter)
     .map(directory => directory.trim())
     .filter(Boolean);
 
-  if (pathDirectories.length === 0) return ['universal'];
+  if (pathDirectories.length === 0) return [['', 'universal']];
 
   const windowsExtensions = platform === 'win32' ? parseWindowsExtensions(env.PATHEXT) : [];
-  const detected: CodingAgentSkill[] = [];
+  const detected: AgentResult[] = [];
 
   for (const [executable, skill] of EXECUTABLE_SKILLS) {
     const found = await hasExecutable({ executable, pathDirectories, platform, windowsExtensions });
-    if (found && !detected.includes(skill)) detected.push(skill);
+    if (found && !detected.some(([, s]) => s === skill)) detected.push([executable, skill]);
   }
 
-  return detected.length > 0 ? detected : ['universal'];
+  return detected.length > 0 ? detected : [['', 'universal']];
 }
 
 function parseWindowsExtensions(pathExt: string | undefined): string[] {

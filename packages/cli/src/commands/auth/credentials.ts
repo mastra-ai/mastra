@@ -179,7 +179,7 @@ function callbackPage({ success }: { success: boolean }): string {
 
 export async function login(signal?: AbortSignal): Promise<Credentials> {
   signal?.throwIfAborted();
-  console.info('\nLogging in to Mastra...\n');
+  console.info('\n   Logging in to Mastra...\n');
 
   const server = createServer();
   const state = randomBytes(16).toString('hex');
@@ -195,6 +195,7 @@ export async function login(signal?: AbortSignal): Promise<Credentials> {
 
   const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}&state=${state}`;
   console.info(`   Opening browser...\n`);
+  console.info(`   Waiting for your input. Skip this step with Ctrl+C\n`);
 
   try {
     openBrowser(loginUrl);
