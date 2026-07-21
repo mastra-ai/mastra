@@ -802,6 +802,221 @@ describe('MastraAuthStudio', () => {
 });
 
 // ---------------------------------------------------------------------------
+// IOrganizationsProvider
+// ---------------------------------------------------------------------------
+
+describe('MastraAuthStudio IOrganizationsProvider', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  let auth: MastraAuthStudio;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function seedSessionCookie(sessionCookie: string, meBody: unknown = mockMeResponse): Promise<void> {
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(meBody), { status: 200 }));
+    const req = mockRequest({ cookie: `wos-session=${sessionCookie}` });
+    await auth.authenticateToken('', req);
+    fetchSpy.mockClear();
+  }
+
+  describe('ensureOrganization', () => {
+    it('returns undefined when no cached cookie exists for the user', async () => {
+      const orgId = await auth.ensureOrganization('never-seen-user');
+      expect(orgId).toBeUndefined();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns the active organizationId from /auth/me when present', async () => {
+      await seedSessionCookie('sealed-1');
+
+      // /auth/me now returns the user with an active org
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+      const orgId = await auth.ensureOrganization('user-1');
+      expect(orgId).toBe('org-1');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${SHARED_API}/auth/me`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Cookie: 'wos-session=sealed-1' }),
+        }),
+      );
+    });
+
+    it('falls back to the first memberOrgIds entry when no active org', async () => {
+      await seedSessionCookie('sealed-2');
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: { id: 'user-1', email: 'alice@example.com' },
+            organizationId: undefined,
+            memberOrgIds: ['org-a', 'org-b'],
+          }),
+          { status: 200 },
+        ),
+      );
+
+      const orgId = await auth.ensureOrganization('user-1');
+      expect(orgId).toBe('org-a');
+    });
+
+    it('creates a personal org via POST /auth/orgs when the user has no memberships', async () => {
+      await seedSessionCookie('sealed-3');
+
+      // /auth/me returns no org, no memberships
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: { id: 'user-1', email: 'alice@example.com' },
+            organizationId: undefined,
+            memberOrgIds: [],
+          }),
+          { status: 200 },
+        ),
+      );
+      // POST /auth/orgs returns the created org
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            organization: { id: 'org-new', name: "alice@example.com's org", role: 'admin', isCurrent: true },
+          }),
+          { status: 201 },
+        ),
+      );
+
+      const orgId = await auth.ensureOrganization('user-1');
+      expect(orgId).toBe('org-new');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        2,
+        `${SHARED_API}/auth/orgs`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Cookie: 'wos-session=sealed-3',
+          }),
+          body: JSON.stringify({ name: "alice@example.com's org" }),
+        }),
+      );
+    });
+
+    it('returns undefined when POST /auth/orgs fails', async () => {
+      await seedSessionCookie('sealed-4');
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: { id: 'user-1', email: 'alice@example.com' },
+            memberOrgIds: [],
+          }),
+          { status: 200 },
+        ),
+      );
+      fetchSpy.mockResolvedValueOnce(new Response('boom', { status: 500 }));
+
+      const orgId = await auth.ensureOrganization('user-1');
+      expect(orgId).toBeUndefined();
+    });
+
+    it('returns undefined when the shared API throws', async () => {
+      await seedSessionCookie('sealed-5');
+      fetchSpy.mockRejectedValueOnce(new Error('network'));
+
+      const orgId = await auth.ensureOrganization('user-1');
+      expect(orgId).toBeUndefined();
+    });
+  });
+
+  describe('isOrganizationAdmin', () => {
+    it('returns false when no cached cookie exists for the user', async () => {
+      const ok = await auth.isOrganizationAdmin('org-1', 'never-seen');
+      expect(ok).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns true when the active org matches and role is admin', async () => {
+      await seedSessionCookie('sealed-6');
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+      const ok = await auth.isOrganizationAdmin('org-1', 'user-1');
+      expect(ok).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns true when the active org matches and role is owner', async () => {
+      await seedSessionCookie('sealed-7');
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...mockMeResponse, role: 'owner' }), { status: 200 }),
+      );
+
+      const ok = await auth.isOrganizationAdmin('org-1', 'user-1');
+      expect(ok).toBe(true);
+    });
+
+    it('returns false when the active org matches but role is member', async () => {
+      await seedSessionCookie('sealed-8');
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...mockMeResponse, role: 'member' }), { status: 200 }),
+      );
+
+      const ok = await auth.isOrganizationAdmin('org-1', 'user-1');
+      expect(ok).toBe(false);
+    });
+
+    it('falls back to /auth/orgs when checking a non-active org and finds admin role', async () => {
+      await seedSessionCookie('sealed-9');
+      // /auth/me returns active org 'org-1'
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+      // /auth/orgs lists both orgs with per-org roles
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            organizations: [
+              { id: 'org-1', name: 'One', role: 'admin', isCurrent: true },
+              { id: 'org-2', name: 'Two', role: 'owner', isCurrent: false },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+
+      const ok = await auth.isOrganizationAdmin('org-2', 'user-1');
+      expect(ok).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns false when /auth/orgs is missing the target org', async () => {
+      await seedSessionCookie('sealed-10');
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ organizations: [{ id: 'org-1', role: 'admin', isCurrent: true }] }), {
+          status: 200,
+        }),
+      );
+
+      const ok = await auth.isOrganizationAdmin('org-elsewhere', 'user-1');
+      expect(ok).toBe(false);
+    });
+
+    it('returns false when the shared API throws', async () => {
+      await seedSessionCookie('sealed-11');
+      fetchSpy.mockRejectedValueOnce(new Error('network'));
+
+      const ok = await auth.isOrganizationAdmin('org-1', 'user-1');
+      expect(ok).toBe(false);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Org-scoping tests
 // ---------------------------------------------------------------------------
 

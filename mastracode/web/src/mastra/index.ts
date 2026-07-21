@@ -29,6 +29,7 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
+import { MastraAuthStudio } from '@mastra/auth-studio';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { MastraFactory } from '../web/factory-entry.js';
@@ -70,17 +71,33 @@ if (redisUrl) {
 }
 
 // Web auth, by env precedence (any custom `MastraAuthProvider` works here too):
-//   1. WORKOS_API_KEY + WORKOS_CLIENT_ID → WorkOS AuthKit (hosted login). The
+//   1. MASTRA_SHARED_API_URL → defer identity to a Mastra platform API
+//      (the same API that hosts the OSS Mastra Studio / mastra.ai dashboard).
+//      This mastracode-web instance owns no credentials — it forwards the
+//      sealed `wos-session` cookie / CLI bearer token to `<sharedApiUrl>/auth/*`
+//      and trusts the platform's answer. Optional `MASTRA_ORGANIZATION_ID`
+//      pins the deploy to a single org; `MASTRA_COOKIE_DOMAIN` sets a shared
+//      parent cookie domain in production. Takes precedence so a deployment
+//      configured to defer to a shared platform never accidentally falls back
+//      to its own WorkOS credentials.
+//   2. WORKOS_API_KEY + WORKOS_CLIENT_ID → WorkOS AuthKit (hosted login). The
 //      WorkOS SDK reads its own credentials; the redirect URI falls back to
 //      `<publicUrl>/auth/callback` inside the provider's init().
-//   2. BETTER_AUTH_SECRET → self-hosted better-auth (email/password on the
+//   3. BETTER_AUTH_SECRET → self-hosted better-auth (email/password on the
 //      configured factory storage — no external identity vendor in the availability path).
 //      MASTRACODE_AUTH_SIGNUP_DISABLED=1 turns off public sign-up.
-//   3. Neither → auth disabled (open server, bare local dev).
+//   4. None of the above → auth disabled (open server, bare local dev).
+const sharedApiUrl = process.env.MASTRA_SHARED_API_URL;
 const workosConfigured = Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
 const betterAuthSecret = process.env.BETTER_AUTH_SECRET;
 let auth: IMastraAuthProvider | undefined;
-if (workosConfigured) {
+if (sharedApiUrl) {
+  auth = new MastraAuthStudio({
+    sharedApiUrl,
+    organizationId: process.env.MASTRA_ORGANIZATION_ID,
+    cookieDomain: process.env.MASTRA_COOKIE_DOMAIN,
+  });
+} else if (workosConfigured) {
   auth = new MastraAuthWorkos({ redirectUri: process.env.WORKOS_REDIRECT_URI, fetchMemberships: true });
 } else if (betterAuthSecret) {
   auth = new MastraAuthBetterAuth({
