@@ -1,6 +1,9 @@
 ---
+'@mastra/playground': minor
 '@mastra/playground-ui': minor
 ---
+
+Added trace-level Agent Learning theme drill-in with theme details, examples, and history.
 
 Added optional Sankey node activation with mouse and keyboard support, including per-node eligibility.
 
