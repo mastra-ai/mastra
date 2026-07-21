@@ -107,7 +107,7 @@ The [worker deployment guide](/docs/deployment/worker-deployment) walks through 
 Split worker deployments require:
 
 - **Distributed PubSub**: [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) is the recommended backend. The default in-memory PubSub can't deliver events across processes.
-- **Shared storage**: All processes must connect to the same database. [`PostgresStore`](/reference/storage/postgres) is recommended.
+- **Shared storage**: All processes must connect to the same database. [`PostgresStore`](/reference/storage/postgresql) is recommended.
 - **Network connectivity**: The orchestration worker must be able to reach the API over HTTP for step execution in fully split setups.
 
 ## Network architecture
