@@ -832,17 +832,21 @@ export async function recallPart({
         if (firstNextPart) {
           const fallbackNote = `Part index ${partIndex} not found in message ${cursor}; showing partIndex ${firstNextPart.partIndex} from next message ${firstNextPart.messageId}.\n\n`;
           const fallbackText = `${fallbackNote}${firstNextPart.text}`;
-          const truncatedText = truncateStringByTokens(fallbackText, maxTokens);
-          const wasTruncated = truncatedText !== fallbackText;
+          const fallbackChunk = chunkTextByTokens(fallbackText, maxTokens, charOffset);
+          const fallbackContinuation = fallbackChunk.nextCharOffset
+            ? `To continue this part, call recall cursor="${cursor}" partIndex=${partIndex} detail="high" charOffset=${fallbackChunk.nextCharOffset}.`
+            : undefined;
 
           return {
-            text: truncatedText,
+            text: fallbackChunk.text,
             messageId: firstNextPart.messageId,
             partIndex: firstNextPart.partIndex,
             role: firstNextPart.role,
             type: firstNextPart.type,
-            truncated: wasTruncated,
-            charOffset: 0,
+            truncated: fallbackChunk.truncated,
+            charOffset: fallbackChunk.charOffset,
+            nextCharOffset: fallbackChunk.nextCharOffset,
+            note: fallbackContinuation,
           };
         }
       }

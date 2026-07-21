@@ -1267,6 +1267,66 @@ describe('om-tools', () => {
       expect(result.text).toContain('This is the next visible message');
     });
 
+    it('should continue a truncated fall-forward part via charOffset', async () => {
+      const nextText = Array.from({ length: 200 }, (_, i) => `next-line ${i}`).join('\n');
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-ff-source',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Only part here' }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+          {
+            id: 'msg-ff-next',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: nextText }],
+            },
+            createdAt: new Date('2024-01-01T10:03:00Z'),
+          },
+        ],
+      });
+
+      const chunks: string[] = [];
+      let nextCharOffset: number | undefined = 0;
+
+      while (nextCharOffset !== undefined) {
+        const result = await recallPart({
+          memory: memory as any,
+          threadId,
+          resourceId,
+          cursor: 'msg-ff-source',
+          partIndex: 1,
+          charOffset: nextCharOffset,
+          maxTokens: 50,
+        });
+
+        expect(result.messageId).toBe('msg-ff-next');
+        if (result.nextCharOffset !== undefined) {
+          expect(result.truncated).toBe(true);
+          expect(result.note).toContain('cursor="msg-ff-source" partIndex=1');
+          expect(result.note).toContain(`charOffset=${result.nextCharOffset}`);
+          expect(result.text).not.toContain('To continue');
+        }
+        chunks.push(result.text);
+        nextCharOffset = result.nextCharOffset;
+      }
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.join('')).toBe(
+        `Part index 1 not found in message msg-ff-source; showing partIndex 0 from next message msg-ff-next.\n\n${nextText}`,
+      );
+    });
+
     it('should skip data-only messages when falling forward to the next visible message', async () => {
       await memory.saveMessages({
         messages: [
