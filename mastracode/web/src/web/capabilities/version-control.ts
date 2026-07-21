@@ -1,4 +1,28 @@
+import type {
+  SourceControlInstallation,
+  SourceControlRepository,
+  SourceControlStorageHandle,
+} from '../storage/domains/source-control/base.js';
 import type { IntegrationConnection } from './connection.js';
+
+export interface InstallationInput {
+  externalId: string;
+  accountName?: string | null;
+  accountType?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RepositoryInput {
+  externalId: string;
+  slug: string;
+  defaultBranch: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RepositoryAccess {
+  cloneUrl: string;
+  authorization?: { scheme: 'bearer'; token: string };
+}
 
 export type PullRequestState = 'open' | 'closed';
 
@@ -199,8 +223,20 @@ export interface UpdateReviewersInput extends PullRequestRef {
   teams?: string[];
 }
 
-/** Fixed pull-request lifecycle, review, comment, and reviewer contract. */
+/** Fixed repository, pull-request lifecycle, review, comment, and reviewer contract. */
 export interface VersionControl {
+  initialize(input: { storage: SourceControlStorageHandle }): void;
+  registerInstallation(input: {
+    orgId: string;
+    userId: string;
+    installation: InstallationInput;
+  }): Promise<SourceControlInstallation>;
+  registerRepositories(input: {
+    orgId: string;
+    installationId: string;
+    repositories: RepositoryInput[];
+  }): Promise<SourceControlRepository[]>;
+  getRepositoryAccess(input: { orgId: string; repositoryId: string }): Promise<RepositoryAccess>;
   listPullRequests(input: ListPullRequestsInput): Promise<PullRequestPage>;
   getPullRequest(input: PullRequestRef): Promise<PullRequest | null>;
   createPullRequest(input: CreatePullRequestInput): Promise<PullRequest>;

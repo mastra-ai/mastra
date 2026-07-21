@@ -37,7 +37,6 @@ import type {
   IntakeIssueDetail,
   ListIntakeIssuesInput,
 } from '../capabilities/intake.js';
-import type { SourceControl } from '../capabilities/source-control.js';
 import type {
   PullRequest,
   PullRequestComment,
@@ -230,6 +229,48 @@ export class GithubIntegration implements FactoryIntegration {
     createComment: input => this.#createIntakeComment(input),
   };
   readonly versionControl: VersionControl = {
+    initialize: ({ storage }) => {
+      this.#sourceControlStorage = storage;
+    },
+    registerInstallation: ({ orgId, userId, installation }) =>
+      this.sourceControlStorage.installations.upsert({
+        orgId,
+        connectedByUserId: userId,
+        externalId: installation.externalId,
+        accountName: installation.accountName,
+        accountType: installation.accountType,
+        providerMetadata: installation.metadata,
+      }),
+    registerRepositories: ({ orgId, installationId, repositories }) =>
+      Promise.all(
+        repositories.map(repository =>
+          this.sourceControlStorage.repositories.upsert({
+            orgId,
+            input: {
+              installationId,
+              externalId: repository.externalId,
+              slug: repository.slug,
+              defaultBranch: repository.defaultBranch,
+              providerMetadata: repository.metadata,
+            },
+          }),
+        ),
+      ),
+    getRepositoryAccess: async ({ orgId, repositoryId }) => {
+      const repository = await this.sourceControlStorage.repositories.get({ orgId, id: repositoryId });
+      if (!repository) throw new Error('Version-control repository not found.');
+      const installation = await this.sourceControlStorage.installations.get({
+        orgId,
+        id: repository.installationId,
+      });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const installationId = Number.parseInt(installation.externalId, 10);
+      if (!Number.isSafeInteger(installationId)) throw new Error('GitHub installation id is invalid.');
+      return {
+        cloneUrl: `https://github.com/${repository.slug}.git`,
+        authorization: { scheme: 'bearer', token: await this.mintInstallationToken(installationId) },
+      };
+    },
     listPullRequests: input => this.#listPullRequests(input),
     getPullRequest: input => this.#getPullRequest(input),
     createPullRequest: input => this.#createPullRequest(input),
@@ -260,51 +301,6 @@ export class GithubIntegration implements FactoryIntegration {
    * multi-replica deploy needs a deployment-stable state secret.
    */
   readonly requiresStableStateSigner = true;
-
-  readonly sourceControl: SourceControl = {
-    initialize: ({ storage }) => {
-      this.#sourceControlStorage = storage;
-    },
-    registerInstallation: ({ orgId, userId, installation }) =>
-      this.sourceControlStorage.installations.upsert({
-        orgId,
-        connectedByUserId: userId,
-        externalId: installation.externalId,
-        accountName: installation.accountName,
-        accountType: installation.accountType,
-        providerMetadata: installation.metadata,
-      }),
-    registerRepositories: ({ orgId, installationId, repositories }) =>
-      Promise.all(
-        repositories.map(repository =>
-          this.sourceControlStorage.repositories.upsert({
-            orgId,
-            input: {
-              installationId,
-              externalId: repository.externalId,
-              slug: repository.slug,
-              defaultBranch: repository.defaultBranch,
-              providerMetadata: repository.metadata,
-            },
-          }),
-        ),
-      ),
-    getRepositoryAccess: async ({ orgId, repositoryId }) => {
-      const repository = await this.sourceControlStorage.repositories.get({ orgId, id: repositoryId });
-      if (!repository) throw new Error('Source-control repository not found.');
-      const installation = await this.sourceControlStorage.installations.get({
-        orgId,
-        id: repository.installationId,
-      });
-      if (!installation) throw new Error('Source-control installation not found.');
-      const installationId = Number.parseInt(installation.externalId, 10);
-      if (!Number.isSafeInteger(installationId)) throw new Error('GitHub installation id is invalid.');
-      return {
-        cloneUrl: `https://github.com/${repository.slug}.git`,
-        authorization: { scheme: 'bearer', token: await this.mintInstallationToken(installationId) },
-      };
-    },
-  };
 
   readonly #appId: string;
   readonly #privateKey: string;

@@ -148,17 +148,17 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
 }
 
 export class ProjectDomain extends FactoryDomain {
-  readonly #sourceControlIntegrationIds: Set<string>;
+  readonly #versionControlIntegrationIds: Set<string>;
 
   constructor({
     storage,
-    sourceControlIntegrationIds = [],
+    versionControlIntegrationIds = [],
   }: {
     storage: FactoryStorage;
-    sourceControlIntegrationIds?: string[];
+    versionControlIntegrationIds?: string[];
   }) {
     super({ storage });
-    this.#sourceControlIntegrationIds = new Set(sourceControlIntegrationIds);
+    this.#versionControlIntegrationIds = new Set(versionControlIntegrationIds);
   }
 
   async #projects(): Promise<FactoryProjectsStorage> {
@@ -173,7 +173,7 @@ export class ProjectDomain extends FactoryDomain {
 
   async #handles(): Promise<SourceControlStorageHandle[]> {
     const storage = await this.#sourceControl();
-    return [...this.#sourceControlIntegrationIds].map(integrationId => storage.forIntegration(integrationId));
+    return [...this.#versionControlIntegrationIds].map(integrationId => storage.forIntegration(integrationId));
   }
 
   async #project(orgId: string, id: string) {
@@ -333,7 +333,7 @@ export class ProjectDomain extends FactoryDomain {
             return context.json({ error: 'Project not found' }, 404);
           const input = parseConnectionInput(await readJson(context));
           if (!input) return context.json({ error: 'invalid_source_control_connection' }, 400);
-          if (!this.#sourceControlIntegrationIds.has(input.integrationId))
+          if (!this.#versionControlIntegrationIds.has(input.integrationId))
             return context.json({ error: 'Source-control integration not found' }, 404);
           const handle = (await this.#sourceControl()).forIntegration(input.integrationId);
           if (!(await handle.installations.get({ orgId: tenant.orgId, id: input.installationId })))

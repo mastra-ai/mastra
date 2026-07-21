@@ -116,7 +116,7 @@ describe('LinearIntegration capability surface', () => {
 
     expect(linear.id).toBe('linear');
     expect(linear.intake).toBeDefined();
-    expect('sourceControl' in linear).toBe(false);
+    expect('versionControl' in linear).toBe(false);
   });
 
   it('throws listing every missing required field', () => {

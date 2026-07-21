@@ -27,7 +27,6 @@ import type { AuditEventRow } from './storage/domains/audit/base.js';
 import type { StateSigner } from './state-signing.js';
 import type { IntegrationStorageHandle } from './storage/domains/integrations/base.js';
 import type { Intake } from './capabilities/intake.js';
-import type { SourceControl } from './capabilities/source-control.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import type { SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 
@@ -83,9 +82,7 @@ export interface FactoryIntegration {
   readonly id: string;
   /** Issue-oriented capability consumed by Intake. */
   readonly intake?: Intake;
-  /** Provider-neutral installation and repository capability. */
-  readonly sourceControl?: SourceControl;
-  /** Repository and pull-request capability consumed by version-control flows. */
+  /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature

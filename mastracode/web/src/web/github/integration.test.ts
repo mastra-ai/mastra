@@ -364,17 +364,17 @@ describe('GithubIntegration FactoryIntegration surface', () => {
     }
   });
 
-  it('registers provider installations and repositories through its source-control capability', async () => {
+  it('registers provider installations and repositories through its version-control capability', async () => {
     const { sourceControl } = await seedFactoryStorageForTests();
     const github = new GithubIntegration(validConfig());
-    github.sourceControl.initialize({ storage: sourceControl.forIntegration(github.id) });
+    github.versionControl.initialize({ storage: sourceControl.forIntegration(github.id) });
 
-    const installation = await github.sourceControl.registerInstallation({
+    const installation = await github.versionControl.registerInstallation({
       orgId: 'org-1',
       userId: 'user-1',
       installation: { externalId: '42', accountName: 'octo', accountType: 'Organization' },
     });
-    const [repository] = await github.sourceControl.registerRepositories({
+    const [repository] = await github.versionControl.registerRepositories({
       orgId: 'org-1',
       installationId: installation.id,
       repositories: [{ externalId: '101', slug: 'octo/widgets', defaultBranch: 'main' }],
