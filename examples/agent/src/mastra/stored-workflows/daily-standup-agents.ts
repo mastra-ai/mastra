@@ -1,7 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 
 /**
- * Agents used by the `daily-standup-digest` stored workflow.
+ * Agents used by the `daily-standup-digest` stored workflow and its two
+ * nested sub-workflows.
  *
  * These live here (not under `src/mastra/agents/`) because they exist only to
  * back the demo workflow that gets seeded at boot. Kept small on purpose:
@@ -49,6 +50,26 @@ export const standupDigestAgent = new Agent({
     '  - <bullet per non-"None" blocker, prefixed with the author>',
     'If there are no blockers, write "- None" under Blockers.',
     'Do not add a title, preamble, or trailing commentary.',
+  ].join('\n'),
+  model: 'openai/gpt-5-mini',
+});
+
+/**
+ * Drafts a short Slack-style escalation message directed at the team's tech
+ * lead when the normalized notes contain real blockers. Runs only on the
+ * truthy branch of the main workflow's conditional (i.e. inside the
+ * `daily-standup-with-escalation` sub-workflow).
+ */
+export const standupEscalationAgent = new Agent({
+  id: 'standup-escalation',
+  name: 'Standup Escalation',
+  description: 'Drafts a Slack-style escalation message when the standup contains blockers.',
+  instructions: [
+    'You receive the day\'s standup digest (markdown) for a team and must draft',
+    'a short Slack-style message to the tech lead flagging the blockers.',
+    'Keep it under 4 lines, plain text, no markdown headings.',
+    'Start with "@techlead" and end with a concrete ask (e.g. "can you unblock X today?").',
+    'Do not repeat the full digest — reference the blockers by author.',
   ].join('\n'),
   model: 'openai/gpt-5-mini',
 });

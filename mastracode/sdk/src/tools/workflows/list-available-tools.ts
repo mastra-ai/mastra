@@ -16,6 +16,7 @@ import { extractJsonSchema } from './extract-json-schema.js';
 const WORKFLOW_BUILDER_NOISE_TOOLS = new Set([
   'list-available-agents',
   'list-available-tools',
+  'list-available-workflows',
   'save-workflow',
   'create-workflow',
   'list-workflows',

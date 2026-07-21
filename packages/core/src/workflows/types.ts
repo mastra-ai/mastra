@@ -680,7 +680,13 @@ export type SerializedSingleStepEntry =
       // looked up from the live Mastra instance at rehydration time.
       options?: SerializedStepOptions;
     }
-  | { type: 'mapping'; id: string; mapConfig: string };
+  | { type: 'mapping'; id: string; mapConfig: string }
+  /**
+   * A nested workflow referenced by its registered id (code-defined or
+   * another stored workflow). The referenced workflow must resolve on the
+   * live Mastra registry at rehydration time; missing refs fail loudly.
+   */
+  | { type: 'workflow'; id: string; workflowId: string; description?: string };
 
 export type SerializedStepFlowEntry =
   | SerializedSingleStepEntry

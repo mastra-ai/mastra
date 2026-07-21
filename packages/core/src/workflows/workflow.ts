@@ -258,6 +258,7 @@ function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): Seri
       if (innerId === stepId) return entry;
     }
     if (entry.type === 'step' && entry.step?.id === stepId) return entry;
+    if (entry.type === 'workflow' && entry.id === stepId) return entry;
     if ('id' in entry && typeof entry.id === 'string' && entry.id === stepId) return entry;
     if ((entry.type === 'conditional' || entry.type === 'parallel') && 'steps' in entry) {
       const found = findStepInGraph(entry.steps as SerializedStepFlowEntry[], stepId);
@@ -1040,6 +1041,14 @@ function toSerializedSingleStepEntry(step: StepWithRefMetadata): SerializedSingl
       toolId: step.__toolRef.id,
       description: step.description,
       ...serializeToolStepFields(step.__toolOptions),
+    };
+  }
+  if ((step as any)?.component === 'WORKFLOW') {
+    return {
+      type: 'workflow',
+      id: step.id,
+      workflowId: step.id,
+      description: step.description,
     };
   }
   return {
@@ -3304,13 +3313,17 @@ export class Workflow<
     for (const step of Object.keys(steps)) {
       const stepGraph = findStepInGraph(serializedStepGraph, step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
-      if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
+      const isNestedWorkflowEntry =
+        !!stepGraph && (stepGraph.type === 'workflow' || (stepGraph as any)?.step?.component === 'WORKFLOW');
+      if (isNestedWorkflowEntry) {
+        const nestedWorkflowId =
+          stepGraph!.type === 'workflow' ? (stepGraph as { type: 'workflow'; workflowId: string }).workflowId : step;
         // Evented runtime stores nested workflow's runId in metadata.nestedRunId (set by step-executor).
         // Default runtime uses the parent runId directly to look up nested workflow steps.
         const stepResult = steps[step] as any;
         const nestedRunId = stepResult?.metadata?.nestedRunId ?? runId;
 
-        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: step });
+        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: nestedWorkflowId });
         if (nestedSteps) {
           const updatedNestedSteps = Object.entries(nestedSteps).reduce(
             (acc, [key, value]) => {

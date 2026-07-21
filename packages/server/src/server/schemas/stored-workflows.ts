@@ -11,7 +11,7 @@ import { z } from 'zod/v4';
 const stepOptionsSchema = z
   .object({
     retries: z.number().int().nonnegative().optional(),
-    metadata: z.record(z.string(), z.any()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .optional();
 
@@ -52,7 +52,7 @@ const agentEntrySchema = z.object({
   type: z.literal('agent'),
   id: z.string(),
   agentId: z.string(),
-  outputSchema: z.any().optional(),
+  outputSchema: z.unknown().optional(),
   options: stepOptionsSchema,
 });
 
@@ -69,14 +69,27 @@ const mappingEntrySchema = z.object({
   mapConfig: z.string(),
 });
 
-const singleStepEntrySchema = z.discriminatedUnion('type', [agentEntrySchema, toolEntrySchema, mappingEntrySchema]);
+const workflowEntrySchema = z.object({
+  type: z.literal('workflow'),
+  id: z.string(),
+  workflowId: z.string(),
+  options: stepOptionsSchema,
+});
 
-const foreachInnerStepSchema = z.discriminatedUnion('type', [agentEntrySchema, toolEntrySchema]);
+const singleStepEntrySchema = z.discriminatedUnion('type', [
+  agentEntrySchema,
+  toolEntrySchema,
+  mappingEntrySchema,
+  workflowEntrySchema,
+]);
+
+const foreachInnerStepSchema = z.discriminatedUnion('type', [agentEntrySchema, toolEntrySchema, workflowEntrySchema]);
 
 const graphEntrySchema = z.discriminatedUnion('type', [
   agentEntrySchema,
   toolEntrySchema,
   mappingEntrySchema,
+  workflowEntrySchema,
   z.object({
     type: z.literal('parallel'),
     steps: z.array(singleStepEntrySchema),
@@ -148,10 +161,10 @@ export const upsertStoredWorkflowBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   // Schemas + graph are loose by design: the agent constructs them and this
   // is the same shape `mastra.addStoredWorkflow` expects.
-  inputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow input'),
-  outputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow output'),
-  stateSchema: z.any().optional(),
-  requestContextSchema: z.any().optional(),
+  inputSchema: z.unknown().describe('JSON Schema (Draft 2020-12) for the workflow input'),
+  outputSchema: z.unknown().describe('JSON Schema (Draft 2020-12) for the workflow output'),
+  stateSchema: z.unknown().optional(),
+  requestContextSchema: z.unknown().optional(),
   graph: z
     .array(graphEntrySchema)
     .describe('Static workflow graph — ordered array of serialized step entries with all refs as ids.'),
@@ -168,11 +181,11 @@ export const storedWorkflowResponseSchema = z.object({
   id: z.string(),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  inputSchema: z.any(),
-  outputSchema: z.any(),
-  stateSchema: z.any().optional(),
-  requestContextSchema: z.any().optional(),
-  graph: z.array(z.any()),
+  inputSchema: z.unknown(),
+  outputSchema: z.unknown(),
+  stateSchema: z.unknown().optional(),
+  requestContextSchema: z.unknown().optional(),
+  graph: z.array(z.unknown()),
   status: z.enum(['active', 'archived']),
   source: z.literal('storage'),
   authorId: z.string().optional(),

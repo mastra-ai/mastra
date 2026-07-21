@@ -48,7 +48,17 @@ const mappingEntry = z.object({
       'A JSON-ENCODED STRING (not an object) of an object whose top-level keys become the mapping output fields. Each value is one of: { "template": "<text with ${placeholders}>" }, { "value": <constant> }, { "step": "<stepId>", "path": "<field.path>" }, { "initData": "<workflowId>", "path": "<field.path>" }, { "requestContextPath": "<field.path>" }.',
     ),
 });
-const singleStepEntry = z.discriminatedUnion('type', [agentEntry, toolEntry, mappingEntry]);
+const workflowEntry = z.object({
+  type: z.literal('workflow'),
+  id: z.string().describe('Step id — kebab-case, unique within the parent workflow.'),
+  workflowId: z
+    .string()
+    .describe(
+      'Id of another workflow registered on this Mastra instance (code-defined or stored). The referenced workflow runs as a single step; its input is the current step input and its output becomes this step output. Cycles are rejected at load time.',
+    ),
+  options: stepOptions,
+});
+const singleStepEntry = z.discriminatedUnion('type', [agentEntry, toolEntry, mappingEntry, workflowEntry]);
 
 // ---------------------------------------------------------------------------
 // Predicate DSL — declarative condition used by conditional (branch) and loop
@@ -87,7 +97,7 @@ const predicate: z.ZodType<any> = z.lazy(() =>
 // `mapping` is deliberately excluded: a mapping's output is always an object
 // keyed by mapConfig fields, so iterating it per-element is meaningless and the
 // rehydrator rejects it.
-const foreachInnerStep = z.discriminatedUnion('type', [agentEntry, toolEntry]);
+const foreachInnerStep = z.discriminatedUnion('type', [agentEntry, toolEntry, workflowEntry]);
 
 // Full top-level entry union — includes container step types (parallel, foreach,
 // sleep, sleepUntil) in addition to the single-step-like entries above.
@@ -95,6 +105,7 @@ const graphEntry = z.discriminatedUnion('type', [
   agentEntry,
   toolEntry,
   mappingEntry,
+  workflowEntry,
   z.object({
     type: z.literal('parallel'),
     steps: z

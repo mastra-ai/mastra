@@ -75,7 +75,7 @@ export type ResolvedWorkflowSleepUntilStep = ResolvedWorkflowStepBase<
 
 export type ResolvedWorkflowNestedWorkflowStep = ResolvedWorkflowStepBase<
   'nested-workflow-step',
-  Extract<SerializedStepFlowEntry, { type: 'step' }>
+  Extract<SerializedStepFlowEntry, { type: 'step' | 'workflow' }>
 >;
 
 export type ResolvedWorkflowUnknownStep = ResolvedWorkflowStepBase<'unknown-step'>;

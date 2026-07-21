@@ -1,12 +1,14 @@
 {
   "id": "daily-standup-digest",
-  "description": "Turn raw standup notes into a team-wide markdown digest. Seeded at boot from a JSON WorkflowDefinition; survives process restarts via WorkflowDefinitionsStorage.",
+  "description": "Turn raw standup notes into a team-wide markdown digest. Routes to one of two nested stored workflows based on whether the day's notes contain blockers. Seeded at boot from a JSON WorkflowDefinition; survives process restarts via WorkflowDefinitionsStorage.",
   "metadata": {
     "seededFrom": "examples/agent/src/mastra/stored-workflows/daily-standup-digest.json",
     "demonstrates": [
-      "declarative tool / agent / mapping / foreach entries",
+      "declarative tool / agent / mapping / foreach / conditional / workflow entries",
       "three-scope templates (initData, inputData, stepResults)",
       "foreach(agent) round-trip through storage",
+      "conditional with declarative predicates",
+      "nested stored workflows as first-class step type",
       "Studio picks up a workflow that was never registered via createWorkflow()"
     ]
   },
@@ -54,25 +56,40 @@
     },
     {
       "type": "mapping",
-      "id": "assemble-digest-prompt",
-      "mapConfig": "{\"prompt\":{\"template\":\"Team: ${initData.teamName}\\n\\nNormalized notes (JSON):\\n${stepResults.normalize-each-note}\"}}"
-    },
-    {
-      "type": "agent",
-      "id": "standup-digest",
-      "agentId": "standup-digest",
-      "description": "Writes the team-wide markdown digest from normalized notes."
-    },
-    {
-      "type": "mapping",
-      "id": "prep-format",
-      "mapConfig": "{\"teamName\":{\"template\":\"${initData.teamName}\"},\"digest\":{\"template\":\"${stepResults.standup-digest.text}\"}}"
+      "id": "prep-detect-blockers",
+      "mapConfig": "{\"normalizedNotesJson\":{\"template\":\"${stepResults.normalize-each-note}\"}}"
     },
     {
       "type": "tool",
-      "id": "format-standup-digest",
-      "toolId": "format-standup-digest",
-      "description": "Wraps the digest in a dated markdown header."
+      "id": "detect-blockers",
+      "toolId": "detect-blockers",
+      "description": "Reports whether any normalized standup note contains a real blocker."
+    },
+    {
+      "type": "mapping",
+      "id": "prep-sub-workflow-input",
+      "mapConfig": "{\"teamName\":{\"template\":\"${initData.teamName}\"},\"normalizedNotesJson\":{\"template\":\"${stepResults.normalize-each-note}\"}}"
+    },
+    {
+      "type": "conditional",
+      "steps": [
+        {
+          "type": "workflow",
+          "id": "call-with-escalation",
+          "workflowId": "daily-standup-with-escalation",
+          "description": "Digest + tech-lead escalation (runs when blockers were detected)."
+        },
+        {
+          "type": "workflow",
+          "id": "call-plain-digest",
+          "workflowId": "daily-standup-plain",
+          "description": "Plain digest (runs when no blockers were detected)."
+        }
+      ],
+      "predicates": [
+        { "op": "truthy", "value": { "path": "stepResults.detect-blockers.hasBlockers" } },
+        { "op": "falsy", "value": { "path": "stepResults.detect-blockers.hasBlockers" } }
+      ]
     }
   ]
 }

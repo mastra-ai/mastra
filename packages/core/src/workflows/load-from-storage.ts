@@ -188,6 +188,17 @@ function serializeSingleEntry(entry: SingleStepEntry): SerializedSingleStepEntry
     }
     return { type: 'mapping', id: entry.id, mapConfig: JSON.stringify(serialized) };
   }
+  // A nested Workflow reached the generic `.then(step)` fallback (its
+  // component discriminator is 'WORKFLOW'). Emit a declarative `workflow`
+  // entry so the rehydrator can rebuild it by id.
+  if ((entry.step as any)?.component === 'WORKFLOW') {
+    return {
+      type: 'workflow',
+      id: (entry.step as any).id,
+      workflowId: (entry.step as any).id,
+      ...((entry.step as any).description ? { description: (entry.step as any).description } : {}),
+    };
+  }
   // generic `.then(step)` — descriptor only; rehydration looks the step up
   // by id on the live Mastra instance.
   return { type: 'step', step: stepDescriptor(entry.step) };
@@ -351,6 +362,11 @@ function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra
     case 'step':
       wf.then(resolveStepDescriptor(entry.step, mastra));
       return;
+    case 'workflow': {
+      const nested = assertWorkflowExists(mastra, entry.workflowId);
+      wf.then(nested);
+      return;
+    }
     case 'conditional': {
       const predicates = (entry as any).predicates as Array<unknown> | undefined;
       if (!predicates || predicates.length !== entry.steps.length) {
@@ -429,6 +445,8 @@ function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra): any {
     }
     case 'step':
       return resolveStepDescriptor(entry.step, mastra);
+    case 'workflow':
+      return assertWorkflowExists(mastra, entry.workflowId);
     case 'mapping':
       throw new Error(`mapping entries cannot appear inside .parallel() or .foreach(); they must be top-level.`);
   }
@@ -458,6 +476,8 @@ function resolveForeachInner(entry: SerializedSingleStepEntry, mastra: Mastra): 
     }
     case 'step':
       return resolveStepDescriptor(entry.step, mastra);
+    case 'workflow':
+      return assertWorkflowExists(mastra, entry.workflowId);
     case 'mapping':
       throw new Error(
         `Foreach step cannot iterate a mapping: mappings project data, they don't execute per item. Use an agent, tool, or plain step as the foreach body.`,
@@ -557,6 +577,25 @@ function assertToolExists(mastra: Mastra, toolId: string): void {
   if (!mastra.getTool?.(toolId)) {
     throw new Error(`Stored workflow references tool "${toolId}" which is not registered on this Mastra instance.`);
   }
+}
+
+function tryGetWorkflowById(mastra: Mastra, id: string): any | undefined {
+  if (!id || typeof (mastra as any).getWorkflow !== 'function') return undefined;
+  try {
+    return (mastra as any).getWorkflow(id);
+  } catch {
+    return undefined;
+  }
+}
+
+function assertWorkflowExists(mastra: Mastra, workflowId: string): any {
+  const wf = tryGetWorkflowById(mastra, workflowId);
+  if (!wf) {
+    throw new Error(
+      `Stored workflow references nested workflow "${workflowId}" which is not registered on this Mastra instance.`,
+    );
+  }
+  return wf;
 }
 
 // ============================================================================

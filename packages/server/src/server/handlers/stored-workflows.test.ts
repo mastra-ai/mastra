@@ -447,6 +447,73 @@ describe('Stored Workflows handlers', () => {
       expect((res4 as any).result.count).toBe(4);
     });
 
+    it('nested workflow reference — parent POST after child is registered runs end-to-end', async () => {
+      // Child stored workflow: single tool that echoes its input.
+      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra),
+        id: 'wf-child',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        inputSchema: objectWith({ value: stringSchema }, ['value']),
+        outputSchema: objectWith({ value: stringSchema }, ['value']),
+        graph: [{ type: 'tool', id: 'echo', toolId: 'echo-tool' }],
+      });
+
+      // Parent stored workflow: calls the child via a `workflow` entry and
+      // wraps its output. Exercises: schema acceptance of the `workflow`
+      // variant on POST, pre-flight ref validation, rehydration through
+      // `mastra.getWorkflow(workflowId)`, and end-to-end run through the
+      // nested workflow.
+      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra),
+        id: 'wf-parent',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        inputSchema: objectWith({ value: stringSchema }, ['value']),
+        outputSchema: objectWith({ wrapped: stringSchema }, ['wrapped']),
+        graph: [
+          { type: 'workflow', id: 'call-child', workflowId: 'wf-child' },
+          {
+            type: 'mapping',
+            id: 'wrap',
+            // Nested-workflow results are keyed by the child workflow's own id
+            // (same convention as foreach keying by the inner step id), not by
+            // the outer `id` in the parent graph.
+            mapConfig: JSON.stringify({
+              wrapped: { template: '[${stepResults.wf-child.value}]' },
+            }),
+          },
+        ],
+      });
+
+      const parent = mastra.getWorkflow('wf-parent');
+      expect(parent).toBeDefined();
+
+      const run = await parent.createRun();
+      const res = await run.start({ inputData: { value: 'hi' } });
+      expect(res.status).toBe('success');
+      expect((res as any).result.wrapped).toBe('[hi]');
+    });
+
+    it('nested workflow reference — POST rejects when the nested workflowId is not registered', async () => {
+      await expect(
+        UPSERT_STORED_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra),
+          id: 'wf-parent-bad',
+          description: undefined,
+          metadata: undefined,
+          stateSchema: undefined,
+          requestContextSchema: undefined,
+          ...baseSchemas,
+          graph: [{ type: 'workflow', id: 'call-missing', workflowId: 'not-a-workflow' }],
+        }),
+      ).rejects.toThrow(/workflow/i);
+    });
+
     it('rejects an unregistered agentId with a specific error', async () => {
       await expect(
         UPSERT_STORED_WORKFLOW_ROUTE.handler({

@@ -4537,15 +4537,19 @@ export class Mastra<
    * every offending id when references are unregistered or mis-classified.
    * @internal
    */
-  #validateStoredWorkflowRefs(def: StoredWorkflowGraph): void {
+  #validateStoredWorkflowRefs(def: StoredWorkflowGraph, opts?: { allowPendingWorkflowIds?: Set<string> }): void {
     type RefEntry =
       | { type: 'agent'; id: string; agentId: string }
       | { type: 'tool'; id: string; toolId: string }
+      | { type: 'workflow'; id: string; workflowId: string }
       | { type: 'parallel'; steps: readonly unknown[] }
-      | { type: 'foreach'; step: unknown };
+      | { type: 'foreach'; step: unknown }
+      | { type: 'conditional'; steps: readonly unknown[] }
+      | { type: 'loop'; step: unknown };
 
     const agents: Array<{ stepId: string; agentId: string }> = [];
     const tools: Array<{ stepId: string; toolId: string }> = [];
+    const workflows: Array<{ stepId: string; workflowId: string }> = [];
     const visit = (entry: unknown): void => {
       if (!entry || typeof entry !== 'object') return;
       const e = entry as Partial<RefEntry> & { type?: unknown };
@@ -4560,6 +4564,11 @@ export class Mastra<
           tools.push({ stepId: t.id, toolId: t.toolId });
           return;
         }
+        case 'workflow': {
+          const w = e as Extract<RefEntry, { type: 'workflow' }>;
+          workflows.push({ stepId: w.id, workflowId: w.workflowId });
+          return;
+        }
         case 'parallel': {
           const p = e as Extract<RefEntry, { type: 'parallel' }>;
           p.steps.forEach(visit);
@@ -4570,6 +4579,16 @@ export class Mastra<
           visit(f.step);
           return;
         }
+        case 'conditional': {
+          const c = e as Extract<RefEntry, { type: 'conditional' }>;
+          c.steps.forEach(visit);
+          return;
+        }
+        case 'loop': {
+          const l = e as Extract<RefEntry, { type: 'loop' }>;
+          visit(l.step);
+          return;
+        }
         default:
           return;
       }
@@ -4578,6 +4597,8 @@ export class Mastra<
 
     const registeredAgents = new Set(Object.keys(this.listAgents() ?? {}));
     const registeredTools = new Set(Object.keys(this.listTools() ?? {}));
+    const registeredWorkflows = new Set(Object.keys(this.#workflows as Record<string, AnyWorkflow>));
+    const pendingWorkflows = opts?.allowPendingWorkflowIds ?? new Set<string>();
     const errors: string[] = [];
     for (const ref of agents) {
       if (registeredAgents.has(ref.agentId)) continue;
@@ -4599,6 +4620,17 @@ export class Mastra<
         errors.push(`Step "${ref.stepId}" declares toolId "${ref.toolId}" which is not a registered tool.`);
       }
     }
+    for (const ref of workflows) {
+      if (ref.workflowId === def.id) {
+        errors.push(
+          `Step "${ref.stepId}" declares { type: "workflow", workflowId: "${ref.workflowId}" } which refers to itself. Nested workflow cycles are not allowed.`,
+        );
+        continue;
+      }
+      if (registeredWorkflows.has(ref.workflowId)) continue;
+      if (pendingWorkflows.has(ref.workflowId)) continue;
+      errors.push(`Step "${ref.stepId}" declares workflowId "${ref.workflowId}" which is not a registered workflow.`);
+    }
     if (errors.length > 0) {
       throw new Error(
         `addStoredWorkflow refused: ${errors.length} unresolved reference(s) in the graph.\n- ${errors.join('\n- ')}`,
@@ -4618,28 +4650,87 @@ export class Mastra<
     if (!store) return;
 
     const { definitions } = await store.list({ status: 'active' });
-    for (const def of definitions) {
-      // Skip definitions already registered (e.g. code-registered workflow
-      // with the same id) — code wins, storage is additive.
-      if ((this.#workflows as Record<string, AnyWorkflow>)[def.id]) continue;
-      try {
-        const { workflow } = await rehydrateWorkflow(
-          {
-            id: def.id,
-            description: def.description,
-            metadata: def.metadata,
-            inputSchema: def.inputSchema as Record<string, any>,
-            outputSchema: def.outputSchema as Record<string, any>,
-            stateSchema: def.stateSchema as Record<string, any> | undefined,
-            requestContextSchema: def.requestContextSchema as Record<string, any> | undefined,
-            graph: def.graph,
-          },
-          this,
-        );
-        this.addWorkflow(workflow as AnyWorkflow, def.id);
-      } catch (error) {
-        this.#logger?.error?.(`Failed to load stored workflow "${def.id}"`, { error });
+
+    // Skip definitions already registered (e.g. code-registered workflow
+    // with the same id) — code wins, storage is additive.
+    const pending = definitions.filter(d => !(this.#workflows as Record<string, AnyWorkflow>)[d.id]);
+
+    // Compute nested-workflow deps for each stored def so we can rehydrate
+    // in an order where every referenced workflow already exists on the
+    // live registry (either code-registered or previously loaded).
+    const collectNestedWorkflowIds = (graph: readonly unknown[]): Set<string> => {
+      const out = new Set<string>();
+      const visit = (entry: unknown): void => {
+        if (!entry || typeof entry !== 'object') return;
+        const e = entry as { type?: unknown; workflowId?: unknown; steps?: unknown; step?: unknown };
+        if (e.type === 'workflow' && typeof e.workflowId === 'string') {
+          out.add(e.workflowId);
+          return;
+        }
+        if ((e.type === 'parallel' || e.type === 'conditional') && Array.isArray(e.steps)) {
+          e.steps.forEach(visit);
+          return;
+        }
+        if ((e.type === 'foreach' || e.type === 'loop') && e.step) {
+          visit(e.step);
+          return;
+        }
+      };
+      graph.forEach(visit);
+      return out;
+    };
+
+    const pendingIds = new Set(pending.map(d => d.id));
+    const deps = new Map<string, Set<string>>();
+    for (const def of pending) {
+      const all = collectNestedWorkflowIds(def.graph as readonly unknown[]);
+      // Only track deps on other pending stored defs; code-registered ones
+      // are already live and don't gate rehydration order.
+      const pendingDeps = new Set<string>();
+      for (const id of all) if (pendingIds.has(id) && id !== def.id) pendingDeps.add(id);
+      deps.set(def.id, pendingDeps);
+    }
+
+    // Kahn's algorithm: repeatedly hydrate defs whose pending deps are all
+    // satisfied. Anything left after the loop is part of a cycle — log and
+    // skip so the rest of the app boots.
+    const remaining = new Map(pending.map(d => [d.id, d] as const));
+    const loaded = new Set<string>();
+    let progress = true;
+    while (remaining.size > 0 && progress) {
+      progress = false;
+      for (const [id, def] of Array.from(remaining)) {
+        const unresolved = Array.from(deps.get(id) ?? []).filter(d => !loaded.has(d));
+        if (unresolved.length > 0) continue;
+        remaining.delete(id);
+        progress = true;
+        try {
+          const { workflow } = await rehydrateWorkflow(
+            {
+              id: def.id,
+              description: def.description,
+              metadata: def.metadata,
+              inputSchema: def.inputSchema as Record<string, any>,
+              outputSchema: def.outputSchema as Record<string, any>,
+              stateSchema: def.stateSchema as Record<string, any> | undefined,
+              requestContextSchema: def.requestContextSchema as Record<string, any> | undefined,
+              graph: def.graph,
+            },
+            this,
+          );
+          this.#workflowOrigin.set(def.id, 'stored');
+          this.addWorkflow(workflow as AnyWorkflow, def.id);
+          loaded.add(def.id);
+        } catch (error) {
+          this.#logger?.error?.(`Failed to load stored workflow "${def.id}"`, { error });
+        }
       }
+    }
+    if (remaining.size > 0) {
+      const stuck = Array.from(remaining.keys()).join(', ');
+      this.#logger?.error?.(
+        `Failed to load stored workflows (cycle or unresolved nested-workflow reference): ${stuck}`,
+      );
     }
   }
 

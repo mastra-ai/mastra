@@ -203,6 +203,9 @@ const unwrapForeachInner = (
   inner: Extract<SerializedStepFlowEntry, { type: 'foreach' }>['step'],
 ): SerializedStepLike => {
   if (inner.type === 'step') return inner.step;
+  if (inner.type === 'workflow') {
+    return { id: inner.id, description: undefined, component: 'WORKFLOW' };
+  }
   return { id: inner.id, description: undefined, component: undefined };
 };
 
@@ -817,6 +820,10 @@ export const collectGraphStepFlags = (
 
   const visit = (entry: SerializedStepFlowEntry | undefined) => {
     if (!entry) return;
+    if (entry.type === 'workflow') {
+      nestedWorkflowStepIds.add(entry.id);
+      return;
+    }
     if (entry.type === 'step' || entry.type === 'foreach' || entry.type === 'loop') {
       const inner = entry.type === 'foreach' ? unwrapForeachInner(entry.step) : entry.step;
       if (inner?.component === 'WORKFLOW' && inner?.id) {

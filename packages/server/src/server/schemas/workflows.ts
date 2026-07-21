@@ -59,6 +59,7 @@ const serializedStepFlowEntrySchema = z.object({
     'conditional',
     'loop',
     'foreach',
+    'workflow',
   ]),
 });
 
