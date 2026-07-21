@@ -1,0 +1,25 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Goal: Complete the single-render goal judge e2e objective.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "{\"decision\":\"done\",\"reason\":\"The single-render goal judge e2e objective is complete.\"}"
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Complete the single-render goal judge e2e objective."
+      },
+      "response": {
+        "content": "Single-render goal work completed."
+      }
+    }
+  ]
+}

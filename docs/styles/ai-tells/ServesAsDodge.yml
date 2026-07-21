@@ -1,0 +1,66 @@
+---
+extends: existence
+message: "AI copula dodge: '%s'. Use 'is' or 'are' instead of this inflated construction."
+level: error
+ignorecase: true
+tokens:
+  - serves as a
+  - serves as an
+  - serves as the
+  - served as a
+  - served as an
+  - served as the
+  - serving as a
+  - serving as an
+  - serving as the
+  - stands as a
+  - stands as an
+  - stands as the
+  - stood as a
+  - stood as an
+  - stood as the
+  - standing as a
+  - standing as an
+  - standing as the
+  - marks a pivotal
+  - marks a significant
+  - marks a crucial
+  - marks a key
+  - marks a turning
+  - marks a critical
+  - marks a major
+  - marks a defining
+  - marks a new
+  - represents a significant
+  - represents a pivotal
+  - represents a crucial
+  - represents a key
+  - represents a major
+  - represents a fundamental
+  - represents a paradigm
+  - boasts a vibrant
+  - boasts a rich
+  - boasts a diverse
+  - boasts a wide
+  - boasts a unique
+  - boasts a thriving
+  - boasts an impressive
+  - features a wide
+  - features a rich
+  - features a diverse
+  - features a unique
+  - features a vibrant
+  - offers a unique
+  - offers a wide
+  - offers a comprehensive
+  - offers a diverse
+
+  # === Colon-cheat: copula-replacement remediation ===
+  # AI evades weak-verb / passive-voice lints by replacing "is" or
+  # "are" with a colon — same appositive shape, no verb.
+  # "The candidate mechanism is a hook." -->
+  # "The candidate mechanism: a hook on Bash that..."
+  # Triggered by a 4+ word definite-NP subject, indefinite article
+  # after the colon, and 6+ token descriptive content (filters
+  # short pedagogical "X is: Y" answers).
+  - "The [^,.:!?\\s]+(?: [^,.:!?\\s]+){2,}: an? [^,.:!?\\s]+(?: [^,.:!?\\s]+){4,}"

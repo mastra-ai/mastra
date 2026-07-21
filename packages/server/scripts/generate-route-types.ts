@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import prettier from 'prettier';
+import type ts from 'typescript';
 import type * as z4 from 'zod/v4/core';
 import { printNode, zodToTs } from 'zod-to-ts';
 
@@ -52,21 +53,137 @@ function createAuxiliaryTypeStore(prefix: string) {
   };
 }
 
+let globalAuxiliaryTypeStore = createAuxiliaryTypeStore('Shared');
+
+/**
+ * Nested shared-schema promotion (two-pass generation).
+ *
+ * Pass 1 counts how many times each nested Zod schema *instance* is visited during
+ * conversion. Pass 2 extracts every schema visited more than once (and whose printed
+ * type is non-trivial) into a single `Shared_Type_N` declaration and replaces each
+ * occurrence with a type reference. This is what keeps large shared sub-schemas
+ * (e.g. the serialized agent shape embedded in many stored-agent responses) from
+ * being inlined dozens of times.
+ */
+const MIN_SHARED_TYPE_LENGTH = 160;
+
+const nestedOccurrenceCounts = new Map<z4.$ZodType, number>();
+let countingPass = true;
+
+// `null` means "visited but not worth promoting" (too small once printed).
+const promotedSchemaNames = new Map<z4.$ZodType, string | null>();
+const promotedTextNames = new Map<string, string>();
+const promotionInProgress = new Set<z4.$ZodType>();
+const sharedTypeDeclarations: string[] = [];
+let sharedTypeIndex = 0;
+
+/**
+ * zod-to-ts cannot represent these schema types (their TypeScript type is only known
+ * at runtime, e.g. a transform's return value), so we emit `unknown` instead of
+ * letting `any` leak into the generated SDK types. Any *new* unrepresentable type
+ * not listed here makes zod-to-ts throw at generation time (the default
+ * `unrepresentable: 'throw'` behavior), so it gets caught in CI instead of
+ * silently widening client types.
+ */
+const UNREPRESENTABLE_SCHEMA_TYPES = new Set(['transform', 'custom']);
+
+function schemaOverrideFunction(schema: z4.$ZodType, tsLib: typeof ts): ts.TypeNode | undefined {
+  if (UNREPRESENTABLE_SCHEMA_TYPES.has(schema._zod.def.type)) {
+    return tsLib.factory.createKeywordTypeNode(tsLib.SyntaxKind.UnknownKeyword);
+  }
+
+  if (countingPass) {
+    nestedOccurrenceCounts.set(schema, (nestedOccurrenceCounts.get(schema) ?? 0) + 1);
+    return undefined;
+  }
+
+  // While a schema's own shared declaration is being rendered, let the default
+  // conversion (and the auxiliary store, for recursive schemas) handle it.
+  if (promotionInProgress.has(schema)) {
+    return undefined;
+  }
+
+  if ((nestedOccurrenceCounts.get(schema) ?? 0) < 2) {
+    return undefined;
+  }
+
+  let sharedName = promotedSchemaNames.get(schema);
+  if (sharedName === undefined) {
+    promotionInProgress.add(schema);
+    const { node } = zodToTs(schema, {
+      auxiliaryTypeStore: globalAuxiliaryTypeStore,
+      io: 'output',
+      overrideFunction: schemaOverrideFunction,
+    });
+    promotionInProgress.delete(schema);
+
+    const printed = printNode(node);
+    if (printed.length < MIN_SHARED_TYPE_LENGTH) {
+      sharedName = null;
+    } else {
+      const existingTextName = promotedTextNames.get(printed);
+      if (existingTextName) {
+        sharedName = existingTextName;
+      } else {
+        sharedName = `Shared_Type_${sharedTypeIndex++}`;
+        promotedTextNames.set(printed, sharedName);
+        sharedTypeDeclarations.push(`type ${sharedName} = ${printed};`);
+      }
+    }
+    promotedSchemaNames.set(schema, sharedName);
+  }
+
+  if (!sharedName) {
+    return undefined;
+  }
+
+  return tsLib.factory.createTypeReferenceNode(sharedName);
+}
+
+/**
+ * Many routes share the same Zod schema instance (e.g. one body schema reused by
+ * dozens of agent routes). Rendering each occurrence inline is the main source of
+ * generated-file bloat, so the first occurrence renders the full type and every
+ * later occurrence becomes a one-line alias to it.
+ */
+const renderedSchemaAliases = new Map<z4.$ZodType, string>();
+
+/**
+ * Second-level dedup: different schema instances (e.g. per-route `.extend()` copies)
+ * often print to the exact same TypeScript text. Alias those too instead of
+ * repeating the body.
+ */
+const renderedTextAliases = new Map<string, string>();
+
 function renderSchemaType(aliasName: string, schema: z4.$ZodType, deprecated: boolean): string {
-  const auxiliaryTypeStore = createAuxiliaryTypeStore(aliasName);
+  const deprecatedComment = deprecated ? '/** @deprecated */\n' : '';
+
+  const existingAlias = renderedSchemaAliases.get(schema);
+  if (existingAlias) {
+    return `${deprecatedComment}export type ${aliasName} = ${existingAlias};`;
+  }
+
+  // Unrepresentable schemas (transforms, customs) are intercepted as `unknown` in
+  // schemaOverrideFunction; anything unexpected throws at generation time.
   const { node } = zodToTs(schema, {
-    auxiliaryTypeStore,
-    unrepresentable: 'any',
+    auxiliaryTypeStore: globalAuxiliaryTypeStore,
     io: 'output',
+    overrideFunction: schemaOverrideFunction,
   });
 
-  const auxiliaryDeclarations = [...auxiliaryTypeStore.definitions.values()]
-    .map(definition => printNode(definition.node))
-    .join('\n\n');
+  const printed = printNode(node);
+  const existingTextAlias = renderedTextAliases.get(printed);
+  if (existingTextAlias) {
+    renderedSchemaAliases.set(schema, existingTextAlias);
+    return `${deprecatedComment}export type ${aliasName} = ${existingTextAlias};`;
+  }
 
-  const aliasDeclaration = `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = ${printNode(node)};`;
+  renderedSchemaAliases.set(schema, aliasName);
+  renderedTextAliases.set(printed, aliasName);
 
-  return auxiliaryDeclarations ? `${auxiliaryDeclarations}\n\n${aliasDeclaration}` : aliasDeclaration;
+  // Auxiliary declarations are collected in the shared global store and emitted once
+  // at the top of the generated file instead of inline per alias.
+  return `${deprecatedComment}export type ${aliasName} = ${printed};`;
 }
 
 function getRoutePart(
@@ -188,6 +305,12 @@ function generateRouteTypesFileContent(): string {
   }).join('\n');
   const clientInterface = renderPathClient();
 
+  const auxiliaryDeclarations = [...globalAuxiliaryTypeStore.definitions.values()]
+    .map(definition => printNode(definition.node))
+    .join('\n\n');
+
+  const sharedDeclarations = sharedTypeDeclarations.join('\n\n');
+
   return `/**
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
  *
@@ -196,6 +319,10 @@ function generateRouteTypesFileContent(): string {
  */
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
+
+${auxiliaryDeclarations}
+
+${sharedDeclarations}
 
 ${routeBlocks}
 
@@ -250,6 +377,16 @@ async function formatGeneratedFileContent(fileContent: string): Promise<string> 
   });
 }
 
+// Pass 1: convert everything once purely to count nested schema instance reuse.
+generateRouteTypesFileContent();
+
+// Reset per-pass render state so pass 2 produces clean output.
+countingPass = false;
+globalAuxiliaryTypeStore = createAuxiliaryTypeStore('Shared');
+renderedSchemaAliases.clear();
+renderedTextAliases.clear();
+
+// Pass 2: real generation, extracting schemas seen more than once into shared types.
 const rawFileContent = generateRouteTypesFileContent();
 
 // Strip `[x: string]: never` index signatures emitted by zod-to-ts for `.strict()` schemas.

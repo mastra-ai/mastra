@@ -11,15 +11,48 @@ import { z } from 'zod/v4';
 const stepOptionsSchema = z
   .object({
     retries: z.number().int().nonnegative().optional(),
-    metadata: z.record(z.string(), z.any()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .optional();
+
+// ----------------------------------------------------------------------------
+// Predicate DSL — declarative condition for `conditional` / `loop` entries.
+// Mirrors `Predicate` in `@mastra/core/workflows/predicate`; duplicated
+// locally for the same peer-floor reason as the graph schema above.
+// ----------------------------------------------------------------------------
+const literalScalar = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const pathOrLiteral: z.ZodType = z.union([
+  z.object({ path: z.string().min(1) }).strict(),
+  z.object({ literal: literalScalar }).strict(),
+]);
+const predicateSchema: z.ZodType = z.lazy(() =>
+  z.union([
+    z
+      .object({
+        op: z.enum(['eq', 'ne', 'lt', 'lte', 'gt', 'gte']),
+        left: pathOrLiteral,
+        right: pathOrLiteral,
+      })
+      .strict(),
+    z
+      .object({
+        op: z.enum(['in', 'notIn']),
+        value: pathOrLiteral,
+        set: z.array(literalScalar).min(1),
+      })
+      .strict(),
+    z.object({ op: z.enum(['exists', 'notExists']), path: z.string().min(1) }).strict(),
+    z.object({ op: z.enum(['truthy', 'falsy']), value: pathOrLiteral }).strict(),
+    z.object({ op: z.enum(['and', 'or']), args: z.array(predicateSchema).min(1) }).strict(),
+    z.object({ op: z.literal('not'), arg: predicateSchema }).strict(),
+  ]),
+);
 
 const agentEntrySchema = z.object({
   type: z.literal('agent'),
   id: z.string(),
   agentId: z.string(),
-  outputSchema: z.any().optional(),
+  outputSchema: z.unknown().optional(),
   options: stepOptionsSchema,
 });
 
@@ -36,14 +69,27 @@ const mappingEntrySchema = z.object({
   mapConfig: z.string(),
 });
 
-const singleStepEntrySchema = z.discriminatedUnion('type', [agentEntrySchema, toolEntrySchema, mappingEntrySchema]);
+const workflowEntrySchema = z.object({
+  type: z.literal('workflow'),
+  id: z.string(),
+  workflowId: z.string(),
+  options: stepOptionsSchema,
+});
 
-const foreachInnerStepSchema = z.discriminatedUnion('type', [agentEntrySchema, toolEntrySchema]);
+const singleStepEntrySchema = z.discriminatedUnion('type', [
+  agentEntrySchema,
+  toolEntrySchema,
+  mappingEntrySchema,
+  workflowEntrySchema,
+]);
+
+const foreachInnerStepSchema = z.discriminatedUnion('type', [agentEntrySchema, toolEntrySchema, workflowEntrySchema]);
 
 const graphEntrySchema = z.discriminatedUnion('type', [
   agentEntrySchema,
   toolEntrySchema,
   mappingEntrySchema,
+  workflowEntrySchema,
   z.object({
     type: z.literal('parallel'),
     steps: z.array(singleStepEntrySchema),
@@ -62,6 +108,22 @@ const graphEntrySchema = z.discriminatedUnion('type', [
     type: z.literal('sleepUntil'),
     id: z.string(),
     date: z.string(),
+  }),
+  z.object({
+    // Declarative-only conditional. Inbound stored workflows must ship a
+    // `predicates` array aligned with `steps`; closure-based branches are not
+    // accepted over the wire (they'd be arbitrary JS strings we can't
+    // safely rehydrate).
+    type: z.literal('conditional'),
+    steps: z.array(singleStepEntrySchema),
+    predicates: z.array(predicateSchema),
+  }),
+  z.object({
+    // Declarative-only loop. Same rationale as `conditional`.
+    type: z.literal('loop'),
+    step: singleStepEntrySchema,
+    loopType: z.enum(['dowhile', 'dountil']),
+    predicate: predicateSchema,
   }),
 ]);
 
@@ -99,10 +161,10 @@ export const upsertStoredWorkflowBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   // Schemas + graph are loose by design: the agent constructs them and this
   // is the same shape `mastra.addStoredWorkflow` expects.
-  inputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow input'),
-  outputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow output'),
-  stateSchema: z.any().optional(),
-  requestContextSchema: z.any().optional(),
+  inputSchema: z.unknown().describe('JSON Schema (Draft 2020-12) for the workflow input'),
+  outputSchema: z.unknown().describe('JSON Schema (Draft 2020-12) for the workflow output'),
+  stateSchema: z.unknown().optional(),
+  requestContextSchema: z.unknown().optional(),
   graph: z
     .array(graphEntrySchema)
     .describe('Static workflow graph — ordered array of serialized step entries with all refs as ids.'),
@@ -119,11 +181,11 @@ export const storedWorkflowResponseSchema = z.object({
   id: z.string(),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  inputSchema: z.any(),
-  outputSchema: z.any(),
-  stateSchema: z.any().optional(),
-  requestContextSchema: z.any().optional(),
-  graph: z.array(z.any()),
+  inputSchema: z.unknown(),
+  outputSchema: z.unknown(),
+  stateSchema: z.unknown().optional(),
+  requestContextSchema: z.unknown().optional(),
+  graph: z.array(z.unknown()),
   status: z.enum(['active', 'archived']),
   source: z.literal('storage'),
   authorId: z.string().optional(),

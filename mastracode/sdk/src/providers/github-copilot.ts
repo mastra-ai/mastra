@@ -20,6 +20,7 @@ import type { LanguageModelMiddleware } from 'ai';
 import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
 import type { CopilotModelEntry, GitHubCopilotCredentials } from '../auth/providers/github-copilot.js';
 import { AuthStorage } from '../auth/storage.js';
+import type { CredentialStore } from '../auth/types.js';
 
 const COPILOT_PROVIDER_ID = 'github-copilot';
 
@@ -114,7 +115,7 @@ function detectIsVision(body: unknown): boolean {
  * - Rewrites the request URL onto the per-token API base when `rewriteUrl` is true.
  */
 export function buildGitHubCopilotOAuthFetch(
-  opts: { authStorage?: AuthStorage; rewriteUrl?: boolean } = {},
+  opts: { authStorage?: CredentialStore; rewriteUrl?: boolean } = {},
 ): typeof fetch {
   return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
     const storage = opts.authStorage ?? getAuthStorage();
@@ -276,7 +277,7 @@ function createCopilotMiddleware(modelId: string): LanguageModelMiddleware {
  */
 export function githubCopilotProvider(
   modelId: string = 'gpt-4.1',
-  options?: { headers?: Record<string, string> },
+  options?: { headers?: Record<string, string>; authStorage?: CredentialStore },
 ): MastraModelConfig {
   const headers = options?.headers;
   const copilot = createOpenAICompatible({
@@ -287,7 +288,7 @@ export function githubCopilotProvider(
     fetch:
       process.env.NODE_ENV === 'test' || process.env.VITEST
         ? undefined
-        : (buildGitHubCopilotOAuthFetch({ rewriteUrl: false }) as any),
+        : (buildGitHubCopilotOAuthFetch({ rewriteUrl: false, authStorage: options?.authStorage }) as any),
   });
 
   return wrapLanguageModel({

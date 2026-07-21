@@ -4,15 +4,15 @@ import { useApiConfig } from '../../../../../shared/api/config';
 import { useKeyDown } from '../../../lib/hooks';
 import { CloseIcon, FolderIcon, LogoMark, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useGithubReposQuery } from '../hooks/useGithubRepos';
-import { useCreateGithubProjectMutation } from '../hooks/useProjects';
+import { useGithubReposQuery } from '../../../../../shared/hooks/useGithubRepos';
+import { useCreateGithubFactoryMutation } from '../../../../../shared/hooks/useFactories';
 import type { GithubRepo, GithubStatus } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
-import type { Project } from '../services/projects';
+import type { Factory } from '../services/factories';
 
 interface GithubConnectModalProps {
   status: GithubStatus;
-  onProjectCreated: (project: Project) => void;
+  onFactoryCreated: (factory: Factory) => void;
   onClose: () => void;
 }
 
@@ -21,27 +21,27 @@ interface GithubConnectModalProps {
  *  1. Connect — shown when the feature is enabled but the user has no
  *     installation yet; a button kicks off the GitHub App install redirect.
  *  2. Pick a repo — a searchable list of repos across the user's installations;
- *     selecting one creates a `source: 'github'` project and selects it.
+ *     selecting one creates a GitHub-backed factory and selects it.
  *
  * No clone happens here — the repo is materialized into its sandbox on open.
  */
-export function GithubConnectModal({ status, onProjectCreated, onClose }: GithubConnectModalProps) {
+export function GithubConnectModal({ status, onFactoryCreated, onClose }: GithubConnectModalProps) {
   const { baseUrl } = useApiConfig();
   const connected = status.connected;
   const [query, setQuery] = useState('');
   const reposQuery = useGithubReposQuery(query || undefined, connected);
-  const createProject = useCreateGithubProjectMutation();
+  const createFactory = useCreateGithubFactoryMutation();
   const repos = reposQuery.data ?? [];
   const loading = reposQuery.isPending;
-  const error = reposQuery.error ?? createProject.error;
-  const busyRepoId = createProject.isPending ? createProject.variables?.id : null;
+  const error = reposQuery.error ?? createFactory.error;
+  const busyRepoId = createFactory.isPending ? createFactory.variables?.id : null;
 
   useKeyDown({ escape: () => onClose() });
 
   const handlePick = async (repo: GithubRepo) => {
     try {
-      const stored = await createProject.mutateAsync(repo);
-      onProjectCreated(stored);
+      const stored = await createFactory.mutateAsync(repo);
+      onFactoryCreated(stored);
       onClose();
     } catch {
       // Mutation state renders the error.
@@ -77,7 +77,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
         {!connected ? (
           <>
             <p className="mb-4 mt-0 text-ui-sm leading-relaxed text-icon3">
-              Install the MastraCode GitHub App to pick repositories you have access to and turn them into projects.
+              Install the MastraCode GitHub App to pick repositories you have access to and turn them into factories.
               Each repo is cloned into its own isolated cloud sandbox when you open it.
             </p>
             {/* Hide the connect button when the feature is disabled — /auth/github/connect won't exist */}
@@ -93,7 +93,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
         ) : (
           <>
             <p className="mb-4 mt-0 text-ui-sm leading-relaxed text-icon3">
-              Choose a repository. It's cloned into an isolated cloud sandbox the first time you open the project.
+              Choose a repository. It's cloned into an isolated cloud sandbox the first time you open the factory.
             </p>
             <div className="mb-3 flex items-center gap-2 rounded-lg border border-border1 bg-surface2 px-3 py-2">
               <SearchIcon size={15} className="shrink-0 text-icon2" />
@@ -194,7 +194,7 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
   if (status.organizationRequired || status.reason === 'organization_required') {
     return (
       <div className={calloutClass}>
-        Your account has no WorkOS organization. GitHub projects require an org. Sign out and back in to auto-create
+        Your account has no WorkOS organization. GitHub factories require an org. Sign out and back in to auto-create
         one, or ask your admin to add you to an org.
       </div>
     );

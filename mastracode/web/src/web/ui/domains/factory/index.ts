@@ -1,9 +1,11 @@
+export { AuditPage } from './AuditPage';
 export { BoardPage } from './BoardPage';
+export { MetricsPage } from './MetricsPage';
 export { FactorySection } from './components/FactorySection';
-export * from './hooks/useFactoryData';
-export * from './hooks/useLinearData';
-export * from './hooks/useIntakeConfig';
-export * from './hooks/useWorkItems';
+export * from '../../../../shared/hooks/useFactoryData';
+export * from '../../../../shared/hooks/useLinearData';
+export * from '../../../../shared/hooks/useIntakeConfig';
+export * from '../../../../shared/hooks/useWorkItems';
 export * from './services/factory';
 export * from './services/linear';
 export * from './services/intake';

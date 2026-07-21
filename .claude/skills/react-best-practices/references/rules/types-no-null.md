@@ -11,6 +11,8 @@ Model missing values as `undefined`, not `null`. In TypeScript code, optional pr
 
 External systems may still emit `null` — REST payloads, database rows, or third-party APIs. Convert those values at the boundary with `?? undefined` and keep internal types null-free. Do not let `null` propagate inward.
 
+Keep leaf display components strict when their UI requires a value: accept a required prop and let the caller decide whether to render the component or its missing-value fallback. Make a prop optional only when absence is part of the component's explicit UI contract.
+
 **Incorrect (null leaks through the component API):**
 
 ```tsx
@@ -88,3 +90,4 @@ Legitimate exceptions are narrow boundary cases: an external API requires `null`
 - Returning or storing `null` because a lookup did not find anything.
 - Passing `null` through multiple layers instead of converting once with `?? undefined`.
 - `null` literals outside boundary adapters, third-party API requirements, DB-specific semantics, or React `return null`.
+- Leaf display components accepting optional props only to choose a generic fallback that belongs to the caller.

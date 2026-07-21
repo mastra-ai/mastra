@@ -22,7 +22,8 @@ function isStructuredOutputFormatError(error: unknown): boolean {
     JSONParseError.isInstance(error) ||
     NoObjectGeneratedError.isInstance(error) ||
     TypeValidationError.isInstance(error) ||
-    (error instanceof MastraError && error.id === 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED')
+    (error instanceof MastraError &&
+      (error.id === 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED' || error.id === 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED'))
   );
 }
 
@@ -68,7 +69,7 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
     if (!isStructuredOutputFormatError(error)) throw error;
 
     console.warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
-    return await agent.generate(prompt, {
+    const result = await agent.generate(prompt, {
       ...options,
       structuredOutput: {
         ...options.structuredOutput,
@@ -79,6 +80,15 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
             : true,
       },
     });
+    if (result.object === undefined) {
+      throw new MastraError({
+        id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'structuredOutput object is undefined',
+      });
+    }
+    return result;
   }
 }
 
@@ -130,6 +140,15 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
       },
     });
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
+    const object = await result.object;
+    if (object === undefined) {
+      throw new MastraError({
+        id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'structuredOutput object is undefined',
+      });
+    }
     return result;
   }
 }

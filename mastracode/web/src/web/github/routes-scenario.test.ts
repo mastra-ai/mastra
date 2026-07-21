@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
 
 // ── Scenario tests (S1, S2) ──────────────────────────────────────────────
 // These exercise the *composition* of the real Phase 4 git route handlers
@@ -15,17 +16,22 @@ vi.mock('drizzle-orm', () => ({
 
 interface Tables {
   installations: Array<{
-    orgId?: string;
-    userId: string;
-    installationId: number;
-    accountLogin: string | null;
+    id: string;
+    integrationId: string;
+    orgId: string;
+    connectedByUserId: string;
+    externalId: string;
+    accountName: string | null;
     accountType: string | null;
+    providerMetadata: Record<string, unknown>;
+    createdAt: Date;
   }>;
   projects: Array<Record<string, any>>;
   sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
 }
 const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [] };
+const sourceControlStorage = new SourceControlStorageInMemory();
 
 vi.mock('./db', () => {
   const makeDb = () => ({
@@ -59,7 +65,10 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
-vi.mock('./client', () => ({
+// Stub integration instance: routes consume the injected `github` instance —
+// real DI instead of module mocking (client.ts no longer exists).
+const githubStub = {
+  sourceControlStorage,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
@@ -90,7 +99,19 @@ vi.mock('./client', () => ({
   ),
   // A fresh token string per call so the scenario can prove per-op minting.
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
-}));
+};
+
+// Deterministic state signer stub (replaces the old signState/verifyState mocks).
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
 
 let mintCount = 0;
 
@@ -99,9 +120,12 @@ vi.mock('./subscriptions', () => ({
   subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
 }));
 
-const ensureProjectSandbox = vi.fn(async (_row: any) => ({ id: 'sb' }));
+const ensureProjectSandbox = vi.fn(async (row: any, storage: SourceControlStorageInMemory['sandboxes']) => {
+  await storage.setSandboxId(row.id, 'sb');
+  return { id: 'sb' };
+});
 const materializeRepo = vi.fn(async () => {});
-const reattachProjectSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -113,6 +137,21 @@ let pushImpl: (...args: any[]) => Promise<void> = async () => {};
 const pushBranch = vi.fn((...args: any[]) => pushImpl(...args));
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
+vi.mock('../sandbox/fleet', () => {
+  class SandboxBudgetError extends Error {
+    readonly code = 'sandbox-budget-exceeded';
+    constructor(readonly max: number) {
+      super(`Sandbox budget exceeded: ${max}`);
+    }
+  }
+  return {
+    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+    getSandboxProvider: () => 'railway',
+    isSandboxEnabled: () => sandboxEnabled,
+    reattachSandbox: (id: string) => reattachSandbox(id),
+    SandboxBudgetError,
+  };
+});
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -129,12 +168,9 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-    getSandboxProvider: () => 'railway',
-    isSandboxEnabled: () => sandboxEnabled,
-    ensureProjectSandbox: (row: any) => ensureProjectSandbox(row),
+    ensureProjectSandbox: (row: any, storage: SourceControlStorageInMemory['sandboxes']) =>
+      ensureProjectSandbox(row, storage),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
-    reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
@@ -149,13 +185,7 @@ vi.mock('./sandbox', () => {
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
+  getGithubFeatureDiagnostics: () => ({}),
 }));
 
 import { mountApiRoutes } from '../test-utils';
@@ -222,7 +252,9 @@ function updateRows(table: any, vals: any, cond?: any): void {
   }
 }
 
-import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
+const githubInstallations = {};
+const githubProjectSandboxes = {};
+const githubWorktrees = {};
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
@@ -244,7 +276,10 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111' }));
+  mountApiRoutes(
+    app as any,
+    buildGithubRoutes({ baseUrl: 'http://localhost:4111', github: githubStub as any, stateSigner }),
+  );
   return app;
 }
 
@@ -261,6 +296,10 @@ beforeEach(() => {
   tables.projects = [];
   tables.sandboxes = [];
   tables.worktrees = [];
+  sourceControlStorage.installationsRows = tables.installations as any;
+  sourceControlStorage.projectsRows = tables.projects as any;
+  sourceControlStorage.sandboxesRows = tables.sandboxes as any;
+  sourceControlStorage.worktreesRows = tables.worktrees as any;
   featureEnabled = true;
   sandboxEnabled = true;
   // No Postgres in these scenario tests: keep the project lock in-process.
@@ -270,7 +309,7 @@ beforeEach(() => {
   pushImpl = async () => {};
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachProjectSandbox.mockClear();
+  reattachSandbox.mockClear();
   ensureWorktree.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
@@ -286,26 +325,27 @@ afterEach(() => {
 // ── S1: full write-back journey ──────────────────────────────────────────
 describe('S1: full write-back journey through the real route handlers', () => {
   it('drives create → ensure → worktree → commit → push → pr for one user', async () => {
-    const mintModule = (await import('./client')) as unknown as {
-      mintInstallationToken: ReturnType<typeof vi.fn>;
-    };
-    const mint = mintModule.mintInstallationToken;
+    const mint = githubStub.mintInstallationToken;
     tables.installations.push({
+      id: 'installation-1',
+      integrationId: 'github',
       orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      accountLogin: 'octo',
+      connectedByUserId: 'u1',
+      externalId: '7',
+      accountName: 'octo',
       accountType: 'User',
+      providerMetadata: {},
+      createdAt: new Date(),
     });
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
     // 1. Create the project from an owned installation.
-    const createRes = await postJson(app, '/web/github/projects', {
+    const createRes = await postJson(app, '/web/github/repositories', {
       repoFullName: 'octo/hello',
       installationId: 7,
     });
     expect(createRes.status).toBe(200);
-    const projectId = (await createRes.json()).project.id as string;
+    const projectId = (await createRes.json()).repository.id as string;
     expect(tables.projects).toHaveLength(1);
     expect(projectId).toBeTruthy();
 
@@ -313,7 +353,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     // binding the way `ensure` would persist it (provisioning itself is mocked).
     tables.sandboxes.push({
       id: 'sbrow-1',
-      githubProjectId: projectId,
+      projectId: projectId,
       userId: 'u1',
       sandboxId: 'sb-1',
       sandboxWorkdir: '/workspace/hello',
@@ -321,20 +361,20 @@ describe('S1: full write-back journey through the real route handlers', () => {
     });
 
     // 2. Ensure → provisions the sandbox + materialises the repo.
-    const ensureRes = await postJson(app, `/web/github/projects/${projectId}/ensure`, {});
+    const ensureRes = await postJson(app, `/web/github/repositories/${projectId}/ensure`, {});
     expect(ensureRes.status).toBe(200);
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
     expect(materializeRepo).toHaveBeenCalledOnce();
 
-    // 3. Worktree → persists a github_worktrees row for feat/x.
-    const wtRes = await postJson(app, `/web/github/projects/${projectId}/worktree`, { branch: 'feat/x' });
+    // 3. Worktree → persists a source_control_worktrees row for feat/x.
+    const wtRes = await postJson(app, `/web/github/repositories/${projectId}/worktree`, { branch: 'feat/x' });
     expect(wtRes.status).toBe(200);
     const wtJson = await wtRes.json();
     expect(wtJson.branch).toBe('feat/x');
     expect(wtJson.baseBranch).toBe('main');
     expect(tables.worktrees).toHaveLength(1);
     expect(tables.worktrees[0]).toMatchObject({
-      githubProjectId: projectId,
+      projectId: projectId,
       branch: 'feat/x',
       baseBranch: 'main',
     });
@@ -344,7 +384,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     // 4. Commit in that exact worktree path → the round-trip is honoured:
     // a path that only exists because step 3 persisted it now passes
     // resolveWorktreePath (no client-path injection possible).
-    const commitRes = await postJson(app, `/web/github/projects/${projectId}/commit`, {
+    const commitRes = await postJson(app, `/web/github/repositories/${projectId}/commit`, {
       message: 'wip',
       worktreePath: persistedWorktreePath,
     });
@@ -354,7 +394,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
 
     // 5. Push that worktree → a fresh token is minted for *this* op.
     const mintBeforePush = mint.mock.calls.length;
-    const pushRes = await postJson(app, `/web/github/projects/${projectId}/push`, {
+    const pushRes = await postJson(app, `/web/github/repositories/${projectId}/push`, {
       branch: 'feat/x',
       worktreePath: persistedWorktreePath,
     });
@@ -370,7 +410,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
 
     // 6. Open a PR → another fresh token is minted (per-op, not reused).
     const mintBeforePr = mint.mock.calls.length;
-    const prRes = await postJson(app, `/web/github/projects/${projectId}/pr`, {
+    const prRes = await postJson(app, `/web/github/repositories/${projectId}/pr`, {
       branch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
@@ -387,8 +427,11 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(prToken).not.toBe(pushToken);
     expect(subscribeToPullRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        githubProjectId: projectId,
-        pullRequestNumber: 1,
+        projectId: projectId,
+        changeRequestId: '1',
+        installationExternalId: '7',
+        repositoryExternalId: '99',
+        repositorySlug: 'octo/hello',
         sessionId: 'session-1',
         ownerId: 'u1',
         resourceId: projectId,
@@ -405,27 +448,33 @@ describe('S1: full write-back journey through the real route handlers', () => {
     tables.projects.push({
       id: projectId,
       orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      repoFullName: 'octo/hello',
-      repoId: 99,
+      integrationId: 'github',
+      createdByUserId: 'u1',
+      installationExternalId: '7',
+      repositorySlug: 'octo/hello',
+      repositoryExternalId: '99',
       defaultBranch: 'main',
+      sandboxProvider: 'railway',
+      sandboxWorkdir: '/workspace/hello',
+      setupCommand: null,
+      providerMetadata: {},
+      createdAt: new Date(),
     });
     tables.sandboxes.push({
       id: 'sbrow-compat',
-      githubProjectId: projectId,
+      projectId: projectId,
       userId: 'u1',
       sandboxId: 'sb-compat',
       sandboxWorkdir: '/workspace/hello',
       materializedAt: new Date(),
     });
 
-    const response = await postJson(app, `/web/github/projects/${projectId}/pr`, {
+    const response = await postJson(app, `/web/github/repositories/${projectId}/pr`, {
       branch: 'feat/x',
       title: 'My PR',
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status, await response.clone().text()).toBe(200);
     expect(subscribeToPullRequest).not.toHaveBeenCalled();
   });
 });
@@ -445,7 +494,7 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
     });
     tables.sandboxes.push({
       id: `sbrow-${id}`,
-      githubProjectId: id,
+      projectId: id,
       userId,
       sandboxId: `sb-${id}`,
       sandboxWorkdir: '/workspace/hello',
@@ -472,8 +521,8 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       order.push('end');
     };
 
-    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a' });
-    const second = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/b' });
+    const first = postJson(app, '/web/github/repositories/p1/push', { branch: 'feat/a' });
+    const second = postJson(app, '/web/github/repositories/p1/push', { branch: 'feat/b' });
 
     // Let microtasks flush; only the first push body should have begun.
     await new Promise(r => setTimeout(r, 10));
@@ -506,8 +555,8 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       active--;
     };
 
-    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a' });
-    const second = postJson(app, '/web/github/projects/p2/push', { branch: 'feat/b' });
+    const first = postJson(app, '/web/github/repositories/p1/push', { branch: 'feat/a' });
+    const second = postJson(app, '/web/github/repositories/p2/push', { branch: 'feat/b' });
 
     await new Promise(r => setTimeout(r, 10));
     // Distinct project ids → distinct locks → both bodies run concurrently.

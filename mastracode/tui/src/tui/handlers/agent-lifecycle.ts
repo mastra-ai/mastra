@@ -100,14 +100,17 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
     ctx.addUserMessage({
       id: `user-${Date.now()}`,
       role: 'user',
-      content: [
-        { type: 'text', text: nextMessage.content },
-        ...(nextMessage.images?.map(img => ({
-          type: 'image' as const,
-          data: img.data,
-          mimeType: img.mimeType,
-        })) ?? []),
-      ],
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: nextMessage.content },
+          ...(nextMessage.images?.map(img => ({
+            type: 'file' as const,
+            data: img.data,
+            mimeType: img.mimeType,
+          })) ?? []),
+        ],
+      },
       createdAt: new Date(),
     });
     // Track the text so the subscription echo is suppressed in addUserMessage.
@@ -151,9 +154,13 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   } else if (state.streamingComponent && state.streamingMessage) {
-    // Update unexpected aborted streams to show they were interrupted.
-    state.streamingMessage.stopReason = 'aborted';
-    state.streamingMessage.errorMessage = 'Interrupted';
+    // Update streaming message to show it was interrupted. Terminal status
+    // lives in content.metadata under the DB-native contract.
+    state.streamingMessage.content.metadata = {
+      ...state.streamingMessage.content.metadata,
+      stopReason: 'aborted',
+      errorMessage: 'Interrupted',
+    };
     state.streamingComponent.updateContent(state.streamingMessage);
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;

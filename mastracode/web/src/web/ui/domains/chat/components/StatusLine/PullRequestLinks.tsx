@@ -1,10 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { CircleDot, CircleX, GitMerge } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { useParams } from 'react-router';
 
-import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { useChatTranscript } from '../../context/useChatTranscript';
+import type { TranscriptState } from '../../services/transcript';
 
 interface PullRequestSubscription {
   id: string;
@@ -30,13 +28,28 @@ function statusColor(status: PullRequestSubscription['status']): string {
   return 'text-accent1 hover:text-accent1';
 }
 
+interface PullRequestLinksProps {
+  baseUrl: string;
+  resourceId: string;
+  projectPath: string | undefined;
+  githubProjectId: unknown;
+  threadId: string | undefined;
+  transcriptEntries: TranscriptState['entries'];
+  busy: boolean;
+}
+
 /** Pull requests subscribed to the active GitHub-backed thread. */
-export function PullRequestLinks() {
-  const { threadId } = useParams<{ threadId: string }>();
-  const { baseUrl, resourceId, projectPath, projectState } = useChatSessionContext();
-  const { transcript, busy } = useChatTranscript();
+export function PullRequestLinks({
+  baseUrl,
+  resourceId,
+  projectPath,
+  githubProjectId,
+  threadId,
+  transcriptEntries,
+  busy,
+}: PullRequestLinksProps) {
   const wasBusy = useRef(busy);
-  const notificationIds = transcript.entries
+  const notificationIds = transcriptEntries
     .flatMap(entry => {
       if (entry.kind === 'notification') return [entry.notificationId];
       if (entry.kind !== 'message') return [];
@@ -50,7 +63,6 @@ export function PullRequestLinks() {
     })
     .filter(id => typeof id === 'string')
     .join(':');
-  const githubProjectId = projectState?.githubProjectId;
   const enabled = typeof githubProjectId === 'string' && Boolean(threadId);
   const query = useQuery({
     queryKey: ['github', 'subscriptions', resourceId, threadId, projectPath],

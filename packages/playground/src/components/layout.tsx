@@ -105,7 +105,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="bg-surface1 font-sans h-screen">
       <Toaster position="bottom-right" />
-      <ThemeProvider defaultTheme="dark">
+      <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>

@@ -56,6 +56,8 @@ import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
+import { derivePredicateLabel, evaluatePredicate } from './predicate';
+import type { Predicate } from './predicate';
 import type {
   ConditionFunction,
   ExecuteFunction,
@@ -146,6 +148,35 @@ function serializeAgentStepFields(options: any): {
   return out;
 }
 
+/**
+ * Type guard for the opt-in declarative-predicate arg accepted by
+ * `.branch()`, `.dowhile()`, and `.dountil()`.
+ */
+function isDeclarativePredicateArg(value: unknown): value is { predicate: Predicate } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { predicate?: unknown }).predicate === 'object' &&
+    (value as { predicate?: unknown }).predicate !== null
+  );
+}
+
+/**
+ * Wrap a declarative `Predicate` as a runtime condition callback so the
+ * existing execution engine (which only knows how to call `condition(params)`)
+ * can execute stored / declarative predicates unchanged.
+ */
+function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
+  return async (params: any) => {
+    return evaluatePredicate(predicate, {
+      initData: params?.getInitData ? params.getInitData() : undefined,
+      inputData: params?.inputData,
+      state: params?.state,
+      getStepResult: typeof params?.getStepResult === 'function' ? (id: string) => params.getStepResult(id) : undefined,
+    });
+  };
+}
+
 function serializeToolStepFields(options: any): { options?: { retries?: number; metadata?: StepMetadata } } {
   const opts: { retries?: number; metadata?: StepMetadata } = {};
   if (typeof options?.retries === 'number') opts.retries = options.retries;
@@ -227,6 +258,7 @@ function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): Seri
       if (innerId === stepId) return entry;
     }
     if (entry.type === 'step' && entry.step?.id === stepId) return entry;
+    if (entry.type === 'workflow' && entry.id === stepId) return entry;
     if ('id' in entry && typeof entry.id === 'string' && entry.id === stepId) return entry;
     if ((entry.type === 'conditional' || entry.type === 'parallel') && 'steps' in entry) {
       const found = findStepInGraph(entry.steps as SerializedStepFlowEntry[], stepId);
@@ -696,6 +728,7 @@ export function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       workflowId,
       state,
       setState,
+      abortSignal,
       ...rest
     }) => {
       // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
@@ -704,6 +737,7 @@ export function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
         mastra,
         requestContext,
         ...observabilityContext,
+        abortSignal,
         resumeData,
         workflow: {
           runId,
@@ -1007,6 +1041,20 @@ function toSerializedSingleStepEntry(step: StepWithRefMetadata): SerializedSingl
       toolId: step.__toolRef.id,
       description: step.description,
       ...serializeToolStepFields(step.__toolOptions),
+    };
+  }
+  if ((step as any)?.component === 'WORKFLOW') {
+    // Prefer the public getter; fall back to the protected field / legacy
+    // SerializedStep shape for any partial mock consumers.
+    const nestedFlow =
+      (step as { serializedStepGraph?: SerializedStepFlowEntry[] }).serializedStepGraph ??
+      (step as SerializedStep).serializedStepFlow;
+    return {
+      type: 'workflow',
+      id: step.id,
+      workflowId: step.id,
+      description: step.description,
+      ...(nestedFlow ? { serializedStepFlow: nestedFlow } : {}),
     };
   }
   return {
@@ -1607,8 +1655,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               // across processOutputStream and processOutputResult calls
               const mutableState = processorState;
               let processorSpan = mutableState[spanKey] as
-                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
-                | undefined;
+                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
@@ -2505,23 +2552,38 @@ export class Workflow<
   branch<
     TBranchSteps extends Array<
       [
-        ConditionFunction<TState, TPrevSchema, any, any, any, TEngineType>,
+        ConditionFunction<TState, TPrevSchema, any, any, any, TEngineType> | { predicate: Predicate },
         Step<string, any, TPrevSchema, any, any, any, TEngineType, any>,
       ]
     >,
   >(steps: TBranchSteps) {
+    const resolved = steps.map(([condOrPred, step]) => {
+      const isDeclarative = isDeclarativePredicateArg(condOrPred);
+      const predicate = isDeclarative ? (condOrPred as { predicate: Predicate }).predicate : undefined;
+      const condition = isDeclarative
+        ? (predicateToCondition(predicate!) as ConditionFunction<TState, TPrevSchema, any, any, any, TEngineType>)
+        : (condOrPred as ConditionFunction<TState, TPrevSchema, any, any, any, TEngineType>);
+      const label = predicate ? derivePredicateLabel(predicate) : condition.toString();
+      return { step, condition, predicate, label };
+    });
     this.stepFlow.push({
       type: 'conditional',
-      steps: steps.map(([_cond, step]) => toSingleStepEntry(step as StepWithRefMetadata)),
-      conditions: steps.map(([cond]) => cond),
-      serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
-    });
+      steps: resolved.map(({ step }) => toSingleStepEntry(step as StepWithRefMetadata)),
+      conditions: resolved.map(({ condition }) => condition),
+      serializedConditions: resolved.map(({ step, label }) => ({ id: `${step.id}-condition`, fn: label })),
+      ...(resolved.some(({ predicate }) => predicate)
+        ? { predicates: resolved.map(({ predicate }) => predicate) as Array<Predicate | undefined> }
+        : {}),
+    } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'conditional',
-      steps: steps.map(([_cond, step]) => toSerializedSingleStepEntry(step as StepWithRefMetadata)),
-      serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
-    });
-    steps.forEach(([_, step]) => {
+      steps: resolved.map(({ step }) => toSerializedSingleStepEntry(step as StepWithRefMetadata)),
+      serializedConditions: resolved.map(({ step, label }) => ({ id: `${step.id}-condition`, fn: label })),
+      ...(resolved.some(({ predicate }) => predicate)
+        ? { predicates: resolved.map(({ predicate }) => predicate) as Array<Predicate | undefined> }
+        : {}),
+    } as SerializedStepFlowEntry);
+    resolved.forEach(({ step }) => {
       this.steps[step.id] = step;
     });
 
@@ -2561,15 +2623,22 @@ export class Workflow<
       // declare one matching the workflow's TRequestContext. Mismatched schemas error.
       unknown extends TStepRC ? unknown : TRequestContext
     >,
-    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
+    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType> | { predicate: Predicate },
   ) {
+    const isDeclarative = isDeclarativePredicateArg(condition);
+    const predicate = isDeclarative ? (condition as { predicate: Predicate }).predicate : undefined;
+    const runtimeCondition = isDeclarative
+      ? (predicateToCondition(predicate!) as LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>)
+      : (condition as LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>);
+    const label = predicate ? derivePredicateLabel(predicate) : runtimeCondition.toString();
     this.stepFlow.push({
       type: 'loop',
       step: toSingleStepEntry(step),
-      condition,
+      condition: runtimeCondition,
       loopType: 'dowhile',
-      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
-    });
+      serializedCondition: { id: `${step.id}-condition`, fn: label },
+      ...(predicate ? { predicate } : {}),
+    } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'loop',
       step: {
@@ -2580,9 +2649,10 @@ export class Workflow<
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
       },
-      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
+      serializedCondition: { id: `${step.id}-condition`, fn: label },
       loopType: 'dowhile',
-    });
+      ...(predicate ? { predicate } : {}),
+    } as SerializedStepFlowEntry);
     this.steps[step.id] = step as any;
     return this as unknown as Workflow<
       TEngineType,
@@ -2609,15 +2679,22 @@ export class Workflow<
       // declare one matching the workflow's TRequestContext. Mismatched schemas error.
       unknown extends TStepRC ? unknown : TRequestContext
     >,
-    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
+    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType> | { predicate: Predicate },
   ) {
+    const isDeclarative = isDeclarativePredicateArg(condition);
+    const predicate = isDeclarative ? (condition as { predicate: Predicate }).predicate : undefined;
+    const runtimeCondition = isDeclarative
+      ? (predicateToCondition(predicate!) as LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>)
+      : (condition as LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>);
+    const label = predicate ? derivePredicateLabel(predicate) : runtimeCondition.toString();
     this.stepFlow.push({
       type: 'loop',
       step: toSingleStepEntry(step),
-      condition,
+      condition: runtimeCondition,
       loopType: 'dountil',
-      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
-    });
+      serializedCondition: { id: `${step.id}-condition`, fn: label },
+      ...(predicate ? { predicate } : {}),
+    } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'loop',
       step: {
@@ -2628,9 +2705,10 @@ export class Workflow<
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
       },
-      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
+      serializedCondition: { id: `${step.id}-condition`, fn: label },
       loopType: 'dountil',
-    });
+      ...(predicate ? { predicate } : {}),
+    } as SerializedStepFlowEntry);
     this.steps[step.id] = step as any;
     return this as unknown as Workflow<
       TEngineType,
@@ -2645,9 +2723,9 @@ export class Workflow<
   }
 
   foreach<
-    TPrevIsArray extends TPrevSchema extends any[] ? true : false,
+    TPrevIsArray extends (TPrevSchema extends any[] ? true : false),
     TStepState,
-    TStepInputSchema extends TPrevSchema extends (infer TElement)[] ? TElement : never,
+    TStepInputSchema extends (TPrevSchema extends (infer TElement)[] ? TElement : never),
     TStepId extends string,
     TSchemaOut,
     TStepRC,
@@ -3241,13 +3319,17 @@ export class Workflow<
     for (const step of Object.keys(steps)) {
       const stepGraph = findStepInGraph(serializedStepGraph, step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
-      if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
+      const isNestedWorkflowEntry =
+        !!stepGraph && (stepGraph.type === 'workflow' || (stepGraph as any)?.step?.component === 'WORKFLOW');
+      if (isNestedWorkflowEntry) {
+        const nestedWorkflowId =
+          stepGraph!.type === 'workflow' ? (stepGraph as { type: 'workflow'; workflowId: string }).workflowId : step;
         // Evented runtime stores nested workflow's runId in metadata.nestedRunId (set by step-executor).
         // Default runtime uses the parent runId directly to look up nested workflow steps.
         const stepResult = steps[step] as any;
         const nestedRunId = stepResult?.metadata?.nestedRunId ?? runId;
 
-        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: step });
+        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: nestedWorkflowId });
         if (nestedSteps) {
           const updatedNestedSteps = Object.entries(nestedSteps).reduce(
             (acc, [key, value]) => {

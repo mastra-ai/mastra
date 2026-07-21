@@ -125,5 +125,17 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         id: flow.id,
         flow,
       };
+    case 'workflow':
+      return {
+        kind: 'nested-workflow-step',
+        id: flow.id,
+        step: {
+          id: flow.workflowId,
+          description: flow.description,
+          component: 'WORKFLOW',
+          serializedStepFlow: flow.serializedStepFlow,
+        } as never,
+        flow,
+      };
   }
 };

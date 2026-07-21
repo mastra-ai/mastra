@@ -107,7 +107,7 @@ export const chefAgent = new Agent({
     myWorkflow,
   },
   memory,
-  voice: new OpenAIVoice(),
+  // voice: new OpenAIVoice(),
 });
 
 export const dynamicAgent = new Agent({
@@ -121,7 +121,7 @@ export const dynamicAgent = new Agent({
   },
   model: ({ requestContext }) => {
     if (requestContext.get('foo')) {
-      return 'openai/gpt-5.4' as const;
+      return 'openai/gpt-5.5' as const;
     }
     return 'openai/gpt-5.4-mini' as const;
   },
@@ -198,7 +198,7 @@ export const schemaValidatedAgent = new Agent({
 });
 
 const piiDetector = new PIIDetector({
-  model: 'openai/gpt-5.4',
+  model: 'openai/gpt-5.5',
   redactionMethod: 'mask',
   preserveFormat: true,
   includeDetections: true,
@@ -229,7 +229,7 @@ export const chefAgentResponses = new Agent({
     ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
-  model: 'openai/gpt-5.4',
+  model: 'openai/gpt-5.5',
   tools: async () => {
     return {
       web_search_preview: openai.tools.webSearchPreview(),
@@ -254,12 +254,12 @@ export const agentThatHarassesYou = new Agent({
   instructions: `
     You are a agent that harasses you. You are a jerk. You are a meanie. You are a bully. You are a asshole.
     `,
-  model: 'openai/gpt-5.4',
+  model: 'openai/gpt-5.5',
   outputProcessors: [moderationDetector],
 });
 
 const answerRelevance = createAnswerRelevancyScorer({
-  model: 'openai/gpt-5.4',
+  model: 'openai/gpt-5.5',
 });
 
 export const evalAgent = new Agent({
@@ -268,7 +268,7 @@ export const evalAgent = new Agent({
   instructions: `
     You are a helpful assistant with a weather tool.
     `,
-  model: 'openai/gpt-5.4',
+  model: 'openai/gpt-5.5',
   tools: {
     weatherInfo,
   },

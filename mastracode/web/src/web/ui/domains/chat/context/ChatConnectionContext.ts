@@ -1,15 +1,13 @@
-import type { AgentControllerSessionState } from '@mastra/client-js';
 import { createContext } from 'react';
 
-import type { ConnectionStatus } from '../hooks/useAgentControllerConnection';
+import type { ConnectionStatus, useAgentControllerConnection } from '../hooks/useAgentControllerConnection';
 
-export type ChatConnectionState = AgentControllerSessionState & { running?: boolean };
+export type ChatConnectionState = ReturnType<typeof useAgentControllerConnection>['state'];
 
 export interface ChatConnectionApi {
   status: ConnectionStatus;
   state?: ChatConnectionState;
-  /** When the state snapshot was last fetched — bumps on reconnect refetches. */
-  stateUpdatedAt?: number;
+  threadId?: string;
   createdThreadId?: string;
 }
 

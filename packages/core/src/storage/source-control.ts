@@ -1,9 +1,5 @@
 export type SourceControlCapabilityReason =
-  | 'provider-not-configured'
-  | 'provider-unavailable'
-  | 'missing-permissions'
-  | 'project-not-linked'
-  | 'unsupported';
+  'provider-not-configured' | 'provider-unavailable' | 'missing-permissions' | 'project-not-linked' | 'unsupported';
 
 export type SourceControlCapabilities = {
   canRead: boolean;

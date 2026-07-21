@@ -293,6 +293,33 @@ describe('createScorer', () => {
       }
     });
 
+    it('uses automatic structured output routing by default', async () => {
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream');
+      try {
+        const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+
+        const scorer = createScorer({
+          id: 'automatic-json-routing-scorer',
+          name: 'automatic-json-routing-scorer',
+          description: 'Verifies the default structured output routing',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
+        expect(options?.structuredOutput?.jsonPromptInjection).toBe('auto');
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
     it('forwards judge memory to the internal judge agent run', async () => {
       const streamSpy = vi
         .spyOn(Agent.prototype, 'stream')
@@ -777,9 +804,9 @@ describe('createScorer', () => {
 
         const result = await scorer.run(testData.scoringInput);
 
-        // Two stream calls: the failed first attempt + the jsonPromptInjection retry.
+        // Two stream calls: automatic routing first, then the existing fallback retry.
         expect(streamSpy).toHaveBeenCalledTimes(2);
-        expect(((streamSpy.mock.calls as any)[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
+        expect(((streamSpy.mock.calls as any)[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe('auto');
         expect(((streamSpy.mock.calls as any)[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
         // The scorer recovered and produced the retried score.
         expect(result.score).toBe(1);

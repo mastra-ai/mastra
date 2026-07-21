@@ -1,0 +1,87 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Name the literal action: is merged or is routed to. Disable this rule for aviation or nature prose."
+level: error
+nonword: true
+ignorecase: true
+# "Lands" is an AI overuse fingerprint: a request "lands on" a node, a PR
+# "lands in" main, an idea "lands in" a sweet spot. Flag the figurative arrival
+# verb and exempt the common things that literally land. The exemption list is
+# deliberately not exhaustive: rare landers (specific species, stray
+# projectiles) fire, so aviation or nature writing disables the whole rule.
+# Exemptions need (?i) because ignorecase covers tokens but not exemptions, so a
+# sentence-initial "Snow lands on the sill" would otherwise leak through. Each
+# exemption matches the subject word inside the captured "<subject> lands on"
+# span.
+exceptions:
+  # Common aircraft
+  - '(?i)planes?'
+  - '(?i)airplanes?'
+  - '(?i)jets?'
+  - '(?i)aircraft'
+  - '(?i)helicopters?'
+  - '(?i)drones?'
+  - '(?i)gliders?'
+  - '(?i)balloons?'
+  - '(?i)flights?'
+  # Spacecraft
+  - '(?i)rockets?'
+  - '(?i)spacecraft'
+  - '(?i)probes?'
+  - '(?i)landers?'
+  - '(?i)rovers?'
+  - '(?i)capsules?'
+  - '(?i)shuttles?'
+  - '(?i)satellites?'
+  # Birds (generic; rare species fire, so nature writing disables the rule)
+  - '(?i)birds?'
+  # Common falling or thrown things
+  - '(?i)balls?'
+  - '(?i)snow'
+  - '(?i)snowflakes?'
+  - '(?i)leaf'
+  - '(?i)leaves'
+  - '(?i)meteors?'
+  - '(?i)asteroids?'
+  # People who land
+  - '(?i)skydivers?'
+  # "Lands" as a territory noun, not the verb (public lands in the west)
+  - '(?i)public'
+  - '(?i)federal'
+  - '(?i)tribal'
+  - '(?i)private'
+  - '(?i)ancestral'
+  - '(?i)indigenous'
+  - '(?i)native'
+  - '(?i)grazing'
+  - '(?i)crown'
+  - '(?i)common'
+  # Assessment subjects owned by ColloquialAssessments ("the joke lands")
+  - '(?i)joke'
+  - '(?i)point'
+  - '(?i)argument'
+  - '(?i)line'
+  - '(?i)metaphor'
+  - '(?i)analogy'
+  - '(?i)comparison'
+  - '(?i)critique'
+  - '(?i)distinction'
+  - '(?i)observation'
+  - '(?i)framing'
+  - '(?i)insight'
+  - '(?i)takeaway'
+  - '(?i)punchline'
+  - '(?i)callback'
+  - '(?i)bit'
+  - '(?i)reference'
+  - '(?i)callout'
+tokens:
+  # <subject> lands on/in/at: the figurative arrival with an explicit
+  # destination ("the PR lands in main," "the request lands on the node").
+  - "\\b\\w+ land(?:s|ed)? (?:on|in|into|at|here|there)\\b"
+  # A temporal or conditional subordinator + <subject> + "lands" with no
+  # destination ("once the feature lands," "when the PR lands," "until the fix
+  # lands"). The subordinator is the tell: bare "X lands" is too broad to flag,
+  # but "once/when/after X lands" reliably means ships or merges in prose. The
+  # shared exceptions still fire, so "when the plane lands" stays quiet.
+  - "\\b(?:once|when|whenever|after|before|until|till|if|as soon as|the (?:moment|second|minute|day|instant)) (?:\\w+ ){1,4}land(?:s|ed)?\\b"

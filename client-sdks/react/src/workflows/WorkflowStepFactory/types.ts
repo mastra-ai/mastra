@@ -8,8 +8,7 @@ import type {
 import type { ReactNode } from 'react';
 
 export type WorkflowStepResult =
-  | StepResult<unknown, unknown, unknown, unknown>
-  | SerializedStepResult<unknown, unknown, unknown, unknown>;
+  StepResult<unknown, unknown, unknown, unknown> | SerializedStepResult<unknown, unknown, unknown, unknown>;
 
 export type ResolvedWorkflowStepBase<
   TKind extends string,
@@ -76,7 +75,7 @@ export type ResolvedWorkflowSleepUntilStep = ResolvedWorkflowStepBase<
 
 export type ResolvedWorkflowNestedWorkflowStep = ResolvedWorkflowStepBase<
   'nested-workflow-step',
-  Extract<SerializedStepFlowEntry, { type: 'step' }>
+  Extract<SerializedStepFlowEntry, { type: 'step' | 'workflow' }>
 >;
 
 export type ResolvedWorkflowUnknownStep = ResolvedWorkflowStepBase<'unknown-step'>;

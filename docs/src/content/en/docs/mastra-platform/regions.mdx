@@ -1,0 +1,78 @@
+---
+title: "Regions | Mastra platform"
+description: Choose where a Mastra platform environment runs, where its hosted database is placed, and where its observability data is stored.
+---
+
+# Regions
+
+A region controls where a platform environment runs, where its [hosted database](/docs/mastra-platform/database) is placed, and where its observability data is stored. The region is fixed when the environment is created and can't be changed later.
+
+Mastra platform offers two residency zones today, `us` and `eu`, backed by specific compute regions on Railway. Databases and observability follow the environment's region automatically.
+
+## Choose a region
+
+Pass `--region` when creating or first deploying to an environment:
+
+```bash
+mastra deploy --env production --region eu
+mastra env create staging --region us
+```
+
+Both `mastra deploy --region` and `mastra env create --region` accept either the `us` / `eu` shorthand or a canonical Railway region code from the table below. Shorthand is the recommended form.
+
+The default when no region is passed is `us`, which resolves to `pdx` (Portland, Oregon).
+
+## Available regions
+
+The residency selector offers four Railway regions across two zones. `us` and `eu` shorthand resolve to the underlined default in each zone.
+
+| Zone | Railway code | Location |
+| - | - | - |
+| `us` | `pdx` (default) | Portland, Oregon |
+| `us` | `iad` | Ashburn, Virginia |
+| `us` | `sfo` | San Francisco, California |
+| `eu` | `ams` (default) | Amsterdam, Netherlands |
+
+Pass a Railway code directly when you need to pin an environment to a specific data center. Passing `us` selects `pdx`, and passing `eu` selects `ams`.
+
+:::note
+Additional Railway regions exist in the deploy pipeline (for example Singapore, `sin`) but aren't offered in the residency selector yet, because hosted databases and observability don't have local placement outside the US and EU. Passing an unrecognized region falls back to the US default rather than pinning to it.
+:::
+
+## Hosted database placement
+
+When you attach an [environment-scoped database](/docs/mastra-platform/database), the platform picks the provider region closest to the environment. This is server-authoritative, so an explicit `--region` on `mastra env db create <env>` is ignored. The environment's region is the source of truth.
+
+| Environment region | Turso region | Postgres (Neon) region |
+| - | - | - |
+| `pdx` | `sjc` (San Jose) | `aws-us-west-2` (Oregon) |
+| `iad` | `iad` (Ashburn) | `aws-us-east-1` (N. Virginia) |
+| `sfo` | `sjc` (San Jose) | `aws-us-west-2` (Oregon) |
+| `ams` | `ams` (Amsterdam) | `aws-eu-central-1` (Frankfurt) |
+
+Project-scoped databases (shared across environments) accept an explicit `--region` because they aren't bound to a single environment. Use a provider region ID for the flag, not the `us` / `eu` shorthand:
+
+```bash
+mastra env db create --kind turso --region fra
+mastra env db create --kind neon --region aws-us-east-1
+```
+
+Turso offers 20+ regions and Postgres (Neon) is available across AWS and Azure regions in the US, EU, and APAC. See the [Turso regions list](https://docs.turso.tech/features/data-edge#locations) and [Neon regions list](https://neon.com/docs/introduction/regions) for the full set. Passing a code not offered by the provider fails at attach time with the provider's error.
+
+## Observability co-location
+
+Observability ingest runs in two regions today: **US** (Iowa, `us-central1`) and **EU** (Amsterdam). Every environment's traces, logs, and metrics are routed to the ingest region that matches its residency zone:
+
+| Environment region | Observability region |
+| - | - |
+| `pdx`, `iad`, `sfo`, `us` shorthand | US (Iowa) |
+| `ams`, `eu` shorthand | EU (Amsterdam) |
+
+Compute and databases can be placed in more Railway and provider regions than observability supports, so co-location isn't perfect for every combination. A `us`-zone environment always sends telemetry to US ingest, and an `eu`-zone environment always sends telemetry to EU ingest, even if the underlying Railway region is a specific city not directly served by an ingest endpoint. Data residency is preserved at the zone level. Telemetry from an `eu` environment never crosses into the US.
+
+## Related
+
+- [Deploy](/docs/mastra-platform/deploy)
+- [Environments](/docs/mastra-platform/environments)
+- [Hosted databases](/docs/mastra-platform/database)
+- [Observability](/docs/mastra-platform/observability)

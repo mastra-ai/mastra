@@ -1,47 +1,50 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
-import { GitBranch, MoreHorizontal, Plus } from 'lucide-react';
+import { ChevronRight, GitBranch, MessagesSquare, MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../chat/hooks/useAgentControllerThreads';
-import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { useActiveProjectContext } from '../context/ActiveProjectProvider';
+import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../../../../shared/hooks/useAgentControllerThreads';
+import {
+  conversationThread,
+  useWorkspaceActivity,
+  useWorkspaceThreadTitles,
+} from '../../../../../shared/hooks/useWorkspaceActivity';
+import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import {
   deriveProjectPath,
-  useCreateWorkspaceMutation,
   useDeleteWorkspaceMutation,
   useSelectWorkspaceMutation,
   useWorkspacesQuery,
-} from '../hooks/useWorkspaces';
-import { useWorkspaceActivity } from '../hooks/useWorkspaceActivity';
-import { useWorkspaceAttention } from '../hooks/useWorkspaceAttention';
-import type { Worktree } from '../services/projects';
+} from '../../../../../shared/hooks/useWorkspaces';
+import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
+import { isGithubFactory } from '../services/factories';
+import type { Worktree } from '../services/factories';
+
+const SESSIONS_COLLAPSED_STORAGE_KEY = 'mastracode-factory-sessions-collapsed';
 
 /**
  * Factory sessions: a GitHub project's feature worktrees, rendered as the
  * "Sessions" subsection of the Factory menu. Each worktree holds a single
  * factory-run conversation, so selecting one opens its thread directly —
- * there is no nested thread list.
+ * there is no nested thread list. Sessions are created by board runs, not
+ * ad hoc, so there is no create affordance here.
  */
-export function WorkspacesSection() {
+export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const [creating, setCreating] = useState(false);
-  const [branch, setBranch] = useState('');
-  const workspaces = useWorkspacesQuery(activeProject);
-  const projectPath = deriveProjectPath(activeProject);
+  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const workspaces = useWorkspacesQuery(activeFactory);
+  const projectPath = deriveProjectPath(activeFactory);
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
-  const selectWorkspace = useSelectWorkspaceMutation(activeProject, scope);
-  const createWorkspace = useCreateWorkspaceMutation(activeProject, scope);
+  const selectWorkspace = useSelectWorkspaceMutation(activeFactory, scope);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -52,29 +55,35 @@ export function WorkspacesSection() {
     baseUrl,
     enabled: sessionEnabled,
   });
-  const deleteWorkspace = useDeleteWorkspaceMutation(activeProject, session, scope);
+  const deleteWorkspace = useDeleteWorkspaceMutation(activeFactory, session, scope);
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
+  const [open, setOpen] = useState(() => {
+    const collapsed = localStorage.getItem(SESSIONS_COLLAPSED_STORAGE_KEY);
+    return collapsed === null ? defaultOpen : collapsed !== 'true';
+  });
   const worktrees = workspaces.data?.worktrees ?? [];
-  const runningByPath = useWorkspaceActivity({
+  const activityOptions = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     projectPath: projectPath || undefined,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: sessionEnabled && activeProject?.source === 'github',
-  });
+    enabled: sessionEnabled && Boolean(activeFactory && isGithubFactory(activeFactory)),
+  };
+  const runningByPath = useWorkspaceActivity(activityOptions);
+  // Both hooks read the same cached thread listing — one poll, no extra request.
+  const titleByPath = useWorkspaceThreadTitles(activityOptions);
   const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
 
-  if (activeProject?.source !== 'github') return null;
+  if (!activeFactory || !isGithubFactory(activeFactory)) return null;
 
   const selectedPath = workspaces.data?.selected?.worktreePath;
-  const pending = createWorkspace.isPending || selectWorkspace.isPending || deleteWorkspace.isPending;
+  const pending = selectWorkspace.isPending || deleteWorkspace.isPending;
 
-  // Threads are scoped to a worktree, so entering a workspace lands on its
-  // most recent thread (creating one when it has none). Factory pages are
-  // worktree-independent and stay put.
+  // Threads are scoped to a worktree, so entering a session lands on its
+  // conversation thread (creating one when it has none) — from anywhere,
+  // including Factory pages: a session row IS its conversation.
   const openWorktreeThread = async (worktreePath: string) => {
-    if (location.pathname.startsWith('/factory')) return;
     try {
       // Address the target worktree's own session (sessions are scoped per
       // worktree). Create it up front so a brand-new scope is seeded with its
@@ -97,11 +106,10 @@ export function WorkspacesSection() {
             tags: { projectPath: worktreePath },
           }),
       });
-      const latest = [...threads].sort((a, b) => {
-        const ta = a.updatedAt ?? a.createdAt ?? '';
-        const tb = b.updatedAt ?? b.createdAt ?? '';
-        return tb.localeCompare(ta);
-      })[0];
+      // Same selection rule as the row label (latest titled thread first), so
+      // the row can never open a different thread than the one it is named
+      // after — e.g. a newer empty untitled thread seeded by session creation.
+      const latest = conversationThread(threads);
       if (latest) {
         // Warm the message cache first so the thread page renders content
         // instead of a loading skeleton, then jump straight to the target
@@ -133,11 +141,6 @@ export function WorkspacesSection() {
     }
   };
 
-  const resetCreate = () => {
-    setCreating(false);
-    setBranch('');
-  };
-
   const confirmDeleteWorktree = () => {
     if (!confirmDelete) return;
     const target = confirmDelete;
@@ -145,9 +148,10 @@ export function WorkspacesSection() {
       onSuccess: ({ updated, wasSelected }) => {
         setConfirmDelete(null);
         // Threads under the deleted worktree are gone; if we were inside one,
-        // land on the fallback workspace's latest thread.
-        if (wasSelected) {
-          const fallback = updated.selectedWorktreePath;
+        // land on the fallback workspace's latest thread. Factory pages are
+        // worktree-independent, so deleting from there stays put.
+        if (wasSelected && !location.pathname.startsWith('/factory')) {
+          const fallback = isGithubFactory(updated) ? updated.binding.selectedWorktreePath : undefined;
           if (fallback) void openWorktreeThread(fallback);
           else void navigate('/new', { replace: true });
         }
@@ -156,91 +160,58 @@ export function WorkspacesSection() {
     });
   };
 
-  const createBranch = () => {
-    const trimmed = branch.trim();
-    if (!trimmed) return;
-    createWorkspace.mutate(trimmed, {
-      onSuccess: updated => {
-        resetCreate();
-        const path = updated.selectedWorktreePath;
-        if (path) void openWorktreeThread(path);
-      },
-    });
-  };
-
-  const submitCreate = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    createBranch();
-  };
-
-  const onCreateKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Escape') resetCreate();
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      createBranch();
-    }
-  };
-
   return (
-    <section className="flex flex-col gap-2" aria-label="Factory sessions">
-      <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
-          Sessions
-        </Txt>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="New workspace"
-          onClick={() => setCreating(true)}
-          disabled={creating || pending}
-        >
-          <Plus size={15} />
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        {worktrees.map(worktree => {
-          const active = worktree.worktreePath === selectedPath;
-          return (
-            <WorkspaceRow
-              key={worktree.worktreePath}
-              worktree={worktree}
-              active={active}
-              running={runningByPath[worktree.worktreePath] === true}
-              attention={attentionByPath[worktree.worktreePath] === true}
-              disabled={pending}
-              onSeen={() => clearAttention(worktree.worktreePath)}
-              onSelect={() => {
-                clearAttention(worktree.worktreePath);
-                selectWorkspace.mutate(worktree.worktreePath, {
-                  onSuccess: () => void openWorktreeThread(worktree.worktreePath),
-                });
-              }}
-              onDelete={() => setConfirmDelete(worktree)}
-            />
-          );
-        })}
-
-        {creating && (
-          <form aria-label="Create workspace" className="flex flex-col gap-1" onSubmit={submitCreate}>
-            <Input
-              aria-label="Branch name"
-              autoFocus
-              value={branch}
-              onChange={event => setBranch(event.target.value)}
-              onKeyDown={onCreateKeyDown}
-              placeholder="feature-branch"
-              disabled={createWorkspace.isPending}
-              className="h-8 text-xs"
-            />
-            {createWorkspace.error && (
-              <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
-                {createWorkspace.error instanceof Error ? createWorkspace.error.message : 'Failed to create workspace'}
-              </Txt>
-            )}
-          </form>
-        )}
-      </div>
+    <section aria-label="Factory sessions">
+      <Collapsible
+        open={open}
+        onOpenChange={nextOpen => {
+          setOpen(nextOpen);
+          localStorage.setItem(SESSIONS_COLLAPSED_STORAGE_KEY, String(!nextOpen));
+        }}
+      >
+        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-icon3 transition hover:bg-surface3 hover:text-icon5">
+          <span className="flex items-center">
+            <MessagesSquare size={13} />
+          </span>
+          <span className="truncate">Sessions</span>
+          <ChevronRight className="ml-auto shrink-0" size={13} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="flex flex-col gap-1 pt-1">
+          {worktrees.map(worktree => {
+            const active = worktree.worktreePath === selectedPath;
+            return (
+              <WorkspaceRow
+                key={worktree.worktreePath}
+                worktree={worktree}
+                label={titleByPath[worktree.worktreePath]}
+                active={active}
+                running={runningByPath[worktree.worktreePath] === true}
+                attention={attentionByPath[worktree.worktreePath] === true}
+                disabled={pending}
+                onSelect={() => {
+                  clearAttention(worktree.worktreePath);
+                  // The active row is already the selected workspace — skip the
+                  // redundant re-select and jump straight to its conversation
+                  // (the user may be on the board, /new, or another page).
+                  if (active) {
+                    void openWorktreeThread(worktree.worktreePath);
+                    return;
+                  }
+                  selectWorkspace.mutate(worktree.worktreePath, {
+                    onSuccess: () => void openWorktreeThread(worktree.worktreePath),
+                  });
+                }}
+                onDelete={() => setConfirmDelete(worktree)}
+              />
+            );
+          })}
+          {worktrees.length === 0 && (
+            <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
+              Sessions appear when work starts from the Factory board.
+            </Txt>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
       {confirmDelete && (
         <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
@@ -282,11 +253,10 @@ export function WorkspaceRow({
   attention,
   disabled,
   onSelect,
-  onSeen,
   onDelete,
 }: {
   worktree: Worktree;
-  /** Display name; defaults to the worktree's branch. */
+  /** Display name (e.g. the session's thread title); defaults to the worktree's branch. */
   label?: string;
   active: boolean;
   running: boolean;
@@ -294,22 +264,17 @@ export function WorkspaceRow({
   attention: boolean;
   disabled: boolean;
   onSelect: () => void;
-  onSeen: () => void;
   onDelete?: () => void;
 }) {
-  // Selecting a row marks it seen (the parent clears attention in onSelect);
-  // the already-active row can't be re-selected, so clicking it just clears
-  // the done indicator.
-  const onClick = active ? (attention ? onSeen : undefined) : onSelect;
   const name = label ?? worktree.branch;
   return (
     <div className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
       <button
         type="button"
         aria-current={active ? 'true' : undefined}
-        aria-disabled={(active && !attention) || undefined}
         disabled={disabled}
-        onClick={onClick}
+        onClick={onSelect}
+        title={worktree.branch}
         className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
       >
         <GitBranch size={13} />

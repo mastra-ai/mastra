@@ -1,0 +1,31 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. State the consequence or the obligation directly. Disable this rule for freight or logistics prose."
+level: error
+nonword: true
+ignorecase: true
+# "Carries" is an AI fingerprint for freighting an abstraction with unstated
+# consequence: a term "carries baggage," a change "carries risk," an approach
+# "carries a caveat." Literal carrying is everywhere (people carry bags,
+# trucks carry freight), so the complement after the verb is the
+# discriminator, in the FigurativeSits mold. "Carries its weight" stays in
+# AnthropomorphicJustification; the tokens here avoid that span so the two
+# rules never double-flag. Freight or logistics writing disables the whole
+# rule.
+tokens:
+  # --- Freighted significance: the abstraction hauls invisible cargo
+  # ("carries weight in the review," "carries implications," "the term
+  # carries baggage"). "Carries risk" is standard in medical and finance
+  # registers; disable the rule for those files.
+  - "\\bcarr(?:y|ies|ied|ying) (?:significant |real |extra |added |considerable |serious |enormous |heavy )?(?:weight|significance|meaning|implications?|connotations?|baggage|risks?|consequences|urgency|stigma)\\b"
+  - "\\bcarr(?:y|ies|ied|ying) (?:the same|as much|more|less|little|no|equal) weight\\b"
+
+  # --- Attached fine print: the change ships with a warning label
+  # ("carries a caveat," "carries a cost," "carries a penalty"). The
+  # sibling of the bare grant in AnthropomorphicJustification, which flags
+  # what the artifact earns rather than what it lugs around.
+  - "\\bcarr(?:y|ies|ied|ying) (?:a|an|the) (?:caveat|warning|cost|price|price tag|penalty|footnote|asterisk|catch|downside|tradeoff|trade-off)\\b"
+
+  # --- Heroics: one component drags the rest across the finish line
+  # ("the cache carries the team," "one test carries the suite").
+  - "\\bcarr(?:y|ies|ied|ying) the (?:day|team|torch|banner|mantle|load|conversation|narrative|argument|story|suite|whole \\w+)\\b"

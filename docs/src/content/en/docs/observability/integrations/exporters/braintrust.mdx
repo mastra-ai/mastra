@@ -95,9 +95,17 @@ new BraintrustExporter({
 
 ## Attach traces to Braintrust evals
 
+Install the Braintrust SDK directly when your application uses `Eval()`, `logger.traced()`, or `currentSpan`:
+
+```bash npm2yarn
+npm install braintrust@latest
+```
+
 When you run Mastra inside Braintrust `Eval()` or `logger.traced()`, pass the Braintrust logger and `currentSpan` resolver to the exporter. Import `currentSpan` from the same `braintrust` package instance that creates the eval or traced span.
 
 This helps Mastra attach its spans under the active Braintrust span when your app and `@mastra/braintrust` resolve different installed copies of the Braintrust SDK.
+
+The exporter accepts compatible logger and span objects from Braintrust SDK v2 and v3. Your application's Braintrust SDK version doesn't need to match the version installed by `@mastra/braintrust`.
 
 ```typescript title="src/mastra/index.ts"
 import { currentSpan, initLogger } from 'braintrust'
@@ -130,15 +138,19 @@ await Eval('my-project', {
 })
 ```
 
+If your application upgrades its direct Braintrust dependency from v2 to v3 and uses Nunjucks prompt templates, follow the [Braintrust v2 to v3 migration guide](https://www.braintrust.dev/docs/sdks/typescript/migrations/v2-to-v3).
+
 ## Querying Braintrust with returned `spanId`
 
-For Braintrust, use `spanId` as the root span identifier when searching for traces because Braintrust root-span queries are typically faster than trace-id queries.
+Mastra uses its returned `spanId` as both the Braintrust row ID and span ID. Use it to find the corresponding Braintrust span by `id` or `span_id`.
+
+Braintrust v3 stores a separate W3C trace ID in `root_span_id`, so the returned Mastra `spanId` isn't the Braintrust `root_span_id`.
 
 ```typescript title="src/mastra/usage.ts"
 const result = await agent.stream('Summarize this ticket')
 
 console.log('Mastra trace ID:', result.traceId)
-console.log('Braintrust root span ID:', result.spanId)
+console.log('Braintrust row and span ID:', result.spanId)
 
 // Use result.spanId in your Braintrust lookup/query path
 ```

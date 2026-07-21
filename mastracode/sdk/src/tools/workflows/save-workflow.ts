@@ -48,13 +48,56 @@ const mappingEntry = z.object({
       'A JSON-ENCODED STRING (not an object) of an object whose top-level keys become the mapping output fields. Each value is one of: { "template": "<text with ${placeholders}>" }, { "value": <constant> }, { "step": "<stepId>", "path": "<field.path>" }, { "initData": "<workflowId>", "path": "<field.path>" }, { "requestContextPath": "<field.path>" }.',
     ),
 });
-const singleStepEntry = z.discriminatedUnion('type', [agentEntry, toolEntry, mappingEntry]);
+const workflowEntry = z.object({
+  type: z.literal('workflow'),
+  id: z.string().describe('Step id — kebab-case, unique within the parent workflow.'),
+  workflowId: z
+    .string()
+    .describe(
+      'Id of another workflow registered on this Mastra instance (code-defined or stored). The referenced workflow runs as a single step; its input is the current step input and its output becomes this step output. Cycles are rejected at load time.',
+    ),
+  options: stepOptions,
+});
+const singleStepEntry = z.discriminatedUnion('type', [agentEntry, toolEntry, mappingEntry, workflowEntry]);
+
+// ---------------------------------------------------------------------------
+// Predicate DSL — declarative condition used by conditional (branch) and loop
+// entries. Mirrors `Predicate` in `@mastra/core/workflows/predicate`. Kept in
+// sync manually because this file uses zod v3 while core exports zod v4.
+// ---------------------------------------------------------------------------
+const literalScalar = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const pathOrLiteral: z.ZodType<any> = z.union([
+  z.object({ path: z.string().min(1) }).strict(),
+  z.object({ literal: literalScalar }).strict(),
+]);
+const predicate: z.ZodType<any> = z.lazy(() =>
+  z.union([
+    z
+      .object({
+        op: z.enum(['eq', 'ne', 'lt', 'lte', 'gt', 'gte']),
+        left: pathOrLiteral,
+        right: pathOrLiteral,
+      })
+      .strict(),
+    z
+      .object({
+        op: z.enum(['in', 'notIn']),
+        value: pathOrLiteral,
+        set: z.array(literalScalar).min(1),
+      })
+      .strict(),
+    z.object({ op: z.enum(['exists', 'notExists']), path: z.string().min(1) }).strict(),
+    z.object({ op: z.enum(['truthy', 'falsy']), value: pathOrLiteral }).strict(),
+    z.object({ op: z.enum(['and', 'or']), args: z.array(predicate).min(1) }).strict(),
+    z.object({ op: z.literal('not'), arg: predicate }).strict(),
+  ]),
+);
 
 // Foreach inner step — same discriminated shape as agent/tool at the top level.
 // `mapping` is deliberately excluded: a mapping's output is always an object
 // keyed by mapConfig fields, so iterating it per-element is meaningless and the
 // rehydrator rejects it.
-const foreachInnerStep = z.discriminatedUnion('type', [agentEntry, toolEntry]);
+const foreachInnerStep = z.discriminatedUnion('type', [agentEntry, toolEntry, workflowEntry]);
 
 // Full top-level entry union — includes container step types (parallel, foreach,
 // sleep, sleepUntil) in addition to the single-step-like entries above.
@@ -62,6 +105,7 @@ const graphEntry = z.discriminatedUnion('type', [
   agentEntry,
   toolEntry,
   mappingEntry,
+  workflowEntry,
   z.object({
     type: z.literal('parallel'),
     steps: z
@@ -92,12 +136,35 @@ const graphEntry = z.discriminatedUnion('type', [
       .string()
       .describe('ISO 8601 wall-clock date to wait until. Static string only — function form does not round-trip.'),
   }),
+  z.object({
+    type: z.literal('conditional'),
+    steps: z
+      .array(singleStepEntry)
+      .describe(
+        'One step per branch. The predicate at the same index decides whether that branch fires. Multiple predicates may match; each matching branch runs.',
+      ),
+    predicates: z
+      .array(predicate)
+      .describe(
+        'Declarative predicate per branch, aligned by index with `steps`. Each predicate is a small JSON expression (see the `op` shapes) — no JS closures. Reference workflow inputs via `{ path: "initData.<field>" }`, previous step output via `{ path: "inputData.<field>" }`, and other step outputs via `{ path: "stepResults.<stepId>.<field>" }`.',
+      ),
+  }),
+  z.object({
+    type: z.literal('loop'),
+    step: singleStepEntry.describe('The step executed each iteration.'),
+    loopType: z
+      .enum(['dowhile', 'dountil'])
+      .describe(
+        '`dowhile` keeps looping while the predicate is TRUE; `dountil` keeps looping until the predicate is TRUE (exit condition).',
+      ),
+    predicate: predicate.describe('Declarative predicate — no JS closures. Same path scopes as `conditional`.'),
+  }),
 ]);
 
 export const saveWorkflowTool = createTool({
   id: 'save-workflow',
   description:
-    'Persist a static workflow definition and live-register it on the running Mastra instance. Supports all seven step types the engine can rehydrate: agent, tool, mapping, parallel, foreach, sleep, sleepUntil. Conditional and loop entries are the only step types NOT supported (their predicates cannot round-trip in v1). After this returns, the workflow is immediately runnable. Call it exactly once with the complete definition; there is no incremental save API.',
+    'Persist a static workflow definition and live-register it on the running Mastra instance. Supports all nine step types the engine can rehydrate: agent, tool, mapping, parallel, foreach, sleep, sleepUntil, conditional, loop. Conditional and loop entries require a declarative `predicate` payload — JS closure conditions cannot round-trip through storage. After this returns, the workflow is immediately runnable. Call it exactly once with the complete definition; there is no incremental save API.',
   inputSchema: z.object({
     id: z.string().describe('Workflow id — kebab-case, descriptive.'),
     description: z.string().optional(),

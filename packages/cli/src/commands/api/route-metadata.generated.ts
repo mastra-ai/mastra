@@ -6083,7 +6083,8 @@ export const API_ROUTE_METADATA = {
     ],
     "bodyParams": [
       "files",
-      "message"
+      "message",
+      "requestContext"
     ],
     "hasQuery": true,
     "hasBody": true,
@@ -6102,7 +6103,8 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
-      "message"
+      "message",
+      "requestContext"
     ],
     "hasQuery": true,
     "hasBody": true,
@@ -6121,7 +6123,8 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
-      "message"
+      "message",
+      "requestContext"
     ],
     "hasQuery": true,
     "hasBody": true,
@@ -6158,6 +6161,7 @@ export const API_ROUTE_METADATA = {
     ],
     "bodyParams": [
       "approved",
+      "requestContext",
       "toolCallId"
     ],
     "hasQuery": true,
@@ -6177,6 +6181,7 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
+      "requestContext",
       "resumeData",
       "toolCallId"
     ],

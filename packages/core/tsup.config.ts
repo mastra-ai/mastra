@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import babel from '@babel/core';
+import * as babel from '@babel/core';
 import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 import type { Options } from 'tsup';
@@ -18,27 +18,17 @@ let treeshakeDecorators = {
       return null;
     }
 
-    return new Promise((resolve, reject) => {
-      babel.transform(
-        code,
-        {
-          babelrc: false,
-          configFile: false,
-          filename: info.path,
-          plugins: [treeshakeDecoratorsBabelPlugin],
-        },
-        (err, result) => {
-          if (err) {
-            return reject(err);
-          }
-
-          resolve({
-            code: result!.code!,
-            map: result!.map!,
-          });
-        },
-      );
-    });
+    return babel
+      .transformAsync(code, {
+        babelrc: false,
+        configFile: false,
+        filename: info.path,
+        plugins: [treeshakeDecoratorsBabelPlugin],
+      })
+      .then(result => ({
+        code: result!.code!,
+        map: result!.map!,
+      }));
   },
 } satisfies Plugin;
 
@@ -63,6 +53,7 @@ export default defineConfig({
     'src/processors/index.ts',
     'src/zod-to-json.ts',
     'src/utils/collect-tool-mocks.ts',
+    'src/utils/safe-stringify.ts',
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
     'src/agent/durable/index.ts',

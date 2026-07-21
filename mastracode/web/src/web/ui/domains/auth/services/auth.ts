@@ -1,5 +1,5 @@
 /**
- * Client-side glue for the optional WorkOS AuthKit gate (see ../auth.ts).
+ * Client-side glue for the optional web auth gate (see src/web/auth.ts).
  *
  * The server protects the whole surface; this module makes the SPA cooperate:
  * - `fetchAuthState()` reads `/auth/me` to decide whether to show the splash
@@ -16,10 +16,14 @@
  */
 
 export interface WebAuthState {
-  /** Whether the server has WorkOS auth configured. */
+  /** Whether the server has web auth configured (any provider). */
   authEnabled: boolean;
   authenticated: boolean;
   user?: { userId?: string; email?: string; name?: string };
+  /** Active identity provider: 'workos' | 'better-auth' | custom adapter kind. */
+  provider?: string;
+  /** True when the provider hosts credential forms and sign-up is disabled. */
+  signUpDisabled?: boolean;
 }
 
 /**
@@ -62,6 +66,52 @@ export function redirectToLogout(baseUrl: string): void {
 }
 
 /**
+ * POST credentials to a better-auth endpoint (`basePath: /auth/api`). The
+ * session cookie is set by the response; the caller navigates afterwards.
+ * Throws with the server's message so the sign-in form can display it.
+ */
+async function postBetterAuthCredentials(baseUrl: string, path: string, body: Record<string, string>): Promise<void> {
+  const res = await fetch(`${baseUrl}/auth/api/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let message = 'Authentication failed';
+    try {
+      const data = (await res.json()) as { message?: string };
+      if (data?.message) message = data.message;
+    } catch {
+      // Non-JSON error body — keep the generic message.
+    }
+    throw new Error(message);
+  }
+}
+
+/**
+ * Full-page navigation after a successful credential sign-in, so the app boots
+ * with the fresh session cookie. Service-level (like `redirectToLogin`) because
+ * jsdom's `window.location.assign` is unforgeable in tests.
+ */
+export function navigateAfterSignIn(returnTo: string): void {
+  window.location.assign(returnTo);
+}
+
+/** Email/password sign-in against the self-hosted better-auth provider. */
+export function signInWithPassword(baseUrl: string, input: { email: string; password: string }): Promise<void> {
+  return postBetterAuthCredentials(baseUrl, 'sign-in/email', input);
+}
+
+/** Email/password sign-up against the self-hosted better-auth provider. */
+export function signUpWithPassword(
+  baseUrl: string,
+  input: { name: string; email: string; password: string },
+): Promise<void> {
+  return postBetterAuthCredentials(baseUrl, 'sign-up/email', input);
+}
+
+/**
  * Fetch the current auth state from `/auth/me`. When the route is missing (auth
  * disabled), reports `authEnabled: false` so the UI hides all auth affordances.
  */
@@ -77,11 +127,15 @@ export async function fetchAuthState(baseUrl: string): Promise<WebAuthState> {
     const data = (await res.json()) as {
       authenticated?: boolean;
       user?: { userId?: string; email?: string; name?: string } | null;
+      provider?: string;
+      signUpDisabled?: boolean;
     };
     return {
       authEnabled: true,
       authenticated: Boolean(data.authenticated),
       user: data.user ?? undefined,
+      provider: data.provider,
+      signUpDisabled: data.signUpDisabled,
     };
   } catch {
     // Network error or non-JSON response → treat as auth not configured so the

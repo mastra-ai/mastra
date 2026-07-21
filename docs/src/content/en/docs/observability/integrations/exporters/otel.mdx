@@ -395,9 +395,7 @@ To disable a signal, set the `signals` option:
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
-  provider: {
-    /* ... */
-  },
+  provider: {/* ... */},
   signals: {
     traces: true, // default
     logs: false, // disable log export

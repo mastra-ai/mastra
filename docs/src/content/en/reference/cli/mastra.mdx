@@ -371,7 +371,7 @@ File to write. Defaults to `.env`.
 
 Manages databases attached to a project on Mastra platform. Databases are provisioned from a managed provider (for example Turso or Neon) and inject their connection env vars into deploys automatically.
 
-A database is either **environment-scoped** (its env vars only go to one environment) or **shared** (project-scoped: its env vars go to all environments). Pass the environment argument to work with environment-scoped databases; omit it for shared databases.
+A database is either **environment-scoped** (its env vars only go to one environment) or **shared** (project-scoped: its env vars go to all environments). Environment-scoped is the default for `mastra env db create` — pass an environment argument, or let the CLI pick or prompt for one. Pass `--shared` on create to attach a shared database instead. For other subcommands (`list`, `delete`, `keys`), pass the environment argument to work with environment-scoped databases and omit it for shared databases.
 
 Creating and deleting databases requires the `admin` role in the organization.
 
@@ -392,11 +392,15 @@ Emit machine-readable JSON.
 
 Provisions a managed database, attaches it, and polls until it's ready. Provisioning errors are printed with the provider's error detail.
 
-With an environment argument, the database is scoped to that environment: only it receives the database's connection env vars, and the provider region is derived from the environment's region. Without one, the database is shared by all environments.
+By default the database is scoped to a single environment: pass an environment argument to pick it, or omit the argument to have the CLI pick for you. When the project has one environment, that environment is used. When it has several, the CLI prompts you to select one interactively; in non-interactive contexts (CI, `--json`) an environment argument is required. Pass `--shared` to attach a project-scoped database that's shared by every environment instead.
+
+Environment-scoped databases inherit their provider region from the environment. Shared databases accept `--region`.
 
 ```bash
-mastra env db create <env> --kind turso
-mastra env db create --kind neon --name my-app-db --region aws-us-east-1
+mastra env db create --kind turso                                    # picks or prompts for an environment
+mastra env db create staging --kind turso                            # scoped to the "staging" environment
+mastra env db create --kind turso --shared                           # shared by all environments
+mastra env db create --kind neon --name my-app-db --region aws-us-east-1 --shared
 ```
 
 #### `--kind`
@@ -411,13 +415,17 @@ Database name. Defaults to a name derived from the project slug (for example `my
 
 Provider region ID for shared databases. Ignored for environment-scoped databases.
 
+#### `--shared`
+
+Attach as a project-scoped database that's shared by every environment. Cannot be combined with an environment argument.
+
 #### `--no-wait`
 
 Return immediately after the attach is queued instead of polling until the database is ready. Check progress later with `mastra env db show`.
 
 #### `--json`
 
-Emit machine-readable JSON.
+Emit machine-readable JSON. In this mode, an environment argument or `--shared` is required when the project has more than one environment (no interactive prompt).
 
 ### `mastra env db show`
 
@@ -439,7 +447,7 @@ Emit machine-readable JSON. Secret values are masked unless `--show-secrets` is 
 
 ### `mastra env db delete`
 
-Permanently deletes a database with the provider, including all of its data. This cannot be undone. The CLI prompts for confirmation unless `--yes` is passed. After deletion, deploys no longer receive the database's env vars.
+Permanently deletes a database with the provider, including all of its data. This can't be undone. The CLI prompts for confirmation unless `--yes` is passed. After deletion, deploys no longer receive the database's env vars.
 
 ```bash
 mastra env db delete <database>

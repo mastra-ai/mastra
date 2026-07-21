@@ -57,8 +57,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private tui: TUI;
   private getMessagePreviews: ((threadIds: string[]) => Promise<Map<string, string>>) | undefined;
   private onMessagePreviewsLoaded:
-    | ((previews: Map<string, string>, attemptedThreadIds: Set<string>) => void)
-    | undefined;
+    ((previews: Map<string, string>, attemptedThreadIds: Set<string>) => void) | undefined;
   private messagePreviews: Map<string, string>;
   private attemptedPreviewThreadIds: Set<string>;
   private loadingPreviewThreadIds: Set<string> = new Set();

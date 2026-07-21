@@ -1,0 +1,34 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. State the effect or the tradeoff directly. Disable this rule for labor or percussion prose."
+level: error
+nonword: true
+ignorecase: true
+# "Strikes" is an AI fingerprint for resonance and aptness: an argument
+# "strikes a chord," a critique "strikes at the heart of" the design, a phrase
+# "strikes the right note." Literal striking is common (a match, a blow,
+# lightning, a workers' strike), so the complement after the verb is the
+# discriminator, in the FigurativeSits mold. "Strike a balance" stays in
+# FalseBalance; the tokens here avoid that object so the two rules never
+# double-flag.
+tokens:
+  # --- Resonance: the artifact rings a bell ("strikes a chord," "strikes a
+  # nerve," "strikes the right note/tone").
+  - "\\bstrik(?:es|ing)? a (?:chord|nerve)\\b"
+  - "\\bstruck a (?:chord|nerve)\\b"
+  - "\\bstrik(?:es|ing)? (?:the right|a|an?) (?:note|tone|chord)\\b"
+  - "\\bstruck (?:the right|a|an?) (?:note|tone|chord)\\b"
+
+  # --- Aptness and targeting: the critique lands at a vital point ("strikes
+  # at the core of," "strikes close to home"). "At the heart of" is left to
+  # PromotionalPuffery to avoid a double flag, the same split FigurativeSits
+  # makes.
+  - "\\bstrik(?:es|ing)? at the (?:core|center|centre|root) of\\b"
+  - "\\bstruck at the (?:core|center|centre|root) of\\b"
+  - "\\bstrik(?:es|ing)? close to home\\b"
+
+  # --- Fortune and opportunism idioms ("strikes gold," "strike while the
+  # iron is hot"). The balance sense stays in FalseBalance.
+  - "\\bstrik(?:es|ing)? gold\\b"
+  - "\\bstruck gold\\b"
+  - "\\bstrike while the iron is hot\\b"

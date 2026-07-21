@@ -10,8 +10,7 @@ import { RoutePermissionGuard } from './domains/auth/components/route-permission
 import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
-import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from './ee/signals';
-import { SignalCrumb, SignalDetailsCrumb, SignalsRootCrumb } from './ee/signals/signal-crumb';
+import SignalsOverviewPage from './ee/signals';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
@@ -108,7 +107,7 @@ import { TraceCrumb } from '@/domains/traces/trace-crumb';
 import { WorkflowCrumb, WorkflowRunCrumb } from '@/domains/workflows/workflow-crumbs';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
-import { findNavItem, navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
+import { navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
 import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
@@ -382,43 +381,7 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
-      {
-        path: '/signals',
-        handle: {
-          ...navHandle('/signals'),
-          crumbs: [
-            {
-              id: 'nav:/signals',
-              Component: SignalsRootCrumb,
-              heading: 'Signals',
-              icon: findNavItem('/signals')?.Icon,
-            },
-          ],
-        },
-        children: [
-          { index: true, element: <SignalsOverviewPage /> },
-          {
-            path: ':signalId',
-            element: <SignalDetailsPage />,
-            handle: {
-              crumbs: [{ id: 'signal', Component: SignalCrumb, heading: 'Signal' }],
-            } satisfies RouteHeaderHandle,
-          },
-          {
-            path: ':signalId/traces/:traceId',
-            element: <SignalTraceIdPage />,
-            handle: {
-              crumbs: [
-                {
-                  id: 'signal',
-                  Component: SignalDetailsCrumb,
-                  heading: 'Signal',
-                },
-              ],
-            } satisfies RouteHeaderHandle,
-          },
-        ],
-      },
+      { path: '/signals', element: <SignalsOverviewPage />, handle: navHandle('/signals') },
       { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
       {
         path: '/traces/:traceId',

@@ -1,5 +1,6 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
+import { encodeFilePartDataForStorage } from '../../agent/signal-data';
 
 /**
  * Convert a CoreUserMessage into a canonical `MastraDBMessage` (`format: 2`).
@@ -21,21 +22,18 @@ const coreUserMessageToParts = (coreUserMessage: CoreUserMessage): MastraMessage
             return { type: 'text' as const, text: part.text };
           }
           case 'image': {
-            const data =
-              typeof part.image === 'string' ? part.image : part.image instanceof URL ? part.image.toString() : '';
+            const mimeType = part.mimeType ?? 'image/*';
             return {
               type: 'file' as const,
-              mimeType: part.mimeType ?? 'image/*',
-              data,
+              mimeType,
+              data: encodeFilePartDataForStorage(part.image, mimeType),
             };
           }
           case 'file': {
-            const data =
-              typeof part.data === 'string' ? part.data : part.data instanceof URL ? part.data.toString() : '';
             return {
               type: 'file' as const,
               mimeType: part.mimeType,
-              data,
+              data: encodeFilePartDataForStorage(part.data, part.mimeType),
               ...(part.filename !== undefined ? { filename: part.filename } : {}),
             };
           }

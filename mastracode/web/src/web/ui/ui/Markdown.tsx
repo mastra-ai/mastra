@@ -73,7 +73,10 @@ export function renderMarkdown(src: string): string {
   try {
     return marked.parse(src) as string;
   } catch {
-    return src;
+    // If parsing fails, never return the raw source: it is injected via
+    // dangerouslySetInnerHTML, so escape it to prevent XSS from a payload
+    // crafted to trigger a parser error.
+    return escapeHtml(src);
   }
 }
 

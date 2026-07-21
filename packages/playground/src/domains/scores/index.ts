@@ -14,6 +14,6 @@ export * from './hooks/use-trace-span-scores';
 export { useScorers, useScorer, useScoresByScorerId } from './hooks/use-scorers';
 export { useStoredScorer, useStoredScorerMutations } from './hooks/use-stored-scorers';
 export * from './hooks/use-scorer-versions';
-export { useScoreMetrics } from './hooks/use-score-metrics';
+export { useScoreMetrics, type ScoreMetricsDateRange } from './hooks/use-score-metrics';
 export * from './components/scorer-version-combobox';
 export * from './components/scorer-create-content';

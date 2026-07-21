@@ -1,3 +1,5 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+
 import { useChatModels } from '../../context/useChatModels';
 
 function lastSegment(id: string): string {
@@ -8,5 +10,5 @@ function lastSegment(id: string): string {
 /** Current model id, or the no-model fallback before the session syncs. */
 export function ActiveModel() {
   const { activeModelId } = useChatModels();
-  return <span className="text-icon3 tabular-nums">{activeModelId ? lastSegment(activeModelId) : 'no model'}</span>;
+  return <Badge size="md">{activeModelId ? lastSegment(activeModelId) : 'no model'}</Badge>;
 }

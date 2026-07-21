@@ -6,11 +6,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
-import { ActiveProjectProvider, useActiveProjectContext } from '../../context/ActiveProjectProvider';
+import { ActiveFactoryProvider, useActiveFactoryContext } from '../../context/ActiveFactoryProvider';
 import { commitChanges, createWorktree, openPullRequest, pushBranch } from '../../services/github';
-import type { GithubStatus, GitOpError, MaterializeResult } from '../../services/github';
-import { loadProjects } from '../../services/projects';
-import type { Project } from '../../services/projects';
+import type { GithubStatus, GitOpError } from '../../services/github';
+import { loadFactories } from '../../services/factories';
 import { GithubConnectModal } from '../GithubConnectModal';
 
 // The git-op helpers take the ApiConfig base URL explicitly, so handlers match
@@ -19,7 +18,7 @@ const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'proj-1';
 
 function gitOpUrl(action: string): string {
-  return `${ORIGIN}/web/github/projects/${PROJECT}/${action}`;
+  return `${ORIGIN}/web/github/repositories/${PROJECT}/${action}`;
 }
 
 describe('github git-op helpers', () => {
@@ -139,20 +138,13 @@ describe('github open-repo journey', () => {
     installationId: 7,
   };
 
-  const createdProject: Project = {
+  const createdProject = {
     id: 'ghp_1',
     name: 'octo/hello',
-    source: 'github',
+    source: 'github' as const,
     githubProjectId: 'ghp_1',
+    resourceId: 'ghp_1',
     gitBranch: 'main',
-    createdAt: 10,
-  };
-
-  const materialized: MaterializeResult = {
-    resourceId: 'resource-gh',
-    githubProjectId: 'ghp_1',
-    sandboxId: 'sbx_1',
-    sandboxWorkdir: '/workspace/hello',
   };
 
   afterEach(() => {
@@ -160,17 +152,16 @@ describe('github open-repo journey', () => {
   });
 
   function Journey() {
-    const { activeProject, resourceId, selectProject, preparing } = useActiveProjectContext();
+    const { activeFactory, resourceId, selectFactory } = useActiveFactoryContext();
     const [open, setOpen] = useState(true);
     return (
       <div>
-        <span data-testid="active">{activeProject?.name ?? '(none)'}</span>
+        <span data-testid="active">{activeFactory?.name ?? '(none)'}</span>
         <span data-testid="resource-id">{resourceId}</span>
-        <span data-testid="preparing">{preparing?.message ?? '(idle)'}</span>
         {open && (
           <GithubConnectModal
             status={connectedStatus}
-            onProjectCreated={project => void selectProject(project)}
+            onFactoryCreated={project => void selectFactory(project)}
             onClose={() => setOpen(false)}
           />
         )}
@@ -178,28 +169,46 @@ describe('github open-repo journey', () => {
     );
   }
 
-  it('given a connected user, when they pick a repo, then the project is created, materialized, and activated', async () => {
+  it('given a connected user, when they pick a repo, then its source-control row is bound without materializing', async () => {
+    let ensureCalls = 0;
+    let connected = false;
     server.use(
       http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-      http.post(`${ORIGIN}/web/github/projects`, () => HttpResponse.json({ project: createdProject })),
-      http.post(`${ORIGIN}/web/github/projects/ghp_1/ensure`, () => HttpResponse.json(materialized)),
+      http.get(`${ORIGIN}/web/github/repositories`, () => HttpResponse.json(connected ? [createdProject] : [])),
+      http.post(`${ORIGIN}/web/github/repositories`, () => {
+        connected = true;
+        return HttpResponse.json({ repository: createdProject });
+      }),
+      http.post(`${ORIGIN}/web/github/repositories/ghp_1/ensure`, () => {
+        ensureCalls += 1;
+        return HttpResponse.json({ error: 'must stay deferred' }, { status: 500 });
+      }),
     );
     const user = userEvent.setup();
 
     renderWithProviders(
-      <ActiveProjectProvider>
+      <ActiveFactoryProvider>
         <Journey />
-      </ActiveProjectProvider>,
+      </ActiveFactoryProvider>,
     );
 
     await user.click(await screen.findByRole('button', { name: /octo\/hello/ }));
 
     await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('octo/hello'));
-    expect(screen.getByTestId('resource-id')).toHaveTextContent('resource-gh');
-    expect(loadProjects().find(p => p.githubProjectId === 'ghp_1')).toMatchObject({
-      resourceId: 'resource-gh',
-      sandboxId: 'sbx_1',
-      sandboxWorkdir: '/workspace/hello',
+    expect(screen.getByTestId('resource-id')).toHaveTextContent('ghp_1');
+    expect(ensureCalls).toBe(0);
+    const stored = loadFactories().find(
+      factory => factory.binding.kind === 'github' && factory.binding.githubProjectId === 'ghp_1',
+    );
+    expect(stored).toMatchObject({
+      resourceId: 'ghp_1',
+      binding: {
+        kind: 'github',
+        githubProjectId: 'ghp_1',
+        gitBranch: 'main',
+        worktrees: [],
+      },
     });
+    expect(stored?.id).not.toBe('ghp_1');
   });
 });

@@ -45,7 +45,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
   private isStructuringAgentStreamStarted = false;
-  private jsonPromptInjection?: boolean | 'system' | 'inline';
+  private jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
   private providerOptions?: ProviderOptions;
   private logger?: IMastraLogger;
 

@@ -3,28 +3,42 @@
  *
  * Inspired by pi-mono's OAuth implementation:
  * https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/oauth/anthropic.ts
+ *
+ * The flow is a paste-code PKCE flow: the redirect lands on Anthropic's hosted
+ * callback page which displays `code#state` for the user to paste back. That
+ * makes it deployable without any inbound connection to the server, so the
+ * primitives are split into `startAnthropicLogin()` / `completeAnthropicLogin()`
+ * which can span separate HTTP requests (only the PKCE verifier needs to be
+ * persisted in between).
  */
 
+import { parseAuthorizationInput } from '../authorization-input.js';
 import { generatePKCE } from '../pkce.js';
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types.js';
 
 const decode = (s: string) => atob(s);
 const CLIENT_ID = decode('OWQxYzI1MGEtZTYxYi00NGQ5LTg4ZWQtNTk0NGQxOTYyZjVl');
 const AUTHORIZE_URL = 'https://claude.ai/oauth/authorize';
+// pi-mono uses `https://platform.claude.com/v1/oauth/token` with extra scopes
+// (user:sessions:claude_code, user:mcp_servers, user:file_upload); we keep the
+// console.anthropic.com endpoints that are known to work for our scope set.
 const TOKEN_URL = 'https://console.anthropic.com/v1/oauth/token';
 const REDIRECT_URI = 'https://console.anthropic.com/oauth/code/callback';
 const SCOPES = 'org:create_api_key user:profile user:inference';
 
+export interface AnthropicLoginStart {
+  /** Authorization URL for the user to open. */
+  url: string;
+  /** PKCE code verifier — persist it to complete the login later. */
+  verifier: string;
+}
+
 /**
- * Login with Anthropic OAuth (device code flow)
+ * Start an Anthropic login: generate PKCE state and build the authorization URL.
  */
-export async function loginAnthropic(
-  onAuthUrl: (url: string) => void,
-  onPromptCode: () => Promise<string>,
-): Promise<OAuthCredentials> {
+export async function startAnthropicLogin(): Promise<AnthropicLoginStart> {
   const { verifier, challenge } = await generatePKCE();
 
-  // Build authorization URL
   const authParams = new URLSearchParams({
     code: 'true',
     client_id: CLIENT_ID,
@@ -36,18 +50,23 @@ export async function loginAnthropic(
     state: verifier,
   });
 
-  const authUrl = `${AUTHORIZE_URL}?${authParams.toString()}`;
+  return { url: `${AUTHORIZE_URL}?${authParams.toString()}`, verifier };
+}
 
-  // Notify caller with URL to open
-  onAuthUrl(authUrl);
+/**
+ * Complete an Anthropic login: parse the pasted authorization input
+ * (full URL, `code#state`, or query string), validate its state, and exchange
+ * it for tokens using the verifier from `startAnthropicLogin()`.
+ */
+export async function completeAnthropicLogin(input: string, verifier: string): Promise<OAuthCredentials> {
+  const { code, state } = parseAuthorizationInput(input);
+  if (!code) {
+    throw new Error('Missing authorization code');
+  }
+  if (!state || state !== verifier) {
+    throw new Error('Invalid authorization state');
+  }
 
-  // Wait for user to paste authorization code (format: code#state)
-  const authCode = await onPromptCode();
-  const splits = authCode.split('#');
-  const code = splits[0];
-  const state = splits[1];
-
-  // Exchange code for tokens
   const tokenResponse = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: {
@@ -56,8 +75,8 @@ export async function loginAnthropic(
     body: JSON.stringify({
       grant_type: 'authorization_code',
       client_id: CLIENT_ID,
-      code: code,
-      state: state,
+      code,
+      state,
       redirect_uri: REDIRECT_URI,
       code_verifier: verifier,
     }),
@@ -82,6 +101,24 @@ export async function loginAnthropic(
     access: tokenData.access_token,
     expires: expiresAt,
   };
+}
+
+/**
+ * Login with Anthropic OAuth (paste-code flow), blocking on the prompt callback.
+ */
+export async function loginAnthropic(
+  onAuthUrl: (url: string) => void,
+  onPromptCode: () => Promise<string>,
+): Promise<OAuthCredentials> {
+  const { url, verifier } = await startAnthropicLogin();
+
+  // Notify caller with URL to open
+  onAuthUrl(url);
+
+  // Wait for user to paste authorization code (format: code#state)
+  const authCode = await onPromptCode();
+
+  return completeAnthropicLogin(authCode, verifier);
 }
 
 /**

@@ -677,13 +677,12 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
     }
     case 'finish': {
       // Not all sub-agent streams emit a `start` chunk before their first
-      // content chunk, so the run state may not exist yet. A2AAgent remote
-      // streams never emit one (see A2AAgentFullStreamChunkBase in
-      // @mastra/core), and resumed Agent streams skip it (`if (!resumeContext)`
-      // in core's loop/workflows/stream.ts).
+      // content chunk, so the run state may not exist yet. Resumed Agent and
+      // A2AAgent streams skip it, as did A2AAgent streams before the chunk
+      // contract was aligned with regular Agent streams.
       const finishRun = ensureAgentRunState(bufferedSteps, payload.runId!);
-      // Regular Agent streams emit `{ stepResult, output }`; A2AAgent remote
-      // streams emit a flat `{ finishReason, usage }` payload.
+      // Current Agent and A2AAgent streams emit `{ stepResult, output }`;
+      // older A2AAgent streams used a flat `{ finishReason, usage }` payload.
       const finishPayload = payload.payload as {
         stepResult?: { reason?: string; warnings?: unknown };
         output?: { usage?: unknown };

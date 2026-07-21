@@ -663,6 +663,61 @@ describe('Workflow (Default Engine Specifics)', () => {
     });
   });
 
+  describe('tool step cancellation', () => {
+    it('forwards abortSignal to tool-wrapped steps so run.cancel() can stop cooperative tools', async () => {
+      let capturedAbortSignal: AbortSignal | undefined;
+      let toolStoppedEarly = false;
+
+      const cooperativeTool = createTool({
+        id: 'cooperative-tool',
+        description: 'Polls abortSignal until canceled',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        execute: async (_input, context) => {
+          capturedAbortSignal = context.abortSignal;
+          const deadline = Date.now() + 5_000;
+          while (Date.now() < deadline) {
+            if (context.abortSignal?.aborted) {
+              toolStoppedEarly = true;
+              return { completed: false };
+            }
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          return { completed: true };
+        },
+      });
+
+      const toolStep = createStep(cooperativeTool);
+      const workflow = createWorkflow({
+        id: 'tool-cancel-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        steps: [toolStep],
+      });
+      workflow.then(toolStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'tool-cancel-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const startedAt = Date.now();
+      const startPromise = run.start({ inputData: {} });
+
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      await run.cancel();
+
+      const result = await startPromise;
+
+      expect(result.status).toBe('canceled');
+      expect(capturedAbortSignal).toBeInstanceOf(AbortSignal);
+      expect(toolStoppedEarly).toBe(true);
+      expect(Date.now() - startedAt).toBeLessThan(3_000);
+    }, 10_000);
+  });
+
   describe('Tracing Context Persistence', () => {
     it('should persist tracing context when workflow suspends', async () => {
       const mastra = new Mastra({

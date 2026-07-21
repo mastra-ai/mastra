@@ -1,10 +1,7 @@
-import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { WebAuthUser } from './auth.js';
 import {
-  ensureUserHasOrganization,
   getWebAuthOrgId,
   getWebAuthUser,
   getWebAuthUserId,
@@ -20,35 +17,24 @@ const mockAuthenticate = vi.fn();
 const mockGetLoginUrl = vi.fn((_redirectUri: string, _state: string) => 'https://workos.example/login');
 const mockHandleCallback = vi.fn(async () => ({ user: { email: 'a@b.com' }, cookies: ['wos_session=sealed; Path=/'] }));
 const mockGetLogoutUrl = vi.fn(async () => 'https://workos.example/logout');
-
-// WorkOS SDK surface used by the personal-org bootstrap. Each test controls the
-// list/create behavior; defaults model "no memberships, creates org_new".
-const mockListMemberships = vi.fn(async () => ({
-  autoPagination: async () => [] as Array<{ organizationId: string }>,
-}));
-const mockCreateOrganization = vi.fn(
-  async (_payload: Record<string, unknown>, _requestOptions?: Record<string, unknown>) => ({ id: 'org_new' }),
-);
-const mockCreateMembership = vi.fn(async () => ({ id: 'om_new' }));
-const mockGetOrgByExternalId = vi.fn(async (_externalId: string) => ({ id: 'org_recovered' }));
-const mockGetWorkOS = vi.fn(() => ({
-  organizations: {
-    createOrganization: mockCreateOrganization,
-    getOrganizationByExternalId: mockGetOrgByExternalId,
-  },
-  userManagement: {
-    listOrganizationMemberships: mockListMemberships,
-    createOrganizationMembership: mockCreateMembership,
-  },
-}));
+const mockGetClearSessionHeaders = vi.fn(() => ({ 'Set-Cookie': 'wos_session=; Path=/; HttpOnly; Max-Age=0' }));
+// Personal-org bootstrap (IOrganizationsProvider). The WorkOS-specific
+// bootstrap mechanics live in @mastra/auth-workos and are covered there; here
+// the mock models "no org → org_new".
+const mockEnsureOrganization = vi.fn(async (_userId: string) => 'org_new');
+const mockIsOrganizationAdmin = vi.fn(async () => false);
 
 vi.mock('@mastra/auth-workos', () => ({
   MastraAuthWorkos: class {
+    name = 'workos';
     getLoginUrl = mockGetLoginUrl;
     handleCallback = mockHandleCallback;
     authenticateToken = mockAuthenticate;
+    authorizeUser = async () => true;
     getLogoutUrl = mockGetLogoutUrl;
-    getWorkOS = mockGetWorkOS;
+    getClearSessionHeaders = mockGetClearSessionHeaders;
+    ensureOrganization = mockEnsureOrganization;
+    isOrganizationAdmin = mockIsOrganizationAdmin;
   },
 }));
 
@@ -68,21 +54,12 @@ function disableEnv() {
 beforeEach(() => {
   vi.clearAllMocks();
   disableEnv();
-  // Restore default bootstrap mock behavior after clearAllMocks wipes it.
-  mockListMemberships.mockResolvedValue({ autoPagination: async () => [] });
-  mockCreateOrganization.mockResolvedValue({ id: 'org_new' });
-  mockCreateMembership.mockResolvedValue({ id: 'om_new' });
-  mockGetOrgByExternalId.mockResolvedValue({ id: 'org_recovered' });
-  mockGetWorkOS.mockReturnValue({
-    organizations: {
-      createOrganization: mockCreateOrganization,
-      getOrganizationByExternalId: mockGetOrgByExternalId,
-    },
-    userManagement: {
-      listOrganizationMemberships: mockListMemberships,
-      createOrganizationMembership: mockCreateMembership,
-    },
-  });
+  // Restore default mock behavior after clearAllMocks wipes it.
+  mockGetLoginUrl.mockReturnValue('https://workos.example/login');
+  mockHandleCallback.mockResolvedValue({ user: { email: 'a@b.com' }, cookies: ['wos_session=sealed; Path=/'] });
+  mockGetLogoutUrl.mockResolvedValue('https://workos.example/logout');
+  mockGetClearSessionHeaders.mockReturnValue({ 'Set-Cookie': 'wos_session=; Path=/; HttpOnly; Max-Age=0' });
+  mockEnsureOrganization.mockResolvedValue('org_new');
 });
 
 afterEach(() => {
@@ -194,12 +171,22 @@ describe('mountWebAuth gate (enabled)', () => {
   });
 
   it('passes through when the provider authenticates', async () => {
-    mockAuthenticate.mockResolvedValue({ email: 'user@example.com', name: 'User' });
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_ok', email: 'user@example.com', name: 'User' });
     const { app } = buildApp();
 
     const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('ok');
+  });
+
+  it('treats a provider result without a stable user id as unauthenticated', async () => {
+    // Downstream tenancy scopes rows by user id; a session that cannot yield
+    // one must not pass the gate.
+    mockAuthenticate.mockResolvedValue({ email: 'user@example.com', name: 'User' });
+    const { app } = buildApp();
+
+    const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(401);
   });
 
   it('treats a thrown provider error as unauthenticated', async () => {
@@ -271,6 +258,15 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     expect(mockHandleCallback).not.toHaveBeenCalled();
   });
 
+  it('redirects callback back to login when the code exchange fails', async () => {
+    mockHandleCallback.mockRejectedValue(new Error('expired code'));
+    const { app } = buildApp();
+    const state = Buffer.from(JSON.stringify({ returnTo: '/dashboard' }), 'utf8').toString('base64url');
+    const res = await app.request(`/auth/callback?code=bad&state=${state}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/auth/login');
+  });
+
   it('logout clears the session cookie and redirects to the WorkOS logout URL', async () => {
     const { app } = buildApp();
     const res = await app.request('/auth/logout');
@@ -279,20 +275,35 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     expect(res.headers.get('set-cookie')).toContain('Max-Age=0');
   });
 
+  it('logout still clears the session cookie when the provider has no logout URL', async () => {
+    mockGetLogoutUrl.mockRejectedValue(new Error('no session'));
+    const { app } = buildApp();
+    const res = await app.request('/auth/logout');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/');
+    expect(res.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
+
   it('/auth/me reports authenticated:false when no session', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
     const res = await app.request('/auth/me');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ authenticated: false, user: null });
+    expect(await res.json()).toEqual({ authenticated: false, user: null, provider: 'workos' });
   });
 
   it('/auth/me reports the user when authenticated', async () => {
-    mockAuthenticate.mockResolvedValue({ email: 'user@example.com', name: 'User' });
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_me', email: 'user@example.com', name: 'User' });
     const { app } = buildApp();
     const res = await app.request('/auth/me');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ authenticated: true, user: { email: 'user@example.com', name: 'User' } });
+    expect(await res.json()).toEqual({
+      authenticated: true,
+      // No-org accounts are bootstrapped into a personal org during /auth/me.
+      user: { userId: 'user_me', email: 'user@example.com', name: 'User', organizationId: 'org_new' },
+      provider: 'workos',
+    });
+    expect(mockEnsureOrganization).toHaveBeenCalledWith('user_me');
   });
 
   it('/auth/me surfaces the organization id and stable user id to the SPA', async () => {
@@ -308,7 +319,9 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     expect(await res.json()).toEqual({
       authenticated: true,
       user: { email: 'user@example.com', name: 'User', organizationId: 'org_a', userId: 'user_1' },
+      provider: 'workos',
     });
+    expect(mockEnsureOrganization).not.toHaveBeenCalled();
   });
 });
 
@@ -330,13 +343,26 @@ describe('org-tenant identity', () => {
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgId: 'org_a', userId: 'user_1' });
+    // The user already has an org — no bootstrap round-trip.
+    expect(mockEnsureOrganization).not.toHaveBeenCalled();
+  });
+
+  it('gate bootstraps a no-org user so webAuthTenant yields the new org', async () => {
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_boot', email: 'boot@example.com' });
+    const app = new Hono();
+    mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
+
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_new', userId: 'user_boot' });
+    expect(mockEnsureOrganization).toHaveBeenCalledWith('user_boot');
   });
 
   it('webAuthTenant omits orgId for personal (no-org) users but keeps userId', async () => {
     // Bootstrap is best-effort: when org creation fails, the user genuinely
     // stays no-org, so the tenant must still expose a userId without an orgId.
-    mockCreateOrganization.mockRejectedValue(new Error('insufficient permissions'));
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockEnsureOrganization.mockResolvedValue(undefined as unknown as string);
     mockAuthenticate.mockResolvedValue({ workosId: 'user_solo', email: 'solo@e.com' });
     const app = new Hono();
     mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
@@ -349,99 +375,19 @@ describe('org-tenant identity', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgId: null, userId: 'user_solo' });
   });
-});
 
-describe('ensureUserHasOrganization (personal-org bootstrap)', () => {
-  beforeEach(enableEnv);
-
-  function makeProvider() {
-    // The mocked MastraAuthWorkos has no real constructor side effects; cast
-    // through unknown so we can call the real ensureUserHasOrganization helper.
-    return new MastraAuthWorkos() as unknown as Parameters<typeof ensureUserHasOrganization>[0];
-  }
-
-  it('creates an org + membership for a no-org user with zero memberships', async () => {
-    const user: WebAuthUser = { workosId: 'user_1', email: 'solo@example.com' };
-    const orgId = await ensureUserHasOrganization(makeProvider(), user);
-
-    expect(orgId).toBe('org_new');
-    expect(mockCreateOrganization).toHaveBeenCalledTimes(1);
-    const [payload, requestOptions] = mockCreateOrganization.mock.calls[0]!;
-    // Idempotency: externalId + stable idempotency key keyed on the user id.
-    expect(payload).toMatchObject({ externalId: 'user_1' });
-    expect(requestOptions).toEqual({ idempotencyKey: 'mastracode-personal-org:user_1' });
-    expect(mockCreateMembership).toHaveBeenCalledWith({ organizationId: 'org_new', userId: 'user_1' });
-  });
-
-  it('returns an existing membership org without creating a new one', async () => {
-    mockListMemberships.mockResolvedValue({ autoPagination: async () => [{ organizationId: 'org_existing' }] });
-    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_2' });
-
-    expect(orgId).toBe('org_existing');
-    expect(mockCreateOrganization).not.toHaveBeenCalled();
-    expect(mockCreateMembership).not.toHaveBeenCalled();
-  });
-
-  it('is a no-op (no SDK calls) when the user already has an organizationId', async () => {
-    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_3', organizationId: 'org_a' });
-
-    expect(orgId).toBe('org_a');
-    expect(mockGetWorkOS).not.toHaveBeenCalled();
-    expect(mockListMemberships).not.toHaveBeenCalled();
-    expect(mockCreateOrganization).not.toHaveBeenCalled();
-  });
-
-  it('swallows WorkOS create errors and returns undefined (user stays no-org)', async () => {
-    mockCreateOrganization.mockRejectedValue(new Error('insufficient permissions'));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_4' });
-
-    expect(orgId).toBeUndefined();
-    warn.mockRestore();
-  });
-
-  it('recovers the existing org by externalId when create hits external_id_already_used', async () => {
-    // A prior partial bootstrap created the org but never attached membership,
-    // so create now 400s. We must look the org up and (re)attach the user.
-    mockCreateOrganization.mockRejectedValue({ code: 'external_id_already_used' });
-
-    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_partial' });
-
-    expect(orgId).toBe('org_recovered');
-    expect(mockGetOrgByExternalId).toHaveBeenCalledWith('user_partial');
-    expect(mockCreateMembership).toHaveBeenCalledWith({
-      organizationId: 'org_recovered',
-      userId: 'user_partial',
-    });
-  });
-
-  it('reads the WorkOS error code from rawData when recovering', async () => {
-    mockCreateOrganization.mockRejectedValue({ rawData: { code: 'external_id_already_used' } });
-
-    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_raw' });
-
-    expect(orgId).toBe('org_recovered');
-  });
-
-  it('tolerates an already-existing membership on the recovered org', async () => {
-    mockCreateOrganization.mockRejectedValue({ code: 'external_id_already_used' });
-    mockCreateMembership.mockRejectedValue({ code: 'organization_membership_already_exists' });
-
-    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_member' });
-
-    expect(orgId).toBe('org_recovered');
-  });
-
-  it('gate bootstraps a no-org user so webAuthTenant yields the new org', async () => {
-    mockAuthenticate.mockResolvedValue({ workosId: 'user_boot', email: 'boot@example.com' });
+  it('a thrown bootstrap error leaves the user no-org instead of failing the request', async () => {
+    mockEnsureOrganization.mockRejectedValue(new Error('workos unavailable'));
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_err', email: 'err@e.com' });
     const app = new Hono();
     mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
-    app.get('/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
+    app.get('/web/whoami', c => {
+      const tenant = webAuthTenant(c);
+      return c.json({ orgId: tenant?.orgId ?? null, userId: tenant?.userId ?? null });
+    });
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: 'org_new', userId: 'user_boot' });
-    expect(mockCreateOrganization).toHaveBeenCalledTimes(1);
+    expect(await res.json()).toEqual({ orgId: null, userId: 'user_err' });
   });
 });

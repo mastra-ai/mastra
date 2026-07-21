@@ -1,0 +1,31 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. State the doubt or the effect directly. Disable this rule for fishing, metalwork, or theater prose."
+level: error
+nonword: true
+ignorecase: true
+# "Casts" is an AI fingerprint for projecting an abstraction: a finding
+# "casts doubt," a decision "casts a long shadow," a rewrite "casts a wide
+# net." Literal casting is common (a fishing line, molten metal, a vote, a
+# play's actors, a spell), so the complement after the verb is the
+# discriminator, in the FigurativeSits mold.
+tokens:
+  # --- Aspersion: the finding dims confidence ("casts doubt on," "casts a
+  # pall," "casts a shadow over," "casts a long shadow").
+  - "\\bcast(?:s|ing)? (?:serious |real |some |considerable )?doubt (?:on|over|upon)\\b"
+  - "\\bcast(?:s|ing)? a (?:long |dark |lingering )?shadow (?:on|over|across)?\\b"
+  - "\\bcast(?:s|ing)? a pall\\b"
+  - "\\bcast(?:s|ing)? aspersions\\b"
+
+  # --- Illumination: the framing supposedly clarifies ("casts light on,"
+  # "casts X in a new light," "casts X as").
+  - "\\bcast(?:s|ing)? (?:new )?light on\\b"
+  - "\\bcast(?:s|ing)? (?:it|this|that|them|the \\w+) in a (?:new|different|positive|negative|favorable|favourable) light\\b"
+
+  # --- Reach: the effort spreads out ("casts a wide net," "casts the net
+  # wide").
+  - "\\bcast(?:s|ing)? a wide net\\b"
+  - "\\bcast(?:s|ing)? the net wide\\b"
+
+  # --- Dismissal ("casts aside," "cast off").
+  - "\\bcast(?:s|ing)? aside\\b"

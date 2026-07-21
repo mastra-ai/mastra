@@ -164,6 +164,145 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(visible).not.toContain('OLD_STREAM_00000');
   });
 
+  it('keeps quiet write preview detail rows stable while streamed content changes', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: 'src/example.ts', content: 'first\nsecond\nthird\nfourth' },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      ui,
+    );
+
+    expect(component.render(100)).toHaveLength(6);
+
+    component.updateArgs({ path: 'src/example.ts', content: 'new first\nnew second\nnew third' });
+    let lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(6);
+    expect(lines.join('\n')).toContain('new third');
+    expect(lines.join('\n')).not.toContain('fourth');
+
+    component.updateArgs({ path: 'src/example.ts', content: 'next first\nnext second\nnext third\nnext fourth' });
+    lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(6);
+    expect(lines.join('\n')).toContain('next fourth');
+  });
+
+  it('keeps quiet edit preview detail rows stable while switching to new_string', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'src/example.ts', old_string: 'old first\nold second\nold third\nold fourth' },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      ui,
+    );
+
+    expect(component.render(100)).toHaveLength(6);
+
+    component.updateArgs({
+      path: 'src/example.ts',
+      old_string: 'old first\nold second\nold third\nold fourth',
+      new_string: 'new first\nnew second',
+    });
+    let lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(6);
+    expect(lines.join('\n')).toContain('new second');
+    expect(lines.join('\n')).not.toContain('old fourth');
+
+    component.updateArgs({
+      path: 'src/example.ts',
+      old_string: 'old first\nold second\nold third\nold fourth',
+      new_string: 'next first\nnext second\nnext third\nnext fourth',
+    });
+    lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(6);
+    expect(lines.join('\n')).toContain('next fourth');
+  });
+
+  it('keeps quiet generic preview detail rows stable through completion', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'mastra_expert',
+      { question: 'Explain previews' },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      ui,
+    );
+
+    component.updateResult({ content: [{ type: 'text', text: 'first\nsecond\nthird\nfourth' }], isError: false }, true);
+    expect(component.render(100)).toHaveLength(6);
+
+    component.updateResult({ content: [{ type: 'text', text: 'complete result' }], isError: false });
+    const lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(6);
+    expect(lines.join('\n')).toContain('complete result');
+    expect(lines.join('\n')).not.toContain('fourth');
+  });
+
+  it('does not reserve quiet preview rows before content and resets the floor at zero', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: 'src/example.ts', content: '' },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      ui,
+    );
+
+    expect(component.render(100)).toHaveLength(1);
+    expect(component.hasQuietStreamingPreview()).toBe(false);
+
+    component.updateArgs({ path: 'src/example.ts', content: 'first\nsecond\nthird\nfourth' });
+    expect(component.render(100)).toHaveLength(6);
+
+    component.setQuietPreviewLineLimit(0);
+    component.updateArgs({ path: 'src/example.ts', content: '' });
+    expect(component.render(100)).toHaveLength(1);
+    expect(component.hasQuietStreamingPreview()).toBe(false);
+
+    component.setQuietPreviewLineLimit(4);
+    expect(component.render(100)).toHaveLength(1);
+    expect(component.hasQuietStreamingPreview()).toBe(false);
+  });
+
+  it('clamps the quiet preview floor when the configured limit is lowered', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: 'src/example.ts', content: 'first\nsecond\nthird\nfourth' },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      ui,
+    );
+
+    expect(component.render(100)).toHaveLength(6);
+    component.setQuietPreviewLineLimit(2);
+    component.updateArgs({ path: 'src/example.ts', content: 'short' });
+    expect(component.render(100)).toHaveLength(4);
+
+    component.setQuietPreviewLineLimit(4);
+    expect(component.render(100)).toHaveLength(4);
+
+    component.updateArgs({ path: 'src/example.ts', content: 'next first\nnext second\nnext third\nnext fourth' });
+    expect(component.render(100)).toHaveLength(6);
+  });
+
+  it('preserves continuation geometry when an established quiet preview becomes empty', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'mastra_expert',
+      { question: 'Explain previews' },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      ui,
+    );
+    component.setCompactToolHasFollowingContinuation(true);
+    component.updateResult({ content: [{ type: 'text', text: 'first\nsecond\nthird\nfourth' }], isError: false }, true);
+
+    let lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(6);
+    expect(lines.slice(1, 5).every(line => line.includes('│'))).toBe(true);
+    expect(lines[5]).toContain('│');
+    expect(lines.join('\n')).not.toContain('╰──');
+
+    component.updateResult({ content: [{ type: 'text', text: '' }], isError: false }, true);
+    expect(component.hasQuietStreamingPreview()).toBe(true);
+    lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(6);
+    expect(lines.slice(1, 5).every(line => line.trim() === '│')).toBe(true);
+    expect(lines[5]!.trim()).toBe('│');
+    expect(lines.join('\n')).not.toContain('╰──');
+  });
+
   it('shows exactly the immediate dirname and filename once continuation paths are available', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',

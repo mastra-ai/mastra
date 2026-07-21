@@ -18,6 +18,7 @@ import type {
 } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
+import type { CredentialStore } from '../auth/types.js';
 import { getCustomProviderId, loadSettings, MASTRA_GATEWAY_PROVIDER } from '../onboarding/settings.js';
 import {
   buildAnthropicOAuthFetch,
@@ -34,6 +35,7 @@ import {
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
+import { xaiProvider } from '../providers/xai.js';
 
 export const OPENAI_PREFIX = 'openai/';
 export const MASTRA_GATEWAY_PREFIX = 'mastra/';
@@ -58,6 +60,12 @@ export type MastraCodeGatewayOptions = {
   thinkingLevel?: ThinkingLevel;
   customProviders?: MastraCodeCustomProvider[];
   settingsPath?: string;
+  /**
+   * Per-tenant credential source for this gateway instance. Defaults to the
+   * server-global file-backed `AuthStorage`; deployed web passes the calling
+   * tenant's store so model calls use the caller's own credentials.
+   */
+  credentialStore?: CredentialStore;
 };
 
 const authStorage = new AuthStorage();
@@ -100,28 +108,30 @@ export function remapOpenAIModelForCodexOAuth(modelId: string): string {
  * Resolve the Anthropic API key.
  * Main slot → dedicated apikey: slot → env var.
  */
-export function getAnthropicApiKey(): string | undefined {
-  const storedCred = authStorage.get('anthropic');
+export function getAnthropicApiKey(credentials: CredentialStore = authStorage): string | undefined {
+  const storedCred = credentials.get('anthropic');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  const dedicatedKey = authStorage.getStoredApiKey('anthropic')?.trim();
+  const dedicatedKey = credentials.getStoredApiKey('anthropic')?.trim();
   if (dedicatedKey) return dedicatedKey;
-  return process.env.ANTHROPIC_API_KEY?.trim() || undefined;
+  return credentials.allowEnvironmentFallback === false
+    ? undefined
+    : process.env.ANTHROPIC_API_KEY?.trim() || undefined;
 }
 
 /**
  * Resolve the OpenAI API key.
  * Main slot → dedicated apikey: slot → env var.
  */
-export function getOpenAIApiKey(): string | undefined {
-  const storedCred = authStorage.get('openai-codex');
+export function getOpenAIApiKey(credentials: CredentialStore = authStorage): string | undefined {
+  const storedCred = credentials.get('openai-codex');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  const dedicatedKey = authStorage.getStoredApiKey('openai-codex')?.trim();
+  const dedicatedKey = credentials.getStoredApiKey('openai-codex')?.trim();
   if (dedicatedKey) return dedicatedKey;
-  return process.env.OPENAI_API_KEY?.trim() || undefined;
+  return credentials.allowEnvironmentFallback === false ? undefined : process.env.OPENAI_API_KEY?.trim() || undefined;
 }
 
 function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
@@ -144,13 +154,13 @@ function getAuthProviderId(providerId: string): string {
   return providerId === 'openai' ? 'openai-codex' : providerId;
 }
 
-function getProviderAuthKey(providerId: string): string | undefined {
+function getProviderAuthKey(providerId: string, credentials: CredentialStore = authStorage): string | undefined {
   const authProviderId = getAuthProviderId(providerId);
-  const storedCred = authStorage.get(authProviderId);
+  const storedCred = credentials.get(authProviderId);
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  return authStorage.getStoredApiKey(authProviderId)?.trim() || undefined;
+  return credentials.getStoredApiKey(authProviderId)?.trim() || undefined;
 }
 
 export function resolveAuth(request: GatewayAuthRequest, mastraGatewayApiKey?: string): GatewayAuthResult | undefined {
@@ -246,6 +256,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   readonly #thinkingLevel?: ThinkingLevel;
   readonly #customProviders?: MastraCodeCustomProvider[];
   readonly #settingsPath?: string;
+  readonly #credentials: CredentialStore;
 
   constructor({
     mastraGatewayBaseUrl,
@@ -254,6 +265,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     thinkingLevel,
     customProviders,
     settingsPath,
+    credentialStore,
   }: MastraCodeGatewayOptions) {
     super();
     this.#mastraGateway = new MastraGateway({ baseUrl: mastraGatewayBaseUrl });
@@ -263,6 +275,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     this.#thinkingLevel = thinkingLevel;
     this.#customProviders = customProviders;
     this.#settingsPath = settingsPath;
+    this.#credentials = credentialStore ?? authStorage;
   }
 
   static getMastraGatewayApiKey(): string | undefined {
@@ -298,17 +311,21 @@ export class MastraCodeGateway extends MastraModelGateway {
     );
   }
 
-  static resolveProviderAuth(request: GatewayAuthRequest, mastraGatewayApiKey?: string): GatewayAuthResult | undefined {
+  static resolveProviderAuth(
+    request: GatewayAuthRequest,
+    mastraGatewayApiKey?: string,
+    credentials: CredentialStore = authStorage,
+  ): GatewayAuthResult | undefined {
     if (request.gatewayId === 'mastra' && mastraGatewayApiKey) {
       return { apiKey: mastraGatewayApiKey, source: 'gateway' };
     }
 
-    const storedCred = authStorage.get(getAuthProviderId(request.providerId));
+    const storedCred = credentials.get(getAuthProviderId(request.providerId));
     if (storedCred?.type === 'oauth') {
       return { bearerToken: 'oauth', source: 'gateway' };
     }
 
-    const apiKey = getProviderAuthKey(request.providerId);
+    const apiKey = getProviderAuthKey(request.providerId, credentials);
     return apiKey ? { apiKey, source: 'gateway' } : undefined;
   }
 
@@ -389,7 +406,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   async getApiKey(modelId: string): Promise<string> {
     const providerId = stripMastraGatewayPrefix(modelId).split('/', 1)[0];
     if (this.#routeThroughMastraGateway) return this.#mastraGatewayApiKey ?? '';
-    return providerId ? (getProviderAuthKey(providerId) ?? '') : '';
+    return providerId ? (getProviderAuthKey(providerId, this.#credentials) ?? '') : '';
   }
 
   resolveAuth(request: GatewayAuthRequest): GatewayAuthResult | undefined {
@@ -404,7 +421,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       return { apiKey: customProvider.apiKey, source: 'gateway' };
     }
 
-    return MastraCodeGateway.resolveProviderAuth(request);
+    return MastraCodeGateway.resolveProviderAuth(request, undefined, this.#credentials);
   }
 
   resolveLanguageModel(args: {
@@ -429,15 +446,23 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     if (args.providerId === 'github-copilot') {
-      return githubCopilotProvider(args.modelId, { headers: args.headers }) as unknown as GatewayLanguageModel;
+      return githubCopilotProvider(args.modelId, {
+        headers: args.headers,
+        authStorage: this.#credentials,
+      }) as unknown as GatewayLanguageModel;
     }
 
     if (args.providerId === 'moonshotai') {
-      if (!process.env.MOONSHOT_AI_API_KEY) {
-        throw new Error(`Need MOONSHOT_AI_API_KEY`);
+      // Prefer the gateway-resolved key (stored credentials), then the canonical
+      // registry env var. Keep the legacy typo name as a fallback for anyone who
+      // set it because of the previous error message.
+      const apiKey =
+        args.apiKey?.trim() || process.env.MOONSHOT_API_KEY?.trim() || process.env.MOONSHOT_AI_API_KEY?.trim();
+      if (!apiKey) {
+        throw new Error('Need MOONSHOT_API_KEY');
       }
       return createAnthropic({
-        apiKey: process.env.MOONSHOT_AI_API_KEY,
+        apiKey,
         baseURL: 'https://api.moonshot.ai/anthropic/v1',
         name: 'moonshotai.anthropicv1',
         headers: args.headers,
@@ -451,6 +476,13 @@ export class MastraCodeGateway extends MastraModelGateway {
     if (args.providerId === 'openai') {
       const openaiModel = this.#resolveOpenAIModel(args);
       if (openaiModel) return openaiModel;
+    }
+
+    if (args.providerId === 'xai' && this.#credentials.get('xai')?.type === 'oauth') {
+      return xaiProvider(args.modelId, {
+        headers: args.headers,
+        authStorage: this.#credentials,
+      }) as unknown as GatewayLanguageModel;
     }
 
     if (this.#routeThroughMastraGateway) {
@@ -472,7 +504,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
     const bareModelId = normalizeAnthropicModelId(args.modelId);
-    const storedCred = authStorage.get('anthropic');
+    const storedCred = this.#credentials.get('anthropic');
 
     if (this.#routeThroughMastraGateway) {
       if (storedCred?.type === 'oauth') {
@@ -483,7 +515,7 @@ export class MastraCodeGateway extends MastraModelGateway {
             [GATEWAY_AUTH_HEADER]: `Bearer ${args.apiKey}`,
             ...args.headers,
           },
-          fetch: buildAnthropicOAuthFetch({ authStorage }) as any,
+          fetch: buildAnthropicOAuthFetch({ authStorage: this.#credentials }) as any,
         });
 
         return wrapLanguageModel({
@@ -496,7 +528,10 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     if (storedCred?.type === 'oauth') {
-      return opencodeClaudeMaxProvider(bareModelId, { headers: args.headers }) as unknown as GatewayLanguageModel;
+      return opencodeClaudeMaxProvider(bareModelId, {
+        headers: args.headers,
+        authStorage: this.#credentials,
+      }) as unknown as GatewayLanguageModel;
     }
 
     if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
@@ -507,13 +542,16 @@ export class MastraCodeGateway extends MastraModelGateway {
       ) as unknown as GatewayLanguageModel;
     }
 
-    const apiKey = getAnthropicApiKey();
+    const apiKey = getAnthropicApiKey(this.#credentials);
     if (apiKey) {
       return anthropicApiKeyProvider(bareModelId, apiKey, args.headers) as unknown as GatewayLanguageModel;
     }
 
     // No stored credentials: use the OAuth-backed provider so the first request can trigger login.
-    return opencodeClaudeMaxProvider(bareModelId, { headers: args.headers }) as unknown as GatewayLanguageModel;
+    return opencodeClaudeMaxProvider(bareModelId, {
+      headers: args.headers,
+      authStorage: this.#credentials,
+    }) as unknown as GatewayLanguageModel;
   }
 
   #resolveOpenAIModel(args: {
@@ -524,7 +562,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     transport?: any;
     responsesWebSocket?: any;
   }): GatewayLanguageModel | undefined {
-    const storedCred = authStorage.get('openai-codex');
+    const storedCred = this.#credentials.get('openai-codex');
 
     if (this.#routeThroughMastraGateway) {
       if (storedCred?.type === 'oauth') {
@@ -541,7 +579,7 @@ export class MastraCodeGateway extends MastraModelGateway {
             [GATEWAY_AUTH_HEADER]: `Bearer ${args.apiKey}`,
             ...args.headers,
           },
-          fetch: buildOpenAICodexOAuthFetch({ authStorage, rewriteUrl: false }) as any,
+          fetch: buildOpenAICodexOAuthFetch({ authStorage: this.#credentials, rewriteUrl: false }) as any,
         });
 
         return wrapLanguageModel({
@@ -558,10 +596,11 @@ export class MastraCodeGateway extends MastraModelGateway {
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: this.#thinkingLevel,
         headers: args.headers,
+        authStorage: this.#credentials,
       }) as unknown as GatewayLanguageModel;
     }
 
-    const apiKey = getOpenAIApiKey();
+    const apiKey = getOpenAIApiKey(this.#credentials);
     if (apiKey) {
       return openaiApiKeyProvider(args.modelId, apiKey, args.headers) as unknown as GatewayLanguageModel;
     }

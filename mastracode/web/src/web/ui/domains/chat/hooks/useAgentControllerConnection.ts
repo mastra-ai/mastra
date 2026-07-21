@@ -1,9 +1,11 @@
-import type { AgentControllerEvent } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { queryKeys } from '../../../../../shared/api/keys';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
-import { useAgentControllerSessionInit } from './useAgentControllerSessionInit';
-import { useAgentControllerSessionSync } from './useAgentControllerSessionSync';
+import { useAgentControllerSessionInit } from '../../../../../shared/hooks/useAgentControllerSessionInit';
+import { useAgentControllerSessionSync } from '../../../../../shared/hooks/useAgentControllerSessionSync';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
@@ -27,6 +29,7 @@ export function useAgentControllerConnection({
   enabled = true,
   onEvent,
 }: UseAgentControllerConnectionArgs) {
+  const queryClient = useQueryClient();
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
@@ -61,11 +64,32 @@ export function useAgentControllerConnection({
     });
   };
 
+  const handleEvent = (event: AgentControllerEvent) => {
+    const displayStateRunning =
+      event.type === 'display_state_changed' &&
+      typeof event.displayState === 'object' &&
+      event.displayState !== null &&
+      'isRunning' in event.displayState
+        ? event.displayState.isRunning
+        : undefined;
+    const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
+    if (typeof running === 'boolean') {
+      const stateQueryKey = queryKeys.agentControllerConnectionState(agentControllerId, resourceId, projectPath);
+      const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
+      queryClient.setQueryData<AgentControllerSessionState>(
+        stateQueryKey,
+        current => (current ? { ...current, running } : current),
+        { updatedAt },
+      );
+    }
+    onEvent(event);
+  };
+
   useAgentControllerEvents({
     session,
     enabled,
     epoch: syncQuery.dataUpdatedAt,
-    onEvent,
+    onEvent: handleEvent,
     onConnectedChange: handleConnectedChange,
   });
 
@@ -81,8 +105,7 @@ export function useAgentControllerConnection({
   return {
     status,
     state: syncQuery.data,
-    stateUpdatedAt: syncQuery.dataUpdatedAt,
-    createdThreadId: initQuery.data?.threadId ?? undefined,
+    threadId: syncQuery.data?.threadId ?? initQuery.data?.threadId ?? undefined,
   };
 }
 

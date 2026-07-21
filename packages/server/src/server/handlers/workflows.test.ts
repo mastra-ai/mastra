@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -76,8 +77,8 @@ function createReusableMockWorkflow(name: string) {
     .commit();
 }
 
-function serializeWorkflow(workflow: Workflow) {
-  return getWorkflowInfo(workflow);
+function serializeWorkflow(workflow: Workflow, origin: 'code' | 'stored' | undefined = 'code') {
+  return getWorkflowInfo(workflow, false, origin);
 }
 
 describe('vNext Workflow Handlers', () => {
@@ -233,6 +234,42 @@ describe('vNext Workflow Handlers', () => {
       expect(workflow.steps).toBeDefined();
       expect(workflow.allSteps).toBeDefined();
       expect(workflow.stepCount).toBeUndefined();
+    });
+
+    it("should stamp origin: 'code' for statically declared workflows", async () => {
+      const result = await LIST_WORKFLOWS_ROUTE.handler({ ...createTestServerContext({ mastra: mockMastra }) });
+      expect(result['test-workflow']?.origin).toBe('code');
+      expect(result['reusable-workflow']?.origin).toBe('code');
+    });
+
+    it("should stamp origin: 'stored' for workflows registered via addStoredWorkflow", async () => {
+      const echoTool = createTool({
+        id: 'echo',
+        description: 'echoes input',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async () => ({ result: 'ok' }),
+      });
+      const mastraForStored = new Mastra({
+        logger: false,
+        workflows: { 'test-workflow': mockWorkflow },
+        tools: { echo: echoTool } as any,
+        storage: new MockStore(),
+      });
+
+      await mastraForStored.addStoredWorkflow({
+        id: 'stored-only',
+        inputSchema: { type: 'object', properties: {}, required: [] },
+        outputSchema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'] },
+        graph: [{ type: 'step', step: { id: 'echo' } }] as any,
+      });
+
+      const result = await LIST_WORKFLOWS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraForStored }),
+      });
+      expect(result['stored-only']?.origin).toBe('stored');
+      // Code-defined workflows keep their 'code' origin in the same response.
+      expect(result['test-workflow']?.origin).toBe('code');
     });
 
     it('should return no workflows when FGA is configured and no user is present', async () => {

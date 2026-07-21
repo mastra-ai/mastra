@@ -32,6 +32,7 @@ import type { Environment } from '../env/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
+import { maybeAutoProvisionDatabases } from './auto-provision-database.js';
 import { getOverwrittenEnvKeys } from './env-vars.js';
 import { assertDeployDir } from './validate-dir.js';
 
@@ -283,7 +284,10 @@ async function resolveEnvironment(
   const envType =
     envName.toLowerCase() === 'production' ? 'production' : envName.toLowerCase() === 'staging' ? 'staging' : 'preview';
 
-  if (!autoAccept) {
+  // Skip the "create it?" prompt for production. A first deploy naturally
+  // creates production — the confirmation is noise. Still prompt for
+  // non-standard names in case the user made a typo (e.g. `--env prodcution`).
+  if (!autoAccept && envType !== 'production') {
     const confirmed = await p.confirm({
       message: `Environment "${envName}" doesn't exist. Create it?`,
       initialValue: true,
@@ -802,13 +806,62 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   // stored vars (request wins), so platform-stored vars don't false-alarm.
   if (!skipPreflight) {
     const preflightEnv = mergePreflightEnvVars(environment.envVars, envVars);
-    const issues = await preflightBuildOutput(targetDir, preflightEnv, {
+    let issues = await preflightBuildOutput(targetDir, preflightEnv, {
       hasEnvFile: hasAmbientEnvFile,
       // Managed resources (e.g. attached databases) inject vars at deploy
       // time; the platform exposes their names on the environment. Absent
       // field = older platform = incomplete env picture (soften to warnings).
       managedEnvVarNames: environment.managedEnvVarNames ?? null,
+      // Use the environment NAME (e.g. `production`, `staging`), not the
+      // slug: some platforms derive the production env's slug from the
+      // project name (`my-app-xyz-1234`), which the env-resolver accepts
+      // but is jarring in a printed remediation command. The name is what
+      // the user actually types.
+      environmentName: environment.name,
     });
+
+    // If preflight flagged a blocking issue that a managed database would
+    // fix (e.g. TURSO_DATABASE_URL missing), offer to attach one inline
+    // rather than failing the deploy and asking the user to run
+    // `mastra env db create` themselves.
+    const autoProvisioned = await maybeAutoProvisionDatabases(issues, {
+      token,
+      orgId,
+      projectId,
+      projectName,
+      projectSlug,
+      environment: {
+        id: environment.id,
+        slug: environment.slug,
+        name: environment.name,
+        type: environment.type,
+      },
+      autoAccept,
+    });
+    if (autoProvisioned.provisioned.length > 0) {
+      const attached = autoProvisioned.provisioned.map(d => `${d.name} (${d.kind})`).join(', ');
+      p.log.success(`Attached managed database: ${attached}`);
+
+      // Re-run preflight with the newly-attached vars folded into the
+      // managed set. Without this, MISSING_ENV_VAR issues for the vars we
+      // just provisioned (TURSO_AUTH_TOKEN, TURSO_DATABASE_URL) still show
+      // as "not in the env file being deployed" — misleading right after
+      // we told the user the DB was attached. Merging is enough; no need
+      // to re-fetch the environment because attachDatabase's response is
+      // authoritative for the vars it just injected.
+      const mergedManagedNames = [
+        ...(environment.managedEnvVarNames ?? []),
+        ...autoProvisioned.newlyManagedEnvVarNames,
+      ];
+      issues = await preflightBuildOutput(targetDir, preflightEnv, {
+        hasEnvFile: hasAmbientEnvFile,
+        managedEnvVarNames: mergedManagedNames,
+        environmentName: environment.name,
+      });
+    } else {
+      issues = autoProvisioned.issues;
+    }
+
     const outcome = await printPreflightIssues(issues, { autoAccept });
     if (outcome === 'blocked') {
       p.cancel('Deploy blocked by preflight errors.');
@@ -847,10 +900,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   if (finalStatus.status === 'running') {
     const { studioUrl, serverUrl } = derivePublicUrls(environment.slug);
-    p.log.success(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
     p.log.info(`  Studio: ${pc.cyan(studioUrl)}`);
     p.log.info(`  Server: ${pc.cyan(serverUrl)}`);
-    p.outro('');
+    p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
     process.exit(1);

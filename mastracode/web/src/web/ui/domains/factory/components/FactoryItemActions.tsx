@@ -18,7 +18,7 @@ export interface FactoryItemActionsProps {
   /** Run the default skill action (Investigate / Review). */
   onAction: () => void;
   /** Additional menu-only actions for the item. */
-  extraActions?: Array<{ label: string; onAction: () => void }>;
+  extraActions?: Array<{ label: string; starting: boolean; onAction: () => void }>;
   /** Run a custom prompt typed by the user (already trimmed, non-empty). */
   onRunPrompt: (prompt: string) => void;
   /** Extra menu items appended after the built-in ones (e.g. "Add to board"). */
@@ -52,7 +52,7 @@ export function FactoryItemActions({
 
   const runPrompt = () => {
     const trimmed = prompt.trim();
-    if (!trimmed) return;
+    if (!trimmed || starting) return;
     closePrompt();
     onRunPrompt(trimmed);
   };
@@ -63,7 +63,7 @@ export function FactoryItemActions({
         variant="ghost"
         size="sm"
         aria-label={`${actionLabel} ${itemLabel}`}
-        disabled={disabled}
+        disabled={disabled || starting}
         onClick={onAction}
       >
         <Play size={13} aria-hidden />
@@ -84,13 +84,17 @@ export function FactoryItemActions({
           }
         />
         <DropdownMenu.Content align="end" className="min-w-40">
-          <DropdownMenu.Item onClick={onAction}>{actionLabel}</DropdownMenu.Item>
+          <DropdownMenu.Item disabled={starting} onClick={onAction}>
+            {starting ? 'Starting…' : actionLabel}
+          </DropdownMenu.Item>
           {extraActions?.map(action => (
-            <DropdownMenu.Item key={action.label} onClick={action.onAction}>
-              {action.label}
+            <DropdownMenu.Item key={action.label} disabled={action.starting} onClick={action.onAction}>
+              {action.starting ? 'Starting…' : action.label}
             </DropdownMenu.Item>
           ))}
-          <DropdownMenu.Item onClick={() => setPromptOpen(true)}>Custom prompt…</DropdownMenu.Item>
+          <DropdownMenu.Item disabled={starting} onClick={() => setPromptOpen(true)}>
+            Custom prompt…
+          </DropdownMenu.Item>
           {menuExtras}
         </DropdownMenu.Content>
       </DropdownMenu>
@@ -123,7 +127,7 @@ export function FactoryItemActions({
               <Button type="button" variant="ghost" size="xs" onClick={closePrompt}>
                 Cancel
               </Button>
-              <Button type="submit" size="xs" disabled={!prompt.trim()}>
+              <Button type="submit" size="xs" disabled={starting || !prompt.trim()}>
                 Run
               </Button>
             </div>

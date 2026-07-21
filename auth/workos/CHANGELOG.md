@@ -325,9 +325,7 @@
   ```typescript
   import { MastraRBACWorkos } from '@mastra/auth-workos';
 
-  const rbac = new MastraRBACWorkos({
-    /* config */
-  });
+  const rbac = new MastraRBACWorkos({/* config */});
 
   // List all available roles
   const roles = await rbac.getAvailableRoles();
@@ -353,9 +351,7 @@
   ```typescript
   import { MastraRBACWorkos } from '@mastra/auth-workos';
 
-  const rbac = new MastraRBACWorkos({
-    /* config */
-  });
+  const rbac = new MastraRBACWorkos({/* config */});
 
   // List all available roles
   const roles = await rbac.getAvailableRoles();

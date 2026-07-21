@@ -24,6 +24,12 @@ function packsResponse(packs: ModelPackInfo[], activePackId: string | null = nul
   return HttpResponse.json({ packs, activePackId });
 }
 
+async function rowFor(packName: string): Promise<HTMLLIElement> {
+  const row = (await screen.findByText(packName)).closest('li');
+  if (!(row instanceof HTMLLIElement)) throw new Error(`Model pack row not found for ${packName}`);
+  return row;
+}
+
 const builtinPack: ModelPackInfo = {
   id: 'builtin',
   name: 'Builtin Pack',
@@ -76,11 +82,11 @@ describe('ModelPacksSection', () => {
       renderWithProviders(<ModelPacksSection models={models} />);
 
       expect(await screen.findByText('Builtin Pack')).toBeInTheDocument();
-      expect(screen.getByText(/Open a project to activate/)).toBeInTheDocument();
+      expect(screen.getByText(/Open a factory to activate/)).toBeInTheDocument();
       // No resourceId means the request is unscoped.
       expect(queryString).toBe('');
 
-      const row = screen.getByText('Builtin Pack').closest('[role="listitem"]') as HTMLElement;
+      const row = await rowFor('Builtin Pack');
       expect(within(row).getByRole('button', { name: 'Activate' })).toBeDisabled();
     });
   });
@@ -101,7 +107,7 @@ describe('ModelPacksSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
 
-      const row = (await screen.findByText('Builtin Pack')).closest('[role="listitem"]') as HTMLElement;
+      const row = await rowFor('Builtin Pack');
       await user.click(within(row).getByRole('button', { name: 'Activate' }));
 
       await waitFor(() => expect(activateBody).toEqual({ resourceId: RESOURCE_ID }));
@@ -167,7 +173,7 @@ describe('ModelPacksSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
 
-      const row = (await screen.findByText('My Pack')).closest('[role="listitem"]') as HTMLElement;
+      const row = await rowFor('My Pack');
       await user.click(within(row).getByRole('button', { name: 'Remove' }));
 
       await waitFor(() => expect(removed).toBe(true));

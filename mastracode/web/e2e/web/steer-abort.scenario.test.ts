@@ -42,7 +42,7 @@ describe('web scenario: steer-abort', () => {
 
         // Abort must drive the run to idle (not left "running" forever).
         await driver.waitForIdle();
-        expect(driver.state().running).toBe(false);
+        expect(driver.running()).toBe(false);
 
         // The session must still be usable after an abort: a fresh prompt streams
         // a new response (proves abort didn't leave the session broken).

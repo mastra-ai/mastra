@@ -7,7 +7,7 @@
 
 // Import types from AI SDK packages
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v6';
-import type { DeepSeekChatOptions } from '@ai-sdk/deepseek-v5';
+import type { DeepSeekChatOptions } from '@ai-sdk/deepseek-v6';
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google-v6';
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v6';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';

@@ -42,7 +42,11 @@ const WorkflowStepCard = ({
   const { label, stepId, description } = data;
   const mapConfig = data.mapConfig ?? ('step' in data.workflowStep ? data.workflowStep.step?.mapConfig : undefined);
   const stepGraph =
-    data.stepGraph ?? ('step' in data.workflowStep ? data.workflowStep.step?.serializedStepFlow : undefined);
+    data.stepGraph ??
+    ('step' in data.workflowStep ? data.workflowStep.step?.serializedStepFlow : undefined) ??
+    (data.workflowStep.kind === 'nested-workflow-step' && data.workflowStep.flow.type === 'workflow'
+      ? data.workflowStep.flow.serializedStepFlow
+      : undefined);
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
   const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
   const isSelected = selectedStepId === stepKey;

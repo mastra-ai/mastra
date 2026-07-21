@@ -5,22 +5,19 @@
  * notice, empty-thread state, transcript entries, and the working indicator.
  * Driven end-to-end: real fetch/SSE transport, MSW at the network boundary.
  */
-import type {
-  AgentControllerEvent,
-  AgentControllerMessageContent,
-  AgentControllerSessionState,
-} from '@mastra/client-js';
-import { screen, waitFor } from '@testing-library/react';
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { ChatMessageList } from '../ChatMessageList';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -32,17 +29,20 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject() {
-  const project: Project = {
+function seedFactory() {
+  const project: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
-    path: '/tmp/mastracode-test',
     resourceId: RESOURCE_ID,
-    gitBranch: 'main',
     createdAt: 1,
+    binding: {
+      kind: 'local',
+      path: '/tmp/mastracode-test',
+      gitBranch: 'main',
+    },
   };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -69,7 +69,7 @@ function sse(events: AgentControllerEvent[] = []): Response {
   );
 }
 
-function useAgentControllerHandlers(events: AgentControllerEvent[] = []) {
+function useAgentControllerHandlers(events: AgentControllerEvent[] = [], messages: MastraDBMessage[] = []) {
   server.use(
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
@@ -80,7 +80,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = []) {
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
     http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages })),
     http.post(`${SESSION}/goal`, () => HttpResponse.json({})),
     http.put(`${SESSION}/goal`, () => HttpResponse.json({})),
     http.delete(`${SESSION}/goal`, () => HttpResponse.json({})),
@@ -99,11 +99,11 @@ function renderMessageList() {
         <Route
           path="/threads/:threadId"
           element={
-            <ActiveProjectProvider>
+            <ActiveFactoryProvider>
               <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatMessageList />
               </ChatSessionProvider>
-            </ActiveProjectProvider>
+            </ActiveFactoryProvider>
           }
         />
       </Routes>
@@ -113,12 +113,12 @@ function renderMessageList() {
 
 describe('ChatMessageList', () => {
   it('given an empty thread, then it shows the welcome state with the project metadata', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderMessageList();
 
     await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
-    expect(screen.getByText('Project')).toBeInTheDocument();
+    expect(screen.getByText('Factory')).toBeInTheDocument();
     expect(screen.getByText('MastraCode Test')).toBeInTheDocument();
     expect(screen.getByText('Resource ID')).toBeInTheDocument();
     expect(screen.getByText(RESOURCE_ID)).toBeInTheDocument();
@@ -128,13 +128,36 @@ describe('ChatMessageList', () => {
     expect(screen.getByText('/tmp/mastracode-test')).toBeInTheDocument();
   });
 
+  it('given only a whitespace message, then it still shows the welcome state', async () => {
+    seedFactory();
+    useAgentControllerHandlers(
+      [],
+      [
+        {
+          id: 'assistant-empty',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: '  \n ' }] },
+        },
+      ],
+    );
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+  });
+
   it('given streamed assistant text, then it renders the transcript entry', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([
       { type: 'agent_start' },
       {
         type: 'message_update',
-        message: { id: 'assistant-1', role: 'assistant', content: [{ type: 'text', text: 'Hello from the agent' }] },
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello from the agent' }] },
+        },
       },
       { type: 'agent_end' },
     ]);
@@ -143,48 +166,97 @@ describe('ChatMessageList', () => {
     await waitFor(() => expect(screen.getByText('Hello from the agent')).toBeInTheDocument());
   });
 
+  it('given a completed tool followed by text, then it renders a quiet header and separates the summary', async () => {
+    seedFactory();
+    useAgentControllerHandlers(
+      [],
+      [
+        {
+          id: 'assistant-tools-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: '   ' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'tool-1',
+                  toolName: 'view',
+                  args: { path: 'src/index.ts' },
+                  result: 'export const value = 1;',
+                },
+              },
+              { type: 'text', text: 'Summary follows.' },
+            ],
+          },
+        },
+      ],
+    );
+    renderMessageList();
+
+    const tool = await screen.findByRole('group', { name: 'Tool: view' });
+    expect(within(tool).queryByText('Done')).not.toBeInTheDocument();
+    expect(tool.querySelector('.lucide-chevron-down')).not.toBeInTheDocument();
+    expect(screen.getByText('Summary follows.').closest('.prose')).toHaveClass('mt-3');
+  });
+
+  it('given running and failed tools, then it keeps their status prominent', async () => {
+    seedFactory();
+    useAgentControllerHandlers([
+      { type: 'tool_start', toolCallId: 'tool-running', toolName: 'view', args: { path: 'src/index.ts' } },
+      { type: 'tool_start', toolCallId: 'tool-failed', toolName: 'execute_command', args: { command: 'exit 1' } },
+      { type: 'tool_end', toolCallId: 'tool-failed', result: 'failed', isError: true },
+    ]);
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('Running')).toBeInTheDocument());
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+  });
+
   it('given a streamed notification signal, then it renders the notification provenance in the transcript', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([
       {
         type: 'message_update',
         message: {
           id: 'notification-message-1',
           role: 'assistant',
-          content: [
-            { type: 'text', text: 'I will inspect the updated pull request.' },
-            {
-              type: 'notification',
-              notificationId: 'notification-1',
-              message: 'octo/repo#42 received a new comment',
-              source: 'github',
-              kind: 'issue-comment-created',
-              priority: 'high',
-              metadata: {
-                action: 'created',
-                repository: 'octo/repo',
-                pullRequestNumber: 42,
-                targetUrl: 'https://github.com/octo/repo/pull/42#issuecomment-123',
-              },
-            },
-            {
-              type: 'notification',
-              notificationId: 'notification-2',
-              message: 'octo/repo#42 was merged',
-              source: 'github',
-              kind: 'pull-request-merged',
-              priority: 'urgent',
-            },
-            {
-              type: 'notification',
-              notificationId: 'notification-3',
-              message: 'octo/repo#43 was closed',
-              source: 'github',
-              kind: 'pull-request-closed',
-              priority: 'urgent',
-            },
-          ],
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'I will inspect the updated pull request.' }] },
         },
+      },
+      {
+        type: 'notification',
+        notificationId: 'notification-1',
+        message: 'octo/repo#42 received a new comment',
+        source: 'github',
+        kind: 'issue-comment-created',
+        priority: 'high',
+        metadata: {
+          action: 'created',
+          repository: 'octo/repo',
+          pullRequestNumber: 42,
+          targetUrl: 'https://github.com/octo/repo/pull/42#issuecomment-123',
+        },
+      },
+      {
+        type: 'notification',
+        notificationId: 'notification-2',
+        message: 'octo/repo#42 was merged',
+        source: 'github',
+        kind: 'pull-request-merged',
+        priority: 'urgent',
+      },
+      {
+        type: 'notification',
+        notificationId: 'notification-3',
+        message: 'octo/repo#43 was closed',
+        source: 'github',
+        kind: 'pull-request-closed',
+        priority: 'urgent',
       },
     ]);
     renderMessageList();
@@ -211,26 +283,23 @@ describe('ChatMessageList', () => {
   });
 
   it('given an assistant response after a notification summary, then it does not render the response as a notice', async () => {
-    seedProject();
-    const summary: AgentControllerMessageContent = {
-      type: 'notification_summary',
-      message: 'github: 1',
-      pending: 1,
-      bySource: { github: 1 },
-      byPriority: { high: 1 },
-      notificationIds: ['notification-1'],
-    };
+    seedFactory();
     useAgentControllerHandlers([
       {
-        type: 'message_update',
-        message: { id: 'assistant-1', role: 'assistant', content: [summary] },
+        type: 'notification_summary',
+        message: 'github: 1',
+        pending: 1,
+        bySource: { github: 1 },
+        byPriority: { high: 1 },
+        notificationIds: ['notification-1'],
       },
       {
         type: 'message_update',
         message: {
           id: 'assistant-1',
           role: 'assistant',
-          content: [summary, { type: 'text', text: 'The pull request is ready for review.' }],
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'The pull request is ready for review.' }] },
         },
       },
     ]);
@@ -243,26 +312,161 @@ describe('ChatMessageList', () => {
     expect(screen.getByText('The pull request is ready for review.').closest('.bg-notice-info\\/20')).toBeNull();
   });
 
-  it('given a persisted notification signal, then it remains visible after transcript hydration', async () => {
-    seedProject();
+  it('given a persisted user signal, then it renders in the right-aligned user bubble after hydration', async () => {
+    seedFactory();
     useAgentControllerHandlers();
     server.use(
       http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
         HttpResponse.json({
           messages: [
             {
-              id: 'notification-message-1',
-              role: 'user',
-              content: [
-                {
-                  type: 'notification',
-                  notificationId: 'notification-1',
-                  message: 'octo/repo#42 was approved',
-                  source: 'github',
-                  kind: 'pull-request-review',
-                  priority: 'urgent',
+              id: 'user-signal-1',
+              role: 'signal',
+              createdAt: '2026-07-15T16:00:00.000Z',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'sup' }],
+                metadata: {
+                  signal: {
+                    id: 'user-signal-1',
+                    type: 'user',
+                    tagName: 'user',
+                    createdAt: '2026-07-15T16:00:00.000Z',
+                    contents: [{ type: 'text', text: 'sup' }],
+                    attributes: { delivery: 'message' },
+                  },
                 },
-              ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    await waitFor(() => {
+      const message = screen.getByText('sup');
+      const userRow = message.closest('.items-end');
+      expect(userRow).toBeInTheDocument();
+      expect(userRow?.firstElementChild).toHaveClass('max-w-[70%]', 'bg-surface3');
+    });
+  });
+
+  it('given a persisted skill activation, then it renders a compact card with expandable contents', async () => {
+    seedFactory();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            {
+              id: 'skill-activation-1',
+              role: 'user',
+              createdAt: '2026-07-16T18:00:00.000Z',
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'text',
+                    text: '<skill name="understand-issue">\n# Understand Issue\n\nInvestigate every relevant code path.\n\nARGUMENTS: https://github.com/mastra-ai/mastra/issues/15\n</skill>',
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    const user = userEvent.setup();
+    const trigger = await screen.findByRole('button', { name: 'Show understand-issue skill contents' });
+    expect(screen.getByText('understand-issue')).toBeInTheDocument();
+    expect(screen.getByText('https://github.com/mastra-ai/mastra/issues/15')).toBeInTheDocument();
+    expect(screen.queryByText('Investigate every relevant code path.')).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(screen.getByText('Investigate every relevant code path.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide understand-issue skill contents' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Hide understand-issue skill contents' }));
+    expect(screen.queryByText('Investigate every relevant code path.')).not.toBeInTheDocument();
+  });
+
+  it('given skill-like markup outside the exact TUI envelope, then it remains a normal message', async () => {
+    seedFactory();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            {
+              id: 'ordinary-xml-message',
+              role: 'user',
+              createdAt: '2026-07-16T18:01:00.000Z',
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'text',
+                    text: 'Please inspect this literal example:\n<skill name="understand-issue">\nnot an invocation\n</skill>',
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    await screen.findByText(/not an invocation/);
+    expect(screen.queryByRole('button', { name: /understand-issue skill contents/ })).not.toBeInTheDocument();
+  });
+
+  it('given a persisted notification signal, then it remains visible after transcript hydration', async () => {
+    seedFactory();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            // Shape produced by core's signalToDBMessage for a delivered notification.
+            {
+              id: 'notification-message-1',
+              role: 'signal',
+              type: 'notification',
+              createdAt: new Date().toISOString(),
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'octo/repo#42 was approved' }],
+                metadata: {
+                  signal: {
+                    id: 'notification-1',
+                    type: 'notification',
+                    tagName: 'notification',
+                    createdAt: new Date().toISOString(),
+                    attributes: {
+                      id: 'notification-1',
+                      source: 'github',
+                      type: 'pull-request-review',
+                      kind: 'pull-request-review',
+                      priority: 'urgent',
+                      status: 'pending',
+                    },
+                    metadata: {
+                      notification: {
+                        signal: 'notification',
+                        recordId: 'notification-1',
+                        source: 'github',
+                        kind: 'pull-request-review',
+                        priority: 'urgent',
+                        status: 'pending',
+                      },
+                    },
+                  },
+                },
+              },
             },
           ],
         }),
@@ -276,7 +480,7 @@ describe('ChatMessageList', () => {
   });
 
   it('given a running turn without streamed assistant text, then it shows the working indicator', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([{ type: 'agent_start' }]);
     renderMessageList();
 
@@ -285,18 +489,37 @@ describe('ChatMessageList', () => {
   });
 
   it('given a persisted status part without text, then no empty notice bubble renders', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     server.use(
       http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
         HttpResponse.json({
           messages: [
-            { id: 'status-1', role: 'assistant', content: [{ type: 'om_compaction' }] },
-            { id: 'status-2', role: 'assistant', content: [{ type: 'om_summary', text: 'Memory updated' }] },
+            {
+              id: 'status-1',
+              role: 'assistant',
+              createdAt: new Date().toISOString(),
+              content: { format: 2, parts: [], metadata: { harnessContent: [{ type: 'om_compaction' }] } },
+            },
+            {
+              id: 'status-2',
+              role: 'assistant',
+              createdAt: new Date().toISOString(),
+              content: {
+                format: 2,
+                parts: [],
+                metadata: { harnessContent: [{ type: 'om_summary', text: 'Memory updated' }] },
+              },
+            },
             {
               id: 'status-3',
               role: 'assistant',
-              content: [{ type: 'om_compaction' }, { type: 'text', text: 'This is an ordinary agent response.' }],
+              createdAt: new Date().toISOString(),
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'This is an ordinary agent response.' }],
+                metadata: { harnessContent: [{ type: 'om_compaction' }] },
+              },
             },
           ],
         }),
@@ -313,7 +536,7 @@ describe('ChatMessageList', () => {
   });
 
   it('given the session fails to connect, then it shows the disconnected notice', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     server.use(http.post(`${API}/sessions`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
     renderMessageList();
@@ -324,7 +547,7 @@ describe('ChatMessageList', () => {
   });
 
   it('given a goal evaluation event, then it shows the goal panel with objective and progress', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([
       {
         type: 'goal_evaluation',
@@ -338,7 +561,7 @@ describe('ChatMessageList', () => {
   });
 
   it('hides the goal panel when no goal is set', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([{ type: 'agent_start' }]);
     renderMessageList();
 
@@ -350,7 +573,7 @@ describe('ChatMessageList', () => {
   });
 
   it('pauses, resumes, and clears a displayed goal through the agent controller', async () => {
-    seedProject();
+    seedFactory();
     const goal = { objective: 'Ship the refactor', iteration: 1, maxRuns: 5, passed: false };
     useAgentControllerHandlers([{ type: 'goal_evaluation', payload: { ...goal, status: 'active' } }]);
     const updates: unknown[] = [];
@@ -375,7 +598,7 @@ describe('ChatMessageList', () => {
   });
 
   it('resumes a paused goal through the agent controller', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([
       {
         type: 'goal_evaluation',
@@ -397,7 +620,7 @@ describe('ChatMessageList', () => {
   });
 
   it('responds to approval and plan suspension prompts, then removes them', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([
       { type: 'tool_approval_required', toolCallId: 'tool-call-1', toolName: 'write_file', args: { path: 'test.ts' } },
       { type: 'tool_approval_required', toolCallId: 'tool-call-3', toolName: 'request_access', args: { path: '/tmp' } },

@@ -1,45 +1,55 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Capture DB updates without a real Postgres. `getAppDb()` returns a chainable
-// stub whose terminal `.where()` records the `set(...)` payload.
 const dbUpdates: Array<Record<string, unknown>> = [];
-vi.mock('./db', () => ({
-  getAppDb: () => ({
-    update: () => ({
-      set: (values: Record<string, unknown>) => ({
-        where: async () => {
-          dbUpdates.push(values);
-        },
-      }),
-    }),
-  }),
-}));
 
+import { resetSandboxFactory, setSandboxFactory } from '../sandbox/fleet';
+import type { MaterializationSandbox, SandboxCommandResult } from '../sandbox/fleet';
 import {
-  computeSandboxWorkdir,
   computeWorktreePath,
   configureGitIdentity,
   createPullRequest,
-  ensureProjectSandbox,
+  ensureProjectSandbox as ensureProjectSandboxWithStorage,
   ensureWorktree,
-  getSandboxIdleMinutes,
-  getSandboxProvider,
-  isSandboxEnabled,
   isValidGitRef,
-  materializeRepo,
+  materializeRepo as materializeRepoWithStorage,
   MaterializeError,
   pushBranch,
-  resetSandboxFactory,
   resolveGitIdentity,
   runWorktreeSetup,
   safeBranchDir,
-  setSandboxFactory,
   shellQuote,
   withInstallToken,
   WorktreeError,
 } from './sandbox';
-import type { MaterializationSandbox, RepoMaterializeInfo, SandboxCommandResult } from './sandbox';
-import type { GithubProjectSandboxRow } from './schema';
+import type { RepoMaterializeInfo } from './sandbox';
+import type { SourceControlProjectSandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
+
+/** Minimal cloneable template sandbox standing in for Railway/Local instances. */
+function templateSandbox(opts: { provider?: string; idleTimeoutMinutes?: number } = {}): WorkspaceSandbox {
+  const template = {
+    id: 'template-1',
+    name: 'Template',
+    provider: opts.provider ?? 'railway',
+    ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
+    clone: () => template,
+  };
+  return template as unknown as WorkspaceSandbox;
+}
+
+/** Seed the runtime-config registry with a factory-shaped sandbox runtime. */
+function seedSandboxRuntime(
+  opts: { provider?: string; idleTimeoutMinutes?: number; workdirBase?: string; maxSandboxes?: number } = {},
+): void {
+  seedRuntimeConfig({
+    sandbox: {
+      machine: templateSandbox(opts),
+      workdirBase: opts.workdirBase ?? '/workspace',
+      ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
+    },
+  });
+}
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };
@@ -70,10 +80,10 @@ class FakeSandbox implements MaterializationSandbox {
   }
 }
 
-function makeRow(overrides: Partial<GithubProjectSandboxRow> = {}): GithubProjectSandboxRow {
+function makeRow(overrides: Partial<SourceControlProjectSandbox> = {}): SourceControlProjectSandbox {
   return {
     id: 'sbrow-1',
-    githubProjectId: 'proj-1',
+    projectId: 'proj-1',
     userId: 'user-1',
     sandboxId: null,
     sandboxWorkdir: '/workspace/hello',
@@ -87,95 +97,41 @@ function makeRepoInfo(overrides: Partial<RepoMaterializeInfo> = {}): RepoMateria
   return { repoFullName: 'octocat/hello', defaultBranch: 'main', ...overrides };
 }
 
+const storage = {
+  setSandboxId: vi.fn(async (_id: string, sandboxId: string) => {
+    dbUpdates.push({ sandboxId });
+  }),
+  clearBinding: vi.fn(async () => {
+    dbUpdates.push({ sandboxId: null });
+  }),
+  markMaterialized: vi.fn(async () => {
+    dbUpdates.push({ materializedAt: new Date() });
+  }),
+} as unknown as SourceControlStorageHandle['sandboxes'];
+
+function ensureProjectSandbox(
+  row: SourceControlProjectSandbox,
+  onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[2],
+) {
+  return ensureProjectSandboxWithStorage(row, storage, onProgress);
+}
+
+function materializeRepo(
+  row: SourceControlProjectSandbox,
+  repoInfo: RepoMaterializeInfo,
+  sandbox: MaterializationSandbox,
+  token: string,
+) {
+  return materializeRepoWithStorage(row, repoInfo, sandbox, token, storage);
+}
+
 beforeEach(() => {
   dbUpdates.length = 0;
 });
 
 afterEach(() => {
   resetSandboxFactory();
-  delete process.env.RAILWAY_API_TOKEN;
-  delete process.env.MASTRACODE_SANDBOX_PROVIDER;
-  delete process.env.MASTRACODE_SANDBOX_WORKDIR;
-  delete process.env.MASTRACODE_SANDBOX_IDLE_MINUTES;
-});
-
-describe('getSandboxProvider', () => {
-  it('defaults to railway when a Railway token is set', () => {
-    process.env.RAILWAY_API_TOKEN = 'tok';
-    expect(getSandboxProvider()).toBe('railway');
-  });
-
-  it('falls back to local when no Railway token is set', () => {
-    expect(getSandboxProvider()).toBe('local');
-  });
-
-  it('honors an explicit provider override', () => {
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'railway';
-    expect(getSandboxProvider()).toBe('railway');
-  });
-});
-
-describe('isSandboxEnabled', () => {
-  it('is true for railway when a token is set', () => {
-    process.env.RAILWAY_API_TOKEN = 'tok';
-    expect(isSandboxEnabled()).toBe(true);
-  });
-
-  it('is true without a token (auto-falls back to local)', () => {
-    expect(isSandboxEnabled()).toBe(true);
-  });
-
-  it('is false when railway is explicitly selected without a token', () => {
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'railway';
-    expect(isSandboxEnabled()).toBe(false);
-  });
-
-  it('is false for an unknown provider', () => {
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'mystery';
-    process.env.RAILWAY_API_TOKEN = 'tok';
-    expect(isSandboxEnabled()).toBe(false);
-  });
-
-  it('is true for the local provider without any token', () => {
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'local';
-    expect(isSandboxEnabled()).toBe(true);
-  });
-});
-
-describe('computeSandboxWorkdir', () => {
-  it('defaults to /workspace/<repo> for the railway provider', () => {
-    process.env.RAILWAY_API_TOKEN = 'tok';
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/workspace/hello');
-  });
-
-  it('appends the repo name to a configured base', () => {
-    process.env.RAILWAY_API_TOKEN = 'tok';
-    process.env.MASTRACODE_SANDBOX_WORKDIR = '/srv/checkouts';
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/checkouts/hello');
-  });
-
-  it('does not double-append when the base already ends in the repo name', () => {
-    process.env.RAILWAY_API_TOKEN = 'tok';
-    process.env.MASTRACODE_SANDBOX_WORKDIR = '/srv/hello';
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/hello');
-  });
-
-  it('checks out under the local sandbox root for the local provider', () => {
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'local';
-    process.env.MASTRACODE_LOCAL_SANDBOX_ROOT = '/tmp/mc-sandboxes';
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/tmp/mc-sandboxes/hello');
-    delete process.env.MASTRACODE_LOCAL_SANDBOX_ROOT;
-  });
-
-  it('ignores the cloud-only workdir base for the local provider', () => {
-    // The schema defaults MASTRACODE_SANDBOX_WORKDIR to /workspace, which is
-    // not writable on a host filesystem — the local provider must ignore it.
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'local';
-    process.env.MASTRACODE_SANDBOX_WORKDIR = '/workspace';
-    process.env.MASTRACODE_LOCAL_SANDBOX_ROOT = '/tmp/mc-sandboxes';
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/tmp/mc-sandboxes/hello');
-    delete process.env.MASTRACODE_LOCAL_SANDBOX_ROOT;
-  });
+  __resetRuntimeConfigForTests();
 });
 
 describe('ensureProjectSandbox', () => {
@@ -204,8 +160,8 @@ describe('ensureProjectSandbox', () => {
     expect(dbUpdates).toEqual([]);
   });
 
-  it('passes the idle timeout to the provider on provision', async () => {
-    process.env.MASTRACODE_SANDBOX_IDLE_MINUTES = '15';
+  it('passes the template-configured idle timeout on provision', async () => {
+    seedSandboxRuntime({ idleTimeoutMinutes: 15 });
     const sandbox = new FakeSandbox();
     let factoryArgs: { idleTimeoutMinutes?: number } | undefined;
     setSandboxFactory(opts => {
@@ -240,28 +196,6 @@ describe('ensureProjectSandbox', () => {
     expect(fresh.startCount).toBe(1);
     // The stale id is cleared, then the new provider id persisted.
     expect(dbUpdates).toEqual([{ sandboxId: null }, { sandboxId: 'railway-vm-new' }]);
-  });
-});
-
-describe('getSandboxIdleMinutes', () => {
-  afterEach(() => {
-    delete process.env.MASTRACODE_SANDBOX_IDLE_MINUTES;
-  });
-
-  it('defaults to 30 minutes when unset', () => {
-    expect(getSandboxIdleMinutes()).toBe(30);
-  });
-
-  it('reads a positive integer from the env', () => {
-    process.env.MASTRACODE_SANDBOX_IDLE_MINUTES = '45';
-    expect(getSandboxIdleMinutes()).toBe(45);
-  });
-
-  it('falls back to 30 for non-positive or invalid values', () => {
-    process.env.MASTRACODE_SANDBOX_IDLE_MINUTES = '0';
-    expect(getSandboxIdleMinutes()).toBe(30);
-    process.env.MASTRACODE_SANDBOX_IDLE_MINUTES = 'nope';
-    expect(getSandboxIdleMinutes()).toBe(30);
   });
 });
 

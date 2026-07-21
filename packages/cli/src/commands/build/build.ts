@@ -107,6 +107,13 @@ export async function build({
     const sourceHash = await computeSourceHash(rootDir, mastraDir);
     await writeBuildManifest(outputDirectory, sourceHash);
 
+    // Push-style deployers (e.g. sandbox deploys) opt in to deploying as part
+    // of the build. Platform deployers deploy via their own tooling instead.
+    if (platformDeployer.deployOnBuild) {
+      await platformDeployer.deploy(outputDirectory);
+      return;
+    }
+
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
     try {

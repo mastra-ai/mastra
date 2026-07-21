@@ -171,10 +171,7 @@ export interface ToolDisplayContext {
 
 /** Return value from a {@link ToolDisplayFn}. */
 export type ToolDisplayResult =
-  | { kind: 'post'; message: PostableMessage }
-  | { kind: 'stream'; chunk: StreamChunk }
-  | undefined
-  | void;
+  { kind: 'post'; message: PostableMessage } | { kind: 'stream'; chunk: StreamChunk } | undefined | void;
 
 /**
  * Stream agent text deltas to this adapter as the agent generates them, instead of
@@ -238,9 +235,7 @@ export interface ChannelAdapterStreamingConfig extends ChannelAdapterBaseConfig 
  * exclusive with `toolDisplay` and kept for backwards compatibility.
  */
 export type ChannelAdapterConfig =
-  | ChannelAdapterStaticConfig
-  | ChannelAdapterStreamingConfig
-  | ChannelAdapterLegacyConfig;
+  ChannelAdapterStaticConfig | ChannelAdapterStreamingConfig | ChannelAdapterLegacyConfig;
 
 /**
  * @deprecated Legacy shape: the old `cards` boolean and `formatToolCall`

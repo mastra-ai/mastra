@@ -11,26 +11,27 @@ import { useLocation, useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useToast } from '../../../ui/toast';
-import { useWebAuth } from '../../auth/hooks/useWebAuth';
+import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { userSessionResourceId } from '../../auth/services/auth';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { useActiveProjectContext } from '../context/ActiveProjectProvider';
-import { useWorkspaceActivity } from '../hooks/useWorkspaceActivity';
-import { useWorkspaceAttention } from '../hooks/useWorkspaceAttention';
+import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
+import { useWorkspaceActivity } from '../../../../../shared/hooks/useWorkspaceActivity';
+import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import { createWorktree, deleteWorktree } from '../services/github';
-import type { Project, Worktree } from '../services/projects';
+import type { Factory, Worktree } from '../services/factories';
 import {
-  loadProjects,
+  isGithubFactory,
+  loadFactories,
   removeWorktree,
   upsertWorktree,
   USER_SESSION_BRANCH_PREFIX,
   userSessionWorktrees,
-} from '../services/projects';
+} from '../services/factories';
 import { WorkspaceRow } from './WorkspacesSection';
 
-function latestProject(project: Project): Project {
-  return loadProjects().find(stored => stored.id === project.id) ?? project;
+function latestFactory(factory: Factory): Factory {
+  return loadFactories().find(stored => stored.id === factory.id) ?? factory;
 }
 
 function sessionLabel(worktree: Worktree): string {
@@ -51,7 +52,7 @@ function sessionLabel(worktree: Worktree): string {
  */
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
-  const { activeProject } = useActiveProjectContext();
+  const { activeFactory } = useActiveFactoryContext();
   const auth = useWebAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -61,18 +62,17 @@ export function UserSessionsSection() {
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
 
-  const isGithubProject = activeProject?.source === 'github';
+  const isGithub = activeFactory ? isGithubFactory(activeFactory) : false;
   const userResourceId = userSessionResourceId(auth.data);
 
   const sessionsQuery = useQuery({
-    queryKey: queryKeys.userSessions(activeProject?.id),
+    queryKey: queryKeys.userSessions(activeFactory?.id),
     queryFn: async (): Promise<Worktree[]> => {
-      if (!activeProject) throw new Error('User sessions require an active project');
-      return userSessionWorktrees(latestProject(activeProject));
+      if (!activeFactory) throw new Error('User sessions require an active factory');
+      return userSessionWorktrees(latestFactory(activeFactory));
     },
-    enabled: isGithubProject,
-    initialData:
-      isGithubProject && activeProject ? () => userSessionWorktrees(latestProject(activeProject)) : undefined,
+    enabled: isGithub,
+    initialData: isGithub && activeFactory ? () => userSessionWorktrees(latestFactory(activeFactory)) : undefined,
   });
   const worktrees = sessionsQuery.data ?? [];
 
@@ -82,13 +82,13 @@ export function UserSessionsSection() {
     projectPath: worktrees[0]?.worktreePath,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: isGithubProject && !auth.isPending && worktrees.length > 0,
+    enabled: isGithub && !auth.isPending && worktrees.length > 0,
   });
   const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.userSessions(activeProject?.id) });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.userSessions(activeFactory?.id) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
   };
 
   // Seed (or address) the user's own session for a worktree: sessions are
@@ -105,20 +105,20 @@ export function UserSessionsSection() {
 
   const createSession = useMutation({
     mutationFn: async (rawName: string) => {
-      if (!activeProject?.githubProjectId) throw new Error('No GitHub project selected');
+      if (!activeFactory || !isGithubFactory(activeFactory)) throw new Error('No GitHub factory selected');
       const slug = rawName.trim().toLowerCase().replace(/\s+/g, '-');
       if (!slug) throw new Error('Session name is required');
       // A fresh worktree branched from the repo's HEAD (server defaults the
       // base branch), owned by this user.
       const result = await createWorktree(
         baseUrl,
-        activeProject.githubProjectId,
+        activeFactory.binding.githubProjectId,
         `${USER_SESSION_BRANCH_PREFIX}${slug}`,
       );
       const chatSession = userSessionFor(result.worktreePath);
       await chatSession.create({ tags: { projectPath: result.worktreePath } });
       const thread = await chatSession.createThread();
-      upsertWorktree(latestProject(activeProject), {
+      upsertWorktree(latestFactory(activeFactory), {
         branch: result.branch,
         worktreePath: result.worktreePath,
         baseBranch: result.baseBranch,
@@ -141,8 +141,8 @@ export function UserSessionsSection() {
 
   const deleteSession = useMutation({
     mutationFn: async (worktree: Worktree) => {
-      if (!activeProject?.githubProjectId) throw new Error('No GitHub project selected');
-      await deleteWorktree(baseUrl, activeProject.githubProjectId, worktree.branch);
+      if (!activeFactory || !isGithubFactory(activeFactory)) throw new Error('No GitHub factory selected');
+      await deleteWorktree(baseUrl, activeFactory.binding.githubProjectId, worktree.branch);
       // Cascade: delete the user's threads scoped to this worktree. Re-list
       // between rounds (page-size cap); bail after a sane number of rounds.
       const chatSession = userSessionFor(worktree.worktreePath);
@@ -151,7 +151,7 @@ export function UserSessionsSection() {
         if (threads.length === 0) break;
         for (const thread of threads) await chatSession.deleteThread(thread.id);
       }
-      removeWorktree(latestProject(activeProject), worktree.worktreePath);
+      removeWorktree(latestFactory(activeFactory), worktree.worktreePath);
       return worktree;
     },
     onSuccess: worktree => {
@@ -168,7 +168,7 @@ export function UserSessionsSection() {
     },
   });
 
-  if (!isGithubProject) return null;
+  if (!isGithub) return null;
 
   const pending = createSession.isPending || deleteSession.isPending;
 
@@ -184,7 +184,7 @@ export function UserSessionsSection() {
       const chatSession = userSessionFor(worktree.worktreePath);
       await chatSession.create({ tags: { projectPath: worktree.worktreePath } });
       const thread = await chatSession.createThread();
-      if (activeProject) upsertWorktree(latestProject(activeProject), { ...worktree, threadId: thread.id });
+      if (activeFactory) upsertWorktree(latestFactory(activeFactory), { ...worktree, threadId: thread.id });
       invalidate();
       void navigate(`/user/threads/${thread.id}`);
     } catch (error) {
@@ -239,7 +239,6 @@ export function UserSessionsSection() {
               running={runningByPath[worktree.worktreePath] === true}
               attention={attentionByPath[worktree.worktreePath] === true}
               disabled={pending}
-              onSeen={() => clearAttention(worktree.worktreePath)}
               onSelect={() => void openSession(worktree)}
               onDelete={() => setConfirmDelete(worktree)}
             />

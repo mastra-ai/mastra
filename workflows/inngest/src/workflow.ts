@@ -30,21 +30,23 @@ import type {
 
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
-  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+  TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
     string,
     unknown,
     unknown,
     unknown,
     unknown,
     unknown,
-    TEngineType
+    TEngineType,
+    unknown
   >[],
   TWorkflowId extends string = string,
   TState = unknown,
   TInput = unknown,
   TOutput = unknown,
   TPrevSchema = TInput,
-> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema, TRequestContext> {
   #mastra: Mastra;
   public inngest: Inngest;
 
@@ -67,14 +69,15 @@ export class InngestWorkflow<
       TState,
       TInput,
       TOutput,
-      TSteps & Step<string, any, any, any, any, any, InngestEngineType>[]
+      TSteps & Step<string, any, any, any, any, any, InngestEngineType, any>[],
+      TRequestContext
     >,
     inngest: Inngest,
   ) {
     const { concurrency, rateLimit, throttle, debounce, priority, cron, inputData, initialState, ...workflowParams } =
       params;
 
-    super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
+    super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>);
 
     this.engineType = 'inngest';
 
@@ -185,12 +188,14 @@ export class InngestWorkflow<
   async createRun(options?: {
     runId?: string;
     resourceId?: string;
-  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+    disableScorers?: boolean;
+    pubsub?: PubSub;
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
     const existingInMemoryRun = this.runs.get(runIdToUse);
-    const newRun = new InngestRun<TEngineType, TSteps, TState, TInput, TOutput>(
+    const newRun = new InngestRun<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>(
       {
         workflowId: this.id,
         runId: runIdToUse,
@@ -207,7 +212,7 @@ export class InngestWorkflow<
       },
       this.inngest,
     );
-    const run = (existingInMemoryRun ?? newRun) as Run<TEngineType, TSteps, TState, TInput, TOutput>;
+    const run = (existingInMemoryRun ?? newRun) as Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>;
 
     this.runs.set(runIdToUse, run);
 
@@ -481,8 +486,7 @@ export class InngestWorkflow<
                 // For suspended workflows, read existing snapshot to preserve suspendedPaths and resumeLabels
                 // which were set correctly by the handlers during execution
                 let existingSnapshot:
-                  | { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> }
-                  | undefined;
+                  { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> } | undefined;
                 if (result.status === 'suspended') {
                   existingSnapshot =
                     (await workflowsStore.loadWorkflowSnapshot({

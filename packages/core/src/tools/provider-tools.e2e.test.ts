@@ -3,6 +3,7 @@ import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v5';
 import { google } from '@ai-sdk/google-v5';
 import { openai } from '@ai-sdk/openai-v5';
 import { openai as openaiV6 } from '@ai-sdk/openai-v6';
+import { openai as openaiV7 } from '@ai-sdk/openai-v7';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -367,6 +368,80 @@ describe('provider-defined tools with AI SDK v6 (@ai-sdk/openai@3)', () => {
     expect(result.text.toLowerCase()).toContain('paris');
 
     // V6 tools don't have a hardcoded `.name`; the model-facing name is the user's object key ("search")
+    const webSearchToolCall = result.toolCalls.find(tc => tc.payload.toolName === 'search');
+    expect(webSearchToolCall).toBeDefined();
+    expect(webSearchToolCall?.payload.providerExecuted).toBe(true);
+
+    const webSearchToolResult = result.toolResults.find(tr => tr.payload.toolName === 'search');
+    expect(webSearchToolResult).toBeDefined();
+
+    // Verify finish reason is 'stop' (not 'tool-calls')
+    expect(result.finishReason).toBe('stop');
+  });
+});
+
+describe('provider-defined tools with AI SDK v7 (@ai-sdk/openai@4)', () => {
+  it('stream - should handle openai web search tool with v7 provider', { timeout: 60000 }, async () => {
+    const tool = openaiV7.tools.webSearch({});
+
+    const agent = new Agent({
+      id: 'test-openai-v7-web-search-agent',
+      name: 'test-openai-v7-web-search-agent',
+      instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
+      model: openaiV7('gpt-4o-mini'),
+      tools: { search: tool },
+    });
+
+    const result = await agent.stream('What is the capital of France? Use the search tool to find the answer.', {});
+
+    await result.consumeStream();
+
+    expect(result).toBeDefined();
+
+    const text = await result.text;
+    const finishReason = await result.finishReason;
+    const toolCalls = await result.toolCalls;
+    const toolResults = await result.toolResults;
+
+    // V7 tools don't have a hardcoded `.name`; the model-facing name is the user's object key ("search")
+    const webSearchToolCall = toolCalls.find(tc => tc.payload.toolName === 'search');
+    expect(webSearchToolCall).toBeDefined();
+    expect(webSearchToolCall?.payload.providerExecuted).toBe(true);
+
+    const webSearchToolResult = toolResults.find(tr => tr.payload.toolName === 'search');
+    expect(webSearchToolResult).toBeDefined();
+
+    // The agent should generate a text response after processing the web search results
+    expect(text).toBeDefined();
+    expect(text.length).toBeGreaterThan(0);
+    // The response should mention Paris (the capital of France)
+    expect(text.toLowerCase()).toContain('paris');
+
+    // Verify finish reason is 'stop' (not 'tool-calls')
+    expect(finishReason).toBe('stop');
+  });
+
+  it('generate - should handle openai web search tool with v7 provider', { timeout: 60000 }, async () => {
+    const tool = openaiV7.tools.webSearch({});
+
+    const agent = new Agent({
+      id: 'test-openai-v7-web-search-agent-generate',
+      name: 'test-openai-v7-web-search-agent-generate',
+      instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
+      model: openaiV7('gpt-4o-mini'),
+      tools: { search: tool },
+    });
+
+    const result = await agent.generate('What is the capital of France? Use the search tool to find the answer.', {});
+
+    expect(result).toBeDefined();
+
+    // The agent should generate a text response after processing the web search results
+    expect(result.text).toBeDefined();
+    expect(result.text.length).toBeGreaterThan(0);
+    expect(result.text.toLowerCase()).toContain('paris');
+
+    // V7 tools don't have a hardcoded `.name`; the model-facing name is the user's object key ("search")
     const webSearchToolCall = result.toolCalls.find(tc => tc.payload.toolName === 'search');
     expect(webSearchToolCall).toBeDefined();
     expect(webSearchToolCall?.payload.providerExecuted).toBe(true);

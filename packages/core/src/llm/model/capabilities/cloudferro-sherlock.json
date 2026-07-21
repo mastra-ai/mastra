@@ -5,5 +5,11 @@
     "openai/gpt-oss-120b",
     "speakleash/Bielik-11B-v2.6-Instruct",
     "speakleash/Bielik-11B-v3.0-Instruct"
+  ],
+  "structuredOutput": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "openai/gpt-oss-120b",
+    "speakleash/Bielik-11B-v2.6-Instruct",
+    "speakleash/Bielik-11B-v3.0-Instruct"
   ]
 }

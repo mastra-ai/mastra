@@ -1,0 +1,47 @@
+{
+  "id": "daily-standup-plain",
+  "description": "Sub-workflow: produce a plain team standup digest (no escalation). Invoked by `daily-standup-digest` when there are no blockers.",
+  "metadata": {
+    "seededFrom": "examples/agent/src/mastra/stored-workflows/daily-standup-plain.json",
+    "role": "sub-workflow of daily-standup-digest (falsy branch)"
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "teamName": { "type": "string" },
+      "normalizedNotesJson": { "type": "string" }
+    },
+    "required": ["teamName", "normalizedNotesJson"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "markdown": { "type": "string" }
+    },
+    "required": ["markdown"]
+  },
+  "graph": [
+    {
+      "type": "mapping",
+      "id": "assemble-digest-prompt",
+      "mapConfig": "{\"prompt\":{\"template\":\"Team: ${initData.teamName}\\n\\nNormalized notes (JSON):\\n${initData.normalizedNotesJson}\"}}"
+    },
+    {
+      "type": "agent",
+      "id": "standup-digest",
+      "agentId": "standup-digest",
+      "description": "Writes the team-wide markdown digest from normalized notes."
+    },
+    {
+      "type": "mapping",
+      "id": "prep-format",
+      "mapConfig": "{\"teamName\":{\"template\":\"${initData.teamName}\"},\"digest\":{\"template\":\"${stepResults.standup-digest.text}\"}}"
+    },
+    {
+      "type": "tool",
+      "id": "format-standup-digest",
+      "toolId": "format-standup-digest",
+      "description": "Wraps the digest in a dated markdown header."
+    }
+  ]
+}

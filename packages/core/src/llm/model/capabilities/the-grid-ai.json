@@ -9,5 +9,16 @@
     "text-max",
     "text-prime",
     "text-standard"
+  ],
+  "structuredOutput": [
+    "agent-max",
+    "agent-prime",
+    "agent-standard",
+    "code-max",
+    "code-prime",
+    "code-standard",
+    "text-max",
+    "text-prime",
+    "text-standard"
   ]
 }

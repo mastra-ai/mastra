@@ -100,12 +100,33 @@ function serializeEntry(entry: StepFlowEntry): SerializedStepFlowEntry {
             ? { fn: entry.opts.concurrency.toString() }
             : { concurrency: entry.opts.concurrency },
       };
-    case 'conditional':
-      throw new Error(`Conditional steps cannot be stored: requires the Phase-2 predicate DSL.`);
-    case 'loop':
-      throw new Error(
-        `Loop step "${getSingleStepEntryId(entry.step)}" cannot be stored: requires the Phase-2 predicate DSL.`,
-      );
+    case 'conditional': {
+      const predicates = (entry as any).predicates as Array<unknown> | undefined;
+      if (!predicates || predicates.some(p => !p || typeof p !== 'object')) {
+        throw new Error(
+          `Conditional (branch) step cannot be stored: closure predicates do not round-trip. Use the declarative form ({ predicate: {...} }) for each branch.`,
+        );
+      }
+      return {
+        type: 'conditional',
+        steps: entry.steps.map(s => serializeSingleEntry(s)),
+        predicates: predicates as any,
+      } as any;
+    }
+    case 'loop': {
+      const predicate = (entry as any).predicate as unknown | undefined;
+      if (!predicate || typeof predicate !== 'object') {
+        throw new Error(
+          `Loop step "${getSingleStepEntryId(entry.step)}" cannot be stored: closure predicates do not round-trip. Use the declarative form ({ predicate: {...} }).`,
+        );
+      }
+      return {
+        type: 'loop',
+        step: serializeSingleEntry(entry.step),
+        loopType: entry.loopType,
+        predicate: predicate as any,
+      } as any;
+    }
     default: {
       const _exhaustive: never = entry;
       throw new Error(`Unknown step entry type: ${JSON.stringify(_exhaustive)}`);
@@ -166,6 +187,25 @@ function serializeSingleEntry(entry: SingleStepEntry): SerializedSingleStepEntry
       }
     }
     return { type: 'mapping', id: entry.id, mapConfig: JSON.stringify(serialized) };
+  }
+  // A nested Workflow reached the generic `.then(step)` fallback (its
+  // component discriminator is 'WORKFLOW'). Emit a declarative `workflow`
+  // entry so the rehydrator can rebuild it by id. Inline the nested graph
+  // when present so Studio/API consumers can expand it (same role the old
+  // `type:'step' + component:'WORKFLOW'` shape played).
+  if ((entry.step as any)?.component === 'WORKFLOW') {
+    // Prefer the public getter (serializedStepGraph); fall back to the
+    // protected/legacy serializedStepFlow field.
+    const nestedFlow =
+      ((entry.step as any).serializedStepGraph as SerializedStepFlowEntry[] | undefined) ??
+      ((entry.step as any).serializedStepFlow as SerializedStepFlowEntry[] | undefined);
+    return {
+      type: 'workflow',
+      id: (entry.step as any).id,
+      workflowId: (entry.step as any).id,
+      ...((entry.step as any).description ? { description: (entry.step as any).description } : {}),
+      ...(nestedFlow ? { serializedStepFlow: nestedFlow } : {}),
+    };
   }
   // generic `.then(step)` — descriptor only; rehydration looks the step up
   // by id on the live Mastra instance.
@@ -330,9 +370,38 @@ function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra
     case 'step':
       wf.then(resolveStepDescriptor(entry.step, mastra));
       return;
-    case 'conditional':
-    case 'loop':
-      throw new Error(`Cannot rehydrate ${entry.type} step: requires the Phase-2 predicate DSL.`);
+    case 'workflow': {
+      const nested = assertWorkflowExists(mastra, entry.workflowId);
+      wf.then(nested);
+      return;
+    }
+    case 'conditional': {
+      const predicates = (entry as any).predicates as Array<unknown> | undefined;
+      if (!predicates || predicates.length !== entry.steps.length) {
+        throw new Error(
+          `Cannot rehydrate conditional step: missing or mismatched predicates. Only declarative predicate branches round-trip.`,
+        );
+      }
+      const branches = entry.steps.map((s, i) => [{ predicate: predicates[i] as any }, resolveSingle(s, mastra)]);
+      wf.branch(branches);
+      return;
+    }
+    case 'loop': {
+      const predicate = (entry as any).predicate as unknown | undefined;
+      const loopType = (entry as any).loopType as 'dowhile' | 'dountil' | undefined;
+      if (!predicate || (loopType !== 'dowhile' && loopType !== 'dountil')) {
+        throw new Error(
+          `Cannot rehydrate loop step: missing declarative predicate or loopType. Only declarative predicate loops round-trip.`,
+        );
+      }
+      const inner = resolveSingle(entry.step as any, mastra);
+      if (loopType === 'dowhile') {
+        wf.dowhile(inner, { predicate: predicate as any });
+      } else {
+        wf.dountil(inner, { predicate: predicate as any });
+      }
+      return;
+    }
     default: {
       const _exhaustive: never = entry;
       throw new Error(`Unknown stored step type: ${JSON.stringify(_exhaustive)}`);
@@ -384,6 +453,8 @@ function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra): any {
     }
     case 'step':
       return resolveStepDescriptor(entry.step, mastra);
+    case 'workflow':
+      return assertWorkflowExists(mastra, entry.workflowId);
     case 'mapping':
       throw new Error(`mapping entries cannot appear inside .parallel() or .foreach(); they must be top-level.`);
   }
@@ -413,6 +484,8 @@ function resolveForeachInner(entry: SerializedSingleStepEntry, mastra: Mastra): 
     }
     case 'step':
       return resolveStepDescriptor(entry.step, mastra);
+    case 'workflow':
+      return assertWorkflowExists(mastra, entry.workflowId);
     case 'mapping':
       throw new Error(
         `Foreach step cannot iterate a mapping: mappings project data, they don't execute per item. Use an agent, tool, or plain step as the foreach body.`,
@@ -512,6 +585,25 @@ function assertToolExists(mastra: Mastra, toolId: string): void {
   if (!mastra.getTool?.(toolId)) {
     throw new Error(`Stored workflow references tool "${toolId}" which is not registered on this Mastra instance.`);
   }
+}
+
+function tryGetWorkflowById(mastra: Mastra, id: string): any | undefined {
+  if (!id || typeof (mastra as any).getWorkflow !== 'function') return undefined;
+  try {
+    return (mastra as any).getWorkflow(id);
+  } catch {
+    return undefined;
+  }
+}
+
+function assertWorkflowExists(mastra: Mastra, workflowId: string): any {
+  const wf = tryGetWorkflowById(mastra, workflowId);
+  if (!wf) {
+    throw new Error(
+      `Stored workflow references nested workflow "${workflowId}" which is not registered on this Mastra instance.`,
+    );
+  }
+  return wf;
 }
 
 // ============================================================================

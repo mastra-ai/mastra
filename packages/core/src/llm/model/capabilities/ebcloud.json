@@ -1,3 +1,4 @@
 {
-  "temperature": ["DeepSeek-V4-Flash", "DeepSeek-V4-Pro", "GLM-5.1", "Kimi-K2.6"]
+  "temperature": ["DeepSeek-V4-Flash", "DeepSeek-V4-Pro", "GLM-5.1", "Kimi-K2.6"],
+  "structuredOutput": ["DeepSeek-V4-Flash", "DeepSeek-V4-Pro", "GLM-5.1", "Kimi-K2.6"]
 }

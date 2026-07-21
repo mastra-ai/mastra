@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -76,6 +77,7 @@ import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
+import { __registerMastraCtor } from './mastra-ctor-holder';
 import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
 import type { VersionOverrides, VersionSelector } from './types';
@@ -565,7 +567,9 @@ export interface Config<
    *
    * - `undefined` (default): Auto-creates default workers (existing behavior)
    * - `false`: Disables all event processing — useful when running standalone workers separately
-   * - `MastraWorker[]`: Use exactly these workers
+   * - `MastraWorker[]`: Additional workers merged with the auto-created
+   *   defaults. A custom worker replaces a default with the same `name`;
+   *   duplicate names within the array throw. Use `false` to run no workers.
    */
   workers?: MastraWorker[] | false;
 
@@ -676,6 +680,14 @@ export class Mastra<
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
+  /**
+   * Tracks how each registered workflow got here. `'code'` = registered via
+   * the constructor `workflows` map or a subsequent `addWorkflow()` call.
+   * `'stored'` = registered via `addStoredWorkflow()` (either at boot from
+   * persisted definitions or at runtime via the HTTP/SDK surface). Keyed by
+   * the same registry key as `#workflows`, and cleaned up in `removeWorkflow`.
+   */
+  #workflowOrigin = new Map<string, 'code' | 'stored'>();
   #observability: ObservabilityEntrypoint;
   #observabilityExplicit = false;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
@@ -758,6 +770,20 @@ export class Mastra<
    * worker-existence checks and double-subscribe to the scheduling topics.
    */
   #schedulingWorkersStartPromise?: Promise<void>;
+  /**
+   * In-flight promise for `__ensureExecutionWorkersStarted()`. Serializes
+   * concurrent lazy startups triggered by background-task dispatches so two
+   * first dispatches on a cold instance can't both init/start the same
+   * workers.
+   */
+  #executionWorkersStartPromise?: Promise<void>;
+  /**
+   * Fast path for `__ensureExecutionWorkersStarted()`. Set once the execution
+   * workers + push wiring are confirmed running; reset by `stopWorkers()`.
+   * Kept separate from `#workersStarted`, which partial `startWorkers(name)`
+   * calls also set without starting the workflow consumer.
+   */
+  #executionWorkersStarted = false;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
   // (in-process EventEmitter listener, the /api/workers/events HTTP route).
@@ -846,8 +872,7 @@ export class Mastra<
                 const isOwnedHere = (() => {
                   if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
                   let parent = data?.parentWorkflow as
-                    | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
-                    | undefined;
+                    { workflowId?: string; runId?: string; parentWorkflow?: unknown } | undefined;
                   let depth = 0;
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;
@@ -1323,13 +1348,8 @@ export class Mastra<
       // runtime triggers (e.g. schedules.create()) don't lazily inject
       // scheduler / agent-schedule workers behind the user's back.
       this.#workersDisabled = true;
-    } else if (Array.isArray(workersOption)) {
-      this.#workers = workersOption;
-      for (const w of this.#workers) {
-        w.__registerMastra(this);
-      }
     } else {
-      // Default: auto-create workers based on config.
+      // Auto-create default workers based on config.
       //
       // Skip OrchestrationWorker when the configured pubsub doesn't support
       // pull delivery (e.g. EventEmitter, GCP Pub/Sub push) — those transports
@@ -1346,7 +1366,18 @@ export class Mastra<
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
       }
-      this.#workers = defaultWorkers;
+      // Merge custom workers with the defaults: a custom worker replaces a
+      // default sharing its name (e.g. a custom OrchestrationWorker), and
+      // duplicate names within the custom array fail loud.
+      const customWorkers = workersOption ?? [];
+      const customNames = new Set<string>();
+      for (const w of customWorkers) {
+        if (customNames.has(w.name)) {
+          throw new Error(`Duplicate worker name "${w.name}" in the 'workers' option`);
+        }
+        customNames.add(w.name);
+      }
+      this.#workers = [...defaultWorkers.filter(w => !customNames.has(w.name)), ...customWorkers];
       for (const w of this.#workers) {
         w.__registerMastra(this);
       }
@@ -2230,6 +2261,26 @@ export class Mastra<
   ): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
+    }
+
+    // Auto-wrap regular Agents that opted in via AgentConfig.durable.
+    // The wrapped agent then flows into the isDurableAgentLike branch below,
+    // which handles __setMastra, workflow registration, and channel routes.
+    //
+    // Statically importing `createDurableAgent` here is safe because `agent.ts`
+    // imports `Mastra` type-only, so there is no `agent → mastra` runtime edge
+    // to close the init cycle. See the import note in `agent/agent.ts`.
+    //
+    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
+    // self-referential `.agent` getter (see `Agent#agent`), so we must
+    // discriminate against a real wrapper by checking `agent.agent !== agent`.
+    // Real wrappers (e.g. `DurableAgent`, `InngestAgent`) point `.agent` at a
+    // distinct inner `Agent`; the standalone placeholder points at itself.
+    const isRealDurableWrapper = isDurableAgentLike(agent) && (agent as DurableAgentLike).agent !== (agent as unknown);
+    if (!isRealDurableWrapper && (agent as Agent).durable) {
+      const durableOption = (agent as Agent).durable;
+      const opts = durableOption === true ? {} : { ...(durableOption as object) };
+      agent = createDurableAgent({ agent: agent as Agent, ...opts }) as unknown as A;
     }
 
     // Handle durable agent wrappers (e.g., InngestAgent)
@@ -3405,25 +3456,10 @@ export class Mastra<
       return { agents: 0, recovered: 0, succeeded: 0, failed: 0 };
     }
 
-    // Duck-type on the presence of `recoverActiveRuns()` rather than
-    // `instanceof DurableAgent` — importing the concrete class here would
-    // pull the entire durable-agent module into `mastra/index.ts` and
-    // introduce a runtime import cycle (`Mastra` <-> `DurableAgent`).
-    // The recovery API is only surfaced by default-engine `DurableAgent`
-    // instances; Inngest-style wrappers legitimately lack it and are
-    // skipped automatically.
-    type RecoverableDurableAgent = {
-      id: string;
-      recoverActiveRuns(): Promise<{
-        recovered: Array<{ runId: string }>;
-        succeeded: number;
-        failed: number;
-      }>;
-    };
-    const durableAgents: RecoverableDurableAgent[] = [];
+    const durableAgents: DurableAgentLike[] = [];
     for (const agent of Object.values(this.#agents ?? {})) {
-      if (agent && typeof (agent as any).recoverActiveRuns === 'function') {
-        durableAgents.push(agent as unknown as RecoverableDurableAgent);
+      if (agent && isDurableAgentLike(agent)) {
+        durableAgents.push(agent);
       }
     }
 
@@ -4328,6 +4364,7 @@ export class Mastra<
     if (workflows[keyOrId]) {
       delete workflows[keyOrId];
       this.#hiddenWorkflowKeys.delete(keyOrId);
+      this.#workflowOrigin.delete(keyOrId);
       return true;
     }
 
@@ -4336,10 +4373,29 @@ export class Mastra<
     if (key) {
       delete workflows[key];
       this.#hiddenWorkflowKeys.delete(key);
+      this.#workflowOrigin.delete(key);
       return true;
     }
 
     return false;
+  }
+
+  /**
+   * Returns how a workflow was registered — `'code'` for statically declared
+   * or `addWorkflow()`-added workflows, `'stored'` for anything added via
+   * `addStoredWorkflow()` (either at boot or through the HTTP/SDK surface).
+   * Returns `undefined` if no workflow is registered under that key/id.
+   *
+   * Used by the HTTP layer to surface a visual distinction (e.g. a "Stored"
+   * badge in Studio) between authored-in-code and dynamically added workflows.
+   */
+  public getWorkflowOrigin(keyOrId: string): 'code' | 'stored' | undefined {
+    if (this.#workflowOrigin.has(keyOrId)) {
+      return this.#workflowOrigin.get(keyOrId);
+    }
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+    const key = Object.keys(workflows).find(k => workflows[k]?.id === keyOrId);
+    return key ? this.#workflowOrigin.get(key) : undefined;
   }
 
   /**
@@ -4390,6 +4446,12 @@ export class Mastra<
       workflow.commit();
     }
     workflows[workflowKey] = workflow;
+
+    // Default to 'code' origin. `addStoredWorkflow` pre-stamps 'stored' before
+    // delegating here, so don't clobber an existing entry.
+    if (!this.#workflowOrigin.has(workflowKey)) {
+      this.#workflowOrigin.set(workflowKey, 'code');
+    }
 
     this.registerStaticWorkflowScorers(workflow);
 
@@ -4449,6 +4511,9 @@ export class Mastra<
     // existing live registration so re-saves surface immediately instead of
     // being silently no-op'd by addWorkflow's first-write-wins guard.
     this.removeWorkflow(def.id);
+    // Pre-stamp origin as 'stored' so `addWorkflow`'s default-to-'code' guard
+    // doesn't overwrite it. Registry key === def.id for stored workflows.
+    this.#workflowOrigin.set(def.id, 'stored');
     this.addWorkflow(workflow as AnyWorkflow, def.id);
 
     const store = await this.#storage?.getStore('workflowDefinitions');
@@ -4472,15 +4537,19 @@ export class Mastra<
    * every offending id when references are unregistered or mis-classified.
    * @internal
    */
-  #validateStoredWorkflowRefs(def: StoredWorkflowGraph): void {
+  #validateStoredWorkflowRefs(def: StoredWorkflowGraph, opts?: { allowPendingWorkflowIds?: Set<string> }): void {
     type RefEntry =
       | { type: 'agent'; id: string; agentId: string }
       | { type: 'tool'; id: string; toolId: string }
+      | { type: 'workflow'; id: string; workflowId: string }
       | { type: 'parallel'; steps: readonly unknown[] }
-      | { type: 'foreach'; step: unknown };
+      | { type: 'foreach'; step: unknown }
+      | { type: 'conditional'; steps: readonly unknown[] }
+      | { type: 'loop'; step: unknown };
 
     const agents: Array<{ stepId: string; agentId: string }> = [];
     const tools: Array<{ stepId: string; toolId: string }> = [];
+    const workflows: Array<{ stepId: string; workflowId: string }> = [];
     const visit = (entry: unknown): void => {
       if (!entry || typeof entry !== 'object') return;
       const e = entry as Partial<RefEntry> & { type?: unknown };
@@ -4495,6 +4564,11 @@ export class Mastra<
           tools.push({ stepId: t.id, toolId: t.toolId });
           return;
         }
+        case 'workflow': {
+          const w = e as Extract<RefEntry, { type: 'workflow' }>;
+          workflows.push({ stepId: w.id, workflowId: w.workflowId });
+          return;
+        }
         case 'parallel': {
           const p = e as Extract<RefEntry, { type: 'parallel' }>;
           p.steps.forEach(visit);
@@ -4505,6 +4579,16 @@ export class Mastra<
           visit(f.step);
           return;
         }
+        case 'conditional': {
+          const c = e as Extract<RefEntry, { type: 'conditional' }>;
+          c.steps.forEach(visit);
+          return;
+        }
+        case 'loop': {
+          const l = e as Extract<RefEntry, { type: 'loop' }>;
+          visit(l.step);
+          return;
+        }
         default:
           return;
       }
@@ -4513,6 +4597,8 @@ export class Mastra<
 
     const registeredAgents = new Set(Object.keys(this.listAgents() ?? {}));
     const registeredTools = new Set(Object.keys(this.listTools() ?? {}));
+    const registeredWorkflows = new Set(Object.keys(this.#workflows as Record<string, AnyWorkflow>));
+    const pendingWorkflows = opts?.allowPendingWorkflowIds ?? new Set<string>();
     const errors: string[] = [];
     for (const ref of agents) {
       if (registeredAgents.has(ref.agentId)) continue;
@@ -4534,6 +4620,17 @@ export class Mastra<
         errors.push(`Step "${ref.stepId}" declares toolId "${ref.toolId}" which is not a registered tool.`);
       }
     }
+    for (const ref of workflows) {
+      if (ref.workflowId === def.id) {
+        errors.push(
+          `Step "${ref.stepId}" declares { type: "workflow", workflowId: "${ref.workflowId}" } which refers to itself. Nested workflow cycles are not allowed.`,
+        );
+        continue;
+      }
+      if (registeredWorkflows.has(ref.workflowId)) continue;
+      if (pendingWorkflows.has(ref.workflowId)) continue;
+      errors.push(`Step "${ref.stepId}" declares workflowId "${ref.workflowId}" which is not a registered workflow.`);
+    }
     if (errors.length > 0) {
       throw new Error(
         `addStoredWorkflow refused: ${errors.length} unresolved reference(s) in the graph.\n- ${errors.join('\n- ')}`,
@@ -4553,28 +4650,87 @@ export class Mastra<
     if (!store) return;
 
     const { definitions } = await store.list({ status: 'active' });
-    for (const def of definitions) {
-      // Skip definitions already registered (e.g. code-registered workflow
-      // with the same id) — code wins, storage is additive.
-      if ((this.#workflows as Record<string, AnyWorkflow>)[def.id]) continue;
-      try {
-        const { workflow } = await rehydrateWorkflow(
-          {
-            id: def.id,
-            description: def.description,
-            metadata: def.metadata,
-            inputSchema: def.inputSchema as Record<string, any>,
-            outputSchema: def.outputSchema as Record<string, any>,
-            stateSchema: def.stateSchema as Record<string, any> | undefined,
-            requestContextSchema: def.requestContextSchema as Record<string, any> | undefined,
-            graph: def.graph,
-          },
-          this,
-        );
-        this.addWorkflow(workflow as AnyWorkflow, def.id);
-      } catch (error) {
-        this.#logger?.error?.(`Failed to load stored workflow "${def.id}"`, { error });
+
+    // Skip definitions already registered (e.g. code-registered workflow
+    // with the same id) — code wins, storage is additive.
+    const pending = definitions.filter(d => !(this.#workflows as Record<string, AnyWorkflow>)[d.id]);
+
+    // Compute nested-workflow deps for each stored def so we can rehydrate
+    // in an order where every referenced workflow already exists on the
+    // live registry (either code-registered or previously loaded).
+    const collectNestedWorkflowIds = (graph: readonly unknown[]): Set<string> => {
+      const out = new Set<string>();
+      const visit = (entry: unknown): void => {
+        if (!entry || typeof entry !== 'object') return;
+        const e = entry as { type?: unknown; workflowId?: unknown; steps?: unknown; step?: unknown };
+        if (e.type === 'workflow' && typeof e.workflowId === 'string') {
+          out.add(e.workflowId);
+          return;
+        }
+        if ((e.type === 'parallel' || e.type === 'conditional') && Array.isArray(e.steps)) {
+          e.steps.forEach(visit);
+          return;
+        }
+        if ((e.type === 'foreach' || e.type === 'loop') && e.step) {
+          visit(e.step);
+          return;
+        }
+      };
+      graph.forEach(visit);
+      return out;
+    };
+
+    const pendingIds = new Set(pending.map(d => d.id));
+    const deps = new Map<string, Set<string>>();
+    for (const def of pending) {
+      const all = collectNestedWorkflowIds(def.graph as readonly unknown[]);
+      // Only track deps on other pending stored defs; code-registered ones
+      // are already live and don't gate rehydration order.
+      const pendingDeps = new Set<string>();
+      for (const id of all) if (pendingIds.has(id) && id !== def.id) pendingDeps.add(id);
+      deps.set(def.id, pendingDeps);
+    }
+
+    // Kahn's algorithm: repeatedly hydrate defs whose pending deps are all
+    // satisfied. Anything left after the loop is part of a cycle — log and
+    // skip so the rest of the app boots.
+    const remaining = new Map(pending.map(d => [d.id, d] as const));
+    const loaded = new Set<string>();
+    let progress = true;
+    while (remaining.size > 0 && progress) {
+      progress = false;
+      for (const [id, def] of Array.from(remaining)) {
+        const unresolved = Array.from(deps.get(id) ?? []).filter(d => !loaded.has(d));
+        if (unresolved.length > 0) continue;
+        remaining.delete(id);
+        progress = true;
+        try {
+          const { workflow } = await rehydrateWorkflow(
+            {
+              id: def.id,
+              description: def.description,
+              metadata: def.metadata,
+              inputSchema: def.inputSchema as Record<string, any>,
+              outputSchema: def.outputSchema as Record<string, any>,
+              stateSchema: def.stateSchema as Record<string, any> | undefined,
+              requestContextSchema: def.requestContextSchema as Record<string, any> | undefined,
+              graph: def.graph,
+            },
+            this,
+          );
+          this.#workflowOrigin.set(def.id, 'stored');
+          this.addWorkflow(workflow as AnyWorkflow, def.id);
+          loaded.add(def.id);
+        } catch (error) {
+          this.#logger?.error?.(`Failed to load stored workflow "${def.id}"`, { error });
+        }
       }
+    }
+    if (remaining.size > 0) {
+      const stuck = Array.from(remaining.keys()).join(', ');
+      this.#logger?.error?.(
+        `Failed to load stored workflows (cycle or unresolved nested-workflow reference): ${stuck}`,
+      );
     }
   }
 
@@ -5490,71 +5646,7 @@ export class Mastra<
     // OrchestrationWorker pulling events — wire handleWorkflowEvent directly
     // to the pubsub so workflow events still get processed in-process.
     if (!name) {
-      const modes = this.#pubsub.supportedModes ?? ['pull'];
-      const pushOnly = modes.includes('push') && !modes.includes('pull');
-      if (pushOnly && !this.#pushSubscription) {
-        const cb: EventCallback = (event, ack, nack) => {
-          // In cross-process push environments (e.g. UnixSocketPubSub),
-          // every subscriber receives every event — including events for
-          // internal workflows registered on a different process. Skip
-          // events whose workflow exists in neither the internal nor the
-          // public registry so only the owning process handles them.
-          // Without this guard the WEP would publish workflow.fail,
-          // propagating through workflows-finish and erroneously
-          // terminating the correct process's run.
-          const data = event.data as Record<string, unknown> | undefined;
-          const wfId = data?.workflowId as string | undefined;
-          const rId = data?.runId as string | undefined;
-          if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
-            if (ack) {
-              void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
-            }
-            return;
-          }
-
-          void this.handleWorkflowEvent(event)
-            .then(result => {
-              if (result.ok) {
-                if (ack) {
-                  return ack().catch(err =>
-                    this.#logger?.error?.('Error acking workflow event in push subscription', err),
-                  );
-                }
-                return;
-              }
-              // Non-ok result: ask the transport to redeliver (nack) when the
-              // handle layer says retry. The WEP tracks per-event delivery
-              // attempts and eventually returns `retry: false` to break the
-              // loop and surface a terminal workflow.fail. For terminal
-              // failures we ack so the event is dropped from the transport.
-              if (result.retry) {
-                if (nack) {
-                  return nack().catch(err =>
-                    this.#logger?.error?.('Error nacking workflow event in push subscription', err),
-                  );
-                }
-                // Transport does not support nack. Do NOT ack — acking a
-                // retryable failure would drop the event and silently lose
-                // the workflow run. Log and let the transport's own delivery
-                // semantics decide (most non-ack transports redeliver until
-                // explicitly acked).
-                this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
-                  type: event.type,
-                  runId: event.runId,
-                });
-                return;
-              }
-              if (ack) {
-                return ack().catch(err =>
-                  this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
-                );
-              }
-            })
-            .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
-        };
-        await this.#pubsub.subscribe('workflows', cb);
-        this.#pushSubscription = { topic: 'workflows', cb };
-      }
+      await this.#wirePushWorkflowSubscription();
     }
 
     // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
@@ -5585,9 +5677,160 @@ export class Mastra<
   }
 
   /**
+   * Wire `handleWorkflowEvent` directly to the pubsub when it is push-only
+   * (no pull mode for an OrchestrationWorker to drive). Idempotent — no-op
+   * when the pubsub supports pull or the subscription already exists.
+   * Shared by `startWorkers()` and `__ensureExecutionWorkersStarted()`.
+   */
+  async #wirePushWorkflowSubscription(): Promise<void> {
+    const modes = this.#pubsub.supportedModes ?? ['pull'];
+    const pushOnly = modes.includes('push') && !modes.includes('pull');
+    if (pushOnly && !this.#pushSubscription) {
+      const cb: EventCallback = (event, ack, nack) => {
+        // In cross-process push environments (e.g. UnixSocketPubSub),
+        // every subscriber receives every event — including events for
+        // internal workflows registered on a different process. Skip
+        // events whose workflow exists in neither the internal nor the
+        // public registry so only the owning process handles them.
+        // Without this guard the WEP would publish workflow.fail,
+        // propagating through workflows-finish and erroneously
+        // terminating the correct process's run.
+        const data = event.data as Record<string, unknown> | undefined;
+        const wfId = data?.workflowId as string | undefined;
+        const rId = data?.runId as string | undefined;
+        if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
+          if (ack) {
+            void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+          }
+          return;
+        }
+
+        void this.handleWorkflowEvent(event)
+          .then(result => {
+            if (result.ok) {
+              if (ack) {
+                return ack().catch(err =>
+                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                );
+              }
+              return;
+            }
+            // Non-ok result: ask the transport to redeliver (nack) when the
+            // handle layer says retry. The WEP tracks per-event delivery
+            // attempts and eventually returns `retry: false` to break the
+            // loop and surface a terminal workflow.fail. For terminal
+            // failures we ack so the event is dropped from the transport.
+            if (result.retry) {
+              if (nack) {
+                return nack().catch(err =>
+                  this.#logger?.error?.('Error nacking workflow event in push subscription', err),
+                );
+              }
+              // Transport does not support nack. Do NOT ack — acking a
+              // retryable failure would drop the event and silently lose
+              // the workflow run. Log and let the transport's own delivery
+              // semantics decide (most non-ack transports redeliver until
+              // explicitly acked).
+              this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
+                type: event.type,
+                runId: event.runId,
+              });
+              return;
+            }
+            if (ack) {
+              return ack().catch(err =>
+                this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
+              );
+            }
+          })
+          .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
+      };
+      await this.#pubsub.subscribe('workflows', cb);
+      this.#pushSubscription = { topic: 'workflows', cb };
+    }
+  }
+
+  /**
+   * Ensure the execution-side machinery — the `orchestration` and
+   * `backgroundTasks` workers, plus the push-mode workflow subscription —
+   * is running. Called lazily by {@link BackgroundTaskManager} when a task
+   * is dispatched or resumed, so background tasks execute in "library mode"
+   * where nothing ever calls `startWorkers()` (no server, no `mastra dev`;
+   * see #19339).
+   *
+   * Deliberately narrower than `startWorkers()`: it never injects or starts
+   * the scheduler/agent-schedule workers and never subscribes user event
+   * listeners — dispatching a background task must not boot cron machinery
+   * as a side effect.
+   *
+   * Honors the same opt-outs as the rest of the worker lifecycle:
+   * `workers: false` / `MASTRA_WORKERS=false` (standalone-worker topologies
+   * run their own worker processes, so this instance must not start local
+   * ones) and the `MASTRA_WORKERS` name filter.
+   *
+   * The fast path is its own `#executionWorkersStarted` flag, NOT
+   * `#workersStarted` — the latter is set by any `startWorkers(name)` call,
+   * including partial named starts (e.g. `startWorkers('backgroundTasks')`)
+   * that never start the orchestration worker or push wiring, which would
+   * leave dispatched tasks stuck again. The pass itself is idempotent
+   * (per-worker `isRunning` checks, idempotent push wiring), so running it
+   * once after a full `startWorkers()` boot is a cheap no-op.
+   *
+   * @internal
+   */
+  async __ensureExecutionWorkersStarted(): Promise<void> {
+    if (this.#executionWorkersStarted) return;
+    if (this.#workersDisabled) return;
+    // Memoize the in-flight startup so concurrent first dispatches on a cold
+    // instance share one start instead of racing worker.init()/start().
+    // Cleared on settle so a dispatch after stopWorkers() can start again.
+    if (!this.#executionWorkersStartPromise) {
+      this.#executionWorkersStartPromise = this.#startExecutionWorkers().finally(() => {
+        this.#executionWorkersStartPromise = undefined;
+      });
+    }
+    await this.#executionWorkersStartPromise;
+  }
+
+  async #startExecutionWorkers(): Promise<void> {
+    // Storage init is memoized (see augmentWithInit) — cheap when already run.
+    if (this.#storage) {
+      await this.#storage.init();
+    }
+
+    const deps: WorkerDeps = {
+      pubsub: this.#pubsub,
+      storage: this.#storage!,
+      logger: this.#logger as unknown as IMastraLogger,
+      mastra: this,
+    };
+
+    for (const worker of this.#workers) {
+      if (worker.name !== 'orchestration' && worker.name !== 'backgroundTasks') continue;
+      if (this.#workerFilter && !this.#workerFilter.has(worker.name)) continue;
+      if (worker.isRunning) continue;
+      await worker.init(deps);
+      await worker.start();
+    }
+
+    await this.#wirePushWorkflowSubscription();
+    this.#executionWorkersStarted = true;
+  }
+
+  /**
    * Stop all running workers and unsubscribe event listeners.
    */
   public async stopWorkers(): Promise<void> {
+    // A background-task dispatch may have kicked off a lazy execution-worker
+    // start (`__ensureExecutionWorkersStarted`) that is still in flight. Wait
+    // for it so the teardown below covers what it started — otherwise the
+    // start finishes after this method returns, leaving workers running and
+    // subscriptions wired behind a "stopped" instance. Failures are already
+    // logged by the start path; here they just mean there is less to stop.
+    while (this.#executionWorkersStartPromise) {
+      await this.#executionWorkersStartPromise.catch(() => {});
+    }
+
     // Stop registered workers in reverse order
     for (const worker of [...this.#workers].reverse()) {
       if (worker.isRunning) {
@@ -5611,6 +5854,7 @@ export class Mastra<
 
     await this.#pubsub.flush();
     this.#workersStarted = false;
+    this.#executionWorkersStarted = false;
   }
 
   /**
@@ -5738,7 +5982,7 @@ export class Mastra<
    *
    * @example
    * ```typescript
-   * import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+   * import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
    * import { MastraModelGateway, type MastraModelGatewayInterface } from '@mastra/core/llm';
    *
    * const plainGateway: MastraModelGatewayInterface = {
@@ -5958,3 +6202,9 @@ export class Mastra<
     return this.#serverCache;
   }
 }
+
+// Publish the constructor so `Agent`'s ephemeral-Mastra path can build one
+// without a static `agent → mastra` runtime import (which would re-create the
+// init cycle documented in `agent/agent.ts`). Runs once, after the class above
+// is initialized. See `./mastra-ctor-holder`.
+__registerMastraCtor(Mastra);

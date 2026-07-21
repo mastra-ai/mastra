@@ -8,9 +8,9 @@ export interface ChatTranscriptApi {
   busy: boolean;
   showWorkingIndicator: boolean;
   localUser: (text: string, steer?: boolean, files?: OutgoingFile[]) => void;
-  syncState: (state: SessionStateSnapshot) => void;
   reset: (threadId?: string, state?: SessionStateSnapshot) => void;
   resolvePrompt: (id: string) => void;
+  clearPending: () => void;
   pushNotice: (text: string, level?: 'info' | 'error') => void;
 }
 

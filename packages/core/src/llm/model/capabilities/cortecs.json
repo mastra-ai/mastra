@@ -69,5 +69,6 @@
     "qwen3-next-80b-a3b-thinking",
     "qwen3.5-122b-a10b",
     "qwen3.5-397b-a17b"
-  ]
+  ],
+  "structuredOutput": ["glm-5-turbo", "glm-5.1", "glm-5.2", "gpt-5.4", "kimi-k2.7-code", "minimax-m2.7"]
 }

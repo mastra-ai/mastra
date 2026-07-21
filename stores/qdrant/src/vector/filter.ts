@@ -84,13 +84,7 @@ type QdrantOperatorValueMap = Omit<OperatorValueMap, '$options' | '$elemMatch'> 
 type QdrantLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor'>;
 
 type QdrantBlacklistedRootOperators =
-  | BlacklistedRootOperators
-  | '$count'
-  | '$geo'
-  | '$nested'
-  | '$datetime'
-  | '$null'
-  | '$empty';
+  BlacklistedRootOperators | '$count' | '$geo' | '$nested' | '$datetime' | '$null' | '$empty';
 
 export type QdrantVectorFilter = VectorFilter<
   keyof QdrantOperatorValueMap,

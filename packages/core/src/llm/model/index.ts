@@ -6,6 +6,7 @@ export {
   type ModelForProvider,
   type AttachmentCapabilities,
   modelSupportsAttachments,
+  modelSupportsStructuredOutput,
   modelSupportsTemperature,
 } from './provider-registry.js';
 export { resolveModelConfig, isOpenAICompatibleObjectConfig } from './resolve-model';

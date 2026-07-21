@@ -76,7 +76,11 @@ type ScorerTypeShortcuts = {
 export interface ScorerJudgeConfig {
   model: MastraModelConfig;
   instructions: string;
-  jsonPromptInjection?: boolean;
+  /**
+   * Controls how the judge's structured output schema reaches the model.
+   * Defaults to automatic capability-based routing.
+   */
+  jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
   /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
   tools?: ToolsInput;
   /** Optional memory instance for the internal judge agent. */
@@ -908,7 +912,8 @@ class MastraScorer<
     const prompt = await originalStep.createPrompt(context);
     const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
-    const jsonPromptInjection = originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection;
+    const jsonPromptInjection =
+      originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection ?? 'auto';
     // Step-level tools override scorer-level tools. When present, the judge agent
     // can call them (in its own tool-call loop) before producing the step output.
     const tools = originalStep.judge?.tools ?? this.config.judge?.tools;

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { useSwitchAgentControllerModelMutation } from '../hooks/useAgentControllerStateMutations';
+import { useSwitchAgentControllerModelMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';

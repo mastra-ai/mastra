@@ -1,0 +1,26 @@
+---
+extends: existence
+message: "AI sycophancy: '%s'. Delete this. It sounds robotic and insincere."
+level: error
+ignorecase: true
+tokens:
+  - Great question
+  - Excellent question
+  - That's a great question
+  - That's an excellent question
+  - What a great question
+  - Fantastic question
+  - Wonderful question
+  - I'm glad you asked
+  - I'm happy to help
+  - I'd be happy to help
+  - I'd be glad to help
+  - Absolutely
+  - Certainly
+  - Of course
+  - Without a doubt
+  - You're absolutely right
+  - You make an excellent point
+  - That's a wonderful idea
+  - That's a fantastic point
+  - I couldn't agree more

@@ -1,5 +1,6 @@
 import type { DatasetItemToolMock } from '@mastra/client-js';
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
+import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -48,7 +49,7 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
   });
 
   const derivedMocks: DatasetItemToolMock[] = trajectory?.steps ? collectToolMocks(trajectory.steps) : [];
-  const initialMocksJson = derivedMocks.length > 0 ? JSON.stringify(derivedMocks, null, 2) : '';
+  const initialMocksJson = derivedMocks.length > 0 ? safeStringify(derivedMocks, 2) : '';
 
   return (
     <SideDialog

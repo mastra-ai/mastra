@@ -34,6 +34,33 @@ function singleStepModel(text = 'Working on it.') {
   });
 }
 
+function goalJudgeModel(
+  decisions: Array<{ decision: 'done' | 'continue' | 'waiting'; reason: string }>,
+  spyStream?: (props: any) => void,
+) {
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async props => {
+      spyStream?.(props);
+      const decision = decisions[Math.min(call, decisions.length - 1)];
+      call++;
+      const text = JSON.stringify(decision);
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: `judge-${call}`, modelId: 'mock-judge-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        ]),
+      };
+    },
+  });
+}
+
 function makeAgent(goal?: GoalConfig) {
   const agent = new Agent({
     id: 'goal-agent',
@@ -53,11 +80,22 @@ describe('resolveEffectiveGoalSettings', () => {
       judgeModelId: undefined,
       maxRuns: DEFAULT_GOAL_MAX_RUNS,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,
+      maxSteps: undefined,
     });
 
     expect(
-      resolveEffectiveGoalSettings(undefined, { judgeModelId: 'agent-judge', maxRuns: 10, prompt: 'agent-prompt' }),
-    ).toEqual({ judgeModelId: 'agent-judge', maxRuns: 10, prompt: 'agent-prompt' });
+      resolveEffectiveGoalSettings(undefined, {
+        judgeModelId: 'agent-judge',
+        maxRuns: 10,
+        prompt: 'agent-prompt',
+        maxSteps: 20,
+      }),
+    ).toEqual({
+      judgeModelId: 'agent-judge',
+      maxRuns: 10,
+      prompt: 'agent-prompt',
+      maxSteps: 20,
+    });
   });
 
   it('lets the ThreadState record override agent config', () => {
@@ -75,6 +113,7 @@ describe('resolveEffectiveGoalSettings', () => {
       judgeModelId: 'record-judge',
       maxRuns: 3,
       prompt: 'record-prompt',
+      maxSteps: undefined,
     });
   });
 
@@ -84,6 +123,7 @@ describe('resolveEffectiveGoalSettings', () => {
       judgeModelId: 'agent-judge',
       maxRuns: 7,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,
+      maxSteps: undefined,
     });
   });
 });
@@ -123,8 +163,16 @@ describe('Agent objective methods', () => {
     expect(await agent.updateObjectiveOptions({ threadId: THREAD, judgeModelId: 'j' })).toBeUndefined();
 
     await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
-    const updated = await agent.updateObjectiveOptions({ threadId: THREAD, judgeModelId: 'new-judge', maxRuns: 12 });
-    expect(updated).toMatchObject({ judgeModelId: 'new-judge', maxRuns: 12, objective: 'Goal' });
+    const updated = await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      judgeModelId: 'new-judge',
+      maxRuns: 12,
+    });
+    expect(updated).toMatchObject({
+      judgeModelId: 'new-judge',
+      maxRuns: 12,
+      objective: 'Goal',
+    });
   });
 
   it('no-ops without storage', async () => {
@@ -203,6 +251,120 @@ describe('in-loop goal scoring', () => {
 
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record?.status).toBe('done');
+    expect(record?.runsUsed).toBe(1);
+  });
+
+  it('direct agent goal loop completes with built-in scorer without manual continuation', async () => {
+    const agent = makeAgent({
+      judge: goalJudgeModel([
+        { decision: 'continue', reason: 'need one more pass' },
+        { decision: 'done', reason: 'goal satisfied' },
+      ]) as any,
+      maxRuns: 5,
+    });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const goalChunks: any[] = [];
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    const resultChunks = goalChunks.filter(c => !c.payload.pending);
+    expect(resultChunks.map(c => c.payload.status)).toEqual(['active', 'done']);
+    expect(resultChunks[resultChunks.length - 1].payload).toMatchObject({
+      objective: 'Reach the goal',
+      iteration: 2,
+      passed: true,
+      status: 'done',
+      maxRunsReached: false,
+    });
+
+    const record = await agent.getObjective({ threadId: THREAD });
+    expect(record?.status).toBe('done');
+    expect(record?.runsUsed).toBe(2);
+  });
+
+  it('goal judge activity observation does not block structured-output fallback', async () => {
+    const streamCalls: any[] = [];
+    const judge = new MockLanguageModelV2({
+      doStream: async props => {
+        streamCalls.push(props);
+        const fallbackText = '{"decision":"done","reason":"stream fallback"}';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: `judge-stream-${streamCalls.length}`,
+              modelId: 'mock-judge-id',
+              timestamp: new Date(0),
+            },
+            ...(streamCalls.length > 1
+              ? [
+                  { type: 'text-start' as const, id: 'text-1' },
+                  { type: 'text-delta' as const, id: 'text-1', delta: fallbackText },
+                  { type: 'text-end' as const, id: 'text-1' },
+                ]
+              : []),
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+    const agent = makeAgent({ judge: judge as any, maxRuns: 5 });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const goalChunks: any[] = [];
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    expect(streamCalls).toHaveLength(2);
+    expect(goalChunks.filter(c => !c.payload.pending).at(-1)?.payload).toMatchObject({
+      status: 'done',
+      reason: 'stream fallback',
+    });
+  });
+
+  it('direct agent goal loop pauses actionably when built-in scorer returns waiting', async () => {
+    const agent = makeAgent({
+      judge: goalJudgeModel([{ decision: 'waiting', reason: 'waiting for your review' }]) as any,
+      maxRuns: 5,
+    });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const goalChunks: any[] = [];
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    const resultChunks = goalChunks.filter(c => !c.payload.pending);
+    expect(resultChunks).toHaveLength(1);
+    expect(resultChunks[0].payload).toMatchObject({
+      objective: 'Reach the goal',
+      iteration: 1,
+      passed: false,
+      status: 'active',
+      waitingForUser: true,
+      reason: 'waiting for your review',
+    });
+
+    const record = await agent.getObjective({ threadId: THREAD });
+    expect(record?.status).toBe('active');
     expect(record?.runsUsed).toBe(1);
   });
 

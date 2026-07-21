@@ -93,6 +93,12 @@ describe('PostgresStoreVNext', () => {
         supported: ['insert-only'],
       });
     });
+
+    it('advertises metrics and logs independently of its constructor name', () => {
+      const observability = store.stores.observability as ObservabilityStoragePostgresVNext;
+
+      expect(observability.getFeatures()).toEqual(expect.arrayContaining(['metrics', 'logs']));
+    });
   });
 
   describe('lifecycle', () => {

@@ -79,6 +79,24 @@ export function getEffectiveResourceId(
 }
 
 /**
+ * Ensures a memory request has a resolvable resource ID. The body's
+ * `memory.resource` is optional so authenticated setups can rely on the
+ * server-derived resource ID (MASTRA_RESOURCE_ID_KEY set via mapUserToResourceId).
+ * When neither the body nor the request context provides one, reject with a
+ * clear 400 instead of failing deep inside agent execution.
+ */
+export function requireEffectiveResourceId(
+  effectiveResourceId: string | undefined,
+): asserts effectiveResourceId is string {
+  if (!effectiveResourceId) {
+    throw new HTTPException(400, {
+      message:
+        'A resource ID is required when using memory. Provide memory.resource in the request body, or configure server auth with mapUserToResourceId to derive it from the authenticated user.',
+    });
+  }
+}
+
+/**
  * Gets the effective threadId, preferring the reserved key from requestContext
  * over client-provided values for security.
  */

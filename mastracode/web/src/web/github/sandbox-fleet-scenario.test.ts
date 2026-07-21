@@ -1,5 +1,23 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
+
+/** Minimal cloneable template sandbox standing in for a RailwaySandbox. */
+function templateSandbox(): WorkspaceSandbox {
+  const template = { id: 'template-1', name: 'Template', provider: 'railway', clone: () => template };
+  return template as unknown as WorkspaceSandbox;
+}
+
+function seedSandboxRuntime(opts: { maxSandboxes?: number } = {}): void {
+  seedRuntimeConfig({
+    sandbox: {
+      machine: templateSandbox(),
+      workdirBase: '/workspace',
+      ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
+    },
+  });
+}
 
 // ── Phase 7 sandbox-fleet scenario tests ─────────────────────────────────
 // These prove the lightweight per-replica sandbox budget and the per-user
@@ -23,14 +41,57 @@ vi.mock('drizzle-orm', () => ({
 // Enable the GitHub feature so the project git routes (incl. DELETE) mount.
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => true,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
+}));
+
+// Minimal injected instances: this suite only exercises sandbox teardown
+// routes, so the integration stub needs no real API methods.
+const sourceControlStorage = {
+  projects: {
+    getOrg: async (orgId: string, projectId: string) =>
+      tables.projects.find(row => row.orgId === orgId && row.id === projectId),
+  },
+  sandboxes: {
+    getOrCreate: async (project: Record<string, any>, userId: string) => {
+      const existing = tables.sandboxes.find(row => row.projectId === project.id && row.userId === userId);
+      if (existing) return existing;
+      const row = {
+        id: `gen-sandboxes-${tables.sandboxes.length}`,
+        projectId: project.id,
+        userId,
+        sandboxId: null,
+        sandboxWorkdir: project.sandboxWorkdir,
+        materializedAt: null,
+        createdAt: new Date(),
+      };
+      tables.sandboxes.push(row);
+      return row;
+    },
+    getById: async (id: string) => tables.sandboxes.find(row => row.id === id),
+    setSandboxId: async (id: string, sandboxId: string) => {
+      const row = tables.sandboxes.find(candidate => candidate.id === id);
+      if (row) row.sandboxId = sandboxId;
+    },
+    clearBinding: async (id: string) => {
+      const row = tables.sandboxes.find(candidate => candidate.id === id);
+      if (row) Object.assign(row, { sandboxId: null, materializedAt: null });
+    },
+  },
+} as any;
+
+const githubStub = {
+  sourceControlStorage,
+  mintInstallationToken: vi.fn(async () => 'install-token'),
+} as any;
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
     if (!state?.startsWith('state.')) return null;
     const [orgId, userId] = state.slice('state.'.length).split('.');
     if (!orgId || !userId) return null;
     return { orgId, userId };
   },
-}));
+};
 
 // ── Shared in-memory DB shaped like routes.test.ts ────────────────────────
 interface Tables {
@@ -105,17 +166,16 @@ import { mountApiRoutes } from '../test-utils';
 import type * as RoutesModule from './routes';
 import {
   __resetLiveSandboxCount,
-  ensureProjectSandbox,
   getLiveSandboxCount,
   resetSandboxFactory,
   SandboxBudgetError,
   setSandboxFactory,
-  teardownProjectSandbox,
-} from './sandbox';
-import type { MaterializationSandbox } from './sandbox';
-import { githubProjectSandboxes } from './schema';
-import type { GithubProjectSandboxRow } from './schema';
+} from '../sandbox/fleet';
+import type { MaterializationSandbox } from '../sandbox/fleet';
+import { ensureProjectSandbox, teardownProjectSandbox } from './sandbox';
+import type { SourceControlProjectSandbox } from '../storage/domains/source-control/base';
 
+const githubProjectSandboxes = {};
 sandboxesRef = githubProjectSandboxes;
 
 /** Minimal fake sandbox VM that records lifecycle calls. */
@@ -140,16 +200,16 @@ class FakeSandbox implements MaterializationSandbox {
   }
 }
 
-function makeBindingRow(id: string): GithubProjectSandboxRow {
+function makeBindingRow(id: string): SourceControlProjectSandbox {
   const row = {
     id,
-    githubProjectId: `proj-${id}`,
+    projectId: `proj-${id}`,
     userId: 'u1',
     sandboxId: null,
     sandboxWorkdir: '/workspace/hello',
     materializedAt: null,
     createdAt: new Date(),
-  } satisfies GithubProjectSandboxRow;
+  } satisfies SourceControlProjectSandbox;
   tables.sandboxes.push(row as unknown as Record<string, any>);
   return row;
 }
@@ -157,15 +217,15 @@ function makeBindingRow(id: string): GithubProjectSandboxRow {
 afterEach(() => {
   resetSandboxFactory();
   __resetLiveSandboxCount(0);
+  __resetRuntimeConfigForTests();
   tables.projects = [];
   tables.sandboxes = [];
-  delete process.env.MASTRACODE_MAX_SANDBOXES;
   vi.restoreAllMocks();
 });
 
 describe('S7 — sandbox fleet budget', () => {
   it('cap=1: a second fresh provision is rejected, then succeeds after teardown frees a slot', async () => {
-    process.env.MASTRACODE_MAX_SANDBOXES = '1';
+    seedSandboxRuntime({ maxSandboxes: 1 });
     let made = 0;
     setSandboxFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? `fresh-${++made}`));
 
@@ -173,26 +233,26 @@ describe('S7 — sandbox fleet budget', () => {
     const rowB = makeBindingRow('b');
 
     // First fresh provision succeeds and consumes the single slot.
-    const sandboxA = (await ensureProjectSandbox(rowA)) as FakeSandbox;
+    const sandboxA = (await ensureProjectSandbox(rowA, sourceControlStorage.sandboxes)) as FakeSandbox;
     expect(sandboxA.startCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
     expect(rowA.sandboxId).toBe('vm-fresh-1');
 
     // Second fresh provision is over budget → rejected before spending quota.
-    const err = await ensureProjectSandbox(rowB).catch(e => e);
+    const err = await ensureProjectSandbox(rowB, sourceControlStorage.sandboxes).catch(e => e);
     expect(err).toBeInstanceOf(SandboxBudgetError);
     expect(err.max).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
     expect(rowB.sandboxId).toBeNull();
 
     // Tear down A → frees the slot.
-    await teardownProjectSandbox(rowA, sandboxA);
+    await teardownProjectSandbox(rowA, sourceControlStorage.sandboxes, sandboxA);
     expect(sandboxA.stopCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(0);
     expect(rowA.sandboxId).toBeNull();
 
     // Now B provisions successfully.
-    const sandboxB = (await ensureProjectSandbox(rowB)) as FakeSandbox;
+    const sandboxB = (await ensureProjectSandbox(rowB, sourceControlStorage.sandboxes)) as FakeSandbox;
     expect(sandboxB.startCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
     expect(rowB.sandboxId).toBe('vm-fresh-2');
@@ -204,21 +264,21 @@ describe('S7 — sandbox fleet budget', () => {
 
     const row = makeBindingRow('a');
 
-    const first = (await ensureProjectSandbox(row)) as FakeSandbox;
+    const first = (await ensureProjectSandbox(row, sourceControlStorage.sandboxes)) as FakeSandbox;
     expect(getLiveSandboxCount()).toBe(1);
     expect(row.sandboxId).toBe('vm-fresh-1');
 
     // Simulate a materialized binding so teardown clears that too.
     (row as { materializedAt: Date | null }).materializedAt = new Date();
 
-    await teardownProjectSandbox(row, first);
+    await teardownProjectSandbox(row, sourceControlStorage.sandboxes, first);
     expect(first.stopCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(0);
     expect(row.sandboxId).toBeNull();
     expect(row.materializedAt).toBeNull();
 
     // Next open re-provisions a brand new sandbox (fresh provider id).
-    const second = (await ensureProjectSandbox(row)) as FakeSandbox;
+    const second = (await ensureProjectSandbox(row, sourceControlStorage.sandboxes)) as FakeSandbox;
     expect(second).not.toBe(first);
     expect(second.startCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
@@ -227,7 +287,7 @@ describe('S7 — sandbox fleet budget', () => {
 
   it('teardown of a never-provisioned binding is a no-op that does not underflow the counter', async () => {
     const row = makeBindingRow('a'); // sandboxId stays null
-    await teardownProjectSandbox(row);
+    await teardownProjectSandbox(row, sourceControlStorage.sandboxes);
     expect(getLiveSandboxCount()).toBe(0);
     expect(row.sandboxId).toBeNull();
   });
@@ -247,11 +307,11 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
     ];
     // Only user 1 has a provisioned sandbox binding.
     tables.sandboxes = [
-      { id: 's1', githubProjectId: 'p1', userId: 'u1', sandboxId: 'vm-u1', sandboxWorkdir: '/workspace/hello' },
+      { id: 's1', projectId: 'p1', userId: 'u1', sandboxId: 'vm-u1', sandboxWorkdir: '/workspace/hello' },
     ];
     process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'railway';
-    process.env.RAILWAY_API_TOKEN = 'test-token'; // makes isSandboxEnabled() true
+    // A seeded sandbox template makes isSandboxEnabled() true.
+    seedSandboxRuntime();
 
     // Real teardown/reattach run; the factory yields a fake VM so reattach starts
     // a recordable sandbox instead of hitting Railway.
@@ -262,8 +322,6 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
 
   afterEach(() => {
     delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
-    delete process.env.MASTRACODE_SANDBOX_PROVIDER;
-    delete process.env.RAILWAY_API_TOKEN;
   });
 
   function buildApp(workosId: string) {
@@ -272,13 +330,13 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
       (c as any).set('webAuthUser', { id: workosId, workosId, organizationId: 'org1', name: 'Test', email: 't@e.co' });
       await next();
     });
-    mountApiRoutes(app as any, buildGithubRoutes({}));
+    mountApiRoutes(app as any, buildGithubRoutes({ github: githubStub, stateSigner }));
     return app;
   }
 
   it("user 2's teardown never touches user 1's sandbox binding", async () => {
     const app = buildApp('u2');
-    const res = await app.request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
+    const res = await app.request('/web/github/repositories/p1/sandbox', { method: 'DELETE' });
 
     // u2 has no provisioned binding → idempotent no-op success.
     expect(res.status).toBe(200);
@@ -295,7 +353,7 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
   it('user 1 can tear down their own sandbox', async () => {
     __resetLiveSandboxCount(1); // u1 has one live sandbox
     const app = buildApp('u1');
-    const res = await app.request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
+    const res = await app.request('/web/github/repositories/p1/sandbox', { method: 'DELETE' });
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ tornDown: true });

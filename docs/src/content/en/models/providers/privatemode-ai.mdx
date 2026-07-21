@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "privatemode-ai/gemma-3-27b"
+  model: "privatemode-ai/gpt-oss-120b"
 });
 
 // Generate a response
@@ -46,18 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "privatemode-ai/gemma-3-27b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "privatemode-ai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -70,14 +58,14 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "privatemode-ai/qwen3-coder-30b-a3b",
-    "imageInput": false,
+    "model": "privatemode-ai/kimi-k2.6",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 32768,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
     "inputCost": null,
     "outputCost": null
   },
@@ -90,6 +78,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 32000,
     "maxOutput": 2560,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "privatemode-ai/voxtral-mini-3b",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
     "inputCost": null,
     "outputCost": null
   },
@@ -118,7 +118,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "http://localhost:8080/v1",
-    id: "privatemode-ai/gemma-3-27b",
+    id: "privatemode-ai/gpt-oss-120b",
     apiKey: process.env.PRIVATEMODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -137,7 +137,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "privatemode-ai/whisper-large-v3"
-      : "privatemode-ai/gemma-3-27b";
+      : "privatemode-ai/gpt-oss-120b";
   }
 });
 ```

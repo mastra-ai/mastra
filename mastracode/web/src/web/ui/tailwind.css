@@ -27,3 +27,17 @@
   --color-icon5: var(--neutral5);
   --color-icon6: var(--neutral6);
 }
+
+/* Queue-health active-work stripes: a calm, continuous left→right drift of a
+ * diagonal-stripe overlay. Registered as a Tailwind v4 `--animate-*` token so
+ * the chart uses `animate-queue-health-stripes`; keyframes must live inside
+ * @theme so Tailwind emits them alongside the utility. */
+@theme inline {
+  --animate-queue-health-stripes: queue-health-stripes 1.2s linear infinite;
+
+  @keyframes queue-health-stripes {
+    to {
+      background-position: 16px 0;
+    }
+  }
+}

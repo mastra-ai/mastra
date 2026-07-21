@@ -149,7 +149,7 @@ describe('rehydrate static subset — parallel / foreach / sleep / sleepUntil', 
         },
         mastra,
       ),
-    ).rejects.toThrow(/predicate DSL/);
+    ).rejects.toThrow(/missing or mismatched predicates|declarative predicate/);
 
     await expect(
       rehydrateWorkflow(
@@ -168,7 +168,7 @@ describe('rehydrate static subset — parallel / foreach / sleep / sleepUntil', 
         },
         mastra,
       ),
-    ).rejects.toThrow(/predicate DSL/);
+    ).rejects.toThrow(/missing declarative predicate|declarative predicate/);
   });
 
   it('preserves a foreach step id that differs from the underlying tool id', async () => {

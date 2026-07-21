@@ -2,27 +2,34 @@
  * Stable, scoped React Query keys for the settings API.
  *
  * Resource-scoped lists (model packs, OM) include the `resourceId` so switching
- * projects yields a distinct cache entry instead of leaking another project's
+ * factories yields a distinct cache entry instead of leaking another factory's
  * data. Keeping every key in one place makes invalidation in the mutation hooks
  * unambiguous.
  */
 export const queryKeys = {
   webAuth: () => ['web-auth'] as const,
-  projects: () => ['projects'] as const,
+  factories: () => ['factories'] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (githubProjectId: string | undefined, label?: string) =>
     ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
   githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
-  githubProjectSettings: (githubProjectId: string | undefined) =>
-    ['github', 'project-settings', githubProjectId ?? null] as const,
+  githubRepositorySettings: (githubProjectId: string | undefined) =>
+    ['github', 'repository-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearIssues: () => ['linear', 'issues'] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   workItems: (githubProjectId: string | undefined) => ['factory', 'work-items', githubProjectId ?? null] as const,
-  workspaces: (projectId: string | undefined) => ['workspaces', projectId ?? null] as const,
-  userSessions: (projectId: string | undefined) => ['user-sessions', projectId ?? null] as const,
+  factoryMetrics: (githubProjectId: string | undefined, days: number) =>
+    ['factory', 'metrics', githubProjectId ?? null, days] as const,
+  factoryHealthThresholds: (githubProjectId: string | undefined) =>
+    ['factory', 'health-thresholds', githubProjectId ?? null] as const,
+  factoryAudit: (githubProjectId: string | undefined, group: string) =>
+    ['factory', 'audit', githubProjectId ?? null, group] as const,
+  factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
+  workspaces: (factoryId: string | undefined) => ['workspaces', factoryId ?? null] as const,
+  userSessions: (factoryId: string | undefined) => ['user-sessions', factoryId ?? null] as const,
   providers: () => ['providers'] as const,
   customProviders: () => ['custom-providers'] as const,
   modelPacks: (resourceId: string | undefined) => ['model-packs', resourceId ?? null] as const,
@@ -30,6 +37,11 @@ export const queryKeys = {
   modelPacksAll: () => ['model-packs'] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
+  artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
+  workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
+    ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
+  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
+    ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
   agentControllerModels: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'models'] as const,
   agentControllerModes: (agentControllerId: string | undefined) =>
@@ -49,6 +61,16 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => ['agent-controller', agentControllerId ?? null, 'connection', resourceId ?? null, projectPath ?? null] as const,
+  agentControllerConnectionInit: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'init'] as const,
+  agentControllerConnectionState: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
   // Kept outside agentControllerSession for the same reason as connection:
   // this is a lightweight activity poll, not session state to invalidate. One
   // entry covers every worktree sharing the resource (single thread listing).

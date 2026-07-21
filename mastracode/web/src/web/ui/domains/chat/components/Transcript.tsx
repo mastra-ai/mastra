@@ -11,6 +11,7 @@ import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import {
   Bell,
+  BookOpen,
   ChevronDown,
   CircleDot,
   CircleX,
@@ -33,7 +34,7 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
-} from '../hooks/useAgentControllerRunMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
@@ -72,7 +73,7 @@ import type {
 
 // Monospace, scrollable container for serialized args/results/file dumps.
 const resultBlock =
-  'm-0 mt-1 max-h-72 overflow-y-auto whitespace-pre-wrap break-all rounded-sm bg-surface1 p-2 font-mono text-xs leading-normal text-icon5';
+  'm-0 mt-1 max-h-72 max-w-full overflow-auto whitespace-pre rounded-sm bg-surface1 p-2 font-mono text-xs leading-normal text-icon5';
 
 // Prompt cards (approval / suspension) — an elevated card with a colored left rail.
 const promptCardBase = 'rounded-lg border border-border1 bg-surface3 px-4 py-3 shadow-md';
@@ -99,6 +100,66 @@ function lastSegment(id: string): string {
   return parts[parts.length - 1] ?? id;
 }
 
+interface SkillActivation {
+  name: string;
+  content: string;
+  arguments?: string;
+}
+
+const skillActivationPattern = /^<skill name="([a-z0-9]+(?:-[a-z0-9]+)*)">\n([\s\S]+)\n<\/skill>$/;
+const skillArgumentsMarker = '\n\nARGUMENTS: ';
+
+function parseSkillActivation(text: string): SkillActivation | undefined {
+  const match = skillActivationPattern.exec(text.trim());
+  if (!match) return undefined;
+
+  const content = match[2];
+  const argumentsIndex = content.lastIndexOf(skillArgumentsMarker);
+  return {
+    name: match[1],
+    content,
+    arguments: argumentsIndex >= 0 ? content.slice(argumentsIndex + skillArgumentsMarker.length).trim() : undefined,
+  };
+}
+
+function SkillActivationCard({ activation }: { activation: SkillActivation }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Collapsible open={expanded} onOpenChange={setExpanded} className="min-w-64 max-w-full">
+      <CollapsibleTrigger
+        className="w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
+        aria-label={`${expanded ? 'Hide' : 'Show'} ${activation.name} skill contents`}
+      >
+        <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-icon3">
+            <BookOpen size={14} aria-hidden="true" />
+            <Txt as="span" variant="ui-xs" className="uppercase tracking-wide">
+              Skill
+            </Txt>
+          </span>
+          <Txt as="span" variant="ui-sm" font="mono" className="text-icon6">
+            {activation.name}
+          </Txt>
+          <ChevronDown
+            size={13}
+            aria-hidden="true"
+            className={`ml-auto shrink-0 text-icon3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          />
+        </span>
+        {activation.arguments && (
+          <span className="mt-1 block truncate text-ui-xs text-icon3">{activation.arguments}</span>
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 max-h-96 overflow-y-auto border-t border-border1 pt-2">
+        <div className="prose text-ui-sm">
+          <Markdown>{activation.content}</Markdown>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Tool card (collapsible)
 // ---------------------------------------------------------------------------
@@ -118,7 +179,7 @@ const STATUS_VARIANT: Record<ToolCall['status'], 'info' | 'success' | 'error'> =
 /** Label + copy header for a section inside a tool card body. */
 function ToolSection({ label, copyText, children }: { label: string; copyText: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 max-w-full flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
           {label}
@@ -137,7 +198,7 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
   const added = newText.split('\n');
   return (
     <div
-      className="overflow-x-auto rounded-xl border border-border1 bg-surface1 font-mono text-xs leading-normal"
+      className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-border1 bg-surface1 font-mono text-xs leading-normal"
       role="group"
       aria-label="File change"
     >
@@ -239,22 +300,12 @@ function ToolCard({
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className={`overflow-hidden bg-surface3 ${toolGroupClasses(groupPosition)}`}
+      className={`min-w-0 max-w-full overflow-hidden bg-surface3 ${toolGroupClasses(groupPosition)}`}
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
     >
-      {/*
-        Wrap the trigger content in a span so no icon is a *direct* child of
-        CollapsibleTrigger. The DS trigger rotates every direct-child <svg> via
-        `[&>svg]:rotate-90` on open — which would spin the tool icon (e.g. the
-        eye). Nesting keeps only the chevron animating, controlled here.
-      */}
       <CollapsibleTrigger className="w-full text-left">
         <span className="flex w-full items-center gap-2 px-2 py-1.5">
-          <ChevronDown
-            size={13}
-            className={`shrink-0 text-icon3 transition-transform duration-150 ${expanded ? 'rotate-0' : '-rotate-90'}`}
-          />
           <ToolIcon name={tool.toolName} className="shrink-0 text-icon3" />
           <Txt as="span" variant="ui-sm" font="mono" className="text-icon5">
             {tool.toolName}
@@ -269,12 +320,14 @@ function ToolCard({
               {truncate(argsPreview, 72)}
             </Txt>
           )}
-          <Badge variant={STATUS_VARIANT[tool.status]} size="xs" className="ml-auto">
-            {STATUS_LABEL[tool.status]}
-          </Badge>
+          {tool.status !== 'done' && (
+            <Badge variant={STATUS_VARIANT[tool.status]} size="xs" className="ml-auto">
+              {STATUS_LABEL[tool.status]}
+            </Badge>
+          )}
         </span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="flex flex-col gap-2 px-2 pb-2">
+      <CollapsibleContent className="flex min-w-0 max-w-full flex-col gap-2 px-2 pb-2">
         {edit ? (
           edit.new_string !== undefined ? (
             <ToolSection label={edit.path ?? 'Change'} copyText={edit.new_string}>
@@ -293,7 +346,7 @@ function ToolCard({
         ) : null}
         {tool.output && (
           <ToolSection label="Output" copyText={tool.output}>
-            <pre className="m-0 max-h-72 overflow-y-auto whitespace-pre-wrap break-all rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3">
+            <pre className="m-0 max-h-72 max-w-full overflow-auto whitespace-pre rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3">
               {tool.output}
             </pre>
           </ToolSection>
@@ -301,7 +354,7 @@ function ToolCard({
         {resultText !== undefined && <DsCodeBlock code={truncate(resultText, 800)} lang="json" fileName="Result" />}
       </CollapsibleContent>
       {!expanded && tool.output && (
-        <pre className="mx-2 mb-2 max-h-72 overflow-y-auto whitespace-pre-wrap break-all rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3 opacity-75">
+        <pre className="mx-2 mb-2 max-h-72 max-w-full overflow-auto whitespace-pre rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3 opacity-75">
           {truncate(tool.output, 180)}
         </pre>
       )}
@@ -641,6 +694,24 @@ export function Transcript() {
   return <TranscriptEntries entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />;
 }
 
+function followsToolEntry(entries: TimelineEntry[], index: number): boolean {
+  const current = entries[index];
+  if (current?.kind !== 'message' || current.message.role !== 'assistant') return false;
+
+  for (let previousIndex = index - 1; previousIndex >= 0; previousIndex--) {
+    const previous = entries[previousIndex];
+    if (previous.kind !== 'message') return false;
+    if (previous.message.role === 'user') return false;
+    if (previous.message.role === 'signal') continue;
+
+    const parts = previous.message.content.parts;
+    if (parts.some(part => part.type === 'text' && part.text.trim().length > 0)) return false;
+    if (parts.some(part => part.type === 'tool-invocation')) return true;
+  }
+
+  return false;
+}
+
 export function TranscriptEntries({
   entries,
   onApprove,
@@ -652,10 +723,10 @@ export function TranscriptEntries({
 }) {
   return (
     <>
-      {entries.map(entry => {
+      {entries.map((entry, index) => {
         switch (entry.kind) {
           case 'message':
-            return <MessageBubble key={entry.id} entry={entry} />;
+            return <MessageBubble key={entry.id} entry={entry} followsToolEntry={followsToolEntry(entries, index)} />;
           case 'notice':
             return <NoticeCard key={entry.id} entry={entry} />;
           case 'approval':
@@ -676,7 +747,7 @@ export function TranscriptEntries({
   );
 }
 
-function MessageBubble({ entry }: { entry: MessageEntry }) {
+function MessageBubble({ entry, followsToolEntry }: { entry: MessageEntry; followsToolEntry: boolean }) {
   // null = no group override; true/false = expand/collapse all in this bubble.
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
   const parts = entry.message.content.parts ?? [];
@@ -742,19 +813,31 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   };
 
   const renderers = {
-    Text: (part: TextPart) =>
-      entry.message.role === 'user' ? (
-        <div className="prose">
-          <Markdown>{part.text}</Markdown>
-        </div>
-      ) : (
-        <div className="prose">
+    Text: (part: TextPart) => {
+      const renderedPart: unknown = part;
+      const partIndex = parts.findIndex(candidate => candidate === renderedPart);
+      const followsTool = partIndex > 0 && parts[partIndex - 1]?.type === 'tool-invocation';
+
+      if (entry.message.role === 'user') {
+        const activation = parseSkillActivation(part.text);
+        return activation ? (
+          <SkillActivationCard activation={activation} />
+        ) : (
+          <div className="prose">
+            <Markdown>{part.text}</Markdown>
+          </div>
+        );
+      }
+
+      return (
+        <div className={`prose ${followsToolEntry ? 'mt-4' : followsTool ? 'mt-3' : ''}`}>
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
           )}
         </div>
-      ),
+      );
+    },
     Reasoning: (part: ReasoningPart) => (
       <div className="my-1.5 border-l-2 border-border1 pl-2.5 text-ui-sm italic text-icon3 [&_p]:my-0.5">
         <Markdown>{part.reasoning}</Markdown>
@@ -780,7 +863,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
             <NotificationSummaryCard key={notification.id} entry={notification} />
           ),
         )}
-        {hasRenderablePart && (
+        {hasRenderablePart && entry.message.role !== 'signal' && (
           <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />
         )}
       </div>
@@ -791,7 +874,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   // Some harness status parts (e.g. om_* markers) carry no text. Ignore the
   // marker while preserving any ordinary assistant content in the message.
   if (status?.text.trim()) return <StatusMetadataCard status={status} />;
-  if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
+  if (!hasRenderablePart) return null;
 
   return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
 }
@@ -822,6 +905,8 @@ function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): T
 }
 
 function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  if (entry.message.role === 'signal') return signalNotifications(entry);
+
   const harnessContent = entry.message.content.metadata?.harnessContent;
   if (!Array.isArray(harnessContent)) return [];
 
@@ -864,6 +949,55 @@ function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | No
     });
   }
   return notifications;
+}
+
+/**
+ * Persisted notification signals are DB-native `role: 'signal'` rows whose
+ * original signal payload lives under `content.metadata.signal` (see
+ * `signalToDBMessage` in @mastra/core). Rebuild notification cards from it so
+ * they survive transcript hydration.
+ */
+function signalNotifications(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  const signal = entry.message.content.metadata?.signal;
+  if (!isRecord(signal) || signal.type !== 'notification') return [];
+
+  const text = (entry.message.content.parts ?? [])
+    .map(part => (part.type === 'text' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+  const attributes = isRecord(signal.attributes) ? signal.attributes : {};
+  const metadata = isRecord(signal.metadata) ? signal.metadata : {};
+
+  if (signal.tagName === 'notification-summary') {
+    const summary = isRecord(metadata.notificationSummary) ? metadata.notificationSummary : {};
+    return [
+      {
+        kind: 'notification_summary',
+        id: `${entry.id}-signal-summary`,
+        message: text,
+        pending: typeof summary.pending === 'number' ? summary.pending : 0,
+        bySource: isNumberRecord(summary.bySource) ? summary.bySource : {},
+        byPriority: isNumberRecord(summary.byPriority) ? summary.byPriority : {},
+        notificationIds: Array.isArray(summary.notificationIds)
+          ? summary.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
+          : [],
+      },
+    ];
+  }
+
+  return [
+    {
+      kind: 'notification',
+      id: `${entry.id}-signal-notification`,
+      notificationId: typeof attributes.id === 'string' ? attributes.id : undefined,
+      message: text,
+      source: typeof attributes.source === 'string' ? attributes.source : undefined,
+      notifKind: typeof attributes.kind === 'string' ? attributes.kind : undefined,
+      priority: typeof attributes.priority === 'string' ? attributes.priority : undefined,
+      metadata,
+    },
+  ];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

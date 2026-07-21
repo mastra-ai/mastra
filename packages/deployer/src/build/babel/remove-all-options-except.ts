@@ -1,4 +1,4 @@
-import babel from '@babel/core';
+import * as babel from '@babel/core';
 import type { NodePath, types } from '@babel/core';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
@@ -7,16 +7,26 @@ export function removeAllOptionsFromMastraExcept(
   result: { hasCustomConfig: boolean },
   option: keyof MastraConfig,
   logger?: IMastraLogger,
-) {
+): babel.PluginObject {
   const t = babel.types;
 
   return {
     name: 'remove-all-except-' + option + '-config',
     visitor: {
       ExportNamedDeclaration: {
-        // remove all exports
+        // remove all exports, but keep the underlying declarations — the
+        // extracted option may reference them (e.g. `export const deployer = ...`
+        // used as `new Mastra({ deployer })`). Unreferenced declarations are
+        // dropped by the cleanup pass afterwards.
         exit(path) {
-          path.remove();
+          if (path.node.declaration) {
+            const [declaration] = path.replaceWith(path.node.declaration);
+            // Already traversed — don't requeue, or the NewExpression visitor
+            // would append the extracted export a second time.
+            declaration.skip();
+          } else {
+            path.remove();
+          }
         },
       },
 
@@ -99,5 +109,5 @@ export function removeAllOptionsFromMastraExcept(
         },
       },
     },
-  } as babel.PluginObj;
+  } satisfies babel.PluginObject;
 }

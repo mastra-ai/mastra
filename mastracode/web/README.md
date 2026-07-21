@@ -1,6 +1,6 @@
 # mastracode-web
 
-The Mastra Code web surface: API routes (config/fs/GitHub), a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk). All agent state (threads, messages, memory, recall vectors) persists in the single app Postgres when `APP_DATABASE_URL` is set.
+The Mastra Code web surface: API routes (config/fs/GitHub/Linear), a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk). One factory storage backend persists agent state (threads, messages, and memory) and web app data. When `APP_DATABASE_URL` is set, a separate `PgVector` uses the same PostgreSQL database for recall search; explicit local development and test runs use the SDK's local LibSQL database without vector storage.
 
 This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). For development, the monorepo-provided packages (`@mastra/*`, `mastra`) are consumed via `link:` specs pointing at the monorepo directories, so you always develop against local source. For builds, `scripts/monorepo-deps.mjs` temporarily pins those deps to the exact versions found in the monorepo (see below).
 
@@ -23,7 +23,7 @@ pnpm web:dev
 - API server (`mastra dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
 - Vite SPA on **:5173**, proxying `/api`, `/web`, and `/auth/` to the API server.
 
-For the GitHub/sandbox features, start the app database first: `pnpm web:dev:github` (Postgres via docker compose on :54329).
+Local development works without PostgreSQL: the full web surface uses the SDK's local LibSQL database. To exercise the PostgreSQL backend and distributed-lock path, run `pnpm web:dev:github` (Docker Compose on port 54329).
 
 ## Build & deploy
 
@@ -57,12 +57,37 @@ pnpm web:test     # server scenario tests (e2e/web)
 pnpm web:ui:test  # UI MSW tests (e2e/web-ui)
 ```
 
+## Factories, bindings, and repositories
+
+In the Web UI a **Factory** is the top-level product entity the user creates and selects. Each Factory has a browser-owned identity (`Factory.id`) and a single **binding**:
+
+- **Local folder** — path on the host machine; sessions use the resolved `resourceId` from `GET /web/codebase/resolve`.
+- **Connected GitHub repository** — org-owned row in `github_projects`, identified by `githubProjectId` / `github_project_id` at the persistence boundary.
+
+Board, metrics, audit, sandboxes, worktrees, and PR subscriptions stay **repository-scoped** via `githubProjectId`. A Factory is not a multi-repository aggregate, and there is no server-side `factories` table yet. GitHub-backed Factories can use the Factory Board; local Factories are still Factories, but Board/metrics/audit require a GitHub connection.
+
+Session continuity with the TUI intentionally keeps the SDK names `projectPath` and `detectProject`. Those refer to the execution workspace path / codebase detection protocol, not the product Factory entity. Private HTTP routes use precise nouns: `/web/codebase/resolve`, `/web/github/repositories/*`, `/web/factory/repositories/:id/*`.
+
+Intake source config is asymmetric by provider: GitHub selections are `repositoryIds` (connected repository UUIDs); Linear selections remain `projectIds` because Linear Project is an external provider concept.
+
+Browser state uses `mastracode-factories` / `mastracode-active-factory` only. Prerelease `mastracode-projects` keys are not read.
+
+## Workspace skill invocation
+
+The private Web API can activate a user-invocable skill on an existing scoped AgentController session with `POST /web/agent-controller/:controllerId/skills/invoke`. The Web Factory packages workflow skills such as `understand-issue` and `understand-pr` as ordinary, read-only `SKILL.md` files and adds them only to workspaces created by `MastraFactory`; the shared SDK and TUI workspace resolver do not load them. The route resolves every ID through the session workspace, uses the same `<skill name="…">` activation envelope as `/skill/<name>` in the TUI, and returns an error without dispatching when the skill is missing. Authenticated requests may target only the caller's personal session or a Factory worktree owned by that organization user.
+
+## Factory Overview
+
+For GitHub projects with a connected repo, the sidebar Factory section leads with an **Overview** tab (`/factory/overview`, above Board) — the factory's at-a-glance landing page. Its centerpiece is the **Queue Health Chart**: one horizontal bar per stage (intake → triage → planning → execute → review), segmented by task age (green / amber / orange / red, proportional to count) with a diagonal-stripe overlay on the portion where agent work is actively running. Clicking a segment filters a drill-down task list below the chart. Age comes from each item's open `stageHistory` entry (falling back to `createdAt`); the active signal reuses the same `useWorkspaceActivity` worktree-activity poll that drives the sidebar dots. Aggregation runs client-side via the pure `computeQueueHealth()` (`src/web/ui/domains/factory/queue-health.ts`).
+
+The age thresholds are server-side, per-project config (seconds), served by `GET /web/factory/repositories/:id/health/thresholds` and stored in the `queue-health` factory storage domain (`queue_health_settings` table) keyed by `(org_id, github_project_id)`. Defaults are `[14400, 86400, 259200]` (4h / 24h / 72h); `saveConfig` rejects a non-ascending or empty `thresholdsSeconds`. Thresholds live in seconds so fast-moving automated flows can represent sub-minute buckets.
+
 ## GitHub pull request notifications
 
-GitHub project sessions automatically subscribe the current thread after a successful `gh pr create`. The `github_subscribe_pr` tool is primarily for existing pull requests or recovery when automatic subscription did not occur. Use `github_unsubscribe_pr` only to stop notifications early; closing or merging the pull request retires its subscription automatically.
+GitHub-backed Factory sessions automatically subscribe the current thread after a successful `gh pr create`. The `github_subscribe_pr` tool is primarily for existing pull requests or recovery when automatic subscription did not occur. Use `github_unsubscribe_pr` only to stop notifications early; closing or merging the pull request retires its subscription automatically.
 
 Configure the GitHub App webhook URL as `https://your-host/web/github/webhook`, set `GITHUB_APP_WEBHOOK_SECRET` to the same secret configured in GitHub, and subscribe the App to pull request, pull request review, pull request review comment, and issue comment events. Comments and reviews are delivered only when their author has write access or is an explicitly authorized bot.
 
 ## Environment
 
-See `.env.schema` (package root; varlock validates `.env` against it). Minimum: none (runs auth-less, local-only). Auth needs `WORKOS_*`; GitHub needs `GITHUB_APP_*` + auth + `APP_DATABASE_URL`; Railway sandboxes need `RAILWAY_API_TOKEN`. `MASTRACODE_PUBLIC_URL` controls both the WorkOS (`/auth/callback`) and GitHub App (`/auth/github/callback`) redirect URLs.
+See `.env.schema` (package root; varlock validates `.env` against it). Local development needs no variables and runs auth-less with local LibSQL storage; non-local deployments require `APP_DATABASE_URL`. WorkOS auth requires both `WORKOS_API_KEY` and `WORKOS_CLIENT_ID`; alternatively set `BETTER_AUTH_SECRET`. GitHub needs the complete `GITHUB_APP_*` group plus auth; Linear needs `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET`; Railway sandboxes need `RAILWAY_API_TOKEN`. `MASTRACODE_PUBLIC_URL` controls the WorkOS (`/auth/callback`), GitHub App (`/auth/github/callback`), and Linear callback URLs.
