@@ -6,10 +6,28 @@ import type { SourceControlStorageHandle } from '@mastra/factory/storage/domains
 import type { IntegrationConnection } from '@mastra/factory/capabilities/connection';
 import type { Intake, IntakeIssue, IntakeIssueDetail } from '@mastra/factory/capabilities/intake';
 import type {
+  CreatePullRequestCommentInput,
+  CreatePullRequestInput,
+  CreateReviewCommentInput,
+  CreateReviewInput,
+  DeletePullRequestCommentInput,
+  DismissReviewInput,
+  ListPullRequestCommentsInput,
+  ListPullRequestsInput,
+  ListReviewCommentsInput,
+  ListReviewsInput,
+  MergePullRequestInput,
   PullRequest,
   PullRequestComment,
+  PullRequestRef,
   Review,
   ReviewComment,
+  ReviewRef,
+  SubmitReviewInput,
+  UpdatePullRequestCommentInput,
+  UpdatePullRequestInput,
+  UpdateReviewInput,
+  UpdateReviewersInput,
   VersionControl,
 } from '@mastra/factory/capabilities/version-control';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
@@ -24,10 +42,6 @@ import {
 } from '../../github/session-subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { PlatformGithubEventWorker, type PlatformGithubEventStorage } from './event-worker.js';
-
-type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
-  ? TInput
-  : never;
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
 
@@ -508,7 +522,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #listPullRequests(input: InputOf<'listPullRequests'>) {
+  async #listPullRequests(input: ListPullRequestsInput) {
     requireGithubConnection(input.connection);
     const page = parsePositiveCursor(input.cursor);
     const query = new URLSearchParams({
@@ -528,7 +542,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     };
   }
 
-  async #getPullRequest(input: InputOf<'getPullRequest'>) {
+  async #getPullRequest(input: PullRequestRef) {
     try {
       return parsePullRequest(
         await this.#client.request<GithubPullRequest>('GET', pullRequestPath(input, input.pullRequestId)),
@@ -539,7 +553,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #createPullRequest(input: InputOf<'createPullRequest'>) {
+  async #createPullRequest(input: CreatePullRequestInput) {
     requireGithubConnection(input.connection);
     const result = await this.#client.request<GithubPullRequest>('POST', repositoryPath(input.sourceId, 'pulls'), {
       head: input.headBranch,
@@ -551,7 +565,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return parsePullRequest(result);
   }
 
-  async #updatePullRequest(input: InputOf<'updatePullRequest'>) {
+  async #updatePullRequest(input: UpdatePullRequestInput) {
     const result = await this.#client.request<GithubPullRequest>('PATCH', pullRequestPath(input, input.pullRequestId), {
       title: input.title,
       body: input.body === null ? '' : input.body,
@@ -561,7 +575,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return parsePullRequest(result);
   }
 
-  #mergePullRequest(input: InputOf<'mergePullRequest'>) {
+  #mergePullRequest(input: MergePullRequestInput) {
     return this.#client.request<{ merged: boolean; message: string; sha: string | null }>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/merge`,
@@ -569,7 +583,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     );
   }
 
-  async #listComments(input: InputOf<'listComments'>) {
+  async #listComments(input: ListPullRequestCommentsInput) {
     const page = parsePositiveCursor(input.cursor);
     const result = await this.#client.request<{ comments: GithubComment[] }>(
       'GET',
@@ -581,7 +595,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     };
   }
 
-  async #createComment(input: InputOf<'createComment'>) {
+  async #createComment(input: CreatePullRequestCommentInput) {
     const comment = await this.#client.request<GithubComment>(
       'POST',
       repositoryPath(input.sourceId, `issues/${requirePositiveId(input.pullRequestId, 'pull request')}/comments`),
@@ -590,7 +604,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return parseComment(comment);
   }
 
-  async #updateComment(input: InputOf<'updateComment'>) {
+  async #updateComment(input: UpdatePullRequestCommentInput) {
     requireGithubConnection(input.connection);
     const comment = await this.#client.request<GithubComment>(
       'PATCH',
@@ -600,7 +614,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return parseComment(comment);
   }
 
-  async #deleteComment(input: InputOf<'deleteComment'>) {
+  async #deleteComment(input: DeletePullRequestCommentInput) {
     requireGithubConnection(input.connection);
     await this.#client.request<void>(
       'DELETE',
@@ -608,7 +622,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     );
   }
 
-  async #listReviews(input: InputOf<'listReviews'>) {
+  async #listReviews(input: ListReviewsInput) {
     const page = parsePositiveCursor(input.cursor);
     const result = await this.#client.request<{ reviews: GithubReview[] }>(
       'GET',
@@ -620,7 +634,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     };
   }
 
-  async #getReview(input: InputOf<'getReview'>) {
+  async #getReview(input: ReviewRef) {
     try {
       return parseReview(
         await this.#client.request<GithubReview>(
@@ -634,7 +648,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #createReview(input: InputOf<'createReview'>) {
+  async #createReview(input: CreateReviewInput) {
     const review = await this.#client.request<GithubReview>(
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews`,
@@ -643,7 +657,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return parseReview(review);
   }
 
-  async #updateReview(input: InputOf<'updateReview'>) {
+  async #updateReview(input: UpdateReviewInput) {
     const review = await this.#client.request<GithubReview>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
@@ -652,7 +666,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return parseReview(review);
   }
 
-  async #submitReview(input: InputOf<'submitReview'>) {
+  async #submitReview(input: SubmitReviewInput) {
     const review = await this.#client.request<GithubReview>(
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/events`,
@@ -661,7 +675,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return parseReview(review);
   }
 
-  async #dismissReview(input: InputOf<'dismissReview'>) {
+  async #dismissReview(input: DismissReviewInput) {
     const review = await this.#client.request<GithubReview>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/dismissals`,
@@ -670,14 +684,14 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return parseReview(review);
   }
 
-  async #deletePendingReview(input: InputOf<'deletePendingReview'>) {
+  async #deletePendingReview(input: ReviewRef) {
     await this.#client.request<void>(
       'DELETE',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
     );
   }
 
-  async #listReviewComments(input: InputOf<'listReviewComments'>) {
+  async #listReviewComments(input: ListReviewCommentsInput) {
     const page = parsePositiveCursor(input.cursor);
     const result = await this.#client.request<{ comments: GithubReviewComment[] }>(
       'GET',
@@ -689,7 +703,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     };
   }
 
-  async #createReviewComment(input: InputOf<'createReviewComment'>) {
+  async #createReviewComment(input: CreateReviewCommentInput) {
     let body: Record<string, unknown>;
     if (input.replyToId !== undefined) {
       body = { body: input.body, replyToId: requirePositiveId(input.replyToId, 'review comment') };
@@ -716,7 +730,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     );
   }
 
-  async #updateReviewComment(input: InputOf<'updateReviewComment'>) {
+  async #updateReviewComment(input: UpdatePullRequestCommentInput) {
     requireGithubConnection(input.connection);
     return parseReviewComment(
       await this.#client.request<GithubReviewComment>(
@@ -727,7 +741,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     );
   }
 
-  async #deleteReviewComment(input: InputOf<'deleteReviewComment'>) {
+  async #deleteReviewComment(input: DeletePullRequestCommentInput) {
     requireGithubConnection(input.connection);
     await this.#client.request<void>(
       'DELETE',
@@ -735,7 +749,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     );
   }
 
-  #requestedReviewers(method: 'GET' | 'POST' | 'DELETE', input: InputOf<'requestReviewers'>) {
+  #requestedReviewers(method: 'GET' | 'POST' | 'DELETE', input: UpdateReviewersInput) {
     requireGithubConnection(input.connection);
     return this.#client.request<{ users: string[]; teams: string[] }>(
       method,
