@@ -48,7 +48,7 @@ overrides:
   js-yaml: ^3.15.0
   glob@<=10.5.0: 10.5.0
   '@mastra/memory>image-size': 1.2.1
-  body-parser@<=2.2.1: 2.2.2
+  body-parser@<=2.2.1: 2.3.0
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.7.1
   langsmith@<0.6.0: ^0.6.0
@@ -58,11 +58,11 @@ overrides:
   simple-git@<3.36.0: 3.36.0
   axios@>=1.0.0 <1.16.0: 1.18.0
   protobufjs@>=7.0.0 <7.6.3: 7.6.3
-  protobufjs@>=8.0.0 <8.6.0: 8.6.0
+  protobufjs@>=8.0.0 <8.6.0: 8.6.6
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
   ws@>=8.0.0 <8.21.0: 8.21.0
-  webpack-dev-server@<5.2.5: 5.2.5
+  webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.15.2: 6.15.2
   fast-uri@<3.1.2: 3.1.2
   form-data@<2.5.6: 2.5.6
@@ -84,7 +84,7 @@ overrides:
   '@opentelemetry/exporter-prometheus@<0.217.0': 0.217.0
   uuid@>=13.0.0 <13.0.1: 13.0.1
   uuid@<11.1.1: 11.1.1
-  tar@<7.5.16: 7.5.16
+  tar@<7.5.16: 7.5.19
   http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
   launch-editor@<2.14.1: 2.14.1
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
@@ -4720,8 +4720,8 @@ importers:
         specifier: ^2.0.3
         version: 2.0.3
       tar:
-        specifier: 7.5.16
-        version: 7.5.16
+        specifier: 7.5.19
+        version: 7.5.19
     devDependencies:
       '@internal/ai-sdk-v4':
         specifier: workspace:*
@@ -20879,8 +20879,8 @@ packages:
   bluebird@3.7.2:
     resolution: {integrity: sha512-XpNj6GDQzdfW+r2Wnn7xiSAd7TM3jzkxGXBGTtWKuSXv1xUV+azxAm8jdWZN06QTQk+2N2XB9jRDkvbmQmcRtg==}
 
-  body-parser@2.2.2:
-    resolution: {integrity: sha512-oP5VkATKlNwcgvxi0vM0p/D3n2C3EReYVX+DNYs5TjZFn/oQt2j+4sVJtSMr18pdRr8wjTcBl6LoV+FUwzPmNA==}
+  body-parser@2.3.0:
+    resolution: {integrity: sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==}
     engines: {node: '>=18'}
 
   bonjour-service@1.3.0:
@@ -27299,8 +27299,8 @@ packages:
     resolution: {integrity: sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==}
     engines: {node: '>=12.0.0'}
 
-  protobufjs@8.6.0:
-    resolution: {integrity: sha512-PIOO89BMGMXGz2333TVv/OqPNVWm7w30ll/4FtLbtLBaonzJMYwTbAZSSlobjIy9MoUgIAxSVUpK7aP7EpTtkg==}
+  protobufjs@8.6.6:
+    resolution: {integrity: sha512-RkLIhE+Tdc2Kpq1F4Uw6OnpAXPca7B+GSDov/GqGCqNBpVyDskQ9yReZfgM+C7xw9AAix873iQZXbBWXj6NzYQ==}
     engines: {node: '>=12.0.0'}
 
   proxy-addr@2.0.7:
@@ -28887,8 +28887,8 @@ packages:
   tar-stream@3.2.0:
     resolution: {integrity: sha512-ojzvCvVaNp6aOTFmG7jaRD0meowIAuPc3cMMhSgKiVWws1GyHbGd/xvnyuRKcKlMpt3qvxx6r0hreCNITP9hIg==}
 
-  tar@7.5.16:
-    resolution: {integrity: sha512-56adEpPMouktRlBLXiaYFFzZ/3+JXa8P9n7WbR+ibIjtviN55mEaOkiysCnPnWm+7kkui1Dn8J9l+g6zV8731w==}
+  tar@7.5.19:
+    resolution: {integrity: sha512-4LeEWl96twnS2Q7Bz4MGqgazLqO+hJN63GZxXoIqh1T3VweYD997gbU1ItNsQafqqXTXd5WFyFdReLtwvRBNiw==}
     engines: {node: '>=18'}
 
   tarn@3.0.2:
@@ -29955,8 +29955,8 @@ packages:
       webpack:
         optional: true
 
-  webpack-dev-server@5.2.5:
-    resolution: {integrity: sha512-4wZtCquSuv9CKX8oybo+mqxtxZqWz47uM1Ch94lxowBztOhWCbhqvRbfC/mODOwxgV2brY+JGZpHq58/SuVFYg==}
+  webpack-dev-server@5.2.6:
+    resolution: {integrity: sha512-HNLRmamRvVavZQ+avceZifmv8hmdUjg43t6MI4SqJDwFdW7RPQwH5vzGhDRZSX59SgfbeHhLnq3g+uooWo7pVw==}
     engines: {node: '>= 18.12.0'}
     hasBin: true
     peerDependencies:
@@ -34332,7 +34332,7 @@ snapshots:
       isomorphic-ws: 5.0.0(ws@8.21.0(bufferutil@4.1.0))
       pathe: 2.0.3
       shell-quote: 1.10.0
-      tar: 7.5.16
+      tar: 7.5.19
       tslib: 2.8.1
     transitivePeerDependencies:
       - debug
@@ -34550,7 +34550,7 @@ snapshots:
       update-notifier: 6.0.2
       webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
       webpack-bundle-analyzer: 4.10.2(bufferutil@4.1.0)
-      webpack-dev-server: 5.2.5(bufferutil@4.1.0)(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
+      webpack-dev-server: 5.2.6(bufferutil@4.1.0)(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
       webpack-merge: 6.0.1
     optionalDependencies:
       '@docusaurus/faster': 3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16)
@@ -39144,7 +39144,7 @@ snapshots:
       '@opentelemetry/sdk-logs': 0.217.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.7.1(@opentelemetry/api@1.9.1)
-      protobufjs: 8.6.0
+      protobufjs: 8.6.6
 
   '@opentelemetry/otlp-transformer@0.218.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -44238,10 +44238,10 @@ snapshots:
 
   bluebird@3.7.2: {}
 
-  body-parser@2.2.2:
+  body-parser@2.3.0:
     dependencies:
       bytes: 3.1.2
-      content-type: 1.0.5
+      content-type: 2.0.0
       debug: 4.4.3
       http-errors: 2.0.1
       iconv-lite: 0.7.3
@@ -44463,7 +44463,7 @@ snapshots:
       promise-inflight: 1.0.1
       rimraf: 3.0.2
       ssri: 14.0.0
-      tar: 7.5.16
+      tar: 7.5.19
       unique-filename: 1.1.1
     transitivePeerDependencies:
       - bluebird
@@ -44828,7 +44828,7 @@ snapshots:
       node-api-headers: 1.8.0
       rc: 1.2.8
       semver: 7.8.5
-      tar: 7.5.16
+      tar: 7.5.19
       url-join: 4.0.1
       which: 6.0.1
       yargs: 17.7.3
@@ -45940,7 +45940,7 @@ snapshots:
       glob: 11.1.0
       openapi-fetch: 0.14.1
       platform: 1.3.6
-      tar: 7.5.16
+      tar: 7.5.19
       undici: 7.28.0
 
   eastasianwidth@0.2.0: {}
@@ -46637,7 +46637,7 @@ snapshots:
     dependencies:
       accepts: 1.3.8
       array-flatten: '@socketregistry/array-flatten@1.0.11'
-      body-parser: 2.2.2
+      body-parser: 2.3.0
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 1.1.1
@@ -46673,7 +46673,7 @@ snapshots:
     dependencies:
       accepts: 1.3.8
       array-flatten: '@socketregistry/array-flatten@1.0.11'
-      body-parser: 2.2.2
+      body-parser: 2.3.0
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 1.1.1
@@ -46708,7 +46708,7 @@ snapshots:
   express@5.2.1:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.2.2
+      body-parser: 2.3.0
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 1.1.1
@@ -48173,7 +48173,7 @@ snapshots:
       adm-zip: 0.5.18
       debug: 4.4.3
       node-fetch: 2.7.0(encoding@0.1.13)
-      tar: 7.5.16
+      tar: 7.5.19
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -50303,7 +50303,7 @@ snapshots:
       npmlog: 6.0.2
       rimraf: 3.0.2
       semver: 7.8.5
-      tar: 7.5.16
+      tar: 7.5.19
       which: 2.0.2
     transitivePeerDependencies:
       - bluebird
@@ -51894,7 +51894,7 @@ snapshots:
       '@types/node': 22.19.15
       long: 5.3.2
 
-  protobufjs@8.6.0:
+  protobufjs@8.6.6:
     dependencies:
       long: 5.3.2
 
@@ -53610,7 +53610,7 @@ snapshots:
       bindings: 1.5.0
       node-addon-api: 7.1.1
       prebuild-install: 7.1.3
-      tar: 7.5.16
+      tar: 7.5.19
     optionalDependencies:
       node-gyp: 8.4.1
     transitivePeerDependencies:
@@ -54088,7 +54088,7 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  tar@7.5.16:
+  tar@7.5.19:
     dependencies:
       '@isaacs/fs-minipass': 4.0.1
       chownr: 3.0.0
@@ -55388,7 +55388,7 @@ snapshots:
     transitivePeerDependencies:
       - tslib
 
-  webpack-dev-server@5.2.5(bufferutil@4.1.0)(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16)):
+  webpack-dev-server@5.2.6(bufferutil@4.1.0)(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16)):
     dependencies:
       '@types/bonjour': 3.5.13
       '@types/connect-history-api-fallback': 1.5.4
