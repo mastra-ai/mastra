@@ -1,3 +1,6 @@
+import { betterAuth } from 'better-auth';
+import { memoryAdapter } from 'better-auth/adapters/memory';
+import { makeSignature } from 'better-auth/crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MastraAuthBetterAuth } from './index';
 import type { BetterAuthUser } from './index';
@@ -280,6 +283,82 @@ describe('MastraAuthBetterAuth', () => {
       expect(call.headers.get('Cookie')).toBe('better-auth.session_token=hono-token');
     });
 
+    it('should sign unsigned Bearer tokens with the instance secret before setting the session cookie', async () => {
+      const secret = 'test-secret-that-is-at-least-32-chars';
+      const authWithContext = {
+        ...mockAuth,
+        $context: Promise.resolve({
+          secret,
+          authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+          internalAdapter: { findUserById: vi.fn() },
+        }),
+      };
+      authWithContext.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: authWithContext as any,
+      });
+      await auth.authenticateToken('my-unsigned-token', mockRawRequest());
+
+      const expectedSignature = await makeSignature('my-unsigned-token', secret);
+      const call = authWithContext.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toBe(
+        `better-auth.session_token=${encodeURIComponent(`my-unsigned-token.${expectedSignature}`)}`,
+      );
+    });
+
+    it('should pass already-signed tokens through without re-signing', async () => {
+      const secret = 'test-secret-that-is-at-least-32-chars';
+      const authWithContext = {
+        ...mockAuth,
+        $context: Promise.resolve({
+          secret,
+          authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+          internalAdapter: { findUserById: vi.fn() },
+        }),
+      };
+      authWithContext.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: authWithContext as any,
+      });
+      const signedToken = `some-token.${await makeSignature('some-token', secret)}`;
+      await auth.authenticateToken(signedToken, mockRawRequest());
+
+      const call = authWithContext.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toBe(`better-auth.session_token=${encodeURIComponent(signedToken)}`);
+    });
+
+    it('should use the session cookie name from the Better Auth context (e.g. __Secure- prefix)', async () => {
+      const secret = 'test-secret-that-is-at-least-32-chars';
+      const authWithContext = {
+        ...mockAuth,
+        $context: Promise.resolve({
+          secret,
+          authCookies: { sessionToken: { name: '__Secure-better-auth.session_token' } },
+          internalAdapter: { findUserById: vi.fn() },
+        }),
+      };
+      authWithContext.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: authWithContext as any,
+      });
+      await auth.authenticateToken('my-unsigned-token', mockRawRequest());
+
+      const call = authWithContext.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toMatch(/^__Secure-better-auth\.session_token=/);
+    });
+
     it('should inject session cookie when session name appears only inside a cookie value', async () => {
       mockAuth.api.getSession.mockResolvedValue({
         session: mockSession,
@@ -443,6 +522,371 @@ describe('MastraAuthBetterAuth', () => {
 
       expect(auth.public).toEqual(publicRoutes);
       expect(auth.protected).toEqual(protectedRoutes);
+    });
+  });
+
+  describe('getUser', () => {
+    it('should look up users via the internal adapter', async () => {
+      const findUserById = vi.fn().mockResolvedValue(mockUser);
+      const authWithContext = {
+        ...mockAuth,
+        $context: Promise.resolve({
+          secret: 'test-secret-that-is-at-least-32-chars',
+          authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+          internalAdapter: { findUserById },
+        }),
+      };
+
+      const auth = new MastraAuthBetterAuth({
+        auth: authWithContext as any,
+      });
+      const user = await auth.getUser('user-123');
+
+      expect(findUserById).toHaveBeenCalledWith('user-123');
+      expect(user).toMatchObject({
+        id: 'user-123',
+        email: 'test@example.com',
+        name: 'Test User',
+      });
+    });
+
+    it('should return null when the user is not found', async () => {
+      const authWithContext = {
+        ...mockAuth,
+        $context: Promise.resolve({
+          secret: 'test-secret-that-is-at-least-32-chars',
+          authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+          internalAdapter: { findUserById: vi.fn().mockResolvedValue(null) },
+        }),
+      };
+
+      const auth = new MastraAuthBetterAuth({
+        auth: authWithContext as any,
+      });
+      expect(await auth.getUser('missing')).toBeNull();
+    });
+
+    it('should return null when the auth context is unavailable', async () => {
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      expect(await auth.getUser('user-123')).toBeNull();
+    });
+
+    it('should batch look up users with getUsers, preserving order and nulls', async () => {
+      const findUserById = vi.fn().mockImplementation((id: string) => (id === 'user-123' ? mockUser : null));
+      const authWithContext = {
+        ...mockAuth,
+        $context: Promise.resolve({
+          secret: 'test-secret-that-is-at-least-32-chars',
+          authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+          internalAdapter: { findUserById },
+        }),
+      };
+
+      const auth = new MastraAuthBetterAuth({
+        auth: authWithContext as any,
+      });
+      const users = await auth.getUsers(['missing', 'user-123']);
+
+      expect(users).toHaveLength(2);
+      expect(users[0]).toBeNull();
+      expect(users[1]).toMatchObject({ id: 'user-123' });
+    });
+  });
+
+  describe('end-to-end with a real Better Auth instance', () => {
+    const createRealAuth = () =>
+      betterAuth({
+        baseURL: 'http://localhost:3000',
+        secret: 'test-secret-that-is-at-least-32-chars',
+        database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
+        emailAndPassword: { enabled: true },
+      });
+
+    it('authenticates the unsigned token returned by signUp/signIn (issue #19110)', async () => {
+      const provider = new MastraAuthBetterAuth({ auth: createRealAuth() });
+
+      const signUpResult = await provider.signUp(
+        'e2e@example.com',
+        'super-secure-password',
+        'E2E User',
+        new Request('http://localhost:3000/signup'),
+      );
+      expect(signUpResult.token).toBeTruthy();
+      // signUp/signIn return the RAW session token — no signature
+      expect(signUpResult.token).not.toContain('.');
+
+      // Bearer-style request: no cookies, just the raw token
+      const result = await provider.authenticateToken(signUpResult.token!, new Request('http://localhost:3000/api'));
+
+      expect(result).not.toBeNull();
+      expect(result?.user.email).toBe('e2e@example.com');
+      expect(result?.session.token).toBe(signUpResult.token);
+    });
+
+    it('resolves the current user from an Authorization: Bearer header', async () => {
+      const provider = new MastraAuthBetterAuth({ auth: createRealAuth() });
+
+      const signUpResult = await provider.signUp(
+        'bearer@example.com',
+        'super-secure-password',
+        'Bearer User',
+        new Request('http://localhost:3000/signup'),
+      );
+
+      const user = await provider.getCurrentUser(
+        new Request('http://localhost:3000/api', {
+          headers: { Authorization: `Bearer ${signUpResult.token}` },
+        }),
+      );
+
+      expect(user).not.toBeNull();
+      expect(user?.email).toBe('bearer@example.com');
+    });
+
+    it('looks up users by ID via getUser/getUsers (issue #19110)', async () => {
+      const provider = new MastraAuthBetterAuth({ auth: createRealAuth() });
+
+      const signUpResult = await provider.signUp(
+        'lookup@example.com',
+        'super-secure-password',
+        'Lookup User',
+        new Request('http://localhost:3000/signup'),
+      );
+
+      const user = await provider.getUser(signUpResult.user.id);
+      expect(user).toMatchObject({
+        id: signUpResult.user.id,
+        email: 'lookup@example.com',
+        name: 'Lookup User',
+      });
+
+      expect(await provider.getUser('does-not-exist')).toBeNull();
+
+      const users = await provider.getUsers([signUpResult.user.id, 'does-not-exist']);
+      expect(users[0]).toMatchObject({ id: signUpResult.user.id });
+      expect(users[1]).toBeNull();
+    });
+  });
+
+  describe('handleAuthRequest', () => {
+    it('proxies the raw request to the better-auth handler', async () => {
+      const handler = vi.fn(async () => new Response('better-auth handled', { status: 200 }));
+      const provider = new MastraAuthBetterAuth({ auth: { ...mockAuth, handler } as any });
+
+      const res = await provider.handleAuthRequest(
+        new Request('http://localhost/auth/api/sign-in/email', { method: 'POST' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe('better-auth handled');
+      expect(handler).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('getClearSessionHeaders', () => {
+    it('clears the session and signature cookies with SameSite=Lax same-origin', () => {
+      const provider = new MastraAuthBetterAuth({ auth: mockAuth as any });
+      expect(provider.getClearSessionHeaders()['Set-Cookie']).toBe(
+        'better-auth.session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0, ' +
+          'better-auth.session_token_sig=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+      );
+    });
+
+    it('uses SameSite=None; Secure after init() with cross-origin SPA origins', async () => {
+      const provider = new MastraAuthBetterAuth({ auth: mockAuth as any });
+      await provider.init({ allowedOrigins: ['https://app.acme.com'] });
+      expect(provider.getClearSessionHeaders()['Set-Cookie']).toContain('SameSite=None; Secure');
+    });
+
+    it('honors the __Secure- prefix better-auth applies on https deploys', () => {
+      const provider = new MastraAuthBetterAuth({
+        auth: { ...mockAuth, options: { baseURL: 'https://factory.acme.com' } } as any,
+      });
+      expect(provider.getClearSessionHeaders()['Set-Cookie']).toMatch(/^__Secure-better-auth\.session_token=/);
+    });
+
+    it('honors a renamed session cookie via advanced.cookies.session_token.name', () => {
+      const provider = new MastraAuthBetterAuth({
+        auth: { ...mockAuth, options: { advanced: { cookies: { session_token: { name: 'acme_session' } } } } } as any,
+      });
+      expect(provider.getClearSessionHeaders()['Set-Cookie']).toMatch(/^acme_session=/);
+    });
+  });
+
+  describe('isOrganizationAdmin', () => {
+    const providerWithCtx = (ctx: Record<string, unknown>) =>
+      new MastraAuthBetterAuth({ auth: { ...mockAuth, $context: Promise.resolve(ctx) } as any });
+
+    it.each(['owner', 'admin'])('allows the %s role', async role => {
+      const findOne = vi.fn(async () => ({ organizationId: 'org_1', role }));
+      const provider = providerWithCtx({ adapter: { findOne } });
+
+      await expect(provider.isOrganizationAdmin('org_1', 'user_1')).resolves.toBe(true);
+      expect(findOne).toHaveBeenCalledWith({
+        model: 'member',
+        where: [
+          { field: 'organizationId', value: 'org_1' },
+          { field: 'userId', value: 'user_1' },
+        ],
+      });
+    });
+
+    it('denies member roles', async () => {
+      const findOne = vi.fn(async () => ({ organizationId: 'org_1', role: 'member' }));
+      const provider = providerWithCtx({ adapter: { findOne } });
+      await expect(provider.isOrganizationAdmin('org_1', 'user_1')).resolves.toBe(false);
+    });
+
+    it('denies when no membership exists', async () => {
+      const provider = providerWithCtx({ adapter: { findOne: vi.fn(async () => null) } });
+      await expect(provider.isOrganizationAdmin('org_1', 'user_1')).resolves.toBe(false);
+    });
+
+    it('fails closed when membership lookup fails', async () => {
+      const provider = providerWithCtx({
+        adapter: { findOne: vi.fn(async () => Promise.reject(new Error('db down'))) },
+      });
+      await expect(provider.isOrganizationAdmin('org_1', 'user_1')).resolves.toBe(false);
+    });
+  });
+
+  describe('ensureOrganization (personal-org bootstrap)', () => {
+    interface MockDbAdapter {
+      findMany: ReturnType<typeof vi.fn>;
+      findOne: ReturnType<typeof vi.fn>;
+      create: ReturnType<typeof vi.fn>;
+    }
+
+    function mockDbAdapter(overrides: Partial<MockDbAdapter> = {}): MockDbAdapter {
+      return {
+        findMany: vi.fn(async () => []),
+        findOne: vi.fn(async () => null),
+        create: vi.fn(async (input: { model: string }) => ({ id: `${input.model}_created` })),
+        ...overrides,
+      };
+    }
+
+    const providerWith = (dbAdapter: MockDbAdapter) =>
+      new MastraAuthBetterAuth({
+        auth: {
+          ...mockAuth,
+          $context: Promise.resolve({
+            adapter: dbAdapter,
+            internalAdapter: { findUserById: vi.fn(async () => ({ id: 'user_1', email: 'u@example.com' })) },
+          }),
+        } as any,
+      });
+
+    it('returns the first existing membership org without creating', async () => {
+      const dbAdapter = mockDbAdapter({ findMany: vi.fn(async () => [{ organizationId: 'org_existing' }]) });
+      const provider = providerWith(dbAdapter);
+
+      expect(await provider.ensureOrganization('user_1')).toBe('org_existing');
+      expect(dbAdapter.create).not.toHaveBeenCalled();
+    });
+
+    it('creates a personal org + owner membership for a no-org user', async () => {
+      const dbAdapter = mockDbAdapter({
+        create: vi.fn(async (input: { model: string }) =>
+          input.model === 'organization' ? { id: 'org_new' } : { id: 'member_new' },
+        ),
+      });
+      const provider = providerWith(dbAdapter);
+
+      expect(await provider.ensureOrganization('user_1')).toBe('org_new');
+
+      const orgCall = dbAdapter.create.mock.calls.find(([input]) => input.model === 'organization')![0];
+      expect(orgCall.data).toMatchObject({ name: "u@example.com's org", slug: 'personal-user_1' });
+      const memberCall = dbAdapter.create.mock.calls.find(([input]) => input.model === 'member')![0];
+      expect(memberCall.data).toMatchObject({ organizationId: 'org_new', userId: 'user_1', role: 'owner' });
+    });
+
+    it('recovers the existing org by slug when the create hits the unique constraint', async () => {
+      const dbAdapter = mockDbAdapter({
+        create: vi.fn(async (input: { model: string }) => {
+          if (input.model === 'organization') throw new Error('duplicate key value violates unique constraint');
+          return { id: 'member_new' };
+        }),
+        findOne: vi.fn(async (input: { model: string }) =>
+          input.model === 'organization' ? { id: 'org_prior' } : null,
+        ),
+      });
+      const provider = providerWith(dbAdapter);
+
+      expect(await provider.ensureOrganization('user_1')).toBe('org_prior');
+      expect(dbAdapter.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'organization', where: [{ field: 'slug', value: 'personal-user_1' }] }),
+      );
+    });
+
+    it('does not adopt a slug-squatted org owned by another user', async () => {
+      // An attacker pre-created `personal-user_1` through the public org API and
+      // is its owner. Recovery must NOT attach the victim there — it creates a
+      // fresh personal org with an unguessable slug instead.
+      const createdOrgs: Array<{ slug: string }> = [];
+      const dbAdapter = mockDbAdapter({
+        create: vi.fn(async (input: { model: string; data?: { slug?: string } }) => {
+          if (input.model === 'organization') {
+            if (input.data?.slug === 'personal-user_1') {
+              throw new Error('duplicate key value violates unique constraint');
+            }
+            createdOrgs.push({ slug: input.data!.slug! });
+            return { id: 'org_fallback' };
+          }
+          return { id: 'member_new' };
+        }),
+        findOne: vi.fn(async (input: { model: string }) =>
+          input.model === 'organization' ? { id: 'org_squatted' } : null,
+        ),
+        findMany: vi.fn(async (input: { model: string; where?: Array<{ field: string }> }) => {
+          // First call: the victim's memberships (none). Second: the squatted org's members.
+          if (input.model === 'member' && input.where?.[0]?.field === 'organizationId') {
+            return [{ organizationId: 'org_squatted', userId: 'attacker_1' }];
+          }
+          return [];
+        }),
+      });
+      const provider = providerWith(dbAdapter);
+
+      expect(await provider.ensureOrganization('user_1')).toBe('org_fallback');
+      expect(createdOrgs[0]!.slug).toMatch(/^personal-user_1-[0-9a-f-]{36}$/);
+      // The victim's owner membership lands on the fallback org, never the squatted one.
+      const memberCall = dbAdapter.create.mock.calls.find(([input]) => input.model === 'member')![0];
+      expect(memberCall.data).toMatchObject({ organizationId: 'org_fallback', userId: 'user_1', role: 'owner' });
+    });
+
+    it('tolerates a membership a concurrent bootstrap already created', async () => {
+      const dbAdapter = mockDbAdapter({
+        create: vi.fn(async (input: { model: string }) => {
+          if (input.model === 'organization') return { id: 'org_new' };
+          throw new Error('duplicate member');
+        }),
+        findOne: vi.fn(async (input: { model: string }) => (input.model === 'member' ? { id: 'member_prior' } : null)),
+      });
+      const provider = providerWith(dbAdapter);
+
+      expect(await provider.ensureOrganization('user_1')).toBe('org_new');
+    });
+
+    it('is best-effort: swallows failures and returns undefined', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const dbAdapter = mockDbAdapter({ findMany: vi.fn(async () => Promise.reject(new Error('db down'))) });
+      const provider = providerWith(dbAdapter);
+
+      expect(await provider.ensureOrganization('user_1')).toBeUndefined();
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('caches the resolved org so subsequent calls skip the DB', async () => {
+      const dbAdapter = mockDbAdapter({ findMany: vi.fn(async () => [{ organizationId: 'org_cached' }]) });
+      const provider = providerWith(dbAdapter);
+
+      await provider.ensureOrganization('user_1');
+      await provider.ensureOrganization('user_1');
+      expect(dbAdapter.findMany).toHaveBeenCalledOnce();
     });
   });
 });

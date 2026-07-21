@@ -470,9 +470,7 @@
 
   const fs = new GCSFilesystem({
     bucket: 'my-bucket',
-    credentials: {
-      /* service account key */
-    },
+    credentials: {/* service account key */},
   });
   ```
 
@@ -490,9 +488,7 @@
 
   const fs = new GCSFilesystem({
     bucket: 'my-bucket',
-    credentials: {
-      /* service account key */
-    },
+    credentials: {/* service account key */},
   });
   ```
 

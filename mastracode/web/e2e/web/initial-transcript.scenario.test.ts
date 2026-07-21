@@ -1,4 +1,4 @@
-import type { AgentControllerMessage } from '@mastra/client-js';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { describe, it, expect } from 'vitest';
 
 import { createInitialTranscript } from '../../src/web/ui/domains/chat/services/transcript.js';
@@ -27,14 +27,17 @@ function toolParts(entry: MessageEntry) {
  * `createInitialTranscript`. This guards the regression where selecting a
  * thread showed an empty transcript.
  */
-function userMsg(id: string, text: string): AgentControllerMessage {
-  return { id, role: 'user', content: [{ type: 'text', text }] } as unknown as AgentControllerMessage;
+function msg(id: string, role: MastraDBMessage['role'], parts: MastraMessagePart[]): MastraDBMessage {
+  return { id, role, createdAt: new Date(), content: { format: 2, parts } };
 }
-function assistantMsg(id: string, text: string): AgentControllerMessage {
-  return { id, role: 'assistant', content: [{ type: 'text', text }] } as unknown as AgentControllerMessage;
+function userMsg(id: string, text: string): MastraDBMessage {
+  return msg(id, 'user', [{ type: 'text', text }]);
 }
-function systemMsg(id: string, text: string): AgentControllerMessage {
-  return { id, role: 'system', content: [{ type: 'text', text }] } as unknown as AgentControllerMessage;
+function assistantMsg(id: string, text: string): MastraDBMessage {
+  return msg(id, 'assistant', [{ type: 'text', text }]);
+}
+function systemMsg(id: string, text: string): MastraDBMessage {
+  return msg(id, 'system', [{ type: 'text', text }]);
 }
 
 describe('initial transcript (thread history rendering)', () => {
@@ -80,15 +83,19 @@ describe('initial transcript (thread history rendering)', () => {
   });
 
   it('reconstructs tool calls (name, args, result) on the assistant entry', () => {
-    const assistantWithTool: AgentControllerMessage = {
-      id: 'a1',
-      role: 'assistant',
-      content: [
-        { type: 'text', text: 'Let me read that file.' },
-        { type: 'tool_call', id: 'tc-1', name: 'read_file', args: { path: 'README.md' } },
-        { type: 'tool_result', id: 'tc-1', result: 'file contents here', isError: false },
-      ],
-    } as unknown as AgentControllerMessage;
+    const assistantWithTool = msg('a1', 'assistant', [
+      { type: 'text', text: 'Let me read that file.' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-1',
+          toolName: 'read_file',
+          args: { path: 'README.md' },
+          result: 'file contents here',
+        },
+      },
+    ]);
 
     const state = createInitialTranscript({
       messages: [userMsg('u1', 'read the readme'), assistantWithTool],
@@ -110,20 +117,32 @@ describe('initial transcript (thread history rendering)', () => {
   });
 
   it('preserves execution order: text → tool → text interleaved, not grouped', () => {
-    const msg: AgentControllerMessage = {
-      id: 'a1',
-      role: 'assistant',
-      content: [
-        { type: 'text', text: 'First I will read it.' },
-        { type: 'tool_call', id: 'tc-1', name: 'read_file', args: { path: 'a.ts' } },
-        { type: 'tool_result', id: 'tc-1', result: 'contents', isError: false },
-        { type: 'text', text: 'Now I will edit it.' },
-        { type: 'tool_call', id: 'tc-2', name: 'write_file', args: { path: 'a.ts' } },
-        { type: 'tool_result', id: 'tc-2', result: 'ok', isError: false },
-        { type: 'text', text: 'Done.' },
-      ],
-    } as unknown as AgentControllerMessage;
-    const state = createInitialTranscript({ messages: [msg], threadId: 't' });
+    const message = msg('a1', 'assistant', [
+      { type: 'text', text: 'First I will read it.' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-1',
+          toolName: 'read_file',
+          args: { path: 'a.ts' },
+          result: 'contents',
+        },
+      },
+      { type: 'text', text: 'Now I will edit it.' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-2',
+          toolName: 'write_file',
+          args: { path: 'a.ts' },
+          result: 'ok',
+        },
+      },
+      { type: 'text', text: 'Done.' },
+    ]);
+    const state = createInitialTranscript({ messages: [message], threadId: 't' });
     const assistant = state.entries[0];
     if (assistant.kind !== 'message') throw new Error('expected assistant entry');
     // The part order must mirror content order, not bucket tools at the end.
@@ -135,15 +154,20 @@ describe('initial transcript (thread history rendering)', () => {
   });
 
   it('marks a tool as errored when its result is an error', () => {
-    const msg: AgentControllerMessage = {
-      id: 'a1',
-      role: 'assistant',
-      content: [
-        { type: 'tool_call', id: 'tc-9', name: 'shell', args: { cmd: 'nope' } },
-        { type: 'tool_result', id: 'tc-9', result: 'command not found', isError: true },
-      ],
-    } as unknown as AgentControllerMessage;
-    const state = createInitialTranscript({ messages: [msg], threadId: 't' });
+    const message = msg('a1', 'assistant', [
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'output-error',
+          toolCallId: 'tc-9',
+          toolName: 'shell',
+          args: { cmd: 'nope' },
+          result: 'command not found',
+          errorText: 'command not found',
+        },
+      },
+    ]);
+    const state = createInitialTranscript({ messages: [message], threadId: 't' });
     const assistant = state.entries[0];
     if (assistant.kind !== 'message') throw new Error('expected assistant entry');
     const [tool] = toolParts(assistant);
@@ -156,6 +180,6 @@ describe('initial transcript (thread history rendering)', () => {
     const state = createInitialTranscript({ messages: [], threadId: 'empty' });
     expect(state.entries).toHaveLength(0);
     expect(state.threadId).toBe('empty');
-    expect(state.running).toBe(false);
+    expect(state.pending).toBe(false);
   });
 });

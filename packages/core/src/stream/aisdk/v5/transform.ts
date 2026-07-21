@@ -9,6 +9,7 @@ import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@i
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
 import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
+import { isUrlString } from './compat/content';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
 /**
@@ -212,7 +213,8 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         from: ChunkFrom.AGENT,
         payload: {
           data: value.data,
-          base64: typeof value.data === 'string' ? value.data : undefined,
+          // URL-backed generated files flatten to URL strings, which are not base64.
+          base64: typeof value.data === 'string' && !isUrlString(value.data) ? value.data : undefined,
           mimeType: value.mediaType,
           ...(pm != null ? { providerMetadata: pm } : {}),
         },
@@ -363,9 +365,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 }
 
 export type OutputChunkType<OUTPUT = undefined> =
-  | TextStreamPart<ToolSet>
-  | ObjectStreamPart<Partial<OUTPUT>>
-  | undefined;
+  TextStreamPart<ToolSet> | ObjectStreamPart<Partial<OUTPUT>> | undefined;
 
 export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
   chunk,

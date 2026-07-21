@@ -100,12 +100,33 @@ function serializeEntry(entry: StepFlowEntry): SerializedStepFlowEntry {
             ? { fn: entry.opts.concurrency.toString() }
             : { concurrency: entry.opts.concurrency },
       };
-    case 'conditional':
-      throw new Error(`Conditional steps cannot be stored: requires the Phase-2 predicate DSL.`);
-    case 'loop':
-      throw new Error(
-        `Loop step "${getSingleStepEntryId(entry.step)}" cannot be stored: requires the Phase-2 predicate DSL.`,
-      );
+    case 'conditional': {
+      const predicates = (entry as any).predicates as Array<unknown> | undefined;
+      if (!predicates || predicates.some(p => !p || typeof p !== 'object')) {
+        throw new Error(
+          `Conditional (branch) step cannot be stored: closure predicates do not round-trip. Use the declarative form ({ predicate: {...} }) for each branch.`,
+        );
+      }
+      return {
+        type: 'conditional',
+        steps: entry.steps.map(s => serializeSingleEntry(s)),
+        predicates: predicates as any,
+      } as any;
+    }
+    case 'loop': {
+      const predicate = (entry as any).predicate as unknown | undefined;
+      if (!predicate || typeof predicate !== 'object') {
+        throw new Error(
+          `Loop step "${getSingleStepEntryId(entry.step)}" cannot be stored: closure predicates do not round-trip. Use the declarative form ({ predicate: {...} }).`,
+        );
+      }
+      return {
+        type: 'loop',
+        step: serializeSingleEntry(entry.step),
+        loopType: entry.loopType,
+        predicate: predicate as any,
+      } as any;
+    }
     default: {
       const _exhaustive: never = entry;
       throw new Error(`Unknown step entry type: ${JSON.stringify(_exhaustive)}`);
@@ -330,9 +351,33 @@ function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra
     case 'step':
       wf.then(resolveStepDescriptor(entry.step, mastra));
       return;
-    case 'conditional':
-    case 'loop':
-      throw new Error(`Cannot rehydrate ${entry.type} step: requires the Phase-2 predicate DSL.`);
+    case 'conditional': {
+      const predicates = (entry as any).predicates as Array<unknown> | undefined;
+      if (!predicates || predicates.length !== entry.steps.length) {
+        throw new Error(
+          `Cannot rehydrate conditional step: missing or mismatched predicates. Only declarative predicate branches round-trip.`,
+        );
+      }
+      const branches = entry.steps.map((s, i) => [{ predicate: predicates[i] as any }, resolveSingle(s, mastra)]);
+      wf.branch(branches);
+      return;
+    }
+    case 'loop': {
+      const predicate = (entry as any).predicate as unknown | undefined;
+      const loopType = (entry as any).loopType as 'dowhile' | 'dountil' | undefined;
+      if (!predicate || (loopType !== 'dowhile' && loopType !== 'dountil')) {
+        throw new Error(
+          `Cannot rehydrate loop step: missing declarative predicate or loopType. Only declarative predicate loops round-trip.`,
+        );
+      }
+      const inner = resolveSingle(entry.step as any, mastra);
+      if (loopType === 'dowhile') {
+        wf.dowhile(inner, { predicate: predicate as any });
+      } else {
+        wf.dountil(inner, { predicate: predicate as any });
+      }
+      return;
+    }
     default: {
       const _exhaustive: never = entry;
       throw new Error(`Unknown stored step type: ${JSON.stringify(_exhaustive)}`);

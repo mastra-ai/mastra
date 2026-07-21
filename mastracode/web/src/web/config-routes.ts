@@ -18,6 +18,21 @@ import {
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 
+import { isOrganizationAdmin } from './auth.js';
+import {
+  getAuthProviderId,
+  listTenantCredentialsForRequest,
+  resolveCredentialContext,
+  WEB_OAUTH_FLOW_KINDS,
+} from './provider-credentials.js';
+import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
+import type { CredentialRecord, LoginSessionKind } from './storage/domains/credentials/base';
+
+/** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
+function loose(c: unknown): import('hono').Context {
+  return c as import('hono').Context;
+}
+
 /**
  * Server-side configuration routes for the web app.
  *
@@ -29,21 +44,23 @@ import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings
  * Keys are never returned to the client; only their presence and source.
  */
 
+/**
+ * Where a provider's active credential comes from, as seen by the caller.
+ * Local mode reports `oauth`/`stored` (server-global `auth.json`); tenant mode
+ * reports the scoped variants (`oauth-user`/`stored-user`/`stored-org`).
+ */
+export type ProviderCredentialSource =
+  'oauth' | 'stored' | 'env' | 'none' | 'oauth-user' | 'stored-user' | 'stored-org';
+
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {
   provider: string;
   /** Env var the provider's key is read from, if any. */
   envVar?: string;
   /** Where the active credential comes from. */
-  source: 'oauth' | 'stored' | 'env' | 'none';
-}
-
-/**
- * OAuth credentials are stored under the auth provider id, which differs from
- * the catalog provider id for OpenAI (stored as `openai-codex`).
- */
-function getAuthProviderId(provider: string): string {
-  return provider === 'openai' ? 'openai-codex' : provider;
+  source: ProviderCredentialSource;
+  /** Web OAuth sign-in capability, when the provider supports it. */
+  oauth?: { supported: true; modes: LoginSessionKind[] };
 }
 
 /** Minimal session surface a pack activation touches. */
@@ -98,16 +115,35 @@ interface ModelCatalog {
  * Build a deduplicated, sorted list of providers from the model catalog,
  * annotated with where each provider's credential currently comes from.
  * Mirrors the TUI's `/api-keys` provider list.
+ *
+ * When `tenantCredentials` is given (deployed mode), sources reflect the
+ * *caller's* tenant rows with user > org precedence and the server-global
+ * `authStorage` is ignored; otherwise the local `auth.json` view is reported.
  */
-export async function listProviders(controller: ModelCatalog, authStorage?: AuthStorage): Promise<ProviderInfo[]> {
+export async function listProviders(
+  controller: ModelCatalog,
+  authStorage?: AuthStorage,
+  tenantCredentials?: CredentialRecord[],
+): Promise<ProviderInfo[]> {
   const models = await controller.listAvailableModels();
   const seen = new Map<string, ProviderInfo>();
 
   for (const model of models) {
     if (seen.has(model.provider)) continue;
 
+    const authProviderId = getAuthProviderId(model.provider);
     let source: ProviderInfo['source'] = 'none';
-    if (authStorage?.isLoggedIn(getAuthProviderId(model.provider))) {
+    if (tenantCredentials) {
+      const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
+      const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
+      if (userRec?.credential.type === 'oauth') {
+        source = 'oauth-user';
+      } else if (userRec?.credential.type === 'api_key') {
+        source = 'stored-user';
+      } else if (orgRec?.credential.type === 'api_key') {
+        source = 'stored-org';
+      }
+    } else if (authStorage?.isLoggedIn(authProviderId)) {
       source = 'oauth';
     } else if (authStorage?.hasStoredApiKey(model.provider)) {
       source = 'stored';
@@ -117,7 +153,13 @@ export async function listProviders(controller: ModelCatalog, authStorage?: Auth
       source = 'env';
     }
 
-    seen.set(model.provider, { provider: model.provider, envVar: model.apiKeyEnvVar, source });
+    const flowKind = WEB_OAUTH_FLOW_KINDS[model.provider];
+    seen.set(model.provider, {
+      provider: model.provider,
+      envVar: model.apiKeyEnvVar,
+      source,
+      ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
+    });
   }
 
   return Array.from(seen.values()).sort((a, b) => a.provider.localeCompare(b.provider));
@@ -348,7 +390,12 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       requiresAuth: false,
       handler: async c => {
         try {
-          return c.json({ providers: await listProviders(controller, authStorage) });
+          // Tenant mode lists the caller's rows and never exposes the
+          // server-global auth.json; local mode is unchanged.
+          const tenantCredentials = await listTenantCredentialsForRequest(loose(c));
+          return c.json({
+            providers: await listProviders(controller, tenantCredentials ? undefined : authStorage, tenantCredentials),
+          });
         } catch (error) {
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
         }
@@ -359,9 +406,11 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'PUT',
       requiresAuth: false,
       handler: async c => {
-        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const ctx = await resolveCredentialContext(loose(c));
+        if ('response' in ctx) return ctx.response;
+
         const provider = c.req.param('provider');
-        let body: { key?: unknown; envVar?: unknown };
+        let body: { key?: unknown; envVar?: unknown; scope?: unknown };
         try {
           body = await c.req.json();
         } catch {
@@ -370,7 +419,23 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
         const key = typeof body.key === 'string' ? body.key.trim() : '';
         if (!key) return c.json({ error: 'Missing required field: key' }, 400);
         const envVar = typeof body.envVar === 'string' ? body.envVar : undefined;
+        const scope = body.scope === 'org' ? 'org' : 'user';
         try {
+          if (ctx.mode === 'tenant') {
+            if (scope === 'org' && !(await isOrganizationAdmin(loose(c), ctx.orgId))) {
+              return c.json({ error: 'organization_admin_required' }, 403);
+            }
+            const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
+            // envVar is intentionally ignored: tenant credentials are resolved
+            // per-request, never written into process.env.
+            await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
+            invalidateTenantCredentialSnapshots(tenant);
+            const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
+            const providers = await listProviders(controller, undefined, records);
+            return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
+          }
+          if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+          // Local mode is single-user: scope is meaningless and ignored.
           authStorage.setStoredApiKey(provider, key, envVar);
           const providers = await listProviders(controller, authStorage);
           return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
@@ -384,9 +449,24 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const ctx = await resolveCredentialContext(loose(c));
+        if ('response' in ctx) return ctx.response;
+
         const provider = c.req.param('provider');
+        const scope = c.req.query('scope') === 'org' ? 'org' : 'user';
         try {
+          if (ctx.mode === 'tenant') {
+            if (scope === 'org' && !(await isOrganizationAdmin(loose(c), ctx.orgId))) {
+              return c.json({ error: 'organization_admin_required' }, 403);
+            }
+            const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
+            await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
+            invalidateTenantCredentialSnapshots(tenant);
+            const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
+            const providers = await listProviders(controller, undefined, records);
+            return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
+          }
+          if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
           authStorage.remove(`apikey:${provider}`);
           const providers = await listProviders(controller, authStorage);
           return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });

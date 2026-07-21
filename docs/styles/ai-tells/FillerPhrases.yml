@@ -1,0 +1,78 @@
+---
+extends: existence
+message: "AI filler: '%s'. Delete this phrase. It adds no meaning."
+level: error
+ignorecase: true
+tokens:
+  - a wide range of
+  - a broad range of
+  - a variety of
+  - a myriad of
+  - a plethora of
+  - a wealth of
+  - an abundance of
+  - a multitude of
+  - countless
+  - numerous
+  - innumerable
+  - in order to
+  - for the purpose of
+  - with the aim of
+  - with a view to
+  - so as to
+  - serves to
+  - tends to
+  - has the potential to
+  - has the ability to
+  - is capable of
+  - is able to
+  - due to the fact that
+  - owing to the fact that
+  - in light of the fact that
+  - given the fact that
+  - despite the fact that
+  - regardless of the fact that
+  - the fact that
+  - it is clear that
+  - it is evident that
+  - it is apparent that
+  - it is obvious that
+  - it can be seen that
+  - it can be observed that
+
+  # Performative sincerity markers
+  - and honestly
+  - and honestly,
+  - honestly,
+  - honestly?
+  - to be honest,
+  - to be honest?
+  - and frankly
+  - and frankly,
+  - frankly,
+  - frankly?
+  - and truthfully
+  - truthfully,
+  - if i'm being honest
+  - if i'm being frank
+  - to be frank,
+  - to tell you the truth
+  - the truth is,
+  - in all honesty
+  - in all honesty,
+  - quite honestly
+  - quite frankly
+  - i'll be honest
+  - i will be honest
+  - to be perfectly honest
+  - to be completely honest
+  - to be totally honest
+  - to be brutally honest
+  - to be 100% honest
+  - the honest truth
+  - the honest answer
+  - the honest take
+  - honest answer
+  - honest take
+  - my honest take
+  - my honest opinion

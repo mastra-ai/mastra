@@ -15,6 +15,39 @@ const stepOptionsSchema = z
   })
   .optional();
 
+// ----------------------------------------------------------------------------
+// Predicate DSL — declarative condition for `conditional` / `loop` entries.
+// Mirrors `Predicate` in `@mastra/core/workflows/predicate`; duplicated
+// locally for the same peer-floor reason as the graph schema above.
+// ----------------------------------------------------------------------------
+const literalScalar = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const pathOrLiteral: z.ZodType = z.union([
+  z.object({ path: z.string().min(1) }).strict(),
+  z.object({ literal: literalScalar }).strict(),
+]);
+const predicateSchema: z.ZodType = z.lazy(() =>
+  z.union([
+    z
+      .object({
+        op: z.enum(['eq', 'ne', 'lt', 'lte', 'gt', 'gte']),
+        left: pathOrLiteral,
+        right: pathOrLiteral,
+      })
+      .strict(),
+    z
+      .object({
+        op: z.enum(['in', 'notIn']),
+        value: pathOrLiteral,
+        set: z.array(literalScalar).min(1),
+      })
+      .strict(),
+    z.object({ op: z.enum(['exists', 'notExists']), path: z.string().min(1) }).strict(),
+    z.object({ op: z.enum(['truthy', 'falsy']), value: pathOrLiteral }).strict(),
+    z.object({ op: z.enum(['and', 'or']), args: z.array(predicateSchema).min(1) }).strict(),
+    z.object({ op: z.literal('not'), arg: predicateSchema }).strict(),
+  ]),
+);
+
 const agentEntrySchema = z.object({
   type: z.literal('agent'),
   id: z.string(),
@@ -62,6 +95,22 @@ const graphEntrySchema = z.discriminatedUnion('type', [
     type: z.literal('sleepUntil'),
     id: z.string(),
     date: z.string(),
+  }),
+  z.object({
+    // Declarative-only conditional. Inbound stored workflows must ship a
+    // `predicates` array aligned with `steps`; closure-based branches are not
+    // accepted over the wire (they'd be arbitrary JS strings we can't
+    // safely rehydrate).
+    type: z.literal('conditional'),
+    steps: z.array(singleStepEntrySchema),
+    predicates: z.array(predicateSchema),
+  }),
+  z.object({
+    // Declarative-only loop. Same rationale as `conditional`.
+    type: z.literal('loop'),
+    step: singleStepEntrySchema,
+    loopType: z.enum(['dowhile', 'dountil']),
+    predicate: predicateSchema,
   }),
 ]);
 

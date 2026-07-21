@@ -54,5 +54,31 @@
     "meta-llama-3-3-70b-instruct",
     "qwen3-next-80b-a3b-instruct",
     "qwen35-122b-a10b"
+  ],
+  "structuredOutput": [
+    "gemini-2-5-flash",
+    "gemini-2-5-pro",
+    "gemini-3-1-flash-lite",
+    "gemini-3-1-pro",
+    "gemini-3-5-flash",
+    "gemini-3-flash",
+    "gemini-3-pro",
+    "gemma-3-12b",
+    "gpt-5",
+    "gpt-5-1",
+    "gpt-5-1-codex-max",
+    "gpt-5-1-codex-mini",
+    "gpt-5-2",
+    "gpt-5-2-codex",
+    "gpt-5-3-codex",
+    "gpt-5-4",
+    "gpt-5-4-mini",
+    "gpt-5-4-nano",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-oss-120b",
+    "gpt-oss-20b",
+    "meta-llama-3-1-8b-instruct",
+    "qwen35-122b-a10b"
   ]
 }

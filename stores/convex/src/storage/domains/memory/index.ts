@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -38,14 +36,8 @@ import type {
 
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
+import { TABLE_OBSERVATIONAL_MEMORY } from '../../types';
 import type { SerializedOMChunk, SerializedOMCurrentRecord } from '../../types';
-
-/**
- * Local constant for the observational memory table name.
- * Defined locally to avoid a static import that crashes on older @mastra/core
- * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
- */
-const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 
 type StoredMessage = {
   id: string;
@@ -896,7 +888,7 @@ export class MemoryConvex extends MemoryStorage {
 
   async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     const lookupKey = this.getOMKey(threadId, resourceId);
-    const doc = await this.#db.omGetLatest<StoredOMRecord>(TABLE_OBSERVATIONAL_MEMORY, lookupKey);
+    const doc = await this.#db.omGetLatest<StoredOMRecord>(lookupKey);
     return doc ? parseStoredOMRecord(doc) : null;
   }
 
@@ -907,7 +899,7 @@ export class MemoryConvex extends MemoryStorage {
     options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     const lookupKey = this.getOMKey(threadId, resourceId);
-    const docs = await this.#db.omGetHistory<StoredOMRecord>(TABLE_OBSERVATIONAL_MEMORY, {
+    const docs = await this.#db.omGetHistory<StoredOMRecord>({
       lookupKey,
       limit,
       from: options?.from ? options.from.toISOString() : undefined,
@@ -1025,7 +1017,7 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
-    await this.#db.omUpdateActive(TABLE_OBSERVATIONAL_MEMORY, {
+    await this.#db.omUpdateActive({
       id: input.id,
       observations: input.observations,
       tokenCount: input.tokenCount,
@@ -1052,7 +1044,7 @@ export class MemoryConvex extends MemoryStorage {
       extractionFailures: input.chunk.extractionFailures,
     };
 
-    await this.#db.omAppendBufferedChunk(TABLE_OBSERVATIONAL_MEMORY, {
+    await this.#db.omAppendBufferedChunk({
       id: input.id,
       chunk,
       lastBufferedAtTime: input.lastBufferedAtTime ? toISO(input.lastBufferedAtTime) : undefined,
@@ -1061,7 +1053,7 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
-    return this.#db.omSwapBuffered<SwapBufferedToActiveResult>(TABLE_OBSERVATIONAL_MEMORY, {
+    return this.#db.omSwapBuffered<SwapBufferedToActiveResult>({
       id: input.id,
       activationRatio: input.activationRatio,
       messageTokensThreshold: input.messageTokensThreshold,
@@ -1140,7 +1132,7 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
-    await this.#db.omUpdateBufferedReflection(TABLE_OBSERVATIONAL_MEMORY, {
+    await this.#db.omUpdateBufferedReflection({
       id: input.id,
       reflection: input.reflection,
       tokenCount: input.tokenCount,
@@ -1166,7 +1158,7 @@ export class MemoryConvex extends MemoryStorage {
       generationCount: currentRecord.generationCount,
     };
 
-    const doc = await this.#db.omSwapBufferedReflection<StoredOMRecord>(TABLE_OBSERVATIONAL_MEMORY, {
+    const doc = await this.#db.omSwapBufferedReflection<StoredOMRecord>({
       currentRecord: serializedCurrentRecord,
       newId: crypto.randomUUID(),
       tokenCount: input.tokenCount,
@@ -1257,7 +1249,7 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
-    await this.#db.omUpdateConfig(TABLE_OBSERVATIONAL_MEMORY, {
+    await this.#db.omUpdateConfig({
       id: input.id,
       config: JSON.stringify(input.config ?? {}),
       updatedAt: new Date().toISOString(),

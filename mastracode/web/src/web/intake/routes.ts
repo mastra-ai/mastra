@@ -11,6 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import { getIntakeConfig, parseIntakeConfig, saveIntakeConfig } from './store';
 
@@ -64,6 +65,14 @@ export function buildIntakeRoutes(): ApiRoute[] {
         if (!config) return c.json({ error: 'invalid_config' }, 400);
 
         await saveIntakeConfig(tenant.orgId, tenant.userId, config);
+        await emitAudit(loose(c), {
+          action: 'factory.intake.config_updated',
+          targets: [{ type: 'intake_config', id: tenant.orgId }],
+          metadata: {
+            github: { enabled: config.github.enabled, repositories: config.github.repositoryIds?.length ?? null },
+            linear: { enabled: config.linear.enabled, projects: config.linear.projectIds?.length ?? null },
+          },
+        });
         return c.json({ config });
       },
     }),

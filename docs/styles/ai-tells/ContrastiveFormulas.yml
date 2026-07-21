@@ -1,0 +1,192 @@
+---
+extends: existence
+message: "AI contrast: '%s'. State the positive claim directly without the 'not X, but Y' formula."
+level: error
+tokens:
+  # "It's not just X; it's Y" patterns
+  - "[Ii]t'?s not just [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Ii]t isn'?t just [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Ii]t'?s not merely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Ii]t'?s not simply [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Ii]t'?s not only [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Ii]t'?s not purely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Ii]t'?s not solely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Ii]t'?s not entirely [^;,—:]+[;,—:] it'?s [^.!?]+"
+
+  # "It's not about X; it's about Y" patterns
+  - "[Ii]t'?s not about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Ii]t isn'?t about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Ii]t'?s not really about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Ii]t'?s not just about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Ii]t'?s not merely about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Ii]t'?s not simply about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Ii]t'?s not only about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Ii]t'?s not purely about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Ii]t'?s not solely about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Ii]t'?s not entirely about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  # Period-separated versions (two sentences)
+  - "[Ii]t'?s not about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Ii]t isn'?t about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Ii]t'?s not really about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Ii]t'?s not just about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Ii]t'?s not merely about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Ii]t'?s not purely about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Ii]t'?s not solely about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Ii]t'?s not entirely about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+
+  # "This isn't X; it's Y" patterns
+  - "[Tt]his isn'?t just [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his isn'?t merely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his isn'?t simply [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his isn'?t only [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his isn'?t purely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his isn'?t solely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his isn'?t entirely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his is not just [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his is not merely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his is not simply [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his is not only [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his is not purely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his is not solely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his is not entirely [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his isn'?t merely about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Tt]his isn'?t just about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Tt]his isn'?t simply about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Tt]his isn'?t only about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Tt]his isn'?t purely about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Tt]his isn'?t solely about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Tt]his isn'?t entirely about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  - "[Tt]his isn'?t about [^;,—:]+[;,—:] it'?s about [^.!?]+"
+  # Period-separated versions (two sentences)
+  - "[Tt]his isn'?t about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Tt]his isn'?t merely about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Tt]his isn'?t just about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Tt]his isn'?t simply about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Tt]his isn'?t only about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Tt]his isn'?t purely about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Tt]his isn'?t solely about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Tt]his isn'?t entirely about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+  - "[Tt]his is not about [^.!?]+\\. [Ii]t'?s about [^.!?]+"
+
+  # "It's more than X; it's Y" patterns
+  - "[Ii]t'?s more than [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Ii]t'?s more than just [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his is more than [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]his is more than just [^;,—:]+[;,—:] it'?s [^.!?]+"
+
+  # "It's less about X and more about Y" patterns
+  - "[Ii]t'?s less about [^;,—:]+ and more about [^.!?]+"
+  - "[Ii]t'?s less about [^;,—:]+, more about [^.!?]+"
+  - '[Tt]his is less about [^;,—:]+ and more about [^.!?]+'
+
+  # "X isn't the point; Y is" patterns
+  - "[^.!?]+ isn'?t the point[;,—:] [^.!?]+ is"
+  - '[^.!?]+ is not the point[;,—:] [^.!?]+ is'
+
+  # "The real X isn't Y; it's Z" patterns
+  - "[Tt]he real [^;,—:]+ isn'?t [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]he true [^;,—:]+ isn'?t [^;,—:]+[;,—:] it'?s [^.!?]+"
+
+  # "What matters isn't X; it's Y" patterns
+  - "[Ww]hat matters isn'?t [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Ww]hat matters is not [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Ww]hat'?s important isn'?t [^;,—:]+[;,—:] it'?s [^.!?]+"
+
+  # "The question isn't X; it's Y" patterns
+  - "[Tt]he question isn'?t [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]he question is not [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]he issue isn'?t [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]he problem isn'?t [^;,—:]+[;,—:] it'?s [^.!?]+"
+  - "[Tt]he challenge isn'?t [^;,—:]+[;,—:] it'?s [^.!?]+"
+
+  # "Yes, X, but Y" dismissive acknowledgment
+  - '[Yy]es, [^,]+, but the real [^.!?]+'
+  - '[Ss]ure, [^,]+, but what really [^.!?]+'
+
+  # "It's not whether X; it's how/why/when Y"
+  - "[Ii]t'?s not whether [^;,—:]+[;,—:] it'?s (?:how|why|when|what) [^.!?]+"
+  - "[Ii]t'?s not if [^;,—:]+[;,—:] it'?s (?:how|why|when|what) [^.!?]+"
+
+  # "[Noun] isn't X. It's Y." pattern (any subject)
+  - "[A-Z][a-z]+ isn'?t [^.!?]+\\. [Ii]t'?s [^.!?]+"
+  - "[A-Z][a-z]+ is not [^.!?]+\\. [Ii]t'?s [^.!?]+"
+
+  # "a Y, not a Z" bare appositive: the categorical assertion with
+  # preemptive correction, verb optional ("a refinement, not a rivalry").
+  # Verbless, so it also fires in headings, where the clause-shaped tokens
+  # above never match. Subsumes the older single-word-subject
+  # "X is a Y, not a Z" token.
+  - "\\b[Aa]n? [^,.;:!?\\n]{2,}, [Nn]ot [Aa]n? [^.!?;:,\\n]+"
+  - '[A-Z][a-z]+ are [^,]+, not [^.]+'
+
+  # "Not only X but also Y" patterns
+  - '[Nn]ot only [^,;—:]+,? but (?:also )?[^.!?]+'
+
+  # "Not because X, but because Y" causal variant
+  - '[Nn]ot because [^,;—:]+,? but because [^.!?]+'
+
+  # === Plural subject negation-correction ===
+
+  # "These aren't X. They're Y." — period-separated
+  - "[Tt]hese aren'?t [^.!?]+\\. [Tt]hey'?re [^.!?]+"
+  - "[Tt]hose aren'?t [^.!?]+\\. [Tt]hey'?re [^.!?]+"
+  - "[Tt]hese are not [^.!?]+\\. [Tt]hey'?re [^.!?]+"
+  - "[Tt]hose are not [^.!?]+\\. [Tt]hey'?re [^.!?]+"
+  - "[Tt]hese are not [^.!?]+\\. [Tt]hey are [^.!?]+"
+  - "[Tt]hose are not [^.!?]+\\. [Tt]hey are [^.!?]+"
+
+  # With modifiers
+  - "[Tt]hese aren'?t just [^.!?]+\\. [Tt]hey'?re [^.!?]+"
+  - "[Tt]hese aren'?t merely [^.!?]+\\. [Tt]hey'?re [^.!?]+"
+  - "[Tt]hese aren'?t simply [^.!?]+\\. [Tt]hey'?re [^.!?]+"
+
+  # Semicolon/em-dash-joined
+  - "[Tt]hese aren'?t [^;,—:]+[;,—:] they'?re [^.!?]+"
+  - "[Tt]hose aren'?t [^;,—:]+[;,—:] they'?re [^.!?]+"
+  - "[Tt]hese are not [^;,—:]+[;,—:] they'?re [^.!?]+"
+  - "[Tt]hose are not [^;,—:]+[;,—:] they'?re [^.!?]+"
+
+  # Generic "[Noun] aren't X. They're Y." catch-all
+  - "[A-Z][a-z]+ aren'?t [^.!?]+\\. [Tt]hey'?re [^.!?]+"
+  - "[A-Z][a-z]+ are not [^.!?]+\\. [Tt]hey'?re [^.!?]+"
+  - "[A-Z][a-z]+ are not [^.!?]+\\. [Tt]hey are [^.!?]+"
+
+  # === "Doesn't mean X. It means Y." ===
+
+  # Period-separated
+  - "[Tt]his doesn'?t mean [^.!?]+\\. [Ii]t means [^.!?]+"
+  - "[Tt]hat doesn'?t mean [^.!?]+\\. [Ii]t means [^.!?]+"
+  - "[Tt]his does not mean [^.!?]+\\. [Ii]t means [^.!?]+"
+  - "[Tt]hat does not mean [^.!?]+\\. [Ii]t means [^.!?]+"
+
+  # Semicolon/em-dash-joined
+  - "[Tt]his doesn'?t mean [^;,—:]+[;,—:] it means [^.!?]+"
+  - "[Tt]hat doesn'?t mean [^;,—:]+[;,—:] it means [^.!?]+"
+
+  # Generic "[Noun] doesn't mean X. It means Y."
+  - "[A-Z][a-z]+ doesn'?t mean [^.!?]+\\. [Ii]t means [^.!?]+"
+  - "[A-Z][a-z]+ does not mean [^.!?]+\\. [Ii]t means [^.!?]+"
+
+  # === Multi-word subject "isn't X. It's Y." ===
+  # Catches "The colophon isn't a disclaimer. It's a feature."
+  # The single-word "[Noun] isn't X. It's Y." patterns above only match
+  # single capitalized-word subjects.
+
+  # "The [noun] isn't X. It's Y."
+  - "[Tt]he [a-z]+ isn'?t [^.!?]+\\. [Ii]t'?s [^.!?]+"
+  - "[Tt]he [a-z]+ is not [^.!?]+\\. [Ii]t'?s [^.!?]+"
+  - "[Tt]he [a-z]+ isn'?t [^.!?]+\\. [Ii]t is [^.!?]+"
+
+  # "A/An [noun] isn't X. It's Y."
+  - "[Aa]n? [a-z]+ isn'?t [^.!?]+\\. [Ii]t'?s [^.!?]+"
+  - "[Aa]n? [a-z]+ is not [^.!?]+\\. [Ii]t'?s [^.!?]+"
+
+  # "Our/Your/Their [noun] isn't X. It's Y."
+  - "(?:Our|Your|Their|Its) [a-z]+ isn'?t [^.!?]+\\. [Ii]t'?s [^.!?]+"
+  - "(?:Our|Your|Their|Its) [a-z]+ is not [^.!?]+\\. [Ii]t'?s [^.!?]+"
+
+  # Multi-word/acronym subjects — catch-all with "isn't...It's" anchor
+  # "WCAG 2.1 AA isn't a checkbox. It's a constraint."
+  - "[^.!?]+ isn'?t [^.!?]+\\. [Ii]t'?s [^.!?]+"
+  - "[^.!?]+ is not [^.!?]+\\. [Ii]t'?s [^.!?]+"
+  - "[^.!?]+ isn'?t [^.!?]+\\. [Ii]t is [^.!?]+"

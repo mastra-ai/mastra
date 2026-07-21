@@ -163,6 +163,7 @@ export type { VNextPostgresObservabilityConfig };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
+export { PgFactoryStorage, hashAdvisoryLockKey, type PgFactoryStorageConfig } from './factory-storage';
 
 /**
  * PostgreSQL storage adapter for Mastra.
@@ -264,6 +265,27 @@ export class PostgresStore extends MastraCompositeStore {
   }
 
   private createPool(config: PostgresStoreConfig): Pool {
+    const pool = this.#buildPool(config);
+
+    // pg emits 'error' on the pool when an idle client's connection drops
+    // (backend restart, network partition, cloud proxies reaping idle
+    // sockets). Without a listener Node escalates the event to an
+    // uncaughtException and crashes the process. Only pools this store
+    // creates get the listener — a user-provided pool keeps the user's own
+    // listeners, mirroring close().
+    pool.on('error', err => {
+      this.logger?.warn?.(
+        'PostgresStore: idle pool client error (pool discards the client and reconnects on next checkout)',
+        {
+          err: err instanceof Error ? err.message : err,
+        },
+      );
+    });
+
+    return pool;
+  }
+
+  #buildPool(config: PostgresStoreConfig): Pool {
     if (isConnectionStringConfig(config)) {
       return createConnectionStringPool(config);
     }
@@ -513,6 +535,20 @@ export class PostgresStoreVNext extends PostgresStore {
     const observabilityClient = built.client;
     this.#observabilityPool = built.pool;
     this.#ownsObservabilityPool = built.owned;
+
+    // Same crash-prevention as the primary pool in createPool(): without an
+    // 'error' listener, an idle client dropped by the backend escalates to an
+    // uncaughtException. Only for pools this store created.
+    if (built.owned) {
+      built.pool.on('error', err => {
+        this.logger?.warn?.(
+          'PostgresStoreVNext: idle observability pool client error (pool discards the client and reconnects on next checkout)',
+          {
+            err: err instanceof Error ? err.message : err,
+          },
+        );
+      });
+    }
 
     // NOTE: `skipDefaultIndexes` / `indexes` from the primary config are
     // intentionally NOT forwarded. The vNext observability domain manages

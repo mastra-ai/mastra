@@ -1,4 +1,5 @@
 {
-  "attachment": ["gemma-3-27b", "whisper-large-v3"],
-  "temperature": ["gemma-3-27b", "gpt-oss-120b", "qwen3-coder-30b-a3b", "qwen3-embedding-4b", "whisper-large-v3"]
+  "attachment": ["kimi-k2.6", "voxtral-mini-3b", "whisper-large-v3"],
+  "temperature": ["gpt-oss-120b", "kimi-k2.6", "qwen3-embedding-4b", "voxtral-mini-3b", "whisper-large-v3"],
+  "structuredOutput": ["gpt-oss-120b", "kimi-k2.6"]
 }

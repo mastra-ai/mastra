@@ -15,10 +15,10 @@ vi.mock('../../services/github', async importOriginal => {
   const actual = await importOriginal<typeof import('../../services/github')>();
   return { ...actual, connectGithub: connectGithubMock, manageGithubConnection: manageGithubConnectionMock };
 });
-import { useProjectsQuery } from '../../hooks/useProjects';
+import { useFactoriesQuery } from '../../../../../../shared/hooks/useFactories';
 import type { GithubRepo, GithubStatus } from '../../services/github';
-import { loadProjects, saveProjects } from '../../services/projects';
-import type { Project } from '../../services/projects';
+import { loadFactories, saveFactories } from '../../services/factories';
+import type { Factory } from '../../services/factories';
 import { GithubConnectModal } from '../GithubConnectModal';
 
 const ORIGIN = TEST_BASE_URL;
@@ -39,27 +39,25 @@ const repo: GithubRepo = {
   installationId: 42,
 };
 
-const createdProject: Project = {
+const createdRepositoryPayload = {
   id: 'github-project-1',
   name: 'mastra-ai/mastra',
-  source: 'github',
+  source: 'github' as const,
   githubProjectId: 'github-project-1',
-  sandboxWorkdir: '/sandbox/mastra',
-  gitBranch: 'main',
   createdAt: 1,
 };
 
 function renderModal(
-  onProjectCreated = vi.fn<(project: Project) => void>(),
+  onFactoryCreated = vi.fn<(project: Factory) => void>(),
   client?: Parameters<typeof renderWithProviders>[1],
   status: GithubStatus = connectedStatus,
 ) {
   return {
-    onProjectCreated,
+    onFactoryCreated,
     ...renderWithProviders(
       createElement(GithubConnectModal, {
         status,
-        onProjectCreated,
+        onFactoryCreated,
         onClose: vi.fn(),
       }),
       client,
@@ -114,35 +112,45 @@ describe('GithubConnectModal', () => {
   });
 
   it('creates a GitHub project, persists it, notifies the caller, and refreshes projects query consumers', async () => {
-    saveProjects([]);
+    saveFactories([]);
     server.use(
       http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-      http.post(`${ORIGIN}/web/github/projects`, () => HttpResponse.json({ project: createdProject })),
+      http.post(`${ORIGIN}/web/github/repositories`, () => HttpResponse.json({ repository: createdRepositoryPayload })),
     );
-    const projectsHook = renderHookWithProviders(() => useProjectsQuery());
-    const { onProjectCreated } = renderModal(undefined, projectsHook.client);
+    const projectsHook = renderHookWithProviders(() => useFactoriesQuery());
+    const { onFactoryCreated } = renderModal(undefined, projectsHook.client);
 
     await userEvent.click(await screen.findByRole('button', { name: /mastra-ai\/mastra/i }));
 
-    await waitFor(() => expect(loadProjects()).toHaveLength(1));
-    expect(loadProjects()[0]).toMatchObject({ id: createdProject.id, source: 'github' });
-    expect(onProjectCreated).toHaveBeenCalledWith(expect.objectContaining({ id: createdProject.id }));
+    await waitFor(() => expect(loadFactories()).toHaveLength(1));
+    const stored = loadFactories()[0]!;
+    expect(stored).toMatchObject({
+      name: 'mastra-ai/mastra',
+      binding: { kind: 'github', githubProjectId: 'github-project-1' },
+    });
+    expect(stored.id).not.toBe('github-project-1');
+    expect(onFactoryCreated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: stored.id,
+        binding: expect.objectContaining({ kind: 'github', githubProjectId: 'github-project-1' }),
+      }),
+    );
     await waitFor(() => expect(projectsHook.result.current.data).toHaveLength(1));
   });
 
   it('shows create errors and does not persist the repo', async () => {
-    saveProjects([]);
+    saveFactories([]);
     server.use(
       http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-      http.post(`${ORIGIN}/web/github/projects`, () => HttpResponse.json({ error: 'failed' }, { status: 500 })),
+      http.post(`${ORIGIN}/web/github/repositories`, () => HttpResponse.json({ error: 'failed' }, { status: 500 })),
     );
 
     renderModal();
 
     await userEvent.click(await screen.findByRole('button', { name: /mastra-ai\/mastra/i }));
 
-    expect(await screen.findByText('Failed to create project (500)')).toBeInTheDocument();
-    expect(loadProjects()).toEqual([]);
+    expect(await screen.findByText('Failed to create connected repository (500)')).toBeInTheDocument();
+    expect(loadFactories()).toEqual([]);
   });
 
   it('offers a manage-connection button when connected that opens the GitHub install page', async () => {

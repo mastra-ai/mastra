@@ -43,7 +43,10 @@ jobs:
 
       - name: Install registry setup dependencies
         working-directory: ./e2e-tests/_local-registry-setup
-        run: pnpm install --ignore-workspace --frozen-lockfile
+        # No --ignore-workspace: the directory has its own pnpm-workspace.yaml
+        # (its workspace root), which also holds the security overrides that
+        # must be read for the lockfile config to match.
+        run: pnpm install --frozen-lockfile
 
       - name: Publish packages to local registry storage
         working-directory: ./e2e-tests/_local-registry-setup
@@ -102,6 +105,52 @@ jobs:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          MASTRA_E2E_REGISTRY_PORT: '4873'
+
+  e2e-softwarefactory:
+    needs: publish-e2e-registry
+    name: E2E softwarefactory template
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          ref: ${{ inputs.head_sha }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Install and build the CLI
+        run: |
+          pnpm install --frozen-lockfile --filter ./mastracode/mastra-factory...
+          pnpm --filter ./mastracode/mastra-factory build
+
+      - name: Install e2e test dependencies
+        working-directory: ./e2e-tests/softwarefactory
+        run: pnpm install
+
+      - name: Download E2E registry artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
+      - name: Test
+        working-directory: ./e2e-tests/softwarefactory
+        run: pnpm test
+        env:
+          MASTRA_TELEMETRY_DISABLED: '1'
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_TAG: softwarefactory-e2e-test
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-no-bundling:

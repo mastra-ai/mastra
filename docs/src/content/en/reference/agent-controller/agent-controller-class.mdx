@@ -31,7 +31,7 @@ import { z } from 'zod'
 const agentController = new AgentController({
   id: 'my-coding-agent',
   agent: myAgent,
-  storage: new LibSQLStore({ url: 'file:./data.db' }),
+  storage: new LibSQLStore({ id: 'agent-storage', url: 'file:./data.db' }),
   stateSchema: z.object({
     currentModelId: z.string().optional(),
   }),

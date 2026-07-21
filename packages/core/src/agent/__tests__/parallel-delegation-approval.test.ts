@@ -186,11 +186,6 @@ function buildSupervisorAgent(storage: InMemoryStore = new InMemoryStore()) {
   return mastra.getAgent('supervisor');
 }
 
-// NOTE: default engine only. The evented engine (MASTRA_EVENTED_EXECUTION) has a
-// separate pre-existing run-lifecycle bug with parallel delegations: resuming the
-// first suspended iteration completes the outer run and deletes its snapshot,
-// permanently orphaning the sibling. Its foreach aggregation does not persist
-// per-iteration suspend payloads, so the pending check cannot see the parked sibling.
 describe('parallel sub-agent delegation (suspend/resume)', () => {
   it('emits two distinct approval requests, one per order', async () => {
     processedOrders.length = 0;

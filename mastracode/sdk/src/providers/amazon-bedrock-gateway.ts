@@ -7,6 +7,79 @@ import type { GatewayAuthRequest, GatewayAuthResult, GatewayLanguageModel, Provi
 import { getBedrockModelCatalog } from './amazon-bedrock.js';
 
 type ModelRequestHeaders = Record<string, string>;
+type BedrockModel = ReturnType<ReturnType<typeof createAmazonBedrock>>;
+type BedrockPrompt = Parameters<BedrockModel['doGenerate']>[0]['prompt'];
+
+const CACHEABLE_BEDROCK_MODEL_IDS = [
+  'anthropic.claude-3-5-haiku-',
+  'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  'anthropic.claude-3-7-sonnet-',
+  'anthropic.claude-fable-5',
+  'anthropic.claude-haiku-4-5-',
+  'anthropic.claude-opus-4-',
+  'anthropic.claude-sonnet-4-',
+  'anthropic.claude-sonnet-5',
+];
+
+export function supportsBedrockPromptCaching(modelId: string): boolean {
+  return CACHEABLE_BEDROCK_MODEL_IDS.some(cacheableModelId => modelId.includes(cacheableModelId));
+}
+
+export function addBedrockCachePoints(prompt: BedrockPrompt): BedrockPrompt {
+  const result = [...prompt];
+  const markCachePoint = (message: (typeof result)[number]) => ({
+    ...message,
+    providerOptions: {
+      ...message.providerOptions,
+      bedrock: {
+        ...message.providerOptions?.bedrock,
+        cachePoint: { type: 'default' },
+      },
+    },
+  });
+
+  let lastSystemIndex = -1;
+  for (let index = result.length - 1; index >= 0; index--) {
+    if (result[index]!.role === 'system') {
+      lastSystemIndex = index;
+      break;
+    }
+  }
+
+  if (lastSystemIndex >= 0) {
+    result[lastSystemIndex] = markCachePoint(result[lastSystemIndex]!);
+  }
+
+  let lastNonSystemIndex = -1;
+  for (let index = result.length - 1; index >= 0; index--) {
+    if (result[index]!.role !== 'system') {
+      lastNonSystemIndex = index;
+      break;
+    }
+  }
+
+  if (lastNonSystemIndex >= 0) {
+    result[lastNonSystemIndex] = markCachePoint(result[lastNonSystemIndex]!);
+  }
+
+  return result;
+}
+
+export function withBedrockCache(model: BedrockModel): BedrockModel {
+  return new Proxy(model, {
+    get(target, property, receiver) {
+      if (property === 'doGenerate') {
+        return (options: Parameters<BedrockModel['doGenerate']>[0]) =>
+          target.doGenerate({ ...options, prompt: addBedrockCachePoints(options.prompt) });
+      }
+      if (property === 'doStream') {
+        return (options: Parameters<BedrockModel['doStream']>[0]) =>
+          target.doStream({ ...options, prompt: addBedrockCachePoints(options.prompt) });
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
 
 export const AMAZON_BEDROCK_GATEWAY_ID = 'amazon-bedrock';
 
@@ -64,7 +137,8 @@ function bedrockProvider(modelId: string, headers?: ModelRequestHeaders) {
     credentialProvider: fromNodeProviderChain(),
     headers,
   });
-  return bedrock(modelId);
+  const model = bedrock(modelId);
+  return supportsBedrockPromptCaching(modelId) ? withBedrockCache(model) : model;
 }
 
 /**

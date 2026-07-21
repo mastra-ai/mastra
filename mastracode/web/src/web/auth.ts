@@ -1,34 +1,45 @@
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { registerApiRoute } from '@mastra/core/server';
-import type { ApiRoute } from '@mastra/core/server';
+import { isAuthHttpHandler, isCredentialsProvider, isOrganizationsProvider, isSSOProvider } from '@mastra/core/server';
+import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/core/server';
 import type { Context, Hono } from 'hono';
 
+import { getSeededAuthProvider, isRuntimeConfigSeeded } from './runtime-config.js';
+
 /**
- * WorkOS AuthKit gating for the MastraCode web server.
+ * Provider-neutral web auth gating for the MastraCode web server.
  *
- * When `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` are both set, every route on the
- * web server is placed behind WorkOS AuthKit authentication: unauthenticated
- * browser navigations are redirected to the SPA's `/signin` page (whose button
- * starts the `/auth/login` hosted-login flow), API/XHR calls receive a 401, and
- * a small set of public routes stay reachable while signed out — the `/auth/*`
- * login/callback/logout/me routes plus the `/signin` page and its `/assets/*`
- * bundle. When the env vars are absent, `mountWebAuth` is a no-op and the
- * server behaves exactly as it does without auth.
+ * When an auth provider is active (a `MastraAuthProvider` instance passed to
+ * `MastraFactory`'s `auth` slot, or — back-compat for suites/paths that never
+ * boot the factory — implied by the WorkOS env vars), every route on the web
+ * server is placed behind it: unauthenticated browser navigations are
+ * redirected to the SPA's `/signin` page, API/XHR calls receive a 401, and a
+ * small set of public routes stay reachable while signed out — the provider's
+ * `/auth/*` routes plus `/auth/me`, the `/signin` page and its `/assets/*`
+ * bundle. When no provider is active, `mountWebAuth` is a no-op and the server
+ * behaves exactly as it does without auth.
  *
- * The actual AuthKit session encryption, code exchange and token validation are
- * delegated to the existing `@mastra/auth-workos` provider (`MastraAuthWorkos`).
+ * Provider specifics stay in the providers (`@mastra/auth-workos`,
+ * `@mastra/auth-better-auth`, or any custom `IMastraAuthProvider`); this
+ * module composes them capability-first via the core type guards:
+ * - `authenticateToken` — session/bearer validation (all providers)
+ * - `ISSOProvider` — hosted-login `/auth/login`, `/auth/callback`, `/auth/logout`
+ * - `IAuthHttpHandler` — provider-owned `/auth/api/*` endpoints (better-auth)
+ * - `IOrganizationsProvider` — personal-org bootstrap + admin checks
+ * - `ICredentialsProvider.isSignUpEnabled` — SPA sign-up affordance
+ * - `getClearSessionHeaders` — session cookie clearing on logout
  */
 
 /** Minimal shape of the signed-in user surfaced to the SPA (no tokens). */
 export interface WebAuthUser {
   /** Stable WorkOS user id used to scope per-user data (GitHub installs etc.). */
   workosId?: string;
-  /** WorkOS user id alias on some shapes; falls back to `workosId`. */
+  /** Provider user id; WorkOS shapes may use `workosId` instead (see {@link workosId}). */
   id?: string;
   email?: string;
   name?: string;
   /**
-   * WorkOS organization id. The org is the top-level tenant: it owns the GitHub
+   * Organization id. The org is the top-level tenant: it owns the GitHub
    * App installation and connected projects, while each user inside the org gets
    * isolated building instances. Absent for personal (no-org) accounts.
    */
@@ -41,10 +52,40 @@ export interface WebAuthUser {
  * `(orgId, userId)`. Personal (no-org) users have `orgId === undefined`.
  */
 export interface WebAuthTenant {
-  /** WorkOS organization id, or `undefined` for personal (no-org) accounts. */
+  /** Organization id, or `undefined` for personal (no-org) accounts. */
   orgId?: string;
-  /** Stable WorkOS user id. */
+  /** Stable provider user id. */
   userId: string;
+}
+
+/**
+ * Validate that a `returnTo` value is a safe same-site path, to prevent
+ * open-redirect attacks. Only absolute local paths (`/foo`) are allowed;
+ * protocol-relative (`//evil.com`) and absolute URLs are rejected.
+ */
+export function sanitizeReturnTo(raw: string | undefined): string {
+  if (!raw) return '/';
+  if (!raw.startsWith('/')) return '/';
+  // Reject protocol-relative URLs like "//evil.com" and "/\evil.com".
+  if (raw.startsWith('//') || raw.startsWith('/\\')) return '/';
+  return raw;
+}
+
+/** Extract a bearer token from the Authorization header, if present. */
+export function getBearerToken(authorization: string | undefined): string {
+  if (!authorization) return '';
+  const match = /^Bearer\s+(.+)$/i.exec(authorization);
+  return match?.[1] ?? '';
+}
+
+/**
+ * Whether the SPA is served cross-origin from this API (platform deploy). When
+ * `MASTRACODE_ALLOWED_ORIGINS` is set the browser talks to us cross-site, so
+ * session cookies must be `SameSite=None; Secure` for the browser to send them.
+ * Same-origin local dev leaves this unset and keeps the stricter `SameSite=Lax`.
+ */
+export function isCrossSiteAuth(): boolean {
+  return Boolean(process.env.MASTRACODE_ALLOWED_ORIGINS?.trim());
 }
 
 /** Hono context variables set by the auth gate. */
@@ -56,7 +97,7 @@ export interface WebAuthVariables {
 const WEB_AUTH_USER_KEY = 'webAuthUser';
 
 /**
- * Read the authenticated WorkOS user the gate stashed on the context, or
+ * Read the authenticated user the gate stashed on the context, or
  * `undefined` when unauthenticated / auth disabled. Used by downstream routes
  * (e.g. GitHub) to scope rows per user.
  */
@@ -64,12 +105,12 @@ export function getWebAuthUser(c: Context): WebAuthUser | undefined {
   return c.get(WEB_AUTH_USER_KEY) as WebAuthUser | undefined;
 }
 
-/** Resolve the stable user id from a WorkOS user shape. */
+/** Resolve the stable user id from an authenticated user shape. */
 export function getWebAuthUserId(user: WebAuthUser | undefined): string | undefined {
   return user?.workosId ?? user?.id;
 }
 
-/** Resolve the WorkOS organization id from a user shape, if present. */
+/** Resolve the organization id from a user shape, if present. */
 export function getWebAuthOrgId(user: WebAuthUser | undefined): string | undefined {
   return user?.organizationId;
 }
@@ -88,144 +129,177 @@ export function webAuthTenant(c: Context): WebAuthTenant | undefined {
   return { orgId: getWebAuthOrgId(user), userId };
 }
 
-/**
- * Lazily-created provider used to authenticate session cookies on public
- * `/auth/*` routes that the gate skips (e.g. the GitHub connect/callback
- * navigations). Kept module-level so callers outside `mountWebAuth` — such as
- * the GitHub routes, which are mounted on a separate sub-app — can reuse it.
- */
-let sessionProvider: MastraAuthWorkos | undefined;
+/** True when both WorkOS credential env vars are present (legacy env gate). */
+function envWorkosConfigured(): boolean {
+  return Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
+}
 
-function getSessionProvider(): MastraAuthWorkos {
-  if (!sessionProvider) {
-    sessionProvider = new MastraAuthWorkos({
-      redirectUri: process.env.WORKOS_REDIRECT_URI,
-      // Resolve `organizationId` from a single membership when the JWT lacks the
-      // claim. This is what lets a freshly bootstrapped personal org take effect
-      // on the next request without forcing a re-login.
-      fetchMemberships: true,
-    });
+/**
+ * Module-level provider used when the factory never seeded the registry but
+ * the WorkOS env vars are set — back-compat for modules and test suites
+ * exercised without booting the factory (route suites set `WORKOS_*`
+ * directly). Kept module-level so callers outside `mountWebAuth` — such as the
+ * GitHub routes, which are mounted on a separate sub-app — reuse one provider.
+ */
+let envFallbackProvider: MastraAuthWorkos | undefined;
+
+/**
+ * Resolve the active auth provider: the factory-seeded provider when the
+ * registry is seeded (including `undefined` = auth explicitly disabled),
+ * otherwise a WorkOS provider implied by the `WORKOS_*` env vars (back-compat;
+ * slated for removal once all consumers seed the registry).
+ */
+export function getActiveWebAuthProvider(): IMastraAuthProvider | undefined {
+  if (isRuntimeConfigSeeded()) return getSeededAuthProvider();
+  if (!envWorkosConfigured()) return undefined;
+  // `fetchMemberships: true` lets `authenticateToken` resolve `organizationId`
+  // from a single membership when the JWT has no org claim — required so a
+  // bootstrapped personal org resolves without re-auth.
+  envFallbackProvider ??= new MastraAuthWorkos({
+    redirectUri: process.env.WORKOS_REDIRECT_URI,
+    fetchMemberships: true,
+  });
+  return envFallbackProvider;
+}
+
+/** Web auth is enabled when a provider is active. */
+export function isWebAuthEnabled(): boolean {
+  return getActiveWebAuthProvider() !== undefined;
+}
+
+/**
+ * Map a provider `authenticateToken` result onto the neutral SPA user shape.
+ *
+ * Two result families exist today:
+ * - flat provider users (WorkOS `WorkOSUser` et al.): `id`/`workosId`/`email`/
+ *   `name`/`organizationId` directly on the object;
+ * - session-shaped results (better-auth `BetterAuthUser`): `{ session, user }`
+ *   with the active org on the session.
+ */
+function toWebAuthUser(result: unknown): WebAuthUser | null {
+  if (!result || typeof result !== 'object') return null;
+  const record = result as Record<string, unknown>;
+
+  // Session-shaped results: { session, user }.
+  if (record.user && typeof record.user === 'object' && record.session && typeof record.session === 'object') {
+    const user = record.user as { id?: unknown; email?: unknown; name?: unknown };
+    const session = record.session as { activeOrganizationId?: unknown };
+    if (typeof user.id !== 'string') return null;
+    return {
+      id: user.id,
+      email: typeof user.email === 'string' ? user.email : undefined,
+      name: typeof user.name === 'string' ? user.name : undefined,
+      organizationId: typeof session.activeOrganizationId === 'string' ? session.activeOrganizationId : undefined,
+    };
   }
-  return sessionProvider;
-}
 
-/** Build a predictable personal-org name from the user's profile. */
-function personalOrgName(user: WebAuthUser, userId: string): string {
-  const label = user.email ?? user.name ?? userId;
-  return `${label}'s org`;
-}
-
-/** Pull a stable error code out of a WorkOS SDK error, if present. */
-function workosErrorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== 'object') return undefined;
-  const e = error as { code?: unknown; rawData?: { code?: unknown } };
-  if (typeof e.code === 'string') return e.code;
-  if (e.rawData && typeof e.rawData.code === 'string') return e.rawData.code;
-  return undefined;
-}
-
-/**
- * True when `createOrganization` rejected because an org is already bound to
- * this `externalId` — i.e. a prior bootstrap created the org but never attached
- * the membership. The org can be recovered via `getOrganizationByExternalId`.
- */
-function isExternalIdAlreadyUsed(error: unknown): boolean {
-  return workosErrorCode(error) === 'external_id_already_used';
+  // Flat provider users.
+  const flat = record as {
+    id?: unknown;
+    workosId?: unknown;
+    email?: unknown;
+    name?: unknown;
+    organizationId?: unknown;
+  };
+  const id = typeof flat.id === 'string' ? flat.id : undefined;
+  const workosId = typeof flat.workosId === 'string' ? flat.workosId : undefined;
+  if (!id && !workosId) return null;
+  return {
+    id,
+    workosId,
+    email: typeof flat.email === 'string' ? flat.email : undefined,
+    name: typeof flat.name === 'string' ? flat.name : undefined,
+    organizationId: typeof flat.organizationId === 'string' ? flat.organizationId : undefined,
+  };
 }
 
 /**
- * True when `createOrganizationMembership` rejected because the user is already
- * a member of the org. Safe to ignore: the desired end state already holds.
+ * Resolve the authenticated user for a request via the provider. Never throws:
+ * ordinary invalid/expired sessions resolve to `null`.
  */
-function isMembershipAlreadyExists(error: unknown): boolean {
-  const code = workosErrorCode(error);
-  return code === 'organization_membership_already_exists' || code === 'entity_already_exists';
-}
-
-/**
- * Ensure the authenticated user belongs to a WorkOS organization, creating a
- * personal org on first use when they have none.
- *
- * The `organizationId` we need for org-scoped GitHub features lives in the
- * WorkOS session, not our app DB, so personal (no-org) accounts otherwise dead
- * end at `organization_required`. This puts the user into a real WorkOS org:
- *
- * - If the user already has an `organizationId` → no-op, return it.
- * - Else list their memberships:
- *   - ≥1 membership → return the first org id (they already belong somewhere;
- *     we never auto-create when a membership exists).
- *   - 0 memberships → create a personal org + membership and return its id.
- *
- * Idempotency: the create call carries `externalId = workosId` and a stable
- * `idempotencyKey`, so concurrent/retried first logins never create duplicate
- * personal orgs. If a prior run created the org but never attached the
- * membership, the create rejects with `external_id_already_used`; we recover the
- * existing org by `externalId` and (re)attach the membership instead of failing.
- *
- * Best-effort: any WorkOS error (e.g. API key lacking org-create permission) is
- * swallowed and returns `undefined`, leaving the user in their no-org state
- * rather than failing the request. Callers keep the existing
- * `organization_required` behavior in that case.
- */
-export async function ensureUserHasOrganization(
-  provider: MastraAuthWorkos,
-  user: WebAuthUser,
-): Promise<string | undefined> {
-  const existingOrg = getWebAuthOrgId(user);
-  if (existingOrg) return existingOrg;
-
-  const userId = getWebAuthUserId(user);
-  if (!userId) return undefined;
-
+async function authenticateRequest(
+  provider: IMastraAuthProvider,
+  token: string,
+  raw: Request,
+): Promise<WebAuthUser | null> {
   try {
-    const workos = provider.getWorkOS();
-
-    const memberships = await workos.userManagement
-      .listOrganizationMemberships({ userId })
-      .then(page => page.autoPagination());
-
-    const firstExisting = memberships.find(m => m.organizationId)?.organizationId;
-    if (firstExisting) return firstExisting;
-
-    // Create the personal org. A prior partial bootstrap (org created, but the
-    // membership step never landed) leaves an org already bound to this
-    // externalId, so the create 400s with `external_id_already_used`. Recover by
-    // looking the existing org up by externalId instead of dead-ending forever.
-    let organizationId: string;
-    try {
-      const organization = await workos.organizations.createOrganization(
-        {
-          name: personalOrgName(user, userId),
-          externalId: userId,
-          metadata: { mastracodePersonalOrg: 'true', workosUserId: userId },
-        },
-        { idempotencyKey: `mastracode-personal-org:${userId}` },
-      );
-      organizationId = organization.id;
-    } catch (error) {
-      if (!isExternalIdAlreadyUsed(error)) throw error;
-      const existing = await workos.organizations.getOrganizationByExternalId(userId);
-      organizationId = existing.id;
-    }
-
-    // Idempotently attach the user. If they are already a member (e.g. the org
-    // existed from a prior run), tolerate the conflict and keep the org id.
-    try {
-      await workos.userManagement.createOrganizationMembership({ organizationId, userId });
-    } catch (error) {
-      if (!isMembershipAlreadyExists(error)) throw error;
-    }
-
-    return organizationId;
-  } catch (error) {
-    console.warn(
-      `[WorkOS] Failed to bootstrap personal organization for user ${userId}. ` +
-        'The user will see organization_required until this succeeds. ' +
-        'Ensure the WorkOS API key can create organizations/memberships.',
-      error,
-    );
-    return undefined;
+    const result = await provider.authenticateToken(token, raw);
+    return toWebAuthUser(result);
+  } catch {
+    return null;
   }
+}
+
+/**
+ * Bootstrap a personal org for no-org accounts so org-scoped features (GitHub
+ * connect) work without leaving the app. Mutates the resolved user so the
+ * current request sees the org immediately; subsequent requests resolve it via
+ * the provider's own session/membership lookup (providers cache internally).
+ * Best-effort: providers swallow their own bootstrap failures, and any
+ * unexpected throw leaves the user no-org.
+ */
+async function ensureUserOrg(provider: IMastraAuthProvider, user: WebAuthUser): Promise<void> {
+  if (getWebAuthOrgId(user)) return;
+  if (!isOrganizationsProvider(provider)) return;
+  const userId = getWebAuthUserId(user);
+  if (!userId) return;
+  try {
+    const orgId = await provider.ensureOrganization(userId);
+    if (orgId) user.organizationId = orgId;
+  } catch {
+    // Best-effort: the user stays no-org until a later request succeeds.
+  }
+}
+
+/**
+ * `Set-Cookie` values that clear the provider's session cookie(s), from the
+ * provider's (possibly partial) `ISessionProvider.getClearSessionHeaders`.
+ */
+function providerClearCookies(provider: IMastraAuthProvider): string[] {
+  const getClearSessionHeaders = (provider as Partial<ISessionProvider>).getClearSessionHeaders;
+  if (typeof getClearSessionHeaders !== 'function') return [];
+  const headers = getClearSessionHeaders.call(provider) ?? {};
+  const setCookie = headers['Set-Cookie'];
+  if (!setCookie) return [];
+  // A provider may join several clearing cookies into one header value.
+  return setCookie.split(/,(?=\s*[^;=,\s]+=)/).map(cookie => cookie.trim());
+}
+
+/**
+ * Fail-closed authorization for organization-level administrative mutations.
+ * The caller must belong to the same active organization and the provider must
+ * explicitly confirm an admin/owner role.
+ */
+export async function isOrganizationAdmin(c: Context, organizationId: string): Promise<boolean> {
+  const user = await ensureWebAuthUser(c);
+  const provider = getActiveWebAuthProvider();
+  if (!user || user.organizationId !== organizationId || !provider || !isOrganizationsProvider(provider)) {
+    return false;
+  }
+  const userId = getWebAuthUserId(user);
+  if (!userId) return false;
+  try {
+    return await provider.isOrganizationAdmin(organizationId, userId);
+  } catch {
+    return false;
+  }
+}
+
+/** True when the active provider is WorkOS. Gates WorkOS-only capabilities. */
+export function isWorkOSAuth(): boolean {
+  return getActiveWebAuthProvider() instanceof MastraAuthWorkos;
+}
+
+/**
+ * Shared WorkOS auth provider, exposed for features that need the raw WorkOS
+ * client (audit-log export, Admin Portal links). Callers must gate on
+ * {@link isWorkOSAuth} (or {@link isWebAuthEnabled} on WorkOS-only deploys)
+ * first — throws when the active provider is not WorkOS.
+ */
+export function getWorkOSProvider(): MastraAuthWorkos {
+  const provider = getActiveWebAuthProvider();
+  if (provider instanceof MastraAuthWorkos) return provider;
+  throw new Error('WorkOS provider requested but the active web auth provider is not WorkOS');
 }
 
 /**
@@ -234,7 +308,7 @@ export async function ensureUserHasOrganization(
  * The gate only authenticates non-`/auth/*` requests via the `Authorization`
  * header, so cookie-based browser navigations to public `/auth/*` routes (the
  * GitHub connect/callback flow) arrive without a gate-stashed user. This reads
- * the WorkOS session cookie from the raw request the same way `/auth/me` does,
+ * the session cookie from the raw request the same way `/auth/me` does,
  * caches the result on the context, and returns it so downstream helpers like
  * {@link webAuthTenant} work uniformly on both gated and public routes.
  *
@@ -243,80 +317,62 @@ export async function ensureUserHasOrganization(
 export async function ensureWebAuthUser(c: Context): Promise<WebAuthUser | undefined> {
   const existing = getWebAuthUser(c);
   if (existing) return existing;
-  if (!isWebAuthEnabled()) return undefined;
+  const provider = getActiveWebAuthProvider();
+  if (!provider) return undefined;
 
   const token = getBearerToken(c.req.header('Authorization'));
-  let user: WebAuthUser | null = null;
-  try {
-    user = (await getSessionProvider().authenticateToken(token, c.req.raw)) as WebAuthUser | null;
-  } catch {
-    user = null;
-  }
+  const user = await authenticateRequest(provider, token, c.req.raw);
   if (!user) return undefined;
 
-  // Bootstrap a personal org for no-org accounts so org-scoped features (GitHub
-  // connect) work without leaving the app. Mutating the resolved user lets the
-  // current request see the org immediately; subsequent requests resolve it via
-  // the provider's single-membership fallback (`fetchMemberships: true`).
-  if (!getWebAuthOrgId(user)) {
-    const orgId = await ensureUserHasOrganization(getSessionProvider(), user);
-    if (orgId) user.organizationId = orgId;
-  }
+  await ensureUserOrg(provider, user);
 
   c.set(WEB_AUTH_USER_KEY, user);
   return user;
 }
 
-/**
- * Web auth is enabled only when both WorkOS credentials are present. These are
- * the same env vars `@mastra/auth-workos` reads, so configuration stays
- * consistent with the rest of the repo.
- */
-export function isWebAuthEnabled(): boolean {
-  return Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
-}
-
-/**
- * Whether the SPA is served cross-origin from this API (platform deploy). When
- * `MASTRACODE_ALLOWED_ORIGINS` is set the browser talks to us cross-site, so
- * session cookies must be `SameSite=None; Secure` for the browser to send them.
- * Same-origin local dev leaves this unset and keeps the stricter `SameSite=Lax`.
- */
-function isCrossSiteAuth(): boolean {
-  return Boolean(process.env.MASTRACODE_ALLOWED_ORIGINS?.trim());
-}
-
-/**
- * Cookie string that clears the WorkOS session. Matches the `SameSite`/`Secure`
- * attributes of the session cookie so the browser actually overwrites it: a
- * `SameSite=None; Secure` session cookie can only be cleared by a clear cookie
- * with the same attributes. See {@link isCrossSiteAuth}.
- */
-function sessionClearCookie(): string {
-  const sameSite = isCrossSiteAuth() ? 'None; Secure' : 'Lax';
-  return `wos_session=; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=0`;
-}
-
 export interface MountWebAuthOptions {
   /**
-   * Absolute URL WorkOS redirects back to after login. Must match an allowed
-   * redirect URI configured in the WorkOS dashboard. Defaults to the
-   * `WORKOS_REDIRECT_URI` env var.
+   * Absolute URL the identity provider redirects back to after login (WorkOS
+   * env-fallback path only). Defaults to the `WORKOS_REDIRECT_URI` env var.
    */
   redirectUri?: string;
 }
 
 /**
- * Validate that a `returnTo` value is a safe same-site path, to prevent
- * open-redirect attacks. Only absolute local paths (`/foo`) are allowed;
- * protocol-relative (`//evil.com`) and absolute URLs are rejected.
+ * Decide whether a request is a top-level browser navigation (which should be
+ * redirected to `/signin`) versus an API/XHR call (which should get a 401 JSON
+ * response the SPA can react to).
  */
-function sanitizeReturnTo(raw: string | undefined): string {
-  if (!raw) return '/';
-  if (!raw.startsWith('/')) return '/';
-  // Reject protocol-relative URLs like "//evil.com" and "/\evil.com".
-  if (raw.startsWith('//') || raw.startsWith('/\\')) return '/';
-  return raw;
+function isNavigationRequest(path: string, accept: string | undefined): boolean {
+  if (path.startsWith('/api/')) return false;
+  return (accept ?? '').includes('text/html');
+}
+
+/**
+ * Handle the provider-neutral `/auth/me` route: validate the session with the
+ * active provider and report the signed-in user (no tokens) to the SPA.
+ * `/auth/me` is public (the gate skips `/auth/*`), so it validates the session
+ * itself rather than reading a value the gate would have stashed.
+ */
+async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<Response> {
+  const token = getBearerToken(c.req.header('Authorization'));
+  const user = await authenticateRequest(provider, token, c.req.raw);
+  // Provider identity for the SPA: `/signin` renders the hosted-login button
+  // for WorkOS and an email/password form for better-auth (with sign-up hidden
+  // when the provider disables it).
+  const signUpDisabled = isCredentialsProvider(provider) && provider.isSignUpEnabled?.() === false;
+  const meta = { provider: provider.name, ...(signUpDisabled ? { signUpDisabled: true } : {}) };
+  if (!user) {
+    return c.json({ authenticated: false, user: null, ...meta });
+  }
+  // Resolve the org the same way gated requests do (providers cache, so this
+  // is a lookup — not a create — after first bootstrap).
+  await ensureUserOrg(provider, user);
+  return c.json({
+    authenticated: true,
+    user: { userId: getWebAuthUserId(user), email: user.email, name: user.name, organizationId: user.organizationId },
+    ...meta,
+  });
 }
 
 /** Encode a validated returnTo path into the OAuth `state` parameter. */
@@ -335,179 +391,193 @@ function decodeState(state: string | undefined): string {
   }
 }
 
-/** Extract a bearer token from the Authorization header, if present. */
-function getBearerToken(authorization: string | undefined): string {
-  if (!authorization) return '';
-  const match = /^Bearer\s+(.+)$/i.exec(authorization);
-  return match?.[1] ?? '';
+/** HTTP methods supported for public auth routes. */
+type AuthRouteMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
+
+/** A public `/auth/*` route derived from the provider's capabilities. */
+interface AuthRouteSpec {
+  path: string;
+  method: AuthRouteMethod;
+  handler: (c: Context) => Response | Promise<Response>;
 }
 
 /**
- * Decide whether a request is a top-level browser navigation (which should be
- * redirected to `/signin`) versus an API/XHR call (which should get a 401 JSON
- * response the SPA can react to).
+ * Derive the public `/auth/*` routes from the provider's capabilities:
+ *
+ * - `IAuthHttpHandler` → `ALL /auth/api/*` proxy to the provider's own HTTP
+ *   surface (better-auth sign-in/up/out/session — what the SPA's
+ *   email/password form posts to).
+ * - `ISSOProvider` → hosted-login `GET /auth/login` / `GET /auth/callback` /
+ *   `GET /auth/logout` (returnTo preserved through the OAuth `state` param).
+ * - handler-shaped, non-SSO providers → `GET /auth/login` redirects to the
+ *   SPA's `/signin` form, `GET /auth/logout` revokes via the provider's
+ *   sign-out endpoint and clears the session cookie.
  */
-function isNavigationRequest(path: string, accept: string | undefined): boolean {
-  if (path.startsWith('/api/')) return false;
-  return (accept ?? '').includes('text/html');
-}
+function providerAuthRoutes(provider: IMastraAuthProvider): AuthRouteSpec[] {
+  const routes: AuthRouteSpec[] = [];
 
-/**
- * Register the public WorkOS `/auth/*` routes (login, callback, logout, me) on a
- * Hono app. Split out from `mountWebAuth` so both the local Hono server and the
- * platform Mastra entry can reuse the exact same handlers.
- */
-export function registerAuthRoutes(app: Hono<any>, provider: MastraAuthWorkos, redirectUri: string | undefined): void {
-  app.get('/auth/login', c => {
-    const returnTo = sanitizeReturnTo(c.req.query('returnTo'));
-    const loginUrl = provider.getLoginUrl(redirectUri ?? '', encodeState(returnTo));
-    return c.redirect(loginUrl);
-  });
-
-  app.get('/auth/callback', async c => {
-    const code = c.req.query('code');
-    const returnTo = decodeState(c.req.query('state'));
-    if (!code) {
-      return c.redirect('/auth/login');
-    }
-
-    try {
-      const result = await provider.handleCallback(code, c.req.query('state') ?? '');
-      for (const cookie of result.cookies ?? []) {
-        c.header('Set-Cookie', cookie, { append: true });
-      }
-      return c.redirect(returnTo);
-    } catch {
-      // Code exchange failed (expired/replayed code, misconfig). Send the user
-      // back to login rather than surfacing a raw error.
-      return c.redirect('/auth/login');
-    }
-  });
-
-  app.get('/auth/logout', async c => {
-    let logoutUrl: string | null = null;
-    try {
-      logoutUrl = await provider.getLogoutUrl('/', c.req.raw);
-    } catch {
-      logoutUrl = null;
-    }
-    // Clear the session cookie regardless of whether WorkOS returned a logout URL.
-    c.header('Set-Cookie', sessionClearCookie(), { append: true });
-    return c.redirect(logoutUrl ?? '/');
-  });
-
-  app.get('/auth/me', async c => {
-    // `/auth/me` is public (the gate skips `/auth/*`), so it validates the
-    // session itself rather than reading a value the gate would have stashed.
-    const token = getBearerToken(c.req.header('Authorization'));
-    let user: WebAuthUser | null = null;
-    try {
-      user = (await provider.authenticateToken(token, c.req.raw)) as WebAuthUser | null;
-    } catch {
-      user = null;
-    }
-    if (!user) {
-      return c.json({ authenticated: false, user: null });
-    }
-    return c.json({
-      authenticated: true,
-      user: { userId: getWebAuthUserId(user), email: user.email, name: user.name, organizationId: user.organizationId },
+  if (isAuthHttpHandler(provider)) {
+    routes.push({
+      path: '/auth/api/*',
+      method: 'ALL',
+      handler: c => provider.handleAuthRequest(c.req.raw),
     });
-  });
+  }
+
+  if (isSSOProvider(provider)) {
+    routes.push(
+      {
+        path: '/auth/login',
+        method: 'GET',
+        handler: async c => {
+          const returnTo = sanitizeReturnTo(c.req.query('returnTo'));
+          const state = encodeState(returnTo);
+          // Providers fall back to their configured redirect URI when the
+          // caller passes an empty one.
+          const loginUrl = await provider.getLoginUrl('', state);
+          for (const cookie of (await provider.getLoginCookies?.('', state)) ?? []) {
+            c.header('Set-Cookie', cookie, { append: true });
+          }
+          return c.redirect(loginUrl);
+        },
+      },
+      {
+        path: '/auth/callback',
+        method: 'GET',
+        handler: async c => {
+          const code = c.req.query('code');
+          const returnTo = decodeState(c.req.query('state'));
+          if (!code) {
+            return c.redirect('/auth/login');
+          }
+          try {
+            const result = await provider.handleCallback(code, c.req.query('state') ?? '');
+            for (const cookie of result.cookies ?? []) {
+              c.header('Set-Cookie', cookie, { append: true });
+            }
+            return c.redirect(returnTo);
+          } catch {
+            // Code exchange failed (expired/replayed code, misconfig). Send the
+            // user back to login rather than surfacing a raw error.
+            return c.redirect('/auth/login');
+          }
+        },
+      },
+      {
+        path: '/auth/logout',
+        method: 'GET',
+        handler: async c => {
+          let logoutUrl: string | null = null;
+          try {
+            logoutUrl = (await provider.getLogoutUrl?.('/', c.req.raw)) ?? null;
+          } catch {
+            logoutUrl = null;
+          }
+          // Clear the session cookie regardless of whether the provider
+          // returned a logout URL.
+          for (const cookie of providerClearCookies(provider)) {
+            c.header('Set-Cookie', cookie, { append: true });
+          }
+          return c.redirect(logoutUrl ?? '/');
+        },
+      },
+    );
+  } else if (isAuthHttpHandler(provider)) {
+    routes.push(
+      {
+        // Hosted-login equivalent: no hosted page, so send the browser to the
+        // SPA's /signin form, preserving returnTo.
+        path: '/auth/login',
+        method: 'GET',
+        handler: c => {
+          const returnTo = sanitizeReturnTo(c.req.query('returnTo'));
+          return c.redirect(`/signin?returnTo=${encodeURIComponent(returnTo)}`);
+        },
+      },
+      {
+        path: '/auth/logout',
+        method: 'GET',
+        handler: async c => {
+          // Revoke the session server-side through the provider's own sign-out
+          // endpoint and forward its clearing cookies; fall back to our clear
+          // cookies regardless.
+          try {
+            const origin = new URL(c.req.url).origin;
+            const response = await provider.handleAuthRequest(
+              new Request(`${origin}/auth/api/sign-out`, { method: 'POST', headers: c.req.raw.headers }),
+            );
+            for (const cookie of response.headers.getSetCookie()) {
+              c.header('Set-Cookie', cookie, { append: true });
+            }
+          } catch {
+            // No/invalid session: nothing to revoke.
+          }
+          for (const cookie of providerClearCookies(provider)) {
+            c.header('Set-Cookie', cookie, { append: true });
+          }
+          return c.redirect('/');
+        },
+      },
+    );
+  }
+
+  return routes;
 }
 
 /**
- * Build the public WorkOS `/auth/*` routes (login, callback, logout, me) as
- * Mastra `server.apiRoutes`. Used by the platform Mastra entry
- * (`src/mastra/index.ts`), which can't register plain Hono routes on the
- * deployer-generated app the way the local server does via {@link registerAuthRoutes}.
+ * Register the public `/auth/*` routes on a Hono app: the capability-derived
+ * provider routes (login/callback/logout/provider APIs) plus the
+ * provider-neutral `/auth/me`. Split out from `mountWebAuth` so both the local
+ * Hono server and the platform Mastra entry can reuse the exact same handlers.
+ */
+export function registerAuthRoutes(app: Hono<any>, provider: IMastraAuthProvider): void {
+  for (const route of providerAuthRoutes(provider)) {
+    const methods = route.method === 'ALL' ? ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] : [route.method];
+    app.on(methods, route.path, c => route.handler(c));
+  }
+  app.get('/auth/me', c => handleAuthMe(provider, c));
+}
+
+/**
+ * Build the public `/auth/*` routes (provider routes + `/auth/me`) as Mastra
+ * `server.apiRoutes`. Used by the platform Mastra entry (`src/mastra/index.ts`),
+ * which can't register plain Hono routes on the deployer-generated app the way
+ * the local server does via {@link registerAuthRoutes}.
  *
  * Handlers are identical to {@link registerAuthRoutes}. All are `requiresAuth: false`
  * (they must be reachable while unauthenticated), and the gate middleware skips
  * `/auth/*` so it never blocks them. `/auth/*` is not under `/api`, so it is a
  * valid custom-route path.
  */
-export function buildAuthRoutes(provider: MastraAuthWorkos, redirectUri: string | undefined): ApiRoute[] {
+export function buildAuthRoutes(provider: IMastraAuthProvider): ApiRoute[] {
   return [
-    registerApiRoute('/auth/login', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: c => {
-        const returnTo = sanitizeReturnTo(c.req.query('returnTo'));
-        const loginUrl = provider.getLoginUrl(redirectUri ?? '', encodeState(returnTo));
-        return c.redirect(loginUrl);
-      },
-    }),
-    registerApiRoute('/auth/callback', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const code = c.req.query('code');
-        const returnTo = decodeState(c.req.query('state'));
-        if (!code) {
-          return c.redirect('/auth/login');
-        }
-        try {
-          const result = await provider.handleCallback(code, c.req.query('state') ?? '');
-          for (const cookie of result.cookies ?? []) {
-            c.header('Set-Cookie', cookie, { append: true });
-          }
-          return c.redirect(returnTo);
-        } catch {
-          return c.redirect('/auth/login');
-        }
-      },
-    }),
-    registerApiRoute('/auth/logout', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        let logoutUrl: string | null = null;
-        try {
-          logoutUrl = await provider.getLogoutUrl('/', c.req.raw);
-        } catch {
-          logoutUrl = null;
-        }
-        c.header('Set-Cookie', sessionClearCookie(), { append: true });
-        return c.redirect(logoutUrl ?? '/');
-      },
-    }),
+    // `registerApiRoute` handlers see @mastra/core's bundled hono Context type,
+    // which is structurally identical to (but nominally distinct from) the
+    // local hono version the route handlers are typed against — cast across
+    // the seam.
+    ...providerAuthRoutes(provider).map(route =>
+      registerApiRoute(route.path, {
+        method: route.method,
+        requiresAuth: false,
+        handler: c => route.handler(c as unknown as Context),
+      }),
+    ),
     registerApiRoute('/auth/me', {
       method: 'GET',
       requiresAuth: false,
-      handler: async c => {
-        const token = getBearerToken(c.req.header('Authorization'));
-        let user: WebAuthUser | null = null;
-        try {
-          user = (await provider.authenticateToken(token, c.req.raw)) as WebAuthUser | null;
-        } catch {
-          user = null;
-        }
-        if (!user) {
-          return c.json({ authenticated: false, user: null });
-        }
-        return c.json({
-          authenticated: true,
-          user: {
-            userId: getWebAuthUserId(user),
-            email: user.email,
-            name: user.name,
-            organizationId: user.organizationId,
-          },
-        });
-      },
+      handler: c => handleAuthMe(provider, c as unknown as Context),
     }),
   ];
 }
 
 /**
- * Build the WorkOS gate as a plain Hono middleware handler `(c, next)`. Protects
+ * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
  * the user on the context and continue; unauthenticated navigations redirect to
  * login and XHR/API calls get a 401 JSON. Shared by the local Hono server
  * (`mountWebAuth`) and the platform Mastra entry (`server.middleware`).
  */
-export function createWebAuthGate(provider: MastraAuthWorkos) {
+export function createWebAuthGate(provider: IMastraAuthProvider) {
   return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
     const path = c.req.path;
     if (path.startsWith('/auth/')) {
@@ -523,20 +593,12 @@ export function createWebAuthGate(provider: MastraAuthWorkos) {
     }
 
     const token = getBearerToken(c.req.header('Authorization'));
-    let user: WebAuthUser | null = null;
-    try {
-      user = (await provider.authenticateToken(token, c.req.raw)) as WebAuthUser | null;
-    } catch {
-      user = null;
-    }
+    const user = await authenticateRequest(provider, token, c.req.raw);
 
     if (user) {
       // Bootstrap a personal org for no-org accounts so the org id resolves on
       // this request (see ensureWebAuthUser for the rationale).
-      if (!getWebAuthOrgId(user)) {
-        const orgId = await ensureUserHasOrganization(provider, user);
-        if (orgId) user.organizationId = orgId;
-      }
+      await ensureUserOrg(provider, user);
       c.set(WEB_AUTH_USER_KEY, user);
       c.get('requestContext')?.set('user', user);
       return next();
@@ -553,17 +615,8 @@ export function createWebAuthGate(provider: MastraAuthWorkos) {
 }
 
 /**
- * Construct the WorkOS AuthKit provider used by the gate and `/auth/*` routes.
- * `fetchMemberships: true` lets `authenticateToken` resolve `organizationId`
- * from a single membership when the JWT has no org claim — required so a
- * bootstrapped personal org resolves without re-auth.
- */
-export function createWebAuthProvider(redirectUri: string | undefined): MastraAuthWorkos {
-  return new MastraAuthWorkos({ redirectUri, fetchMemberships: true });
-}
-
-/**
- * Mount WorkOS AuthKit gating onto the web app. No-op when auth is disabled.
+ * Mount web auth gating onto the web app. No-op when auth is disabled (no
+ * provider active).
  *
  * Must be called before the Mastra adapter routes, the `/web/*` routes, and
  * the static UI handlers so the gate covers every request. Composes the shared
@@ -571,17 +624,20 @@ export function createWebAuthProvider(redirectUri: string | undefined): MastraAu
  * and the platform Mastra entry stay behavior-identical.
  */
 export function mountWebAuth(app: Hono<any>, options: MountWebAuthOptions = {}): boolean {
-  if (!isWebAuthEnabled()) return false;
+  let provider: IMastraAuthProvider | undefined;
+  if (isRuntimeConfigSeeded()) {
+    provider = getSeededAuthProvider();
+  } else if (envWorkosConfigured()) {
+    // Env-fallback path: construct a fresh provider honoring the caller's
+    // redirect URI, mirroring the pre-seam behavior.
+    provider = new MastraAuthWorkos({
+      redirectUri: options.redirectUri ?? process.env.WORKOS_REDIRECT_URI,
+      fetchMemberships: true,
+    });
+  }
+  if (!provider) return false;
 
-  const redirectUri = options.redirectUri ?? process.env.WORKOS_REDIRECT_URI;
-  const provider = createWebAuthProvider(redirectUri);
-
-  // Public auth routes, registered before the gate so they remain reachable
-  // while unauthenticated.
-  registerAuthRoutes(app, provider, redirectUri);
-
-  // Gate middleware: protects everything that is not a public `/auth/*` route.
+  registerAuthRoutes(app, provider);
   app.use('*', createWebAuthGate(provider));
-
   return true;
 }

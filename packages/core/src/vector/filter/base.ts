@@ -26,12 +26,7 @@ type RegexOperator = '$regex' | '$options'; // Matches documents that have the s
 
 // Union of all supported operators
 type QueryOperator =
-  | BasicOperator
-  | NumericOperator
-  | LogicalOperator
-  | ArrayOperator
-  | ElementOperator
-  | RegexOperator;
+  BasicOperator | NumericOperator | LogicalOperator | ArrayOperator | ElementOperator | RegexOperator;
 
 type EmptyObject = Record<string, never>;
 

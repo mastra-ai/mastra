@@ -14,7 +14,7 @@ Observational Memory (OM) is Mastra's memory system for long-context agentic mem
 
 ## Quickstart
 
-Enable `observationalMemory` in the memory options when creating your agent:
+Ensure you have `@mastra/memory` installed in your project. Set `observationalMemory: true` in your Memory config to enable Observational Memory.
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from '@mastra/memory'
@@ -34,7 +34,56 @@ export const agent = new Agent({
 })
 ```
 
-That's it. The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `google/gemini-2.5-flash` by default. Config objects also use this model unless you set a different one. To use a different model, pass it in the config object:
+<Inject>
+  **For AI agents:** Using Observational Memory requires a storage provider! You either need to set it on the Mastra instance at `src/mastra/index.ts` or pass it to the Agent constructor.
+
+  The following script creates a local LibSQL database, enables Observational Memory, and uses one resource and thread across two agent calls:
+
+  ```typescript title="src/observational-memory.ts"
+  import { Agent } from '@mastra/core/agent'
+  import { LibSQLStore } from '@mastra/libsql'
+  import { Memory } from '@mastra/memory'
+
+  const memory = new Memory({
+    storage: new LibSQLStore({
+      id: 'memory-storage',
+      url: 'file:./memory.db',
+    }),
+    options: {
+      observationalMemory: {
+        model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      },
+    },
+  })
+
+  const agent = new Agent({
+    id: 'memory-agent',
+    name: 'Memory Agent',
+    instructions: 'You are a helpful assistant.',
+    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    memory,
+  })
+
+  const memoryOptions = {
+    resource: 'user-123',
+    thread: 'conversation-123',
+  }
+
+  const firstResponse = await agent.generate('Remember that my favorite color is blue.', {
+    memory: memoryOptions,
+  })
+  console.log(firstResponse.text)
+
+  const secondResponse = await agent.generate('What is my favorite color?', {
+    memory: memoryOptions,
+  })
+  console.log(secondResponse.text)
+  ```
+
+  The `resource` identifies the user or entity, while the `thread` identifies the conversation. Reuse both values to continue the same conversation. Observational Memory processes the stored history as it grows and replaces older messages with observations when its activation conditions are met.
+</Inject>
+
+The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `__GATEWAY_GOOGLE_MODEL_FLASH__` by default. To use a different model, pass it in the config object:
 
 ```typescript
 const memory = new Memory({
@@ -250,6 +299,34 @@ new Extractor({
     memory ? 'Extract workspace facts for this memory instance.' : 'Extract workspace facts.',
 })
 ```
+
+#### Read extracted values from a stream
+
+Extractor results are emitted when OM completes an observation or reflection. Read both completion data parts from the stream:
+
+```typescript title="src/mastra/run.ts"
+const stream = await agent.stream('Remember that I prefer dark mode.')
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'data-om-observation-end' || chunk.type === 'data-om-buffering-end') {
+    const { operationType, extractedValues = {}, extractionFailures = [] } = chunk.data
+
+    for (const [slug, value] of Object.entries(extractedValues)) {
+      console.log(`${operationType} extractor ${slug}:`, value)
+    }
+
+    for (const failure of extractionFailures) {
+      console.error(`Extractor ${failure.slug} failed:`, failure.error)
+    }
+  }
+}
+```
+
+`extractedValues` uses each extractor's slug as its key. Both result fields are optional, and a failed extractor doesn't remove values from successful extractors.
+
+`data-om-observation-end` reports a synchronous completion. `data-om-buffering-end` reports completed background work. Its extractor metadata is persisted immediately, but the buffered content remains inactive until activation. Check `operationType` to determine whether the completed work was an observation or reflection.
+
+See the [`data-om-observation-end`](/reference/memory/observational-memory#data-om-observation-end) and [`data-om-buffering-end`](/reference/memory/observational-memory#data-om-buffering-end) reference tables for the complete payloads.
 
 ### Working memory updates
 

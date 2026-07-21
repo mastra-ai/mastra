@@ -108,7 +108,7 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
       const workflows = mastra.listWorkflows({ serialized: false });
       const isPartial = partial === 'true';
       const _workflows = Object.entries(workflows).reduce<Record<string, WorkflowInfo>>((acc, [key, workflow]) => {
-        acc[key] = getWorkflowInfo(workflow as any, isPartial);
+        acc[key] = getWorkflowInfo(workflow as any, isPartial, mastra.getWorkflowOrigin?.(key));
         return acc;
       }, {});
 
@@ -157,7 +157,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-      return getWorkflowInfo(workflow);
+      return getWorkflowInfo(workflow, false, mastra.getWorkflowOrigin?.(workflowId));
     } catch (error) {
       return handleError(error, 'Error getting workflow');
     }
@@ -1265,11 +1265,11 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 const stepExecutionBodySchema = z.object({
   stepId: z.string(),
   executionPath: z.array(z.number().int().nonnegative()),
-  stepResults: z.record(z.string(), z.any()),
-  state: z.record(z.string(), z.any()),
-  requestContext: z.record(z.string(), z.any()),
-  input: z.any().optional(),
-  resumeData: z.any().optional(),
+  stepResults: z.record(z.string(), z.unknown()),
+  state: z.record(z.string(), z.unknown()),
+  requestContext: z.record(z.string(), z.unknown()),
+  input: z.unknown().optional(),
+  resumeData: z.unknown().optional(),
   retryCount: z.number().int().nonnegative().optional(),
   foreachIdx: z.number().int().nonnegative().optional(),
   format: z.enum(['legacy', 'vnext']).optional(),
@@ -1307,8 +1307,8 @@ async function getStepStrategy(mastra: Mastra): Promise<StepStrategy> {
 }
 
 // Step execution returns the worker's StepResult. Its shape is dynamic
-// (depends on the step's output schema), so we use a permissive z.any().
-const stepExecutionResponseSchema = z.any();
+// and depends on the step's output schema.
+const stepExecutionResponseSchema = z.unknown();
 
 export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
   method: 'POST',

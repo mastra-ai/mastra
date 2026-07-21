@@ -131,3 +131,50 @@ describe('Mastra.addStoredWorkflow replaces on re-save', () => {
     expect((resultB as any).result.message).toBe('B=6');
   });
 });
+
+describe('Mastra.getWorkflowOrigin', () => {
+  it("stamps 'code' for statically declared workflows and clears on remove", () => {
+    const wf = buildWorkflow('v=${stepResults.double-tool.doubled}');
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      workflows: { myWorkflow: wf } as any,
+    });
+
+    expect(mastra.getWorkflowOrigin('myWorkflow')).toBe('code');
+    // Lookup by workflow id also resolves.
+    expect(mastra.getWorkflowOrigin('wf')).toBe('code');
+
+    mastra.removeWorkflow('myWorkflow');
+    expect(mastra.getWorkflowOrigin('myWorkflow')).toBeUndefined();
+  });
+
+  it("stamps 'stored' for workflows added via addStoredWorkflow", async () => {
+    const storage = new InMemoryStore({ id: 'origin-stored' });
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      storage,
+    });
+
+    const graph = JSON.parse(
+      JSON.stringify(toStorableGraph(buildWorkflow('v=${stepResults.double-tool.doubled}').stepGraph)),
+    );
+    await mastra.addStoredWorkflow({
+      id: 'stored-wf',
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+      graph,
+    });
+
+    expect(mastra.getWorkflowOrigin('stored-wf')).toBe('stored');
+
+    mastra.removeWorkflow('stored-wf');
+    expect(mastra.getWorkflowOrigin('stored-wf')).toBeUndefined();
+  });
+
+  it('returns undefined for unknown keys', () => {
+    const mastra = new Mastra({ logger: false });
+    expect(mastra.getWorkflowOrigin('does-not-exist')).toBeUndefined();
+  });
+});

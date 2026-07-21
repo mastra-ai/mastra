@@ -323,8 +323,7 @@ export const useChat = ({
   }, [propsRequestContext]);
 
   type SignalContentPart =
-    | { type: 'text'; text: string }
-    | { type: 'file'; data: string; mediaType: string; filename?: string };
+    { type: 'text'; text: string } | { type: 'file'; data: string; mediaType: string; filename?: string };
   type UserMessageSignalContents = string | SignalContentPart[];
 
   const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {
@@ -750,6 +749,9 @@ export const useChat = ({
 
     const resolvedSignalId = signalId ?? uuid();
     const messageContents = getSignalContents(coreUserMessages);
+    // RequestContext serializes to a plain record via its toJSON(), but the class has no
+    // index signature, so it isn't assignable to the generated `Record<string, unknown>` body type.
+    const requestContextRecord = resolvedRequestContext as Record<string, unknown> | undefined;
     const streamOptions = {
       maxSteps,
       modelSettings: {
@@ -762,7 +764,7 @@ export const useChat = ({
         topP,
       },
       instructions,
-      requestContext: resolvedRequestContext,
+      requestContext: requestContextRecord,
       providerOptions: providerOptions as any,
       requireToolApproval,
       tracingOptions,
@@ -778,7 +780,7 @@ export const useChat = ({
         ifIdle: {
           streamOptions: {
             ...signalContinuationOptions,
-            requestContext: resolvedRequestContext,
+            requestContext: requestContextRecord,
             clientTools: resolvedClientTools,
           },
         },
