@@ -4,7 +4,7 @@
  *
  * The template is the web project minus monorepo coupling:
  *   - `link:` deps           -> caret ranges on published versions (verified on npm)
- *   - monorepo tsconfig      -> standalone tsconfig
+ *   - monorepo tsconfig       -> standalone tsconfig
  *   - contributor README     -> checked-in template/README.md (version tokens filled)
  *   - e2e/tests/test deps    -> stripped
  *   - monorepo-only scripts  -> user-facing scripts (dev/build/start/deploy)

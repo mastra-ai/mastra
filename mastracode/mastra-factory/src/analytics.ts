@@ -5,9 +5,7 @@ import path from 'node:path';
 import { PostHog } from 'posthog-node';
 
 /**
- * Minimal PostHog analytics for create-factory, mirroring the
- * create-mastra pattern (same project key, same opt-out env var, same
- * ~/.mastra/analytics.json distinct-id store).
+ * Minimal PostHog analytics for create-factory, mirroring the create-mastra pattern (same project key, same opt-out env var, same ~/.mastra/analytics.json distinct-id store).
  */
 
 const ANALYTICS_CONFIG_PATH = path.join(os.homedir(), '.mastra', 'analytics.json');

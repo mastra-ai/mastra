@@ -16,18 +16,18 @@ const clack = vi.hoisted(() => ({
   spinner: () => ({ start: vi.fn(), stop: vi.fn() }),
 }));
 
-const exec = vi.hoisted(() => ({
-  runInherit: vi.fn(),
-  execFileAsync: vi.fn(),
+const tinyexec = vi.hoisted(() => ({
+  x: vi.fn(),
 }));
 
 vi.mock('@clack/prompts', () => clack);
-vi.mock('./utils/exec.js', () => exec);
+vi.mock('tinyexec', () => tinyexec);
 
 import type { Analytics } from './analytics.js';
 import { create } from './create.js';
 
 const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as Analytics;
+const TEMPLATE_REPO = 'https://github.com/mastra-ai/softwarefactory-template';
 
 const ENV_EXAMPLE = `# Mastra Software Factory environment.
 
@@ -50,8 +50,6 @@ const originalCwd = process.cwd();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  exec.runInherit.mockResolvedValue(undefined);
-  exec.execFileAsync.mockResolvedValue({ stdout: '', stderr: '' });
 
   // realpath: macOS tmpdir is a symlink and cwd-relative paths resolve it.
   workDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sf-create-test-')));
@@ -63,6 +61,12 @@ beforeEach(() => {
   );
   fs.writeFileSync(path.join(templateDir, '.env.example'), ENV_EXAMPLE);
   process.chdir(workDir);
+
+  tinyexec.x.mockImplementation(async (command: string, args: string[]) => {
+    if (command === 'npx' && args[0] === 'degit') {
+      fs.cpSync(templateDir, args[2]!, { recursive: true });
+    }
+  });
 });
 
 afterEach(() => {
@@ -70,9 +74,9 @@ afterEach(() => {
   fs.rmSync(workDir, { recursive: true, force: true });
 });
 
-describe('create --default', () => {
-  it('scaffolds a project with a correct .env and finishes with the success outro', async () => {
-    await create({ projectName: 'my-factory', useDefaults: true, templateDir, analytics });
+describe('create', () => {
+  it('scaffolds a project with a correct .env and shows the next steps', async () => {
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
 
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
@@ -87,44 +91,45 @@ describe('create --default', () => {
     // Project renamed and installed.
     const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));
     expect(pkg.name).toBe('my-factory');
-    expect(exec.runInherit).toHaveBeenCalledWith(
+    expect(tinyexec.x).toHaveBeenCalledWith(
       expect.any(String),
       ['install'],
       expect.objectContaining({
-        cwd: projectPath,
+        nodeOptions: { cwd: projectPath },
       }),
     );
 
-    // Git repo always initialized.
-    expect(exec.runInherit).toHaveBeenCalledWith('git', ['init', '-q'], expect.objectContaining({ cwd: projectPath }));
+    // Git repo initialized.
+    expect(tinyexec.x).toHaveBeenCalledWith('git', ['init', '-q'], { nodeOptions: { cwd: projectPath } });
 
-    // Success outro shown.
     expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Your Software Factory is ready!'), 'Next steps');
-    expect(clack.outro).toHaveBeenCalled();
   });
 
-  it('fails the run when the template clone fails, without a success outro', async () => {
-    exec.execFileAsync.mockRejectedValue(new Error('remote unreachable'));
+  it('fails the run when the template clone fails, without showing next steps', async () => {
+    tinyexec.x.mockRejectedValue(new Error('remote unreachable'));
 
-    await expect(create({ projectName: 'my-factory', useDefaults: true, analytics })).rejects.toThrow(
-      /Failed to clone template/,
+    await expect(create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics })).rejects.toThrow(
+      /Failed to clone repository/,
     );
 
-    expect(exec.runInherit).not.toHaveBeenCalled();
+    expect(tinyexec.x).not.toHaveBeenCalledWith(expect.any(String), ['install'], expect.anything());
     expect(clack.note).not.toHaveBeenCalled();
-    expect(clack.outro).not.toHaveBeenCalled();
   });
 
-  it('fails the run when dependency install fails, without a success outro', async () => {
-    exec.runInherit.mockImplementation(async (_cmd: string, args: string[]) => {
-      if (args[0] === 'install') throw new Error('npm install exited with code 1');
+  it('fails the run when dependency install fails, without showing next steps', async () => {
+    tinyexec.x.mockImplementation(async (command: string, args: string[]) => {
+      if (command === 'npx' && args[0] === 'degit') {
+        fs.cpSync(templateDir, args[2]!, { recursive: true });
+      }
+      if (args[0] === 'install') {
+        throw new Error('npm install exited with code 1');
+      }
     });
 
-    await expect(create({ projectName: 'my-factory', useDefaults: true, templateDir, analytics })).rejects.toThrow(
+    await expect(create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics })).rejects.toThrow(
       /retry manually/,
     );
 
     expect(clack.note).not.toHaveBeenCalled();
-    expect(clack.outro).not.toHaveBeenCalled();
   });
 });

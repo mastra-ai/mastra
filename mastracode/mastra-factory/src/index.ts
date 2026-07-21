@@ -2,9 +2,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
-
-import { Analytics } from './analytics.js';
-import { create } from './create.js';
+import { Analytics } from './analytics';
+import { create } from './create';
 
 const pkg = JSON.parse(
   readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
@@ -12,30 +11,22 @@ const pkg = JSON.parse(
 
 const analytics = new Analytics(pkg.version);
 const program = new Command();
+const DEFAULT_TEMPLATE_REPO = 'https://github.com/mastra-ai/softwarefactory-template';
+
+type CreateArgs = {
+  template: string;
+};
 
 program
   .name('create-factory')
-  .description('Create a Mastra Software Factory project')
-  .version(pkg.version, '-v, --version')
+  .description('Create a new Mastra Software Factory project')
   .argument('[project-name]', 'Directory name of the project')
-  .option('--default', 'Non-interactive: default name')
-  .option('--template-ref <ref>', 'Pin a template repo tag/branch')
-  .option('--template-dir <dir>', 'Use a local template directory instead of cloning (development)')
-  .option('-t, --timeout [ms]', 'Timeout for dependency installation in ms')
-  .action(async (projectNameArg: string | undefined, args: Record<string, unknown>) => {
-    let timeout: number | undefined;
-    if (args.timeout !== undefined) {
-      timeout = args.timeout === true ? 60_000 : Number(args.timeout);
-      if (!Number.isInteger(timeout) || timeout <= 0) {
-        throw new Error(`--timeout must be a positive integer in milliseconds (got ${String(args.timeout)})`);
-      }
-    }
+  .option('--template <template-name>', 'Create a project from a template (public GitHub URL)', DEFAULT_TEMPLATE_REPO)
+  .version(pkg.version, '-v, --version')
+  .action(async (projectNameArg: string | undefined, args: CreateArgs) => {
     await create({
       projectName: projectNameArg,
-      useDefaults: Boolean(args.default),
-      templateRef: args.templateRef ? String(args.templateRef) : undefined,
-      templateDir: args.templateDir ? String(args.templateDir) : undefined,
-      timeout,
+      template: args.template,
       analytics,
     });
   });
