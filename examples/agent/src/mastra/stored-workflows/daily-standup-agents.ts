@@ -29,7 +29,7 @@ export const standupNoteNormalizerAgent = new Agent({
     '  Blocked: <one short phrase, or "None">',
     'Keep each line under 20 words. Do not add anything else.',
   ].join('\n'),
-  model: 'openai/gpt-5.4-mini',
+  model: 'openai/gpt-5-mini',
 });
 
 /**
@@ -50,5 +50,5 @@ export const standupDigestAgent = new Agent({
     'If there are no blockers, write "- None" under Blockers.',
     'Do not add a title, preamble, or trailing commentary.',
   ].join('\n'),
-  model: 'openai/gpt-5.4-mini',
+  model: 'openai/gpt-5-mini',
 });
