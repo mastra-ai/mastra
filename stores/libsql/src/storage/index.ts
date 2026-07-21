@@ -3,6 +3,7 @@ import type { Client } from '@libsql/client';
 import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
+import type { LibSQLLocalJournalMode } from '../types';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
@@ -52,6 +53,7 @@ export {
   WorkflowsLibSQL,
   WorkspacesLibSQL,
 };
+export type { LibSQLLocalJournalMode } from '../types';
 export type { LibSQLDomainConfig } from './db';
 export { LibSQLFactoryStorage, type LibSQLFactoryStorageConfig } from './factory-storage';
 
@@ -103,6 +105,12 @@ export type LibSQLBaseConfig = {
    * @default 5000
    */
   connectionTimeoutMs?: number;
+  /**
+   * SQLite journal mode for local file databases. Remote and in-memory databases
+   * keep their existing behavior.
+   * @default 'wal'
+   */
+  journalMode?: LibSQLLocalJournalMode;
   /**
    * Overrides local SQLite PRAGMA values used for startup/read performance.
    * Only applies to local file and in-memory databases.
@@ -171,7 +179,10 @@ export class LibSQLStore extends MastraCompositeStore {
   private readonly connectionTimeoutMs: number;
   private readonly pragmasReady: Promise<void>;
   private readonly isLocalDb: boolean;
+  private readonly isLocalFileDb: boolean;
+  private readonly journalMode: LibSQLLocalJournalMode;
   private readonly localPragmas: Required<LibSQLLocalPragmaOptions>;
+  private closePromise?: Promise<void>;
 
   stores: StorageDomains;
 
@@ -179,11 +190,15 @@ export class LibSQLStore extends MastraCompositeStore {
     if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
       throw new Error('LibSQLStore: id must be provided and cannot be empty.');
     }
+    if (config.journalMode !== undefined && config.journalMode !== 'wal' && config.journalMode !== 'delete') {
+      throw new Error("LibSQLStore: journalMode must be either 'wal' or 'delete'.");
+    }
     super({ id: config.id, name: `LibSQLStore`, disableInit: config.disableInit, retention: config.retention });
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;
     this.connectionTimeoutMs = config.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
+    this.journalMode = config.journalMode ?? 'wal';
     this.localPragmas = {
       cacheSize: config.localPragmas?.cacheSize ?? DEFAULT_LOCAL_CACHE_SIZE,
       mmapSize: config.localPragmas?.mmapSize ?? DEFAULT_LOCAL_MMAP_SIZE,
@@ -196,6 +211,7 @@ export class LibSQLStore extends MastraCompositeStore {
       }
 
       this.isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
+      this.isLocalFileDb = config.url.startsWith('file:') && !config.url.includes(':memory:');
 
       this.client = createClient({
         url: config.url,
@@ -208,6 +224,7 @@ export class LibSQLStore extends MastraCompositeStore {
     } else {
       this.client = config.client;
       this.isLocalDb = false;
+      this.isLocalFileDb = false;
       this.pragmasReady = Promise.resolve();
     }
 
@@ -267,8 +284,27 @@ export class LibSQLStore extends MastraCompositeStore {
   }
 
   private async applyLocalPragmas(): Promise<void> {
+    const journalMode = this.journalMode.toUpperCase();
+    try {
+      const result = await this.client.execute(`PRAGMA journal_mode=${journalMode};`);
+
+      if (this.isLocalFileDb && this.journalMode === 'delete') {
+        const appliedMode = Object.values(result.rows[0] ?? {})[0];
+        if (typeof appliedMode !== 'string' || appliedMode.toLowerCase() !== 'delete') {
+          throw new Error(
+            `LibSQLStore: Failed to set PRAGMA journal_mode=DELETE; SQLite reported ${String(appliedMode)}.`,
+          );
+        }
+      }
+      this.logger.debug(`LibSQLStore: PRAGMA journal_mode=${journalMode} set.`);
+    } catch (err) {
+      if (this.isLocalFileDb && this.journalMode === 'delete') {
+        throw err;
+      }
+      this.logger.warn(`LibSQLStore: Failed to set PRAGMA journal_mode=${journalMode}.`, err);
+    }
+
     const pragmas = [
-      ['journal_mode=WAL', 'PRAGMA journal_mode=WAL;'],
       // Keep in sync with the connection-level `timeout` passed to createClient
       // so a custom connectionTimeoutMs isn't clobbered back to a hardcoded value.
       [`busy_timeout=${this.connectionTimeoutMs}`, `PRAGMA busy_timeout=${this.connectionTimeoutMs};`],
@@ -341,27 +377,39 @@ export class LibSQLStore extends MastraCompositeStore {
   /**
    * Closes the underlying libsql client, releasing all OS file handles.
    *
-   * For local file databases, first runs PRAGMA wal_checkpoint(TRUNCATE) and
-   * switches back to journal_mode=DELETE so that Windows releases the -wal
-   * and -shm sidecar files promptly. Without this, the handles stay open
-   * until process exit, causing EBUSY errors when callers try to fs.rm the
-   * storage directory after Mastra.shutdown().
+   * Local file databases configured for WAL are checkpointed and switched to
+   * journal_mode=DELETE so that Windows releases the -wal and -shm sidecar
+   * files promptly. Databases already configured for DELETE skip that work.
    *
    * Remote (Turso) databases skip the WAL pragmas and just close the client.
    *
    * Safe to call more than once; subsequent calls are no-ops.
    */
-  async close(): Promise<void> {
+  close(): Promise<void> {
+    if (!this.closePromise) {
+      this.closePromise = this.closeClient();
+    }
+    return this.closePromise;
+  }
+
+  private async closeClient(): Promise<void> {
     if (this.client.closed) {
       return;
     }
 
-    // A store built from an injected client may still point at a local file even
-    // though `isLocalDb` (derived from the url config) is false, so also trust the
-    // client's own protocol to decide whether WAL cleanup is needed.
-    const isLocalFileDb = this.isLocalDb || this.client.protocol === 'file';
+    let readinessError: unknown;
+    try {
+      await this.pragmasReady;
+    } catch (err) {
+      readinessError = err;
+    }
 
-    if (isLocalFileDb) {
+    // A store built from an injected client may still point at a local file even
+    // though its journal mode is unknown, so preserve the WAL cleanup behavior.
+    const needsWalCleanup =
+      (this.isLocalFileDb && this.journalMode === 'wal') || (!this.isLocalDb && this.client.protocol === 'file');
+
+    if (!readinessError && needsWalCleanup) {
       try {
         await this.client.execute('PRAGMA wal_checkpoint(TRUNCATE);');
         await this.client.execute('PRAGMA journal_mode=DELETE;');
@@ -371,6 +419,10 @@ export class LibSQLStore extends MastraCompositeStore {
     }
 
     this.client.close();
+
+    if (readinessError) {
+      throw readinessError;
+    }
   }
 }
 
