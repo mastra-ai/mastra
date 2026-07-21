@@ -17,7 +17,6 @@ import type { MastraVector } from '@mastra/core/vector';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { FactoryIntegration } from '@mastra/factory/integrations/base';
 import type { GithubIntegration } from './github/integration.js';
-import type { LinearIntegration } from './linear/integration.js';
 import type { StateSigner } from '@mastra/factory/state-signing';
 
 /**
@@ -133,16 +132,6 @@ export function getSeededIntegration(id: string): FactoryIntegration | undefined
 export function getSeededGithubIntegration(): GithubIntegration | undefined {
   const integration = getSeededIntegration('github');
   return integration?.versionControl ? (integration as GithubIntegration) : undefined;
-}
-
-/**
- * Linear integration seeded by the factory. Typed convenience over
- * {@link getSeededIntegration}. `undefined` when no Linear integration was
- * registered (or the factory never ran) — Linear intake stays off in that case.
- */
-export function getSeededLinearIntegration(): LinearIntegration | undefined {
-  const integration = getSeededIntegration('linear');
-  return integration?.intake ? (integration as LinearIntegration) : undefined;
 }
 
 /**

@@ -9,7 +9,6 @@ import type { AuditEmitter } from '@mastra/factory/storage/domains/audit/domain'
 import { factoryRouteAuth } from './auth.js';
 import type { FactoryIntegration, IntegrationContext } from '@mastra/factory/integrations/base';
 import { getGithubFeatureDiagnostics } from './github/config.js';
-import { getLinearFeatureDiagnostics } from './linear/config.js';
 import { WorkItemRoutes } from '@mastra/factory/routes/work-items';
 import { buildFsRoutes } from './fs-routes.js';
 import { IntakeRoutes } from '@mastra/factory/routes/intake';
@@ -122,6 +121,7 @@ export function buildIntegrationContext(
   integrationId: string,
 ): IntegrationContext {
   return {
+    auth: factoryRouteAuth,
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
     stateSigner: deps.stateSigner,
@@ -141,7 +141,7 @@ export function buildIntegrationContext(
  * integration is absent (or not ready) the status contract must still hold.
  * Unknown custom ids get no stub — the SPA doesn't poll them.
  */
-function disabledIntegrationStatusRoutes(id: string): ApiRoute[] {
+function disabledIntegrationStatusRoutes(id: string, configured = false): ApiRoute[] {
   if (id === 'github') {
     return [
       registerApiRoute('/web/github/status', {
@@ -169,7 +169,11 @@ function disabledIntegrationStatusRoutes(id: string): ApiRoute[] {
             connected: false,
             workspace: null,
             reason: 'missing_config',
-            diagnostics: getLinearFeatureDiagnostics(),
+            diagnostics: {
+              linearAppConfigured: configured,
+              webAuthEnabled: factoryRouteAuth.enabled(),
+              appDbConfigured: true,
+            },
           }),
       }),
     ];
@@ -191,14 +195,14 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
-    if (!deps.stateSigner) return disabledIntegrationStatusRoutes(integration.id);
+    if (!deps.stateSigner) return disabledIntegrationStatusRoutes(integration.id, true);
     const context = buildIntegrationContext({ ...deps, stateSigner: deps.stateSigner, emitAudit }, integration.id);
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });
   // Absent known integrations still get their disabled-status stub.
   const absentStubs = ['github', 'linear']
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
-    .flatMap(disabledIntegrationStatusRoutes);
+    .flatMap(id => disabledIntegrationStatusRoutes(id));
 
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),

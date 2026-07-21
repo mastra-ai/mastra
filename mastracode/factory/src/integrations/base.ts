@@ -24,6 +24,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 
 import type { Intake } from '../capabilities/intake';
 import type { VersionControl } from '../capabilities/version-control';
+import type { RouteAuth } from '../routes/route.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -57,6 +58,8 @@ export interface IntegrationPostToolContext {
  * Built once per boot in `MastraFactory.prepare()`.
  */
 export interface IntegrationContext {
+  /** Host auth seam — integration routes resolve callers through this. */
+  auth: RouteAuth;
   /** Browser-facing origin (OAuth redirect base), no trailing slash. */
   baseUrl?: string;
   /** Mounted agent controller for webhook → session signal delivery. */
@@ -97,7 +100,7 @@ export interface FactoryIntegration {
    * agent tools, intake capability calls — reach storage without a service
    * locator. Mirrors `sourceControl.initialize`.
    */
-  initialize?(args: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage }): void;
+  initialize?(args: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage; auth: RouteAuth }): void;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds

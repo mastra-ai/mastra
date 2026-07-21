@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { LinearIntegration, type LinearIssue, type LinearIssueDetail } from './integration';
+import { LinearIntegration } from './integration';
+import type { LinearIssue, LinearIssueDetail } from './integration';
 
 function integration(): LinearIntegration {
   return new LinearIntegration({ clientId: 'linear-client', clientSecret: 'linear-secret' });

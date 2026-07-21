@@ -404,6 +404,7 @@ export class MastraFactory {
       integration.initialize?.({
         storage: integrationStorage.forIntegration(integration.id),
         projects: factoryProjectsStorage,
+        auth: factoryRouteAuth,
       });
       if (integration.versionControl) {
         integration.versionControl.initialize({

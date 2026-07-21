@@ -33,7 +33,7 @@ import { WorkOSAuditIntegration } from '../web/audit/workos-integration.js';
 import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '@mastra/factory/integrations/base';
 import { GithubIntegration } from '../web/github/integration.js';
-import { LinearIntegration } from '../web/linear/integration.js';
+import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".

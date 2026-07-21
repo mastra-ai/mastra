@@ -22,7 +22,7 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
-import type { IntegrationConnection } from '@mastra/factory/capabilities/connection';
+import type { IntegrationConnection } from '../../capabilities/connection';
 import type {
   CreateIntakeCommentInput,
   GetIntakeIssueInput,
@@ -30,14 +30,14 @@ import type {
   IntakeIssue,
   IntakeIssueDetail,
   ListIntakeIssuesInput,
-} from '@mastra/factory/capabilities/intake';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
-import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
-import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
+} from '../../capabilities/intake';
+import type { RouteAuth } from '../../routes/route.js';
+import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { buildLinearAgentTools } from './agent-tools.js';
-import { getFreshLinearAccessToken, loadLinearConnection } from './connection.js';
 import { buildLinearRoutes } from './routes.js';
-import type { LinearStorageHandle } from './storage.js';
+import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
 const LINEAR_TOKEN_URL = 'https://api.linear.app/oauth/token';
@@ -137,6 +137,29 @@ const ISSUE_COMMENTS_PAGE_SIZE = 50;
 /** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
 const ISSUE_COMMENTS_MAX_PAGES = 20;
 
+/** Refresh this many ms before the recorded expiry to absorb clock skew. */
+const TOKEN_REFRESH_SKEW_MS = 60_000;
+
+/** Re-check an org's Linear connection (and its scopes) at most this often. */
+const CONNECTION_TTL_MS = 60_000;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Thrown when the org's Linear authorization can no longer be renewed. */
+export class LinearReauthRequiredError extends Error {
+  constructor() {
+    super('Linear authorization expired. Reconnect Linear to keep syncing intake issues.');
+  }
+}
+
+/** Cached result of {@link LinearIntegration.checkConnection}. */
+export interface LinearConnectionCheck {
+  connected: boolean;
+  /** Whether the granted OAuth scope allows posting issue comments. */
+  canComment: boolean;
+  checkedAt: number;
+}
+
 interface IssuesQueryData {
   issues: {
     nodes: Array<{
@@ -235,16 +258,26 @@ async function linearGraphql<T>(accessToken: string, query: string, variables?: 
 }
 
 export class LinearIntegration implements FactoryIntegration {
-  /** Stable integration identifier (see `../factory-integration.ts`). */
+  /** Stable integration identifier (see `../base.ts`). */
   readonly id = 'linear';
   /** Bound once by the factory via `initialize()` before any surface is used. */
   #storage: LinearStorageHandle | undefined;
   #projects: FactoryProjectsStorage | undefined;
+  #auth: RouteAuth | undefined;
 
-  /** Bind Linear's slice of the generic integration storage + the projects domain. */
-  initialize({ storage, projects }: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage }): void {
+  /** Bind Linear's slice of the generic integration storage, the projects domain, and the host auth seam. */
+  initialize({
+    storage,
+    projects,
+    auth,
+  }: {
+    storage: IntegrationStorageHandle;
+    projects: FactoryProjectsStorage;
+    auth: RouteAuth;
+  }): void {
     this.#storage = storage as unknown as LinearStorageHandle;
     this.#projects = projects;
+    this.#auth = auth;
   }
 
   get storage(): LinearStorageHandle {
@@ -262,11 +295,209 @@ export class LinearIntegration implements FactoryIntegration {
     return this.#projects;
   }
 
+  /**
+   * Whether the host runs with web auth enabled. Linear connections are
+   * org-owned, so every Linear surface is inert without a tenant auth seam.
+   */
+  get authEnabled(): boolean {
+    return this.#auth?.enabled() ?? false;
+  }
+
+  // ── Connection + OAuth token lifecycle ───────────────────────────────────
+
+  /** Load the org's Linear connection, or `null` when not connected. */
+  async loadConnection(orgId: string): Promise<LinearConnectionRow | null> {
+    const connection = await this.storage.connections.get(orgId);
+    if (!connection) return null;
+    const { data } = connection;
+    return {
+      id: connection.id,
+      orgId: connection.orgId,
+      userId: connection.userId,
+      accessToken: data.accessToken,
+      scope: data.scope ?? null,
+      refreshToken: data.refreshToken ?? null,
+      expiresAt: data.expiresAtMs === null || data.expiresAtMs === undefined ? null : new Date(data.expiresAtMs),
+      workspaceName: data.workspaceName ?? null,
+      workspaceUrlKey: data.workspaceUrlKey ?? null,
+      createdAt: connection.createdAt,
+      updatedAt: connection.updatedAt,
+    };
+  }
+
+  /** Insert or replace the org's connection (one per org). */
+  async upsertConnection(input: UpsertLinearConnectionInput): Promise<void> {
+    await this.storage.connections.upsert(input.orgId, {
+      userId: input.userId,
+      data: {
+        accessToken: input.accessToken,
+        refreshToken: input.refreshToken,
+        expiresAtMs: input.expiresAt?.getTime() ?? null,
+        scope: input.scope,
+        workspaceName: input.workspaceName,
+        workspaceUrlKey: input.workspaceUrlKey,
+      },
+    });
+    // Let the agent tools see the new connection immediately.
+    this.invalidateConnectionCache(input.orgId);
+  }
+
+  /** Persist a rotated token set on the org's existing connection row. */
+  async #updateTokens(orgId: string, tokens: LinearTokenSet): Promise<void> {
+    await this.storage.connections.update(orgId, data => ({
+      ...data,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAtMs: tokens.expiresAt?.getTime() ?? null,
+      // Refresh responses may omit scope; keep the recorded grant.
+      scope: tokens.scope ?? data.scope,
+    }));
+  }
+
+  /**
+   * Whether the connection's token can post issue comments. Legacy rows
+   * without a recorded scope were minted with `read` only, so they count as
+   * read-only until the org reconnects Linear.
+   */
+  canPostComments(connection: LinearConnectionRow): boolean {
+    const scopes = (connection.scope ?? '').split(/[\s,]+/).filter(Boolean);
+    return scopes.some(scope => scope === 'comments:create' || scope === 'write' || scope === 'admin');
+  }
+
+  /**
+   * In-flight refreshes keyed by org. Linear rotates refresh tokens, so two
+   * concurrent refreshes with the same token would invalidate each other —
+   * single-flight ensures one exchange per org and shares the result.
+   */
+  readonly #inflightRefreshes = new Map<string, Promise<string>>();
+
+  /**
+   * Return a usable access token for the connection, proactively refreshing
+   * it when the recorded expiry is past (or imminent). Throws
+   * `LinearReauthRequiredError` when the token is expired and cannot be
+   * refreshed — the org has to go through the OAuth flow again.
+   */
+  async getFreshAccessToken(connection: LinearConnectionRow): Promise<string> {
+    const expired =
+      connection.expiresAt !== null && connection.expiresAt.getTime() - TOKEN_REFRESH_SKEW_MS <= Date.now();
+    if (!expired) return connection.accessToken;
+
+    if (!connection.refreshToken) {
+      // Legacy row from before refresh-token support: nothing to renew with.
+      throw new LinearReauthRequiredError();
+    }
+
+    const existing = this.#inflightRefreshes.get(connection.orgId);
+    if (existing) return existing;
+
+    // The caller may hold a stale row: another request could have refreshed
+    // and rotated the refresh token since this row was loaded. Reload before
+    // refreshing so we don't burn the rotated token and force a false reauth.
+    const latest = await this.loadConnection(connection.orgId);
+    if (!latest) throw new LinearReauthRequiredError();
+
+    const concurrent = this.#inflightRefreshes.get(connection.orgId);
+    if (concurrent) return concurrent;
+
+    const latestExpired = latest.expiresAt !== null && latest.expiresAt.getTime() - TOKEN_REFRESH_SKEW_MS <= Date.now();
+    if (!latestExpired) return latest.accessToken;
+    if (!latest.refreshToken) throw new LinearReauthRequiredError();
+
+    const refreshToken = latest.refreshToken;
+    const refresh = (async () => {
+      try {
+        const tokens = await this.refreshAccessToken(refreshToken);
+        await this.#updateTokens(connection.orgId, tokens);
+        return tokens.accessToken;
+      } catch (err) {
+        const status = (err as { status?: number }).status;
+        // invalid_grant surfaces as 400/401: the refresh token was revoked or
+        // already rotated away. Terminal for this connection.
+        if (status === 400 || status === 401) throw new LinearReauthRequiredError();
+        throw err;
+      } finally {
+        this.#inflightRefreshes.delete(connection.orgId);
+      }
+    })();
+    this.#inflightRefreshes.set(connection.orgId, refresh);
+    return refresh;
+  }
+
+  // ── Connection checks for agent tools ────────────────────────────────────
+
+  /** Re-check an org's Linear connection (and its scopes) at most this often. */
+  readonly #connectionChecks = new Map<string, LinearConnectionCheck>();
+
+  /**
+   * Whether the org has an active connection and whether its granted scope
+   * allows posting comments. Cached per org with a short TTL — tool-set
+   * resolution runs on every request.
+   */
+  async checkConnection(orgId: string): Promise<LinearConnectionCheck> {
+    const cached = this.#connectionChecks.get(orgId);
+    if (cached && Date.now() - cached.checkedAt < CONNECTION_TTL_MS) return cached;
+    const connection = await this.loadConnection(orgId);
+    const check: LinearConnectionCheck = {
+      connected: connection !== null,
+      canComment: connection !== null && this.canPostComments(connection),
+      checkedAt: Date.now(),
+    };
+    this.#connectionChecks.set(orgId, check);
+    return check;
+  }
+
+  /**
+   * Drop the cached connection check for an org. Called after a connection is
+   * persisted so the tools show up on the very next run instead of after the
+   * TTL lapses.
+   */
+  invalidateConnectionCache(orgId: string): void {
+    this.#connectionChecks.delete(orgId);
+  }
+
+  /**
+   * A project's org never changes, so the resourceId → orgId mapping is
+   * cached forever. `null` marks resource ids that aren't factory projects
+   * (e.g. local default resources) so we don't re-query them on every
+   * tool-set resolution.
+   */
+  readonly #orgIdByResourceId = new Map<string, string | null>();
+
+  /** Map a session's resourceId to its owning org, or `null` when it isn't a project. */
+  async resolveOrgId(resourceId: string): Promise<string | null> {
+    const cached = this.#orgIdByResourceId.get(resourceId);
+    if (cached !== undefined) return cached;
+    // Non-UUID resource ids (local/dev resources) would make the uuid column
+    // comparison throw — they're definitively "not a project", so cache that.
+    if (!UUID_PATTERN.test(resourceId)) {
+      this.#orgIdByResourceId.set(resourceId, null);
+      return null;
+    }
+    let orgId: string | null;
+    try {
+      await this.projects.ensureReady();
+      const project = await this.projects.getById({ id: resourceId });
+      orgId = project?.orgId ?? null;
+    } catch {
+      // Transient database failure: skip the tools for this request but don't
+      // cache the miss, so the next request retries the lookup.
+      return null;
+    }
+    this.#orgIdByResourceId.set(resourceId, orgId);
+    return orgId;
+  }
+
+  /** Test hook: clear the org/connection caches between specs. */
+  clearCaches(): void {
+    this.#orgIdByResourceId.clear();
+    this.#connectionChecks.clear();
+  }
+
   readonly intake: Intake = {
     listSources: async ({ orgId }) => {
-      const connection = await loadLinearConnection(this.storage, orgId);
+      const connection = await this.loadConnection(orgId);
       if (!connection) return [];
-      const accessToken = await getFreshLinearAccessToken(this, this.storage, connection);
+      const accessToken = await this.getFreshAccessToken(connection);
       const projects = await this.listProjects(accessToken);
       return projects.map(project => ({
         id: project.id,
@@ -276,9 +507,9 @@ export class LinearIntegration implements FactoryIntegration {
     },
     listItems: async ({ orgId, sourceIds, cursor }) => {
       if (sourceIds.length === 0) return { items: [], nextCursor: null };
-      const connection = await loadLinearConnection(this.storage, orgId);
+      const connection = await this.loadConnection(orgId);
       if (!connection) return { items: [], nextCursor: null };
-      const accessToken = await getFreshLinearAccessToken(this, this.storage, connection);
+      const accessToken = await this.getFreshAccessToken(connection);
       const page = await this.listActiveIssues(accessToken, cursor, sourceIds);
       return {
         items: page.issues.map(issue => ({
@@ -666,6 +897,7 @@ export class LinearIntegration implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     return buildLinearRoutes({
       linear: this,
+      auth: ctx.auth,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,

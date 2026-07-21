@@ -2,15 +2,15 @@
  * Linear tools exposed to the coding agent.
  *
  * Wired into the agent through the SDK's async `extraTools` provider: on each
- * tool-set resolution we map the session's resourceId (which is the GitHub
- * project id in the web app) to its owning WorkOS org and only expose the
- * Linear tools when that org has a Linear connection. Projects whose org never
- * connected Linear (or when the feature is disabled) see no Linear tools at
- * all — the model is never shown tools it can't use.
+ * tool-set resolution we map the session's resourceId (the factory project id)
+ * to its owning org and only expose the Linear tools when that org has a
+ * Linear connection. Projects whose org never connected Linear (or when the
+ * feature is disabled) see no Linear tools at all — the model is never shown
+ * tools it can't use.
  *
  * Tenancy mirrors the Linear API routes: everything is scoped by the org that
- * owns the project, and tokens are refreshed through the same shared
- * connection helpers the routes use.
+ * owns the project, and tokens are refreshed through the integration's shared
+ * connection lifecycle.
  */
 
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
@@ -18,85 +18,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
-import { isLinearFeatureEnabled } from './config';
 import type { LinearIntegration } from './integration';
-import {
-  canPostLinearComments,
-  getFreshLinearAccessToken,
-  LinearReauthRequiredError,
-  loadLinearConnection,
-} from './connection';
-
-/**
- * A project's org never changes, so the resourceId → orgId mapping is cached
- * forever. `null` marks resource ids that aren't GitHub projects (e.g. local
- * default resources) so we don't re-query them on every tool-set resolution.
- */
-const orgIdByResourceId = new Map<string, string | null>();
-
-/** Re-check the org's Linear connection (and its scopes) at most this often. */
-const CONNECTION_TTL_MS = 60_000;
-interface ConnectionCheck {
-  connected: boolean;
-  /** Whether the granted OAuth scope allows posting issue comments. */
-  canComment: boolean;
-  checkedAt: number;
-}
-const connectionCheckByOrg = new Map<string, ConnectionCheck>();
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-async function resolveOrgId(projects: FactoryProjectsStorage, resourceId: string): Promise<string | null> {
-  const cached = orgIdByResourceId.get(resourceId);
-  if (cached !== undefined) return cached;
-  // Non-UUID resource ids (local/dev resources) would make the uuid column
-  // comparison throw — they're definitively "not a project", so cache that.
-  if (!UUID_PATTERN.test(resourceId)) {
-    orgIdByResourceId.set(resourceId, null);
-    return null;
-  }
-  let orgId: string | null;
-  try {
-    await projects.ensureReady();
-    const project = await projects.getById({ id: resourceId });
-    orgId = project?.orgId ?? null;
-  } catch {
-    // Transient database failure: skip the tools for this request but don't
-    // cache the miss, so the next request retries the lookup.
-    return null;
-  }
-  orgIdByResourceId.set(resourceId, orgId);
-  return orgId;
-}
-
-async function checkLinearConnection(linear: LinearIntegration, orgId: string): Promise<ConnectionCheck> {
-  const cached = connectionCheckByOrg.get(orgId);
-  if (cached && Date.now() - cached.checkedAt < CONNECTION_TTL_MS) return cached;
-  const connection = await loadLinearConnection(linear.storage, orgId);
-  const check: ConnectionCheck = {
-    connected: connection !== null,
-    canComment: connection !== null && canPostLinearComments(connection),
-    checkedAt: Date.now(),
-  };
-  connectionCheckByOrg.set(orgId, check);
-  return check;
-}
-
-/** Test hook: clear the org/connection caches between specs. */
-export function clearLinearAgentToolCaches(): void {
-  orgIdByResourceId.clear();
-  connectionCheckByOrg.clear();
-}
-
-/**
- * Drop the cached connection check for an org. Called by the OAuth callback
- * after a connection is persisted so the tools show up on the very next run
- * instead of after the TTL lapses.
- */
-export function invalidateLinearConnectionCache(orgId: string): void {
-  connectionCheckByOrg.delete(orgId);
-}
+import { LinearReauthRequiredError } from './integration';
 
 function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
   return createTool({
@@ -107,12 +30,12 @@ function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
       issue: z.string().min(1).describe('The Linear issue identifier (e.g. "ENG-123") or issue UUID.'),
     }),
     execute: async ({ issue }: { issue: string }) => {
-      const connection = await loadLinearConnection(linear.storage, orgId);
+      const connection = await linear.loadConnection(orgId);
       if (!connection) {
         return { error: 'Linear is not connected for this repository. Connect Linear in Settings to fetch issues.' };
       }
       try {
-        const accessToken = await getFreshLinearAccessToken(linear, linear.storage, connection);
+        const accessToken = await linear.getFreshAccessToken(connection);
         const detail = await linear.intake.getIssue({
           connection: { type: 'oauth', accessToken },
           issueId: issue.trim(),
@@ -141,17 +64,17 @@ function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
       body: z.string().min(1).describe('The comment body, as Linear-flavored markdown.'),
     }),
     execute: async ({ issue, body }: { issue: string; body: string }) => {
-      const connection = await loadLinearConnection(linear.storage, orgId);
+      const connection = await linear.loadConnection(orgId);
       if (!connection) {
         return { error: 'Linear is not connected for this repository. Connect Linear in Settings to post comments.' };
       }
-      if (!canPostLinearComments(connection)) {
+      if (!linear.canPostComments(connection)) {
         return {
           error: 'The Linear connection does not have comment permissions. Reconnect Linear in Settings to grant them.',
         };
       }
       try {
-        const accessToken = await getFreshLinearAccessToken(linear, linear.storage, connection);
+        const accessToken = await linear.getFreshAccessToken(connection);
         const comment = await linear.intake.createComment({
           connection: { type: 'oauth', accessToken },
           issueId: issue.trim(),
@@ -183,15 +106,15 @@ export async function buildLinearAgentTools({
   /** The integration instance providing the Linear API client. */
   linear: LinearIntegration;
 }): Promise<Record<string, ReturnType<typeof createLinearGetIssueTool> | ReturnType<typeof createLinearCommentTool>>> {
-  if (!isLinearFeatureEnabled()) return {};
+  if (!linear.authEnabled) return {};
 
   const ctx = requestContext.get('controller') as AgentControllerRequestContext | undefined;
   const resourceId = ctx?.resourceId;
   if (!resourceId) return {};
 
-  const orgId = await resolveOrgId(linear.projects, resourceId);
+  const orgId = await linear.resolveOrgId(resourceId);
   if (!orgId) return {};
-  const check = await checkLinearConnection(linear, orgId);
+  const check = await linear.checkConnection(orgId);
   if (!check.connected) return {};
 
   return {
