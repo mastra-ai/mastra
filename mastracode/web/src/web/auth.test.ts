@@ -1,7 +1,14 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getWebAuthOrgId, getWebAuthUser, getWebAuthUserId, isWebAuthEnabled, mountWebAuth, webAuthTenant } from './auth.js';
+import {
+  getWebAuthOrgId,
+  getWebAuthUser,
+  getWebAuthUserId,
+  isWebAuthEnabled,
+  mountWebAuth,
+  webAuthTenant,
+} from './auth.js';
 
 // Mock @mastra/auth-workos so the tests exercise the gating/routing logic in
 // this module without constructing a real WorkOS client. `authenticateToken`'s

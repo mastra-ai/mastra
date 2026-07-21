@@ -194,7 +194,13 @@ function toWebAuthUser(result: unknown): WebAuthUser | null {
   }
 
   // Flat provider users.
-  const flat = record as { id?: unknown; workosId?: unknown; email?: unknown; name?: unknown; organizationId?: unknown };
+  const flat = record as {
+    id?: unknown;
+    workosId?: unknown;
+    email?: unknown;
+    name?: unknown;
+    organizationId?: unknown;
+  };
   const id = typeof flat.id === 'string' ? flat.id : undefined;
   const workosId = typeof flat.workosId === 'string' ? flat.workosId : undefined;
   if (!id && !workosId) return null;
