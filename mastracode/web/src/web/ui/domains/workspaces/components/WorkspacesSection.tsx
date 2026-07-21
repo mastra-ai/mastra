@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { queryKeys } from '../../../../../shared/api/keys';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../../../../shared/hooks/useAgentControllerThreads';
 import {
   conversationThread,
@@ -162,8 +162,13 @@ export function WorkspacesSection() {
         // scope, the route-thread sync settles on it instead of erroring on
         // the stale one.
         await queryClient.prefetchQuery({
-          queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, latest.id),
-          queryFn: () => chatSession.listMessages(latest.id),
+          queryKey: queryKeys.agentControllerThreadMessages(
+            AGENT_CONTROLLER_ID,
+            resourceId,
+            latest.id,
+            INITIAL_THREAD_MESSAGE_LIMIT,
+          ),
+          queryFn: () => chatSession.listMessages(latest.id, INITIAL_THREAD_MESSAGE_LIMIT),
         });
         void navigate(`/threads/${latest.id}`, { replace: true });
         return;
@@ -176,7 +181,7 @@ export function WorkspacesSection() {
       const created = await chatSession.createThread();
       // A fresh thread has no messages; seed the cache to skip the skeleton.
       queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, created.id),
+        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, created.id, INITIAL_THREAD_MESSAGE_LIMIT),
         [],
       );
       void queryClient.invalidateQueries({ queryKey: threadsKey });

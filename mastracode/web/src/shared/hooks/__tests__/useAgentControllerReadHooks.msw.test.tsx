@@ -142,4 +142,53 @@ describe('agent-controller read hooks', () => {
     expect(result.current.data).toBeUndefined();
     await waitFor(() => expect(result.current.data?.[0]?.id).toBe('thread-b-msg'));
   });
+
+  it('resets the window to the initial cap when switching threads (no grown-limit fetch)', async () => {
+    // Record the (threadId, limit) of every request so we can assert the new
+    // thread is never fetched with the previous thread's grown limit.
+    const requests: Array<{ threadId: string; limit: number }> = [];
+
+    server.use(
+      http.get(`${sessionUrl}/threads/:threadId/messages`, ({ params, request }) => {
+        const threadId = params.threadId as string;
+        const limit = Number(new URL(request.url).searchParams.get('limit'));
+        requests.push({ threadId, limit });
+        return HttpResponse.json({
+          // Return a full page so hasMore stays true and loadMore is allowed.
+          messages: Array.from({ length: limit }, (_, i) => ({
+            id: `${threadId}-m${i}`,
+            role: 'assistant',
+            content: threadId,
+          })),
+        });
+      }),
+    );
+
+    const { result, rerender } = renderHookWithProviders(
+      ({ threadId }: { threadId: string }) =>
+        useAgentControllerThreadMessages({ ...hookArgs, threadId, initialLimit: 2, pageSize: 2 }),
+      { initialProps: { threadId: 'thread-a' } },
+    );
+
+    await waitFor(() => expect(result.current.data?.length).toBe(2));
+
+    // Grow thread-a's window to 4.
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.data?.length).toBe(4));
+    expect(requests).toEqual([
+      { threadId: 'thread-a', limit: 2 },
+      { threadId: 'thread-a', limit: 4 },
+    ]);
+
+    // Switch to thread-b: the very first fetch must use the initial cap (2),
+    // never the grown limit (4) carried over from thread-a.
+    rerender({ threadId: 'thread-b' });
+    await waitFor(() => expect(requests.some(r => r.threadId === 'thread-b')).toBe(true));
+
+    const threadBRequests = requests.filter(r => r.threadId === 'thread-b');
+    expect(threadBRequests[0]?.limit).toBe(2);
+    expect(threadBRequests.every(r => r.limit === 2)).toBe(true);
+    // The hook also reports it is not mid-load-more on the fresh thread.
+    expect(result.current.isLoadingMore).toBe(false);
+  });
 });

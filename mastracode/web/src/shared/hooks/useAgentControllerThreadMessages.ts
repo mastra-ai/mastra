@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
-import { queryKeys } from '../api/keys';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../api/keys';
 import { createAgentControllerClient } from '../../web/ui/domains/chat/services/agentControllerClient';
 
 /**
@@ -16,8 +16,8 @@ import { createAgentControllerClient } from '../../web/ui/domains/chat/services/
  * server, and the SDK. If a refetch returns exactly `limit` messages the thread
  * may have more older history; if it returns fewer we have reached the top.
  */
-const DEFAULT_INITIAL_MESSAGE_LIMIT = 100;
-const LOAD_MORE_PAGE_SIZE = 100;
+const DEFAULT_INITIAL_MESSAGE_LIMIT = INITIAL_THREAD_MESSAGE_LIMIT;
+const LOAD_MORE_PAGE_SIZE = INITIAL_THREAD_MESSAGE_LIMIT;
 
 interface UseAgentControllerThreadMessagesArgs {
   agentControllerId: string;
@@ -49,17 +49,27 @@ export function useAgentControllerThreadMessages({
   });
 
   const [limit, setLimit] = useState(initialLimit);
+  // Tracks the (threadId, initialLimit) the current `limit` was seeded for so a
+  // change can be detected during render.
+  const [windowKey, setWindowKey] = useState({ threadId, initialLimit });
 
-  // Reset the window whenever we switch threads so each thread opens at the
-  // initial cap rather than inheriting a grown limit from the previous thread.
-  useEffect(() => {
+  // Reset the window synchronously during render when the thread (or the initial
+  // cap) changes. This hook instance is NOT remounted on thread switch — only
+  // its downstream provider is keyed — so an effect-based reset would run one
+  // render too late, firing the very first query for the new thread with the
+  // previous thread's grown limit (re-introducing the large fetch this cap is
+  // meant to prevent). Adjusting state during render is the supported pattern
+  // for deriving state from props.
+  if (windowKey.threadId !== threadId || windowKey.initialLimit !== initialLimit) {
+    setWindowKey({ threadId, initialLimit });
     setLimit(initialLimit);
-  }, [threadId, initialLimit]);
+  }
 
-  const baseKey = queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId);
+  // Prefix without the limit — used to detect "same thread" for placeholder data.
+  const threadKey = queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId);
 
   const query = useQuery({
-    queryKey: [...baseKey, limit],
+    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId, limit),
     queryFn: () => session!.listMessages(threadId!, limit),
     enabled: enabled && Boolean(session) && Boolean(threadId),
     refetchOnWindowFocus: false,
@@ -73,7 +83,7 @@ export function useAgentControllerThreadMessages({
     // state, so we don't carry the previous thread's messages over.
     placeholderData: (previous, previousQuery) => {
       const previousKey = previousQuery?.queryKey as readonly unknown[] | undefined;
-      const sameThread = previousKey ? baseKey.every((part, i) => previousKey[i] === part) : false;
+      const sameThread = previousKey ? threadKey.every((part, i) => previousKey[i] === part) : false;
       return sameThread ? previous : undefined;
     },
   });
