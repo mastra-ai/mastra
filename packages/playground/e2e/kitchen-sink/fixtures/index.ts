@@ -15,6 +15,7 @@ import {
 import { textStreamFixture } from './text-stream.fixture';
 import { toolStreamFixture } from './tool-stream.fixture';
 import { workflowStreamFixture } from './workflow-stream.fixture';
+import { workflowBuilderLifecycleFixture } from './workflow-builder.fixture';
 
 export const fixtures: Record<Fixtures, Array<unknown>> = {
   'text-stream': textStreamFixture,
@@ -29,6 +30,7 @@ export const fixtures: Record<Fixtures, Array<unknown>> = {
   'agent-builder-pr-reviewer': agentBuilderPrReviewerFixture,
   'agent-builder-onboarding': agentBuilderOnboardingFixture,
   'agent-builder-complex': agentBuilderComplexFixture,
+  'workflow-builder-lifecycle': workflowBuilderLifecycleFixture,
 };
 
 // Auth role fixtures for E2E testing
