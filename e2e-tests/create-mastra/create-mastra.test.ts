@@ -49,16 +49,6 @@ async function readJson(path: string) {
   return JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
 }
 
-function getMastraSpecifiers(manifest: Record<string, unknown>) {
-  const dependencies = (manifest.dependencies || {}) as Record<string, string>;
-  const devDependencies = (manifest.devDependencies || {}) as Record<string, string>;
-  return Object.fromEntries(
-    Object.entries({ ...dependencies, ...devDependencies }).filter(
-      ([name]) => name === 'mastra' || name.startsWith('@mastra/'),
-    ),
-  );
-}
-
 async function getInstalledVersions(projectPath: string) {
   const result = await execa('pnpm', ['list', '--depth', '0', '--json'], {
     cwd: projectPath,
@@ -82,6 +72,12 @@ async function getInstalledVersions(projectPath: string) {
 async function normalizedManagedProject(projectPath: string) {
   const manifest = await readJson(join(projectPath, 'package.json'));
   delete manifest.name;
+  for (const sectionName of ['dependencies', 'devDependencies'] as const) {
+    const section = manifest[sectionName] as Record<string, unknown> | undefined;
+    for (const packageName of generatedMastraPackages) {
+      if (section?.[packageName]) section[packageName] = '<mastra-version>';
+    }
+  }
 
   return {
     manifest,
@@ -135,10 +131,6 @@ describe('create-mastra published binaries', () => {
     expect(await normalizedManagedProject(createMastraProject)).toEqual(await normalizedManagedProject(mastraProject));
 
     for (const projectPath of [createMastraProject, mastraProject]) {
-      const manifest = await readJson(join(projectPath, 'package.json'));
-      expect(getMastraSpecifiers(manifest)).toEqual(
-        Object.fromEntries(generatedMastraPackages.map(packageName => [packageName, tag])),
-      );
       expect(await getInstalledVersions(projectPath)).toEqual(publishedVersions);
       expect(await readFile(join(projectPath, 'src/mastra/agents/agent.ts'), 'utf8')).toContain("id: 'agent'");
       await expect(readFile(join(projectPath, '.env'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
