@@ -4,6 +4,8 @@ import { isAuthHttpHandler, isCredentialsProvider, isOrganizationsProvider, isSS
 import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/core/server';
 import type { Context, Hono } from 'hono';
 
+import type { RouteAuth } from '@mastra/factory/routes/route';
+
 import { getSeededAuthProvider, isRuntimeConfigSeeded } from './runtime-config.js';
 
 /**
@@ -284,6 +286,18 @@ export async function isOrganizationAdmin(c: Context, organizationId: string): P
     return false;
   }
 }
+
+/**
+ * The web server's implementation of the `@mastra/factory` route auth seam.
+ * Factory route modules receive this at construction and never import the
+ * web auth module directly.
+ */
+export const webRouteAuth: RouteAuth = {
+  enabled: () => isWebAuthEnabled(),
+  ensureUser: (c: Context) => ensureWebAuthUser(c),
+  tenant: (c: Context) => webAuthTenant(c),
+  isOrganizationAdmin: (c: Context, organizationId: string) => isOrganizationAdmin(c, organizationId),
+};
 
 /** True when the active provider is WorkOS. Gates WorkOS-only capabilities. */
 export function isWorkOSAuth(): boolean {

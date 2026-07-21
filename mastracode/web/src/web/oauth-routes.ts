@@ -35,9 +35,14 @@ import type { XAIDeviceLoginPending } from '@mastra/code-sdk/auth/providers/xai'
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { OAuthCredentials } from '@mastra/code-sdk/auth/types';
 
-import { getAuthProviderId, resolveCredentialContext, WEB_OAUTH_FLOW_KINDS } from './provider-credentials.js';
-import type { CredentialContext } from './provider-credentials.js';
+import { webRouteAuth } from './auth.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
+import {
+  getAuthProviderId,
+  resolveCredentialContext,
+  WEB_OAUTH_FLOW_KINDS,
+} from '@mastra/factory/routes/provider-credentials';
+import type { CredentialContext } from '@mastra/factory/routes/provider-credentials';
 import { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
 import type { LoginSessionKind, LoginSessionRow } from '@mastra/factory/storage/domains/credentials/base';
 
@@ -249,7 +254,7 @@ export function buildOAuthRoutes(
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c), modelCredentials);
+        const ctx = await resolveCredentialContext({ c: loose(c), auth: webRouteAuth, credentials: modelCredentials });
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');
@@ -302,7 +307,7 @@ export function buildOAuthRoutes(
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c), modelCredentials);
+        const ctx = await resolveCredentialContext({ c: loose(c), auth: webRouteAuth, credentials: modelCredentials });
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');
@@ -346,7 +351,7 @@ export function buildOAuthRoutes(
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c), modelCredentials);
+        const ctx = await resolveCredentialContext({ c: loose(c), auth: webRouteAuth, credentials: modelCredentials });
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');
@@ -412,7 +417,7 @@ export function buildOAuthRoutes(
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c), modelCredentials);
+        const ctx = await resolveCredentialContext({ c: loose(c), auth: webRouteAuth, credentials: modelCredentials });
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');
@@ -427,7 +432,7 @@ export function buildOAuthRoutes(
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c), modelCredentials);
+        const ctx = await resolveCredentialContext({ c: loose(c), auth: webRouteAuth, credentials: modelCredentials });
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');

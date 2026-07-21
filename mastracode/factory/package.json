@@ -53,6 +53,7 @@
   "dependencies": {
     "@mastra/code-sdk": "workspace:*",
     "@mastra/core": "workspace:*",
+    "hono": "^4.12.8",
     "zod": "^4.3.6"
   },
   "devDependencies": {

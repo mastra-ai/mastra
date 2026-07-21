@@ -24,7 +24,7 @@ import { getOAuthProvider } from '@mastra/code-sdk/auth/storage';
 import type { AuthCredential, CredentialStore } from '@mastra/code-sdk/auth/types';
 
 import { getWebAuthUser, getWebAuthOrgId, getWebAuthUserId } from './auth.js';
-import { getTenantCredentialsStorage, tenantOrgId } from './provider-credentials.js';
+import { getTenantCredentialsStorage, tenantOrgId } from '@mastra/factory/routes/provider-credentials';
 import { isOAuthCredentialExpired } from '@mastra/factory/storage/domains/credentials/base';
 import type { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
 

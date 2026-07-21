@@ -1,13 +1,11 @@
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import type { IMastraAuthProvider } from '@mastra/core/server';
-import { buildConfigRoutes, listProviders } from './config-routes.js';
-import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config.js';
-import { seedFactoryStorageForTests } from './storage/test-utils.js';
-import type { FactoryStorageTestSeed } from './storage/test-utils.js';
-import { mountApiRoutes } from './test-utils.js';
+import { createFactoryStorageForTests } from '../storage/test-utils';
+import type { FactoryStorageTestSeed } from '../storage/test-utils';
+import { ConfigRoutes, listProviders } from './config-routes';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils';
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {
   const loggedIn = new Set(opts.loggedIn ?? []);
@@ -33,10 +31,10 @@ describe('listProviders', () => {
   it('labels an OAuth-logged-in provider as oauth (not stored)', async () => {
     const auth = makeAuthStorage({ loggedIn: ['anthropic'], storedKeys: ['anthropic'] });
 
-    const list = await listProviders(
-      makeAgentController([{ provider: 'anthropic', hasApiKey: true, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
-      auth,
-    );
+    const list = await listProviders({
+      controller: makeAgentController([{ provider: 'anthropic', hasApiKey: true, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
+      authStorage: auth,
+    });
 
     expect(list).toHaveLength(1);
     expect(list[0]?.source).toBe('oauth');
@@ -45,10 +43,10 @@ describe('listProviders', () => {
   it('maps the openai catalog provider to the openai-codex OAuth slot', async () => {
     const auth = makeAuthStorage({ loggedIn: ['openai-codex'] });
 
-    const list = await listProviders(
-      makeAgentController([{ provider: 'openai', hasApiKey: false, apiKeyEnvVar: 'OPENAI_API_KEY' }]),
-      auth,
-    );
+    const list = await listProviders({
+      controller: makeAgentController([{ provider: 'openai', hasApiKey: false, apiKeyEnvVar: 'OPENAI_API_KEY' }]),
+      authStorage: auth,
+    });
 
     expect(list[0]?.source).toBe('oauth');
   });
@@ -56,10 +54,10 @@ describe('listProviders', () => {
   it('falls back to stored when not OAuth but a stored key exists', async () => {
     const auth = makeAuthStorage({ storedKeys: ['anthropic'] });
 
-    const list = await listProviders(
-      makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
-      auth,
-    );
+    const list = await listProviders({
+      controller: makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
+      authStorage: auth,
+    });
 
     expect(list[0]?.source).toBe('stored');
   });
@@ -68,10 +66,10 @@ describe('listProviders', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-env';
     const auth = makeAuthStorage({});
 
-    const list = await listProviders(
-      makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
-      auth,
-    );
+    const list = await listProviders({
+      controller: makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
+      authStorage: auth,
+    });
 
     expect(list[0]?.source).toBe('env');
   });
@@ -80,23 +78,23 @@ describe('listProviders', () => {
     delete process.env.ANTHROPIC_API_KEY;
     const auth = makeAuthStorage({});
 
-    const list = await listProviders(
-      makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
-      auth,
-    );
+    const list = await listProviders({
+      controller: makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
+      authStorage: auth,
+    });
 
     expect(list[0]?.source).toBe('none');
   });
 
   it('advertises web OAuth capability for supported providers only', async () => {
-    const list = await listProviders(
-      makeAgentController([
+    const list = await listProviders({
+      controller: makeAgentController([
         { provider: 'anthropic', hasApiKey: false },
         { provider: 'openai', hasApiKey: false },
         { provider: 'xai', hasApiKey: false },
         { provider: 'google', hasApiKey: false },
       ]),
-    );
+    });
     const byProvider = Object.fromEntries(list.map(p => [p.provider, p]));
     expect(byProvider.anthropic?.oauth).toEqual({ supported: true, modes: ['paste-code'] });
     expect(byProvider.openai?.oauth).toEqual({ supported: true, modes: ['device-code'] });
@@ -121,31 +119,34 @@ describe('listProviders', () => {
         { provider: 'anthropic', hasApiKey: true, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
       ]);
 
-      const userWins = await listProviders(controller, undefined, [
-        record('anthropic', 'user', 'api_key'),
-        record('anthropic', 'org', 'api_key'),
-      ]);
+      const userWins = await listProviders({
+        controller,
+        tenantCredentials: [record('anthropic', 'user', 'api_key'), record('anthropic', 'org', 'api_key')],
+      });
       expect(userWins[0]?.source).toBe('stored-user');
 
-      const orgWins = await listProviders(controller, undefined, [record('anthropic', 'org', 'api_key')]);
+      const orgWins = await listProviders({ controller, tenantCredentials: [record('anthropic', 'org', 'api_key')] });
       expect(orgWins[0]?.source).toBe('stored-org');
 
-      const noTenantCredential = await listProviders(controller, undefined, []);
+      const noTenantCredential = await listProviders({ controller, tenantCredentials: [] });
       expect(noTenantCredential[0]?.source).toBe('none');
     });
 
     it('reports oauth-user for a user OAuth token stored under the auth provider id', async () => {
-      const list = await listProviders(
-        makeAgentController([{ provider: 'openai', hasApiKey: false, apiKeyEnvVar: 'OPENAI_API_KEY' }]),
-        undefined,
-        [record('openai-codex', 'user', 'oauth')],
-      );
+      const list = await listProviders({
+        controller: makeAgentController([{ provider: 'openai', hasApiKey: false, apiKeyEnvVar: 'OPENAI_API_KEY' }]),
+        tenantCredentials: [record('openai-codex', 'user', 'oauth')],
+      });
       expect(list[0]?.source).toBe('oauth-user');
     });
 
     it('never falls back to the server-global auth storage in tenant mode', async () => {
       const auth = makeAuthStorage({ loggedIn: ['anthropic'] });
-      const list = await listProviders(makeAgentController([{ provider: 'anthropic', hasApiKey: false }]), auth, []);
+      const list = await listProviders({
+        controller: makeAgentController([{ provider: 'anthropic', hasApiKey: false }]),
+        authStorage: auth,
+        tenantCredentials: [],
+      });
       // Tenant records take over entirely; auth.json state must not leak.
       expect(list[0]?.source).toBe('none');
     });
@@ -157,13 +158,6 @@ describe('listProviders', () => {
 describe('provider key routes with a tenant', () => {
   let seed: FactoryStorageTestSeed;
   const isOrganizationAdmin = vi.fn(async () => true);
-  const authProvider = {
-    name: 'test',
-    authenticateToken: vi.fn(async () => null),
-    authorizeUser: vi.fn(async () => true),
-    ensureOrganization: vi.fn(async () => undefined),
-    isOrganizationAdmin,
-  } as unknown as IMastraAuthProvider;
 
   const controller = makeAgentController([
     { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
@@ -175,7 +169,15 @@ describe('provider key routes with a tenant', () => {
       if (user) c.set('webAuthUser' as never, user as never);
       await next();
     });
-    mountApiRoutes(app as any, buildConfigRoutes({ controller, authStorage, modelCredentials: seed.credentials }));
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth({ isOrganizationAdmin }),
+        controller,
+        authStorage,
+        modelCredentials: seed.credentials,
+      }).routes(),
+    );
     return app;
   }
 
@@ -183,13 +185,11 @@ describe('provider key routes with a tenant', () => {
   const userB = { workosId: 'user-b', organizationId: 'org1' };
 
   beforeEach(async () => {
-    seed = await seedFactoryStorageForTests();
+    seed = await createFactoryStorageForTests();
     isOrganizationAdmin.mockResolvedValue(true);
-    seedRuntimeConfig({ storage: seed.storage, authProvider });
   });
 
   afterEach(() => {
-    __resetRuntimeConfigForTests();
     vi.clearAllMocks();
   });
 
@@ -298,8 +298,6 @@ describe('provider key routes with a tenant', () => {
 // ── Available models + DB-backed model packs (tenant mode) ──────────────
 
 describe('GET /web/config/models', () => {
-  afterEach(() => __resetRuntimeConfigForTests());
-
   it('returns only credentialed models with their ids', async () => {
     const controller = {
       listAvailableModels: async () => [
@@ -309,7 +307,7 @@ describe('GET /web/config/models', () => {
       ],
     };
     const app = new Hono();
-    mountApiRoutes(app as any, buildConfigRoutes({ controller }));
+    mountApiRoutes(app as any, new ConfigRoutes({ auth: fakeRouteAuth({ enabled: false }), controller }).routes());
 
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
@@ -321,7 +319,6 @@ describe('GET /web/config/models', () => {
 
 describe('model pack routes with a tenant', () => {
   let seed: FactoryStorageTestSeed;
-  const authProvider = { name: 'test', authenticateToken: async () => null } as unknown as IMastraAuthProvider;
   const controller = makeAgentController([
     { provider: 'anthropic', hasApiKey: true, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
   ]);
@@ -332,7 +329,10 @@ describe('model pack routes with a tenant', () => {
       if (user) c.set('webAuthUser' as never, user as never);
       await next();
     });
-    mountApiRoutes(app as any, buildConfigRoutes({ controller, modelPacks: seed.modelPacks }));
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({ auth: fakeRouteAuth(), controller, modelPacks: seed.modelPacks }).routes(),
+    );
     return app;
   }
 
@@ -351,12 +351,10 @@ describe('model pack routes with a tenant', () => {
     });
 
   beforeEach(async () => {
-    seed = await seedFactoryStorageForTests();
-    seedRuntimeConfig({ storage: seed.storage, authProvider });
+    seed = await createFactoryStorageForTests();
   });
 
   afterEach(() => {
-    __resetRuntimeConfigForTests();
     vi.clearAllMocks();
   });
 

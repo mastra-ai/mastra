@@ -6,7 +6,7 @@ import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import type { AuditEmitter } from './audit/domain.js';
-import { buildConfigRoutes } from './config-routes.js';
+import { webRouteAuth } from './auth.js';
 import type { FactoryIntegration, IntegrationContext } from './factory-integration.js';
 import { getGithubFeatureDiagnostics } from './github/config.js';
 import { getLinearFeatureDiagnostics } from './linear/config.js';
@@ -17,6 +17,8 @@ import { buildOAuthRoutes } from './oauth-routes.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
 import type { StateSigner } from './state-signing.js';
+import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
+import { ConfigRoutes } from '@mastra/factory/routes/config-routes';
 import type { IntegrationStorage } from '@mastra/factory/storage/domains/integrations/base';
 import type { SourceControlStorage } from '@mastra/factory/storage/domains/source-control/base';
 import type { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
@@ -200,12 +202,14 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
 
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
-    ...buildConfigRoutes({
+    ...new ConfigRoutes({
+      auth: webRouteAuth,
       controller: deps.controller,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       modelPacks: deps.domains.modelPacks,
-    }),
+      onCredentialsChanged: invalidateTenantCredentialSnapshots,
+    }).routes(),
     ...buildOAuthRoutes({ authStorage: deps.authStorage, modelCredentials: deps.domains.modelCredentials }),
     ...buildSkillRoutes({
       controllerId: deps.controllerId,

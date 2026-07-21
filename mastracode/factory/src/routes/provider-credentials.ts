@@ -16,12 +16,8 @@
 
 import type { Context } from 'hono';
 
-import { ensureWebAuthUser, isWebAuthEnabled, webAuthTenant } from './auth.js';
-import type {
-  CredentialRecord,
-  LoginSessionKind,
-  ModelCredentialsStorage,
-} from '@mastra/factory/storage/domains/credentials/base';
+import type { CredentialRecord, LoginSessionKind, ModelCredentialsStorage } from '../storage/domains/credentials/base';
+import type { RouteAuth } from './route';
 
 /**
  * OAuth credentials are stored under the auth provider id, which differs from
@@ -79,17 +75,23 @@ export function tenantOrgId(tenant: { orgId?: string; userId: string }): string 
  * response. Mutating credential routes call this and hard-fail (401/503)
  * when the tenant path is required but unavailable.
  */
-export async function resolveCredentialContext(
-  c: Context,
-  credentials: ModelCredentialsStorage | undefined,
-): Promise<CredentialContext | { response: Response }> {
-  await ensureWebAuthUser(c);
-  const tenant = webAuthTenant(c);
+export async function resolveCredentialContext({
+  c,
+  auth,
+  credentials,
+}: {
+  c: Context;
+  auth: RouteAuth;
+  /** Tenant credential domain handle; absent in local (no-DB) mode. */
+  credentials?: ModelCredentialsStorage;
+}): Promise<CredentialContext | { response: Response }> {
+  await auth.ensureUser(c);
+  const tenant = auth.tenant(c);
   if (!tenant) {
-    // When an auth adapter is active, credential operations always require a
+    // When an auth provider is active, credential operations always require a
     // signed-in caller — otherwise one anonymous request could write keys for
-    // everyone. Without an adapter this is a single-user local server.
-    if (isWebAuthEnabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
+    // everyone. Without a provider this is a single-user local server.
+    if (auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
     return { mode: 'local' };
   }
   const storage = await getTenantCredentialsStorage(credentials);
@@ -114,13 +116,19 @@ export async function resolveCredentialContext(
  * unavailable gets an empty list (sources show `env`/`none`) instead of a 503
  * so the settings page still renders.
  */
-export async function listTenantCredentialsForRequest(
-  c: Context,
-  credentials: ModelCredentialsStorage | undefined,
-): Promise<CredentialRecord[] | undefined> {
-  await ensureWebAuthUser(c);
-  const tenant = webAuthTenant(c);
-  if (!tenant) return isWebAuthEnabled() ? [] : undefined;
+export async function listTenantCredentialsForRequest({
+  c,
+  auth,
+  credentials,
+}: {
+  c: Context;
+  auth: RouteAuth;
+  /** Tenant credential domain handle; absent in local (no-DB) mode. */
+  credentials?: ModelCredentialsStorage;
+}): Promise<CredentialRecord[] | undefined> {
+  await auth.ensureUser(c);
+  const tenant = auth.tenant(c);
+  if (!tenant) return auth.enabled() ? [] : undefined;
   const storage = await getTenantCredentialsStorage(credentials);
   if (!storage) return [];
   return storage.listCredentials(tenantOrgId(tenant), tenant.userId);
