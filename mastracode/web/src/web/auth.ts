@@ -1,12 +1,18 @@
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { registerApiRoute } from '@mastra/core/server';
-import { isAuthHttpHandler, isCredentialsProvider, isOrganizationsProvider, isSSOProvider } from '@mastra/core/server';
+import {
+  isAuthHttpHandler,
+  isCredentialsProvider,
+  isOrganizationsProvider,
+  isSessionProvider,
+  isSSOProvider,
+} from '@mastra/core/server';
 import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/core/server';
 import type { Context, Hono } from 'hono';
 
 import type { RouteAuth } from '@mastra/factory/routes/route';
 
-import { getSeededAuthProvider, isRuntimeConfigSeeded } from './runtime-config.js';
+import { getPublicUrl, getSeededAuthProvider, isRuntimeConfigSeeded } from './runtime-config.js';
 
 /**
  * Provider-neutral web auth gating for the MastraCode web server.
@@ -446,10 +452,17 @@ function providerAuthRoutes(provider: IMastraAuthProvider): AuthRouteSpec[] {
         handler: async c => {
           const returnTo = sanitizeReturnTo(c.req.query('returnTo'));
           const state = encodeState(returnTo);
-          // Providers fall back to their configured redirect URI when the
-          // caller passes an empty one.
-          const loginUrl = await provider.getLoginUrl('', state);
-          for (const cookie of (await provider.getLoginCookies?.('', state)) ?? []) {
+          // Build the callback URL from the browser-facing public origin so
+          // the OAuth round-trip lands back on the SPA's origin (in dev the
+          // SPA is on :5173 and Vite proxies /auth/* to the API on :4111 —
+          // deriving from c.req.url would use :4111 and the post-callback
+          // redirect to `/` would miss the SPA). Providers that ignore the
+          // caller's URI in favor of their own config (e.g. MastraAuthWorkos
+          // with an explicit `redirectUri` option) still take precedence.
+          const publicUrl = getPublicUrl();
+          const redirectUri = publicUrl ? new URL('/auth/callback', publicUrl).toString() : '';
+          const loginUrl = await provider.getLoginUrl(redirectUri, state);
+          for (const cookie of (await provider.getLoginCookies?.(redirectUri, state)) ?? []) {
             c.header('Set-Cookie', cookie, { append: true });
           }
           return c.redirect(loginUrl);
@@ -466,8 +479,29 @@ function providerAuthRoutes(provider: IMastraAuthProvider): AuthRouteSpec[] {
           }
           try {
             const result = await provider.handleCallback(code, c.req.query('state') ?? '');
-            for (const cookie of result.cookies ?? []) {
-              c.header('Set-Cookie', cookie, { append: true });
+            if (result.cookies?.length) {
+              // Provider populated cookies directly (e.g. WorkOS AuthKit builds
+              // its own sealed session cookie inside handleCallback).
+              for (const cookie of result.cookies) {
+                c.header('Set-Cookie', cookie, { append: true });
+              }
+            } else if (isSessionProvider(provider) && result.tokens) {
+              // Fallback for providers that expose ISessionProvider but leave
+              // cookie construction to the server (e.g. MastraAuthStudio, which
+              // returns just the sealed session as accessToken so
+              // getSessionHeaders can scope the cookie to this deployment's
+              // domain via MASTRA_COOKIE_DOMAIN / sharedApiUrl auto-detection).
+              // Mirrors packages/server/src/server/handlers/auth.ts:492-503.
+              const resultUser = result.user as { id: string; organizationId?: string };
+              const session = await provider.createSession(resultUser.id, {
+                accessToken: result.tokens.accessToken,
+                refreshToken: result.tokens.refreshToken,
+                expiresAt: result.tokens.expiresAt,
+                organizationId: resultUser.organizationId,
+              });
+              for (const [key, value] of Object.entries(provider.getSessionHeaders(session))) {
+                c.header(key, value, { append: true });
+              }
             }
             return c.redirect(returnTo);
           } catch {
