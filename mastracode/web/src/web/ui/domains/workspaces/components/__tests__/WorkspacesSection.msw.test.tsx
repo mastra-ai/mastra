@@ -10,6 +10,7 @@
  * a legacy repo-root entry and a `user/` personal-session worktree, and the
  * specs assert both stay out of the list.
  */
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -19,7 +20,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { queryKeys } from '../../../../../../shared/api/keys';
-import { ToastProvider } from '../../../../ui';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
 import type { WorkItem } from '../../../factory/services/workItems';
 import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
@@ -206,14 +206,13 @@ function LocationProbe() {
 function renderSection(initialPath = '/') {
   return renderWithProviders(
     <MemoryRouter initialEntries={[initialPath]}>
-      <ToastProvider>
-        <ActiveFactoryProvider>
-          <ChatSessionConfigProvider>
-            <WorkspacesSection />
-            <LocationProbe />
-          </ChatSessionConfigProvider>
-        </ActiveFactoryProvider>
-      </ToastProvider>
+      <ActiveFactoryProvider>
+        <ChatSessionConfigProvider>
+          <WorkspacesSection />
+          <LocationProbe />
+        </ChatSessionConfigProvider>
+      </ActiveFactoryProvider>
+      <Toaster position="bottom-right" />
     </MemoryRouter>,
   );
 }
@@ -304,7 +303,7 @@ describe('WorkspacesSection', () => {
         id: `item-${index}`,
         orgId: 'org-1',
         createdBy: 'user-1',
-            githubProjectId: GITHUB_PROJECT_ID,
+        githubProjectId: GITHUB_PROJECT_ID,
         source: review ? 'github-pr' : 'github-issue',
         sourceKey: `${review ? 'github-pr' : 'github-issue'}:${index}`,
         parentWorkItemId: null,

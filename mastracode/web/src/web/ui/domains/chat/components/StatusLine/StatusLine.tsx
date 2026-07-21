@@ -23,7 +23,8 @@ export function StatusLine() {
   const { transcript, busy } = useChatTranscript();
   const repository = activeFactory ? selectedRepository(activeFactory) : undefined;
   const projectRepositoryId = repository?.projectRepositoryId;
-  const factoryProjectId = activeFactory?.binding.kind === 'factory' ? activeFactory.binding.factoryProjectId : undefined;
+  const factoryProjectId =
+    activeFactory?.binding.kind === 'factory' ? activeFactory.binding.factoryProjectId : undefined;
 
   return (
     <div

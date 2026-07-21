@@ -1,1 +1,1 @@
-export { Toaster } from '../../../lib/toast';
+export { Toaster, toast } from '../../../lib/toast';
