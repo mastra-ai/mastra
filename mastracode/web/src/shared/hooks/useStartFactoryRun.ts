@@ -124,7 +124,7 @@ export function useStartFactoryRun() {
       const { session } = createAgentControllerClient({
         agentControllerId: AGENT_CONTROLLER_ID,
         resourceId,
-        scope: projectPath,
+        projectPath,
         baseUrl,
         enabled: sessionEnabled,
       });

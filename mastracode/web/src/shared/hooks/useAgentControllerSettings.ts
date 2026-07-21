@@ -21,7 +21,7 @@ export function useAgentControllerSettings({
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope: projectPath,
+    projectPath,
     baseUrl,
     enabled,
   });

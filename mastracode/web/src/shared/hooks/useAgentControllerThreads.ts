@@ -23,7 +23,7 @@ export function useAgentControllerThreads({
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope: projectPath,
+    projectPath,
     baseUrl,
     enabled,
   });
