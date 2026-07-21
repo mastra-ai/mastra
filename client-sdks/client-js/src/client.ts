@@ -80,6 +80,7 @@ import {
   Conversations,
   Observability,
   StoredAgent,
+  StoredWorkflow,
   StoredPromptBlock,
   StoredMCPClient,
   StoredScorer,
@@ -129,6 +130,10 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListStoredWorkflowsParams,
+  ListStoredWorkflowsResponse,
+  UpsertStoredWorkflowParams,
+  UpsertStoredWorkflowResponse,
   ListStoredPromptBlocksParams,
   ListStoredPromptBlocksResponse,
   CreateStoredPromptBlockParams,
@@ -1282,6 +1287,30 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Stored Workflows
+  // ============================================================================
+
+  public listStoredWorkflows(params?: ListStoredWorkflowsParams): Promise<ListStoredWorkflowsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.authorId) searchParams.set('authorId', params.authorId);
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/workflows${queryString ? `?${queryString}` : ''}`);
+  }
+
+  public upsertStoredWorkflow(params: UpsertStoredWorkflowParams): Promise<UpsertStoredWorkflowResponse> {
+    return this.request('/stored/workflows', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  public getStoredWorkflow(storedWorkflowId: string): StoredWorkflow {
+    return new StoredWorkflow(this.options, storedWorkflowId);
   }
 
   // ============================================================================

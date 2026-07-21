@@ -79947,8 +79947,136 @@ export type PostStoredWorkflows_Body = {
   outputSchema: any;
   stateSchema?: any | undefined;
   requestContextSchema?: any | undefined;
-  /** Static workflow graph — SerializedStepFlowEntry[] with all refs as ids */
-  graph: any[];
+  /** Static workflow graph — ordered array of serialized step entries with all refs as ids. */
+  graph: (
+    | {
+        type: 'agent';
+        id: string;
+        agentId: string;
+        outputSchema?: any | undefined;
+        options?:
+          | {
+              retries?: number | undefined;
+              metadata?:
+                | {
+                    [key: string]: any;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | {
+        type: 'tool';
+        id: string;
+        toolId: string;
+        options?:
+          | {
+              retries?: number | undefined;
+              metadata?:
+                | {
+                    [key: string]: any;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | {
+        type: 'mapping';
+        id: string;
+        mapConfig: string;
+      }
+    | {
+        type: 'parallel';
+        steps: (
+          | {
+              type: 'agent';
+              id: string;
+              agentId: string;
+              outputSchema?: any | undefined;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | {
+              type: 'tool';
+              id: string;
+              toolId: string;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | {
+              type: 'mapping';
+              id: string;
+              mapConfig: string;
+            }
+        )[];
+      }
+    | {
+        type: 'foreach';
+        step:
+          | {
+              type: 'agent';
+              id: string;
+              agentId: string;
+              outputSchema?: any | undefined;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | {
+              type: 'tool';
+              id: string;
+              toolId: string;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            };
+        opts?:
+          | {
+              concurrency: number;
+            }
+          | undefined;
+      }
+    | {
+        type: 'sleep';
+        id: string;
+        duration: number;
+      }
+    | {
+        type: 'sleepUntil';
+        id: string;
+        date: string;
+      }
+  )[];
 };
 
 export type PostStoredWorkflows_Response = {

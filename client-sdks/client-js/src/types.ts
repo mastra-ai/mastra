@@ -625,6 +625,13 @@ export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowState;
 
+export type ListStoredWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
+export type ListStoredWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
+export type UpsertStoredWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
+export type UpsertStoredWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
+export type StoredWorkflowDefinition = GeneratedResponse<'GET /stored/workflows/:storedWorkflowId'>;
+export type DeleteStoredWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:storedWorkflowId'>;
+
 export interface GetWorkflowResponse {
   name: string;
   description?: string;
