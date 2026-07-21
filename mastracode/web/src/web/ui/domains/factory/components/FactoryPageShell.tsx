@@ -35,6 +35,10 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
   const { activeFactory } = useActiveFactoryContext();
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
 
+  if (!activeFactory) {
+    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+  }
+
   return (
     <PageLayout
       sidebar={<Sidebar />}
@@ -43,17 +47,13 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
       description={activeFactory ? description : undefined}
       actions={serverFactory ? <RepositoryPicker factory={serverFactory} /> : undefined}
     >
-      {activeFactory ? (
-        serverFactory ? (
-          children(serverFactory)
-        ) : (
-          <Notice variant="info">
-            Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder
-            — create a Factory from the switcher to use the Board.
-          </Notice>
-        )
+      {serverFactory ? (
+        children(serverFactory)
       ) : (
-        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+        <Notice variant="info">
+          Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder —
+          create a Factory from the switcher to use the Board.
+        </Notice>
       )}
     </PageLayout>
   );

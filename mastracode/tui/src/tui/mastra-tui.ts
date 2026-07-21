@@ -649,7 +649,11 @@ export class MastraTUI {
         .initInBackground()
         .then(result => {
           for (const s of result.failed) {
-            showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            if (s.needsAuth) {
+              showInfo(this.state, `MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
+            } else {
+              showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            }
           }
           for (const s of result.skipped) {
             showInfo(this.state, `MCP: Skipped "${s.name}": ${s.reason}`);
