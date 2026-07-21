@@ -525,10 +525,18 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
         const nestedResumeSteps = resume.steps.slice(1);
         if (nestedResumeSteps.length === 0) {
-          const suspendedStepId = Object.keys(snapshot?.suspendedPaths ?? {})[0];
-          if (suspendedStepId) {
-            nestedResumeSteps.push(suspendedStepId);
+          const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+          if (suspendedStepIds.length === 0) {
+            throw new Error(`No suspended steps found in nested workflow: ${step.id}`);
           }
+          if (suspendedStepIds.length > 1) {
+            const pathStrings = suspendedStepIds.map(stepId => `[${stepId}]`);
+            throw new Error(
+              `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
+                'Please specify which step to resume using the "step" parameter.',
+            );
+          }
+          nestedResumeSteps.push(suspendedStepIds[0]!);
         }
         const nestedResumeStepId = nestedResumeSteps[0];
 

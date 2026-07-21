@@ -98,56 +98,52 @@ describe('InngestExecutionEngine.executeStepWithRetry', () => {
   });
 });
 
-describe('InngestExecutionEngine.executeWorkflowStep', () => {
-  it('restores the suspended child path when resuming with only the nested workflow id', async () => {
-    const inngest = new Inngest({ id: 'nested-resume-test' });
-    const { createWorkflow, createStep } = init(inngest);
-    const suspendedStep = createStep({
-      id: 'suspended-child-step',
-      inputSchema: z.object({ value: z.string() }),
-      outputSchema: z.object({ value: z.string() }),
-      execute: async ({ inputData }) => inputData,
-    });
-    const nestedWorkflow = createWorkflow({
-      id: 'nested-resume-workflow',
-      inputSchema: z.object({ value: z.string() }),
-      outputSchema: z.object({ value: z.string() }),
-      steps: [suspendedStep],
-    })
-      .then(suspendedStep)
-      .commit();
+function createNestedResumeFixture(suspendedPaths: Record<string, number[]>) {
+  const inngest = new Inngest({ id: 'nested-resume-test' });
+  const { createWorkflow, createStep } = init(inngest);
+  const suspendedStep = createStep({
+    id: 'suspended-child-step',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+    execute: async ({ inputData }) => inputData,
+  });
+  const nestedWorkflow = createWorkflow({
+    id: 'nested-resume-workflow',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+    steps: [suspendedStep],
+  })
+    .then(suspendedStep)
+    .commit();
 
-    const nestedRunId = 'nested-run';
-    const nestedStepResults = {
-      [suspendedStep.id]: {
-        status: 'suspended',
-        payload: { value: 'before-suspend' },
-      },
-    };
-    const loadWorkflowSnapshot = vi.fn().mockResolvedValue({
-      value: { count: 1 },
-      context: nestedStepResults,
-      suspendedPaths: { [suspendedStep.id]: [1, 0] },
-    });
-    const mastra = {
-      getStorage: () => ({
-        getStore: async () => ({ loadWorkflowSnapshot }),
-      }),
-    } as unknown as Mastra;
-    const invoke = vi.fn().mockResolvedValue({
-      result: { status: 'success', result: { value: 'resumed' }, state: { count: 2 } },
-      runId: nestedRunId,
-    });
-    const inngestStep = {
-      invoke,
-      run: vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn()),
-      sleep: vi.fn(),
-      sleepUntil: vi.fn(),
-    };
-    const engine = new InngestExecutionEngine(mastra, inngestStep as any, 0, {});
-    const resumePayload = { approved: true };
-
-    await engine.executeWorkflowStep({
+  const nestedRunId = 'nested-run';
+  const nestedStepResults = Object.fromEntries(
+    Object.keys(suspendedPaths).map(stepId => [stepId, { status: 'suspended', payload: { value: 'before-suspend' } }]),
+  );
+  const loadWorkflowSnapshot = vi.fn().mockResolvedValue({
+    value: { count: 1 },
+    context: nestedStepResults,
+    suspendedPaths,
+  });
+  const mastra = {
+    getStorage: () => ({
+      getStore: async () => ({ loadWorkflowSnapshot }),
+    }),
+  } as unknown as Mastra;
+  const invoke = vi.fn().mockResolvedValue({
+    result: { status: 'success', result: { value: 'resumed' }, state: { count: 2 } },
+    runId: nestedRunId,
+  });
+  const inngestStep = {
+    invoke,
+    run: vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn()),
+    sleep: vi.fn(),
+    sleepUntil: vi.fn(),
+  };
+  const engine = new InngestExecutionEngine(mastra, inngestStep as any, 0, {});
+  const resumePayload = { approved: true };
+  const execute = () =>
+    engine.executeWorkflowStep({
       step: nestedWorkflow as any,
       stepResults: {
         [nestedWorkflow.id]: {
@@ -169,6 +165,34 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
       startedAt: Date.now(),
     });
 
+  return {
+    execute,
+    invoke,
+    loadWorkflowSnapshot,
+    nestedRunId,
+    nestedStepResults,
+    nestedWorkflow,
+    resumePayload,
+    suspendedStep,
+  };
+}
+
+describe('InngestExecutionEngine.executeWorkflowStep', () => {
+  it('restores the suspended child path when resuming with only the nested workflow id', async () => {
+    const fixture = createNestedResumeFixture({ 'suspended-child-step': [1, 0] });
+    const {
+      execute,
+      invoke,
+      loadWorkflowSnapshot,
+      nestedRunId,
+      nestedStepResults,
+      nestedWorkflow,
+      resumePayload,
+      suspendedStep,
+    } = fixture;
+
+    await execute();
+
     expect(loadWorkflowSnapshot).toHaveBeenCalledWith({
       workflowName: nestedWorkflow.id,
       runId: nestedRunId,
@@ -180,6 +204,30 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
       stepResults: nestedStepResults,
       resumePayload,
       resumePath: [1, 0],
+    });
+  });
+
+  it.each([
+    {
+      name: 'no suspended child',
+      suspendedPaths: {},
+      message: 'No suspended steps found in nested workflow: nested-resume-workflow',
+    },
+    {
+      name: 'multiple suspended children',
+      suspendedPaths: { 'first-child': [1, 0], 'second-child': [1, 1] },
+      message:
+        'Multiple suspended steps found: [first-child], [second-child]. Please specify which step to resume using the "step" parameter.',
+    },
+  ])('does not guess a resume target with $name', async ({ suspendedPaths, message }) => {
+    const { execute, invoke } = createNestedResumeFixture(suspendedPaths);
+
+    const result = await execute();
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: expect.objectContaining({ message }),
     });
   });
 });
