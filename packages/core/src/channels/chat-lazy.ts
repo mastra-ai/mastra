@@ -8,10 +8,20 @@ let cached: ChatModule | undefined;
 let loading: Promise<ChatModule> | undefined;
 
 /**
- * Lazily imports the `chat` package using a runtime-constructed module specifier.
- * This prevents bundlers (Vite/Rollup/esbuild) from resolving `chat` at build time,
- * which is necessary because the `chat` package is ESM-only (no CJS exports) and
- * breaks Vitest's module graph resolution when imported statically.
+ * Lazily imports the `chat` package via a literal dynamic import.
+ *
+ * The import must stay dynamic (not static) because `chat` is ESM-only (no CJS
+ * exports): a static import would be compiled to `require('chat')` in the CJS
+ * build and crash every CJS consumer. A literal dynamic import is safe here
+ * because this package builds with tsup's `treeshake` option, which emits CJS
+ * through Rollup and preserves native `import()` in `.cjs` output.
+ * The `@vite-ignore`/`webpackIgnore` comments keep
+ * Vite and webpack from pre-resolving the ESM-only package.
+ *
+ * The specifier must stay a literal (not a runtime-constructed string) so
+ * production bundlers can see the dependency — serverless targets like
+ * Cloudflare Workers must statically bundle `chat` or channels fail at runtime
+ * with `No such module "chat"` (#19254).
  */
 export async function getChatModule(): Promise<ChatModule> {
   if (cached) {
@@ -19,8 +29,7 @@ export async function getChatModule(): Promise<ChatModule> {
   }
   if (!loading) {
     loading = (async () => {
-      const mod = 'chat';
-      const chatModule = await import(/* @vite-ignore */ /* webpackIgnore: true */ mod);
+      const chatModule = await import(/* @vite-ignore */ /* webpackIgnore: true */ 'chat');
       cached = chatModule;
       return chatModule;
     })();

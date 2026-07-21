@@ -37,7 +37,7 @@ vi.mock('@mastra/code-sdk/auth/providers/github-copilot', async importOriginal =
 }));
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import type { WebAuthAdapter } from './auth-adapter';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { buildOAuthRoutes } from './oauth-routes';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config';
 import { seedFactoryStorageForTests } from './storage/test-utils';
@@ -329,18 +329,20 @@ describe('gating', () => {
     expect(res.status).toBe(404);
   });
 
-  it('401s unauthenticated requests when an auth adapter is active', async () => {
+  it('401s unauthenticated requests when an auth provider is active', async () => {
     seedRuntimeConfig({
       storage: seed.storage,
-      authAdapter: { kind: 'test', authenticate: async () => null } as unknown as WebAuthAdapter,
+      authProvider: { name: 'test', authenticateToken: async () => null } as unknown as IMastraAuthProvider,
     });
     const res = await post(buildApp(null), '/web/config/providers/anthropic/oauth/start');
     expect(res.status).toBe(401);
   });
 
   it('503s tenant writes when the credentials domain is unavailable', async () => {
-    // Auth adapter active + user present, but no factory store at all.
-    seedRuntimeConfig({ authAdapter: { kind: 'test', authenticate: async () => null } as unknown as WebAuthAdapter });
+    // Auth provider active + user present, but no factory store at all.
+    seedRuntimeConfig({
+      authProvider: { name: 'test', authenticateToken: async () => null } as unknown as IMastraAuthProvider,
+    });
     const res = await post(buildApp(userA), '/web/config/providers/anthropic/oauth/start');
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe('credentials_unavailable');

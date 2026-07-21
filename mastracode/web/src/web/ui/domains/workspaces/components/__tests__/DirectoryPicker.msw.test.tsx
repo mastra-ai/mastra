@@ -84,6 +84,61 @@ describe('DirectoryBrowser', () => {
     });
   });
 
+  describe('when navigating folder history', () => {
+    it('moves backward and forward through visited folders', async () => {
+      server.use(
+        http.get(FS_URL, ({ request }) => HttpResponse.json(listingFor(new URL(request.url).searchParams.get('path')))),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+
+      const back = screen.getByRole('button', { name: 'Back' });
+      const forward = screen.getByRole('button', { name: 'Forward' });
+      expect(back).toBeDisabled();
+      expect(forward).toBeDisabled();
+
+      await user.click(await screen.findByText('alpha'));
+      expect(await screen.findByText('src')).toBeInTheDocument();
+      expect(back).toBeEnabled();
+      expect(forward).toBeDisabled();
+
+      await user.click(back);
+      expect(await screen.findByText('beta')).toBeInTheDocument();
+      expect(back).toBeDisabled();
+      expect(forward).toBeEnabled();
+
+      await user.click(forward);
+      expect(await screen.findByText('src')).toBeInTheDocument();
+    });
+  });
+
+  describe('while navigation is loading', () => {
+    it('keeps the breadcrumb mounted with the current listing', async () => {
+      server.use(
+        http.get(FS_URL, async ({ request }) => {
+          const path = new URL(request.url).searchParams.get('path');
+          if (path === '/projects/alpha') await delay(150);
+          return HttpResponse.json(listingFor(path));
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+
+      await screen.findByText('alpha');
+      const breadcrumb = screen.getByRole('navigation', { name: 'Path' });
+      await user.click(screen.getByText('alpha'));
+
+      expect(screen.getByRole('navigation', { name: 'Path' })).toBe(breadcrumb);
+      expect(screen.getByText('beta')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Use this folder' })).toBeDisabled();
+
+      expect(await screen.findByText('src')).toBeInTheDocument();
+      expect(screen.getByRole('navigation', { name: 'Path' })).toBe(breadcrumb);
+    });
+  });
+
   describe('when a folder is double-clicked', () => {
     it('does not pick the folder', async () => {
       server.use(

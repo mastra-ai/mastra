@@ -1,5 +1,30 @@
 # @mastra/evals
 
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- Added context-recall LLM scorer that evaluates how well retrieved context covers the claims in a ground-truth reference answer. Complements the existing context-precision scorer by measuring retrieval completeness rather than relevance ranking. ([#19733](https://github.com/mastra-ai/mastra/pull/19733))
+
+  ```typescript
+  import { createContextRecallScorer } from '@mastra/evals/scorers/prebuilt';
+
+  const scorer = createContextRecallScorer({
+    model: 'openai/gpt-5-mini',
+    options: {
+      context: [
+        'Einstein was born on 14 March 1879 in Ulm, Germany.',
+        'Einstein developed the theory of special relativity in 1905.',
+      ],
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`0a2c22c`](https://github.com/mastra-ai/mastra/commit/0a2c22c902604439ec490319e14c17f331e0c84c), [`3a8024c`](https://github.com/mastra-ai/mastra/commit/3a8024ce615f8aa89479c0d71fe61d10bb0040be)]:
+  - @mastra/core@1.52.0-alpha.9
+
 ## 1.5.1
 
 ### Patch Changes

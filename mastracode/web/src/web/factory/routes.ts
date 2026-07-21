@@ -14,9 +14,10 @@ import type { Context } from 'hono';
 import type { AuditEmitter } from '../audit/domain';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import { getFactoryStorage } from '../runtime-config';
-import { getFactoryProjectsStorage } from '../storage/domains';
+import { getFactoryProjectsStorage, getQueueHealthStorage } from '../storage/domains';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
 import type { WorkItemRow } from '../storage/domains/work-items/base';
+import { thresholdsOrDefault } from '../storage/domains/queue-health/base';
 import type { WorkItemPriorState } from './store';
 import {
   deleteWorkItem,
@@ -175,6 +176,24 @@ export function buildFactoryRoutes({ audit }: { audit: AuditEmitter }): ApiRoute
         const days = clampMetricsWindow(loose(c).req.query('days'));
         const items = await listWorkItems({ orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId });
         return c.json({ metrics: computeFactoryMetrics(items, { days, now: new Date() }) });
+      },
+    }),
+
+    // ── Per-project queue-health age-threshold config (seconds) ─────────────
+    registerApiRoute('/web/factory/projects/:id/health/thresholds', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveProject(loose(c));
+        if ('response' in resolved) return resolved.response;
+        const factoryStorage = getFactoryStorage();
+        await factoryStorage.ensureDomainReady('queue-health');
+        const stored = await getQueueHealthStorage().getConfig(resolved.orgId, resolved.factoryProjectId);
+        // Validate at the read choke point: `getConfig` round-trips a stored
+        // JSONB row, and only `saveConfig` validates on write — a corrupted or
+        // hand-edited row (empty / non-ascending) would otherwise flow to the
+        // chart and invert bucket colors. Fall back to the default on invalid.
+        return c.json({ thresholds: thresholdsOrDefault(stored) });
       },
     }),
 

@@ -22,7 +22,7 @@ vi.mock('drizzle-orm', () => ({
 // so middleware-stashed users flow through unchanged, but make
 // `ensureWebAuthUser` simulate cookie-based session resolution + personal-org
 // bootstrap on `/auth/*` routes the gate skips. A no-org cookie user comes back
-// with an `organizationId` populated (mirroring `ensureUserHasOrganization`), so
+// with an `organizationId` populated (mirroring the provider's `ensureOrganization`), so
 // downstream `webAuthTenant` yields a real tenant instead of an org gate 403.
 let cookieUser: { workosId: string; organizationId?: string } | null = null;
 // Bootstrap is always attempted for no-org users, but the WorkOS create can

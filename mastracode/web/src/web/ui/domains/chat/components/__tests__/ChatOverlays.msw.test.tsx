@@ -45,7 +45,7 @@ beforeEach(useOverlayControllerHandlers);
 afterEach(() => localStorage.clear());
 
 describe('ChatOverlays', () => {
-  it('given a project, when contextual overlays are opened, then it mounts settings, shortcuts, and projects', async () => {
+  it('given a project, when contextual overlays are opened, then it mounts settings and shortcuts', async () => {
     localStorage.setItem('mastracode-factories', JSON.stringify([project]));
     localStorage.setItem('mastracode-active-factory', project.id);
     const user = userEvent.setup();

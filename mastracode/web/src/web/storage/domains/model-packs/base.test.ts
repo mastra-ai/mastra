@@ -21,7 +21,11 @@ describe('ModelPacksStorage', () => {
       userId: 'user-1',
       input: {
         name: 'Team default',
-        models: { build: 'anthropic/claude-fable-5', plan: 'anthropic/claude-fable-5', fast: 'anthropic/claude-haiku-4-5' },
+        models: {
+          build: 'anthropic/claude-fable-5',
+          plan: 'anthropic/claude-fable-5',
+          fast: 'anthropic/claude-haiku-4-5',
+        },
       },
     });
 
@@ -47,12 +51,18 @@ describe('ModelPacksStorage', () => {
     const first = await seed.modelPacks.upsert({
       orgId: 'org-1',
       userId: 'user-1',
-      input: { name: 'Default', models: { build: 'openai/gpt-5.5', plan: 'openai/gpt-5.5', fast: 'openai/gpt-5.4-mini' } },
+      input: {
+        name: 'Default',
+        models: { build: 'openai/gpt-5.5', plan: 'openai/gpt-5.5', fast: 'openai/gpt-5.4-mini' },
+      },
     });
     const second = await seed.modelPacks.upsert({
       orgId: 'org-1',
       userId: 'user-2',
-      input: { name: 'Default', models: { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6', fast: 'openai/gpt-5.4-mini' } },
+      input: {
+        name: 'Default',
+        models: { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6', fast: 'openai/gpt-5.4-mini' },
+      },
     });
 
     expect(second.id).toBe(first.id);
@@ -63,7 +73,10 @@ describe('ModelPacksStorage', () => {
     const otherOrg = await seed.modelPacks.upsert({
       orgId: 'org-2',
       userId: 'user-3',
-      input: { name: 'Default', models: { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6', fast: 'openai/gpt-5.4-mini' } },
+      input: {
+        name: 'Default',
+        models: { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6', fast: 'openai/gpt-5.4-mini' },
+      },
     });
     expect(otherOrg.id).not.toBe(first.id);
   });

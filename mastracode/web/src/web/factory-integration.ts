@@ -20,6 +20,7 @@
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 
 import type { AuditEmitter } from './audit/domain.js';
 import type { AuditEventRow } from './storage/domains/audit/base.js';
@@ -175,6 +176,16 @@ export interface FactoryIntegration {
    * integration cannot prevent another from observing the same tool result.
    */
   postToolObserver?(args: { toolContext: IntegrationPostToolContext; requestContext?: RequestContext }): Promise<void>;
+  /**
+   * Background workers the integration needs running for its lifecycle
+   * (e.g. polling an upstream that doesn't support webhooks). Optional
+   * capability: called once at boot for READY integrations only; the factory
+   * folds the returned workers into the server Mastra's `workers` option, so
+   * they are merged with the built-in workers and started with them
+   * (`startWorkers()`). Worker names must be unique across integrations —
+   * duplicates fail the `new Mastra(...)` construction loudly.
+   */
+  workers?(ctx: IntegrationContext): MastraWorker[];
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

@@ -30,6 +30,8 @@ async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTM
   const option = await screen.findByRole('option', { name });
   fireEvent.pointerDown(option, { pointerType: 'mouse' });
   fireEvent.click(option, { detail: 1 });
+  // Wait for the popup to close so the next interaction targets a settled DOM.
+  await waitFor(() => expect(screen.queryByRole('option', { name })).not.toBeInTheDocument());
 }
 
 const builtinPack: ModelPackInfo = {

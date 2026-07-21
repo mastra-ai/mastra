@@ -8,7 +8,7 @@
  */
 import type { AgentControllerSessionState } from '@mastra/client-js';
 import { QueryClient } from '@tanstack/react-query';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -101,9 +101,15 @@ const AUTHENTICATED = () =>
 function renderRoutes(
   initialEntry: string,
   authMe: () => Response | Promise<Response>,
-  options?: { project?: Factory; workItemCount?: number; workItemsReady?: Promise<void>; workItemsError?: boolean },
+  options?: {
+    project?: Factory;
+    withFactory?: boolean;
+    workItemCount?: number;
+    workItemsReady?: Promise<void>;
+    workItemsError?: boolean;
+  },
 ) {
-  seedFactory(options?.project);
+  if (options?.withFactory !== false) seedFactory(options?.project);
   useAgentControllerHandlers();
   server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
   if (options?.project?.binding.kind === 'factory') {
@@ -154,6 +160,24 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
+  });
+
+  it('given no factory, when visiting /new, then the create factory modal is shown', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
+        HttpResponse.json({
+          root: '/projects',
+          path: '/projects',
+          parent: null,
+          entries: [],
+        }),
+      ),
+    );
+
+    renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
+
+    const dialog = await screen.findByRole('dialog', { name: 'Create Factory' });
+    expect(within(dialog).getByLabelText('Factory name')).toBeInTheDocument();
   });
 
   it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {

@@ -24,9 +24,10 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { hasAuthInit } from '@mastra/core/server';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { observeAgentGitAction } from './audit/agent-audit.js';
 import { AuditDomain } from './audit/domain.js';
-import type { WebAuthAdapter } from './auth-adapter.js';
 import { buildAuthRoutes, createWebAuthGate } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './factory-integration.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
@@ -40,12 +41,13 @@ import { createTenantCredentialPrimer, registerTenantCredentialResolver } from '
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { handleServerError } from './server-error.js';
 import { createStateSigner } from './state-signing.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
-import { assembleWebApiRoutes } from './web-surface.js';
+import { assembleWebApiRoutes, buildIntegrationContext } from './web-surface.js';
 import type { WebApiRoutesDeps } from './web-surface.js';
 
 type BuildApiRoutesDeps = Pick<WebApiRoutesDeps, 'controller' | 'authStorage'>;
@@ -55,12 +57,13 @@ export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
 export interface MastraFactoryConfig {
   /**
-   * Web auth adapter instance — `WorkOSWebAuth`, `BetterAuthWebAuth`, or any
-   * custom `WebAuthAdapter` implementation. Whatever instance is passed is the
-   * active provider; the factory never selects or constructs one itself.
+   * Auth provider instance — `MastraAuthWorkos` (`@mastra/auth-workos`),
+   * `MastraAuthBetterAuth` (`@mastra/auth-better-auth`), or any custom
+   * `MastraAuthProvider`. Whatever instance is passed is the active provider;
+   * the factory never selects or constructs one itself.
    * Omitted → auth disabled (open server, local-dev behavior).
    */
-  auth?: WebAuthAdapter;
+  auth?: IMastraAuthProvider;
   /**
    * REQUIRED. Factory storage backend powering BOTH agent storage (threads,
    * messages, memory, OM — via `getMastraStorage()`) and the app tables
@@ -208,6 +211,7 @@ export class MastraFactory {
     storage.registerDomain(new WorkItemsStorage());
     storage.registerDomain(new ModelCredentialsStorage());
     storage.registerDomain(new ModelPacksStorage());
+    storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage());
@@ -260,7 +264,7 @@ export class MastraFactory {
       vector,
       integrations,
       publicUrl: publicOrigin,
-      authAdapter: auth,
+      authProvider: auth,
       stateSigner,
       sandbox: machine
         ? {
@@ -271,11 +275,14 @@ export class MastraFactory {
         : undefined,
     });
 
-    // One-time adapter initialization with factory-level context (e.g.
+    // One-time provider initialization with factory-level context (e.g.
     // better-auth builds its default instance on the backend's auth
-    // database). Failures surface here, at prepare() — a misconfigured
-    // adapter must not boot.
-    await auth?.init?.({ storage, publicUrl: publicOrigin, allowedOrigins });
+    // database, WorkOS derives its redirect URI from the public URL).
+    // Failures surface here, at prepare() — a misconfigured provider must
+    // not boot.
+    if (auth && hasAuthInit(auth)) {
+      await auth.init({ database: storage.authDatabase?.(), publicUrl: publicOrigin, allowedOrigins });
+    }
 
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
@@ -451,7 +458,34 @@ export class MastraFactory {
     });
 
     this.#prepared = prepared;
-    return prepared.mastraArgs;
+
+    // Integration lifecycle workers (e.g. polling an upstream without
+    // webhooks): collected from READY integrations only, folded into the
+    // constructor args so `new Mastra(...)` merges them with the default
+    // workers and `finalize()`'s `startWorkers()` starts them alongside the
+    // built-ins. Never passed for the disabled/not-ready case — a worker for
+    // an unavailable integration must not run.
+    const integrationWorkers = integrationRegistrations
+      .filter(({ integration, ready }) => ready && integration.workers)
+      .flatMap(({ integration }) =>
+        integration.workers!(
+          buildIntegrationContext(
+            {
+              controller: prepared.base.controller,
+              publicOrigin,
+              stateSigner,
+              integrationStorage,
+              sourceControlStorage,
+            },
+            integration.id,
+          ),
+        ),
+      );
+
+    return {
+      ...prepared.mastraArgs,
+      ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
+    };
   }
 
   /**
