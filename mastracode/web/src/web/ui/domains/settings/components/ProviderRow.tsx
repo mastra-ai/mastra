@@ -4,8 +4,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check } from 'lucide-react';
-import { forwardRef, useState } from 'react';
-import type { ComponentPropsWithoutRef } from 'react';
+import { useState } from 'react';
 
 import type { ProviderInfo } from '../../../../../shared/api/types';
 import {
@@ -35,7 +34,7 @@ const SOURCE_VARIANT: Record<ProviderInfo['source'], 'success' | 'info' | 'defau
   none: 'default',
 };
 
-interface ProviderRowProps extends Omit<ComponentPropsWithoutRef<'li'>, 'children' | 'className' | 'role'> {
+interface ProviderRowProps {
   provider: ProviderInfo;
   authEnabled: boolean;
   disabled?: boolean;
@@ -43,17 +42,13 @@ interface ProviderRowProps extends Omit<ComponentPropsWithoutRef<'li'>, 'childre
   onStartOAuth: (provider: string, mode?: string) => Promise<void>;
 }
 
-export const ProviderRow = forwardRef<HTMLLIElement, ProviderRowProps>(function ProviderRow(
-  {
-    provider,
-    authEnabled,
-    disabled = false,
-    startingOAuth,
-    onStartOAuth,
-    ...rowProps
-  },
-  ref,
-) {
+export function ProviderRow({
+  provider,
+  authEnabled,
+  disabled = false,
+  startingOAuth,
+  onStartOAuth,
+}: ProviderRowProps) {
   const displayName = providerDisplayName(provider.provider);
   const saveKeyMutation = useSaveProviderKey();
   const removeKeyMutation = useRemoveProviderKey();
@@ -112,7 +107,7 @@ export const ProviderRow = forwardRef<HTMLLIElement, ProviderRowProps>(function 
   };
 
   return (
-    <li {...rowProps} ref={ref} className="flex flex-col gap-2 py-2">
+    <li className="flex flex-col gap-2 py-2">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {provider.source !== 'none' && <Check size={13} className="shrink-0 text-accent1" />}
@@ -219,4 +214,4 @@ export const ProviderRow = forwardRef<HTMLLIElement, ProviderRowProps>(function 
       )}
     </li>
   );
-});
+}

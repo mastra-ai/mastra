@@ -41,7 +41,6 @@
     "@octokit/auth-app": "^8.0.0",
     "@octokit/rest": "^22.0.1",
     "@tanstack/react-query": "^5.90.21",
-    "@tanstack/react-virtual": "^3.14.7",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.0",
     "hono": "^4.12.8",

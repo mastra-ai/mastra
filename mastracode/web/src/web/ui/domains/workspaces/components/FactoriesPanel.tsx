@@ -32,10 +32,7 @@ export function FactoriesPanel({ onOpenGithub, onClose }: FactoriesPanelProps) {
   };
 
   return (
-    <section
-      aria-labelledby="create-factory-title"
-      className="flex min-h-0 flex-1 overflow-hidden p-4 md:p-6"
-    >
+    <section aria-labelledby="create-factory-title" className="flex min-h-0 flex-1 overflow-hidden p-4 md:p-6">
       <div className="flex min-h-0 w-full flex-1 flex-col gap-3">
         <Txt id="create-factory-title" as="h1" variant="header-md">
           Create factory

@@ -52,10 +52,7 @@ interface NavigationState {
   index: number;
 }
 
-type NavigationAction =
-  | { type: 'browse'; path: string | undefined }
-  | { type: 'back' }
-  | { type: 'forward' };
+type NavigationAction = { type: 'browse'; path: string | undefined } | { type: 'back' } | { type: 'forward' };
 
 const initialNavigationState: NavigationState = {
   paths: [undefined],
@@ -247,7 +244,6 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
           {pickError}
         </Txt>
       )}
-
     </div>
   );
 }

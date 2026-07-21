@@ -7,7 +7,7 @@ import { Brain, FolderKanban, Key, Layers, Palette, Search, Server, SlidersHoriz
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { useToast } from '../../../ui';
+import { useToast } from '../../../ui/toast';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';

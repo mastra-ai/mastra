@@ -1,7 +1,6 @@
 import { Input } from '@mastra/playground-ui/components/Input';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual';
 import { Search } from 'lucide-react';
 import { useRef, useState } from 'react';
 
@@ -22,8 +21,6 @@ interface ActiveOAuthSession {
 }
 
 const API_KEY_LIST_MAX_HEIGHT = 280;
-const PROVIDER_ROW_ESTIMATE = 48;
-const PROVIDER_LIST_OVERSCAN = 6;
 
 /** Provider OAuth and API-key management for local and tenant-scoped web deployments. */
 export function ProvidersSection() {
@@ -53,23 +50,6 @@ export function ProvidersSection() {
   const results = query
     ? apiKeyProviders.filter(provider => provider.provider.toLowerCase().includes(query))
     : apiKeyProviders;
-  const providerVirtualizer = useVirtualizer({
-    count: results.length,
-    estimateSize: () => PROVIDER_ROW_ESTIMATE,
-    getItemKey: index => results[index]?.provider ?? index,
-    getScrollElement: () => apiKeyListRef.current,
-    initialRect: { height: API_KEY_LIST_MAX_HEIGHT, width: 0 },
-    observeElementRect: (instance, callback) =>
-      observeElementRect(instance, rect =>
-        callback(rect.height > 0 ? rect : { ...rect, height: API_KEY_LIST_MAX_HEIGHT }),
-      ),
-    overscan: PROVIDER_LIST_OVERSCAN,
-  });
-  const virtualItems = providerVirtualizer.getVirtualItems();
-  const totalSize = providerVirtualizer.getTotalSize();
-  const paddingTop = virtualItems[0]?.start ?? 0;
-  const paddingBottom =
-    virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   const startOAuth = async (provider: string, mode?: string) => {
     setStartingProvider(provider);
@@ -169,25 +149,16 @@ export function ProvidersSection() {
             className="min-h-0 rounded-md border border-border1"
           >
             <ul role="list" aria-label="API key providers" className="flex flex-col divide-y divide-border1 px-2">
-              {paddingTop > 0 && <li aria-hidden="true" style={{ height: paddingTop }} />}
-              {virtualItems.map(virtualItem => {
-                const provider = results[virtualItem.index];
-                if (!provider) return null;
-
-                return (
-                  <ProviderRow
-                    key={provider.provider}
-                    ref={providerVirtualizer.measureElement}
-                    data-index={virtualItem.index}
-                    provider={provider}
-                    authEnabled={authEnabled}
-                    disabled={startOAuthMutation.isPending}
-                    startingOAuth={startingProvider === provider.provider}
-                    onStartOAuth={startOAuth}
-                  />
-                );
-              })}
-              {paddingBottom > 0 && <li aria-hidden="true" style={{ height: paddingBottom }} />}
+              {results.map(provider => (
+                <ProviderRow
+                  key={provider.provider}
+                  provider={provider}
+                  authEnabled={authEnabled}
+                  disabled={startOAuthMutation.isPending}
+                  startingOAuth={startingProvider === provider.provider}
+                  onStartOAuth={startOAuth}
+                />
+              ))}
             </ul>
           </ScrollArea>
         ))}
