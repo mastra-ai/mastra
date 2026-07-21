@@ -165,6 +165,53 @@ Requirements:
 - **No Manual Editing**: Reduce errors from typing JSON manually
 - **Environment Parity**: Test production configurations in development
 
+## Stored Workflow Demo — `daily-standup-digest`
+
+This example seeds a workflow at boot from a JSON `WorkflowDefinition`, without ever calling `createWorkflow(...)`. The workflow shows up in Studio like any other workflow because `mastra.addStoredWorkflow(...)` persists it to `WorkflowDefinitionsStorage` and live-registers it in one shot.
+
+### What it demonstrates
+
+- Declarative `tool` / `agent` / `mapping` / `foreach` entry types round-tripping from JSON.
+- The three-scope template model: `${initData.teamName}` and `${stepResults.normalize-each-note}` in a `mapping` step, with the array of per-note outputs JSON-encoded automatically.
+- `foreach(agent)` with `concurrency`, rehydrated from JSON.
+- Restart survival: kill `pnpm mastra dev`, restart, and the workflow is still there because `LibSQLStore`'s `workflowDefinitions` domain persists it.
+
+### Files
+
+- `src/mastra/stored-workflows/daily-standup-digest.json` — the `WorkflowDefinition`.
+- `src/mastra/stored-workflows/daily-standup-agents.ts` — the two agents referenced by `agentId`.
+- `src/mastra/stored-workflows/daily-standup-tools.ts` — the two tools referenced by `toolId`.
+- `src/mastra/index.ts` — imports the JSON and calls `mastra.addStoredWorkflow(...)` right after the `Mastra` instance is constructed.
+
+### Try it
+
+```bash
+pnpm mastra dev
+```
+
+Then in Studio:
+
+1. Open **Workflows** → `daily-standup-digest`.
+2. Run with an input like:
+   ```json
+   {
+     "teamName": "Platform",
+     "notes": [
+       { "author": "Alex", "text": "yesterday shipped the auth fix. today wiring up the retry queue. blocked on staging creds." },
+       { "author": "Sam",  "text": "finished the migration script. moving on to the dashboard rewrite. no blockers." }
+     ]
+   }
+   ```
+3. Confirm the run produces a `markdown` output with a dated `# Platform — Daily Standup (...)` header.
+
+### Proof of restart survival
+
+1. Run `pnpm mastra dev` once so the workflow is upserted into `mastra.db`.
+2. Stop the process.
+3. Delete `src/mastra/stored-workflows/daily-standup-digest.json` (temporarily).
+4. Restart `pnpm mastra dev` — the workflow still appears in Studio because it was loaded from storage on boot, not from the JSON file.
+5. Restore the JSON file when done.
+
 ## Learn More
 
 - [Mastra Documentation](https://mastra.ai/docs)

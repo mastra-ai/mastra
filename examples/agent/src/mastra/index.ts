@@ -107,6 +107,9 @@ import { askUserAgent } from './agents/ask-user-agent';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 import { approvalDemoAgent } from './agents/approval-demo-agent';
+import { standupNoteNormalizerAgent, standupDigestAgent } from './stored-workflows/daily-standup-agents';
+import { buildNormalizerPromptsTool, formatDigestTool } from './stored-workflows/daily-standup-tools';
+import dailyStandupDigestGraph from './stored-workflows/daily-standup-digest.json' with { type: 'json' };
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -161,6 +164,12 @@ export const mastra = new Mastra({
     clinicDirectAgent,
     clinicSpecialistAgent,
     clinicSupervisorAgent,
+    'standup-note-normalizer': standupNoteNormalizerAgent,
+    'standup-digest': standupDigestAgent,
+  },
+  tools: {
+    'build-normalizer-prompts': buildNormalizerPromptsTool,
+    'format-standup-digest': formatDigestTool,
   },
   processors: {
     moderationProcessor,
@@ -230,4 +239,19 @@ export const mastra = new Mastra({
       },
     },
   }),
+});
+
+/**
+ * Seed the `daily-standup-digest` stored workflow on boot.
+ *
+ * This is the point of the demo: on `pnpm mastra dev`, a JSON WorkflowDefinition
+ * is upserted into `WorkflowDefinitionsStorage` and live-registered via
+ * `mastra.addStoredWorkflow()`. Studio then shows it as a runnable workflow,
+ * even though it was never authored with `createWorkflow(...)`.
+ *
+ * `addStoredWorkflow` is idempotent — re-running replaces any existing row and
+ * live registration with the same id, so this is safe to call on every boot.
+ */
+void mastra.addStoredWorkflow(dailyStandupDigestGraph as Parameters<typeof mastra.addStoredWorkflow>[0]).catch((err: unknown) => {
+  mastra.getLogger().error('Failed to seed daily-standup-digest stored workflow', { err });
 });

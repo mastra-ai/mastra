@@ -1,0 +1,78 @@
+{
+  "id": "daily-standup-digest",
+  "description": "Turn raw standup notes into a team-wide markdown digest. Seeded at boot from a JSON WorkflowDefinition; survives process restarts via WorkflowDefinitionsStorage.",
+  "metadata": {
+    "seededFrom": "examples/agent/src/mastra/stored-workflows/daily-standup-digest.json",
+    "demonstrates": [
+      "declarative tool / agent / mapping / foreach entries",
+      "three-scope templates (initData, inputData, stepResults)",
+      "foreach(agent) round-trip through storage",
+      "Studio picks up a workflow that was never registered via createWorkflow()"
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "teamName": { "type": "string" },
+      "notes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "author": { "type": "string" },
+            "text": { "type": "string" }
+          },
+          "required": ["author", "text"]
+        }
+      }
+    },
+    "required": ["teamName", "notes"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "markdown": { "type": "string" }
+    },
+    "required": ["markdown"]
+  },
+  "graph": [
+    {
+      "type": "tool",
+      "id": "build-normalizer-prompts",
+      "toolId": "build-normalizer-prompts",
+      "description": "Turns raw standup notes into per-author prompts for the normalizer agent."
+    },
+    {
+      "type": "foreach",
+      "step": {
+        "type": "agent",
+        "id": "normalize-each-note",
+        "agentId": "standup-note-normalizer",
+        "description": "Normalizes a single standup note into { did, doing, blocked } text."
+      },
+      "opts": { "concurrency": 3 }
+    },
+    {
+      "type": "mapping",
+      "id": "assemble-digest-prompt",
+      "mapConfig": "{\"prompt\":{\"template\":\"Team: ${initData.teamName}\\n\\nNormalized notes (JSON):\\n${stepResults.normalize-each-note}\"}}"
+    },
+    {
+      "type": "agent",
+      "id": "standup-digest",
+      "agentId": "standup-digest",
+      "description": "Writes the team-wide markdown digest from normalized notes."
+    },
+    {
+      "type": "mapping",
+      "id": "prep-format",
+      "mapConfig": "{\"teamName\":{\"template\":\"${initData.teamName}\"},\"digest\":{\"template\":\"${stepResults.standup-digest.text}\"}}"
+    },
+    {
+      "type": "tool",
+      "id": "format-standup-digest",
+      "toolId": "format-standup-digest",
+      "description": "Wraps the digest in a dated markdown header."
+    }
+  ]
+}
