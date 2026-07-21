@@ -19,9 +19,7 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { Card, CardText, Actions, LinkButton } from 'chat';
 import { Mastra } from '@mastra/core/mastra';
-import type { ChannelHandlerConfig } from '@mastra/core/channels';
 import { ConsoleLogger, type LogLevelType } from '@mastra/core/logger';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
@@ -29,7 +27,6 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
-import { SlackProvider } from '@mastra/slack';
 import { WorkOS } from '@workos-inc/node';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
@@ -38,6 +35,7 @@ import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '../web/factory-integration.js';
 import { GithubIntegration } from '../web/github/integration.js';
 import { LinearIntegration } from '../web/linear/integration.js';
+import { createSlackChannelProvider } from '../web/channels/slack/slack.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -287,91 +285,23 @@ export const factory = new MastraFactory({
   integrations,
 });
 
-// Browser-facing origin for channel deep links (trailing slashes trimmed so the
-// `${publicOrigin}/threads/...` join never produces a double slash).
-const publicOrigin = (process.env.MASTRACODE_PUBLIC_URL ?? 'http://localhost:4111').replace(/\/+$/, '');
-
-const newSessionChatHandler: ChannelHandlerConfig = async (thread, message, defaultHandler) => {
-  // A mention on a not-yet-subscribed thread is a NEW session. The
-  // default handler auto-subscribes, so once subscribed this is a
-  // follow-up mention — don't re-announce.
-  const isNewSession = !(await thread.isSubscribed());
-
-  // Run the framework handler first so the internal Mastra thread and
-  // controller session are created before we build the deep link.
-  await defaultHandler(thread, message);
-
-  if (!isNewSession) return;
-
-  // The handler's `thread` is the Slack chat thread — its `.id` is the
-  // platform thread id (e.g. `slack:C0BG...`), NOT the internal Mastra
-  // thread UUID the web UI routes on. Look up the internal thread that
-  // the framework created for this channel conversation via the stored
-  // channel metadata, then build the link from its real id + resourceId.
-  const store = await mastra.getStorage()?.getStore('memory');
-  const { threads } = (await store?.listThreads({
-    filter: {
-      metadata: {
-        channel_platform: thread.adapter.name,
-        channel_externalThreadId: thread.id,
-        channel_externalChannelId: thread.channelId,
-      },
-    },
-    perPage: 1,
-  })) ?? { threads: [] };
-
-  const internalThread = threads[0];
-  if (!internalThread) {
-    console.warn('[onMention] no internal thread found for', thread.id);
-    return;
-  }
-
-  await thread.post(
-    Card({
-      title: 'New Mastra Code session started.',
-      children: [
-        CardText('A new session has been created.'),
-        Actions([
-          LinkButton({
-            url: `${publicOrigin}/threads/${internalThread.id}?resourceId=${encodeURIComponent(
-              internalThread.resourceId,
-            )}`,
-            label: 'View Session',
-          }),
-        ]),
-      ],
-    }),
-  );
-};
-
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
 // `server` config (middleware + apiRoutes + cors). Slack channels + logger are
 // layered on top of the factory args here so channel rendering rides the same
 // deployed instance while the factory keeps owning the rest of the config.
-export const mastra = new Mastra({
+export const mastra: Mastra = new Mastra({
   ...(await factory.prepare()),
   channels: {
-    slack: new SlackProvider({
-      refreshToken: process.env.SLACK_APP_REFRESH_TOKEN,
-      baseUrl: process.env.MASTRACODE_PUBLIC_URL,
-      handlers: {
-        onSubscribedMessage: async (thread, message, defaultHandler) => {
-          // `aside` as its own leading word lets humans talk in a subscribed
-          // thread without the bot replying. Word boundary so messages that
-          // merely start with "aside..." (e.g. "asides can wait") still route.
-          if (/^aside\b/i.test(message.text)) return;
-          return defaultHandler(thread, message);
-        },
-        onMention: newSessionChatHandler,
-        onDirectMessage: newSessionChatHandler,
-      },
-    }),
+    // `getMastra` is a lazy accessor: the provider is built inside this
+    // `new Mastra(...)` literal, so `mastra` isn't assigned yet. The thunk is
+    // only dereferenced when a handler fires (well after module init), so it
+    // safely resolves the exported instance by then.
+    slack: createSlackChannelProvider({ getMastra: () => mastra }),
   },
   logger: new ConsoleLogger({ level: (process.env.LOG_LEVEL as LogLevelType) ?? 'debug' }),
 });
-
 
 // Post-construct boot: initialize the controller (which now inherits this
 // instance's storage) and start its workers. Runs at module load via top-level

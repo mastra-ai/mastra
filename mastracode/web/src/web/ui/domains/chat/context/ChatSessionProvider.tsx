@@ -1,7 +1,6 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
-import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
@@ -41,7 +40,6 @@ export function ChatSessionConfigProvider({
   const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
   const auth = useWebAuth();
   const { baseUrl } = useApiConfig();
-  const [searchParams] = useSearchParams();
   const projectPath = deriveProjectPath(activeFactory);
   const userSession = userScoped && threadId ? findUserSessionByThreadId(threadId) : undefined;
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
@@ -56,7 +54,14 @@ export function ChatSessionConfigProvider({
   // session keyed `channel:slack:...`. Channel threads are not partitioned by
   // worktree, so drop `projectPath` when the override is present. This only
   // applies to the factory branch; user-scoped sessions derive identity from auth.
-  const resourceOverride = userScoped ? null : searchParams.get('resourceId');
+  //
+  // Read once from the entry URL rather than via the router's `useSearchParams`:
+  // this is a deep-link entry param that the session binds to at mount and does
+  // not re-read on in-app navigation, and this config provider otherwise has no
+  // router dependency.
+  const resourceOverride = userScoped
+    ? null
+    : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
 
   const value = userScoped
     ? {
