@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { McE2eScenario } from './types.js';
@@ -32,11 +32,22 @@ export const storageDeleteModeScenario: McE2eScenario = {
     const { DatabaseSync } = await import('node:sqlite');
     for (const file of [dbPath, vectorPath]) {
       const database = new DatabaseSync(file);
-      database.exec('PRAGMA journal_mode=WAL; CREATE TABLE seed (id INTEGER PRIMARY KEY);');
-      // Preserve the WAL header to model a database left by an older Mastra Code
-      // process. The product path under test owns the safe transition to DELETE.
-      database.close();
-      if (readJournalHeader(file) !== 'wal') throw new Error(`Failed to seed WAL database: ${file}`);
+      let wal: Buffer;
+      let shm: Buffer;
+      try {
+        database.exec('PRAGMA journal_mode=WAL; CREATE TABLE seed (id INTEGER PRIMARY KEY);');
+        wal = readFileSync(`${file}-wal`);
+        shm = readFileSync(`${file}-shm`);
+      } finally {
+        database.close();
+      }
+      // Restore the valid sidecars removed by the clean seed shutdown to model
+      // the files an older WAL-mode process can leave behind.
+      writeFileSync(`${file}-wal`, wal);
+      writeFileSync(`${file}-shm`, shm);
+      if (readJournalHeader(file) !== 'wal' || !existsSync(`${file}-wal`) || !existsSync(`${file}-shm`)) {
+        throw new Error(`Failed to seed WAL database with sidecars: ${file}`);
+      }
     }
   },
   inProcessApp: ({ appDataDir, dbPath, startMastraCodeApp, terminal }) => {
