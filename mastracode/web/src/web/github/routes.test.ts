@@ -292,8 +292,69 @@ const githubStub = {
     addIssueLabels(installationId, repoFullName, issueNumber, labels),
   listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
     listRepoOpenIssues(installationId, repoFullName, page, options),
-  listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
-    listRepoOpenPullRequests(installationId, repoFullName, page),
+  intake: {
+    listIssues: async (input: import('../capabilities/intake').ListIntakeIssuesInput) => {
+      if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
+      const result = await listRepoOpenIssues(
+        input.connection.installationId,
+        input.sourceIds[0]!,
+        Number(input.cursor ?? '1'),
+        { label: input.labels?.join(',') },
+      );
+      return {
+        issues: result.issues.map(issue => ({
+          id: String(issue.number),
+          identifier: `#${issue.number}`,
+          title: issue.title,
+          url: issue.url,
+          author: issue.author,
+          state: 'open',
+          stateType: 'open',
+          priority: null,
+          assignee: null,
+          source: input.sourceIds[0]!,
+          labels: issue.labels,
+          commentCount: issue.comments,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+        })),
+        nextCursor: result.nextPage === null ? null : String(result.nextPage),
+      };
+    },
+  },
+  versionControl: {
+    listPullRequests: async (input: import('../capabilities/version-control').ListPullRequestsInput) => {
+      if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
+      const result = await listRepoOpenPullRequests(
+        input.connection.installationId,
+        input.sourceId,
+        Number(input.cursor ?? '1'),
+      );
+      return {
+        pullRequests: result.pullRequests.map(pr => ({ ...pr, id: String(pr.number) })),
+        nextCursor: result.nextPage === null ? null : String(result.nextPage),
+      };
+    },
+    createPullRequest: async (input: import('../capabilities/version-control').CreatePullRequestInput) => {
+      const result = await createPullRequest(input);
+      return {
+        id: '1',
+        title: input.title,
+        url: result.url,
+        author: 'octo',
+        body: input.body ?? null,
+        state: 'open' as const,
+        draft: input.draft ?? false,
+        merged: false,
+        mergeable: null,
+        baseBranch: input.baseBranch,
+        headBranch: input.headBranch,
+        headSha: 'abc123',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+    },
+  },
 };
 
 // Deterministic state signer stub (replaces the old signState/verifyState mocks).
@@ -1783,8 +1844,25 @@ describe('pr route', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
     expect(createPullRequest).toHaveBeenCalledOnce();
-    const opts = (createPullRequest.mock.calls[0] as unknown as any[])[2];
-    expect(opts).toMatchObject({ token: 'install-token', base: 'main', head: 'feat/x', title: 'My PR' });
+    expect(createPullRequest).toHaveBeenCalledWith({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'octo/hello',
+      baseBranch: 'main',
+      headBranch: 'feat/x',
+      title: 'My PR',
+      body: 'Adds a thing',
+    });
+  });
+
+  it('returns 502 when the version-control provider rejects PR creation', async () => {
+    seedMaterializedProject();
+    createPullRequest.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+      branch: 'feat/x',
+      title: 'My PR',
+    });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: 'github_pr_create_failed', message: 'GitHub unavailable' });
   });
 });
 

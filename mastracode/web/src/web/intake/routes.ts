@@ -4,12 +4,12 @@ import type { Context } from 'hono';
 
 import type { AuditEmitter } from '../audit/domain';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
-import type { FactoryIntegration, IntakeItem } from '../factory-integration';
+import type { Intake, IntakeItem } from '../capabilities/intake';
 import { getIntakeConfig, parseIntakeConfig, saveIntakeConfig } from './store';
 
 interface IntakeIntegration {
   id: string;
-  intake: NonNullable<FactoryIntegration['intake']>;
+  intake: Pick<Intake, 'listSources' | 'listItems'>;
 }
 
 interface AggregatedIntakeItem extends Omit<IntakeItem, 'source'> {

@@ -46,7 +46,7 @@ describe('agent-controller read hooks', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useAgentControllerThreads({ ...hookArgs, projectPath: '/sandbox/mastra' }),
+      useAgentControllerThreads({ ...hookArgs, scope: '/sandbox/mastra' }),
     );
 
     await waitFor(() => expect(result.current.data?.[0]?.id).toBe('thread-one'));

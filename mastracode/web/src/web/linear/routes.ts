@@ -285,8 +285,28 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
 
         try {
           const accessToken = await getFreshAccessToken(linear, connection);
-          const { issues, nextCursor } = await linear.listActiveIssues(accessToken, after, projectIds);
-          return c.json({ issues, nextCursor });
+          const { issues, nextCursor } = await linear.intake.listIssues({
+            connection: { type: 'oauth', accessToken },
+            sourceIds: projectIds,
+            cursor: after,
+          });
+          return c.json({
+            issues: issues.map(issue => ({
+              id: issue.id,
+              identifier: issue.identifier,
+              title: issue.title,
+              url: issue.url,
+              state: issue.state,
+              stateType: issue.stateType,
+              priorityLabel: issue.priority,
+              assignee: issue.assignee,
+              team: issue.source,
+              labels: issue.labels,
+              createdAt: issue.createdAt,
+              updatedAt: issue.updatedAt,
+            })),
+            nextCursor,
+          });
         } catch (err) {
           return linearFetchError(loose(c), err);
         }

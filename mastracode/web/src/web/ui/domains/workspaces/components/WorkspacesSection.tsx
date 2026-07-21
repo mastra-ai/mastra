@@ -65,7 +65,7 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
   const activityOptions = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath: projectPath || undefined,
+    scope: projectPath || undefined,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
     enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory)),
