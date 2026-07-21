@@ -1205,19 +1205,70 @@ describe('om-tools', () => {
       let nextCharOffset: number | undefined = 0;
 
       while (nextCharOffset !== undefined) {
+        const charOffset: number = nextCharOffset;
         const result = await recallPart({
           memory: memory as any,
           threadId,
           cursor: 'msg-exact-chunks',
           partIndex: 0,
-          charOffset: nextCharOffset,
+          charOffset,
           maxTokens: 10,
         });
 
+        if (result.nextCharOffset !== undefined) {
+          expect(result.nextCharOffset).toBeGreaterThan(charOffset);
+        }
         chunks.push(result.text);
         nextCharOffset = result.nextCharOffset;
       }
 
+      expect(chunks.join('')).toBe(fullText);
+    });
+
+    it('should truncate an oversized part using the default token budget', async () => {
+      const fullText = Array.from(
+        { length: 1500 },
+        (_, index) => `default-budget-segment-${index.toString().padStart(4, '0')}`,
+      ).join(' ');
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-default-budget',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: fullText }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+
+      const chunks: string[] = [];
+      let nextCharOffset: number | undefined = 0;
+
+      while (nextCharOffset !== undefined) {
+        const charOffset: number = nextCharOffset;
+        const result = await recallPart({
+          memory: memory as any,
+          threadId,
+          cursor: 'msg-default-budget',
+          partIndex: 0,
+          charOffset,
+        });
+
+        if (result.nextCharOffset !== undefined) {
+          expect(result.truncated).toBe(true);
+          expect(result.nextCharOffset).toBeGreaterThan(charOffset);
+          expect(result.note).toContain(`charOffset=${result.nextCharOffset}`);
+        }
+        chunks.push(result.text);
+        nextCharOffset = result.nextCharOffset;
+      }
+
+      expect(chunks.length).toBeGreaterThan(1);
       expect(chunks.join('')).toBe(fullText);
     });
 
@@ -1300,19 +1351,21 @@ describe('om-tools', () => {
       let nextCharOffset: number | undefined = 0;
 
       while (nextCharOffset !== undefined) {
+        const charOffset: number = nextCharOffset;
         const result = await recallPart({
           memory: memory as any,
           threadId,
           resourceId,
           cursor: 'msg-ff-source',
           partIndex: 1,
-          charOffset: nextCharOffset,
+          charOffset,
           maxTokens: 50,
         });
 
         expect(result.messageId).toBe('msg-ff-next');
         if (result.nextCharOffset !== undefined) {
           expect(result.truncated).toBe(true);
+          expect(result.nextCharOffset).toBeGreaterThan(charOffset);
           expect(result.note).toContain('cursor="msg-ff-source" partIndex=1');
           expect(result.note).toContain(`charOffset=${result.nextCharOffset}`);
           expect(result.text).not.toContain('To continue');
