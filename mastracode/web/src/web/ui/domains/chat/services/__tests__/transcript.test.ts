@@ -372,7 +372,6 @@ describe('transcript reducer message entries', () => {
         },
       },
     ]);
-
   });
 });
 

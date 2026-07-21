@@ -534,9 +534,7 @@ function SuspensionCard({
     );
   }
 
-  return (
-    <AskUserCard prompt={prompt} payload={payload} isSubmitting={isSubmitting} onRespond={onRespond} />
-  );
+  return <AskUserCard prompt={prompt} payload={payload} isSubmitting={isSubmitting} onRespond={onRespond} />;
 }
 
 function AskUserCard({
@@ -771,21 +769,14 @@ export function TranscriptEntries({
           case 'notice':
             return <NoticeCard key={entry.id} entry={entry} />;
           case 'approval':
-            return (
-              <ApprovalCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />
-            );
+            return <ApprovalCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
           case 'notification':
             return <NotificationCard key={entry.id} entry={entry} />;
           case 'notification_summary':
             return <NotificationSummaryCard key={entry.id} entry={entry} />;
           case 'suspension':
             return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
-              <SuspensionCard
-                key={entry.id}
-                prompt={entry}
-                isSubmitting={isSubmitting}
-                onRespond={onRespond}
-              />
+              <SuspensionCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
             ) : null;
           case 'subagent':
             return <SubagentCard key={entry.id} entry={entry} />;
