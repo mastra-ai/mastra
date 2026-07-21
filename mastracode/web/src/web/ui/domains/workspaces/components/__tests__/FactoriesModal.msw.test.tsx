@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
@@ -22,10 +22,10 @@ const rootListing: DirectoryListing = {
   entries: [{ name: 'gamma', path: '/projects/gamma' }],
 };
 
-function renderProjects() {
+function renderProjects(onOpenGithub?: () => void) {
   return renderWithProviders(
     <OverlayTestProviders>
-      <FactoriesModal />
+      <FactoriesModal onOpenGithub={onOpenGithub} />
     </OverlayTestProviders>,
   );
 }
@@ -49,6 +49,16 @@ beforeEach(() => {
 afterEach(() => localStorage.clear());
 
 describe('FactoriesModal', () => {
+  it('offers GitHub alongside local directory browsing', async () => {
+    const onOpenGithub = vi.fn();
+    const user = userEvent.setup();
+    renderProjects(onOpenGithub);
+
+    await user.click(screen.getByRole('button', { name: 'Create/connect factory from GitHub' }));
+
+    expect(onOpenGithub).toHaveBeenCalledOnce();
+  });
+
   it('opens directly into local directory browsing', async () => {
     renderProjects();
 

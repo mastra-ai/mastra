@@ -21,11 +21,7 @@ export interface GithubInstallation {
 
 /** Reason the GitHub feature is in its current state, returned by the server. */
 export type GithubStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
@@ -116,9 +112,28 @@ export async function listGithubRepos(baseUrl: string, query?: string): Promise<
 
 /**
  * Create a connected GitHub repository binding. The server persists a
- * `github_projects` row (no sandbox, no clone yet) and returns a temporary
+ * `source_control_projects` row (no sandbox, no clone yet) and returns a temporary
  * repository DTO. The browser wraps it into a Factory with its own UUID.
  */
+export async function listConnectedRepositories(baseUrl: string): Promise<GithubConnectedRepositoryPayload[]> {
+  const res = await fetch(`${baseUrl}/web/github/repositories`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Failed to list connected repositories (${res.status})`);
+  return (await res.json()) as GithubConnectedRepositoryPayload[];
+}
+
+export async function deleteConnectedRepository(baseUrl: string, projectId: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/github/repositories/${encodeURIComponent(projectId)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`Failed to delete connected repository (${res.status})`);
+}
+
 export async function createConnectedRepository(
   baseUrl: string,
   repo: GithubRepo,

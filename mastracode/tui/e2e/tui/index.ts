@@ -43,6 +43,7 @@ import { githubSignalsNotificationReloadScenario } from './github-signals-notifi
 import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbox.js';
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
 import { goalApiErrorStopsLoopScenario } from './goal-api-error-stops-loop.js';
+import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { integrationCommandsScenario } from './integration-commands.js';
@@ -200,6 +201,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'github-signals-polling-inbox': githubSignalsPollingInboxScenario,
   'github-signals-unsubscribe-reload': githubSignalsUnsubscribeReloadScenario,
   'goal-api-error-stops-loop': goalApiErrorStopsLoopScenario,
+  'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,

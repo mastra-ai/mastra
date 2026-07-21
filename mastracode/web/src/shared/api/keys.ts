@@ -23,6 +23,8 @@ export const queryKeys = {
   workItems: (githubProjectId: string | undefined) => ['factory', 'work-items', githubProjectId ?? null] as const,
   factoryMetrics: (githubProjectId: string | undefined, days: number) =>
     ['factory', 'metrics', githubProjectId ?? null, days] as const,
+  factoryHealthThresholds: (githubProjectId: string | undefined) =>
+    ['factory', 'health-thresholds', githubProjectId ?? null] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string) =>
     ['factory', 'audit', githubProjectId ?? null, group] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,

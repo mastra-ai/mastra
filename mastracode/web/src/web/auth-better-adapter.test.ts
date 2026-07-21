@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PostgresStore } from '@mastra/pg';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { PgFactoryStorage } from '@mastra/pg';
 import type { BetterAuthInstance } from './auth-better-adapter.js';
 import { BetterAuthWebAuth } from './auth-better-adapter.js';
 
@@ -93,13 +94,22 @@ describe('construction and init', () => {
     // SPA deploys must have their origins forwarded.
     const adapter = new BetterAuthWebAuth({ secret: 's3cret' });
     await adapter.init?.({
-      storage: new PostgresStore({ id: 'auth-test', connectionString: 'postgres://user:pw@localhost:5432/app' }),
+      storage: new PgFactoryStorage({ connectionString: 'postgres://user:pw@localhost:5432/app' }),
       publicUrl: 'https://api.acme.com',
       allowedOrigins: ['https://app.acme.com'],
     });
     expect((adapter.instance as { options: { trustedOrigins?: unknown } }).options.trustedOrigins).toEqual([
       'https://app.acme.com',
     ]);
+  });
+
+  it('builds the default instance on a libsql auth database via the kysely dialect', async () => {
+    const adapter = new BetterAuthWebAuth({ secret: 's3cret' });
+    await adapter.init?.({
+      storage: new LibSQLFactoryStorage({ url: ':memory:' }),
+      publicUrl: 'https://api.acme.com',
+    });
+    expect(adapter.instance).toBeDefined();
   });
 });
 

@@ -568,7 +568,6 @@ describe('WorkspacesSection', () => {
     expect(deleteCalled).toBe(false);
     expect(screen.getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
     expect(storedGithubFactory().binding.worktrees.map(worktree => worktree.branch)).toEqual([
-      'main',
       'feat-ui',
       'feat-api',
       'user/alice-notes',

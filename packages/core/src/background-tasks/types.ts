@@ -9,13 +9,7 @@ import type {
 } from '../stream/types';
 
 export type BackgroundTaskStatus =
-  | 'pending'
-  | 'running'
-  | 'suspended'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
+  'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
 
 export interface BackgroundTask {
   id: string;

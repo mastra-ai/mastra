@@ -1,5 +1,73 @@
 # @mastra/core
 
+## 1.52.0-alpha.9
+
+### Minor Changes
+
+- The 'workers' option on the Mastra class now merges with the default workers instead of replacing them. Passing custom workers (e.g. a polling worker for an integration) no longer silently drops the built-in orchestration and background-task workers — a custom worker only replaces a default when it shares its name, and 'workers: false' still disables all workers. ([#19766](https://github.com/mastra-ai/mastra/pull/19766))
+
+  ```ts
+  const mastra = new Mastra({
+    // before: only myPoller ran — orchestration was dropped
+    // after: myPoller runs alongside the default workers
+    workers: [myPoller],
+  });
+  ```
+
+### Patch Changes
+
+- Fixed goal judges changing the parent agent's observational-memory model state. ([#19710](https://github.com/mastra-ai/mastra/pull/19710))
+
+## 1.52.0-alpha.8
+
+### Minor Changes
+
+- Added a FactoryStorage contract that owns application storage domains, initializes them with the shared backend, and reports per-domain readiness and initialization errors. ([#19681](https://github.com/mastra-ai/mastra/pull/19681))
+
+  ```ts
+  import { FactoryStorageDomain } from '@mastra/core/storage';
+  import { LibSQLFactoryStorage } from '@mastra/libsql';
+
+  class TasksStorage extends FactoryStorageDomain {
+    constructor() {
+      super('tasks');
+    }
+
+    async init() {
+      await this.ensureCollections([{ name: 'tasks', columns: { id: { type: 'uuid-pk' } } }]);
+    }
+
+    async dangerouslyClearAll() {
+      await this.ops.deleteMany('tasks', {});
+    }
+  }
+
+  const storage = new LibSQLFactoryStorage({ url: 'file:mastra.db' });
+  storage.registerDomain(new TasksStorage());
+  await storage.init();
+  ```
+
+### Patch Changes
+
+- Fixed Babel 8 compatibility for build-time transforms. ([#19393](https://github.com/mastra-ai/mastra/pull/19393))
+
+- Fixed `requestContext` typing inside a tool's `execute` callback. It is now non-optional, matching runtime behavior: Mastra always provides a `RequestContext` (creating an empty one when the caller passed none), and when `requestContextSchema` is defined the context is validated before `execute` runs — on failure the tool returns a validation error and `execute` is never called. No more null-checks, throws, or tool factories needed to satisfy the compiler. ([#19680](https://github.com/mastra-ai/mastra/pull/19680))
+
+  ```typescript
+  const tool = createTool({
+    id: 'fetch-doc',
+    requestContextSchema: z.object({ documentId: z.string(), userId: z.string() }),
+    execute: async (input, context) => {
+      // Before: context.requestContext was RequestContext<...> | undefined,
+      // forcing ?. / ! / throw even though the runtime guarantees it exists
+      // After: typed as RequestContext<{ documentId: string; userId: string }>
+      const documentId = context.requestContext.get('documentId'); // string
+    },
+  });
+  ```
+
+  Callers of `tool.execute(...)` are unaffected — passing a context remains optional there. Fixes [#19480](https://github.com/mastra-ai/mastra/issues/19480)
+
 ## 1.52.0-alpha.7
 
 ### Patch Changes
@@ -1586,9 +1654,7 @@
       memory: { messages: { maxAge: '30d' }, threads: { maxAge: '90d' } },
       observability: { spans: { maxAge: '7d' } },
     },
-    domains: {
-      /* ... */
-    },
+    domains: {/* ... */},
   });
 
   // Wire this to your own cron — Mastra never runs it for you.
@@ -2217,9 +2283,7 @@
       memory: { messages: { maxAge: '30d' }, threads: { maxAge: '90d' } },
       observability: { spans: { maxAge: '7d' } },
     },
-    domains: {
-      /* ... */
-    },
+    domains: {/* ... */},
   });
 
   // Wire this to your own cron — Mastra never runs it for you.
@@ -18851,9 +18915,7 @@ Bearer <token>` header. The token comes from the new
   ```ts
   import { Mastra } from '@mastra/core';
 
-  const mastra = new Mastra({
-    /* ... */
-  });
+  const mastra = new Mastra({/* ... */});
 
   const dataset = await mastra.datasets.create({ name: 'my-eval-set' });
   await dataset.addItems([{ input: { query: 'What is 2+2?' }, groundTruth: { answer: '4' } }]);
@@ -19082,9 +19144,7 @@ Bearer <token>` header. The token comes from the new
   ```ts
   import { Mastra } from '@mastra/core';
 
-  const mastra = new Mastra({
-    /* ... */
-  });
+  const mastra = new Mastra({/* ... */});
 
   const dataset = await mastra.datasets.create({ name: 'my-eval-set' });
   await dataset.addItems([{ input: { query: 'What is 2+2?' }, groundTruth: { answer: '4' } }]);
@@ -20049,9 +20109,7 @@ Bearer <token>` header. The token comes from the new
   const agent = new Agent({
     name: 'my-agent',
     inputProcessors: [toolSearch],
-    tools: {
-      /* always-available tools */
-    },
+    tools: {/* always-available tools */},
   });
   ```
 
@@ -20281,9 +20339,7 @@ Bearer <token>` header. The token comes from the new
   const agent = new Agent({
     name: 'my-agent',
     inputProcessors: [toolSearch],
-    tools: {
-      /* always-available tools */
-    },
+    tools: {/* always-available tools */},
   });
   ```
 

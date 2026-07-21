@@ -7,8 +7,7 @@ import { buildFullPrompt } from './prompts/index.js';
 
 export async function getDynamicInstructions({ requestContext }: { requestContext: { get(key: string): unknown } }) {
   const agentControllerContext = requestContext.get('controller') as
-    | AgentControllerRequestContext<MastraCodeComposedState>
-    | undefined;
+    AgentControllerRequestContext<MastraCodeComposedState> | undefined;
   const state = agentControllerContext?.getState();
   const modeId = agentControllerContext?.session?.modeId ?? 'build';
   const projectPath = state?.projectPath ?? process.cwd();
