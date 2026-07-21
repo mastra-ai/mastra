@@ -26,14 +26,14 @@ export interface FactoryMetrics {
   transitions: { human: number; total: number };
 }
 
-/** Fetch the org's aggregated flow metrics for a project. */
+/** Fetch the org's aggregated flow metrics for a Factory project. */
 export async function fetchFactoryMetrics(
   baseUrl: string,
-  githubProjectId: string,
+  factoryProjectId: string,
   days: number,
 ): Promise<FactoryMetrics> {
   const res = await fetch(
-    `${baseUrl}/web/factory/repositories/${encodeURIComponent(githubProjectId)}/metrics?days=${days}`,
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/metrics?days=${days}`,
     { headers: { Accept: 'application/json' }, credentials: 'include' },
   );
   if (!res.ok) {

@@ -18,7 +18,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { getSeededGithubIntegration } from '../runtime-config';
+import { getFactoryStorage } from '../runtime-config';
+import { FactoryProjectsStorage } from '../storage/domains/projects/base';
 import { isLinearFeatureEnabled } from './config';
 import type { LinearIntegration } from './integration';
 import {
@@ -58,8 +59,10 @@ async function resolveOrgId(resourceId: string): Promise<string | null> {
   }
   let orgId: string | null;
   try {
-    const github = getSeededGithubIntegration();
-    const project = github ? await github.sourceControlStorage.projects.getById(resourceId) : null;
+    const storage = getFactoryStorage();
+    await storage.ensureDomainReady('projects');
+    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    const project = await projects.getById({ id: resourceId });
     orgId = project?.orgId ?? null;
   } catch {
     // Transient database failure: skip the tools for this request but don't

@@ -1,5 +1,6 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -26,6 +27,7 @@ function OverlayLauncher() {
     <>
       <button onClick={() => open('settings')}>Settings</button>
       <button onClick={() => open('shortcuts')}>Shortcuts</button>
+      <button onClick={() => open('factories')}>Factories</button>
       <ChatOverlays />
     </>
   );
@@ -55,6 +57,42 @@ describe('ChatOverlays', () => {
     await user.click(screen.getByRole('button', { name: 'Shortcuts' }));
     expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: 'Factories' }));
+    expect(await screen.findByRole('dialog', { name: 'Create Factory' })).toBeInTheDocument();
   });
 
+  it('forces first-run factory setup after backend hydration confirms there are no factories', async () => {
+    renderOverlays();
+    expect(await screen.findByRole('dialog', { name: 'Create Factory' })).toBeInTheDocument();
+  });
+
+  it('hydrates a source-control repository before deciding whether to show first-run setup', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              repositories: [
+                {
+                  id: 'github-project-1',
+                  branch: 'main',
+                  sandboxWorkdir: '/workspace/acme/mastra',
+                  repository: { slug: 'mastra', defaultBranch: 'main' },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderOverlays();
+
+    await waitFor(() => expect(localStorage.getItem('mastracode-factories')).toContain('github-project-1'));
+    expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
+  });
 });

@@ -2,6 +2,7 @@ import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { queryKeys } from '../../../../../shared/api/keys';
+import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../../shared/hooks/useAgentControllerSessionInit';
@@ -14,7 +15,7 @@ interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
   resourceId: string;
   scope?: string;
-  projectState?: Record<string, unknown>;
+  factorySessionState?: FactorySessionState;
   baseUrl?: string;
   enabled?: boolean;
   onEvent: (event: AgentControllerEvent) => void;
@@ -24,7 +25,7 @@ export function useAgentControllerConnection({
   agentControllerId,
   resourceId,
   scope,
-  projectState,
+  factorySessionState,
   baseUrl = '',
   enabled = true,
   onEvent,
@@ -44,7 +45,7 @@ export function useAgentControllerConnection({
     agentControllerId,
     resourceId,
     scope,
-    projectState,
+    factorySessionState,
     baseUrl,
     enabled,
   });

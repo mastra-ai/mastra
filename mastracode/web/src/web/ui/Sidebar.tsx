@@ -7,7 +7,7 @@ import { redirectToLogout, useWebAuth } from './domains/auth';
 import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
 import {
-  isGithubFactory,
+  isServerFactory,
   FactorySwitcher,
   useActiveFactoryContext,
   UserSessionsSection,
@@ -20,15 +20,15 @@ import { useOverlays } from './lib/overlays';
  * (`useActiveFactoryContext`, focused chat hooks, `useOverlays`), so nothing is
  * wired through props here.
  *
- * Everything runs in a worktree branched from the repo's HEAD. GitHub factories
- * show the Factory menu (Board + org-level factory Sessions) and the current
- * user's personal User Sessions; each worktree holds a single conversation, so
- * there is no nested thread list. Local factories (no worktrees) keep the flat
- * thread list.
+ * Everything runs in a worktree branched from the repo's HEAD. Server-backed
+ * factories show the Factory menu (Board + org-level factory Sessions) and the
+ * current user's personal User Sessions; each worktree holds a single
+ * conversation, so there is no nested thread list. Local factories (no
+ * worktrees) keep the flat thread list.
  */
 export function Sidebar() {
   const { activeFactory } = useActiveFactoryContext();
-  const isGithub = activeFactory ? isGithubFactory(activeFactory) : false;
+  const isServerBacked = activeFactory ? isServerFactory(activeFactory) : false;
 
   return (
     <MainSidebar className="bg-transparent h-full">
@@ -38,7 +38,7 @@ export function Sidebar() {
             <FactorySwitcher />
           </section>
           <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
-            {isGithub ? (
+            {isServerBacked ? (
               <>
                 <FactorySection>
                   <WorkspacesSection />

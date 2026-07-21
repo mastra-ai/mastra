@@ -4,11 +4,9 @@ import { useLocation } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
-import { ChatLayout } from '../../ui/ChatLayout';
-import { FolderIcon } from '../../ui/icons';
-import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
-import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
-import type { Factory } from '../workspaces/services/factories';
+import { ChatLayout, FolderIcon } from '../../ui';
+import type { Factory } from '../workspaces';
+import { EmptyFactoryState, isLocalFactory, selectedRepository, useActiveFactoryContext } from '../workspaces';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ComposerPanel } from './components/ComposerPanel';
@@ -90,16 +88,19 @@ function BrandLockup() {
 }
 
 function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
-  // GitHub factories have no local `path`; show the sandbox worktree path instead.
+  // Server factories have no local `path`; show the sandbox worktree path instead.
   const projectPath = deriveProjectPath(activeFactory);
+  const gitBranch = isLocalFactory(activeFactory)
+    ? activeFactory.binding.gitBranch
+    : selectedRepository(activeFactory)?.gitBranch;
   return (
     <p className="m-0 flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
       <FolderIcon size={13} className="shrink-0 text-icon2" />
       <span className="shrink-0 font-medium">{activeFactory.name}</span>
-      {activeFactory.binding.gitBranch && (
+      {gitBranch && (
         <>
           <span className="shrink-0 text-icon2">·</span>
-          <span className="shrink-0">{activeFactory.binding.gitBranch}</span>
+          <span className="shrink-0">{gitBranch}</span>
         </>
       )}
       {projectPath && (

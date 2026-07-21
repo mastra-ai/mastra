@@ -29,7 +29,8 @@ describe('PageLayout', () => {
       expect(heading).toBeInTheDocument();
       expect(screen.getByText('Project work in progress')).toBeInTheDocument();
       expect(content).toBeInTheDocument();
-      expect(heading.parentElement?.parentElement).toContainElement(content);
+      // The heading row and page content share the same column container.
+      expect(heading.closest('header')?.parentElement).toContainElement(content);
     });
   });
 

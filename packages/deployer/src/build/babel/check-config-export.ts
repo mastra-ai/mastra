@@ -1,8 +1,7 @@
+import { types as t } from '@babel/core';
 import type { PluginObject } from '@babel/core';
-import * as babel from '@babel/core';
 
 export function checkConfigExport(result: { hasValidConfig: boolean }): PluginObject {
-  const t = babel.types;
   // Track which local variable names are assigned to `new Mastra()`
   const mastraVars = new Set<string>();
 

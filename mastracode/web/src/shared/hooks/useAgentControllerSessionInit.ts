@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
+import type { FactorySessionState } from '../../web/ui/domains/chat/context/ChatSessionContext';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,
@@ -15,7 +16,7 @@ interface UseAgentControllerSessionInitArgs {
    * tag so the server side can round-trip it.
    */
   scope?: string;
-  projectState?: Record<string, unknown>;
+  factorySessionState?: FactorySessionState;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -24,7 +25,7 @@ export function useAgentControllerSessionInit({
   agentControllerId,
   resourceId,
   scope,
-  projectState,
+  factorySessionState,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerSessionInitArgs) {
@@ -37,13 +38,17 @@ export function useAgentControllerSessionInit({
   });
 
   return useQuery({
-    queryKey: [...queryKeys.agentControllerConnection(agentControllerId, resourceId, scope), 'init', projectState],
+    queryKey: [
+      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, scope),
+      'init',
+      factorySessionState,
+    ],
     queryFn: async () => {
       const activeSession = requireAgentControllerSession(session);
       const created = await activeSession.create({ tags: scope ? { projectPath: scope } : undefined });
       if (scope) {
         try {
-          await activeSession.setState({ projectPath: scope, ...projectState });
+          await activeSession.setState({ projectPath: scope, ...factorySessionState });
         } catch {
           // Continue connecting; session.state() remains the source of truth.
         }
