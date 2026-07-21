@@ -246,7 +246,8 @@ describe('SettingsPanel', () => {
       const captured = renderSettingsPanel();
 
       await user.click(screen.getByRole('tab', { name: /behavior/i }));
-      await user.click(screen.getByRole('button', { name: 'System' }));
+      const notifications = await screen.findByRole('group', { name: 'Notifications' });
+      await user.click(within(notifications).getByRole('button', { name: 'System' }));
       const readPermission = await screen.findByRole('group', { name: 'Read permission' });
       await user.click(within(readPermission).getByRole('button', { name: 'Allow' }));
 
