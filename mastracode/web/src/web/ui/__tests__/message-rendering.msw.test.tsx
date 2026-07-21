@@ -519,16 +519,15 @@ describe('MastraCode message rendering', () => {
     expect(streamRequests).toHaveBeenCalledTimes(1);
   });
 
-  it('shows required first-run Factory creation in the layout after empty backend hydration', async () => {
+  it('shows the first-run welcome screen after empty backend hydration', async () => {
     useAgentControllerHandlers();
     server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
 
     renderChat();
 
-    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
-    expect(factorySurface.closest('main')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory from local folder' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Close factory creation' })).not.toBeInTheDocument();
   });
 
   it('does not show first-run Factory creation after a remote Factory hydrates', async () => {

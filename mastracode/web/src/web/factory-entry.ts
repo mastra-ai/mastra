@@ -431,8 +431,7 @@ export class MastraFactory {
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      | GithubIntegration
-      | undefined;
+      GithubIntegration | undefined;
     const workItemsStorage = storage.isDomainReady('work-items')
       ? storage.getDomain<WorkItemsStorage>('work-items')
       : undefined;
