@@ -1,3 +1,4 @@
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -36,13 +37,10 @@ vi.mock('@mastra/code-sdk/auth/providers/github-copilot', async importOriginal =
   pollGitHubCopilotDeviceLogin: (...args: unknown[]) => pollGitHubCopilotDeviceLogin(...args),
 }));
 
-import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import type { IMastraAuthProvider } from '@mastra/core/server';
-import { buildOAuthRoutes } from './oauth-routes';
-import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config';
-import { seedFactoryStorageForTests } from './storage/test-utils';
-import type { FactoryStorageTestSeed } from './storage/test-utils';
-import { mountApiRoutes } from './test-utils';
+import { createFactoryStorageForTests } from '../storage/test-utils';
+import type { FactoryStorageTestSeed } from '../storage/test-utils';
+import { OAuthRoutes } from './oauth';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils';
 
 // ── Test harness ─────────────────────────────────────────────────────────
 
@@ -56,7 +54,10 @@ function makeAuthStorage() {
 let authStorage: ReturnType<typeof makeAuthStorage>;
 let seed: FactoryStorageTestSeed;
 
-function buildApp(user: { workosId: string; organizationId?: string } | null, opts?: { noCredentials?: boolean }) {
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  opts?: { noCredentials?: boolean; enabled?: boolean },
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
@@ -64,7 +65,11 @@ function buildApp(user: { workosId: string; organizationId?: string } | null, op
   });
   mountApiRoutes(
     app as any,
-    buildOAuthRoutes({ authStorage, modelCredentials: opts?.noCredentials ? undefined : seed.credentials }),
+    new OAuthRoutes({
+      auth: fakeRouteAuth({ enabled: opts?.enabled }),
+      authStorage,
+      modelCredentials: opts?.noCredentials ? undefined : seed.credentials,
+    }).routes(),
   );
   return app;
 }
@@ -84,7 +89,7 @@ const ANTHROPIC_CREDS = { refresh: 'r-1', access: 'a-1', expires: Date.now() + 3
 const CODEX_CREDS = { refresh: 'r-2', access: 'a-2', expires: Date.now() + 3_600_000 };
 
 beforeEach(async () => {
-  seed = await seedFactoryStorageForTests();
+  seed = await createFactoryStorageForTests();
   authStorage = makeAuthStorage();
   startAnthropicLogin.mockResolvedValue({ url: 'https://claude.ai/oauth/authorize?state=s', verifier: 'v-1' });
   completeAnthropicLogin.mockResolvedValue(ANTHROPIC_CREDS);
@@ -111,7 +116,6 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  __resetRuntimeConfigForTests();
   vi.clearAllMocks();
 });
 
@@ -333,19 +337,12 @@ describe('gating', () => {
   });
 
   it('401s unauthenticated requests when an auth provider is active', async () => {
-    seedRuntimeConfig({
-      storage: seed.storage,
-      authProvider: { name: 'test', authenticateToken: async () => null } as unknown as IMastraAuthProvider,
-    });
     const res = await post(buildApp(null), '/web/config/providers/anthropic/oauth/start');
     expect(res.status).toBe(401);
   });
 
   it('503s tenant writes when the credentials domain is unavailable', async () => {
-    // Auth provider active + user present, but no factory store at all.
-    seedRuntimeConfig({
-      authProvider: { name: 'test', authenticateToken: async () => null } as unknown as IMastraAuthProvider,
-    });
+    // Auth active + user present, but no credentials domain handle at all.
     const res = await post(buildApp(userA, { noCredentials: true }), '/web/config/providers/anthropic/oauth/start');
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe('credentials_unavailable');
@@ -355,13 +352,9 @@ describe('gating', () => {
 // ── Local mode (no auth adapter, no tenant) ──────────────────────────────
 
 describe('local mode', () => {
-  beforeEach(() => {
-    // No adapter and no tenant user: requests fall back to AuthStorage.
-    __resetRuntimeConfigForTests();
-  });
-
+  // No auth enabled and no tenant user: requests fall back to AuthStorage.
   it('completes a paste-code flow into the file-backed AuthStorage', async () => {
-    const app = buildApp(null);
+    const app = buildApp(null, { enabled: false });
     const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
 
     const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
@@ -370,7 +363,9 @@ describe('local mode', () => {
   });
 
   it('signs out via AuthStorage using the auth provider id', async () => {
-    const res = await buildApp(null).request('/web/config/providers/openai/oauth', { method: 'DELETE' });
+    const res = await buildApp(null, { enabled: false }).request('/web/config/providers/openai/oauth', {
+      method: 'DELETE',
+    });
     expect(res.status).toBe(200);
     expect(authStorage.remove).toHaveBeenCalledWith('openai-codex');
   });

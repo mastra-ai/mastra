@@ -16,17 +16,16 @@
  * environment fallback so server-shell credentials never leak into tenants.
  */
 
-import type { MiddlewareHandler } from 'hono';
-
 import type { CredentialTenant as SdkCredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
 import { setCredentialStoreProvider } from '@mastra/code-sdk/agents/credential-resolver';
 import { getOAuthProvider } from '@mastra/code-sdk/auth/storage';
 import type { AuthCredential, CredentialStore } from '@mastra/code-sdk/auth/types';
+import type { MiddlewareHandler } from 'hono';
 
-import { getWebAuthUser, getWebAuthOrgId, getWebAuthUserId } from './auth.js';
-import { getTenantCredentialsStorage, tenantOrgId } from '@mastra/factory/routes/provider-credentials';
-import { isOAuthCredentialExpired } from '@mastra/factory/storage/domains/credentials/base';
-import type { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
+import { isOAuthCredentialExpired } from '../storage/domains/credentials/base';
+import type { ModelCredentialsStorage } from '../storage/domains/credentials/base';
+import { getTenantCredentialsStorage, tenantOrgId } from './provider-credentials';
+import type { RouteAuth } from './route';
 
 /** How long a hydrated snapshot is considered fresh. */
 const SNAPSHOT_TTL_MS = 15_000;
@@ -200,13 +199,18 @@ export function invalidateTenantCredentialSnapshots(tenant: { orgId: string; use
  * async seam in model resolution. Cheap when fresh (TTL check), best-effort
  * when not — a failed hydrate falls back to env vars, never blocks a request.
  */
-export function createTenantCredentialPrimer(credentials: ModelCredentialsStorage): MiddlewareHandler {
+export function createTenantCredentialPrimer({
+  auth,
+  credentials,
+}: {
+  auth: RouteAuth;
+  credentials: ModelCredentialsStorage;
+}): MiddlewareHandler {
   return async (c, next) => {
-    const user = getWebAuthUser(c);
-    const userId = getWebAuthUserId(user);
-    if (userId) {
+    const tenant = auth.tenant(c);
+    if (tenant) {
       try {
-        await storeFor({ orgId: getWebAuthOrgId(user), userId }, credentials).ensureFresh();
+        await storeFor(tenant, credentials).ensureFresh();
       } catch {
         // Fail open: model calls fall back to env credentials.
       }

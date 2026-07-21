@@ -9,12 +9,7 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
-import type {
-  CustomProviderInfo,
-  ModelPackInfo,
-  OMConfigInfo,
-  ProviderInfo,
-} from '@mastra/factory/routes/config-routes';
+import type { CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderInfo } from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
   ArtifactListing,

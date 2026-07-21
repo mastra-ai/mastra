@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
-import { buildProviderAccess, listModelPacks } from '../../src/web/config-routes.js';
+import { buildProviderAccess, listModelPacks } from '@mastra/factory/routes/config';
 
 /**
  * The web settings panel surfaces model packs through the same primitives the
@@ -36,14 +36,14 @@ describe('web model packs (TUI /models-pack parity)', () => {
     // anthropic/openai access comes from credentials stored under the bare
     // provider id (e.g. /login); a model that reports a usable key grants
     // apikey access to any *other* provider via the fallback sweep.
-    const access = await buildProviderAccess(
-      catalog([
+    const access = await buildProviderAccess({
+      controller: catalog([
         { provider: 'anthropic', hasApiKey: true },
         { provider: 'cohere', hasApiKey: true },
         { provider: 'unreachable', hasApiKey: false },
       ]),
-      auth,
-    );
+      authStorage: auth,
+    });
     expect(access.cohere).toBe('apikey'); // not a named provider → fallback sweep
     expect(access.unreachable).toBeFalsy(); // no key → not added / not reachable
   });
@@ -53,16 +53,19 @@ describe('web model packs (TUI /models-pack parity)', () => {
     // (mirrors `/login` storing an api_key or oauth cred), matching the TUI's
     // accessLevel('anthropic') derivation.
     auth.set('anthropic', { type: 'api_key', key: 'sk-ant' });
-    const access = await buildProviderAccess(catalog([{ provider: 'anthropic', hasApiKey: true }]), auth);
+    const access = await buildProviderAccess({
+      controller: catalog([{ provider: 'anthropic', hasApiKey: true }]),
+      authStorage: auth,
+    });
     // Sanity: anthropic is reachable, so the built-in anthropic pack must list.
     expect(access.anthropic).toBe('apikey');
 
-    const packs = await listModelPacks(
-      catalog([{ provider: 'anthropic', hasApiKey: true }]),
-      auth,
-      { mode: 'local' },
-      null,
-    );
+    const packs = await listModelPacks({
+      controller: catalog([{ provider: 'anthropic', hasApiKey: true }]),
+      authStorage: auth,
+      packContext: { mode: 'local' },
+      activePackId: null,
+    });
     const anthropic = packs.find(p => p.id === 'anthropic');
     expect(anthropic).toBeDefined();
     expect(anthropic!.models.build).toBeTruthy();

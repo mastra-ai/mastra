@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils';
 import type { FactoryStorageTestSeed } from '../storage/test-utils';
-import { ConfigRoutes, listProviders } from './config-routes';
+import { ConfigRoutes, listProviders } from './config';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils';
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {

@@ -1,3 +1,5 @@
+import { resolveCredentialStore, setCredentialStoreProvider } from '@mastra/code-sdk/agents/credential-resolver';
+import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,8 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // deterministic; the store's snapshot hydration, precedence, and refresh
 // delegation are what's under test.
 
-const refreshToken = vi.fn();
-const getApiKeyFromCreds = vi.fn();
+const { refreshToken, getApiKeyFromCreds } = vi.hoisted(() => ({
+  refreshToken: vi.fn(),
+  getApiKeyFromCreds: vi.fn(),
+}));
 vi.mock('@mastra/code-sdk/auth/storage', () => ({
   getOAuthProvider: (id: string) =>
     id === 'anthropic' || id === 'xai'
@@ -19,17 +23,15 @@ vi.mock('@mastra/code-sdk/auth/storage', () => ({
       : undefined,
 }));
 
-import { resolveCredentialStore, setCredentialStoreProvider } from '@mastra/code-sdk/agents/credential-resolver';
-import { RequestContext } from '@mastra/core/request-context';
-import { __resetRuntimeConfigForTests } from './runtime-config';
-import { seedFactoryStorageForTests } from './storage/test-utils';
-import type { FactoryStorageTestSeed } from './storage/test-utils';
+import { createFactoryStorageForTests } from '../storage/test-utils';
+import type { FactoryStorageTestSeed } from '../storage/test-utils';
 import {
   TenantCredentialStore,
   createTenantCredentialPrimer,
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
 } from './tenant-credentials';
+import { fakeRouteAuth } from './test-utils';
 
 let seed: FactoryStorageTestSeed;
 
@@ -42,13 +44,12 @@ const FRESH_OAUTH = { type: 'oauth', refresh: 'r-1', access: 'a-1', expires: Dat
 const EXPIRED_OAUTH = { type: 'oauth', refresh: 'r-old', access: 'a-old', expires: Date.now() - 1000 } as const;
 
 beforeEach(async () => {
-  seed = await seedFactoryStorageForTests();
+  seed = await createFactoryStorageForTests();
   getApiKeyFromCreds.mockImplementation(creds => (creds as { access: string }).access);
 });
 
 afterEach(() => {
   resetTenantCredentialResolverForTests();
-  __resetRuntimeConfigForTests();
   vi.clearAllMocks();
 });
 
@@ -199,7 +200,7 @@ describe('createTenantCredentialPrimer', () => {
       if (user) c.set('webAuthUser' as never, user as never);
       await next();
     });
-    app.use('*', createTenantCredentialPrimer(seed.credentials));
+    app.use('*', createTenantCredentialPrimer({ auth: fakeRouteAuth(), credentials: seed.credentials }));
     app.get('/ok', c => c.text('ok'));
     return app;
   }

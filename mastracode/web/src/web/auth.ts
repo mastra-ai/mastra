@@ -292,7 +292,7 @@ export async function isOrganizationAdmin(c: Context, organizationId: string): P
  * Factory route modules receive this at construction and never import the
  * web auth module directly.
  */
-export const webRouteAuth: RouteAuth = {
+export const factoryRouteAuth: RouteAuth = {
   enabled: () => isWebAuthEnabled(),
   ensureUser: (c: Context) => ensureWebAuthUser(c),
   tenant: (c: Context) => webAuthTenant(c),
@@ -591,7 +591,7 @@ export function buildAuthRoutes(provider: IMastraAuthProvider): ApiRoute[] {
  * login and XHR/API calls get a 401 JSON. Shared by the local Hono server
  * (`mountWebAuth`) and the platform Mastra entry (`server.middleware`).
  */
-export function createWebAuthGate(provider: IMastraAuthProvider) {
+export function createFactoryAuthGate(provider: IMastraAuthProvider) {
   return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
     const path = c.req.path;
     if (path.startsWith('/auth/')) {
@@ -634,7 +634,7 @@ export function createWebAuthGate(provider: IMastraAuthProvider) {
  *
  * Must be called before the Mastra adapter routes, the `/web/*` routes, and
  * the static UI handlers so the gate covers every request. Composes the shared
- * `registerAuthRoutes` + `createWebAuthGate` factories so the local Hono server
+ * `registerAuthRoutes` + `createFactoryAuthGate` factories so the local Hono server
  * and the platform Mastra entry stay behavior-identical.
  */
 export function mountWebAuth(app: Hono<any>, options: MountWebAuthOptions = {}): boolean {
@@ -652,6 +652,6 @@ export function mountWebAuth(app: Hono<any>, options: MountWebAuthOptions = {}):
   if (!provider) return false;
 
   registerAuthRoutes(app, provider);
-  app.use('*', createWebAuthGate(provider));
+  app.use('*', createFactoryAuthGate(provider));
   return true;
 }

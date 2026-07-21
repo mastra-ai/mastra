@@ -28,7 +28,7 @@ import { hasAuthInit } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { observeAgentGitAction } from './audit/agent-audit.js';
 import { AuditDomain } from './audit/domain.js';
-import { buildAuthRoutes, createWebAuthGate } from './auth.js';
+import { buildAuthRoutes, createFactoryAuthGate, factoryRouteAuth } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './factory-integration.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
 import { ProjectDomain } from './projects/domain.js';
@@ -37,7 +37,10 @@ import { seedRuntimeConfig } from './runtime-config.js';
 import { AuditStorage } from '@mastra/factory/storage/domains/audit/base';
 import { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
 import { ModelPacksStorage } from '@mastra/factory/storage/domains/model-packs/base';
-import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './tenant-credentials.js';
+import {
+  createTenantCredentialPrimer,
+  registerTenantCredentialResolver,
+} from '@mastra/factory/routes/tenant-credentials';
 import { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
 import { IntegrationStorage } from '@mastra/factory/storage/domains/integrations/base';
 import { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
@@ -465,7 +468,11 @@ export class MastraFactory {
         //               request's first model call resolves tenant credentials.
         //   3. spa    — serves the built UI for everything the server doesn't own.
         return {
-          middleware: [createWebAuthGate(auth), createTenantCredentialPrimer(modelCredentialsStorage), ...spa],
+          middleware: [
+            createFactoryAuthGate(auth),
+            createTenantCredentialPrimer({ auth: factoryRouteAuth, credentials: modelCredentialsStorage }),
+            ...spa,
+          ],
           ...cors,
           ...onError,
         };
