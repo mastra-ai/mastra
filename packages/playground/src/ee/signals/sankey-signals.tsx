@@ -10,10 +10,9 @@ import { useEffect, useState } from 'react';
 import { useThemeFlow } from './hooks/use-theme-flow';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
 import { buildSignalGraphSummary, getSignalRecordNodeId, getSignalRecordNodeLabel } from './sankey-signals-data';
-import type { SignalGraphNodeSummary, SignalGraphStageSummary } from './sankey-signals-data';
 import { SignalsErrorState } from './signals-error-state';
-import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
-import type { ThemeSnapshot, TraceSignalName } from './types';
+import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
+import type { ThemeFlowResponse, ThemeNode, ThemeSnapshot, TraceSignalName } from './types';
 import { Link } from '@/lib/link';
 
 export interface SankeySignalsProps {
@@ -69,28 +68,33 @@ function SnapshotTimeline({
       aria-label="Snapshot timeline"
       className="flex flex-wrap items-center gap-3 rounded-lg border border-border1 bg-surface2 px-3 py-2.5 sm:px-4"
     >
-      <Button
-        aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
-        disabled={snapshots.length < 2}
-        onClick={() => onPlayingChange(!isPlaying)}
-        size="sm"
-        type="button"
-        variant="outline"
+      {snapshots.length > 1 ? (
+        <>
+          <Button
+            aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
+            onClick={() => onPlayingChange(!isPlaying)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            {isPlaying ? 'Pause' : 'Play'}
+          </Button>
+          <Slider
+            aria-label="Snapshot"
+            className="min-w-32 flex-1"
+            max={snapshots.length - 1}
+            min={0}
+            onValueChange={value => onSnapshotChange(value[0] ?? 0)}
+            step={1}
+            value={[selectedIndex]}
+          />
+        </>
+      ) : null}
+      <p
+        aria-live="polite"
+        className="w-full text-left font-mono text-xs tabular-nums text-neutral4 md:ml-auto md:w-auto md:min-w-72 md:text-right"
       >
-        {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-        {isPlaying ? 'Pause' : 'Play'}
-      </Button>
-      <Slider
-        aria-label="Snapshot"
-        className="min-w-32 flex-1"
-        disabled={snapshots.length < 2}
-        max={Math.max(snapshots.length - 1, 1)}
-        min={0}
-        onValueChange={value => onSnapshotChange(value[0] ?? 0)}
-        step={1}
-        value={[selectedIndex]}
-      />
-      <p className="w-full text-left font-mono text-xs tabular-nums text-neutral4 md:w-auto md:min-w-72 md:text-right">
         Snapshot {snapshot.ordinal}/{snapshot.total} · {formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)} ·{' '}
         {traceLabel(snapshot.traceCount)}
       </p>
@@ -105,7 +109,7 @@ function SignalDistribution({
 }: {
   signalName: TraceSignalName;
   traceCount: number;
-  nodes: SignalGraphNodeSummary[];
+  nodes: ThemeNode[];
 }) {
   const label = formatSignalName(signalName);
   const color = nodeColor(getSignalHue(signalName));
@@ -142,9 +146,7 @@ function SignalDistribution({
             nodes.map((node, index) => (
               <li
                 key={node.nodeId}
-                aria-label={node.description ? `${node.label}. ${node.description}` : node.label}
-                className="flex min-w-0 items-center justify-between gap-3 rounded-xs text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
-                tabIndex={0}
+                className="flex min-w-0 items-center justify-between gap-3 text-xs"
                 title={node.description ? `${node.label}\n${node.description}` : node.label}
               >
                 <span className="flex min-w-0 items-center gap-2 text-neutral5">
@@ -171,7 +173,7 @@ function SignalDistribution({
   );
 }
 
-function SignalDistributions({ stages }: { stages: SignalGraphStageSummary[] }) {
+function SignalDistributions({ stages }: { stages: ThemeFlowResponse['stages'] }) {
   return (
     <section aria-label="Signal distributions" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {stages.map(stage => (
@@ -194,7 +196,7 @@ function FlowCard({
 }: {
   columns: SankeyChartColumn[];
   records: SankeyChartRecord[];
-  stages: SignalGraphStageSummary[];
+  stages: ThemeFlowResponse['stages'];
   height?: number;
 }) {
   const chartColumns = columns.map(column => {
@@ -270,9 +272,7 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
 
   const flowQuery = useThemeFlow(entityId, entityType, signalNames, snapshot?.snapshotId);
 
-  if (snapshotsQuery.isPending || (snapshot && flowQuery.isPending)) {
-    return <SignalsLoadingSkeleton />;
-  }
+  if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
 
   if (snapshotsQuery.isError || flowQuery.isError) {
     return (
@@ -283,20 +283,34 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
     );
   }
 
+  if (!snapshot) return <SignalsEmptyState LinkComponent={Link} />;
+
+  if (flowQuery.isPending) {
+    return (
+      <main className="min-w-0 space-y-5 p-4 lg:p-6">
+        <SnapshotTimeline
+          snapshots={snapshots}
+          selectedIndex={selectedSnapshotIndex}
+          isPlaying={isPlaying}
+          onPlayingChange={setIsPlaying}
+          onSnapshotChange={selectSnapshot}
+        />
+        <SignalsFrameLoadingSkeleton />
+      </main>
+    );
+  }
+
   const flow = flowQuery.data;
   const populatedStageCount = flow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
 
-  if (!snapshot || !flow || populatedStageCount < 2) {
-    return <SignalsEmptyState LinkComponent={Link} />;
-  }
+  if (!flow || populatedStageCount < 2) return <SignalsEmptyState LinkComponent={Link} />;
 
   const graphSummary = buildSignalGraphSummary(flow);
-  const stages = graphSummary.stages.map(stage => ({
-    ...stage,
-    traceCount:
-      flow.stages.find(flowStage => flowStage.signalName === stage.signalName)?.traceCount ?? stage.traceCount,
-  }));
-  const themeCount = stages.reduce((total, stage) => total + stage.nodes.length, 0);
+  const stages = flow.stages;
+  const themeCount = stages.reduce(
+    (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
+    0,
+  );
 
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">

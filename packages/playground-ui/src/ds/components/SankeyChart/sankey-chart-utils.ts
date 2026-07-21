@@ -126,8 +126,8 @@ export function buildSankeyChartGraph(
         : targetRecordValue;
       if (sourceValue === undefined || targetValue === undefined) continue;
 
-      const sourceLabel = getRecordNodeLabel?.(record, sourceColumn) ?? String(sourceValue);
-      const targetLabel = getRecordNodeLabel?.(record, targetColumn) ?? String(targetValue);
+      const sourceLabel = getRecordNodeLabel?.(record, sourceColumn) ?? String(sourceRecordValue);
+      const targetLabel = getRecordNodeLabel?.(record, targetColumn) ?? String(targetRecordValue);
       const source = getNode(sourceColumn, sourceValue, sourceLabel);
       const target = getNode(targetColumn, targetValue, targetLabel);
       const id = `${source.node.id}->${target.node.id}`;

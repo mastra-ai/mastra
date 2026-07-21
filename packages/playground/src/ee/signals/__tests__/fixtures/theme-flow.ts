@@ -31,6 +31,36 @@ export const multiAgentThemeEntitiesResponse: ThemeEntitiesResponse = {
   ],
 };
 
+export const lowSignalFirstThemeEntitiesResponse: ThemeEntitiesResponse = {
+  entities: [
+    {
+      entityId: 'triage-agent',
+      entityType: 'agent',
+      availableSignals: ['goal'],
+      latestWindow: {
+        startedAt: '2026-07-01T00:00:00.000Z',
+        endedAt: '2026-07-08T00:00:00.000Z',
+      },
+    },
+    ...populatedThemeEntitiesResponse.entities,
+  ],
+};
+
+export const multiEligibleThemeEntitiesResponse: ThemeEntitiesResponse = {
+  entities: [
+    ...populatedThemeEntitiesResponse.entities,
+    {
+      entityId: 'billing-agent',
+      entityType: 'agent',
+      availableSignals: ['goal', 'outcome'],
+      latestWindow: {
+        startedAt: '2026-07-08T00:00:00.000Z',
+        endedAt: '2026-07-15T00:00:00.000Z',
+      },
+    },
+  ],
+};
+
 export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
   snapshots: [
     {
@@ -40,6 +70,29 @@ export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
       startedAt: '2026-07-01T00:00:00.000Z',
       endedAt: '2026-07-08T00:00:00.000Z',
       traceCount: 50,
+      availableSignals: ['goal', 'outcome'],
+    },
+  ],
+};
+
+export const billingThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      snapshotId: 'billing-snapshot-1',
+      ordinal: 1,
+      total: 2,
+      startedAt: '2026-07-01T00:00:00.000Z',
+      endedAt: '2026-07-08T00:00:00.000Z',
+      traceCount: 20,
+      availableSignals: ['goal', 'outcome'],
+    },
+    {
+      snapshotId: 'billing-snapshot-2',
+      ordinal: 2,
+      total: 2,
+      startedAt: '2026-07-08T00:00:00.000Z',
+      endedAt: '2026-07-15T00:00:00.000Z',
+      traceCount: 30,
       availableSignals: ['goal', 'outcome'],
     },
   ],
@@ -68,7 +121,7 @@ export const multiThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       startedAt: '2026-06-24T00:00:00.000Z',
       endedAt: '2026-07-01T00:00:00.000Z',
       traceCount: 40,
-      availableSignals: ['goal', 'outcome'],
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
     },
     ...themeSnapshotsResponse.snapshots,
   ],

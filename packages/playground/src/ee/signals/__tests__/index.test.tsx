@@ -7,8 +7,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import SignalsOverviewPage from '..';
 import {
+  billingThemeSnapshotsResponse,
   emptyThemeEntitiesResponse,
+  lowSignalFirstThemeEntitiesResponse,
   multiAgentThemeEntitiesResponse,
+  multiEligibleThemeEntitiesResponse,
   populatedThemeEntitiesResponse,
   themeFlowResponse,
   themeSnapshotsResponse,
@@ -126,6 +129,31 @@ describe('Signals page', () => {
 
       expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
     });
+
+    it('keeps the single agent visible in the selector', async () => {
+      renderSignalsPage();
+
+      expect((await screen.findByRole('combobox', { name: 'Agent' })).textContent).toContain('support-agent');
+    });
+  });
+
+  describe('when a low-signal agent is returned before an eligible agent', () => {
+    it('defaults to the first agent that can render a flow', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(lowSignalFirstThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+
+      renderSignalsPage();
+
+      expect((await screen.findByRole('combobox', { name: 'Agent' })).textContent).toContain('support-agent');
+      expect(screen.queryByText('Not enough signal data yet')).toBeNull();
+    });
   });
 
   describe('when multiple agents have different signal coverage', () => {
@@ -162,6 +190,40 @@ describe('Signals page', () => {
       expect(await screen.findByText('Not enough signal data yet')).not.toBeNull();
       expect(screen.getByText('Available signals: Goal')).not.toBeNull();
       expect(screen.getByRole('combobox', { name: 'Agent' })).not.toBeNull();
+    });
+  });
+
+  describe('when switching between eligible agents', () => {
+    it("loads the selected agent's latest snapshot", async () => {
+      let billingFlowSnapshotId: string | null = null;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiEligibleThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-snapshots`, () =>
+          HttpResponse.json(billingThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-flow`, ({ request }) => {
+          billingFlowSnapshotId = new URL(request.url).searchParams.get('snapshotId');
+          return HttpResponse.json({
+            ...themeFlowResponse,
+            snapshot: billingThemeSnapshotsResponse.snapshots[1],
+          });
+        }),
+      );
+      renderSignalsPage();
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Agent' }));
+      const billingAgent = await screen.findByRole('option', { name: 'billing-agent' });
+
+      fireEvent.pointerDown(billingAgent, { pointerType: 'mouse' });
+      fireEvent.click(billingAgent, { detail: 1 });
+
+      expect(await screen.findByText('Snapshot 2/2 · Jul 8–15, 2026 · 30 traces')).not.toBeNull();
+      expect(billingFlowSnapshotId).toBe('billing-snapshot-2');
     });
   });
 

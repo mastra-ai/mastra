@@ -142,6 +142,37 @@ describe('SankeyChart utilities', () => {
     });
   });
 
+  describe('when only one optional node accessor is provided', () => {
+    it('keeps record values as labels when only identity is customized', () => {
+      const graph = buildSankeyChartGraph(
+        [{ source: 'Readable source', sourceId: 'source-1', model: 'Readable model', modelId: 'model-1' }],
+        columns.slice(0, 2),
+        undefined,
+        (record, column) => String(record[`${column.id}Id`]),
+      );
+
+      expect(graph.nodes.map(node => ({ label: node.label, value: node.value }))).toEqual([
+        { label: 'Readable source', value: 'source-1' },
+        { label: 'Readable model', value: 'model-1' },
+      ]);
+    });
+
+    it('keeps record values as identities when only labels are customized', () => {
+      const graph = buildSankeyChartGraph(
+        [{ source: 'source-1', sourceLabel: 'Readable source', model: 'model-1', modelLabel: 'Readable model' }],
+        columns.slice(0, 2),
+        undefined,
+        undefined,
+        (record, column) => String(record[`${column.id}Label`]),
+      );
+
+      expect(graph.nodes.map(node => ({ label: node.label, value: node.value }))).toEqual([
+        { label: 'Readable source', value: 'source-1' },
+        { label: 'Readable model', value: 'model-1' },
+      ]);
+    });
+  });
+
   describe('when values cannot form a flow', () => {
     it('ignores blank, non-finite, and non-primitive dimension values', () => {
       const data = [

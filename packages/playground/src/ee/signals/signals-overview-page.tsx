@@ -58,7 +58,10 @@ export function SignalsOverviewPage() {
   }
 
   const entities = entitiesQuery.data?.entities ?? [];
-  const entity = entities.find(currentEntity => currentEntity.entityId === selectedEntityId) ?? entities[0];
+  const entity =
+    entities.find(currentEntity => currentEntity.entityId === selectedEntityId) ??
+    entities.find(currentEntity => currentEntity.availableSignals.length >= 2) ??
+    entities[0];
 
   if (!entity) {
     return <SignalsEmptyState LinkComponent={Link} />;

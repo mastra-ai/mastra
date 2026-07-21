@@ -155,6 +155,7 @@ function SankeyNode({
   return (
     <g
       aria-label={`${displayLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
+      className="outline-none focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
       onFocus={() => onHoverChange(name)}
       onBlur={() => onHoverChange(undefined)}
       onMouseEnter={() => onHoverChange(name)}

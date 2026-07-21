@@ -11,6 +11,29 @@ function DistributionSkeleton() {
   );
 }
 
+function AnalysisSkeletons() {
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <DistributionSkeleton />
+        <DistributionSkeleton />
+        <DistributionSkeleton />
+        <DistributionSkeleton />
+      </div>
+      <Skeleton className="h-80 w-full" />
+    </>
+  );
+}
+
+export function SignalsFrameLoadingSkeleton() {
+  return (
+    <section aria-label="Loading snapshot flow" className="space-y-5" role="status">
+      <span className="sr-only">Loading snapshot flow</span>
+      <AnalysisSkeletons />
+    </section>
+  );
+}
+
 export function SignalsLoadingSkeleton() {
   return (
     <div
@@ -26,13 +49,7 @@ export function SignalsLoadingSkeleton() {
         <Skeleton className="h-4 w-xl max-w-full" />
       </div>
       <Skeleton className="h-14 w-full" />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <DistributionSkeleton />
-        <DistributionSkeleton />
-        <DistributionSkeleton />
-        <DistributionSkeleton />
-      </div>
-      <Skeleton className="h-80 w-full" />
+      <AnalysisSkeletons />
     </div>
   );
 }

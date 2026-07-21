@@ -206,12 +206,12 @@ describe('SankeySignals', () => {
       expect(within(metrics).getByText('4 signal types')).not.toBeNull();
     });
 
-    it('shows the selected snapshot context and timeline controls', async () => {
+    it('shows the selected snapshot context without controls for a single snapshot', async () => {
       renderSankeySignals();
 
       expect(await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
-      expect(screen.getByRole('group', { name: 'Snapshot' })).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Play snapshots' })).not.toBeNull();
+      expect(screen.queryByRole('group', { name: 'Snapshot' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Play snapshots' })).toBeNull();
     });
 
     it('delegates the signal column headings to the Sankey chart', async () => {
@@ -304,7 +304,8 @@ describe('SankeySignals', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
           const snapshotId = new URL(request.url).searchParams.get('snapshotId');
           const snapshot = multiThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
-          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot: snapshot! });
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot });
         }),
       );
     });
@@ -339,6 +340,32 @@ describe('SankeySignals', () => {
       ).not.toBeNull();
       expect(screen.getByRole('button', { name: 'Pause snapshots' })).not.toBeNull();
     });
+
+    it('keeps the pause control available while the next flow is loading', async () => {
+      let releasePendingFlow: (() => void) | undefined;
+      const pendingFlow = new Promise<void>(resolve => {
+        releasePendingFlow = resolve;
+      });
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, async ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          const snapshot = multiThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          if (snapshotId === 'snapshot-3') await pendingFlow;
+          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot });
+        }),
+      );
+      renderSankeySignals();
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
+
+      expect(
+        await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces', undefined, { timeout: 2000 }),
+      ).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Pause snapshots' })).not.toBeNull();
+      expect(screen.getByRole('status', { name: 'Loading snapshot flow' })).not.toBeNull();
+      releasePendingFlow?.();
+    });
   });
 
   describe('when API count metadata disagrees with the weighted graph', () => {
@@ -372,22 +399,22 @@ describe('SankeySignals', () => {
       }
     });
 
-    it('uses graph-derived node counts and percentages in every distribution row', async () => {
+    it('uses authoritative API node counts and shares in every distribution row', async () => {
       renderSankeySignals();
 
       const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
       const expectedRows = {
-        Goal: ['22 · 44%', '17 · 34%', '11 · 22%'],
-        Outcome: ['31 · 62%', '19 · 38%'],
-        Behavior: ['34 · 68%', '16 · 32%'],
-        Sentiment: ['29 · 58%', '21 · 42%'],
+        Goal: ['42 · 90%', '38 · 80%', '33 · 70%', '99 · 99%'],
+        Outcome: ['51 · 90%', '40 · 80%'],
+        Behavior: ['54 · 90%', '37 · 80%'],
+        Sentiment: ['49 · 90%', '42 · 80%'],
       };
 
       for (const [signalName, rows] of Object.entries(expectedRows)) {
         const distribution = within(distributions).getByRole('article', { name: `${signalName} distribution` });
         for (const row of rows) expect(within(distribution).getByText(row)).not.toBeNull();
       }
-      expect(within(distributions).queryByText('Metadata only goal')).toBeNull();
+      expect(within(distributions).getByText('Metadata only goal')).not.toBeNull();
     });
 
     it('shows the same graph-derived counts and percentages on chart nodes', async () => {
