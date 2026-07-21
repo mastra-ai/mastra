@@ -15,23 +15,77 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 interface Tables {
-  installations: Array<{
-    id: string;
-    integrationId: string;
-    orgId: string;
-    connectedByUserId: string;
-    externalId: string;
-    accountName: string | null;
-    accountType: string | null;
-    providerMetadata: Record<string, unknown>;
-    createdAt: Date;
-  }>;
-  projects: Array<Record<string, any>>;
+  installations: Array<Record<string, any>>;
+  repositories: Array<Record<string, any>>;
+  connections: Array<Record<string, any>>;
+  projectRepositories: Array<Record<string, any>>;
   sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
 }
-const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [] };
+const tables: Tables = {
+  installations: [],
+  repositories: [],
+  connections: [],
+  projectRepositories: [],
+  sandboxes: [],
+  worktrees: [],
+};
 const sourceControlStorage = new SourceControlStorageInMemory();
+
+function projectRepositoryRow(row: Record<string, any>) {
+  const installationId = `installation-${row.orgId}-${row.installationId}`;
+  const repositoryId = `repository-${row.repoId ?? row.repoFullName}`;
+  const connectionId = `connection-${row.id}`;
+  const now = new Date();
+
+  if (!tables.installations.some(candidate => candidate.id === installationId)) {
+    tables.installations.push({
+      id: installationId,
+      integrationId: 'github',
+      orgId: row.orgId,
+      connectedByUserId: row.userId,
+      externalId: String(row.installationId),
+      accountName: 'octo',
+      accountType: 'User',
+      providerMetadata: {},
+      createdAt: now,
+    });
+  }
+  if (!tables.repositories.some(candidate => candidate.id === repositoryId)) {
+    tables.repositories.push({
+      id: repositoryId,
+      installationId,
+      externalId: String(row.repoId ?? 99),
+      slug: row.repoFullName,
+      defaultBranch: row.defaultBranch ?? 'main',
+      providerMetadata: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  if (!tables.connections.some(candidate => candidate.id === connectionId)) {
+    tables.connections.push({
+      id: connectionId,
+      factoryProjectId: row.factoryProjectId ?? `factory-${row.id}`,
+      integrationId: 'github',
+      installationId,
+      createdByUserId: row.userId,
+      createdAt: now,
+    });
+  }
+
+  return {
+    id: row.id,
+    connectionId,
+    repositoryId,
+    branch: row.defaultBranch ?? null,
+    sandboxProvider: 'railway',
+    sandboxWorkdir: row.sandboxWorkdir,
+    setupCommand: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
 vi.mock('./db', () => {
   const makeDb = () => ({
@@ -99,6 +153,27 @@ const githubStub = {
   ),
   // A fresh token string per call so the scenario can prove per-op minting.
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
+  versionControl: {
+    createPullRequest: async (input: import('../capabilities/version-control').CreatePullRequestInput) => {
+      const result = await createPullRequest(input);
+      return {
+        id: '1',
+        title: input.title,
+        url: result.url,
+        author: 'octo',
+        body: input.body ?? null,
+        state: 'open' as const,
+        draft: false,
+        merged: false,
+        mergeable: null,
+        baseBranch: input.baseBranch,
+        headBranch: input.headBranch,
+        headSha: 'abc123',
+        createdAt: '2026-07-21T00:00:00Z',
+        updatedAt: '2026-07-21T00:00:00Z',
+      };
+    },
+  },
 };
 
 // Deterministic state signer stub (replaces the old signState/verifyState mocks).
@@ -194,11 +269,16 @@ import { buildGithubRoutes } from './routes';
 // ── Fake table helpers (mirrors routes.test.ts) ─────────────────────────
 function tableKind(table: any): keyof Tables {
   if (table === installationsRef) return 'installations';
+  if (table === repositoriesRef) return 'repositories';
+  if (table === connectionsRef) return 'connections';
   if (table === worktreesRef) return 'worktrees';
   if (table === sandboxesRef) return 'sandboxes';
-  return 'projects';
+  return 'projectRepositories';
 }
 let installationsRef: any;
+let repositoriesRef: any;
+let connectionsRef: any;
+let projectRepositoriesRef: any;
 let worktreesRef: any;
 let sandboxesRef: any;
 
@@ -253,9 +333,15 @@ function updateRows(table: any, vals: any, cond?: any): void {
 }
 
 const githubInstallations = {};
+const githubRepositories = {};
+const githubConnections = {};
+const githubProjectRepositories = {};
 const githubProjectSandboxes = {};
 const githubWorktrees = {};
 installationsRef = githubInstallations;
+repositoriesRef = githubRepositories;
+connectionsRef = githubConnections;
+projectRepositoriesRef = githubProjectRepositories;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
 
@@ -293,11 +379,15 @@ function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown)
 
 beforeEach(() => {
   tables.installations = [];
-  tables.projects = [];
+  tables.repositories = [];
+  tables.connections = [];
+  tables.projectRepositories = [];
   tables.sandboxes = [];
   tables.worktrees = [];
   sourceControlStorage.installationsRows = tables.installations as any;
-  sourceControlStorage.projectsRows = tables.projects as any;
+  sourceControlStorage.repositoriesRows = tables.repositories as any;
+  sourceControlStorage.connectionsRows = tables.connections as any;
+  sourceControlStorage.projectRepositoriesRows = tables.projectRepositories as any;
   sourceControlStorage.sandboxesRows = tables.sandboxes as any;
   sourceControlStorage.worktreesRows = tables.worktrees as any;
   featureEnabled = true;
@@ -326,34 +416,26 @@ afterEach(() => {
 describe('S1: full write-back journey through the real route handlers', () => {
   it('drives create → ensure → worktree → commit → push → pr for one user', async () => {
     const mint = githubStub.mintInstallationToken;
-    tables.installations.push({
-      id: 'installation-1',
-      integrationId: 'github',
-      orgId: 'org1',
-      connectedByUserId: 'u1',
-      externalId: '7',
-      accountName: 'octo',
-      accountType: 'User',
-      providerMetadata: {},
-      createdAt: new Date(),
-    });
+    const projectId = 'project-1';
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: projectId,
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        repoId: 99,
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    );
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
-    // 1. Create the project from an owned installation.
-    const createRes = await postJson(app, '/web/github/repositories', {
-      repoFullName: 'octo/hello',
-      installationId: 7,
-    });
-    expect(createRes.status).toBe(200);
-    const projectId = (await createRes.json()).repository.id as string;
-    expect(tables.projects).toHaveLength(1);
-    expect(projectId).toBeTruthy();
-
-    // The project must be materializable: seed the per-(project,user) sandbox
-    // binding the way `ensure` would persist it (provisioning itself is mocked).
+    // Seed the per-(project-repository,user) sandbox binding the way `ensure`
+    // would persist it (provisioning itself is mocked).
     tables.sandboxes.push({
       id: 'sbrow-1',
-      projectId: projectId,
+      projectRepositoryId: projectId,
       userId: 'u1',
       sandboxId: 'sb-1',
       sandboxWorkdir: '/workspace/hello',
@@ -361,20 +443,20 @@ describe('S1: full write-back journey through the real route handlers', () => {
     });
 
     // 2. Ensure → provisions the sandbox + materialises the repo.
-    const ensureRes = await postJson(app, `/web/github/repositories/${projectId}/ensure`, {});
+    const ensureRes = await postJson(app, `/web/github/projects/${projectId}/ensure`, {});
     expect(ensureRes.status).toBe(200);
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
     expect(materializeRepo).toHaveBeenCalledOnce();
 
     // 3. Worktree → persists a source_control_worktrees row for feat/x.
-    const wtRes = await postJson(app, `/web/github/repositories/${projectId}/worktree`, { branch: 'feat/x' });
+    const wtRes = await postJson(app, `/web/github/projects/${projectId}/worktree`, { branch: 'feat/x' });
     expect(wtRes.status).toBe(200);
     const wtJson = await wtRes.json();
     expect(wtJson.branch).toBe('feat/x');
     expect(wtJson.baseBranch).toBe('main');
     expect(tables.worktrees).toHaveLength(1);
     expect(tables.worktrees[0]).toMatchObject({
-      projectId: projectId,
+      projectRepositoryId: projectId,
       branch: 'feat/x',
       baseBranch: 'main',
     });
@@ -384,7 +466,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     // 4. Commit in that exact worktree path → the round-trip is honoured:
     // a path that only exists because step 3 persisted it now passes
     // resolveWorktreePath (no client-path injection possible).
-    const commitRes = await postJson(app, `/web/github/repositories/${projectId}/commit`, {
+    const commitRes = await postJson(app, `/web/github/projects/${projectId}/commit`, {
       message: 'wip',
       worktreePath: persistedWorktreePath,
     });
@@ -394,7 +476,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
 
     // 5. Push that worktree → a fresh token is minted for *this* op.
     const mintBeforePush = mint.mock.calls.length;
-    const pushRes = await postJson(app, `/web/github/repositories/${projectId}/push`, {
+    const pushRes = await postJson(app, `/web/github/projects/${projectId}/push`, {
       branch: 'feat/x',
       worktreePath: persistedWorktreePath,
     });
@@ -408,9 +490,9 @@ describe('S1: full write-back journey through the real route handlers', () => {
     const pushToken = pushCall[3] as string;
     expect(pushToken).toMatch(/^install-token-/);
 
-    // 6. Open a PR → another fresh token is minted (per-op, not reused).
+    // 6. Open a PR through VersionControl; only the preceding git push needs a sandbox token.
     const mintBeforePr = mint.mock.calls.length;
-    const prRes = await postJson(app, `/web/github/repositories/${projectId}/pr`, {
+    const prRes = await postJson(app, `/web/github/projects/${projectId}/pr`, {
       branch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
@@ -420,21 +502,25 @@ describe('S1: full write-back journey through the real route handlers', () => {
     });
     expect(prRes.status).toBe(200);
     expect(await prRes.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
-    expect(mint.mock.calls.length).toBe(mintBeforePr + 1);
-    const prToken = (createPullRequest.mock.calls[0] as unknown as any[])[2].token as string;
-    expect(prToken).toMatch(/^install-token-/);
-    // The push and PR tokens are distinct mints (never reused across ops).
-    expect(prToken).not.toBe(pushToken);
+    expect(mint.mock.calls.length).toBe(mintBeforePr);
+    expect(createPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'octo/hello',
+        baseBranch: 'main',
+        headBranch: 'feat/x',
+      }),
+    );
     expect(subscribeToPullRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        projectId: projectId,
+        projectRepositoryId: projectId,
         changeRequestId: '1',
         installationExternalId: '7',
         repositoryExternalId: '99',
         repositorySlug: 'octo/hello',
         sessionId: 'session-1',
         ownerId: 'u1',
-        resourceId: projectId,
+        resourceId: `factory-${projectId}`,
         threadId: 'thread-1',
         sessionScope: persistedWorktreePath,
         source: 'factory-pr-create',
@@ -445,36 +531,33 @@ describe('S1: full write-back journey through the real route handlers', () => {
   it('keeps PR creation compatible when no originating session is supplied', async () => {
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
     const projectId = 'project-compat';
-    tables.projects.push({
-      id: projectId,
-      orgId: 'org1',
-      integrationId: 'github',
-      createdByUserId: 'u1',
-      installationExternalId: '7',
-      repositorySlug: 'octo/hello',
-      repositoryExternalId: '99',
-      defaultBranch: 'main',
-      sandboxProvider: 'railway',
-      sandboxWorkdir: '/workspace/hello',
-      setupCommand: null,
-      providerMetadata: {},
-      createdAt: new Date(),
-    });
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: projectId,
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        repoId: 99,
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    );
     tables.sandboxes.push({
       id: 'sbrow-compat',
-      projectId: projectId,
+      projectRepositoryId: projectId,
       userId: 'u1',
       sandboxId: 'sb-compat',
       sandboxWorkdir: '/workspace/hello',
       materializedAt: new Date(),
     });
 
-    const response = await postJson(app, `/web/github/repositories/${projectId}/pr`, {
+    const response = await postJson(app, `/web/github/projects/${projectId}/pr`, {
       branch: 'feat/x',
       title: 'My PR',
     });
 
-    expect(response.status, await response.clone().text()).toBe(200);
+    expect(response.status).toBe(200);
     expect(subscribeToPullRequest).not.toHaveBeenCalled();
   });
 });
@@ -482,19 +565,21 @@ describe('S1: full write-back journey through the real route handlers', () => {
 // ── S2: concurrent push serialisation (per-project mutex) ─────────────────
 describe('S2: per-project mutex serialises concurrent pushes', () => {
   function seed(id: string, userId = 'u1', orgId = 'org1') {
-    tables.projects.push({
-      id,
-      orgId,
-      userId,
-      installationId: 7,
-      repoFullName: 'octo/hello',
-      repoId: 99,
-      defaultBranch: 'main',
-      sandboxWorkdir: '/workspace/hello',
-    });
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id,
+        orgId,
+        userId,
+        installationId: 7,
+        repoFullName: `octo/${id}`,
+        repoId: id,
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    );
     tables.sandboxes.push({
       id: `sbrow-${id}`,
-      projectId: id,
+      projectRepositoryId: id,
       userId,
       sandboxId: `sb-${id}`,
       sandboxWorkdir: '/workspace/hello',
@@ -521,8 +606,8 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       order.push('end');
     };
 
-    const first = postJson(app, '/web/github/repositories/p1/push', { branch: 'feat/a' });
-    const second = postJson(app, '/web/github/repositories/p1/push', { branch: 'feat/b' });
+    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a' });
+    const second = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/b' });
 
     // Let microtasks flush; only the first push body should have begun.
     await new Promise(r => setTimeout(r, 10));
@@ -555,8 +640,8 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       active--;
     };
 
-    const first = postJson(app, '/web/github/repositories/p1/push', { branch: 'feat/a' });
-    const second = postJson(app, '/web/github/repositories/p2/push', { branch: 'feat/b' });
+    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a' });
+    const second = postJson(app, '/web/github/projects/p2/push', { branch: 'feat/b' });
 
     await new Promise(r => setTimeout(r, 10));
     // Distinct project ids → distinct locks → both bodies run concurrently.

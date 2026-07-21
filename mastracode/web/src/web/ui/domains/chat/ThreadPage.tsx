@@ -8,13 +8,11 @@ import { renderedPaths } from '../workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
 import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
-import {
-  activeWorkspacePath,
-  findUserSessionByThreadId,
-} from '../workspaces/services/factories';
+import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ComposerPanel } from './components/ComposerPanel';
+import { TaskPanel } from './components/TaskPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
@@ -75,10 +73,11 @@ function ThreadPageMain() {
   useGlobalShortcuts();
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden">
       <ChatMessageBoundary>
         <ThreadPageContent />
       </ChatMessageBoundary>
+      <TaskPanel />
       <ThreadComposer />
     </div>
   );

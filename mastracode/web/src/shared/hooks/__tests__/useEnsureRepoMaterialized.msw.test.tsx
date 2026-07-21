@@ -15,11 +15,12 @@ import type { MaterializeResult, PrepareProgress } from '../../../web/ui/domains
 import { useEnsureRepoMaterializedMutation } from '../useEnsureRepoMaterialized';
 
 const ORIGIN = TEST_BASE_URL;
-const ENSURE_URL = `${ORIGIN}/web/github/repositories/ghp_1/ensure`;
+const ENSURE_URL = `${ORIGIN}/web/github/projects/ghp_1/ensure`;
 
 const materialized: MaterializeResult = {
   resourceId: 'resource-1',
-  githubProjectId: 'ghp_1',
+  factoryProjectId: 'factory-project-1',
+  projectRepositoryId: 'ghp_1',
   sandboxId: 'sbx_1',
   sandboxWorkdir: '/workspace/repo',
 };
@@ -50,7 +51,7 @@ describe('useEnsureRepoMaterializedMutation', () => {
 
     let resolved: MaterializeResult | undefined;
     await act(async () => {
-      resolved = await result.current.mutateAsync({ githubProjectId: 'ghp_1', onProgress });
+      resolved = await result.current.mutateAsync({ projectRepositoryId: 'ghp_1', onProgress });
     });
     await waitForMutationsIdle(client);
 
@@ -65,7 +66,7 @@ describe('useEnsureRepoMaterializedMutation', () => {
 
     let resolved: MaterializeResult | undefined;
     await act(async () => {
-      resolved = await result.current.mutateAsync({ githubProjectId: 'ghp_1' });
+      resolved = await result.current.mutateAsync({ projectRepositoryId: 'ghp_1' });
     });
     await waitForMutationsIdle(client);
 
@@ -82,7 +83,7 @@ describe('useEnsureRepoMaterializedMutation', () => {
     const { result, client } = renderHookWithProviders(() => useEnsureRepoMaterializedMutation());
 
     await act(async () => {
-      await expect(result.current.mutateAsync({ githubProjectId: 'ghp_1' })).rejects.toMatchObject({
+      await expect(result.current.mutateAsync({ projectRepositoryId: 'ghp_1' })).rejects.toMatchObject({
         message: 'Sandbox is not configured',
         code: 'sandbox_not_configured',
       });
@@ -102,7 +103,7 @@ describe('useEnsureRepoMaterializedMutation', () => {
     const { result, client } = renderHookWithProviders(() => useEnsureRepoMaterializedMutation());
 
     await act(async () => {
-      await expect(result.current.mutateAsync({ githubProjectId: 'ghp_1', onProgress })).rejects.toMatchObject({
+      await expect(result.current.mutateAsync({ projectRepositoryId: 'ghp_1', onProgress })).rejects.toMatchObject({
         message: 'Clone failed inside the sandbox',
         code: 'clone_failed',
       });

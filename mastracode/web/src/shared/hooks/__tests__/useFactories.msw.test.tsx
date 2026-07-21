@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
-import type { Factory, GithubFactory, LocalFactory } from '../../../web/ui/domains/workspaces/services/factories';
+import type { LocalFactory, ServerFactory } from '../../../web/ui/domains/workspaces/services/factories';
 import {
   loadActiveFactoryId,
   loadFactories,
@@ -14,8 +14,9 @@ import {
 import { useActiveFactory } from '../useActiveFactory';
 import {
   useAddFactoryMutation,
-  useCreateGithubFactoryMutation,
+  useCreateFactoryMutation,
   useFactoriesQuery,
+  useLinkRepositoryMutation,
   useRemoveFactoryMutation,
 } from '../useFactories';
 
@@ -33,28 +34,35 @@ const localFactory: LocalFactory = {
   },
 };
 
-const githubFactory: GithubFactory = {
-  id: 'factory-gh',
-  name: 'acme/mastra',
+const serverFactory: ServerFactory = {
+  id: 'factory-server',
+  name: 'Acme Product',
   createdAt: 2,
   binding: {
-    kind: 'github',
-    githubProjectId: 'github-project-1',
-    worktrees: [],
+    kind: 'factory',
+    factoryProjectId: 'fp-1',
+    repositories: [],
   },
 };
 
-const githubRepositoryPayload = {
-  id: 'github-project-1',
-  name: 'mastra',
-  source: 'github' as const,
-  githubProjectId: 'github-project-1',
-  resourceId: 'github-project-1',
-  gitBranch: 'main',
+const factoryProjectPayload = { id: 'fp-1', name: 'Acme Product' };
+
+const projectRepositoryPayload = {
+  id: 'pr-1',
+  branch: 'main',
   sandboxWorkdir: '/workspace/acme/mastra',
-  worktrees: [],
-  createdAt: 2,
+  repository: { slug: 'acme/mastra', defaultBranch: 'main' },
 };
+
+/** MSW handlers for the Factory-projects list walk used by repository hydration. */
+function factoryProjectListHandlers(getLinks: () => Array<typeof projectRepositoryPayload>) {
+  return [
+    http.get(`${ORIGIN}/web/factory/projects`, () => HttpResponse.json({ projects: [factoryProjectPayload] })),
+    http.get(`${ORIGIN}/web/factory/projects/${factoryProjectPayload.id}/source-control-connections`, () =>
+      HttpResponse.json({ connections: [{ id: 'conn-1', installationId: 'inst-1', repositories: getLinks() }] }),
+    ),
+  ];
+}
 
 beforeEach(() => {
   localStorage.clear();
@@ -70,35 +78,33 @@ describe('factories query hooks', () => {
     expect(result.current.data[0]).toMatchObject({ id: 'factory-local', name: 'Mastra' });
   });
 
-  it('hydrates GitHub factories from source-control-backed repositories while preserving browser identity', async () => {
+  it('hydrates server factories from the Factory project list while preserving browser identity', async () => {
     saveFactories([
       localFactory,
       {
-        ...githubFactory,
+        ...serverFactory,
         binding: {
-          ...githubFactory.binding,
-          selectedWorktreePath: '/workspace/worktrees/stale',
-          worktrees: [
+          ...serverFactory.binding,
+          repositories: [
             {
-              branch: 'feature/one',
-              baseBranch: 'main',
-              worktreePath: '/workspace/worktrees/one',
-              threadId: 'thread-1',
+              projectRepositoryId: 'pr-1',
+              slug: 'acme/mastra',
+              sandboxId: 'sbx-cached',
+              selectedWorktreePath: '/workspace/worktrees/stale',
+              worktrees: [
+                {
+                  branch: 'feature/one',
+                  baseBranch: 'main',
+                  worktreePath: '/workspace/worktrees/one',
+                  threadId: 'thread-1',
+                },
+              ],
             },
           ],
         },
       },
     ]);
-    server.use(
-      http.get(`${ORIGIN}/web/github/repositories`, () =>
-        HttpResponse.json([
-          {
-            ...githubRepositoryPayload,
-            worktrees: [{ branch: 'feature/one', baseBranch: 'main', worktreePath: '/workspace/worktrees/one' }],
-          },
-        ]),
-      ),
-    );
+    server.use(...factoryProjectListHandlers(() => [projectRepositoryPayload]));
 
     const { result } = renderHookWithProviders(() => useFactoriesQuery());
 
@@ -106,23 +112,31 @@ describe('factories query hooks', () => {
     expect(result.current.data).toEqual([
       localFactory,
       {
-        id: 'factory-gh',
-        name: 'mastra',
-        resourceId: 'github-project-1',
+        id: 'factory-server',
+        name: 'Acme Product',
+        resourceId: undefined,
         createdAt: 2,
         binding: {
-          kind: 'github',
-          githubProjectId: 'github-project-1',
-          gitBranch: 'main',
-          sandboxId: undefined,
-          sandboxWorkdir: '/workspace/acme/mastra',
-          selectedWorktreePath: undefined,
-          worktrees: [
+          kind: 'factory',
+          factoryProjectId: 'fp-1',
+          selectedRepositoryId: undefined,
+          repositories: [
             {
-              branch: 'feature/one',
-              baseBranch: 'main',
-              worktreePath: '/workspace/worktrees/one',
-              threadId: 'thread-1',
+              projectRepositoryId: 'pr-1',
+              slug: 'acme/mastra',
+              gitBranch: 'main',
+              sandboxId: 'sbx-cached',
+              sandboxWorkdir: '/workspace/acme/mastra',
+              // Cached worktrees survive hydration; the stale selection is dropped.
+              selectedWorktreePath: undefined,
+              worktrees: [
+                {
+                  branch: 'feature/one',
+                  baseBranch: 'main',
+                  worktreePath: '/workspace/worktrees/one',
+                  threadId: 'thread-1',
+                },
+              ],
             },
           ],
         },
@@ -173,10 +187,107 @@ describe('factories query hooks', () => {
     );
   });
 
+  it('creates a named server-backed factory with zero repositories and a distinct browser id', async () => {
+    server.use(
+      http.post(`${ORIGIN}/web/factory/projects`, async ({ request }) => {
+        expect(await request.json()).toEqual({ name: 'Acme Product' });
+        return HttpResponse.json({ project: factoryProjectPayload });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() => {
+      const factories = useFactoriesQuery();
+      const createFactory = useCreateFactoryMutation();
+      return { factories, createFactory };
+    });
+    await waitFor(() => expect(result.current.factories.isFetching).toBe(false));
+
+    let created: ServerFactory | undefined;
+    await act(async () => {
+      created = await result.current.createFactory.mutateAsync({ name: 'Acme Product' });
+    });
+    await waitForMutationsIdle(client);
+
+    expect(created).toBeDefined();
+    expect(created!.id).not.toBe('fp-1');
+    expect(created!.binding).toEqual({ kind: 'factory', factoryProjectId: 'fp-1', repositories: [] });
+    await waitFor(() => expect(result.current.factories.data.map(factory => factory.name)).toEqual(['Acme Product']));
+
+    // Re-creating the same project keeps the existing browser factory.
+    let second: ServerFactory | undefined;
+    await act(async () => {
+      second = await result.current.createFactory.mutateAsync({ name: 'Acme Product' });
+    });
+    await waitForMutationsIdle(client);
+    expect(second!.id).toBe(created!.id);
+    expect(loadFactories()).toHaveLength(1);
+  });
+
+  it('links a GitHub repository to a factory and hydrates it into the repository list', async () => {
+    saveFactories([serverFactory]);
+    let linked = false;
+    server.use(
+      ...factoryProjectListHandlers(() => (linked ? [projectRepositoryPayload] : [])),
+      http.post(`${ORIGIN}/web/factory/projects/${factoryProjectPayload.id}/source-control-connections`, () =>
+        HttpResponse.json({ connection: { id: 'conn-1' } }),
+      ),
+      http.post(
+        `${ORIGIN}/web/factory/projects/${factoryProjectPayload.id}/source-control-connections/conn-1/repositories`,
+        async ({ request }) => {
+          expect(await request.json()).toMatchObject({ repositoryId: 'repo-1', branch: 'main' });
+          linked = true;
+          return HttpResponse.json({ projectRepository: projectRepositoryPayload });
+        },
+      ),
+    );
+
+    const { result, client } = renderHookWithProviders(() => {
+      const factories = useFactoriesQuery();
+      const linkRepository = useLinkRepositoryMutation();
+      return { factories, linkRepository };
+    });
+    await waitFor(() => expect(result.current.factories.isFetching).toBe(false));
+
+    await act(async () => {
+      await result.current.linkRepository.mutateAsync({
+        factoryProjectId: 'fp-1',
+        repo: {
+          id: 1,
+          fullName: 'acme/mastra',
+          name: 'mastra',
+          owner: 'acme',
+          private: false,
+          defaultBranch: 'main',
+          installationId: 9,
+          installationStorageId: 'inst-9',
+          repositoryStorageId: 'repo-1',
+          sandboxProvider: 'local',
+          sandboxWorkdir: '/workspace/acme/mastra',
+        },
+      });
+    });
+    await waitForMutationsIdle(client);
+
+    await waitFor(() => {
+      const factory = result.current.factories.data.find(candidate => candidate.id === 'factory-server');
+      expect(factory?.binding.kind === 'factory' && factory.binding.repositories).toEqual([
+        {
+          projectRepositoryId: 'pr-1',
+          slug: 'acme/mastra',
+          gitBranch: 'main',
+          sandboxId: undefined,
+          sandboxWorkdir: '/workspace/acme/mastra',
+          worktrees: [],
+          selectedWorktreePath: undefined,
+        },
+      ]);
+    });
+  });
+
   it('removes the active factory, clears active id, and refreshes factory query consumers', async () => {
-    saveFactories([localFactory, { ...githubFactory, resourceId: 'resource-gh' }]);
+    saveFactories([localFactory, { ...serverFactory, resourceId: 'resource-server' }]);
     saveActiveFactoryId(localFactory.id);
-    server.use(http.get(`${ORIGIN}/web/github/repositories`, () => HttpResponse.json([githubRepositoryPayload])));
+    server.use(...factoryProjectListHandlers(() => []));
 
     const { result, client } = renderHookWithProviders(() => {
       const factories = useFactoriesQuery();
@@ -191,20 +302,23 @@ describe('factories query hooks', () => {
     });
     await waitForMutationsIdle(client);
 
-    expect(loadFactories().map(factory => factory.id)).toEqual(['factory-gh']);
+    expect(loadFactories().map(factory => factory.id)).toEqual(['factory-server']);
     expect(loadActiveFactoryId()).toBeNull();
-    await waitFor(() => expect(result.current.factories.data.map(factory => factory.id)).toEqual(['factory-gh']));
+    await waitFor(() => expect(result.current.factories.data.map(factory => factory.id)).toEqual(['factory-server']));
   });
 
-  it('deletes a GitHub repository from the backend before removing its browser factory', async () => {
-    saveFactories([githubFactory]);
+  it('deletes the Factory project from the backend before removing its browser factory', async () => {
+    saveFactories([serverFactory]);
     let connected = true;
     server.use(
-      http.get(`${ORIGIN}/web/github/repositories`, () =>
-        HttpResponse.json(connected ? [githubRepositoryPayload] : []),
+      http.get(`${ORIGIN}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: connected ? [factoryProjectPayload] : [] }),
       ),
-      http.delete(`${ORIGIN}/web/github/repositories/github-project-1`, () => {
-        expect(loadFactories().some(factory => factory.id === githubFactory.id)).toBe(true);
+      http.get(`${ORIGIN}/web/factory/projects/${factoryProjectPayload.id}/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+      http.delete(`${ORIGIN}/web/factory/projects/${factoryProjectPayload.id}`, () => {
+        expect(loadFactories().some(factory => factory.id === serverFactory.id)).toBe(true);
         connected = false;
         return HttpResponse.json({ deleted: true });
       }),
@@ -218,7 +332,7 @@ describe('factories query hooks', () => {
     await waitFor(() => expect(result.current.factories.isFetching).toBe(false));
 
     await act(async () => {
-      await result.current.removeFactory.mutateAsync(githubFactory.id);
+      await result.current.removeFactory.mutateAsync(serverFactory.id);
     });
     await waitForMutationsIdle(client);
 
@@ -237,64 +351,16 @@ describe('factories query hooks', () => {
           source: 'local',
           createdAt: 1,
         },
+        {
+          id: 'prerelease-github',
+          name: 'acme/mastra',
+          createdAt: 2,
+          binding: { kind: 'github', githubProjectId: 'github-project-1', worktrees: [] },
+        },
       ]),
     );
 
     expect(loadFactories()).toEqual([]);
-  });
-
-  it('creates a GitHub factory with a browser id distinct from githubProjectId and de-duplicates by repository id', async () => {
-    let connected = false;
-    server.use(
-      http.get(`${ORIGIN}/web/github/repositories`, () =>
-        HttpResponse.json(connected ? [githubRepositoryPayload] : []),
-      ),
-      http.post(`${ORIGIN}/web/github/repositories`, async () => {
-        connected = true;
-        return HttpResponse.json({ repository: githubRepositoryPayload });
-      }),
-    );
-
-    const { result, client } = renderHookWithProviders(() => {
-      const factories = useFactoriesQuery();
-      const createGithub = useCreateGithubFactoryMutation();
-      return { factories, createGithub };
-    });
-
-    let first: Factory | undefined;
-    const repo = {
-      id: 1,
-      fullName: 'acme/mastra',
-      name: 'mastra',
-      owner: 'acme',
-      private: false,
-      defaultBranch: 'main',
-      installationId: 9,
-    };
-
-    await act(async () => {
-      first = await result.current.createGithub.mutateAsync(repo);
-    });
-    await waitForMutationsIdle(client);
-
-    expect(first).toBeDefined();
-    expect(first!.id).not.toBe('github-project-1');
-    if (first!.binding.kind !== 'github') throw new Error('expected github binding');
-    expect(first!.resourceId).toBe('github-project-1');
-    expect(first!.binding.githubProjectId).toBe('github-project-1');
-    expect(first!.binding.worktrees).toEqual([]);
-    expect(first).not.toHaveProperty('path');
-    expect(first).not.toHaveProperty('source');
-    expect(first).not.toHaveProperty('githubProjectId');
-
-    let second: Factory | undefined;
-    await act(async () => {
-      second = await result.current.createGithub.mutateAsync(repo);
-    });
-    await waitForMutationsIdle(client);
-
-    expect(second!.id).toBe(first!.id);
-    expect(loadFactories()).toHaveLength(1);
   });
 
   it('keeps active factory selection across reloads when stored under the new key', async () => {
@@ -307,13 +373,13 @@ describe('factories query hooks', () => {
   });
 
   it('does not clear a persisted backend selection when repository hydration fails', async () => {
-    saveActiveFactoryId('factory-gh');
-    server.use(http.get(`${ORIGIN}/web/github/repositories`, () => new HttpResponse(null, { status: 503 })));
+    saveActiveFactoryId('factory-server');
+    server.use(http.get(`${ORIGIN}/web/factory/projects`, () => new HttpResponse(null, { status: 503 })));
 
     const { result } = renderHookWithProviders(() => useActiveFactory());
 
     await waitFor(() => expect(result.current.factoriesPending).toBe(false));
     expect(result.current.activeFactory).toBeNull();
-    expect(loadActiveFactoryId()).toBe('factory-gh');
+    expect(loadActiveFactoryId()).toBe('factory-server');
   });
 });

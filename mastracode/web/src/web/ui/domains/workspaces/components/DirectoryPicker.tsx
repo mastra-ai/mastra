@@ -1,10 +1,12 @@
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronLeft, ChevronRight, Folder } from 'lucide-react';
-import { memo, useReducer } from 'react';
+import { memo, useReducer, useState } from 'react';
 
+import type { DirectoryListing } from '../../../../../shared/api/types';
 import { useDirectoryListing } from '../../../../../shared/hooks/use-fs';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
@@ -14,8 +16,9 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
  * (confined to the server's configured root). The user drills into folders and
  * picks one — yielding a real absolute path with no typing.
  *
- * This is a *body* component with no backdrop of its own. The factory setup
- * screen embeds it directly in the application content.
+ * This is a *body* component with no backdrop of its own: it's embedded inside
+ * a host modal (see FactoriesModal) so Factory selection is a first-class,
+ * centered flow rather than a sidebar popover.
  */
 
 interface DirectoryBrowserProps {
@@ -50,10 +53,7 @@ interface NavigationState {
   index: number;
 }
 
-type NavigationAction =
-  | { type: 'browse'; path: string | undefined }
-  | { type: 'back' }
-  | { type: 'forward' };
+type NavigationAction = { type: 'browse'; path: string | undefined } | { type: 'back' } | { type: 'forward' };
 
 const initialNavigationState: NavigationState = {
   paths: [undefined],
@@ -109,6 +109,61 @@ const DirectoryBreadcrumb = memo(function DirectoryBreadcrumb({
 const ENTRY_CLASS =
   'flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-icon5 transition-colors hover:bg-surface4 focus-visible:outline-hidden focus-visible:bg-surface4 disabled:cursor-default disabled:opacity-50';
 
+interface DirectoryEntriesProps {
+  entries: DirectoryListing['entries'];
+  busy: boolean;
+  navigating: boolean;
+  navigate: (action: NavigationAction) => void;
+}
+
+function DirectoryEntries({ entries, busy, navigating, navigate }: DirectoryEntriesProps) {
+  const [search, setSearch] = useState('');
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const visibleEntries =
+    normalizedSearch === ''
+      ? entries
+      : entries.filter(entry => entry.name.toLocaleLowerCase().includes(normalizedSearch));
+
+  return (
+    <>
+      {entries.length > 0 && (
+        <ListSearch
+          label="Search folders"
+          placeholder="Search folders…"
+          size="sm"
+          debounceMs={0}
+          onSearch={setSearch}
+        />
+      )}
+      <ScrollArea className="min-h-0 flex-1">
+        {entries.length === 0 && (
+          <Txt as="div" variant="ui-sm" className="px-2 py-1.5 text-icon3">
+            No subfolders here
+          </Txt>
+        )}
+        {entries.length > 0 && visibleEntries.length === 0 && (
+          <Txt as="div" variant="ui-sm" className="px-2 py-1.5 text-icon3">
+            No matching folders
+          </Txt>
+        )}
+        {visibleEntries.map(entry => (
+          <button
+            key={entry.path}
+            type="button"
+            className={ENTRY_CLASS}
+            disabled={busy || navigating}
+            onClick={() => navigate({ type: 'browse', path: entry.path })}
+            title={`Open ${entry.name}`}
+          >
+            <Folder size={15} className="text-accent1" />
+            <span className="truncate">{entry.name}</span>
+          </button>
+        ))}
+      </ScrollArea>
+    </>
+  );
+}
+
 export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickError = null }: DirectoryBrowserProps) {
   const [navigation, navigate] = useReducer(navigationReducer, initialNavigationState);
   const path = navigation.paths[navigation.index];
@@ -163,36 +218,27 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
         </Button>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
-        {loading && <SkeletonRows label="Loading folders" rows={4} rowClassName="h-7 w-full" />}
-        {error && (
+      {loading && (
+        <ScrollArea className="min-h-0 flex-1">
+          <SkeletonRows label="Loading folders" rows={4} rowClassName="h-7 w-full" />
+        </ScrollArea>
+      )}
+      {error && (
+        <ScrollArea className="min-h-0 flex-1">
           <Txt as="div" variant="ui-sm" className="px-2 py-1.5 text-notice-destructive-fg">
             {error}
           </Txt>
-        )}
-        {!loading && !error && listing && (
-          <>
-            {listing.entries.length === 0 && (
-              <Txt as="div" variant="ui-sm" className="px-2 py-1.5 text-icon3">
-                No subfolders here
-              </Txt>
-            )}
-            {listing.entries.map(entry => (
-              <button
-                key={entry.path}
-                type="button"
-                className={ENTRY_CLASS}
-                disabled={busy || navigating}
-                onClick={() => navigate({ type: 'browse', path: entry.path })}
-                title={`Open ${entry.name}`}
-              >
-                <Folder size={15} className="text-accent1" />
-                <span className="truncate">{entry.name}</span>
-              </button>
-            ))}
-          </>
-        )}
-      </ScrollArea>
+        </ScrollArea>
+      )}
+      {!loading && !error && listing && (
+        <DirectoryEntries
+          key={listing.path}
+          entries={listing.entries}
+          busy={busy}
+          navigating={navigating}
+          navigate={navigate}
+        />
+      )}
 
       {pickError && (
         <Txt as="div" variant="ui-sm" className="text-notice-destructive-fg">
@@ -200,6 +246,21 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
         </Txt>
       )}
 
+      <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!listing || busy}
+            onClick={() => listing && onPick(listing.path, basename(listing.path))}
+          >
+            {busy ? 'Creating…' : 'Create Factory'}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

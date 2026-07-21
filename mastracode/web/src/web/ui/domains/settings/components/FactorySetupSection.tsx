@@ -8,18 +8,16 @@ import {
   useSaveRepositorySettingsMutation,
 } from '../../../../../shared/hooks/useRepositorySettings';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
-import type { GithubFactory } from '../../workspaces/services/factories';
-import { isGithubFactory } from '../../workspaces/services/factories';
+import { isServerFactory } from '../../workspaces/services/factories';
 
 /**
- * One editable setup-command row per GitHub factory. The field is a draft —
+ * One editable setup-command row per linked repository. The field is a draft —
  * nothing persists until Save — so typing a long command never spams the
  * server. Saving a blank field clears the command.
  */
-function FactorySetupRow({ factory }: { factory: GithubFactory }) {
+function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryId: string; label: string }) {
   const { toast } = useToast();
-  const githubProjectId = factory.binding.githubProjectId;
-  const settingsQuery = useRepositorySettingsQuery(githubProjectId);
+  const settingsQuery = useRepositorySettingsQuery(projectRepositoryId);
   const saveMutation = useSaveRepositorySettingsMutation();
 
   const saved = settingsQuery.data?.setupCommand ?? '';
@@ -30,7 +28,7 @@ function FactorySetupRow({ factory }: { factory: GithubFactory }) {
   const dirty = draft.trim() !== saved;
   const save = () => {
     saveMutation.mutate(
-      { githubProjectId, settings: { setupCommand: draft.trim() || null } },
+      { projectRepositoryId, settings: { setupCommand: draft.trim() || null } },
       {
         onSuccess: () => toast('Setup command saved', 'success'),
         onError: err => toast(err instanceof Error ? err.message : 'Failed to save setup command', 'error'),
@@ -41,12 +39,12 @@ function FactorySetupRow({ factory }: { factory: GithubFactory }) {
   return (
     <div className="flex flex-col gap-1.5">
       <Txt as="span" variant="ui-sm" className="text-icon5">
-        {factory.name}
+        {label}
       </Txt>
       <div className="flex items-center gap-2">
         <input
           type="text"
-          aria-label={`Setup command for ${factory.name}`}
+          aria-label={`Setup command for ${label}`}
           placeholder="e.g. pnpm i && pnpm build"
           value={draft}
           disabled={settingsQuery.isPending || saveMutation.isPending}
@@ -65,15 +63,20 @@ function FactorySetupRow({ factory }: { factory: GithubFactory }) {
 }
 
 /**
- * Settings › General › Worktree setup: a per-factory shell command (e.g.
+ * Settings › General › Worktree setup: a per-repository shell command (e.g.
  * `pnpm i && pnpm build`) that runs inside every freshly created worktree
  * before any agent execution, so agents always start from a built tree.
- * Rendered only when at least one GitHub factory exists.
+ * Rendered only when at least one linked repository exists.
  */
 export function FactorySetupSection() {
   const factoriesQuery = useFactoriesQuery();
-  const githubFactories = (factoriesQuery.data ?? []).filter(isGithubFactory);
-  if (githubFactories.length === 0) return null;
+  const rows = (factoriesQuery.data ?? []).filter(isServerFactory).flatMap(factory =>
+    factory.binding.repositories.map(repository => ({
+      projectRepositoryId: repository.projectRepositoryId,
+      label: factory.name === repository.slug ? repository.slug : `${factory.name} · ${repository.slug}`,
+    })),
+  );
+  if (rows.length === 0) return null;
 
   return (
     <div className="mt-6 pt-4 border-t border-border1/40 flex flex-col gap-4">
@@ -85,8 +88,12 @@ export function FactorySetupSection() {
           Runs in every new worktree before any agent starts. Leave blank to skip setup.
         </Txt>
       </div>
-      {githubFactories.map(factory => (
-        <FactorySetupRow key={factory.binding.githubProjectId} factory={factory} />
+      {rows.map(row => (
+        <RepositorySetupRow
+          key={row.projectRepositoryId}
+          projectRepositoryId={row.projectRepositoryId}
+          label={row.label}
+        />
       ))}
     </div>
   );

@@ -40,7 +40,7 @@ function subscription(id: string, scope: string, threadId = `thread-${id}`): Git
     status: 'open',
     data: {
       installationExternalId: '7',
-      projectId: 'project-1',
+      projectRepositoryId: 'project-repository-1',
       repositoryExternalId: '99',
       repositorySlug: 'octo/hello',
       changeRequestId: '34',
@@ -205,7 +205,11 @@ describe('dispatchGithubWebhook', () => {
       ownerId: 'owner-1',
       resourceId: 'resource-1',
       scope: '/worktrees/b',
-      tags: { githubProjectId: 'project-1', projectPath: '/worktrees/b' },
+      tags: {
+        factoryProjectId: 'resource-1',
+        projectRepositoryId: 'project-repository-1',
+        worktreePath: '/worktrees/b',
+      },
     });
     expect(switchB).not.toHaveBeenCalled();
     expect(sendA).toHaveBeenCalledWith(

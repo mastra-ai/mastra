@@ -5,7 +5,7 @@ import type { PrepareProgress } from '../../web/ui/domains/workspaces/services/g
 import { ensureRepoMaterialized } from '../../web/ui/domains/workspaces/services/github';
 
 export interface EnsureRepoMaterializedVariables {
-  githubProjectId: string;
+  projectRepositoryId: string;
   /**
    * Live server-side preparation steps (SSE). Deliberately a caller-supplied
    * callback rather than cache state — progress is transient UI feedback.
@@ -22,7 +22,7 @@ export interface EnsureRepoMaterializedVariables {
 export function useEnsureRepoMaterializedMutation() {
   const { baseUrl } = useApiConfig();
   return useMutation({
-    mutationFn: ({ githubProjectId, onProgress }: EnsureRepoMaterializedVariables) =>
-      ensureRepoMaterialized(baseUrl, githubProjectId, onProgress),
+    mutationFn: ({ projectRepositoryId, onProgress }: EnsureRepoMaterializedVariables) =>
+      ensureRepoMaterialized(baseUrl, projectRepositoryId, onProgress),
   });
 }

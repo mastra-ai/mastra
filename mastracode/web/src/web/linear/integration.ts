@@ -22,8 +22,18 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
+import type { IntegrationConnection } from '../capabilities/connection.js';
+import type {
+  CreateIntakeCommentInput,
+  GetIntakeIssueInput,
+  Intake,
+  IntakeIssue,
+  IntakeIssueDetail,
+  ListIntakeIssuesInput,
+} from '../capabilities/intake.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
 import { buildLinearAgentTools } from './agent-tools.js';
+import { getFreshLinearAccessToken, loadLinearConnection } from './connection.js';
 import { buildLinearRoutes } from './routes.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
@@ -60,6 +70,7 @@ export interface LinearWorkspace {
 
 export interface LinearIssue {
   id: string;
+  projectId: string;
   /** Human key like `ENG-123`. */
   identifier: string;
   title: string;
@@ -134,6 +145,7 @@ interface IssuesQueryData {
       createdAt: string;
       updatedAt: string;
       state: { name: string; type: string };
+      project: { id: string };
       assignee: { name: string } | null;
       team: { key: string } | null;
       labels: { nodes: Array<{ name: string }> };
@@ -164,6 +176,7 @@ interface IssueDetailQueryData {
     createdAt: string;
     updatedAt: string;
     state: { name: string; type: string };
+    project: { id: string };
     assignee: { name: string } | null;
     team: { key: string } | null;
     labels: { nodes: Array<{ name: string }> };
@@ -221,6 +234,48 @@ async function linearGraphql<T>(accessToken: string, query: string, variables?: 
 export class LinearIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'linear';
+  readonly intake: Intake = {
+    listSources: async ({ orgId }) => {
+      const connection = await loadLinearConnection(orgId);
+      if (!connection) return [];
+      const accessToken = await getFreshLinearAccessToken(this, connection);
+      const projects = await this.listProjects(accessToken);
+      return projects.map(project => ({
+        id: project.id,
+        name: project.name,
+        type: 'project',
+      }));
+    },
+    listItems: async ({ orgId, sourceIds, cursor }) => {
+      if (sourceIds.length === 0) return { items: [], nextCursor: null };
+      const connection = await loadLinearConnection(orgId);
+      if (!connection) return { items: [], nextCursor: null };
+      const accessToken = await getFreshLinearAccessToken(this, connection);
+      const page = await this.listActiveIssues(accessToken, cursor, sourceIds);
+      return {
+        items: page.issues.map(issue => ({
+          source: { type: 'issue', externalId: issue.id, url: issue.url },
+          sourceId: issue.projectId,
+          title: `${issue.identifier}: ${issue.title}`,
+          status: issue.state,
+          labels: issue.labels,
+          assignee: issue.assignee,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+          metadata: {
+            identifier: issue.identifier,
+            stateType: issue.stateType,
+            priority: issue.priorityLabel,
+            team: issue.team,
+          },
+        })),
+        nextCursor: page.nextCursor,
+      };
+    },
+    listIssues: input => this.#listIntakeIssues(input),
+    getIssue: input => this.#getIntakeIssue(input),
+    createComment: input => this.#createIntakeComment(input),
+  };
   /**
    * The OAuth connect/callback flow round-trips a signed `state` through
    * Linear, so a multi-replica deploy needs a deployment-stable state secret.
@@ -319,6 +374,32 @@ export class LinearIntegration implements FactoryIntegration {
     return { name: data.organization.name, urlKey: data.organization.urlKey };
   }
 
+  async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
+    const accessToken = getLinearAccessToken(input.connection);
+    const result = await this.listActiveIssues(accessToken, input.cursor, input.sourceIds, input.labels);
+    return {
+      issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
+      nextCursor: result.nextCursor,
+    };
+  }
+
+  async #getIntakeIssue(input: GetIntakeIssueInput): Promise<IntakeIssueDetail | null> {
+    const accessToken = getLinearAccessToken(input.connection);
+    const issue = await this.fetchIssueDetail(accessToken, input.issueId);
+    if (!issue) return null;
+    return {
+      ...linearIssueToIntakeIssue(issue),
+      description: issue.description,
+      commentCount: issue.comments.length,
+      comments: issue.comments,
+    };
+  }
+
+  async #createIntakeComment(input: CreateIntakeCommentInput): Promise<{ id: string; url: string } | null> {
+    const accessToken = getLinearAccessToken(input.connection);
+    return this.createIssueComment(accessToken, input.issueId, input.body);
+  }
+
   /** List the workspace's projects (for the Settings intake-source picker). */
   async listProjects(accessToken: string): Promise<LinearProject[]> {
     const data = await linearGraphql<{
@@ -348,17 +429,25 @@ export class LinearIntegration implements FactoryIntegration {
    * first. When `projectIds` is provided, only issues from those projects are
    * returned.
    */
-  async listActiveIssues(accessToken: string, after?: string, projectIds?: string[]): Promise<LinearIssuePage> {
+  async listActiveIssues(
+    accessToken: string,
+    after?: string,
+    projectIds?: string[],
+    labels?: string[],
+  ): Promise<LinearIssuePage> {
+    const normalizedLabels = [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
     const projectFilter = projectIds?.length ? ', project: { id: { in: $projectIds } }' : '';
     const projectVar = projectIds?.length ? ', $projectIds: [ID!]' : '';
+    const labelFilter = normalizedLabels.length > 0 ? ', labels: { name: { in: $labels } }' : '';
+    const labelVar = normalizedLabels.length > 0 ? ', $labels: [String!]' : '';
     const data = await linearGraphql<IssuesQueryData>(
       accessToken,
-      `query Intake($first: Int!, $after: String${projectVar}) {
+      `query Intake($first: Int!, $after: String${projectVar}${labelVar}) {
         issues(
           first: $first
           after: $after
           orderBy: updatedAt
-          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter} }
+          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter}${labelFilter} }
         ) {
           nodes {
             id
@@ -369,6 +458,7 @@ export class LinearIntegration implements FactoryIntegration {
             createdAt
             updatedAt
             state { name type }
+            project { id }
             assignee { name }
             team { key }
             labels { nodes { name } }
@@ -380,12 +470,14 @@ export class LinearIntegration implements FactoryIntegration {
         first: LINEAR_ISSUES_PAGE_SIZE,
         after: after ?? null,
         ...(projectIds?.length ? { projectIds } : {}),
+        ...(normalizedLabels.length > 0 ? { labels: normalizedLabels } : {}),
       },
     );
     const { nodes, pageInfo } = data.issues;
     return {
       issues: nodes.map(node => ({
         id: node.id,
+        projectId: node.project.id,
         identifier: node.identifier,
         title: node.title,
         url: node.url,
@@ -453,6 +545,7 @@ export class LinearIntegration implements FactoryIntegration {
             createdAt
             updatedAt
             state { name type }
+            project { id }
             assignee { name }
             team { key }
             labels { nodes { name } }
@@ -477,6 +570,7 @@ export class LinearIntegration implements FactoryIntegration {
     const comments = allComments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return {
       id: issue.id,
+      projectId: issue.project.id,
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description?.trim() ? issue.description : null,
@@ -563,4 +657,30 @@ export class LinearIntegration implements FactoryIntegration {
       oauthAppConfigured: true,
     };
   }
+}
+
+function getLinearAccessToken(connection: IntegrationConnection): string {
+  if (connection.type !== 'oauth') {
+    throw new Error('Linear capabilities require an OAuth connection.');
+  }
+  return connection.accessToken;
+}
+
+function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    url: issue.url,
+    author: null,
+    state: issue.state,
+    stateType: issue.stateType,
+    priority: issue.priorityLabel,
+    assignee: issue.assignee,
+    source: issue.team,
+    labels: issue.labels,
+    commentCount: null,
+    createdAt: issue.createdAt,
+    updatedAt: issue.updatedAt,
+  };
 }

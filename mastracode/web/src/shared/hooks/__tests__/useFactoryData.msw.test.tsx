@@ -15,8 +15,8 @@ import type { GithubIssue, GithubPullRequest } from '../../../web/ui/domains/fac
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../useFactoryData';
 
 const PROJECT_ID = 'github-project-1';
-const ISSUES_URL = `${TEST_BASE_URL}/web/github/repositories/${PROJECT_ID}/issues`;
-const PRS_URL = `${TEST_BASE_URL}/web/github/repositories/${PROJECT_ID}/prs`;
+const ISSUES_URL = `${TEST_BASE_URL}/web/github/projects/${PROJECT_ID}/issues`;
+const PRS_URL = `${TEST_BASE_URL}/web/github/projects/${PROJECT_ID}/prs`;
 
 const issues: GithubIssue[] = [
   {
