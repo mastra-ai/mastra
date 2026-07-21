@@ -13,7 +13,6 @@ export { ChatSessionProvider } from './context/ChatSessionProvider';
 export { ChatConnectionProvider } from './context/ChatConnectionProvider';
 export { ChatTranscriptProvider } from './context/ChatTranscriptProvider';
 export { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
-export { ChatPermissionsContext } from './context/ChatPermissionsContext';
 export { useChatConnection } from './context/useChatConnection';
 export { useChatModels } from './context/useChatModels';
 export { useChatModes } from './context/useChatModes';

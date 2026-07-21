@@ -5,11 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { useOverlays } from '../../../../lib/overlays';
-import type { Factory } from '../../../workspaces';
+import { useOverlays } from '../../../../lib/overlays/overlays';
+import type { Factory } from '../../../workspaces/services/factories';
 import { ChatOverlays } from '../ChatOverlays';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
-
 const project: Factory = {
   id: 'project-test',
   name: 'Test',
@@ -25,7 +24,6 @@ function OverlayLauncher() {
   const { open } = useOverlays();
   return (
     <>
-      <button onClick={() => open('settings')}>Settings</button>
       <button onClick={() => open('shortcuts')}>Shortcuts</button>
       <button onClick={() => open('factories')}>Factories</button>
       <ChatOverlays />
@@ -45,15 +43,12 @@ beforeEach(useOverlayControllerHandlers);
 afterEach(() => localStorage.clear());
 
 describe('ChatOverlays', () => {
-  it('given a project, when contextual overlays are opened, then it mounts settings and shortcuts', async () => {
+  it('mounts and closes the keyboard-shortcuts dialog', async () => {
     localStorage.setItem('mastracode-factories', JSON.stringify([project]));
     localStorage.setItem('mastracode-active-factory', project.id);
     const user = userEvent.setup();
     renderOverlays();
 
-    await user.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Close' }));
     await user.click(screen.getByRole('button', { name: 'Shortcuts' }));
     expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close' }));

@@ -2,7 +2,10 @@ import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSideba
 import type { ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router';
 
-import { OverlaysProvider } from '../../lib/overlays';
+import { PageLayoutMainViewProvider } from '../../ui/PageLayout';
+import { OverlaysProvider, useOverlays } from '../../lib/overlays/overlays';
+import { SettingsPanel } from '../settings/components/SettingsPanel';
+import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
 import { ActiveFactoryProvider } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
@@ -18,7 +21,9 @@ export default function Chat() {
       <ActiveFactoryProvider>
         <ChatSessionRouteProvider>
           <OverlaysProvider>
-            <ChatShell />
+            <SettingsNavigationProvider>
+              <ChatShell />
+            </SettingsNavigationProvider>
           </OverlaysProvider>
         </ChatSessionRouteProvider>
       </ActiveFactoryProvider>
@@ -43,9 +48,12 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 }
 
 function ChatShell() {
+  const overlays = useOverlays();
   return (
     <>
-      <Outlet />
+      <PageLayoutMainViewProvider view={overlays.isOpen('settings') ? <SettingsPanel /> : undefined}>
+        <Outlet />
+      </PageLayoutMainViewProvider>
       <ChatOverlays />
     </>
   );

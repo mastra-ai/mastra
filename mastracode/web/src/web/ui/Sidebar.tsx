@@ -3,17 +3,19 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';
 
 import { useApiConfig } from '../../shared/api/config';
-import { redirectToLogout, useWebAuth } from './domains/auth';
-import { ThreadList } from './domains/chat';
-import { FactorySection } from './domains/factory';
-import {
-  isServerFactory,
-  FactorySwitcher,
-  useActiveFactoryContext,
-  UserSessionsSection,
-  WorkspacesSection,
-} from './domains/workspaces';
-import { useOverlays } from './lib/overlays';
+import { useWebAuth } from '../../shared/hooks/useWebAuth';
+import { redirectToLogout } from './domains/auth/services/auth';
+import { ThreadList } from './domains/chat/components/ThreadList';
+import { FactorySection } from './domains/factory/components/FactorySection';
+import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
+import { useSetSettingsSection } from './domains/settings/context/SettingsNavigationProvider';
+import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
+import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
+import { UserSessionsSection } from './domains/workspaces/components/UserSessionsSection';
+import { WorkspacesSection } from './domains/workspaces/components/WorkspacesSection';
+import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
+import { isServerFactory } from './domains/workspaces/services/factories';
+import { useOverlays } from './lib/overlays/overlays';
 
 /**
  * Composition shell: each section owns its data through the domain contexts
@@ -28,28 +30,34 @@ import { useOverlays } from './lib/overlays';
  */
 export function Sidebar() {
   const { activeFactory } = useActiveFactoryContext();
+  const overlays = useOverlays();
   const isServerBacked = activeFactory ? isServerFactory(activeFactory) : false;
+  const settingsOpen = overlays.isOpen('settings');
 
   return (
     <MainSidebar className="bg-transparent h-full">
-      <MainSidebar.Nav>
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
-          <section aria-label="Factory switcher">
-            <FactorySwitcher />
-          </section>
-          <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
-            {isServerBacked ? (
-              <>
-                <FactorySection>
-                  <WorkspacesSection />
-                </FactorySection>
-                <UserSessionsSection />
-              </>
-            ) : (
-              <ThreadList />
-            )}
-          </section>
-        </div>
+      <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
+        {settingsOpen ? (
+          <SettingsNavigation />
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
+            <section aria-label="Factory switcher">
+              <FactorySwitcher />
+            </section>
+            <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
+              {isServerBacked ? (
+                <>
+                  <FactorySection>
+                    <WorkspacesSection />
+                  </FactorySection>
+                  <UserSessionsSection />
+                </>
+              ) : (
+                <ThreadList />
+              )}
+            </section>
+          </div>
+        )}
       </MainSidebar.Nav>
       <MainSidebar.Bottom role="region" aria-label="Account and settings" className="pb-3">
         <SidebarFooter />
@@ -60,6 +68,18 @@ export function Sidebar() {
 
 function SidebarFooter() {
   const overlays = useOverlays();
+  const settingsOpen = overlays.isOpen('settings');
+  const setSettingsSection = useSetSettingsSection();
+  const closeSettings = useCloseSettings();
+
+  const toggleSettings = () => {
+    if (settingsOpen) {
+      closeSettings();
+      return;
+    }
+    setSettingsSection('general');
+    overlays.open('settings');
+  };
 
   return (
     <>
@@ -73,8 +93,15 @@ function SidebarFooter() {
             url: '#',
             icon: <Settings />,
           }}
+          isActive={settingsOpen}
         >
-          <button type="button" onClick={() => overlays.open('settings')} aria-label="Open settings">
+          <button
+            id="settings-trigger"
+            type="button"
+            onClick={toggleSettings}
+            aria-label="Settings"
+            aria-current={settingsOpen ? 'page' : undefined}
+          >
             <Settings />
             <MainSidebar.NavLabel>Settings</MainSidebar.NavLabel>
           </button>

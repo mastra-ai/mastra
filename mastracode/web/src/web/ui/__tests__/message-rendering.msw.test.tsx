@@ -399,6 +399,43 @@ describe('MastraCode message rendering', () => {
     await waitFor(() => expect(screen.getByText('Streaming now')).toBeInTheDocument());
   });
 
+  it('keeps the running conversation and stream subscription alive while Settings is open', async () => {
+    const user = userEvent.setup();
+    seedFactory();
+    const stream = delayedSse({
+      type: 'message_update',
+      message: dbMessage('assistant-settings-stream', 'assistant', [
+        { type: 'text', text: 'Streaming while settings are open' },
+      ]),
+    });
+    const streamRequests = vi.fn();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(SESSION, () => HttpResponse.json({ ...sessionState(), running: true })),
+      http.get(`${SESSION}/stream`, () => {
+        streamRequests();
+        return stream.response();
+      }),
+    );
+
+    renderChat();
+
+    expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
+
+    const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
+    await user.click(settingsTrigger);
+    expect(screen.getByRole('region', { name: 'Settings' })).toBeInTheDocument();
+
+    await stream.emit();
+    await user.keyboard('{Escape}');
+
+    expect(await screen.findByText('Streaming while settings are open')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(settingsTrigger).toHaveFocus());
+    expect(streamRequests).toHaveBeenCalledTimes(1);
+  });
+
   it('renders tool lifecycle events inline before a later message update re-emits the tool part', async () => {
     seedFactory();
     useAgentControllerHandlers({
@@ -742,10 +779,10 @@ describe('App mode + theme controls', () => {
 
       await screen.findByRole('button', { name: 'Build' });
 
-      const header = document.querySelector('header');
-      expect(header).not.toBeNull();
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Open settings' })).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Open settings' })).toBeInTheDocument();
+      const header = document.querySelector<HTMLElement>('header');
+      if (!header) throw new Error('Expected the chat header to be rendered');
+      expect(within(header).queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
       expect(screen.queryByText('Ready')).not.toBeInTheDocument();
     });
 

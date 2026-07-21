@@ -1,10 +1,41 @@
 import { useContext } from 'react';
 
-import { ChatPermissionsContext } from './ChatPermissionsContext';
+import {
+  ChatPermissionsQueryContext,
+  PendingPermissionCategoryContext,
+  SetPendingPermissionCategoryContext,
+  SetPermissionMutationContext,
+} from './ChatPermissionsContext';
 import type { ChatPermissionsApi } from './ChatPermissionsContext';
 
 export function useChatPermissions(): ChatPermissionsApi {
-  const ctx = useContext(ChatPermissionsContext);
-  if (!ctx) throw new Error('useChatPermissions must be used within a ChatPermissionsProvider');
-  return ctx;
+  const permissionsQuery = useContext(ChatPermissionsQueryContext);
+  const setPermissionMutation = useContext(SetPermissionMutationContext);
+  const pendingPermissionCategory = useContext(PendingPermissionCategoryContext);
+  const setPendingPermissionCategory = useContext(SetPendingPermissionCategoryContext);
+
+  if (
+    permissionsQuery === undefined ||
+    setPermissionMutation === undefined ||
+    setPendingPermissionCategory === undefined
+  ) {
+    throw new Error('useChatPermissions must be used within a ChatPermissionsProvider');
+  }
+
+  const setPermissionForCategory: ChatPermissionsApi['setPermissionForCategory'] = async (category, policy) => {
+    setPendingPermissionCategory(category);
+    try {
+      await setPermissionMutation.mutateAsync({ category, policy });
+    } finally {
+      setPendingPermissionCategory(undefined);
+    }
+  };
+
+  return {
+    permissions: permissionsQuery.data,
+    permissionsLoading: permissionsQuery.isLoading,
+    permissionsError: permissionsQuery.error ?? undefined,
+    pendingPermissionCategory,
+    setPermissionForCategory,
+  };
 }
