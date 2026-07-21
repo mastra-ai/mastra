@@ -14,6 +14,7 @@ import { ChatHeader } from '../../chat/components/ChatHeader';
 import { EmptyFactoryState, useActiveFactoryContext } from '../../workspaces';
 import type { ServerFactory } from '../../workspaces';
 import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 interface FactoryPageShellProps {
   title: string;
@@ -32,10 +33,20 @@ interface FactoryPageShellProps {
  */
 export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
   const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending, factories } = useActiveFactoryContext();
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
 
-  if (!activeFactory) {
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
+
+  const noFactories = factories.length === 0;
+
+  if (noFactories || !activeFactory) {
     return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
   }
 

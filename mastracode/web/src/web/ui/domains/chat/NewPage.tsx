@@ -14,14 +14,25 @@ import { TranscriptEntries } from './components/Transcript';
 import { ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useChatTranscript } from './context/useChatTranscript';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
   const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending, factories } = useActiveFactoryContext();
 
-  if (!activeFactory) {
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
+
+  const noFactories = factories.length === 0;
+
+  if (noFactories || !activeFactory) {
     return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
   }
 

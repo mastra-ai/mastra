@@ -17,6 +17,7 @@ import {
   useCreateFactoryMutation,
   useFactoriesQuery,
   useLinkRepositoryMutation,
+  useLoadFactories,
   useRemoveFactoryMutation,
 } from '../useFactories';
 
@@ -69,6 +70,16 @@ beforeEach(() => {
 });
 
 describe('factories query hooks', () => {
+  it('loads persisted factories asynchronously through React Query', async () => {
+    saveFactories([localFactory]);
+
+    const { result } = renderHookWithProviders(() => useLoadFactories());
+
+    expect(result.current.isPending).toBe(true);
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(result.current.data?.[0]).toMatchObject({ id: 'factory-local', name: 'Mastra' });
+  });
+
   it('reads persisted factories through React Query', async () => {
     saveFactories([localFactory]);
 

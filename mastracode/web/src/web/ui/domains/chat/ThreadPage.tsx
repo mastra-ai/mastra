@@ -18,13 +18,14 @@ import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionP
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
 import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
   const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending, factories } = useActiveFactoryContext();
   const { threadId } = useParams();
   const location = useLocation();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
@@ -38,7 +39,17 @@ export function ThreadPage() {
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
 
-  if (!activeFactory) {
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
+
+  const noFactories = factories.length === 0;
+
+  if (noFactories || !activeFactory) {
     return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
   }
 

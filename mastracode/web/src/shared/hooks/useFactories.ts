@@ -21,12 +21,19 @@ function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
 }
 
+export function useLoadFactories() {
+  return useQuery({
+    queryKey: queryKeys.persistedFactories(),
+    queryFn: () => Promise.resolve(loadFactories()),
+  });
+}
+
 export function useFactoriesQuery() {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.factories(),
     queryFn: () => loadFactoriesWithResolvedIds(baseUrl),
-    initialData: loadFactories,
+    initialData: [],
   });
 }
 
