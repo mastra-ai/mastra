@@ -83,7 +83,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };

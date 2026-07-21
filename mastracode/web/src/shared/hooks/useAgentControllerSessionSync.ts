@@ -6,7 +6,7 @@ import { createAgentControllerClient } from '../../web/ui/domains/chat/services/
 interface UseAgentControllerSessionSyncArgs {
   agentControllerId: string;
   resourceId: string;
-  projectPath?: string;
+  scope?: string;
   baseUrl?: string;
   enabled?: boolean;
   sseConnected: boolean;
@@ -21,7 +21,7 @@ export function reconnectRefetchInterval(sseConnected: boolean, fetchFailureCoun
 export function useAgentControllerSessionSync({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
   baseUrl = '',
   enabled = true,
   sseConnected,
@@ -29,13 +29,13 @@ export function useAgentControllerSessionSync({
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope: projectPath,
+    scope,
     baseUrl,
     enabled,
   });
 
   return useQuery({
-    queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, projectPath),
+    queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope),
     queryFn: () => session!.state(),
     enabled: enabled && Boolean(session),
     staleTime: Infinity,

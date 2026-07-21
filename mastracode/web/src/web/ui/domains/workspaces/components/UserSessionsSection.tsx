@@ -79,7 +79,7 @@ export function UserSessionsSection() {
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId: userResourceId,
-    projectPath: worktrees[0]?.worktreePath,
+    scope: worktrees[0]?.worktreePath,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
     enabled: isGithub && !auth.isPending && worktrees.length > 0,

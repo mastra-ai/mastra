@@ -18,7 +18,7 @@ export function ChatConnectionProvider({
   const connection = useAgentControllerConnection({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     projectState,
     baseUrl,
     enabled: sessionEnabled,

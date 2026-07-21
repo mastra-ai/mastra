@@ -9,7 +9,7 @@ import {
 interface AgentControllerThreadMutationArgs {
   agentControllerId: string;
   resourceId: string;
-  projectPath?: string;
+  scope?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -17,12 +17,12 @@ interface AgentControllerThreadMutationArgs {
 function useThreadMutationInvalidation({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
 }: AgentControllerThreadMutationArgs) {
   const queryClient = useQueryClient();
   return () =>
     queryClient.invalidateQueries({
-      queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, projectPath),
+      queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, scope),
       exact: true,
     });
 }
@@ -70,7 +70,7 @@ export function useCloneAgentControllerThreadMutation(args: AgentControllerThrea
 }
 
 export function useSwitchAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { agentControllerId, resourceId, projectPath } = args;
+  const { agentControllerId, resourceId, scope } = args;
   const queryClient = useQueryClient();
   const { session } = createAgentControllerClient(args);
 
@@ -81,7 +81,7 @@ export function useSwitchAgentControllerThreadMutation(args: AgentControllerThre
     },
     onSuccess: state => {
       queryClient.setQueryData(
-        queryKeys.agentControllerConnectionState(agentControllerId, resourceId, projectPath),
+        queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope),
         state,
       );
     },

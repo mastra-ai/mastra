@@ -9,7 +9,12 @@ import {
 interface UseAgentControllerSessionInitArgs {
   agentControllerId: string;
   resourceId: string;
-  projectPath?: string;
+  /**
+   * Session scope. The Factory feeds its per-worktree project path in here;
+   * the same value is also written back into the session as a `projectPath`
+   * tag so the server side can round-trip it.
+   */
+  scope?: string;
   projectState?: Record<string, unknown>;
   baseUrl?: string;
   enabled?: boolean;
@@ -18,7 +23,7 @@ interface UseAgentControllerSessionInitArgs {
 export function useAgentControllerSessionInit({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
   projectState,
   baseUrl = '',
   enabled = true,
@@ -26,23 +31,23 @@ export function useAgentControllerSessionInit({
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope: projectPath,
+    scope,
     baseUrl,
     enabled,
   });
 
   return useQuery({
     queryKey: [
-      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath),
+      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, scope),
       'init',
       projectState,
     ],
     queryFn: async () => {
       const activeSession = requireAgentControllerSession(session);
-      const created = await activeSession.create({ tags: projectPath ? { projectPath } : undefined });
-      if (projectPath) {
+      const created = await activeSession.create({ tags: scope ? { projectPath: scope } : undefined });
+      if (scope) {
         try {
-          await activeSession.setState({ projectPath, ...projectState });
+          await activeSession.setState({ projectPath: scope, ...projectState });
         } catch {
           // Continue connecting; session.state() remains the source of truth.
         }

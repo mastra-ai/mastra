@@ -86,7 +86,7 @@ export function ChatSessionBoundary({
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     threadId,
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),
