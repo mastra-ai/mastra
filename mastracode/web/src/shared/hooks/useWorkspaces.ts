@@ -1,8 +1,8 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { useToast } from '../../web/ui/ui/toast';
 import { createWorktree, deleteWorktree } from '../../web/ui/domains/workspaces/services/github';
 import type { Factory, Worktree } from '../../web/ui/domains/workspaces/services/factories';
 import {
@@ -102,7 +102,6 @@ export function useSelectWorkspaceMutation(factory: Factory | null | undefined, 
 export function useCreateWorkspaceMutation(factory: Factory | null | undefined, scope?: AgentControllerThreadsScope) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (branch: string) => {
@@ -119,7 +118,7 @@ export function useCreateWorkspaceMutation(factory: Factory | null | undefined, 
       return selectWorktree(upsertWorktree(latestFactory(factory), worktree), worktree.worktreePath);
     },
     onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
-    onError: error => toast(error instanceof Error ? error.message : 'Failed to create workspace', 'error'),
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to create workspace'),
   });
 }
 
@@ -138,7 +137,6 @@ export function useDeleteWorkspaceMutation(
 ) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (worktree: Worktree) => {
@@ -172,6 +170,6 @@ export function useDeleteWorkspaceMutation(
       });
       toast('Workspace deleted');
     },
-    onError: error => toast(error instanceof Error ? error.message : 'Failed to delete workspace', 'error'),
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to delete workspace'),
   });
 }

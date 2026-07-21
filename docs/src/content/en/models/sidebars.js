@@ -228,6 +228,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/cline-pass',
+          label: 'ClinePass',
+        },
+        {
+          type: 'doc',
           id: 'providers/cloudferro-sherlock',
           label: 'CloudFerro Sherlock',
         },

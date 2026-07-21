@@ -29,7 +29,7 @@ import { hasAuthInit } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { observeAgentGitAction } from './audit/agent-audit.js';
 import { AuditDomain } from './audit/domain.js';
-import { buildAuthRoutes, createWebAuthGate } from './auth.js';
+import { buildAuthRoutes, createWebAuthGate, isWebAuthEnabled } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './factory-integration.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
 import { ProjectDomain } from './projects/domain.js';
@@ -369,7 +369,16 @@ export class MastraFactory {
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
     // mirroring stored API keys into process.env.
-    registerTenantCredentialResolver();
+    //
+    // Only register when a real auth adapter gates callers. In local /
+    // auth-disabled mode there is no authenticated tenant, so registering would
+    // force every model call through an empty tenant store (fail-closed, no env
+    // fallback) and break chat with "Not logged in". Leaving it unregistered
+    // lets the SDK fall back to the file-backed AuthStorage (auth.json) — the
+    // same store the local /login and Settings pages read and write.
+    if (isWebAuthEnabled()) {
+      registerTenantCredentialResolver();
+    }
 
     for (const integration of integrations) {
       if (integration.versionControl) {
