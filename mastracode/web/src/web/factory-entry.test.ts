@@ -120,8 +120,10 @@ describe('MastraFactory.prepare', () => {
       'audit',
       'work-items',
       'model-credentials',
+      'model-packs',
       'queue-health',
       'integrations',
+      'projects',
       'source-control',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
@@ -276,6 +278,69 @@ function fakeIntegration(overrides: Partial<FactoryIntegration> & { id: string }
   };
 }
 
+function fakeAuditIntegration(overrides: Partial<FactoryIntegration> & { id: string }): FactoryIntegration {
+  return fakeIntegration({ audit: vi.fn(async () => {}), ...overrides });
+}
+
+describe('MastraFactory.prepare audit-capable integrations', () => {
+  it('rejects duplicate audit-capable integration ids', async () => {
+    const factory = new MastraFactory({
+      storage: fakeStorage(),
+      integrations: [fakeAuditIntegration({ id: 'mirror' }), fakeAuditIntegration({ id: 'mirror' })],
+    });
+    await expect(factory.prepare()).rejects.toThrow(/duplicate integration id 'mirror'/);
+  });
+
+  it('mounts audit domain routes without an audit integration', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    expect(paths).toContain('/web/factory/projects/:id/audit');
+    expect(paths).not.toContain('/web/audit/portal-link');
+  });
+
+  it("folds an audit integration's routes into buildApiRoutes", async () => {
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      integrations: [
+        fakeAuditIntegration({
+          id: 'mirror',
+          routes: () => [{ path: '/web/audit/portal-link', method: 'GET', handler: () => new Response() }],
+        }),
+      ],
+    });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    expect(paths).toContain('/web/factory/projects/:id/audit');
+    expect(paths).toContain('/web/audit/portal-link');
+  });
+
+  it.each([
+    { authKind: 'workos', auditConfigured: true, expectsPortal: true },
+    { authKind: 'better-auth', auditConfigured: true, expectsPortal: true },
+    { authKind: 'workos', auditConfigured: false, expectsPortal: false },
+  ])(
+    'keeps audit integration routes independent from $authKind auth when auditConfigured=$auditConfigured',
+    async ({ authKind, auditConfigured, expectsPortal }) => {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        auth: fakeProvider({ name: authKind }),
+        integrations: auditConfigured
+          ? [
+              fakeAuditIntegration({
+                id: 'workos-audit',
+                routes: () => [{ path: '/web/audit/portal-link', method: 'GET', handler: () => new Response() }],
+              }),
+            ]
+          : [],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+      expect(paths.includes('/web/audit/portal-link')).toBe(expectsPortal);
+    },
+  );
+});
+
 describe('MastraFactory.prepare integrations', () => {
   it('rejects duplicate integration ids', async () => {
     const factory = new MastraFactory({
@@ -292,6 +357,24 @@ describe('MastraFactory.prepare integrations', () => {
     expect(getSeededIntegration('missing')).toBeUndefined();
   });
 
+  it('initializes source-control capabilities with integration-scoped storage', async () => {
+    const initialize = vi.fn();
+    const custom = fakeIntegration({
+      id: 'custom-source-control',
+      sourceControl: {
+        initialize,
+        registerInstallation: vi.fn(),
+        registerRepositories: vi.fn(),
+        getRepositoryAccess: vi.fn(),
+      },
+    });
+
+    await prepareFactory({ storage: fakeStorage(), integrations: [custom] });
+
+    expect(initialize).toHaveBeenCalledOnce();
+    expect(initialize.mock.calls[0]![0].storage.integrationId).toBe('custom-source-control');
+  });
+
   it("folds a ready integration's routes into buildApiRoutes", async () => {
     const routes = vi.fn((_ctx: IntegrationContext) => [
       { path: '/web/custom/status', method: 'GET' as const, handler: () => new Response() },
@@ -305,10 +388,10 @@ describe('MastraFactory.prepare integrations', () => {
     expect(paths).toContain('/web/custom/status');
     const ctx = routes.mock.calls[0]![0];
     expect(ctx.stateSigner).toBe(getSeededStateSigner());
-    expect(typeof ctx.hooks?.runIssueTriage).toBe('function');
+    expect(typeof ctx.hooks?.emitAudit).toBe('function');
   });
 
-  it('mounts disabled-status stubs for the known ids when no integrations are registered', async () => {
+  it('mounts disabled status stubs when no integrations are registered', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
     const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
@@ -369,11 +452,11 @@ describe('MastraFactory.prepare integrations', () => {
     expect(getSeededStateSigner()?.stable).toBe(true);
   });
 
-  it("falls back to a github integration's webhook secret for the state signer", async () => {
-    const github = fakeIntegration({ id: 'github' }) as FactoryIntegration & { webhookSecret?: string };
-    github.webhookSecret = 'hook-secret';
-    await prepareFactory({ storage: fakeStorage(), integrations: [github] });
-    expect(getSeededStateSigner()?.stable).toBe(true);
+  it('does not inspect provider-specific integration secrets for state signing', async () => {
+    const integration = fakeIntegration({ id: 'custom' }) as FactoryIntegration & { webhookSecret?: string };
+    integration.webhookSecret = 'provider-owned-secret';
+    await prepareFactory({ storage: fakeStorage(), integrations: [integration] });
+    expect(getSeededStateSigner()?.stable).toBe(false);
   });
 
   it("folds a ready integration's workers into the returned Mastra args", async () => {

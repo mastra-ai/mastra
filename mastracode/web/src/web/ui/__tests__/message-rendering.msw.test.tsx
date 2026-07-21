@@ -373,8 +373,12 @@ describe('MastraCode message rendering', () => {
 
     renderChat();
 
-    const heading = await screen.findByRole('heading', { name: 'Quality gate' });
-    expect(heading.closest('.prose')).toHaveClass('mt-4');
+    await waitFor(() => {
+      const summaryHeading = screen
+        .getAllByRole('heading', { name: 'Quality gate' })
+        .find(heading => heading.closest('.prose'));
+      expect(summaryHeading?.closest('.prose')).toHaveClass('mt-4');
+    });
   });
 
   it('renders assistant text when SSE message updates arrive after subscription', async () => {

@@ -1,4 +1,3 @@
-import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
@@ -12,6 +11,7 @@ import {
   useUpdateOMObserveAttachments,
   useUpdateOMThresholds,
 } from '../../../../../shared/hooks/use-om';
+import type { AvailableModelOption } from '../../../../../shared/hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 type OMConfig = OMConfigInfo;
@@ -55,12 +55,20 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
  * observed. Everything is session-scoped (resolved from and written to the
  * active factory's session), so it needs the project's resourceId.
  */
-export function OMSection({ resourceId, models }: { resourceId?: string; models: AgentControllerAvailableModel[] }) {
-  const omQuery = useOMQuery(resourceId);
-  const observerMutation = useUpdateOMModel(resourceId, 'observer');
-  const reflectorMutation = useUpdateOMModel(resourceId, 'reflector');
-  const thresholdsMutation = useUpdateOMThresholds(resourceId);
-  const attachmentsMutation = useUpdateOMObserveAttachments(resourceId);
+export function OMSection({
+  resourceId,
+  scope,
+  models,
+}: {
+  resourceId?: string;
+  scope?: string;
+  models: AvailableModelOption[];
+}) {
+  const omQuery = useOMQuery(resourceId, scope);
+  const observerMutation = useUpdateOMModel(resourceId, 'observer', scope);
+  const reflectorMutation = useUpdateOMModel(resourceId, 'reflector', scope);
+  const thresholdsMutation = useUpdateOMThresholds(resourceId, scope);
+  const attachmentsMutation = useUpdateOMObserveAttachments(resourceId, scope);
 
   const config = omQuery.data?.config ?? null;
   const loading = omQuery.isPending && !!resourceId;
