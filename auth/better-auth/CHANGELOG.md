@@ -1,5 +1,43 @@
 # @mastra/auth-better-auth
 
+## 1.1.2-alpha.2
+
+### Patch Changes
+
+- Added a deferred instance mode and organization management to MastraAuthBetterAuth so it can be passed directly to a server host without a wrapper adapter. The provider can now be constructed with just a secret and will build its Better Auth instance (including running migrations) against the host database during init. It also bootstraps a personal organization for new users (ensureOrganization), checks organization admin roles (isOrganizationAdmin), and exposes the Better Auth HTTP handler (handleAuthRequest) so hosts can mount it under /auth/api/*. ([#19765](https://github.com/mastra-ai/mastra/pull/19765))
+
+  **Before**
+
+  ```ts
+  import { betterAuth } from 'better-auth';
+  import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
+
+  const auth = new MastraAuthBetterAuth({ auth: betterAuth({/* ... */}) });
+  ```
+
+  **After** (bring-your-own instance still works)
+
+  ```ts
+  import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
+
+  const auth = new MastraAuthBetterAuth({ secret: process.env.BETTER_AUTH_SECRET! });
+  // host calls auth.init({ database, publicUrl, allowedOrigins }) during startup
+  ```
+
+## 1.1.2-alpha.1
+
+### Patch Changes
+
+- Fixed Better Auth bearer token authentication and implemented user lookup in `@mastra/auth-better-auth` (fixes [#19110](https://github.com/mastra-ai/mastra/issues/19110)). ([#19629](https://github.com/mastra-ai/mastra/pull/19629))
+
+  **Bearer tokens now work after credentials sign-in**
+
+  `signIn`/`signUp` return Better Auth's raw session token, but Better Auth only accepts _signed_ session cookies. Sending that token as `Authorization: Bearer <token>` previously always failed authentication. The provider now signs unsigned tokens with the Better Auth secret before verifying the session — matching the semantics of Better Auth's bearer plugin. The session cookie name is also resolved from the Better Auth instance, so secure-cookie setups (`__Secure-` prefix) work too.
+
+  **`getUser()` and `getUsers()` are now implemented**
+
+  Previously `getUser()` was a stub that always returned `null`, breaking Studio user lookup and author enrichment. It now resolves users by ID through Better Auth's internal database adapter, and `getUsers()` supports batch lookups.
+
 ## 1.1.2-alpha.0
 
 ### Patch Changes

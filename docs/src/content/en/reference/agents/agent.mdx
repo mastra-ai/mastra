@@ -108,6 +108,18 @@ export const agent = new Agent({
 })
 ```
 
+## Model strings
+
+For the simplest setup, pass `model` as a string in `provider/model` format. Separate the provider and model name with a slash. Mastra reads the matching provider credentials from the environment, so this format doesn't require a provider package or import.
+
+Popular provider strings and credentials:
+
+- **OpenAI**: `__GATEWAY_OPENAI_MODEL__` uses `OPENAI_API_KEY`.
+- **Anthropic**: `__GATEWAY_ANTHROPIC_MODEL_SONNET__` uses `ANTHROPIC_API_KEY`.
+- **Google**: `__GATEWAY_GOOGLE_MODEL__` uses `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`.
+
+See [models](/models) for supported model IDs and [environment variables](/models/environment-variables) for the complete provider list.
+
 ## Thread signals
 
 Use Agent signals to send real-time input and context into a memory thread. Message APIs are for user-authored input. `sendSignal()` is the lower-level API for system-generated context.
@@ -796,7 +808,8 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     name: 'model',
     type: 'MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>',
     isOptional: false,
-    description: 'The language model used by the agent. Can be provided statically or resolved at runtime.',
+    description:
+      'The language model used by the agent. Pass a model router string in `provider/model` format, a model configuration or provider instance, or a function that resolves the model at runtime. See [Model strings](#model-strings) for common providers and environment variables.',
   },
   {
     name: 'agents',

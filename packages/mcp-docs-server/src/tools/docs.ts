@@ -7,8 +7,7 @@ import { fromPackageRoot, getMatchingPaths } from '../utils';
 const docsBaseDir = fromPackageRoot('.docs/');
 
 type ReadDocsResult =
-  | { found: true; content: string; isSecurityViolation: boolean }
-  | { found: false; isSecurityViolation: boolean };
+  { found: true; content: string; isSecurityViolation: boolean } | { found: false; isSecurityViolation: boolean };
 
 // Helper function to list contents of a directory
 async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files: string[] }> {

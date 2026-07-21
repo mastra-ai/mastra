@@ -1,60 +1,20 @@
 import type { TaskItem } from '@mastra/core/signals';
-import { Bell, Database, Radio } from 'lucide-react';
+import { Database, Radio } from 'lucide-react';
 
-import { getNotificationMetadata, isRecord, isSignalData } from './signal-data';
+import { NotificationSignalNotice } from './notification-signal-notice';
+import { formatSignalValue, isRecord, isSignalData, signalContentsToText } from './signal-data';
 import type { SignalData } from './signal-data';
 
 export type SignalBadgeProps = {
   signal: unknown;
 };
 
-const contentsToText = (contents: unknown): string => {
-  if (typeof contents === 'string') return contents;
-  if (!Array.isArray(contents)) return '';
-
-  return contents
-    .map(part => {
-      if (!isRecord(part)) return '';
-      return part.type === 'text' && typeof part.text === 'string' ? part.text : '';
-    })
-    .filter(Boolean)
-    .join('\n');
-};
-
-const formatValue = (value: unknown): string | undefined => {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return undefined;
-};
-
 const getStateLabel = (signal: SignalData) => {
   const state = isRecord(signal.metadata?.state) ? signal.metadata.state : undefined;
   return {
-    id: formatValue(state?.id) ?? formatValue(signal.attributes?.id) ?? 'State signal',
-    mode: formatValue(state?.mode) ?? formatValue(signal.attributes?.mode),
+    id: formatSignalValue(state?.id) ?? formatSignalValue(signal.attributes?.id) ?? 'State signal',
+    mode: formatSignalValue(state?.mode) ?? formatSignalValue(signal.attributes?.mode),
   };
-};
-
-const getNotificationTitle = (signal: SignalData) => {
-  const notification = getNotificationMetadata(signal);
-  if (notification?.signal === 'summary' || signal.tagName === 'notification-summary') return 'Notification summary';
-  const source = notification?.source ?? formatValue(signal.attributes?.source);
-  const kind = notification?.kind ?? formatValue(signal.attributes?.kind);
-  if (source && kind) return `${source} / ${kind}`;
-  return source ?? kind ?? 'Notification';
-};
-
-const getToneClass = (priority: string | undefined) => {
-  switch (priority) {
-    case 'urgent':
-      return 'border-notice-destructive/20 bg-notice-destructive/20 text-notice-destructive-fg';
-    case 'high':
-      return 'border-notice-warning/20 bg-notice-warning/20 text-notice-warning-fg';
-    case 'medium':
-      return 'border-notice-info/20 bg-notice-info/20 text-notice-info-fg';
-    default:
-      return 'border-border1 bg-surface2 text-neutral5';
-  }
 };
 
 const Pill = ({ children }: { children: string }) => (
@@ -93,7 +53,7 @@ function getTaskSignalData(signal: SignalData): TaskItem[] | undefined {
 export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
   if (!isSignalData(value)) return null;
 
-  const text = contentsToText(value.contents);
+  const text = signalContentsToText(value.contents);
 
   if (value.type === 'state') {
     // Task signals are rendered in the docked TaskPanel (bottom of chat) instead
@@ -119,28 +79,7 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
   }
 
   if (value.type === 'notification') {
-    const notification = getNotificationMetadata(value);
-    const priority = notification?.priority ?? formatValue(value.attributes?.priority);
-    const pending = formatValue(notification?.pending) ?? formatValue(value.attributes?.pending);
-    const status = notification?.status ?? formatValue(value.attributes?.status);
-    const toneClass = getToneClass(priority);
-
-    return (
-      <div className={`my-2 max-w-[80%] rounded-lg border px-4 py-3 ${toneClass}`}>
-        <div className="flex items-start gap-3">
-          <Bell className="mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-ui-sm leading-ui-sm font-medium text-neutral6">{getNotificationTitle(value)}</p>
-              {priority ? <Pill>{priority}</Pill> : null}
-              {status ? <Pill>{status}</Pill> : null}
-              {pending ? <Pill>{`${pending} pending`}</Pill> : null}
-            </div>
-            {text ? <p className="mt-2 whitespace-pre-wrap break-words text-ui-sm leading-ui-md">{text}</p> : null}
-          </div>
-        </div>
-      </div>
-    );
+    return <NotificationSignalNotice signal={value} />;
   }
 
   if (value.type === 'reactive') {

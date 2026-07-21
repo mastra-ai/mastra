@@ -92,7 +92,7 @@ import type { AgentSkillsInput, SkillInput } from '../skills/types';
 import { InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
-import type { MastraAgentNetworkStream } from '../stream';
+import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
@@ -132,6 +132,18 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
+// Type-only imports from the durable module: erased at build time so they
+// don't create the runtime cycle `agent → agent/durable → agent`.
+import type {
+  DurableAgentListActiveRunsOptions,
+  DurableAgentListActiveRunsResult,
+  DurableAgentRecoverActiveRunsOptions,
+  DurableAgentRecoverActiveRunsResult,
+  DurableAgentRecoverOptions,
+  DurableAgentStreamOptions,
+  DurableAgentStreamResult,
+} from './durable/durable-agent';
+import type { AgentStepFinishEventData, AgentSuspendedEventData } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
@@ -186,6 +198,26 @@ import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+
+// Structural shape of the lazily-built `DurableAgent` wrapper used by
+// `Agent`'s standalone-durable delegators. Declared as a concrete interface
+// (rather than `Record<string, Function>`) so that under
+// `noUncheckedIndexedAccess` each method access is a non-optional function.
+interface StandaloneDurableWrapper {
+  stream: (...args: any[]) => any;
+  generate: (...args: any[]) => any;
+  resume: (...args: any[]) => any;
+  recover: (...args: any[]) => any;
+  resumeGenerate: (...args: any[]) => any;
+  resumeStream: (...args: any[]) => any;
+  approveToolCall: (...args: any[]) => any;
+  declineToolCall: (...args: any[]) => any;
+  streamUntilIdle: (...args: any[]) => any;
+  listActiveRuns: (...args: any[]) => any;
+  recoverActiveRuns: (...args: any[]) => any;
+  observe: (...args: any[]) => any;
+  prepare: (...args: any[]) => any;
+}
 
 const createSubAgentInputSchema = () =>
   z.object({
@@ -548,6 +580,14 @@ export class Agent<
   #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
   readonly #durable?: AgentDurableOption;
+  /**
+   * Cached DurableAgent wrapper created on-demand by `#getStandaloneDurable()`
+   * when `durable: true` is set on the config but the agent is not attached
+   * to a Mastra instance (which normally auto-wraps on registration). The
+   * wrapper is created via dynamic import to avoid the ESM init cycle
+   * `agent → agent/durable → agent`.
+   */
+  #standaloneDurable?: unknown;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas?: SubAgentToolSchemas;
@@ -928,17 +968,26 @@ export class Agent<
       maxRuns?: number;
       prompt?: string;
       id?: string;
+      activeDurationMs?: number;
     },
   ): Promise<GoalObjectiveRecord | undefined> {
     const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
     if (!store || !options.threadId) return undefined;
 
     const now = Date.now();
+    const suppliedActiveDurationMs = options.activeDurationMs;
+    const activeDurationMs =
+      suppliedActiveDurationMs !== undefined &&
+      Number.isFinite(suppliedActiveDurationMs) &&
+      suppliedActiveDurationMs >= 0
+        ? suppliedActiveDurationMs
+        : 0;
     const record: GoalObjectiveRecord = {
       id: options.id ?? randomUUID(),
       objective,
       status: 'active',
       runsUsed: 0,
+      activeDurationMs,
       startedAt: now,
       updatedAt: now,
       ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
@@ -1133,6 +1182,60 @@ export class Agent<
    */
   get durable(): AgentDurableOption | undefined {
     return this.#durable;
+  }
+
+  /**
+   * Self-referential `agent` accessor exposed only when this agent was
+   * constructed with `durable: true`.
+   *
+   * This lets `isDurableAgentLike()` return `true` for a standalone durable
+   * `Agent` — mirroring the duck-type shape of a real `DurableAgent` wrapper
+   * (`wrapper.agent` points to the wrapped `Agent`). External consumers can
+   * then treat a `new Agent({ durable: true })` as durable-capable without
+   * having to first register it with a Mastra instance.
+   *
+   * `Mastra.addAgent` disambiguates a self-referential placeholder from a real
+   * wrapper by checking `agent.agent === agent` and routes the placeholder
+   * through `createDurableAgent` so registration still produces a proper
+   * `DurableAgent` wrapper.
+   *
+   * Returns `undefined` when this agent is not durable so non-durable agents
+   * do not accidentally satisfy the durable duck-type.
+   */
+  get agent(): Agent<TAgentId, TTools, TOutput> | undefined {
+    return this.#durable ? (this as unknown as Agent<TAgentId, TTools, TOutput>) : undefined;
+  }
+
+  /**
+   * Resolve the DurableAgent that should handle `stream`/`generate` calls when
+   * this agent was constructed with `durable: true` but is being used
+   * standalone (i.e. no `Mastra` instance auto-wrapped it during registration).
+   *
+   * The wrapper is created lazily via a dynamic `import()` of the durable
+   * module to avoid the ESM initialization cycle
+   * `agent → agent/durable → agent` that would TDZ-break
+   * `class DurableAgent extends Agent`. The result is cached on
+   * `#standaloneDurable` so subsequent calls reuse the same wrapper.
+   *
+   * Returns `undefined` when the agent has already been registered with a
+   * Mastra instance (Mastra performs the wrapping itself) or when no
+   * `durable` config is set.
+   */
+  async #getStandaloneDurable(): Promise<StandaloneDurableWrapper | undefined> {
+    if (!this.#durable) return undefined;
+    // When attached to a Mastra instance, Mastra auto-wraps at registration
+    // and the caller is already talking to the DurableAgent — the raw
+    // `Agent` is only reached via internal delegation from the wrapper,
+    // which must not re-enter the durable path.
+    if (this.#mastra) return undefined;
+    if (this.#standaloneDurable) {
+      return this.#standaloneDurable as StandaloneDurableWrapper;
+    }
+    const { createDurableAgent } = await import('./durable/create-durable-agent');
+    const opts = this.#durable === true ? {} : (this.#durable as object);
+    const wrapper = createDurableAgent({ agent: this as unknown as Agent, ...opts });
+    this.#standaloneDurable = wrapper;
+    return wrapper as unknown as StandaloneDurableWrapper;
   }
 
   /**
@@ -1403,8 +1506,7 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, SubAgent<string, TRequestContext>>
-    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
+    Record<string, SubAgent<string, TRequestContext>> | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -2302,8 +2404,7 @@ export class Agent<
    * ```
    */
   public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentInstructions
-    | Promise<AgentInstructions> {
+    AgentInstructions | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
       const result = this.#instructions({
         requestContext: requestContext as RequestContext<TRequestContext>,
@@ -2421,9 +2522,7 @@ export class Agent<
    * ```
    */
   public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, unknown>
-    | undefined
-    | Promise<Record<string, unknown> | undefined> {
+    Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined> {
     if (this.#metadata === undefined) {
       return undefined;
     }
@@ -2567,8 +2666,7 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentExecutionOptions<TOutput>
-    | Promise<AgentExecutionOptions<TOutput>> {
+    AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -2611,8 +2709,7 @@ export class Agent<
    * ```
    */
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | NetworkOptions
-    | Promise<NetworkOptions> {
+    NetworkOptions | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -2654,8 +2751,7 @@ export class Agent<
    * ```
    */
   public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | TTools
-    | Promise<TTools> {
+    TTools | Promise<TTools> {
     if (typeof this.#tools !== 'function') {
       return ensureToolProperties(this.#tools) as TTools;
     }
@@ -3127,6 +3223,14 @@ export class Agent<
     // need the storage fallback.
     if (this.#ephemeralMastra) {
       this.#ephemeralMastra = undefined;
+    }
+
+    // Drop the standalone durable wrapper (if any) — Mastra registration
+    // means the durable path is now owned by the DurableAgent that Mastra
+    // created (or was passed) and callers should be talking to that
+    // instance directly. The wrapper is only meaningful pre-registration.
+    if (this.#standaloneDurable) {
+      this.#standaloneDurable = undefined;
     }
 
     // Propagate logger to workspace if it's a direct instance (not a factory function)
@@ -6099,8 +6203,7 @@ export class Agent<
     requestContext: RequestContext;
     structuredOutput?: boolean;
     overrideScorers?:
-      | MastraScorers
-      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+      MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
   } & ObservabilityContext) {
@@ -6537,7 +6640,13 @@ export class Agent<
     return resourceIdFromContext || memory?.resource || snapshotMemoryInfo?.resourceId;
   }
 
-  async #requireAgentExecutionFGA({
+  /**
+   * Enforce agent-level FGA (`agents:execute`) before running the agent.
+   * `protected` so durable/evented subclasses can enforce the same gate before
+   * their workflow-based execution (they override the public entry points and
+   * would otherwise bypass it).
+   */
+  protected async requireAgentExecutionFGA({
     requestContext,
     memory,
     runId,
@@ -6790,8 +6899,7 @@ export class Agent<
       : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
-          | { traceId?: string; spanId?: string; parentSpanId?: string }
-          | undefined)
+          { traceId?: string; spanId?: string; parentSpanId?: string } | undefined)
       : undefined;
 
     // Only fall back to persisted traceId/parentSpanId when the caller didn't provide
@@ -6987,6 +7095,7 @@ export class Agent<
     threadExists,
     structuredOutput = false,
     overrideScorers,
+    onTitleGenerated,
   }: AgentExecuteOnFinishOptions) {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
@@ -7091,26 +7200,24 @@ export class Agent<
               titleModel,
               titleInstructions,
               uiMessages,
-            ).then(
-              async title => {
+            )
+              .then(async title => {
                 if (title) {
-                  try {
-                    await memory.createThread({
-                      threadId: thread.id,
-                      resourceId,
-                      memoryConfig,
-                      title,
-                      metadata: thread.metadata,
-                    });
-                  } catch (error) {
-                    this.logger.error('Error persisting generated title:', error);
+                  await memory.createThread({
+                    threadId: thread.id,
+                    resourceId,
+                    memoryConfig,
+                    title,
+                    metadata: thread.metadata,
+                  });
+                  if (typeof onTitleGenerated === 'function') {
+                    await onTitleGenerated(title);
                   }
                 }
-              },
-              error => {
+              })
+              .catch(error => {
                 this.logger.error('Error persisting generated title:', error);
-              },
-            );
+              });
           }
         }
       } catch (e) {
@@ -7231,9 +7338,10 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
+        model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
-      } as unknown as AgentExecutionOptions<OUTPUT>,
+      },
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages,
@@ -7306,6 +7414,7 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
+        model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
@@ -7393,6 +7502,16 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path so callers using the agent outside of a
+    // `Mastra` instance still get durable execution. When attached to
+    // Mastra, the auto-wrap at registration means the caller already
+    // holds a `DurableAgent` and this branch is skipped.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.generate(messages, options) as Promise<FullOutput<OUTPUT>>;
+    }
+
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
@@ -7411,7 +7530,7 @@ export class Agent<
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
 
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
@@ -7961,6 +8080,16 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path so callers using the agent outside of a
+    // `Mastra` instance still get durable streams. When attached to Mastra,
+    // the auto-wrap at registration means the caller already holds a
+    // `DurableAgent` and this branch is skipped.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.stream(messages, streamOptions) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
@@ -7996,7 +8125,7 @@ export class Agent<
       );
     }
 
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
@@ -8173,6 +8302,13 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.streamUntilIdle(messages, streamOptions) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
     return runStreamUntilIdle<OUTPUT>(this, messages, streamOptions, {
       activeStreams: this.#activeStreamUntilIdle,
       bgManager: this.#mastra?.backgroundTaskManager,
@@ -8290,6 +8426,13 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.resumeStream(resumeData, streamOptions) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
@@ -8335,7 +8478,7 @@ export class Agent<
       loopStreamOptions.memory = mergedStreamOptions.memory;
     }
 
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedStreamOptions.requestContext,
       memory: mergedStreamOptions.memory,
       runId: mergedStreamOptions.runId,
@@ -8478,6 +8621,14 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path so callers using the agent outside of a
+    // `Mastra` instance still get durable execution.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.resumeGenerate(resumeData, options) as Promise<FullOutput<OUTPUT>>;
+    }
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -8491,11 +8642,8 @@ export class Agent<
     delete loopOptions.actor;
 
     const runId = options?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
-      runId,
-      method: 'resumeGenerate',
-    });
-    await this.#requireAgentExecutionFGA({
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
@@ -8616,6 +8764,13 @@ export class Agent<
   async approveToolCall<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.approveToolCall(options) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
     // @ts-expect-error - the types here are wrong
     return this.resumeStream({ approved: true }, options);
   }
@@ -8840,6 +8995,13 @@ export class Agent<
   async declineToolCall<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.declineToolCall(options) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
     // @ts-expect-error - the types here are wrong
     return this.resumeStream({ approved: false }, options);
   }
@@ -9066,4 +9228,105 @@ export class Agent<
       });
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Durable-agent method delegators
+  //
+  // These methods only make sense when the agent was constructed with
+  // `durable: true`. They mirror the public surface of `DurableAgent` (which
+  // extends `Agent`) so that a standalone `new Agent({ durable: true })` — used
+  // without being attached to a `Mastra` instance — can still drive durable
+  // execution. Each delegator resolves the lazily-built standalone
+  // `DurableAgent` wrapper via `#getStandaloneDurable()` and forwards the call.
+  //
+  // On a non-durable agent they throw `AGENT_DURABLE_METHOD_NOT_AVAILABLE` so
+  // callers get a clear error instead of a confusing "not a function" from a
+  // typo-safe method that silently does nothing.
+  //
+  // When the agent is attached to a `Mastra`, Mastra auto-wraps at
+  // registration and the caller already holds a `DurableAgent`, so the base
+  // methods below are unreachable via the wrapper — `#getStandaloneDurable()`
+  // returns `undefined` and the throw path fires. To avoid that misleading
+  // error, callers should either use the wrapper Mastra hands back or omit the
+  // `Mastra` registration and rely on the standalone wrapper.
+  // ---------------------------------------------------------------------------
+
+  async #requireStandaloneDurable(method: string): Promise<StandaloneDurableWrapper> {
+    const durable = await this.#getStandaloneDurable();
+    if (!durable) {
+      throw new MastraError({
+        id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent.${method}() is only available on agents constructed with \`durable: true\`. Configure \`new Agent({ durable: true })\` or retrieve the durable agent from a registered Mastra instance.`,
+        details: { agentId: this.id, method },
+      });
+    }
+    return durable;
+  }
+
+  /** Resume a suspended durable run. Only valid when `durable: true`. */
+  async resume(
+    runId: string,
+    resumeData: unknown,
+    options?: DurableAgentStreamOptions<TOutput>,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
+    const durable = await this.#requireStandaloneDurable('resume');
+    return durable.resume(runId, resumeData, options) as Promise<DurableAgentStreamResult<TOutput>>;
+  }
+
+  /** Recover a persisted durable run in a fresh process. Only valid when `durable: true`. */
+  async recover(
+    runId: string,
+    options?: DurableAgentRecoverOptions<TOutput>,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
+    const durable = await this.#requireStandaloneDurable('recover');
+    return durable.recover(runId, options) as Promise<DurableAgentStreamResult<TOutput>>;
+  }
+
+  /** List active durable runs. Only valid when `durable: true`. */
+  async listActiveRuns(options?: DurableAgentListActiveRunsOptions): Promise<DurableAgentListActiveRunsResult> {
+    const durable = await this.#requireStandaloneDurable('listActiveRuns');
+    return durable.listActiveRuns(options) as Promise<DurableAgentListActiveRunsResult>;
+  }
+
+  /** Bulk-recover active durable runs. Only valid when `durable: true`. */
+  async recoverActiveRuns(
+    options?: DurableAgentRecoverActiveRunsOptions,
+  ): Promise<DurableAgentRecoverActiveRunsResult> {
+    const durable = await this.#requireStandaloneDurable('recoverActiveRuns');
+    return durable.recoverActiveRuns(options) as Promise<DurableAgentRecoverActiveRunsResult>;
+  }
+
+  /** Observe an in-flight durable run without driving it. Only valid when `durable: true`. */
+  async observe(
+    runId: string,
+    options?: {
+      offset?: number;
+      onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
+      onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+      onFinish?: MastraOnFinishCallback<TOutput>;
+      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+      onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+    },
+  ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {
+    const durable = await this.#requireStandaloneDurable('observe');
+    return durable.observe(runId, options) as Promise<
+      Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }
+    >;
+  }
+
+  /** Prepare a durable execution without starting it. Only valid when `durable: true`. */
+  async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>): Promise<unknown> {
+    const durable = await this.#requireStandaloneDurable('prepare');
+    return durable.prepare(messages, options);
+  }
+
+  // Note: `getWorkflow()` and `getDurableWorkflows()` are intentionally NOT
+  // added to base `Agent`. `DurableAgent` defines them synchronously (and
+  // `getDurableWorkflows` is called by `Mastra.addAgent` at registration
+  // time), so a base async delegator would break the overridden sync
+  // signatures. Callers that need those APIs should hold a `DurableAgent`
+  // reference — either by using `createDurableAgent()` explicitly or by
+  // reading the agent back from a registered `Mastra`.
 }

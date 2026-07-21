@@ -6,15 +6,15 @@ nonword: true
 scope: heading
 tokens:
   # "X, not Y" / "X, never Y"
-  - "[A-Z][a-z]+, not [a-z]+"
-  - "[A-Z][a-z]+, never [a-z]+"
+  - '[A-Z][a-z]+, not [a-z]+'
+  - '[A-Z][a-z]+, never [a-z]+'
 
   # "X, then Y"
-  - "[A-Z][a-z]+, then [a-z]+"
+  - '[A-Z][a-z]+, then [a-z]+'
 
   # "X over Y"
-  - "[A-Z][a-z]+ over [a-z]+"
+  - '[A-Z][a-z]+ over [a-z]+'
 
   # "X first, Y second"
-  - "[A-Z][a-z]+ first, [a-z]+ second"
-  - "[A-Z][a-z]+ first, [a-z]+ never"
+  - '[A-Z][a-z]+ first, [a-z]+ second'
+  - '[A-Z][a-z]+ first, [a-z]+ never'

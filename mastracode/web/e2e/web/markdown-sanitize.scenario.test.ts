@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderMarkdown } from '../../src/web/ui/ui/Markdown.js';
 
@@ -6,6 +6,10 @@ import { renderMarkdown } from '../../src/web/ui/ui/Markdown.js';
 // contain attacker-influenced text (file contents, tool output, fetched pages).
 // These tests pin the sanitization that prevents XSS from that content.
 describe('markdown sanitization', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('drops javascript: link hrefs but keeps the visible text', () => {
     const html = renderMarkdown('[click me](javascript:alert(1))');
     expect(html).not.toMatch(/javascript:/i);
@@ -48,5 +52,25 @@ describe('markdown sanitization', () => {
     const html = renderMarkdown('`<img src=x onerror=alert(1)>`');
     expect(html).not.toMatch(/<img[^>]*onerror/i);
     expect(html).toContain('&lt;img');
+  });
+
+  it('escapes the raw source when markdown parsing throws', async () => {
+    // A payload crafted to trigger a parser error must not bypass sanitization:
+    // the catch fallback escapes the raw source instead of returning it as-is.
+    vi.resetModules();
+    vi.doMock('marked', () => ({
+      Marked: class {
+        use() {}
+        parse() {
+          throw new Error('parse error');
+        }
+      },
+    }));
+    const { renderMarkdown: render } = await import('../../src/web/ui/ui/Markdown.js');
+    const html = render('<img src=x onerror=alert(1)>');
+    expect(html).not.toMatch(/<img[^>]*onerror/i);
+    expect(html).toContain('&lt;img');
+    vi.doUnmock('marked');
+    vi.resetModules();
   });
 });

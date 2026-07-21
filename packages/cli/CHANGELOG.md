@@ -1,5 +1,139 @@
 # mastra
 
+## 1.20.0-alpha.10
+
+### Patch Changes
+
+- Added request-scoped model overrides to agent execution and approvals, and fixed Studio model selection so each tab can use a different model without changing the agent's configured default. ([#19749](https://github.com/mastra-ai/mastra/pull/19749))
+
+  ```ts
+  await agent.stream(messages, { model: 'google/gemini-2.5-flash' });
+  ```
+
+- Updated dependencies [[`41a5392`](https://github.com/mastra-ai/mastra/commit/41a5392d9f6c5e18d6b227f0fc0ddf49c50774e9), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`da009e1`](https://github.com/mastra-ai/mastra/commit/da009e1aacd89ed94b8d1b2af09c9d4fe7c4db49), [`35c2181`](https://github.com/mastra-ai/mastra/commit/35c2181e6a50e47c90ba36260db7c9723d54696f), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`eac4537`](https://github.com/mastra-ai/mastra/commit/eac453795531df0d5fe3729d80e93a91f8c1bc91), [`c328769`](https://github.com/mastra-ai/mastra/commit/c3287698ff8ef98dba86d415faa566fa3e5f4d56), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`232fcbc`](https://github.com/mastra-ai/mastra/commit/232fcbc14fce625dd672ba043329c0b732c62be2), [`3491666`](https://github.com/mastra-ai/mastra/commit/34916663c4fdd43b48c21f4ab2d5fb6dcccc94f9)]:
+  - @mastra/core@1.52.0-alpha.10
+  - @mastra/deployer@1.52.0-alpha.10
+
+## 1.20.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`0a2c22c`](https://github.com/mastra-ai/mastra/commit/0a2c22c902604439ec490319e14c17f331e0c84c), [`3a8024c`](https://github.com/mastra-ai/mastra/commit/3a8024ce615f8aa89479c0d71fe61d10bb0040be)]:
+  - @mastra/core@1.52.0-alpha.9
+  - @mastra/deployer@1.52.0-alpha.9
+
+## 1.20.0-alpha.8
+
+### Patch Changes
+
+- Fixed Babel 8 compatibility for build-time transforms. ([#19393](https://github.com/mastra-ai/mastra/pull/19393))
+
+- dependencies updates: ([#19393](https://github.com/mastra-ai/mastra/pull/19393))
+  - Updated dependency [`@babel/parser@^8.0.4` ↗︎](https://www.npmjs.com/package/@babel/parser/v/8.0.4) (from `^7.29.7`, in `dependencies`)
+  - Updated dependency [`@babel/types@^8.0.4` ↗︎](https://www.npmjs.com/package/@babel/types/v/8.0.4) (from `^7.29.7`, in `dependencies`)
+- Updated dependencies [[`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`6b1bf3b`](https://github.com/mastra-ai/mastra/commit/6b1bf3b9494bd51aa8f654c68c9355d6046fa2a1), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9)]:
+  - @mastra/deployer@1.52.0-alpha.8
+  - @mastra/core@1.52.0-alpha.8
+
+## 1.20.0-alpha.7
+
+### Minor Changes
+
+- Deploy now offers to attach a managed database inline when preflight would otherwise block on a missing database env var (`TURSO_DATABASE_URL`, `DATABASE_URL`, ...). Previously the CLI errored out and told you to run `mastra env db create` yourself, then re-run `mastra deploy`. ([#19653](https://github.com/mastra-ai/mastra/pull/19653))
+
+  The new flow:
+
+  ```
+  Preflight needs TURSO_DATABASE_URL for the production environment.
+  Create a managed turso database now and attach it? (Y/n)
+  ```
+
+  Answer yes and the CLI provisions the database, attaches it to the target environment (scoped, not shared), and continues the deploy in the same run. Answer no, or run in a non-interactive shell (CI, `--yes`), and the CLI falls back to the previous behavior and prints the exact `mastra env db create --kind ...` command as remediation.
+
+  The prompt only appears in an interactive TTY. `--yes` never silently creates infrastructure — it just skips the prompt and leaves the original preflight error in place, so CI stays deterministic. Resolves the deploy-time papercut tracked in the deploy-experience issue on `create-mastra` auto-provisioning: no manual command, no CLI restart, no extra login step.
+
+- Changed the default scope for `mastra env db create`. It now creates an **environment-scoped** database instead of a project-scoped one shared by every environment. This matches the more common case of isolating production and staging data. ([#19653](https://github.com/mastra-ai/mastra/pull/19653))
+
+  **How the default is picked**
+  - If the project has one environment, that environment is used automatically.
+  - If it has several and the terminal is interactive, the CLI prompts you to select one (production pre-selected when present).
+  - In non-interactive mode (CI, `--json`) with multiple environments, the CLI now errors and asks you to pass an environment name or `--shared`, instead of silently attaching a shared database.
+
+  **New `--shared` flag**
+
+  Opt in to the old project-scoped behavior explicitly:
+
+  ```bash
+  # Before (implicit shared scope)
+  mastra env db create --kind turso
+
+  # After (same effect)
+  mastra env db create --kind turso --shared
+
+  # Or scope to a specific environment
+  mastra env db create staging --kind turso
+  ```
+
+### Patch Changes
+
+- Fixed a crash in mastra worker start when a worker subprocess writes a very large amount of stderr output. The output is now capped to the most recent 1MB instead of growing without limit. ([#19675](https://github.com/mastra-ai/mastra/pull/19675))
+
+- Preflight remediation messages now scope `mastra env db create` to the target environment as a positional argument (`mastra env db create production --kind turso`) instead of the unscoped form. There is no `--env` flag — the environment is a positional arg on this command. After the earlier default-scope change, running the unscoped command in CI (where preflight failures land) errors out on projects with more than one environment because it cannot prompt. The scoped form is copy-pasteable and works everywhere. ([#19653](https://github.com/mastra-ai/mastra/pull/19653))
+
+- Preflight remediation for missing DB env vars now renders as a step list — one arrow line per option (`Run mastra env db create <env> --kind <kind>` on line 1, `Or set <ENV_VAR> in your env file` on line 2) — instead of a single run-on sentence that squashed both options into a wall of text. ([#19653](https://github.com/mastra-ai/mastra/pull/19653))
+
+- Removes the `Environment "production" doesn't exist. Create it?` confirmation on first deploy. It always fires on a fresh project, always gets 'yes', and the whole point of `mastra deploy` is 'ship this to production' — the extra keypress is pure noise. The confirmation still runs for non-standard environment names (typo protection against `--env prodcution`). ([#19653](https://github.com/mastra-ai/mastra/pull/19653))
+
+- Updated dependencies [[`b7e79c3`](https://github.com/mastra-ai/mastra/commit/b7e79c3c02ac5cd415db34ba0975ceafc1464333), [`b75d749`](https://github.com/mastra-ai/mastra/commit/b75d749621ff5d17e86bcb4ee809d301fb4f7cf3), [`a8799bb`](https://github.com/mastra-ai/mastra/commit/a8799bb8e44f4a60d01e4e2acd3448ff80bf14f8)]:
+  - @mastra/core@1.52.0-alpha.7
+  - @mastra/deployer@1.52.0-alpha.7
+
+## 1.20.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`a40adeb`](https://github.com/mastra-ai/mastra/commit/a40adeb222b961a56a58af56a106106525721b74), [`821648b`](https://github.com/mastra-ai/mastra/commit/821648bf2871ef840100c7bacbecf676010bd12a), [`11f6cd9`](https://github.com/mastra-ai/mastra/commit/11f6cd96fe42582403416608beb212cc1a2cc79e)]:
+  - @mastra/core@1.52.0-alpha.6
+  - @mastra/deployer@1.52.0-alpha.6
+
+## 1.20.0-alpha.5
+
+### Minor Changes
+
+- `mastra build` now deploys in one step for push-style deployers. Deployers can opt in with the new `deployOnBuild` flag on the deployer contract, and the build runs their `deploy()` right after bundling. `SandboxDeployer` from `@mastra/deployer-sandbox` opts in, so configuring it means `mastra build` bundles your project, deploys it into the sandbox, and prints the live URL. Existing platform deployers are unchanged. ([#19577](https://github.com/mastra-ai/mastra/pull/19577))
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+  import { SandboxDeployer } from '@mastra/deployer-sandbox';
+  import { VercelSandbox } from '@mastra/vercel';
+
+  export const mastra = new Mastra({
+    deployer: new SandboxDeployer({
+      sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+    }),
+  });
+  ```
+
+  ```bash
+  mastra build # bundles AND deploys — prints the live URL
+  ```
+
+### Patch Changes
+
+- Fixed a crash where `mastra start` could exit with `RangeError: Invalid string length`. The command retained every byte a running server wrote to stderr in an ever-growing buffer; on long-running or noisy servers this eventually exceeded the maximum string length and took down the process. The retained buffer is now capped at its most recent 1MB, which still contains the crash diagnostics it is inspected for ([#19581](https://github.com/mastra-ai/mastra/issues/19581)). ([#19604](https://github.com/mastra-ai/mastra/pull/19604))
+
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/core@1.52.0-alpha.5
+  - @mastra/deployer@1.52.0-alpha.5
+
+## 1.19.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`4cfdd64`](https://github.com/mastra-ai/mastra/commit/4cfdd645794feaea0c4ea711e70ecdfbef0c5b8e)]:
+  - @mastra/core@1.52.0-alpha.4
+  - @mastra/deployer@1.52.0-alpha.4
+
 ## 1.19.1-alpha.3
 
 ### Patch Changes

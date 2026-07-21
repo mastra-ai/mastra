@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GithubSignalSubscriptionRow } from './schema';
+import type { GithubSignalSubscriptionRow } from './subscriptions';
 
-const getRepositoryCollaboratorPermission = vi.hoisted(() =>
-  vi.fn<() => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>>(async () => 'write'),
-);
-vi.mock('./client', () => ({ getRepositoryCollaboratorPermission }));
+const getRepositoryCollaboratorPermission = vi.fn<
+  (
+    installationId: number,
+    repoFullName: string,
+    username: string,
+    signal?: AbortSignal,
+  ) => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>
+>(async () => 'write');
+// Stub integration: dispatch consumes the injected instance for permission checks.
+const githubStub = { getRepositoryCollaboratorPermission } as unknown as import('./integration').GithubIntegration;
 import { classifyGithubWebhook, dispatchGithubWebhook, type ParsedGithubWebhook } from './webhook';
 
 function parsed(event: string, action: string, extra: Record<string, unknown> = {}): ParsedGithubWebhook {
@@ -26,19 +32,22 @@ function subscription(id: string, scope: string, threadId = `thread-${id}`): Git
   return {
     id,
     orgId: 'org-1',
-    installationId: 7,
-    githubProjectId: 'project-1',
-    repoId: 99,
-    repoFullName: 'octo/hello',
-    pullRequestNumber: 34,
+    targetKey: 'change-request:7:99:34',
     sessionId: `session-${id}`,
-    ownerId: 'owner-1',
     resourceId: 'resource-1',
     threadId,
     sessionScope: scope,
-    source: 'explicit-tool',
     status: 'open',
-    subscribedByUserId: 'user-1',
+    data: {
+      installationExternalId: '7',
+      projectRepositoryId: 'project-repository-1',
+      repositoryExternalId: '99',
+      repositorySlug: 'octo/hello',
+      changeRequestId: '34',
+      ownerId: 'owner-1',
+      source: 'explicit-tool',
+      subscribedByUserId: 'user-1',
+    },
     createdAt: new Date('2026-07-13T00:00:00Z'),
     updatedAt: new Date('2026-07-13T00:00:00Z'),
   };
@@ -100,31 +109,37 @@ describe('dispatchGithubWebhook', () => {
       }),
       {
         controller: {} as never,
+        github: githubStub,
         listSubscriptions,
       },
     );
 
     expect(result).toEqual({ delivered: 0, failed: 0, ignored: true });
-    expect(getRepositoryCollaboratorPermission).toHaveBeenCalledWith(7, 'octo/hello', 'ada');
+    expect(getRepositoryCollaboratorPermission).toHaveBeenCalledWith(7, 'octo/hello', 'ada', expect.any(AbortSignal));
     expect(listSubscriptions).not.toHaveBeenCalled();
   });
 
   it('fails closed when the collaborator permission check times out', async () => {
     vi.useFakeTimers();
     try {
-      getRepositoryCollaboratorPermission.mockImplementation(() => new Promise(() => undefined));
+      let permissionSignal: AbortSignal | undefined;
+      getRepositoryCollaboratorPermission.mockImplementation((_installationId, _repository, _sender, signal) => {
+        permissionSignal = signal;
+        return new Promise(() => undefined);
+      });
       const listSubscriptions = vi.fn(async () => [subscription('a', '/worktrees/a')]);
       const result = dispatchGithubWebhook(
         parsed('issue_comment', 'created', {
           issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
           pull_request: undefined,
         }),
-        { controller: {} as never, listSubscriptions },
+        { controller: {} as never, github: githubStub, listSubscriptions },
       );
 
       await vi.advanceTimersByTimeAsync(5_000);
 
       await expect(result).resolves.toEqual({ delivered: 0, failed: 0, ignored: true });
+      expect(permissionSignal?.aborted).toBe(true);
       expect(listSubscriptions).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
@@ -140,12 +155,16 @@ describe('dispatchGithubWebhook', () => {
       sender: { login: 'coderabbitai[bot]', type: 'Bot' },
     });
 
-    await expect(dispatchGithubWebhook(unauthorized, { controller: {} as never, listSubscriptions })).resolves.toEqual({
+    await expect(
+      dispatchGithubWebhook(unauthorized, { controller: {} as never, github: githubStub, listSubscriptions }),
+    ).resolves.toEqual({
       delivered: 0,
       failed: 0,
       ignored: true,
     });
-    await expect(dispatchGithubWebhook(authorized, { controller: {} as never, listSubscriptions })).resolves.toEqual({
+    await expect(
+      dispatchGithubWebhook(authorized, { controller: {} as never, github: githubStub, listSubscriptions }),
+    ).resolves.toEqual({
       delivered: 0,
       failed: 0,
       ignored: false,
@@ -186,7 +205,11 @@ describe('dispatchGithubWebhook', () => {
       ownerId: 'owner-1',
       resourceId: 'resource-1',
       scope: '/worktrees/b',
-      tags: { githubProjectId: 'project-1', projectPath: '/worktrees/b' },
+      tags: {
+        factoryProjectId: 'resource-1',
+        projectRepositoryId: 'project-repository-1',
+        worktreePath: '/worktrees/b',
+      },
     });
     expect(switchB).not.toHaveBeenCalled();
     expect(sendA).toHaveBeenCalledWith(
@@ -236,7 +259,7 @@ describe('dispatchGithubWebhook', () => {
       retireSubscription: updateStatus,
     });
 
-    expect(listSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ pullRequestNumber: 34 }), {
+    expect(listSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ changeRequestId: '34' }), {
       includeTerminal: true,
     });
     expect(updateStatus).toHaveBeenCalledWith('a', 'open');

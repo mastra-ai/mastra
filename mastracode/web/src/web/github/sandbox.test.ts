@@ -1,48 +1,55 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Capture DB updates without a real Postgres. `getAppDb()` returns a chainable
-// stub whose terminal `.where()` records the `set(...)` payload.
 const dbUpdates: Array<Record<string, unknown>> = [];
-vi.mock('./db', () => ({
-  getAppDb: () => ({
-    update: () => ({
-      set: (values: Record<string, unknown>) => ({
-        where: async () => {
-          dbUpdates.push(values);
-        },
-      }),
-    }),
-  }),
-}));
 
+import { resetSandboxFactory, setSandboxFactory } from '../sandbox/fleet';
+import type { MaterializationSandbox, SandboxCommandResult } from '../sandbox/fleet';
 import {
-  computeSandboxWorkdir,
   computeWorktreePath,
   configureGitIdentity,
   createPullRequest,
-  ensureProjectSandbox,
+  ensureProjectSandbox as ensureProjectSandboxWithStorage,
   ensureWorktree,
-  getSandboxIdleMinutes,
-  getSandboxProvider,
-  isSandboxEnabled,
   isValidGitRef,
-  materializeRepo,
+  materializeRepo as materializeRepoWithStorage,
   MaterializeError,
   pushBranch,
-  resetSandboxFactory,
   resolveGitIdentity,
   runWorktreeSetup,
   safeBranchDir,
-  setSandboxFactory,
   shellQuote,
   withInstallToken,
   WorktreeError,
 } from './sandbox';
-import type { MaterializationSandbox, RepoMaterializeInfo, SandboxCommandResult } from './sandbox';
-import type { GithubProjectSandboxRow } from './schema';
+import type { RepoMaterializeInfo } from './sandbox';
+import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
-import { LocalSandboxProvider } from '../sandbox-local-provider';
-import { RailwaySandboxProvider } from '../sandbox-railway-provider';
+
+/** Minimal cloneable template sandbox standing in for Railway/Local instances. */
+function templateSandbox(opts: { provider?: string; idleTimeoutMinutes?: number } = {}): WorkspaceSandbox {
+  const template = {
+    id: 'template-1',
+    name: 'Template',
+    provider: opts.provider ?? 'railway',
+    ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
+    clone: () => template,
+  };
+  return template as unknown as WorkspaceSandbox;
+}
+
+/** Seed the runtime-config registry with a factory-shaped sandbox runtime. */
+function seedSandboxRuntime(
+  opts: { provider?: string; idleTimeoutMinutes?: number; workdirBase?: string; maxSandboxes?: number } = {},
+): void {
+  seedRuntimeConfig({
+    sandbox: {
+      machine: templateSandbox(opts),
+      workdirBase: opts.workdirBase ?? '/workspace',
+      ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
+    },
+  });
+}
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };
@@ -73,10 +80,10 @@ class FakeSandbox implements MaterializationSandbox {
   }
 }
 
-function makeRow(overrides: Partial<GithubProjectSandboxRow> = {}): GithubProjectSandboxRow {
+function makeRow(overrides: Partial<ProjectRepositorySandbox> = {}): ProjectRepositorySandbox {
   return {
     id: 'sbrow-1',
-    githubProjectId: 'proj-1',
+    projectRepositoryId: 'project-repository-1',
     userId: 'user-1',
     sandboxId: null,
     sandboxWorkdir: '/workspace/hello',
@@ -90,90 +97,41 @@ function makeRepoInfo(overrides: Partial<RepoMaterializeInfo> = {}): RepoMateria
   return { repoFullName: 'octocat/hello', defaultBranch: 'main', ...overrides };
 }
 
-// RailwaySandboxProvider.isEnabled() honors the SDK's own env credential
-// fallback; clear it per test so host-machine env can't leak in, and restore
-// the pre-suite value afterwards so later suites see an unchanged environment.
-const ORIGINAL_RAILWAY_API_TOKEN = process.env.RAILWAY_API_TOKEN;
+const storage = {
+  setSandboxId: vi.fn(async ({ sandboxId }: { id: string; sandboxId: string }) => {
+    dbUpdates.push({ sandboxId });
+  }),
+  clearBinding: vi.fn(async (_input: { id: string }) => {
+    dbUpdates.push({ sandboxId: null });
+  }),
+  markMaterialized: vi.fn(async (_input: { id: string }) => {
+    dbUpdates.push({ materializedAt: new Date() });
+  }),
+} as unknown as SourceControlStorageHandle['sandboxes'];
+
+function ensureProjectSandbox(
+  row: ProjectRepositorySandbox,
+  onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[2],
+) {
+  return ensureProjectSandboxWithStorage(row, storage, onProgress);
+}
+
+function materializeRepo(
+  row: ProjectRepositorySandbox,
+  repoInfo: RepoMaterializeInfo,
+  sandbox: MaterializationSandbox,
+  token: string,
+) {
+  return materializeRepoWithStorage(row, repoInfo, sandbox, token, storage);
+}
 
 beforeEach(() => {
   dbUpdates.length = 0;
-  delete process.env.RAILWAY_API_TOKEN;
 });
 
 afterEach(() => {
   resetSandboxFactory();
   __resetRuntimeConfigForTests();
-  if (ORIGINAL_RAILWAY_API_TOKEN === undefined) {
-    delete process.env.RAILWAY_API_TOKEN;
-  } else {
-    process.env.RAILWAY_API_TOKEN = ORIGINAL_RAILWAY_API_TOKEN;
-  }
-});
-
-describe('getSandboxProvider', () => {
-  it('reports the seeded adapter kind', () => {
-    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'tok' }) });
-    expect(getSandboxProvider()).toBe('railway');
-    __resetRuntimeConfigForTests();
-    seedRuntimeConfig({ sandbox: new LocalSandboxProvider() });
-    expect(getSandboxProvider()).toBe('local');
-  });
-
-  it('reports none when no sandbox provider is configured', () => {
-    expect(getSandboxProvider()).toBe('none');
-  });
-});
-
-describe('isSandboxEnabled', () => {
-  it('is true for railway when a token is configured', () => {
-    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'tok' }) });
-    expect(isSandboxEnabled()).toBe(true);
-  });
-
-  it('is false for railway without a token', () => {
-    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider() });
-    expect(isSandboxEnabled()).toBe(false);
-  });
-
-  it('is true for the local provider without any token', () => {
-    seedRuntimeConfig({ sandbox: new LocalSandboxProvider() });
-    expect(isSandboxEnabled()).toBe(true);
-  });
-
-  it('is false when no sandbox provider is configured', () => {
-    expect(isSandboxEnabled()).toBe(false);
-  });
-});
-
-describe('computeSandboxWorkdir', () => {
-  it('defaults to /workspace/<repo> for the railway provider', () => {
-    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'tok' }) });
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/workspace/hello');
-  });
-
-  it('appends the repo name to a configured base', () => {
-    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'tok', workdirBase: '/srv/checkouts' }) });
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/checkouts/hello');
-  });
-
-  it('does not double-append when the base already ends in the repo name', () => {
-    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'tok', workdirBase: '/srv/hello' }) });
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/hello');
-  });
-
-  it('checks out under the configured root for the local provider, keyed by owner + name', () => {
-    seedRuntimeConfig({ sandbox: new LocalSandboxProvider({ root: '/tmp/mc-sandboxes' }) });
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/tmp/mc-sandboxes/octocat/hello');
-  });
-
-  it('defaults the local root to ~/.mastracode/web/sandboxes', () => {
-    seedRuntimeConfig({ sandbox: new LocalSandboxProvider() });
-    expect(computeSandboxWorkdir('octocat/hello')).toMatch(/\.mastracode\/web\/sandboxes\/octocat\/hello$/);
-  });
-
-  it('throws when no sandbox provider is configured', () => {
-    expect(() => computeSandboxWorkdir('octocat/hello')).toThrow(/No sandbox provider configured/);
-  });
 });
 
 describe('ensureProjectSandbox', () => {
@@ -202,8 +160,8 @@ describe('ensureProjectSandbox', () => {
     expect(dbUpdates).toEqual([]);
   });
 
-  it('passes the idle timeout to the provider on provision', async () => {
-    seedRuntimeConfig({ sandbox: new LocalSandboxProvider({ idleMinutes: 15 }) });
+  it('passes the template-configured idle timeout on provision', async () => {
+    seedSandboxRuntime({ idleTimeoutMinutes: 15 });
     const sandbox = new FakeSandbox();
     let factoryArgs: { idleTimeoutMinutes?: number } | undefined;
     setSandboxFactory(opts => {
@@ -238,22 +196,6 @@ describe('ensureProjectSandbox', () => {
     expect(fresh.startCount).toBe(1);
     // The stale id is cleared, then the new provider id persisted.
     expect(dbUpdates).toEqual([{ sandboxId: null }, { sandboxId: 'railway-vm-new' }]);
-  });
-});
-
-describe('getSandboxIdleMinutes', () => {
-  it('defaults to 30 minutes when the adapter does not specify one', () => {
-    seedRuntimeConfig({ sandbox: new LocalSandboxProvider() });
-    expect(getSandboxIdleMinutes()).toBe(30);
-  });
-
-  it('defaults to 30 minutes when no adapter is configured', () => {
-    expect(getSandboxIdleMinutes()).toBe(30);
-  });
-
-  it('reads the adapter-configured window', () => {
-    seedRuntimeConfig({ sandbox: new LocalSandboxProvider({ idleMinutes: 45 }) });
-    expect(getSandboxIdleMinutes()).toBe(45);
   });
 });
 

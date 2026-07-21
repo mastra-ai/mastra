@@ -180,6 +180,6 @@ describe('initial transcript (thread history rendering)', () => {
     const state = createInitialTranscript({ messages: [], threadId: 'empty' });
     expect(state.entries).toHaveLength(0);
     expect(state.threadId).toBe('empty');
-    expect(state.running).toBe(false);
+    expect(state.pending).toBe(false);
   });
 });

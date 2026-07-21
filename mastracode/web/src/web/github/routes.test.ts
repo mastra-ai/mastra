@@ -15,40 +15,170 @@ vi.mock('drizzle-orm', () => ({
 // In-memory tables so route handlers exercise real query-builder call shapes
 // against a tiny fake. We only model the operations the routes actually use.
 interface Tables {
-  installations: Array<{
-    orgId?: string;
-    userId: string;
-    installationId: number;
-    accountLogin: string | null;
-    accountType: string | null;
-  }>;
-  projects: Array<Record<string, any>>;
+  installations: Array<Record<string, any>>;
+  repositories: Array<Record<string, any>>;
+  connections: Array<Record<string, any>>;
+  projectRepositories: Array<Record<string, any>>;
   sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
   subscriptions: Array<Record<string, any>>;
 }
-const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [], subscriptions: [] };
+const tables: Tables = {
+  installations: [],
+  repositories: [],
+  connections: [],
+  projectRepositories: [],
+  sandboxes: [],
+  worktrees: [],
+  subscriptions: [],
+};
 
-// Capture audit events at the store boundary so the real `emitAudit` path
-// (actor resolution, request context, never-throws) is exercised end to end.
+import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
+const sourceControlStorage = new SourceControlStorageInMemory();
+
+function installationRow(row: Record<string, any>) {
+  return {
+    id: row.id ?? `installation-${row.orgId}-${row.installationId}`,
+    integrationId: 'github',
+    orgId: row.orgId,
+    connectedByUserId: row.userId,
+    externalId: String(row.installationId),
+    accountName: row.accountLogin ?? null,
+    accountType: row.accountType ?? null,
+    providerMetadata: {},
+    createdAt: row.createdAt ?? new Date(),
+  };
+}
+
+function projectRepositoryRow(row: Record<string, any>) {
+  const installationId = `installation-${row.orgId}-${row.installationId}`;
+  const repositoryId = `repository-${row.repoId ?? row.repoFullName}`;
+  const connectionId = `connection-${row.id}`;
+  const now = row.createdAt ?? new Date();
+
+  if (!tables.installations.some(candidate => candidate.id === installationId)) {
+    tables.installations.push(
+      installationRow({
+        id: installationId,
+        orgId: row.orgId,
+        userId: row.userId,
+        installationId: row.installationId,
+        accountLogin: row.accountLogin ?? 'octo',
+        accountType: row.accountType ?? 'User',
+        createdAt: now,
+      }),
+    );
+  }
+  if (!tables.repositories.some(candidate => candidate.id === repositoryId)) {
+    tables.repositories.push({
+      id: repositoryId,
+      installationId,
+      externalId: String(row.repoId ?? 99),
+      slug: row.repoFullName,
+      defaultBranch: row.defaultBranch ?? 'main',
+      providerMetadata: row.providerMetadata ?? {},
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  if (!tables.connections.some(candidate => candidate.id === connectionId)) {
+    tables.connections.push({
+      id: connectionId,
+      factoryProjectId: row.factoryProjectId ?? `factory-${row.id}`,
+      integrationId: 'github',
+      installationId,
+      createdByUserId: row.userId,
+      createdAt: now,
+    });
+  }
+
+  return {
+    id: row.id,
+    connectionId,
+    repositoryId,
+    branch: row.defaultBranch ?? null,
+    sandboxProvider: row.sandboxProvider ?? 'railway',
+    sandboxWorkdir: row.sandboxWorkdir,
+    setupCommand: row.setupCommand ?? null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function sandboxRow(row: Record<string, any>) {
+  return { ...row, projectRepositoryId: row.projectRepositoryId };
+}
+
+function worktreeRow(row: Record<string, any>) {
+  return { ...row, projectRepositoryId: row.projectRepositoryId };
+}
+
+function subscriptionRow(row: Record<string, any>) {
+  if (row.targetKey) return row;
+  return {
+    id: row.id,
+    integrationId: 'github',
+    orgId: row.orgId,
+    targetKey: `change-request:${row.installationId}:${row.repoId}:${row.pullRequestNumber}`,
+    sessionId: row.sessionId,
+    resourceId: row.resourceId,
+    threadId: row.threadId,
+    sessionScope: row.sessionScope ?? '',
+    status: row.status,
+    data: {
+      installationExternalId: String(row.installationId),
+      projectRepositoryId: row.projectRepositoryId,
+      repositoryExternalId: String(row.repoId),
+      repositorySlug: row.repoFullName,
+      changeRequestId: String(row.pullRequestNumber),
+      ownerId: row.ownerId,
+      source: row.source,
+      subscribedByUserId: row.subscribedByUserId ?? null,
+    },
+    createdAt: row.createdAt ?? new Date(),
+    updatedAt: row.updatedAt ?? new Date(),
+  };
+}
+
+const integrationStorage = {
+  subscriptions: {
+    create: vi.fn(async (input: Record<string, any>) => {
+      const row = subscriptionRow({
+        ...input,
+        id: `subscription-${tables.subscriptions.length + 1}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      tables.subscriptions.push(row);
+      return row;
+    }),
+    listByTarget: vi.fn(async (targetKey: string) =>
+      tables.subscriptions.map(subscriptionRow).filter(row => row.targetKey === targetKey),
+    ),
+    listBySession: vi.fn(async (sessionId: string) =>
+      tables.subscriptions.map(subscriptionRow).filter(row => row.sessionId === sessionId),
+    ),
+    listByThread: vi.fn(async (resourceId: string, threadId: string) =>
+      tables.subscriptions
+        .map(subscriptionRow)
+        .filter(row => row.resourceId === resourceId && row.threadId === threadId),
+    ),
+    updateStatus: vi.fn(async (id: string, status: string) => {
+      const row = tables.subscriptions.find(candidate => candidate.id === id);
+      if (row) row.status = status;
+    }),
+    delete: vi.fn(async (id: string) => {
+      const index = tables.subscriptions.findIndex(row => row.id === id);
+      if (index >= 0) tables.subscriptions.splice(index, 1);
+    }),
+    deleteWhere: vi.fn(async () => 0),
+  },
+};
+
+// Capture events through the injected audit seam. The fake preserves the
+// domain's actor resolution and never-throw behavior so route tests stay focused.
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
-
-vi.mock('../audit/store', () => ({
-  recordAuditEvent: async (input: any) => {
-    if (auditFailure) throw auditFailure;
-    auditRecorded.push(input);
-    return {
-      id: `00000000-0000-4000-9000-${String(auditRecorded.length).padStart(12, '0')}`,
-      occurredAt: new Date(),
-      ...input,
-      githubProjectId: input.githubProjectId ?? null,
-      metadata: input.metadata ?? {},
-      context: input.context ?? {},
-    };
-  },
-  listAuditEvents: async () => ({ events: [] }),
-}));
 
 vi.mock('./db', () => {
   // Minimal chainable drizzle-like stub keyed off the table object identity.
@@ -122,13 +252,18 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
   nextPage: null as number | null,
 }));
 
-vi.mock('./client', () => ({
+// Stub GithubIntegration instance injected into `buildGithubRoutes` — real DI
+// instead of module mocking (github/client.ts no longer exists).
+const githubStub = {
+  sourceControlStorage,
+  integrationStorage,
+  webhookSecret: undefined as string | undefined,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   getRepositoryCollaboratorPermission: vi.fn(async () => 'write'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
-  listInstallationRepos: vi.fn(async () => [
+  listInstallationRepos: vi.fn(async (_installationId: number) => [
     {
       id: 99,
       fullName: 'octo/hello',
@@ -157,19 +292,95 @@ vi.mock('./client', () => ({
     addIssueLabels(installationId, repoFullName, issueNumber, labels),
   listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
     listRepoOpenIssues(installationId, repoFullName, page, options),
-  listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
-    listRepoOpenPullRequests(installationId, repoFullName, page),
-}));
+  intake: {
+    listIssues: async (input: import('../capabilities/intake').ListIntakeIssuesInput) => {
+      if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
+      const result = await listRepoOpenIssues(
+        input.connection.installationId,
+        input.sourceIds[0]!,
+        Number(input.cursor ?? '1'),
+        { label: input.labels?.join(',') },
+      );
+      return {
+        issues: result.issues.map(issue => ({
+          id: String(issue.number),
+          identifier: `#${issue.number}`,
+          title: issue.title,
+          url: issue.url,
+          author: issue.author,
+          state: 'open',
+          stateType: 'open',
+          priority: null,
+          assignee: null,
+          source: input.sourceIds[0]!,
+          labels: issue.labels,
+          commentCount: issue.comments,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+        })),
+        nextCursor: result.nextPage === null ? null : String(result.nextPage),
+      };
+    },
+  },
+  versionControl: {
+    listPullRequests: async (input: import('../capabilities/version-control').ListPullRequestsInput) => {
+      if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
+      const result = await listRepoOpenPullRequests(
+        input.connection.installationId,
+        input.sourceId,
+        Number(input.cursor ?? '1'),
+      );
+      return {
+        pullRequests: result.pullRequests.map(pr => ({ ...pr, id: String(pr.number) })),
+        nextCursor: result.nextPage === null ? null : String(result.nextPage),
+      };
+    },
+    createPullRequest: async (input: import('../capabilities/version-control').CreatePullRequestInput) => {
+      const result = await createPullRequest(input);
+      return {
+        id: '1',
+        title: input.title,
+        url: result.url,
+        author: 'octo',
+        body: input.body ?? null,
+        state: 'open' as const,
+        draft: input.draft ?? false,
+        merged: false,
+        mergeable: null,
+        baseBranch: input.baseBranch,
+        headBranch: input.headBranch,
+        headSha: 'abc123',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+    },
+  },
+};
 
-const ensureProjectSandbox = vi.fn(async (_row: any, onProgress?: (e: any) => void) => {
-  onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
-  return { id: 'sb' };
-});
+// Deterministic state signer stub (replaces the old signState/verifyState mocks).
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
+
+const ensureProjectSandbox = vi.fn(
+  async (row: any, storage: SourceControlStorageInMemory['sandboxes'], onProgress?: (e: any) => void) => {
+    await storage.setSandboxId({ id: row.id, sandboxId: 'sb' });
+    onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
+    return { id: 'sb' };
+  },
+);
 const materializeRepo = vi.fn(async (..._args: any[]) => {
-  const onProgress = _args[4] as ((e: any) => void) | undefined;
+  const onProgress = _args[5] as ((e: any) => void) | undefined;
   onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
-const reattachProjectSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -181,6 +392,21 @@ const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
+vi.mock('../sandbox/fleet', () => {
+  class SandboxBudgetError extends Error {
+    readonly code = 'sandbox-budget-exceeded';
+    constructor(readonly max: number) {
+      super(`Sandbox budget exceeded: ${max}`);
+    }
+  }
+  return {
+    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+    getSandboxProvider: () => 'railway',
+    isSandboxEnabled: () => sandboxEnabled,
+    reattachSandbox: (id: string) => reattachSandbox(id),
+    SandboxBudgetError,
+  };
+});
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -197,14 +423,11 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
     computeWorktreePath: (repoWorkdir: string, branch: string) =>
       `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
-    getSandboxProvider: () => 'railway',
-    isSandboxEnabled: () => sandboxEnabled,
-    ensureProjectSandbox: (row: any, onProgress?: any) => ensureProjectSandbox(row, onProgress),
+    ensureProjectSandbox: (row: any, storage: SourceControlStorageInMemory['sandboxes'], onProgress?: any) =>
+      ensureProjectSandbox(row, storage, onProgress),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
-    reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
@@ -223,14 +446,6 @@ let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
   getGithubFeatureDiagnostics: () => ({}),
-  getGithubWebhookSecret: () => process.env.GITHUB_APP_WEBHOOK_SECRET || undefined,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
 }));
 
 // Partially mock `../auth`: keep all real helpers (getWebAuthUser/webAuthTenant)
@@ -270,7 +485,7 @@ function tableKind(table: any): keyof Tables {
   if (table === worktreesRef) return 'worktrees';
   if (table === sandboxesRef) return 'sandboxes';
   if (table === subscriptionsRef) return 'subscriptions';
-  return 'projects';
+  return 'projectRepositories';
 }
 // We can't import the actual schema objects easily into the closure used by the
 // mock above, so resolve them lazily here for the helpers.
@@ -340,9 +555,12 @@ function deleteRows(table: any, cond?: any): void {
   tables[kind] = tables[kind].filter(row => !matches(table, row, cond)) as any;
 }
 
-// Resolve schema refs after import.
-import { listInstallationRepos, listUserInstallations } from './client';
-import { githubInstallations, githubProjectSandboxes, githubSignalSubscriptions, githubWorktrees } from './schema';
+const githubInstallations = {};
+const githubProjectSandboxes = {};
+const githubSignalSubscriptions = {};
+const githubWorktrees = {};
+
+const { listInstallationRepos, listUserInstallations } = githubStub;
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
@@ -354,6 +572,7 @@ function buildApp(
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
+    stateSigner?: typeof stateSigner | null;
   } = {},
 ) {
   const app = new Hono();
@@ -366,27 +585,67 @@ function buildApp(
     }
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111', ...options }));
+  const { stateSigner: signerOverride, ...routeOptions } = options;
+  mountApiRoutes(
+    app as any,
+    buildGithubRoutes({
+      baseUrl: 'http://localhost:4111',
+      github: githubStub as any,
+      stateSigner: signerOverride === null ? undefined : (signerOverride ?? stateSigner),
+      emitAudit: async ({ context, input }) => {
+        try {
+          if (auditFailure) throw auditFailure;
+          const tenant = (context as any).get('webAuthUser');
+          if (!tenant?.organizationId) return;
+          auditRecorded.push({
+            orgId: tenant.organizationId,
+            actorId: tenant.workosId,
+            action: input.action,
+            factoryProjectId: input.factoryProjectId,
+            projectRepositoryId: input.projectRepositoryId,
+            targets: input.targets,
+            metadata: input.metadata,
+          });
+        } catch (error) {
+          console.warn('[Audit] Failed to emit audit event', {
+            action: input.action,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+      ...routeOptions,
+    }),
+  );
   return app;
 }
 
 beforeEach(() => {
   tables.installations = [];
-  tables.projects = [];
+  tables.repositories = [];
+  tables.connections = [];
+  tables.projectRepositories = [];
   tables.sandboxes = [];
   tables.worktrees = [];
   tables.subscriptions = [];
+  sourceControlStorage.installationsRows = tables.installations as any;
+  sourceControlStorage.repositoriesRows = tables.repositories as any;
+  sourceControlStorage.connectionsRows = tables.connections as any;
+  sourceControlStorage.projectRepositoriesRows = tables.projectRepositories as any;
+  sourceControlStorage.sandboxesRows = tables.sandboxes as any;
+  sourceControlStorage.worktreesRows = tables.worktrees as any;
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
   auditRecorded = [];
   auditFailure = undefined;
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
+  // The webhook route verifies deliveries against the injected instance's secret.
+  githubStub.webhookSecret = 'test-webhook-secret';
   // No Postgres in these unit tests: keep the project lock purely in-process.
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachProjectSandbox.mockClear();
+  reattachSandbox.mockClear();
   ensureWorktree.mockClear();
   removeWorktree.mockClear();
   runWorktreeSetup.mockClear();
@@ -419,9 +678,10 @@ function signedGithubWebhookRequest(event: string, payload: Record<string, unkno
 }
 
 describe('webhook route', () => {
-  it('accepts a valid signed issues event, labels it, and runs issue triage with board session identity', async () => {
+  it('accepts a valid signed issues event without guessing a Factory project repository', async () => {
     seedMaterializedProject();
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
     const res = await buildApp(null, { runIssueTriage }).request(
       signedGithubWebhookRequest('issues', {
@@ -450,19 +710,9 @@ describe('webhook route', () => {
       sender: 'ada',
       installationId: 7,
     });
-    await vi.waitFor(() => expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']));
-    expect(runIssueTriage).toHaveBeenCalledWith({
-      repository: 'octo/hello',
-      issueNumber: 12,
-      issueTitle: 'Fix flaky test',
-      issueUrl: 'https://github.com/octo/hello/issues/12',
-      labels: ['bug', 'auto-triaged'],
-      sender: 'ada',
-      installationId: 7,
-      resourceId: 'p1',
-      projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
-      branch: 'factory/issue-12',
-    });
+    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
+    expect(addIssueLabels).not.toHaveBeenCalled();
+    expect(runIssueTriage).not.toHaveBeenCalled();
   });
 
   it('accepts a valid signed PR review comment event and logs normalized PR metadata', async () => {
@@ -508,7 +758,7 @@ describe('webhook route', () => {
       id: 'subscription-1',
       orgId: 'org1',
       installationId: 7,
-      githubProjectId: 'project-1',
+      projectRepositoryId: 'project-1',
       repoId: 99,
       repoFullName: 'octo/hello',
       pullRequestNumber: 34,
@@ -610,14 +860,21 @@ describe('status route', () => {
     expect(await res.json()).toMatchObject({ enabled: false, connected: false });
   });
 
+  it('reports disabled without a state signer', async () => {
+    const res = await buildApp({ workosId: 'u1' }, { stateSigner: null }).request('/web/github/status');
+    expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
+  });
+
   it('reports connected installations for the user', async () => {
-    tables.installations.push({
-      orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      accountLogin: 'octo',
-      accountType: 'User',
-    });
+    tables.installations.push(
+      installationRow({
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        accountLogin: 'octo',
+        accountType: 'User',
+      }),
+    );
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
     const json = await res.json();
     expect(json.enabled).toBe(true);
@@ -660,7 +917,9 @@ describe('subscriptions route', () => {
 
 describe('repos route', () => {
   const install = (installationId: number, accountLogin: string) => {
-    tables.installations.push({ orgId: 'org1', userId: 'u1', installationId, accountLogin, accountType: 'User' });
+    tables.installations.push(
+      installationRow({ orgId: 'org1', userId: 'u1', installationId, accountLogin, accountType: 'User' }),
+    );
   };
 
   // The `./client` mock's default implementation must survive these tests
@@ -697,7 +956,7 @@ describe('repos route', () => {
     expect(json.repos).toHaveLength(1);
     expect(json.repos[0].fullName).toBe('octo/hello');
     // The stale row is gone; the live one remains.
-    expect(tables.installations.map(i => i.installationId)).toEqual([7]);
+    expect(tables.installations.map(i => i.externalId)).toEqual(['7']);
     expect(String(errorSpy.mock.calls[0]![0])).toContain('stale GitHub installation 8');
     errorSpy.mockRestore();
   });
@@ -726,13 +985,15 @@ describe('auth scoping', () => {
   describe('without the gate (isolated custom-route context)', () => {
     it('status resolves the session from the cookie', async () => {
       cookieUser = { workosId: 'u1' };
-      tables.installations.push({
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        accountLogin: 'octo',
-        accountType: 'User',
-      });
+      tables.installations.push(
+        installationRow({
+          orgId: 'org1',
+          userId: 'u1',
+          installationId: 7,
+          accountLogin: 'octo',
+          accountType: 'User',
+        }),
+      );
       const res = await buildApp(null).request('/web/github/status');
       expect(res.status).toBe(200);
       const json = await res.json();
@@ -852,124 +1113,57 @@ describe('connect + callback', () => {
   });
 });
 
-describe('create project', () => {
-  it('inserts a github-sourced project for an owned installation', async () => {
-    tables.installations.push({
-      orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      accountLogin: 'octo',
-      accountType: 'User',
-    });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ repoFullName: 'octo/hello', repoId: 99, installationId: 7 }),
-    });
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.project.source).toBe('github');
-    expect(json.project.name).toBe('octo/hello');
-    expect(tables.projects).toHaveLength(1);
+it('does not expose the removed GitHub project-creation route', async () => {
+  const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ repoFullName: 'octo/hello', repoId: 99, installationId: 7 }),
   });
-
-  it('rejects an invalid repo name', async () => {
-    tables.installations.push({
-      orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      accountLogin: 'octo',
-      accountType: 'User',
-    });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ repoFullName: 'not-a-repo', repoId: 99, installationId: 7 }),
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it('404s when the repo is not accessible to the installation', async () => {
-    tables.installations.push({
-      orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      accountLogin: 'octo',
-      accountType: 'User',
-    });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ repoFullName: 'octo/other-repo', installationId: 7 }),
-    });
-    expect(res.status).toBe(404);
-  });
-
-  it('persists the server-returned defaultBranch, ignoring the client value', async () => {
-    tables.installations.push({
-      orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      accountLogin: 'octo',
-      accountType: 'User',
-    });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        repoFullName: 'octo/hello',
-        installationId: 7,
-        defaultBranch: "main'; rm -rf /; '",
-      }),
-    });
-    expect(res.status).toBe(200);
-    expect(tables.projects[0].defaultBranch).toBe('main');
-  });
-
-  it('404s when the installation is not owned by the user', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ repoFullName: 'octo/hello', repoId: 99, installationId: 7 }),
-    });
-    expect(res.status).toBe(404);
-  });
+  expect(res.status).toBe(404);
 });
 
 describe('ensure (materialize)', () => {
   it('503s when the sandbox is not configured', async () => {
     sandboxEnabled = false;
-    tables.projects.push({
-      id: 'p1',
-      orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      repoFullName: 'octo/hello',
-      sandboxWorkdir: '/workspace/hello',
-    });
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    );
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe('sandbox_not_configured');
   });
 
   it('provisions + materializes and returns a resourceId', async () => {
-    tables.projects.push({
-      id: 'p1',
-      orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      repoFullName: 'octo/hello',
-      defaultBranch: 'main',
-      sandboxWorkdir: '/workspace/hello',
-    });
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    );
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ resourceId: 'p1', githubProjectId: 'p1' });
+    expect(await res.json()).toMatchObject({
+      resourceId: 'factory-p1',
+      factoryProjectId: 'factory-p1',
+      projectRepositoryId: 'p1',
+    });
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
     expect(materializeRepo).toHaveBeenCalledOnce();
     // A per-user sandbox binding row was created for the caller.
     expect(tables.sandboxes).toHaveLength(1);
-    expect(tables.sandboxes[0]).toMatchObject({ githubProjectId: 'p1', userId: 'u1' });
+    expect(tables.sandboxes[0]).toMatchObject({ projectRepositoryId: 'p1', userId: 'u1' });
   });
 
   it('404s for a project the user does not own', async () => {
@@ -980,15 +1174,17 @@ describe('ensure (materialize)', () => {
   });
 
   it('streams server-side progress events when the client accepts an event stream', async () => {
-    tables.projects.push({
-      id: 'p1',
-      orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      repoFullName: 'octo/hello',
-      defaultBranch: 'main',
-      sandboxWorkdir: '/workspace/hello',
-    });
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    );
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', {
       method: 'POST',
       headers: { Accept: 'text/event-stream' },
@@ -1001,7 +1197,8 @@ describe('ensure (materialize)', () => {
     expect(body).toContain('Provisioning a new sandbox…');
     expect(body).toContain('Cloning octo/hello…');
     expect(body).toContain('event: done');
-    expect(body).toContain('"resourceId":"p1"');
+    expect(body).toContain('"resourceId":"factory-p1"');
+    expect(body).toContain('"projectRepositoryId":"p1"');
   });
 });
 
@@ -1009,25 +1206,29 @@ describe('ensure (materialize)', () => {
 function seedMaterializedProject(opts: { orgId?: string; userId?: string; setupCommand?: string | null } = {}) {
   const orgId = opts.orgId ?? 'org1';
   const userId = opts.userId ?? 'u1';
-  tables.projects.push({
-    id: 'p1',
-    orgId,
-    userId,
-    installationId: 7,
-    repoFullName: 'octo/hello',
-    repoId: 99,
-    defaultBranch: 'main',
-    sandboxWorkdir: '/workspace/hello',
-    setupCommand: opts.setupCommand ?? null,
-  });
-  tables.sandboxes.push({
-    id: 'sbrow-1',
-    githubProjectId: 'p1',
-    userId,
-    sandboxId: 'sb-1',
-    sandboxWorkdir: '/workspace/hello',
-    materializedAt: new Date(),
-  });
+  tables.projectRepositories.push(
+    projectRepositoryRow({
+      id: 'p1',
+      orgId,
+      userId,
+      installationId: 7,
+      repoFullName: 'octo/hello',
+      repoId: 99,
+      defaultBranch: 'main',
+      sandboxWorkdir: '/workspace/hello',
+      setupCommand: opts.setupCommand ?? null,
+    }),
+  );
+  tables.sandboxes.push(
+    sandboxRow({
+      id: 'sbrow-1',
+      projectRepositoryId: 'p1',
+      userId,
+      sandboxId: 'sb-1',
+      sandboxWorkdir: '/workspace/hello',
+      materializedAt: new Date(),
+    }),
+  );
 }
 
 function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown) {
@@ -1147,7 +1348,7 @@ describe('issues route', () => {
       issueUrl: 'https://github.com/octo/hello/issues/12',
       labels: ['bug', 'auto-triaged'],
       installationId: 7,
-      resourceId: 'p1',
+      resourceId: 'factory-p1',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
     });
@@ -1274,7 +1475,7 @@ describe('project settings routes', () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build' });
-    expect(tables.projects[0].setupCommand).toBe('pnpm i && pnpm build');
+    expect(tables.projectRepositories[0].setupCommand).toBe('pnpm i && pnpm build');
   });
 
   it('clears the setup command with an empty string or null', async () => {
@@ -1282,12 +1483,12 @@ describe('project settings routes', () => {
     const app = buildApp({ workosId: 'u1' });
     const res = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: '   ' });
     expect(await res.json()).toEqual({ setupCommand: null });
-    expect(tables.projects[0].setupCommand).toBeNull();
+    expect(tables.projectRepositories[0].setupCommand).toBeNull();
 
-    tables.projects[0].setupCommand = 'pnpm i';
+    tables.projectRepositories[0].setupCommand = 'pnpm i';
     const res2 = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: null });
     expect(await res2.json()).toEqual({ setupCommand: null });
-    expect(tables.projects[0].setupCommand).toBeNull();
+    expect(tables.projectRepositories[0].setupCommand).toBeNull();
   });
 
   it('400s on a non-string setup command', async () => {
@@ -1313,7 +1514,7 @@ describe('project settings routes', () => {
       setupCommand: 'pnpm i \x1b[31m&& rm -rf /',
     });
     expect(res.status).toBe(400);
-    expect(tables.projects[0].setupCommand).toBeNull();
+    expect(tables.projectRepositories[0].setupCommand).toBeNull();
 
     // Newlines and tabs are legitimate in multi-line setup scripts.
     const res2 = await postJson(app, '/web/github/projects/p1/settings', {
@@ -1366,8 +1567,9 @@ describe('worktree route', () => {
     const json = await res.json();
     expect(json.branch).toBe('feat/x');
     expect(json.baseBranch).toBe('main');
-    expect(json.resourceId).toBe('p1');
-    expect(reattachProjectSandbox).toHaveBeenCalledWith('sb-1');
+    expect(json.resourceId).toBe('factory-p1');
+    expect(json.projectRepositoryId).toBe('p1');
+    expect(reattachSandbox).toHaveBeenCalledWith('sb-1');
     expect(ensureWorktree).toHaveBeenCalledOnce();
     // A freshly minted install token + repo name are passed through so the
     // worktree forks from the latest fetched origin/<base>, not local state.
@@ -1378,7 +1580,7 @@ describe('worktree route', () => {
       repoFullName: 'octo/hello',
     });
     expect(tables.worktrees).toHaveLength(1);
-    expect(tables.worktrees[0]).toMatchObject({ githubProjectId: 'p1', branch: 'feat/x', userId: 'u1' });
+    expect(tables.worktrees[0]).toMatchObject({ projectRepositoryId: 'p1', branch: 'feat/x', userId: 'u1' });
   });
 
   it('upserts the worktree row on conflict instead of duplicating', async () => {
@@ -1478,15 +1680,17 @@ describe('worktree delete route', () => {
 
   it('400s when the worktree row points at the repo root checkout', async () => {
     seedMaterializedProject();
-    tables.worktrees.push({
-      id: 'wt-root',
-      orgId: 'org1',
-      userId: 'u1',
-      githubProjectId: 'p1',
-      branch: 'main',
-      baseBranch: 'main',
-      worktreePath: '/workspace/hello',
-    });
+    tables.worktrees.push(
+      worktreeRow({
+        id: 'wt-root',
+        orgId: 'org1',
+        userId: 'u1',
+        projectRepositoryId: 'p1',
+        branch: 'main',
+        baseBranch: 'main',
+        worktreePath: '/workspace/hello',
+      }),
+    );
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
       branch: 'main',
     });
@@ -1564,14 +1768,16 @@ describe('commit route', () => {
 
   it('commits in a persisted worktree path', async () => {
     seedMaterializedProject();
-    tables.worktrees.push({
-      id: 'w1',
-      userId: 'u1',
-      githubProjectId: 'p1',
-      branch: 'feat/x',
-      baseBranch: 'main',
-      worktreePath: '/workspace/worktrees/feat-x',
-    });
+    tables.worktrees.push(
+      worktreeRow({
+        id: 'w1',
+        userId: 'u1',
+        projectRepositoryId: 'p1',
+        branch: 'feat/x',
+        baseBranch: 'main',
+        worktreePath: '/workspace/worktrees/feat-x',
+      }),
+    );
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
       message: 'wip',
       worktreePath: '/workspace/worktrees/feat-x',
@@ -1638,8 +1844,25 @@ describe('pr route', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
     expect(createPullRequest).toHaveBeenCalledOnce();
-    const opts = (createPullRequest.mock.calls[0] as unknown as any[])[2];
-    expect(opts).toMatchObject({ token: 'install-token', base: 'main', head: 'feat/x', title: 'My PR' });
+    expect(createPullRequest).toHaveBeenCalledWith({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'octo/hello',
+      baseBranch: 'main',
+      headBranch: 'feat/x',
+      title: 'My PR',
+      body: 'Adds a thing',
+    });
+  });
+
+  it('returns 502 when the version-control provider rejects PR creation', async () => {
+    seedMaterializedProject();
+    createPullRequest.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+      branch: 'feat/x',
+      title: 'My PR',
+    });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: 'github_pr_create_failed', message: 'GitHub unavailable' });
   });
 });
 
@@ -1653,7 +1876,7 @@ describe('audit events', () => {
       orgId: 'org1',
       actorId: 'u1',
       action: 'factory.worktree.created',
-      githubProjectId: 'p1',
+      projectRepositoryId: 'p1',
       targets: [{ type: 'worktree', id: '/workspace/hello/../worktrees/feat/x', name: 'feat/x' }],
       metadata: { branch: 'feat/x', baseBranch: 'main' },
     });
@@ -1681,7 +1904,7 @@ describe('audit events', () => {
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
       action: 'factory.worktree.deleted',
-      githubProjectId: 'p1',
+      projectRepositoryId: 'p1',
       targets: [{ type: 'worktree', id: '/workspace/hello/../worktrees/feat/x', name: 'feat/x' }],
       metadata: { branch: 'feat/x' },
     });
@@ -1699,7 +1922,7 @@ describe('audit events', () => {
     expect(auditRecorded[0]).toMatchObject({
       actorId: 'u1',
       action: 'factory.triage.started',
-      githubProjectId: 'p1',
+      projectRepositoryId: 'p1',
       targets: [{ type: 'issue', id: '12', name: 'Fix flaky test' }],
       metadata: { issueNumber: 12, branch: 'factory/issue-12', threadId: 'thread-triage' },
     });
@@ -1723,7 +1946,7 @@ describe('audit events', () => {
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
       action: 'factory.git.push',
-      githubProjectId: 'p1',
+      projectRepositoryId: 'p1',
       targets: [{ type: 'branch', id: 'feat/x' }],
       metadata: { branch: 'feat/x' },
     });
@@ -1738,7 +1961,7 @@ describe('audit events', () => {
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
       action: 'factory.git.pr_opened',
-      githubProjectId: 'p1',
+      projectRepositoryId: 'p1',
       targets: [{ type: 'pull_request', id: 'https://github.com/octo/hello/pull/1', name: 'My PR' }],
       metadata: { branch: 'feat/x', base: 'main', url: 'https://github.com/octo/hello/pull/1' },
     });

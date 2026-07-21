@@ -9,7 +9,8 @@
  * page. Driven through a memory router over the real route table with MSW at
  * the network boundary.
  */
-import type { AgentControllerSessionState, AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
+import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { QueryClient } from '@tanstack/react-query';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -20,7 +21,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import type * as AuthService from '../domains/auth/services/auth';
-import type { Project } from '../domains/workspaces';
+import type { Factory } from '../domains/workspaces';
 import { createAppRoutes } from '../router';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
@@ -32,7 +33,6 @@ vi.mock('../domains/auth/services/auth', async importOriginal => {
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
-const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 
 function thread(id: string, title: string, updatedAt: string): AgentControllerThreadInfo {
   return { id, title, resourceId: RESOURCE_ID, createdAt: '2026-06-01T00:00:00.000Z', updatedAt };
@@ -66,16 +66,20 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject() {
-  const project: Project = {
+function seedFactory(projects?: Factory[], activeFactoryId?: string) {
+  const project: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
-    path: '/tmp/mastracode-test',
     resourceId: RESOURCE_ID,
     createdAt: 1,
+    binding: {
+      kind: 'local',
+      path: '/tmp/mastracode-test',
+    },
   };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  const storedProjects = projects ?? [project];
+  localStorage.setItem('mastracode-factories', JSON.stringify(storedProjects));
+  localStorage.setItem('mastracode-active-factory', activeFactoryId ?? storedProjects[0]?.id ?? project.id);
 }
 
 function sessionState(threadId: string): AgentControllerSessionState {
@@ -147,17 +151,17 @@ function useAgentControllerHandlers({
     }),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get(SESSION, async () => {
+    http.get(`${API}/sessions/:resourceId`, async () => {
       if (stateDelayMs > 0) await delay(stateDelayMs);
       if (stateShouldFail) return HttpResponse.error();
       return HttpResponse.json(sessionState(bound));
     }),
-    http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState(bound))),
-    http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
-    http.get(`${SESSION}/threads`, () =>
+    http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json(sessionState(bound))),
+    http.get(`${API}/sessions/:resourceId/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
+    http.get(`${API}/sessions/:resourceId/threads`, () =>
       HttpResponse.json({ threads: captured.created > 0 ? [newThread, threadOne, threadTwo] : [threadOne, threadTwo] }),
     ),
-    http.get(`${SESSION}/threads/:threadId/messages`, async ({ params }) => {
+    http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, async ({ params }) => {
       const threadId = String(params.threadId);
       const messagesDelay = messagesDelayMsByThread[threadId] ?? messagesDelayMs;
       if (messagesDelay > 0) await delay(messagesDelay);
@@ -172,11 +176,11 @@ function useAgentControllerHandlers({
       }
       return HttpResponse.json({ messages: MESSAGES[threadId] ?? [] });
     }),
-    http.get(`${SESSION}/stream`, () => {
+    http.get(`${API}/sessions/:resourceId/stream`, () => {
       captured.streamSubscriptions += 1;
       return emptySse();
     }),
-    http.post(`${SESSION}/thread`, async ({ request }) => {
+    http.post(`${API}/sessions/:resourceId/thread`, async ({ request }) => {
       const { threadId } = (await request.json()) as { threadId: string };
       captured.switched.push(threadId);
       const switchDelayMs = switchDelayMsByThread[threadId] ?? 0;
@@ -188,16 +192,19 @@ function useAgentControllerHandlers({
       bound = threadId;
       return HttpResponse.json({ ok: true });
     }),
-    http.post(`${SESSION}/threads`, () => {
+    http.post(`${API}/sessions/:resourceId/threads`, () => {
       captured.created += 1;
       bound = newThread.id;
       return HttpResponse.json(newThread);
     }),
-    http.delete(`${SESSION}/threads/:threadId`, ({ params }) => {
+    http.delete(`${API}/sessions/:resourceId/threads/:threadId`, ({ params }) => {
       captured.deleted.push(String(params.threadId));
       return HttpResponse.json({ ok: true });
     }),
-    http.post(`${SESSION}/messages`, async ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
+      HttpResponse.json({ rootPath: '/tmp/mastracode-test', renderedPath: '.artifacts', entries: [] }),
+    ),
+    http.post(`${API}/sessions/:resourceId/messages`, async ({ request }) => {
       const { message } = (await request.json()) as { message: string };
       captured.sent.push(message);
       return HttpResponse.json({ ok: true });
@@ -207,8 +214,8 @@ function useAgentControllerHandlers({
   return captured;
 }
 
-function renderRoutes(initialEntry: string) {
-  seedProject();
+function renderRoutes(initialEntry: string, projects?: Factory[], activeFactoryId?: string) {
+  seedFactory(projects, activeFactoryId);
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
@@ -221,6 +228,50 @@ async function expectPathname(router: ReturnType<typeof createMemoryRouter>, pat
 }
 
 describe('MastraCode thread pages', () => {
+  it('hides user-session workspace files when the thread belongs to another project', async () => {
+    const activeFactory: Factory = {
+      id: 'project-active',
+      name: 'Active factory',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: {
+        kind: 'local',
+        path: '/tmp/active-project',
+      },
+    };
+    const threadProject: Factory = {
+      id: 'project-thread',
+      name: 'Thread project',
+      resourceId: RESOURCE_ID,
+      createdAt: 2,
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'fp-github-thread',
+        repositories: [
+          {
+            projectRepositoryId: 'pr-github-thread',
+            slug: 'mastra-ai/thread-project',
+            worktrees: [
+              {
+                branch: 'user/thread-session',
+                worktreePath: '/tmp/thread-project-session',
+                baseBranch: 'main',
+                threadId: threadOne.id,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    useAgentControllerHandlers();
+    renderRoutes(`/user/threads/${threadOne.id}`, [activeFactory, threadProject], activeFactory.id);
+
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
+    expect(screen.queryByTestId('workspace-viewer-panel')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open workspace files' })).not.toBeInTheDocument();
+  });
+
   it('given persisted messages load slowly, when deep-linking to /threads/:threadId, then a skeleton renders before the thread history', async () => {
     useAgentControllerHandlers({ messagesDelayMs: 150 });
     renderRoutes(`/threads/${threadOne.id}`);

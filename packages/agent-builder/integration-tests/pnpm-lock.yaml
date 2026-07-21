@@ -32,7 +32,7 @@ importers:
         version: 17.4.2
       vite:
         specifier: ^8.0.16
-        version: 8.1.4
+        version: 8.1.5
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -54,7 +54,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.10
-        version: 4.1.10(vite@8.1.4)
+        version: 4.1.10(vite@8.1.5)
 
 packages:
   '@ai-sdk/openai@1.3.24':
@@ -584,9 +584,9 @@ packages:
       { integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A== }
     engines: { node: '>=12' }
 
-  postcss@8.5.17:
+  postcss@8.5.19:
     resolution:
-      { integrity: sha512-J7EF+8X+CzRPaJPOv9Ck2wNWJvGnnl3PcNPAdGg6GTLjyVpyQ0yATMSXRFRV01BviT/9Gwuc3rjEyJbDJG9a4w== }
+      { integrity: sha512-Mz8SaolMd8nB+G13WkORcxQKHZ/NE4xXevtkJHVuG+guo9/wYKlIMTKAqGdEmYOXR2ijPjTYNHssizdaVSUNdQ== }
     engines: { node: ^10 || ^12 || >=14 }
 
   rolldown@1.1.5:
@@ -645,9 +645,9 @@ packages:
     engines: { node: '>=16.20.0' }
     hasBin: true
 
-  vite@8.1.4:
+  vite@8.1.5:
     resolution:
-      { integrity: sha512-bTT9PsdWO+MQMNG9ZXIP/qM9wGh37DFxTV/sPq9cFpHr3w4jkgef032PkAL9jAqhk3Nz8NQw3O8n6/xFkqO4QQ== }
+      { integrity: sha512-7ULLwsCdYx/nRyrpiEwvqb5TFHrMVZyBt+rg/OAXT7rgj/z+DtTDyKFeLAdDkubDVDKD8jOsndmy7m55XcfUsw== }
     engines: { node: ^20.19.0 || >=22.12.0 }
     hasBin: true
     peerDependencies:
@@ -922,13 +922,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.10(vite@8.1.4)':
+  '@vitest/mocker@4.1.10(vite@8.1.5)':
     dependencies:
       '@vitest/spy': 4.1.10
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.1.4
+      vite: 8.1.5
 
   '@vitest/pretty-format@4.1.10':
     dependencies:
@@ -1044,7 +1044,7 @@ snapshots:
 
   picomatch@4.0.5: {}
 
-  postcss@8.5.17:
+  postcss@8.5.19:
     dependencies:
       nanoid: 3.3.16
       picocolors: 1.1.1
@@ -1118,20 +1118,20 @@ snapshots:
       '@typescript/typescript-win32-arm64': 7.0.2
       '@typescript/typescript-win32-x64': 7.0.2
 
-  vite@8.1.4:
+  vite@8.1.5:
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.5
-      postcss: 8.5.17
+      postcss: 8.5.19
       rolldown: 1.1.5
       tinyglobby: 0.2.17
     optionalDependencies:
       fsevents: 2.3.3
 
-  vitest@4.1.10(vite@8.1.4):
+  vitest@4.1.10(vite@8.1.5):
     dependencies:
       '@vitest/expect': 4.1.10
-      '@vitest/mocker': 4.1.10(vite@8.1.4)
+      '@vitest/mocker': 4.1.10(vite@8.1.5)
       '@vitest/pretty-format': 4.1.10
       '@vitest/runner': 4.1.10
       '@vitest/snapshot': 4.1.10
@@ -1148,7 +1148,7 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.1.4
+      vite: 8.1.5
       why-is-node-running: 2.3.0
     transitivePeerDependencies:
       - msw

@@ -9,7 +9,7 @@ import { EmptyThreadState } from './EmptyThreadState';
 import { WorkingIndicator } from './WorkingIndicator';
 
 const transcriptScrollClass =
-  'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]';
+  'flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:min-w-0 [&>*]:max-w-[80ch]';
 
 export function TranscriptPanel() {
   const { transcript, showWorkingIndicator } = useChatTranscript();

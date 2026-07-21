@@ -1,6 +1,6 @@
 ---
 extends: occurrence
-message: "AI tricolon: multiple verb tricolons in one paragraph (found %s). Rewrite some with two or four items."
+message: 'AI tricolon: multiple verb tricolons in one paragraph (found %s). Rewrite some with two or four items.'
 level: error
 scope: paragraph
 max: 1

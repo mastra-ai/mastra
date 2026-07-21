@@ -1,5 +1,4 @@
-import type { MastraDBMessage } from '@mastra/client-js';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../api/config';
@@ -7,13 +6,19 @@ import { queryKeys } from '../api/keys';
 import type { AgentControllerSession } from '../../web/ui/domains/chat/services/agentControllerClient';
 import {
   createAgentControllerClient,
+  prepareWorkspaceSkill,
   requireAgentControllerSession,
 } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
+import {
+  queueThreadPageKickoff,
+  ThreadPageKickoffTimeoutError,
+} from '../../web/ui/domains/chat/services/threadPageReadiness';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
-import { useActiveProjectContext } from '../../web/ui/domains/workspaces/context/ActiveProjectProvider';
+import { useActiveFactoryContext } from '../../web/ui/domains/workspaces/context/ActiveFactoryProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
-import type { Project } from '../../web/ui/domains/workspaces/services/projects';
+import type { Factory } from '../../web/ui/domains/workspaces/services/factories';
+import { isServerFactory } from '../../web/ui/domains/workspaces/services/factories';
 import { createWorkItem, updateWorkItem } from '../../web/ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../../web/ui/domains/factory/services/workItems';
 
@@ -37,9 +42,35 @@ export interface StartFactoryRunWorkItem {
   stages: string[];
   source: WorkItemSource;
   sourceKey: string | null;
+  parentWorkItemId?: string;
   title: string;
   url?: string | null;
   metadata?: Record<string, unknown>;
+}
+
+export type FactoryRunInvocation =
+  { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
+
+const factoryRunMutationKey = (resourceId: string, projectId: string | undefined) =>
+  ['factory', 'start-run', resourceId, projectId] as const;
+
+export interface PendingFactoryRun {
+  id?: string;
+  sourceKey: string | null;
+  role: string;
+}
+
+function toPendingFactoryRun(value: unknown): PendingFactoryRun | undefined {
+  if (!isRecord(value) || !isRecord(value.workItem)) return undefined;
+  const { id, sourceKey, role } = value.workItem;
+  if (id !== undefined && typeof id !== 'string') return undefined;
+  if (sourceKey !== null && typeof sourceKey !== 'string') return undefined;
+  if (typeof role !== 'string') return undefined;
+  return { id, sourceKey, role };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export interface StartFactoryRunInput {
@@ -49,8 +80,8 @@ export interface StartFactoryRunInput {
   threadTitle: string;
   /** Existing thread tags to prefer before falling back to the session thread. */
   threadTags?: Record<string, string>;
-  /** First user message sent to the agent (e.g. a skill invocation). */
-  prompt: string;
+  /** First user action dispatched to the agent. Omit to open the session without starting a run. */
+  invocation?: FactoryRunInvocation;
   /** Board card to file for this run (kanban record; optional). */
   workItem?: StartFactoryRunWorkItem;
 }
@@ -58,7 +89,9 @@ export interface StartFactoryRunInput {
 /**
  * Start an agent run for a Factory item: create (or reuse) a worktree for the
  * item's branch, create a fresh thread in that workspace, send the kickoff
- * prompt, and navigate to the new thread.
+ * prompt, and navigate to the new thread. Without an `invocation` it opens an
+ * empty session instead: same worktree/thread/card filing, but no message is
+ * sent — the user lands on the thread and types the first message.
  *
  * Sessions are scoped per worktree, so the run targets the NEW worktree's own
  * session (created here with its `projectPath` tag) instead of repointing the
@@ -66,23 +99,24 @@ export interface StartFactoryRunInput {
  * independent and never abort each other.
  */
 export function useStartFactoryRun() {
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
   const { baseUrl } = useApiConfig();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const createWorkspace = useCreateWorkspaceMutation(activeProject, {
+  const createWorkspace = useCreateWorkspaceMutation(activeFactory, {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
   });
 
   const mutation = useMutation({
-    mutationFn: async ({ branch, threadTitle, threadTags, prompt, workItem }: StartFactoryRunInput) => {
-      const updatedProject = await createWorkspace.mutateAsync(branch);
-      queryClient.setQueryData(queryKeys.projects(), (projects: Project[] | undefined) =>
-        projects?.map(project => (project.id === updatedProject.id ? updatedProject : project)),
+    mutationKey: factoryRunMutationKey(resourceId, activeFactory?.id),
+    mutationFn: async ({ branch, threadTitle, threadTags, invocation, workItem }: StartFactoryRunInput) => {
+      const updatedFactory = await createWorkspace.mutateAsync(branch);
+      queryClient.setQueryData(queryKeys.factories(), (factories: Factory[] | undefined) =>
+        factories?.map(factory => (factory.id === updatedFactory.id ? updatedFactory : factory)),
       );
-      const projectPath = deriveProjectPath(updatedProject);
+      const projectPath = deriveProjectPath(updatedFactory);
       if (!projectPath) throw new Error('Could not resolve the new worktree path');
 
       // Address the new worktree's own session; create it up front so a
@@ -106,35 +140,56 @@ export function useStartFactoryRun() {
       // the same item, reuse that thread: the prompt lands as a follow-up
       // message instead of leaving a stray second thread in the worktree.
       const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
-      await scopedSession.sendMessage(prompt);
+      let kickoffMessage: string | undefined;
+      if (invocation?.type === 'skill') {
+        const skillArguments = `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Worktree: ${projectPath}\n- Branch: ${branch}`;
+        const prepared = await prepareWorkspaceSkill({
+          agentControllerId: AGENT_CONTROLLER_ID,
+          resourceId,
+          scope: projectPath,
+          name: invocation.skillName,
+          arguments: skillArguments,
+          baseUrl,
+        });
+        kickoffMessage = prepared.message;
+      } else if (invocation) {
+        kickoffMessage = invocation.prompt;
+      }
 
-      // Append the prompt to the thread's message cache so it renders
-      // immediately when the thread page mounts, before the server transcript
-      // catches up. Appending (not replacing) preserves any prior conversation
-      // when the run reuses an existing thread.
-      const message: MastraDBMessage = {
-        id: `local-${Date.now()}`,
-        role: 'user',
-        createdAt: new Date(),
-        content: { format: 2, parts: [{ type: 'text', text: prompt }] },
-      };
-      queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId),
-        (existing: MastraDBMessage[] | undefined) => [...(existing ?? []), message],
-      );
-      // The thread now exists under the new worktree's project path; refresh
-      // its thread list so the sidebar shows it once the UI lands there.
-      void queryClient.invalidateQueries({
+      // Refresh the new workspace's thread list before mounting the route so
+      // route synchronization can bind the live session to the new thread.
+      await queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
       });
+
+      // Queue the kickoff before navigating so the destination page can claim it
+      // exactly once. Wait for that page's composer path to finish dispatching
+      // before filing the board card as an active run. Without an invocation
+      // (opening an empty session) there is nothing to dispatch — navigate and
+      // let the user type the first message.
+      if (kickoffMessage !== undefined) {
+        const kickoffCompleted = queueThreadPageKickoff({ resourceId, projectPath, threadId }, kickoffMessage);
+        void navigate(`/threads/${threadId}`);
+        try {
+          await kickoffCompleted;
+        } catch (error) {
+          if (error instanceof ThreadPageKickoffTimeoutError) {
+            void navigate('/new', { replace: true, state: { routeErrorNotice: error.message } });
+          }
+          throw error;
+        }
+      } else {
+        void navigate(`/threads/${threadId}`);
+      }
 
       // File the board card now that the run is underway, hanging the run's
       // session ref off the requested role. Best-effort: the run itself
       // (worktree + session + thread + prompt) already succeeded, so a filing
       // failure must not reject the mutation and strand the user off the
       // thread that is actively running.
-      const githubProjectId = activeProject?.githubProjectId;
-      if (workItem && githubProjectId) {
+      const factoryProjectId =
+        activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
+      if (workItem && factoryProjectId) {
         try {
           // One thread per item: stamp the run's ref onto every role the card
           // tracks so all refs share this threadId.
@@ -144,9 +199,10 @@ export function useStartFactoryRun() {
           if (workItem.id) {
             await updateWorkItem(baseUrl, workItem.id, { stages: workItem.stages, sessions });
           } else {
-            await createWorkItem(baseUrl, githubProjectId, {
+            await createWorkItem(baseUrl, factoryProjectId, {
               source: workItem.source,
               sourceKey: workItem.sourceKey,
+              parentWorkItemId: workItem.parentWorkItemId,
               title: workItem.title,
               url: workItem.url ?? null,
               stages: workItem.stages,
@@ -154,17 +210,20 @@ export function useStartFactoryRun() {
               metadata: workItem.metadata,
             });
           }
-          void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
         } catch (err) {
           console.error('Failed to file the board card for this run', err);
         }
       }
-      return threadId;
     },
-    onSuccess: threadId => void navigate(`/threads/${threadId}`),
   });
 
-  return { start: mutation, enabled: sessionEnabled };
+  const pendingRuns = useMutationState({
+    filters: { mutationKey: factoryRunMutationKey(resourceId, activeFactory?.id), status: 'pending' },
+    select: pending => toPendingFactoryRun(pending.state.variables),
+  }).filter(run => run !== undefined);
+
+  return { start: mutation, pendingRuns, enabled: sessionEnabled };
 }
 
 /**

@@ -30,6 +30,7 @@ export interface WorkItem {
   githubProjectId: string;
   source: WorkItemSource;
   sourceKey: string | null;
+  parentWorkItemId: string | null;
   title: string;
   url: string | null;
   stages: string[];
@@ -50,6 +51,7 @@ export interface WorkItemSessionInput {
 export interface CreateWorkItemInput {
   source: WorkItemSource;
   sourceKey: string | null;
+  parentWorkItemId?: string | null;
   title: string;
   url?: string | null;
   stages: string[];
@@ -58,6 +60,7 @@ export interface CreateWorkItemInput {
 }
 
 export interface UpdateWorkItemInput {
+  parentWorkItemId?: string | null;
   title?: string;
   url?: string | null;
   stages?: string[];
@@ -85,10 +88,10 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** List the org's work items for a project. */
-export async function listWorkItems(baseUrl: string, githubProjectId: string): Promise<WorkItem[]> {
+/** List the org's work items for a Factory project. */
+export async function listWorkItems(baseUrl: string, factoryProjectId: string): Promise<WorkItem[]> {
   const data = await requestJson<{ workItems: WorkItem[] }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items`,
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
   );
   return data.workItems;
 }
@@ -96,11 +99,11 @@ export async function listWorkItems(baseUrl: string, githubProjectId: string): P
 /** Create a work item; the server upserts on `sourceKey` so repeats reuse the card. */
 export async function createWorkItem(
   baseUrl: string,
-  githubProjectId: string,
+  factoryProjectId: string,
   input: CreateWorkItemInput,
 ): Promise<WorkItem> {
   const data = await requestJson<{ workItem: WorkItem }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items`,
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
     { method: 'POST', body: JSON.stringify(input) },
   );
   return data.workItem;

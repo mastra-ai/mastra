@@ -1,5 +1,5 @@
 export { AuditPage } from './AuditPage';
-export { BoardPage } from './BoardPage';
+export { BoardPage, ReviewBoardPage, WorkBoardPage } from './BoardPage';
 export { MetricsPage } from './MetricsPage';
 export { FactorySection } from './components/FactorySection';
 export * from '../../../../shared/hooks/useFactoryData';

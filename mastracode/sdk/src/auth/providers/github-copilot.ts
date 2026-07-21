@@ -188,75 +188,135 @@ function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-async function pollForGitHubAccessToken(
-  domain: string,
-  deviceCode: string,
-  intervalSeconds: number,
-  expiresIn: number,
-  signal?: AbortSignal,
-): Promise<string> {
-  const urls = getUrls(domain);
-  const deadline = Date.now() + expiresIn * 1000;
-  let intervalMs = Math.max(1000, Math.floor(intervalSeconds * 1000));
-  let intervalMultiplier = INITIAL_POLL_INTERVAL_MULTIPLIER;
-  let slowDownResponses = 0;
+/**
+ * Serializable pending state for a Copilot device-code login. Safe to persist
+ * (e.g. a `pending jsonb` column) so polling can span HTTP requests/replicas.
+ */
+export interface CopilotDeviceLoginPending {
+  /** GitHub host performing the flow (`github.com` or an Enterprise hostname). */
+  domain: string;
+  /** Enterprise hostname, or undefined for github.com. Recorded on the final credentials. */
+  enterpriseDomain?: string;
+  deviceCode: string;
+  userCode: string;
+  /** Verification URL for the user to open. */
+  url: string;
+  instructions: string;
+  /** Current base poll interval in ms (grows on slow_down). */
+  intervalMs: number;
+  /** Safety margin applied to intervalMs when computing the next wait. */
+  intervalMultiplier: number;
+  /** Number of slow_down responses seen (used for the clock-drift hint). */
+  slowDownCount: number;
+  /** ms epoch after which the device authorization expires. */
+  deadlineAt: number;
+}
 
-  while (Date.now() < deadline) {
-    if (signal?.aborted) {
-      throw new Error('Login cancelled');
+export type CopilotDevicePollResult =
+  | { status: 'complete'; credentials: GitHubCopilotCredentials }
+  | { status: 'pending'; pending: CopilotDeviceLoginPending; nextPollMs: number }
+  | { status: 'failed'; error: string };
+
+/** Delay to wait before the next upstream poll for a pending Copilot device login. */
+export function copilotNextPollDelayMs(pending: CopilotDeviceLoginPending): number {
+  return Math.ceil(pending.intervalMs * pending.intervalMultiplier);
+}
+
+/**
+ * Start a Copilot device-code login: request a user code and return the
+ * serializable pending state for subsequent polls. Wait `copilotNextPollDelayMs`
+ * before the first poll.
+ */
+export async function startGitHubCopilotDeviceLogin(
+  enterpriseDomain?: string,
+  options?: { signal?: AbortSignal },
+): Promise<CopilotDeviceLoginPending> {
+  const domain = enterpriseDomain || 'github.com';
+  const device = await startDeviceFlow(domain, options?.signal);
+
+  return {
+    domain,
+    ...(enterpriseDomain ? { enterpriseDomain } : {}),
+    deviceCode: device.device_code,
+    userCode: device.user_code,
+    url: device.verification_uri,
+    instructions: `Enter code: ${device.user_code}`,
+    intervalMs: Math.max(1000, Math.floor(device.interval * 1000)),
+    intervalMultiplier: INITIAL_POLL_INTERVAL_MULTIPLIER,
+    slowDownCount: 0,
+    deadlineAt: Date.now() + device.expires_in * 1000,
+  };
+}
+
+/**
+ * Perform exactly one upstream poll for a pending Copilot device login.
+ * On success, exchanges the GitHub OAuth token for a Copilot bearer token and
+ * returns full credentials. Never throws for flow-level conditions; network
+ * errors from fetch still propagate.
+ */
+export async function pollGitHubCopilotDeviceLogin(
+  pending: CopilotDeviceLoginPending,
+  options?: { signal?: AbortSignal; onProgress?: (message: string) => void },
+): Promise<CopilotDevicePollResult> {
+  if (Date.now() >= pending.deadlineAt) {
+    if (pending.slowDownCount > 0) {
+      return {
+        status: 'failed',
+        error:
+          'Device flow timed out after one or more slow_down responses. This is often caused by clock drift in WSL or VM environments. Please sync or restart the VM clock and try again.',
+      };
     }
+    return { status: 'failed', error: 'Device flow timed out' };
+  }
 
-    const remainingMs = deadline - Date.now();
-    const waitMs = Math.min(Math.ceil(intervalMs * intervalMultiplier), remainingMs);
-    await abortableSleep(waitMs, signal);
-
-    const raw = await fetchJson(
-      urls.accessTokenUrl,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': COPILOT_USER_AGENT,
-        },
-        body: new URLSearchParams({
-          client_id: CLIENT_ID,
-          device_code: deviceCode,
-          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-        }),
+  const urls = getUrls(pending.domain);
+  const raw = await fetchJson(
+    urls.accessTokenUrl,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': COPILOT_USER_AGENT,
       },
-      signal,
-    );
+      body: new URLSearchParams({
+        client_id: CLIENT_ID,
+        device_code: pending.deviceCode,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      }),
+    },
+    options?.signal,
+  );
 
-    if (raw && typeof raw === 'object' && typeof (raw as DeviceTokenSuccessResponse).access_token === 'string') {
-      return (raw as DeviceTokenSuccessResponse).access_token;
+  if (raw && typeof raw === 'object' && typeof (raw as DeviceTokenSuccessResponse).access_token === 'string') {
+    const githubAccessToken = (raw as DeviceTokenSuccessResponse).access_token;
+    options?.onProgress?.('Fetching Copilot token...');
+    const credentials = await refreshGitHubCopilotToken(githubAccessToken, pending.enterpriseDomain, options?.signal);
+    return { status: 'complete', credentials };
+  }
+
+  if (raw && typeof raw === 'object' && typeof (raw as DeviceTokenErrorResponse).error === 'string') {
+    const { error, error_description: description, interval } = raw as DeviceTokenErrorResponse;
+
+    if (error === 'slow_down') {
+      const next: CopilotDeviceLoginPending = {
+        ...pending,
+        slowDownCount: pending.slowDownCount + 1,
+        intervalMs:
+          typeof interval === 'number' && interval > 0 ? interval * 1000 : Math.max(1000, pending.intervalMs + 5000),
+        intervalMultiplier: SLOW_DOWN_POLL_INTERVAL_MULTIPLIER,
+      };
+      return { status: 'pending', pending: next, nextPollMs: copilotNextPollDelayMs(next) };
     }
 
-    if (raw && typeof raw === 'object' && typeof (raw as DeviceTokenErrorResponse).error === 'string') {
-      const { error, error_description: description, interval } = raw as DeviceTokenErrorResponse;
-      if (error === 'authorization_pending') {
-        continue;
-      }
-
-      if (error === 'slow_down') {
-        slowDownResponses += 1;
-        intervalMs = typeof interval === 'number' && interval > 0 ? interval * 1000 : Math.max(1000, intervalMs + 5000);
-        intervalMultiplier = SLOW_DOWN_POLL_INTERVAL_MULTIPLIER;
-        continue;
-      }
-
+    if (error !== 'authorization_pending') {
       const descriptionSuffix = description ? `: ${description}` : '';
-      throw new Error(`Device flow failed: ${error}${descriptionSuffix}`);
+      return { status: 'failed', error: `Device flow failed: ${error}${descriptionSuffix}` };
     }
   }
 
-  if (slowDownResponses > 0) {
-    throw new Error(
-      'Device flow timed out after one or more slow_down responses. This is often caused by clock drift in WSL or VM environments. Please sync or restart the VM clock and try again.',
-    );
-  }
-
-  throw new Error('Device flow timed out');
+  // authorization_pending or an unrecognized-but-OK response: keep polling.
+  return { status: 'pending', pending, nextPollMs: copilotNextPollDelayMs(pending) };
 }
 
 /**
@@ -336,21 +396,30 @@ export async function loginGitHubCopilot(options: {
   if (trimmed && !enterpriseDomain) {
     throw new Error('Invalid GitHub Enterprise URL/domain');
   }
-  const domain = enterpriseDomain || 'github.com';
+  let pending = await startGitHubCopilotDeviceLogin(enterpriseDomain ?? undefined, { signal: options.signal });
+  options.onAuth(pending.url, pending.instructions);
 
-  const device = await startDeviceFlow(domain, options.signal);
-  options.onAuth(device.verification_uri, `Enter code: ${device.user_code}`);
+  while (true) {
+    if (options.signal?.aborted) {
+      throw new Error('Login cancelled');
+    }
 
-  const githubAccessToken = await pollForGitHubAccessToken(
-    domain,
-    device.device_code,
-    device.interval,
-    device.expires_in,
-    options.signal,
-  );
+    // Wait before polling (safety margin over the server interval), clamped to the deadline.
+    const remainingMs = Math.max(pending.deadlineAt - Date.now(), 0);
+    await abortableSleep(Math.min(copilotNextPollDelayMs(pending), remainingMs), options.signal);
 
-  options.onProgress?.('Fetching Copilot token...');
-  return refreshGitHubCopilotToken(githubAccessToken, enterpriseDomain ?? undefined, options.signal);
+    const result = await pollGitHubCopilotDeviceLogin(pending, {
+      signal: options.signal,
+      onProgress: options.onProgress,
+    });
+    if (result.status === 'complete') {
+      return result.credentials;
+    }
+    if (result.status === 'failed') {
+      throw new Error(result.error);
+    }
+    pending = result.pending;
+  }
 }
 
 /**

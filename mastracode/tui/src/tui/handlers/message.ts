@@ -14,7 +14,7 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
-import { getAssistantRenderParts } from '../db-message-parts.js';
+import { getAssistantRenderParts, isGoalJudgeEvaluationSignal } from '../db-message-parts.js';
 import type { ToolRenderPart } from '../db-message-parts.js';
 import { flushRender, requestRender } from '../render-scheduler.js';
 import { getMarkdownTheme } from '../theme.js';
@@ -118,6 +118,7 @@ export function handleMessageStart(ctx: EventHandlerContext, message: MastraDBMe
     if (message.role === 'signal') {
       if (state.currentRunSystemReminderKeys.has(message.id)) return;
       state.currentRunSystemReminderKeys.add(message.id);
+      if (isGoalJudgeEvaluationSignal(message)) return;
     }
     ctx.addUserMessage(message);
     return;
@@ -144,6 +145,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
   // Signals arrive as their own message_start/message_end pair; if an update is
   // delivered for one, route it through the shared signal renderer (deduped by id).
   if (message.role === 'signal') {
+    if (isGoalJudgeEvaluationSignal(message)) return;
     ctx.addUserMessage(message);
     return;
   }

@@ -20,6 +20,7 @@ import type {
   InstructionsOption,
   MastraSandboxOptions,
   ProviderStatus,
+  SandboxCloneOptions,
   SandboxInfo,
 } from '@mastra/core/workspace';
 import { MastraSandbox, ProcessHandle, SandboxExecutionError } from '@mastra/core/workspace';
@@ -200,6 +201,7 @@ export class AppleContainerSandbox extends MastraSandbox {
   private readonly _runner: AppleContainerCommandRunner;
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _createdAt: Date;
+  private readonly _constructorOptions: AppleContainerSandboxOptions;
 
   private _containerId?: string;
 
@@ -251,6 +253,30 @@ export class AppleContainerSandbox extends MastraSandbox {
     this._runner = options.runner ?? new DefaultAppleContainerCommandRunner(options.containerBinary);
     this._instructionsOverride = options.instructions;
     this._createdAt = new Date();
+    this._constructorOptions = { ...options };
+  }
+
+  /**
+   * Construct a sibling `AppleContainerSandbox` that inherits this sandbox's
+   * configuration (image, resources, network, security options, labels) with
+   * per-instance overrides.
+   *
+   * Performs no I/O — the sandbox clone provisions (or reconnects to an
+   * existing container labelled with the same logical `id`) on its own
+   * `start()`. Use it when one configured sandbox acts as the template for a
+   * fleet of independent sandboxes (e.g. one per project).
+   *
+   * `options.idleTimeoutMinutes` is ignored (Apple containers have no
+   * provider-side idle teardown; `timeout` here is a command timeout), and
+   * `options.sandboxId` is ignored because reconnection is by logical `id`.
+   */
+  clone(options: SandboxCloneOptions = {}): AppleContainerSandbox {
+    const { id: _id, name: _name, ...base } = this._constructorOptions;
+    return new AppleContainerSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+    });
   }
 
   get containerId(): string {

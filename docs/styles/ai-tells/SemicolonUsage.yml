@@ -11,21 +11,21 @@ nonword: true
 # conjunctive adverbs that join clauses without one. Google.Semicolons still
 # warns on the rest.
 exceptions:
-  - "(?i)however"
-  - "(?i)therefore"
-  - "(?i)thus"
-  - "(?i)hence"
-  - "(?i)moreover"
-  - "(?i)furthermore"
-  - "(?i)consequently"
-  - "(?i)nevertheless"
-  - "(?i)nonetheless"
-  - "(?i)otherwise"
-  - "(?i)meanwhile"
-  - "(?i)accordingly"
-  - "(?i)besides"
-  - "(?i)indeed"
-  - "(?i)namely"
-  - "(?i)instead"
+  - '(?i)however'
+  - '(?i)therefore'
+  - '(?i)thus'
+  - '(?i)hence'
+  - '(?i)moreover'
+  - '(?i)furthermore'
+  - '(?i)consequently'
+  - '(?i)nevertheless'
+  - '(?i)nonetheless'
+  - '(?i)otherwise'
+  - '(?i)meanwhile'
+  - '(?i)accordingly'
+  - '(?i)besides'
+  - '(?i)indeed'
+  - '(?i)namely'
+  - '(?i)instead'
 tokens:
   - "; [^,;\\n]*[.!?]"

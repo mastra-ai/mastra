@@ -4,15 +4,17 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { useToast } from '../../web/ui/ui/toast';
 import { createWorktree, deleteWorktree } from '../../web/ui/domains/workspaces/services/github';
-import type { Project, Worktree } from '../../web/ui/domains/workspaces/services/projects';
+import type { Factory, Worktree } from '../../web/ui/domains/workspaces/services/factories';
 import {
-  factoryWorktrees,
-  loadProjects,
+  boardSessionWorktrees,
+  isServerFactory,
+  loadFactories,
   removeWorktree,
+  selectedRepository,
   selectedWorktree,
   selectWorktree,
   upsertWorktree,
-} from '../../web/ui/domains/workspaces/services/projects';
+} from '../../web/ui/domains/workspaces/services/factories';
 
 /**
  * The slice of the agent-controller session the delete mutation needs to
@@ -33,70 +35,71 @@ export interface WorkspacesData {
   selected: Worktree | undefined;
 }
 
-function latestProject(project: Project): Project {
-  return loadProjects().find(stored => stored.id === project.id) ?? project;
+function latestFactory(factory: Factory): Factory {
+  return loadFactories().find(stored => stored.id === factory.id) ?? factory;
 }
 
-export function deriveProjectPath(project: Project | null | undefined): string {
-  if (!project) return '';
+export function deriveProjectPath(factory: Factory | null | undefined): string {
+  if (!factory) return '';
   // The repo-root checkout is not a chat target: everything runs in a
-  // worktree branched from HEAD, so a GitHub project without a selected
+  // worktree branched from HEAD, so a server factory without a selected
   // workspace has no project path (and no enabled chat session).
-  if (project.source === 'github') return selectedWorktree(project)?.worktreePath ?? '';
-  return project.path ?? '';
+  // `projectPath` remains the SDK/TUI session tag for the execution workspace.
+  if (isServerFactory(factory)) return selectedWorktree(factory)?.worktreePath ?? '';
+  return factory.binding.path;
 }
 
 function invalidateWorkspaceQueries(
   queryClient: ReturnType<typeof useQueryClient>,
-  project: Project,
+  factory: Factory,
   scope?: AgentControllerThreadsScope,
 ) {
-  const projectPath = deriveProjectPath(latestProject(project));
-  void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces(project.id) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
+  const projectPath = deriveProjectPath(latestFactory(factory));
+  void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces(factory.id) });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
   void queryClient.invalidateQueries({
     queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, projectPath),
   });
 }
 
-function workspacesData(project: Project): WorkspacesData {
-  const current = latestProject(project);
+function workspacesData(factory: Factory): WorkspacesData {
+  const current = latestFactory(factory);
   return {
-    // Factory workspaces only: user-session worktrees are listed by the
-    // User Sessions section, and the repo root is not a workspace at all.
-    worktrees: factoryWorktrees(current),
+    // Board-created factory workspaces only: user-session worktrees are listed
+    // by the User Sessions section, and the repo root is not a workspace at all.
+    worktrees: boardSessionWorktrees(current),
     selected: selectedWorktree(current),
   };
 }
 
-export function useWorkspacesQuery(project: Project | null | undefined) {
-  const githubProject = project?.source === 'github' ? project : undefined;
+export function useWorkspacesQuery(factory: Factory | null | undefined) {
+  const serverFactory = factory && isServerFactory(factory) ? factory : undefined;
   return useQuery({
-    queryKey: queryKeys.workspaces(project?.id),
+    queryKey: queryKeys.workspaces(factory?.id),
     queryFn: async (): Promise<WorkspacesData> => {
-      if (!githubProject) throw new Error('Workspaces query requires a GitHub project');
-      return workspacesData(githubProject);
+      if (!serverFactory) throw new Error('Workspaces query requires a server-backed factory');
+      return workspacesData(serverFactory);
     },
-    enabled: !!githubProject,
-    initialData: githubProject ? () => workspacesData(githubProject) : undefined,
+    enabled: !!serverFactory,
+    initialData: serverFactory ? () => workspacesData(serverFactory) : undefined,
   });
 }
 
-export function useSelectWorkspaceMutation(project: Project | null | undefined, scope?: AgentControllerThreadsScope) {
+export function useSelectWorkspaceMutation(factory: Factory | null | undefined, scope?: AgentControllerThreadsScope) {
   const queryClient = useQueryClient();
   return useMutation({
     // Sessions are scoped per worktree, so selecting a worktree only updates
-    // the stored project — the UI re-derives the scope and addresses that
+    // the stored factory — the UI re-derives the scope and addresses that
     // worktree's own session (no rebinding of the previous session's state).
     mutationFn: async (worktreePath: string) => {
-      if (!project) throw new Error('No active project');
-      return selectWorktree(latestProject(project), worktreePath);
+      if (!factory) throw new Error('No active factory');
+      return selectWorktree(latestFactory(factory), worktreePath);
     },
     onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
   });
 }
 
-export function useCreateWorkspaceMutation(project: Project | null | undefined, scope?: AgentControllerThreadsScope) {
+export function useCreateWorkspaceMutation(factory: Factory | null | undefined, scope?: AgentControllerThreadsScope) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -104,14 +107,16 @@ export function useCreateWorkspaceMutation(project: Project | null | undefined, 
   return useMutation({
     mutationFn: async (branch: string) => {
       const trimmedBranch = branch.trim();
-      if (!project?.githubProjectId) throw new Error('No GitHub project selected');
-      const result = await createWorktree(baseUrl, project.githubProjectId, trimmedBranch);
+      if (!factory || !isServerFactory(factory)) throw new Error('No server-backed factory selected');
+      const repository = selectedRepository(factory);
+      if (!repository) throw new Error('Connect a repository before creating a workspace');
+      const result = await createWorktree(baseUrl, repository.projectRepositoryId, trimmedBranch);
       const worktree: Worktree = {
         branch: result.branch,
         worktreePath: result.worktreePath,
         baseBranch: result.baseBranch,
       };
-      return selectWorktree(upsertWorktree(latestProject(project), worktree), worktree.worktreePath);
+      return selectWorktree(upsertWorktree(latestFactory(factory), worktree), worktree.worktreePath);
     },
     onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
     onError: error => toast(error instanceof Error ? error.message : 'Failed to create workspace', 'error'),
@@ -120,14 +125,14 @@ export function useCreateWorkspaceMutation(project: Project | null | undefined, 
 
 /**
  * Delete a worktree: removes the sandbox checkout + branch server-side, deletes
- * every thread that ran inside it, drops it from the stored project, and — when
- * the deleted worktree was selected — falls back to the first remaining factory
+ * every thread that ran inside it, drops it from the stored factory, and — when
+ * the deleted worktree was selected — falls back to the first remaining board
  * workspace (the UI re-derives the scope and addresses that worktree's own
  * session), or to no selection when none remain.
  * Destructive; callers confirm with the user first.
  */
 export function useDeleteWorkspaceMutation(
-  project: Project | null | undefined,
+  factory: Factory | null | undefined,
   threadSession: WorkspaceThreadSession | null | undefined,
   scope?: AgentControllerThreadsScope,
 ) {
@@ -137,8 +142,10 @@ export function useDeleteWorkspaceMutation(
 
   return useMutation({
     mutationFn: async (worktree: Worktree) => {
-      if (!project?.githubProjectId) throw new Error('No GitHub project selected');
-      await deleteWorktree(baseUrl, project.githubProjectId, worktree.branch);
+      if (!factory || !isServerFactory(factory)) throw new Error('No server-backed factory selected');
+      const repository = selectedRepository(factory);
+      if (!repository) throw new Error('Connect a repository before deleting a workspace');
+      await deleteWorktree(baseUrl, repository.projectRepositoryId, worktree.branch);
 
       // Cascade: delete the threads scoped to this worktree. Re-list between
       // rounds since the page size caps each fetch; bail after a sane number
@@ -154,8 +161,8 @@ export function useDeleteWorkspaceMutation(
         }
       }
 
-      const wasSelected = selectedWorktree(latestProject(project))?.worktreePath === worktree.worktreePath;
-      const updated = removeWorktree(latestProject(project), worktree.worktreePath);
+      const wasSelected = selectedWorktree(latestFactory(factory))?.worktreePath === worktree.worktreePath;
+      const updated = removeWorktree(latestFactory(factory), worktree.worktreePath);
       return { updated, removedPath: worktree.worktreePath, wasSelected };
     },
     onSuccess: ({ updated, removedPath }) => {

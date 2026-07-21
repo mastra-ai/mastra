@@ -50,6 +50,10 @@ export function useAgentControllerTranscript({
     dispatch({ type: 'resolvePrompt', id });
   };
 
+  const clearPending = () => {
+    dispatch({ type: 'clearPending' });
+  };
+
   const pushNotice = (text: string, level: 'info' | 'error' = 'info') => {
     dispatch({ type: 'localNotice', text, level });
   };
@@ -61,6 +65,7 @@ export function useAgentControllerTranscript({
     onEvent,
     localUser,
     resolvePrompt,
+    clearPending,
     pushNotice,
   };
 }

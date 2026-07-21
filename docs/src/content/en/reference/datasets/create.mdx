@@ -17,9 +17,7 @@ Creates a new dataset. Use Standard JSON Schema (Zod, Valibot, ArkType, etc.) fo
 import { Mastra } from '@mastra/core'
 import { z } from 'zod'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 // Create with metadata
 const dataset = await mastra.datasets.create({

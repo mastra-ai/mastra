@@ -70,6 +70,41 @@ Read the [`mastra start`](/reference/cli/mastra#mastra-start) reference for all 
 
 ## Build configuration
 
+### Build-time configuration
+
+Mastra reads the `bundler`, `deployer`, and `server` options while it builds your application. Keep those options as direct properties of the object passed to `new Mastra()` so the build can extract them.
+
+The following entry-file shape works:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: ['sharp'],
+  },
+  server: {
+    port: 4111,
+  },
+})
+```
+
+The value of each option can come from a variable, import, or function call. The option itself must remain a direct property. Do not hide build-time options behind a factory call or an object spread:
+
+```typescript title="src/mastra/index.ts"
+const options = {
+  bundler: {
+    externals: ['sharp'],
+  },
+}
+
+// These patterns prevent Mastra from extracting `bundler` during the build.
+export const mastra = new Mastra(createMastraOptions())
+export const otherMastra = new Mastra({ ...options })
+```
+
+When Mastra can't extract an option, it uses the default build behavior for that option. See the [configuration reference](/reference/configuration) for the available `bundler`, `deployer`, and `server` settings.
+
 ### Public folder
 
 If a `public` folder exists in your Mastra directory (`src/mastra/public`), its contents are copied to the output directory during build. These files are served as static assets by the server.

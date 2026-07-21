@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CircleDot, CircleX, GitMerge } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
+import { useWorkItemsQuery } from '../../../../../../shared/hooks/useWorkItems';
 import type { TranscriptState } from '../../services/transcript';
 
 interface PullRequestSubscription {
@@ -32,7 +33,9 @@ interface PullRequestLinksProps {
   baseUrl: string;
   resourceId: string;
   projectPath: string | undefined;
-  githubProjectId: unknown;
+  projectRepositoryId: unknown;
+  factoryProjectId: unknown;
+  repositorySlug: string | undefined;
   threadId: string | undefined;
   transcriptEntries: TranscriptState['entries'];
   busy: boolean;
@@ -43,12 +46,38 @@ export function PullRequestLinks({
   baseUrl,
   resourceId,
   projectPath,
-  githubProjectId,
+  projectRepositoryId,
+  factoryProjectId,
+  repositorySlug,
   threadId,
   transcriptEntries,
   busy,
 }: PullRequestLinksProps) {
   const wasBusy = useRef(busy);
+  const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
+  const workItems = useWorkItemsQuery(factoryProjectKey);
+  const reviewItem = workItems.data?.find(
+    item =>
+      item.source === 'github-pr' &&
+      Object.values(item.sessions).some(
+        session => session.threadId === threadId && (!projectPath || session.projectPath === projectPath),
+      ),
+  );
+  const reviewNumber = reviewItem?.metadata.number;
+  const factorySubscription: PullRequestSubscription | undefined =
+    reviewItem &&
+    repositorySlug &&
+    (typeof reviewNumber === 'number' || typeof reviewNumber === 'string') &&
+    Number.isInteger(Number(reviewNumber))
+      ? {
+          id: `factory-work-item:${reviewItem.id}`,
+          repoFullName: repositorySlug,
+          pullRequestNumber: Number(reviewNumber),
+          status:
+            reviewItem.metadata.merged === true ? 'merged' : reviewItem.metadata.state === 'closed' ? 'closed' : 'open',
+          url: `https://github.com/${repositorySlug}/pull/${reviewNumber}`,
+        }
+      : undefined;
   const notificationIds = transcriptEntries
     .flatMap(entry => {
       if (entry.kind === 'notification') return [entry.notificationId];
@@ -63,7 +92,7 @@ export function PullRequestLinks({
     })
     .filter(id => typeof id === 'string')
     .join(':');
-  const enabled = typeof githubProjectId === 'string' && Boolean(threadId);
+  const enabled = typeof projectRepositoryId === 'string' && Boolean(threadId);
   const query = useQuery({
     queryKey: ['github', 'subscriptions', resourceId, threadId, projectPath],
     queryFn: async () => {
@@ -86,11 +115,21 @@ export function PullRequestLinks({
     wasBusy.current = busy;
   }, [busy, query.refetch]);
 
-  if (!query.data?.subscriptions.length) return null;
+  const subscriptions = query.data?.subscriptions ?? [];
+  const links =
+    factorySubscription &&
+    !subscriptions.some(
+      subscription =>
+        subscription.repoFullName === factorySubscription.repoFullName &&
+        subscription.pullRequestNumber === factorySubscription.pullRequestNumber,
+    )
+      ? [...subscriptions, factorySubscription]
+      : subscriptions;
+  if (links.length === 0) return null;
 
   return (
     <div className="flex items-center gap-2">
-      {query.data.subscriptions.map(subscription => (
+      {links.map(subscription => (
         <a
           key={subscription.id}
           href={subscription.url}

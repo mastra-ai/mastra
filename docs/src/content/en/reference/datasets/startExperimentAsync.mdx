@@ -16,9 +16,7 @@ Starts an experiment asynchronously (fire-and-forget). Returns immediately with 
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 

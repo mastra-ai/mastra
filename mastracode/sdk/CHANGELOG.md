@@ -1,5 +1,177 @@
 # @mastra/code-sdk
 
+## 1.0.0-alpha.10
+
+### Major Changes
+
+- Replaced GitHub-specific Mastra Code session state with Factory project and linked-repository identities. This lets SDK consumers represent sessions independently of a source-control provider and select a repository explicitly when sandbox execution is required. ([#19849](https://github.com/mastra-ai/mastra/pull/19849))
+
+  Updated Mastra Code onboarding to be Factory-first: create a Factory by name, then link repositories from your connected source-control installations in a separate step. A Factory is valid with zero linked repositories, and the Board, Metrics, and Audit pages stay available for any server-backed Factory. Factory pages keep project-scoped data separate from repository-scoped intake and provide a repository selector when a Factory has multiple linked repositories. Creating a Factory from a local folder remains available as a secondary option.
+
+  **Before**
+
+  ```ts
+  const state = { githubProjectId: 'project-1', sandboxId, sandboxWorkdir };
+  ```
+
+  **After**
+
+  ```ts
+  const state = {
+    factoryProjectId: 'factory-project-1',
+    projectRepositoryId: 'project-repository-1',
+    sandboxId,
+    sandboxWorkdir,
+  };
+  ```
+
+### Minor Changes
+
+- Moved model packs in Mastra Code web to database-backed storage and refreshed the built-in packs. ([#19849](https://github.com/mastra-ai/mastra/pull/19849))
+
+  **Model packs are now stored in the Factory database**
+
+  When running with a Factory backend, custom model packs are saved in a new model-packs storage domain scoped to your organization instead of the local settings.json file. Local (non-tenant) mode keeps the file-backed behavior.
+
+  **Pick from available models**
+
+  The settings Model tab now loads the list of available models from a new /web/config/models endpoint, so the Factory default model picker and model pack editor only offer models you actually have credentials for. Model pickers are searchable comboboxes instead of plain dropdowns, and pack activation now resolves the correct scoped session so packs can be activated from settings.
+
+  **Default packs updated to the latest model releases**
+
+  - Anthropic: build and plan anthropic/claude-fable-5, fast anthropic/claude-haiku-4-5
+  - OpenAI: build and plan openai/gpt-5.6
+  - Observational memory default model is now google/gemini-3.5-flash
+
+- Added a Factory default model for server-backed Factories in Mastra Code web. Set it in Settings under the Model tab and every factory run (like issue triage) starts on that model. The Model tab now also hosts model packs, replacing the separate Packs tab — packs stay session-scoped while the default model is stored on the Factory project itself. ([#19849](https://github.com/mastra-ai/mastra/pull/19849))
+
+### Patch Changes
+
+- dependencies updates: ([#19813](https://github.com/mastra-ai/mastra/pull/19813))
+  - Updated dependency [`@ai-sdk/amazon-bedrock@^3.0.107` ↗︎](https://www.npmjs.com/package/@ai-sdk/amazon-bedrock/v/3.0.107) (from `^3.0.105`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.98` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.98) (from `^3.0.96`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.86` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.86) (from `^3.0.84`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai-compatible@^2.0.62` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai-compatible/v/2.0.62) (from `^2.0.59`, in `dependencies`)
+  - Updated dependency [`ai@^6.0.230` ↗︎](https://www.npmjs.com/package/ai/v/6.0.230) (from `^6.0.225`, in `dependencies`)
+
+- Fixed goal duration so it persists across pauses and process restarts. ([#19837](https://github.com/mastra-ai/mastra/pull/19837))
+
+- Updated dependencies [[`41a5392`](https://github.com/mastra-ai/mastra/commit/41a5392d9f6c5e18d6b227f0fc0ddf49c50774e9), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`da009e1`](https://github.com/mastra-ai/mastra/commit/da009e1aacd89ed94b8d1b2af09c9d4fe7c4db49), [`35c2181`](https://github.com/mastra-ai/mastra/commit/35c2181e6a50e47c90ba36260db7c9723d54696f), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`6deac4a`](https://github.com/mastra-ai/mastra/commit/6deac4a520750d807a2154333bf1b91a2df958a5), [`c328769`](https://github.com/mastra-ai/mastra/commit/c3287698ff8ef98dba86d415faa566fa3e5f4d56), [`232fcbc`](https://github.com/mastra-ai/mastra/commit/232fcbc14fce625dd672ba043329c0b732c62be2), [`3491666`](https://github.com/mastra-ai/mastra/commit/34916663c4fdd43b48c21f4ab2d5fb6dcccc94f9)]:
+  - @mastra/core@1.52.0-alpha.10
+  - @mastra/libsql@1.17.0-alpha.2
+  - @mastra/pg@1.17.0-alpha.2
+  - @mastra/observability@1.16.2-alpha.1
+  - @mastra/mcp@1.15.0-alpha.0
+
+## 0.2.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`0a2c22c`](https://github.com/mastra-ai/mastra/commit/0a2c22c902604439ec490319e14c17f331e0c84c), [`3a8024c`](https://github.com/mastra-ai/mastra/commit/3a8024ce615f8aa89479c0d71fe61d10bb0040be)]:
+  - @mastra/core@1.52.0-alpha.9
+
+## 0.2.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`6b1bf3b`](https://github.com/mastra-ai/mastra/commit/6b1bf3b9494bd51aa8f654c68c9355d6046fa2a1), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9)]:
+  - @mastra/core@1.52.0-alpha.8
+  - @mastra/pg@1.17.0-alpha.1
+  - @mastra/libsql@1.17.0-alpha.1
+
+## 0.2.0-alpha.7
+
+### Patch Changes
+
+- Fixed Mastra Code retries for EPIPE and closed provider connections. (#19691) ([#19692](https://github.com/mastra-ai/mastra/pull/19692))
+
+- Fixed Amazon Bedrock prompt caching for long Mastra Code conversations. ([#19690](https://github.com/mastra-ai/mastra/pull/19690))
+
+- Updated dependencies [[`b7e79c3`](https://github.com/mastra-ai/mastra/commit/b7e79c3c02ac5cd415db34ba0975ceafc1464333), [`b75d749`](https://github.com/mastra-ai/mastra/commit/b75d749621ff5d17e86bcb4ee809d301fb4f7cf3), [`a8799bb`](https://github.com/mastra-ai/mastra/commit/a8799bb8e44f4a60d01e4e2acd3448ff80bf14f8)]:
+  - @mastra/core@1.52.0-alpha.7
+
+## 0.2.0-alpha.6
+
+### Patch Changes
+
+- Fixed Moonshot AI API key resolution so keys saved via /api-keys (MOONSHOT_API_KEY) work when selecting moonshot models ([#19655](https://github.com/mastra-ai/mastra/pull/19655))
+
+- Updated dependencies [[`a40adeb`](https://github.com/mastra-ai/mastra/commit/a40adeb222b961a56a58af56a106106525721b74), [`821648b`](https://github.com/mastra-ai/mastra/commit/821648bf2871ef840100c7bacbecf676010bd12a), [`11f6cd9`](https://github.com/mastra-ai/mastra/commit/11f6cd96fe42582403416608beb212cc1a2cc79e)]:
+  - @mastra/core@1.52.0-alpha.6
+
+## 0.2.0-alpha.5
+
+### Minor Changes
+
+- Added support for injecting pre-built storage and vector store instances into Mastra Code. `MastraCodeConfig.storage` now accepts a `MastraCompositeStore` instance in addition to a storage config, and the new `MastraCodeConfig.vector` slot accepts a `MastraVector` instance. When an instance is provided it is used as-is — no connection test or LibSQL fallback — so hosted deployments can share a single Postgres connection pool between Mastra storage and application tables. ([#19623](https://github.com/mastra-ai/mastra/pull/19623))
+
+  **Before**
+
+  ```ts
+  await createMastraCode({ storage: { backend: 'pg', connectionString } });
+  ```
+
+  **After**
+
+  ```ts
+  const storage = new PostgresStore({ id: 'code-storage', connectionString });
+  const vector = new PgVector({ id: 'code-vectors', connectionString });
+  await createMastraCode({ storage, vector });
+  ```
+
+- Added step-based OAuth APIs for browser-driven provider sign-in and tenant-aware credential resolution. Hosted applications can now inject a credential store so each request resolves the caller's credentials without copying stored secrets into process environment variables. ([#19638](https://github.com/mastra-ai/mastra/pull/19638))
+
+  ```ts
+  import { startAnthropicLogin } from '@mastra/code-sdk/auth/providers/anthropic';
+
+  const { url, verifier } = await startAnthropicLogin();
+  ```
+
+- Added access to the workspace resolved for an AgentController session. ([#19547](https://github.com/mastra-ai/mastra/pull/19547))
+
+  Use the session-owned workspace when an operation must remain isolated to that session:
+
+  ```ts
+  const session = await controller.createSession({ resourceId, scope });
+  const workspace = session.getWorkspace();
+  ```
+
+  Mastra Code workspace resolvers can now accept an isolated read-only skill extension:
+
+  ```ts
+  const workspace = await getDynamicWorkspace({
+    requestContext,
+    skillExtension: {
+      id: 'review-skills',
+      paths: ['/__review_skills__'],
+      createSource: fallback => new ReviewSkillSource(fallback),
+    },
+  });
+  ```
+
+  This lets SDK consumers compose additional read-only skill roots into selected workspaces without changing the default workspace skill set.
+
+### Patch Changes
+
+- dependencies updates: ([#19611](https://github.com/mastra-ai/mastra/pull/19611))
+  - Updated dependency [`ai@^6.0.225` ↗︎](https://www.npmjs.com/package/ai/v/6.0.225) (from `^6.0.224`, in `dependencies`)
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`d2ff897`](https://github.com/mastra-ai/mastra/commit/d2ff8979d3069c6101108cdb7815792b0cc1c1b3), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`89da3cd`](https://github.com/mastra-ai/mastra/commit/89da3cd80c7c9936791ff0c31e244bcc41b0dd12), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`0c52047`](https://github.com/mastra-ai/mastra/commit/0c520470a4547666156b2f18eb794eb8bd2676c8), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`ec17152`](https://github.com/mastra-ai/mastra/commit/ec17152e7514b5fad37d6ed50f90a937b4bb87a2), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/core@1.52.0-alpha.5
+  - @mastra/tavily@1.1.1-alpha.0
+  - @mastra/libsql@1.16.1-alpha.0
+  - @mastra/memory@1.23.1-alpha.1
+  - @mastra/observability@1.16.2-alpha.0
+  - @mastra/mcp@1.15.0-alpha.0
+
+## 0.2.0-alpha.4
+
+### Patch Changes
+
+- Added on-disk verification to the update utilities: `runUpdate` now returns the package manager's stderr, and the new `performUpdate` locates the running install, delegates the update to the tool that owns it (for example vite-plus), verifies the on-disk version when available, and reports when a readable installed version remains unchanged. ([#18792](https://github.com/mastra-ai/mastra/pull/18792))
+
+- Updated dependencies [[`4cfdd64`](https://github.com/mastra-ai/mastra/commit/4cfdd645794feaea0c4ea711e70ecdfbef0c5b8e)]:
+  - @mastra/core@1.52.0-alpha.4
+
 ## 0.2.0-alpha.3
 
 ### Patch Changes

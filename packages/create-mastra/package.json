@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "1.19.1-alpha.3",
+  "version": "1.20.0-alpha.10",
   "description": "Create Mastra apps with one command",
   "license": "Apache-2.0",
   "type": "module",
@@ -48,7 +48,7 @@
     "@rollup/plugin-node-resolve": "16.0.3",
     "@types/node": "22.20.1",
     "esbuild": "^0.28.0",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "mastra": "workspace:^",
     "rollup": "^4.62.2",
     "rollup-plugin-esbuild": "^6.2.1",

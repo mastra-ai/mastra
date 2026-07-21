@@ -23,6 +23,7 @@ vi.mock('../display.js', () => ({
   notify: vi.fn(),
 }));
 
+import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { handleAgentAborted, handleAgentEnd, handleGoalEvaluation } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
@@ -54,7 +55,7 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
   return {
     session,
     controller: { session, ...(agentControllerOverride ?? {}) },
-    goalManager: { stopActiveTimer: vi.fn() },
+    goalManager: {},
     gradientAnimator: undefined,
     projectInfo: { rootPath: '.', gitBranch: 'main' } as TUIState['projectInfo'],
     streamingComponent: undefined,
@@ -605,6 +606,40 @@ describe('MastraTUI queueing', () => {
     expect(state.ui.requestRender).toHaveBeenCalled();
   });
 
+  it('clears completed judge state and places the next iteration after continuation output', () => {
+    const applyEvaluation = vi.fn();
+    const state = createQueueState({
+      goalManager: {
+        applyEvaluation,
+        getGoal: vi.fn(() => ({
+          id: 'continuing-goal',
+          status: 'active',
+          judgeModelId: 'openai/gpt-5.4-mini',
+          turnsUsed: 1,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1 }));
+    expect(state.activeGoalJudge).toBeUndefined();
+
+    const continuationOutput = { kind: 'assistant-output' };
+    state.chatContainer.addChild(continuationOutput as any);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 2 }));
+
+    const judgeComponents = state.chatContainer.children.filter(child => child instanceof JudgeDisplayComponent);
+    expect(judgeComponents).toHaveLength(2);
+    expect(judgeComponents[1]).not.toBe(judgeComponents[0]);
+    expect(state.chatContainer.children.indexOf(judgeComponents[1]!)).toBeGreaterThan(
+      state.chatContainer.children.indexOf(continuationOutput as any),
+    );
+    expect(state.activeGoalJudge).toBeUndefined();
+    expect(applyEvaluation).toHaveBeenNthCalledWith(1, { runsUsed: 1, status: 'active' });
+    expect(applyEvaluation).toHaveBeenNthCalledWith(2, { runsUsed: 2, status: 'active' });
+  });
+
   it('ignores late goal chunks after the user has aborted and paused the goal', () => {
     const applyEvaluation = vi.fn();
     const state = createQueueState({
@@ -832,7 +867,6 @@ describe('MastraTUI queueing', () => {
       isActive: vi.fn(() => true),
       pause: vi.fn(),
       saveToThread: vi.fn(),
-      stopActiveTimer: vi.fn(),
     };
     const state = createQueueState({
       userInitiatedAbort: true,
@@ -842,7 +876,6 @@ describe('MastraTUI queueing', () => {
 
     handleAgentAborted(ctx);
 
-    expect(goalManager.stopActiveTimer).toHaveBeenCalled();
     expect(goalManager.pause).not.toHaveBeenCalled();
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.userInitiatedAbort).toBe(false);

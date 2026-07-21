@@ -7,7 +7,7 @@
  * testable and lets the route stay a thin shell.
  */
 
-import type { WorkItemRow, WorkItemStageEntry } from './schema';
+import type { WorkItemRow, WorkItemStageEntry } from '../storage/domains/work-items/base';
 
 /** Windows the metrics endpoint accepts; anything else clamps to the default. */
 export const METRICS_WINDOWS = [7, 30, 90] as const;
@@ -148,7 +148,7 @@ export function computeFactoryMetrics(items: WorkItemRow[], opts: { days: number
       title: item.title,
       stage: oldest?.stage ?? inFlightStages[0]!,
       enteredAt: oldest?.enteredAt ?? item.createdAt.toISOString(),
-      url: item.url,
+      url: item.externalSource?.url ?? null,
     });
   }
   aging.sort((a, b) => parseTime(a.enteredAt) - parseTime(b.enteredAt));
@@ -159,7 +159,10 @@ export function computeFactoryMetrics(items: WorkItemRow[], opts: { days: number
   let transitionsHuman = 0;
   for (const item of items) {
     if (item.createdAt.getTime() >= windowStart) {
-      sourceCounts.set(item.source, (sourceCounts.get(item.source) ?? 0) + 1);
+      const source = item.externalSource
+        ? `${item.externalSource.integrationId}:${item.externalSource.type}`
+        : 'manual';
+      sourceCounts.set(source, (sourceCounts.get(source) ?? 0) + 1);
     }
     for (const entry of item.stageHistory) {
       const entered = parseTime(entry.enteredAt);

@@ -1,6 +1,7 @@
 import type { MCPToolType } from '@mastra/core/mcp';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { MainContentContent } from '@mastra/playground-ui/components/MainContent';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tabs, Tab, TabList } from '@mastra/playground-ui/components/Tabs';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
@@ -11,7 +12,8 @@ import {
   useSchemaRequestContext,
 } from '@/domains/request-context';
 import { ToolInformation } from '@/domains/tools/components/ToolInformation';
-import { DynamicForm } from '@/lib/form';
+import { DynamicForm } from '@/lib/form/dynamic-form';
+import { isEmptyZodObject } from '@/lib/form/is-empty-zod-object';
 
 interface ToolExecutorProps {
   isExecutingTool: boolean;
@@ -41,18 +43,22 @@ const ToolExecutorContent = ({
   const code = JSON.stringify(result ?? {}, null, 2);
   const [selectedTab, setSelectedTab] = useState('input-data');
   const { schemaValues } = useSchemaRequestContext();
+  const hasInputFields = !isEmptyZodObject(zodInputSchema);
+  const hasConfiguration = hasInputFields || Boolean(requestContextSchema);
 
   return (
     <MainContentContent>
       <div className="flex w-full flex-col items-center p-5 lg:flex-row lg:items-start lg:justify-center">
         <div className="grid w-full min-w-0 max-w-3xl content-start gap-5">
           <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
-          <Tabs defaultTab="input-data" value={selectedTab} onValueChange={setSelectedTab}>
-            <TabList variant="pill">
-              <Tab value="input-data">Input Data</Tab>
-              {requestContextSchema && <Tab value="request-context">Request Context</Tab>}
-            </TabList>
-          </Tabs>
+          {hasConfiguration && (
+            <Tabs defaultTab="input-data" value={selectedTab} onValueChange={setSelectedTab}>
+              <TabList variant="pill">
+                <Tab value="input-data">Input Data</Tab>
+                {requestContextSchema && <Tab value="request-context">Request Context</Tab>}
+              </TabList>
+            </Tabs>
+          )}
           <div className={cn(selectedTab !== 'input-data' && 'hidden')}>
             <DynamicForm
               isSubmitLoading={isExecutingTool}
@@ -60,8 +66,10 @@ const ToolExecutorContent = ({
               onSubmit={data => {
                 handleExecuteTool(data, schemaValues);
               }}
-              className="h-auto"
-            />
+              className="space-y-4"
+            >
+              {!hasInputFields && <Notice variant="info">No input is required to run this tool.</Notice>}
+            </DynamicForm>
           </div>
           {requestContextSchema && (
             <div className={cn(selectedTab !== 'request-context' && 'hidden')}>

@@ -107,9 +107,9 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/anthropic": "^3.0.96",
-    "@ai-sdk/google": "^3.0.91",
-    "@ai-sdk/openai": "^3.0.84",
+    "@ai-sdk/anthropic": "^3.0.98",
+    "@ai-sdk/google": "^3.0.95",
+    "@ai-sdk/openai": "^3.0.86",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
@@ -124,7 +124,7 @@
     "@vitest/ui": "catalog:",
     "ajv": "^8.20.0",
     "arktype": "^2.2.0",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "json-schema-traverse": "^1.0.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",

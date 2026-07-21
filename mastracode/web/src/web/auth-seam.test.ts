@@ -1,8 +1,8 @@
+import { MastraAuthWorkos } from '@mastra/auth-workos';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { WebAuthAdapter } from './auth-adapter.js';
-import { WorkOSWebAuth } from './auth-workos-adapter.js';
 import {
   buildAuthRoutes,
   getWorkOSProvider,
@@ -14,35 +14,54 @@ import {
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config.js';
 
 /**
- * Adapter-seam behavior: the auth module resolves the ACTIVE adapter from the
- * factory-seeded registry (seeded config authoritative, including "seeded with
- * no adapter" = auth explicitly disabled) and falls back to a WorkOS adapter
- * implied by the `WORKOS_*` env vars only when the factory never ran.
- * Provider-specific WorkOS behavior itself is covered by `auth.test.ts`.
+ * Provider-seam behavior: the auth module resolves the ACTIVE provider from
+ * the factory-seeded registry (seeded config authoritative, including "seeded
+ * with no provider" = auth explicitly disabled) and falls back to a WorkOS
+ * provider implied by the `WORKOS_*` env vars only when the factory never ran.
+ * Public `/auth/*` routes are derived from the provider's capabilities
+ * (SSO-shaped vs HTTP-handler-shaped). Provider-specific behavior lives in the
+ * provider packages' own tests.
  */
 
-// Mock @mastra/auth-workos so WorkOSWebAuth never constructs a real client.
-const mockAuthenticate = vi.fn();
-const mockGetLoginUrl = vi.fn(() => 'https://workos.example/login');
+// Mock @mastra/auth-workos so no real WorkOS client is constructed.
 vi.mock('@mastra/auth-workos', () => ({
   MastraAuthWorkos: class {
-    getLoginUrl = mockGetLoginUrl;
-    authenticateToken = mockAuthenticate;
+    name = 'workos';
+    authenticateToken = vi.fn(async () => null);
+    authorizeUser = async () => true;
+    getLoginUrl = vi.fn(() => 'https://workos.example/login');
+    handleCallback = vi.fn();
   },
 }));
 
 const ORIGINAL_ENV = { ...process.env };
 
-/** Minimal custom adapter standing in for a non-WorkOS provider. */
-function fakeAdapter(overrides: Partial<WebAuthAdapter> = {}): WebAuthAdapter {
+/** Minimal custom provider standing in for a non-WorkOS `IMastraAuthProvider`. */
+function fakeProvider(overrides: Record<string, unknown> = {}): IMastraAuthProvider {
   return {
-    kind: 'fake',
-    authenticate: vi.fn(async () => ({ id: 'user_fake', email: 'fake@example.com', organizationId: 'org_fake' })),
-    ensureOrg: vi.fn(async () => 'org_fake'),
-    publicRoutes: () => [
-      { path: '/auth/fake-login', method: 'GET', handler: c => c.redirect('https://fake.example/login') },
-    ],
-    sessionClearCookie: () => 'fake_session=; Path=/; Max-Age=0',
+    name: 'fake',
+    authenticateToken: vi.fn(async () => ({ id: 'user_fake', email: 'fake@example.com', organizationId: 'org_fake' })),
+    authorizeUser: async () => true,
+    ...overrides,
+  } as unknown as IMastraAuthProvider;
+}
+
+/** SSO capability mixin (makes `isSSOProvider` true). */
+function ssoCapability(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    getLoginUrl: vi.fn(async () => 'https://fake.example/login'),
+    handleCallback: vi.fn(async () => ({ user: {}, tokens: { accessToken: 't' }, cookies: ['fake_session=abc'] })),
+    getLogoutUrl: vi.fn(async () => 'https://fake.example/logout'),
+    getClearSessionHeaders: vi.fn(() => ({ 'Set-Cookie': 'fake_session=; Path=/; Max-Age=0' })),
+    ...overrides,
+  };
+}
+
+/** HTTP-handler capability mixin (makes `isAuthHttpHandler` true). */
+function httpHandlerCapability(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    handleAuthRequest: vi.fn(async () => new Response('handled', { status: 200 })),
+    getClearSessionHeaders: vi.fn(() => ({ 'Set-Cookie': 'fake_session=; Path=/; Max-Age=0' })),
     ...overrides,
   };
 }
@@ -60,19 +79,17 @@ afterEach(() => {
   process.env = { ...ORIGINAL_ENV };
 });
 
-describe('active adapter resolution', () => {
-  it('a seeded adapter enables auth regardless of env', () => {
-    seedRuntimeConfig({ authAdapter: fakeAdapter() });
+describe('active provider resolution', () => {
+  it('a seeded provider enables auth regardless of env', () => {
+    seedRuntimeConfig({ authProvider: fakeProvider() });
     expect(isWebAuthEnabled()).toBe(true);
-    expect(isWorkOSAuth()).toBe(false);
   });
 
-  it('seeding without an adapter disables auth even when WORKOS env vars are set', () => {
+  it('seeding without a provider disables auth even when WORKOS env vars are set', () => {
     process.env.WORKOS_API_KEY = 'sk_test';
     process.env.WORKOS_CLIENT_ID = 'client_test';
     seedRuntimeConfig({});
     expect(isWebAuthEnabled()).toBe(false);
-    expect(isWorkOSAuth()).toBe(false);
   });
 
   it('falls back to env-implied WorkOS when the factory never seeded (back-compat)', () => {
@@ -82,46 +99,29 @@ describe('active adapter resolution', () => {
     expect(isWorkOSAuth()).toBe(true);
   });
 
-  it('a seeded WorkOS adapter reports isWorkOSAuth and exposes its provider', () => {
-    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
-    seedRuntimeConfig({ authAdapter: adapter });
+  it('a seeded MastraAuthWorkos reports isWorkOSAuth and is exposed directly', () => {
+    const provider = new MastraAuthWorkos({ redirectUri: 'http://localhost:4111/auth/callback' });
+    seedRuntimeConfig({ authProvider: provider as unknown as IMastraAuthProvider });
     expect(isWorkOSAuth()).toBe(true);
-    expect(getWorkOSProvider()).toBe(adapter.provider);
+    expect(getWorkOSProvider()).toBe(provider);
   });
 
-  it('getWorkOSProvider throws when the active adapter is not WorkOS', () => {
-    seedRuntimeConfig({ authAdapter: fakeAdapter() });
+  it('getWorkOSProvider throws when the active provider is not WorkOS', () => {
+    seedRuntimeConfig({ authProvider: fakeProvider() });
     expect(() => getWorkOSProvider()).toThrow(/not WorkOS/);
   });
 });
 
-describe('WorkOSWebAuth.init callback-URL resolution', () => {
-  it('derives the callback URL from the factory publicUrl', async () => {
-    const adapter = new WorkOSWebAuth();
-    await expect(adapter.init?.({ publicUrl: 'https://factory.acme.com' })).resolves.toBeUndefined();
-  });
-
-  it('keeps an explicit redirectUri without needing a publicUrl', async () => {
-    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
-    await expect(adapter.init?.({})).resolves.toBeUndefined();
-  });
-
-  it('fails init when no callback URL can be resolved', async () => {
-    const adapter = new WorkOSWebAuth();
-    await expect(adapter.init?.({})).rejects.toThrow(/could not resolve a callback URL/);
-  });
-});
-
-describe('mountWebAuth with a seeded custom adapter', () => {
-  function buildApp(adapter: WebAuthAdapter) {
-    seedRuntimeConfig({ authAdapter: adapter });
+describe('mountWebAuth with a seeded custom provider', () => {
+  function buildApp(provider: IMastraAuthProvider) {
+    seedRuntimeConfig({ authProvider: provider });
     const app = new Hono();
     const enabled = mountWebAuth(app);
     app.get('*', c => c.text('ok'));
     return { app, enabled };
   }
 
-  it('returns false when the registry is seeded without an adapter', () => {
+  it('returns false when the registry is seeded without a provider', () => {
     process.env.WORKOS_API_KEY = 'sk_test';
     process.env.WORKOS_CLIENT_ID = 'client_test';
     seedRuntimeConfig({});
@@ -129,18 +129,35 @@ describe('mountWebAuth with a seeded custom adapter', () => {
     expect(enabled).toBe(false);
   });
 
-  it('mounts the adapter-provided public routes', async () => {
-    const { app, enabled } = buildApp(fakeAdapter());
+  it('derives hosted-login routes for an SSO-shaped provider', async () => {
+    const { app, enabled } = buildApp(fakeProvider(ssoCapability()));
     expect(enabled).toBe(true);
 
-    const res = await app.request('/auth/fake-login');
+    const res = await app.request('/auth/login?returnTo=/dashboard');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('https://fake.example/login');
   });
 
-  it('gates protected routes through adapter.authenticate and stashes the tenant', async () => {
-    const adapter = fakeAdapter();
-    seedRuntimeConfig({ authAdapter: adapter });
+  it('proxies /auth/api/* to an HTTP-handler-shaped provider', async () => {
+    const provider = fakeProvider(httpHandlerCapability());
+    const { app } = buildApp(provider);
+
+    const res = await app.request('/auth/api/sign-in/email', { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('handled');
+  });
+
+  it('redirects /auth/login to the SPA form for a handler-shaped (non-SSO) provider', async () => {
+    const { app } = buildApp(fakeProvider(httpHandlerCapability()));
+
+    const res = await app.request('/auth/login?returnTo=/chat');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/signin?returnTo=%2Fchat');
+  });
+
+  it('gates protected routes through provider.authenticateToken and stashes the tenant', async () => {
+    const provider = fakeProvider();
+    seedRuntimeConfig({ authProvider: provider });
     const app = new Hono();
     mountWebAuth(app);
     app.get('/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
@@ -148,32 +165,34 @@ describe('mountWebAuth with a seeded custom adapter', () => {
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgId: 'org_fake', userId: 'user_fake' });
-    expect(adapter.authenticate).toHaveBeenCalledOnce();
+    expect(provider.authenticateToken).toHaveBeenCalledOnce();
   });
 
-  it('bootstraps a no-org user through adapter.ensureOrg', async () => {
-    const adapter = fakeAdapter({
-      authenticate: vi.fn(async () => ({ id: 'user_solo', email: 'solo@example.com' })),
-      ensureOrg: vi.fn(async () => 'org_boot'),
+  it('bootstraps a no-org user through IOrganizationsProvider.ensureOrganization', async () => {
+    const ensureOrganization = vi.fn(async () => 'org_boot');
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async () => ({ id: 'user_solo', email: 'solo@example.com' })),
+      ensureOrganization,
+      isOrganizationAdmin: vi.fn(async () => false),
     });
-    seedRuntimeConfig({ authAdapter: adapter });
+    seedRuntimeConfig({ authProvider: provider });
     const app = new Hono();
     mountWebAuth(app);
     app.get('/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(await res.json()).toEqual({ orgId: 'org_boot', userId: 'user_solo' });
-    expect(adapter.ensureOrg).toHaveBeenCalledOnce();
+    expect(ensureOrganization).toHaveBeenCalledWith('user_solo');
   });
 
-  it('returns 401 for unauthenticated API calls (adapter returns null)', async () => {
-    const { app } = buildApp(fakeAdapter({ authenticate: vi.fn(async () => null) }));
+  it('returns 401 for unauthenticated API calls (provider returns null)', async () => {
+    const { app } = buildApp(fakeProvider({ authenticateToken: vi.fn(async () => null) }));
     const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(401);
   });
 
-  it('serves the provider-neutral /auth/me from the adapter session', async () => {
-    const { app } = buildApp(fakeAdapter());
+  it('serves the provider-neutral /auth/me from the provider session', async () => {
+    const { app } = buildApp(fakeProvider());
     const res = await app.request('/auth/me');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -182,13 +201,58 @@ describe('mountWebAuth with a seeded custom adapter', () => {
       provider: 'fake',
     });
   });
+
+  it('/auth/me surfaces signUpDisabled when a credentials provider disables sign-up', async () => {
+    const { app } = buildApp(
+      fakeProvider({
+        authenticateToken: vi.fn(async () => null),
+        signIn: vi.fn(),
+        isSignUpEnabled: () => false,
+      }),
+    );
+    const res = await app.request('/auth/me');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      authenticated: false,
+      user: null,
+      provider: 'fake',
+      signUpDisabled: true,
+    });
+  });
+
+  it('logout for a handler-shaped provider revokes the session and clears the cookie', async () => {
+    const handleAuthRequest = vi.fn(
+      async () => new Response(null, { status: 200, headers: { 'Set-Cookie': 'fake_session=revoked; Max-Age=0' } }),
+    );
+    const { app } = buildApp(fakeProvider(httpHandlerCapability({ handleAuthRequest })));
+
+    const res = await app.request('/auth/logout');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/');
+    expect(res.headers.get('set-cookie')).toContain('Max-Age=0');
+    const revoked = handleAuthRequest.mock.calls[0]![0] as Request;
+    expect(revoked.method).toBe('POST');
+    expect(new URL(revoked.url).pathname).toBe('/auth/api/sign-out');
+  });
 });
 
 describe('buildAuthRoutes', () => {
-  it('folds the adapter routes plus /auth/me into unauthenticated apiRoutes', () => {
-    const routes = buildAuthRoutes(fakeAdapter());
+  it('derives SSO routes plus /auth/me as unauthenticated apiRoutes', () => {
+    const routes = buildAuthRoutes(fakeProvider(ssoCapability()));
     const paths = routes.map(r => r.path);
-    expect(paths).toEqual(['/auth/fake-login', '/auth/me']);
+    expect(paths).toEqual(['/auth/login', '/auth/callback', '/auth/logout', '/auth/me']);
     expect(routes.every(r => r.requiresAuth === false)).toBe(true);
+  });
+
+  it('derives handler routes plus /auth/me for an HTTP-handler-shaped provider', () => {
+    const routes = buildAuthRoutes(fakeProvider(httpHandlerCapability()));
+    const paths = routes.map(r => r.path);
+    expect(paths).toEqual(['/auth/api/*', '/auth/login', '/auth/logout', '/auth/me']);
+    expect(routes.every(r => r.requiresAuth === false)).toBe(true);
+  });
+
+  it('a bare provider still gets /auth/me', () => {
+    const routes = buildAuthRoutes(fakeProvider());
+    expect(routes.map(r => r.path)).toEqual(['/auth/me']);
   });
 });

@@ -1,5 +1,99 @@
 # @mastra/server
 
+## 1.52.0-alpha.10
+
+### Minor Changes
+
+- Added request-scoped model overrides to agent execution and approvals, and fixed Studio model selection so each tab can use a different model without changing the agent's configured default. ([#19749](https://github.com/mastra-ai/mastra/pull/19749))
+
+  ```ts
+  await agent.stream(messages, { model: 'google/gemini-2.5-flash' });
+  ```
+
+### Patch Changes
+
+- Prevented clients from spoofing a trusted actor or tenant scope through built-in agent HTTP execution routes. ([#19338](https://github.com/mastra-ai/mastra/pull/19338))
+
+  The agent generate/stream/resume routes parse the request body with a passthrough schema and spread unknown fields into the execution options, so a caller could supply `actor` (including `agentId`, `permissions`, and `scope`) and have it reach the authorization layer, or self-assert a tenant by setting `requestContext.organizationId`.
+
+  - `actor` is now stripped from top-level and nested execution options handled by these routes. The actor signal must be produced by trusted server-side code, such as a scheduled job or workflow, never accepted from an HTTP client.
+  - `organizationId` is now a reserved request-context key, so a body-supplied value is no longer merged into the request context. Establish tenant scope server-side.
+
+  Behavior change: clients that previously passed `actor` or `organizationId` through the HTTP body will no longer have those values honored.
+
+- Updated dependencies [[`41a5392`](https://github.com/mastra-ai/mastra/commit/41a5392d9f6c5e18d6b227f0fc0ddf49c50774e9), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`da009e1`](https://github.com/mastra-ai/mastra/commit/da009e1aacd89ed94b8d1b2af09c9d4fe7c4db49), [`35c2181`](https://github.com/mastra-ai/mastra/commit/35c2181e6a50e47c90ba36260db7c9723d54696f), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`c328769`](https://github.com/mastra-ai/mastra/commit/c3287698ff8ef98dba86d415faa566fa3e5f4d56), [`232fcbc`](https://github.com/mastra-ai/mastra/commit/232fcbc14fce625dd672ba043329c0b732c62be2), [`3491666`](https://github.com/mastra-ai/mastra/commit/34916663c4fdd43b48c21f4ab2d5fb6dcccc94f9)]:
+  - @mastra/core@1.52.0-alpha.10
+
+## 1.52.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`0a2c22c`](https://github.com/mastra-ai/mastra/commit/0a2c22c902604439ec490319e14c17f331e0c84c), [`3a8024c`](https://github.com/mastra-ai/mastra/commit/3a8024ce615f8aa89479c0d71fe61d10bb0040be)]:
+  - @mastra/core@1.52.0-alpha.9
+
+## 1.52.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`6b1bf3b`](https://github.com/mastra-ai/mastra/commit/6b1bf3b9494bd51aa8f654c68c9355d6046fa2a1), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9)]:
+  - @mastra/core@1.52.0-alpha.8
+
+## 1.52.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`b7e79c3`](https://github.com/mastra-ai/mastra/commit/b7e79c3c02ac5cd415db34ba0975ceafc1464333), [`b75d749`](https://github.com/mastra-ai/mastra/commit/b75d749621ff5d17e86bcb4ee809d301fb4f7cf3), [`a8799bb`](https://github.com/mastra-ai/mastra/commit/a8799bb8e44f4a60d01e4e2acd3448ff80bf14f8)]:
+  - @mastra/core@1.52.0-alpha.7
+
+## 1.52.0-alpha.6
+
+### Patch Changes
+
+- Fixed agent replies from channels being silently dropped on Cloudflare Workers. ([#19299](https://github.com/mastra-ai/mastra/pull/19299))
+
+  The bot would receive a message and the webhook returned `200 OK`, but no reply was posted and nothing was logged. Channel replies run after the webhook responds, and on Cloudflare Workers that remaining work was being dropped once the response was sent. It is now kept running to completion, so the reply is delivered. (#19285)
+
+- Fixed durable-agent check in recover route ([#19632](https://github.com/mastra-ai/mastra/pull/19632))
+
+- Fixed dataset item endpoints to return HTTP 400 when payloads contain circular values, silently lossy JSON values (nested `undefined`, functions, symbols, bigints, and non-finite numbers), or non-plain objects (`Date`, `Map`, `Set`, class instances, and custom `toJSON()` objects) that cannot be serialized faithfully. Also fixed the add/update dataset item endpoints to persist the caller-provided `requestContext` entries instead of the live server request context instance, which contained internal server state and could fail storage serialization. ([#19603](https://github.com/mastra-ai/mastra/pull/19603))
+
+- Updated dependencies [[`a40adeb`](https://github.com/mastra-ai/mastra/commit/a40adeb222b961a56a58af56a106106525721b74), [`821648b`](https://github.com/mastra-ai/mastra/commit/821648bf2871ef840100c7bacbecf676010bd12a), [`11f6cd9`](https://github.com/mastra-ai/mastra/commit/11f6cd96fe42582403416608beb212cc1a2cc79e)]:
+  - @mastra/core@1.52.0-alpha.6
+
+## 1.52.0-alpha.5
+
+### Patch Changes
+
+- Fixed agent controller session routes to use the active request context when creating or resolving sessions. ([#19642](https://github.com/mastra-ai/mastra/pull/19642))
+
+- Replace `any` with `unknown` in generated route types so clients get real type errors instead of silently unchecked values. Route-types generation now deduplicates shared schemas into reusable type aliases, shrinking the generated `route-types.generated.ts` from ~94K to ~22K lines (77% smaller). The memory config response now types `workingMemory` (enabled, scope, template, schema, version) instead of `unknown`. ([#19573](https://github.com/mastra-ai/mastra/pull/19573))
+
+  If your code read fields from responses that were previously typed `any`, TypeScript now requires you to narrow them before use:
+
+  ```ts
+  // Before: `metadata` was `any`, so this compiled even when unsafe
+  const value = response.metadata.someField;
+
+  // After: `metadata` is `unknown` — narrow it first
+  const metadata = response.metadata;
+  if (metadata && typeof metadata === 'object' && 'someField' in metadata) {
+    const value = metadata.someField;
+  }
+  // ...or cast if you know the shape: (metadata as MyMetadata).someField
+  ```
+
+  Code that reads `workingMemory` from the memory config response no longer needs casts — `config.workingMemory?.enabled`, `scope`, `template`, `schema`, and `version` are now typed directly.
+
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/core@1.52.0-alpha.5
+
+## 1.52.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`4cfdd64`](https://github.com/mastra-ai/mastra/commit/4cfdd645794feaea0c4ea711e70ecdfbef0c5b8e)]:
+  - @mastra/core@1.52.0-alpha.4
+
 ## 1.52.0-alpha.3
 
 ### Patch Changes

@@ -14,28 +14,32 @@ The `createTool()` function is used to define custom tools that your Mastra agen
 
 ## Usage example
 
-```typescript title="src/mastra/tools/reverse-tool.ts"
+```typescript title="src/mastra/tools/weather-tool.ts"
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
-export const tool = createTool({
-  id: 'test-tool',
-  description: 'Reverse the input string',
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
-    input: z.string(),
+    location: z.string(),
   }),
   outputSchema: z.object({
-    output: z.string(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
-  execute: async inputData => {
-    const reversed = inputData.input.split('').reverse().join('')
-
+  execute: async ({ location }) => {
     return {
-      output: reversed,
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
 })
 ```
+
+The first `execute` parameter is the validated value from `inputSchema`. Destructure schema fields directly in the function signature, as shown with `{ location }`. The optional second parameter contains the execution context.
 
 ## Parameters
 
@@ -337,10 +341,12 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
         location: z.string(),
       }),
       outputSchema: z.object({
-        weather: z.string(),
+        location: z.string(),
+        temperatureCelsius: z.number(),
+        conditions: z.string(),
       }),
-      execute: async inputData => {
-        // Fetch weather data
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
     })
     ```
@@ -362,11 +368,13 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
       ),
       outputSchema: toStandardJsonSchema(
         v.object({
-          weather: v.string(),
+          location: v.string(),
+          temperatureCelsius: v.number(),
+          conditions: v.string(),
         }),
       ),
-      execute: async inputData => {
-        // Fetch weather data
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
     })
     ```
@@ -384,10 +392,12 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
         location: 'string',
       }),
       outputSchema: type({
-        weather: 'string',
+        location: 'string',
+        temperatureCelsius: 'number',
+        conditions: 'string',
       }),
-      execute: async inputData => {
-        // Fetch weather data
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
     })
     ```
@@ -403,18 +413,22 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get weather for a city',
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   strict: true,
   inputSchema: z.object({
-    city: z.string(),
-    units: z.enum(['metric', 'imperial']),
+    location: z.string(),
   }),
-  execute: async ({ city, units }) => {
+  outputSchema: z.object({
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ location }) => {
     return {
-      city,
-      units,
-      forecast: 'sunny',
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
 })
@@ -431,28 +445,31 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get weather for a city',
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
-    city: z.string(),
+    location: z.string(),
   }),
   outputSchema: z.object({
-    city: z.string(),
-    temperature: z.number(),
-    condition: z.string(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
     radarImageUrl: z.string().url(),
   }),
-  execute: async ({ city }) => ({
-    city,
-    temperature: 72,
-    condition: 'sunny',
+  execute: async ({ location }) => ({
+    location,
+    temperatureCelsius: 21,
+    conditions: 'sunny',
     radarImageUrl: 'https://example.com/radar/seattle.png',
   }),
   toModelOutput: output => {
     return {
       type: 'content',
       value: [
-        { type: 'text', text: `${output.city}: ${output.temperature}F and ${output.condition}` },
+        {
+          type: 'text',
+          text: `${output.location}: ${output.temperatureCelsius}°C and ${output.conditions}`,
+        },
         { type: 'image-url', url: output.radarImageUrl },
       ],
     }
@@ -521,10 +538,15 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get current weather for a location',
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
     location: z.string().describe('City name or coordinates'),
+  }),
+  outputSchema: z.object({
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
   // MCP-specific properties
   mcp: {
@@ -542,9 +564,11 @@ export const weatherTool = createTool({
       category: 'weather',
     },
   },
-  execute: async inputData => {
+  execute: async ({ location }) => {
     return {
-      weather: `Current weather for ${inputData.location}: sunny`,
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
 })
@@ -561,19 +585,21 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get weather for a city',
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
-    city: z.string(),
+    location: z.string(),
   }),
   outputSchema: z.object({
-    city: z.string(),
-    forecast: z.string(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
-  execute: async ({ city }) => {
+  execute: async ({ location }) => {
     return {
-      city,
-      forecast: 'sunny',
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
   onInputStart: ({ toolCallId }) => {
@@ -583,10 +609,10 @@ export const weatherTool = createTool({
     console.log(`Tool call ${toolCallId} received input chunk: ${inputTextDelta}`)
   },
   onInputAvailable: ({ input, toolCallId }) => {
-    console.log(`Tool call ${toolCallId} received city: ${input.city}`)
+    console.log(`Tool call ${toolCallId} received location: ${input.location}`)
   },
   onOutput: ({ output, toolCallId, toolName }) => {
-    console.log(`Tool ${toolName} call ${toolCallId} returned forecast: ${output.forecast}`)
+    console.log(`Tool ${toolName} call ${toolCallId} returned conditions: ${output.conditions}`)
   },
 })
 ```
@@ -630,7 +656,7 @@ export const tool = createTool({
   id: 'example-tool',
   description: 'Example tool with hooks',
   inputSchema: z.object({
-    city: z.string(),
+    location: z.string(),
   }),
   onInputAvailable: ({ input, toolCallId, messages, abortSignal }) => {
     console.log(`Tool received complete input:`, input)

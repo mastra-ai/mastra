@@ -18,7 +18,10 @@ import type {
   InstructionsOption,
   MastraSandboxOptions,
   ProviderStatus,
+  SandboxFileInput,
+  SandboxCloneOptions,
   SandboxInfo,
+  SandboxNetworking,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox } from '@vercel/sandbox';
@@ -106,7 +109,26 @@ export class VercelSandbox extends MastraSandbox {
 
   declare readonly processes: VercelSandboxProcessManager;
 
+  /**
+   * Networking capability: public HTTPS URLs for exposed ports.
+   * A port must be declared in `ports` at construction time for a URL to exist.
+   */
+  readonly networking: SandboxNetworking = {
+    getPortUrl: async (port: number): Promise<string | null> => {
+      const sandbox = this._sandbox ?? (await this.attach());
+      if (!sandbox) return null;
+      try {
+        return sandbox.domain(port);
+      } catch {
+        // Port has no associated route (not declared in `ports`).
+        return null;
+      }
+    },
+  };
+
   private _sandbox: Sandbox | null = null;
+  /** True when `_sandbox` came from a resume-less lookup — `start()` must still resume it. */
+  private _attachedWithoutResume = false;
   private _createdAt: Date | null = null;
 
   private readonly _sandboxName?: string;
@@ -120,6 +142,7 @@ export class VercelSandbox extends MastraSandbox {
   private readonly _env: Record<string, string>;
   private readonly _metadata: Record<string, unknown>;
   private readonly _instructionsOverride?: InstructionsOption;
+  private readonly _constructorOptions: VercelSandboxOptions;
 
   constructor(options: VercelSandboxOptions = {}) {
     super({
@@ -140,6 +163,30 @@ export class VercelSandbox extends MastraSandbox {
     this._env = options.env ?? {};
     this._metadata = options.metadata ?? {};
     this._instructionsOverride = options.instructions;
+    this._constructorOptions = { ...options };
+  }
+
+  /**
+   * Construct a sibling `VercelSandbox` that inherits this sandbox's
+   * configuration (credentials, runtime, resources, ports, metadata,
+   * instructions) with per-instance overrides.
+   *
+   * Performs no I/O — the sandbox clone provisions a fresh MicroVM on its
+   * own `start()` (Vercel sandboxes cannot be reconnected to, so
+   * `options.sandboxId` is ignored). Use it when one configured sandbox acts
+   * as the template for a fleet of independent sandboxes (e.g. one per
+   * project).
+   *
+   * `options.idleTimeoutMinutes` maps to the Vercel sandbox `timeout` (ms).
+   */
+  clone(options: SandboxCloneOptions = {}): VercelSandbox {
+    const { id: _id, sandboxName: _sandboxName, ...base } = this._constructorOptions;
+    return new VercelSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+      ...(options.idleTimeoutMinutes !== undefined && { timeout: options.idleTimeoutMinutes * 60_000 }),
+    });
   }
 
   /**
@@ -157,56 +204,116 @@ export class VercelSandbox extends MastraSandbox {
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  async start(): Promise<void> {
-    if (this._sandbox) {
-      return;
-    }
+  /**
+   * Attach to an existing named sandbox WITHOUT resuming it (`resume: false`),
+   * so lookups (URL resolution, stop, destroy) never wake a stopped sandbox
+   * and start billing. Returns null when unnamed or when no sandbox with this
+   * name exists.
+   */
+  private async attach(): Promise<Sandbox | null> {
+    if (this._sandbox) return this._sandbox;
+    if (!this._sandboxName) return null;
 
-    // Credentials are all-or-nothing: when any explicit credential is provided,
-    // the SDK requires the full triple. Otherwise it falls back to the OIDC token.
-    const hasExplicitCreds = Boolean(this._token || this._teamId || this._projectId);
-    if (hasExplicitCreds && !(this._token && this._teamId && this._projectId)) {
+    try {
+      this._sandbox = await Sandbox.get({
+        name: this._sandboxName,
+        resume: false,
+        ...this.credentialParams(),
+      });
+      this._attachedWithoutResume = true;
+      return this._sandbox;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The token is the credential: when provided, the SDK requires teamId and
+   * projectId alongside it. Without a token the SDK authenticates via the
+   * `VERCEL_OIDC_TOKEN`; a stray teamId/projectId (for example, an exported
+   * `VERCEL_TEAM_ID` in the shell) must not break OIDC auth, so it is ignored.
+   */
+  private credentialParams(): { token: string; teamId: string; projectId: string } | Record<string, never> {
+    if (!this._token) return {};
+    if (!(this._teamId && this._projectId)) {
       throw new Error(
         `${LOG_PREFIX} Incomplete credentials. Provide token, teamId, and projectId together ` +
           `(or the VERCEL_TOKEN, VERCEL_TEAM_ID, and VERCEL_PROJECT_ID env vars), ` +
-          `or omit all three to use the VERCEL_OIDC_TOKEN.`,
+          `or omit the token to use the VERCEL_OIDC_TOKEN.`,
       );
+    }
+    return { token: this._token, teamId: this._teamId, projectId: this._projectId };
+  }
+
+  async start(): Promise<void> {
+    // A sandbox attached via a resume-less lookup still needs an actual
+    // resume, so only a started/resumed sandbox short-circuits here.
+    if (this._sandbox && !this._attachedWithoutResume) {
+      return;
     }
 
     this.logger.debug(`${LOG_PREFIX} Creating sandbox...`, { runtime: this._runtime, timeout: this._timeout });
 
-    this._sandbox = await Sandbox.create({
-      ...(this._sandboxName ? { name: this._sandboxName } : {}),
+    const params = {
       runtime: this._runtime,
       timeout: this._timeout,
       ...(this._vcpus ? { resources: { vcpus: this._vcpus } } : {}),
       ...(this._ports?.length ? { ports: this._ports } : {}),
       ...(Object.keys(this._env).length ? { env: this._env } : {}),
-      ...(hasExplicitCreds ? { token: this._token!, teamId: this._teamId!, projectId: this._projectId! } : {}),
-    });
+      ...this.credentialParams(),
+    };
+
+    // Named sandboxes are an identity: get-or-create resumes the existing
+    // sandbox (snapshot restore) if one with this name exists, otherwise
+    // creates a fresh one with the name. Unnamed sandboxes always create.
+    this._sandbox = this._sandboxName
+      ? await Sandbox.getOrCreate({ ...params, name: this._sandboxName })
+      : await Sandbox.create(params);
+    this._attachedWithoutResume = false;
 
     this._createdAt = new Date();
     this.logger.debug(`${LOG_PREFIX} Sandbox ready: ${this._sandbox.name}`);
   }
 
+  /** Snapshot-stop: the filesystem persists and a named sandbox resumes on the next `start()`. */
   async stop(): Promise<void> {
-    await this._teardown();
-  }
-
-  async destroy(): Promise<void> {
-    await this._teardown();
-  }
-
-  private async _teardown(): Promise<void> {
-    if (!this._sandbox) {
+    const sandbox = this._sandbox ?? (await this.attach());
+    if (!sandbox) {
       return;
     }
-    try {
-      await this._sandbox.stop();
-    } catch (error) {
-      this.logger.warn(`${LOG_PREFIX} Error stopping sandbox:`, error);
-    }
+    // Stop failures propagate — a sandbox that failed to stop is still
+    // running (and billing), so callers must not assume it snapshotted.
+    await sandbox.stop();
     this._sandbox = null;
+    this._attachedWithoutResume = false;
+  }
+
+  /** Permanently delete the sandbox and its snapshots. */
+  async destroy(): Promise<void> {
+    // Attach by name when needed so destroy works from a fresh process
+    // (e.g. a `getDeployment()` handle) without resuming the sandbox first.
+    const sandbox = this._sandbox ?? (await this.attach());
+    if (!sandbox) {
+      return;
+    }
+    // Delete failures propagate — a sandbox that failed to delete still
+    // exists, so callers must not assume cleanup completed.
+    await sandbox.delete();
+    this._sandbox = null;
+    this._attachedWithoutResume = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // File Upload
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Bulk-write files into the sandbox filesystem via the SDK's native upload.
+   * Relative paths resolve against /vercel/sandbox.
+   */
+  async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    await this.ensureRunning();
+    await this.sandbox.writeFiles(files.map(f => ({ path: f.path, content: f.content })));
   }
 
   // ---------------------------------------------------------------------------
@@ -332,7 +439,9 @@ export class VercelSandbox extends MastraSandbox {
     return [
       'Vercel Sandbox: an ephemeral Firecracker MicroVM running Amazon Linux 2023.',
       `- Runtime: ${this._runtime}. Working directory defaults to /vercel/sandbox.`,
-      '- Persistent filesystem within the session; state is lost when the sandbox stops.',
+      this._sandboxName
+        ? '- Persistent filesystem: stopping snapshots the filesystem and the named sandbox resumes it on the next start. Processes do not survive a stop.'
+        : '- Persistent filesystem within the session; state is lost when the sandbox stops.',
       '- Runs as the vercel-sandbox user with sudo access (install packages via dnf).',
       `- The sandbox auto-terminates after ${Math.round(this._timeout / 1000)} seconds.`,
       ...(this._ports?.length

@@ -45,15 +45,27 @@ function renderSignIn(initialEntry = '/signin') {
 }
 
 describe('SignInPage', () => {
+  it('renders the Mastra Factory brand and product message', async () => {
+    stubAuthMe({ provider: 'workos' });
+    renderSignIn();
+
+    expect(await screen.findByLabelText('Mastra Factory')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Turn issues into production-ready code.' })).toBeInTheDocument();
+    expect(screen.getByText(/GitHub Issues, Linear, and other trackers/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Mastra Code')).not.toBeInTheDocument();
+  });
+
   describe('given a WorkOS (hosted-login) deploy', () => {
-    it('renders the hosted sign-in button and redirects to the login route', async () => {
+    it('renders the GitHub sign-in action and redirects to the login route', async () => {
       stubAuthMe({ provider: 'workos' });
       renderSignIn('/signin?returnTo=%2Ffactory%2Fboard');
 
-      const button = await screen.findByRole('button', { name: 'Sign in' });
+      const button = await screen.findByRole('button', { name: 'Continue with GitHub' });
       expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
 
       await userEvent.click(button);
+      expect(button).toBeDisabled();
+      expect(button).toHaveTextContent('Opening GitHub…');
       expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/factory/board');
     });
   });
@@ -120,7 +132,7 @@ describe('SignInPage', () => {
       await userEvent.type(screen.getByLabelText('Name'), 'Ada Lovelace');
       await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com');
       await userEvent.type(screen.getByLabelText('Password'), 'hunter22!');
-      await userEvent.click(screen.getByRole('button', { name: 'Sign up' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
 
       await waitFor(() => expect(navigateAfterSignIn).toHaveBeenCalledWith('/'));
       expect(posted).toHaveBeenCalledWith({ name: 'Ada Lovelace', email: 'ada@example.com', password: 'hunter22!' });

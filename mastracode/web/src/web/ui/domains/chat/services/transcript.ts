@@ -113,12 +113,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | MessageEntry
-  | NoticeEntry
-  | PromptEntry
-  | NotificationEntry
-  | NotificationSummaryEntry
-  | SubagentEntry;
+  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
 
 /** Token usage snapshot from usage_update events. */
 export interface UsageSnapshot {
@@ -200,6 +195,7 @@ export interface OutgoingFile {
 type Action =
   | { type: 'event'; event: AgentControllerEvent }
   | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
+  | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
   | {
@@ -255,6 +251,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ),
         ],
       };
+    case 'clearPending':
+      return { ...state, pending: false };
     case 'localNotice':
       return pushNotice(state, action.level, action.text);
     case 'resolvePrompt':
@@ -451,15 +449,13 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       const stepTokens = (usageSnap.completionTokens ?? 0) + (usageSnap.reasoningTokens ?? 0);
       let tps = state.tokensPerSec;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
-        const decodeSec = (now - state._decodeStartedAt) / 1000;
-        if (decodeSec > 0) {
-          const instantaneous = stepTokens / decodeSec;
-          const alpha = 0.3;
-          tps =
-            state.tokensPerSec > 0
-              ? Math.round(alpha * instantaneous + (1 - alpha) * state.tokensPerSec)
-              : Math.round(instantaneous);
-        }
+        const decodeSec = Math.max((now - state._decodeStartedAt) / 1000, 0.001);
+        const instantaneous = stepTokens / decodeSec;
+        const alpha = 0.3;
+        tps =
+          state.tokensPerSec > 0
+            ? Math.round(alpha * instantaneous + (1 - alpha) * state.tokensPerSec)
+            : Math.round(instantaneous);
       }
       return {
         ...state,
@@ -610,6 +606,29 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   const nextMessage = message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
   const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
 
+  if (message.role === 'assistant') {
+    const ownedToolCallIds = new Set(
+      nextMessage.content.parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)),
+    );
+    if (ownedToolCallIds.size > 0) {
+      for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+        if (entryIndex === idx) continue;
+        const candidate = entries[entryIndex];
+        if (candidate.kind !== 'message' || candidate.message.role !== 'assistant') continue;
+        const parts = candidate.message.content.parts.filter(part => {
+          const toolCallId = toolCallIdForPart(part);
+          return !toolCallId || !ownedToolCallIds.has(toolCallId);
+        });
+        if (parts.length !== candidate.message.content.parts.length) {
+          entries[entryIndex] = {
+            ...candidate,
+            message: { ...candidate.message, content: { ...candidate.message.content, parts } },
+          };
+        }
+      }
+    }
+  }
+
   if (idx === -1) entries.push(entry);
   else entries[idx] = entry;
   return { ...state, entries };
@@ -637,9 +656,16 @@ function hasAssistantText(state: TranscriptState): boolean {
   const idx = latestAssistantIndex(state.entries);
   if (idx === -1) return false;
   const entry = state.entries[idx];
-  if (entry.kind !== 'message') return false;
+  if (entry.kind !== 'message' || !Array.isArray(entry.message.content.parts)) return false;
   return entry.message.content.parts.some(
-    part => part.type === 'text' && 'text' in part && part.text.trim().length > 0,
+    (part: unknown) =>
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      part.type === 'text' &&
+      'text' in part &&
+      typeof part.text === 'string' &&
+      part.text.trim().length > 0,
   );
 }
 

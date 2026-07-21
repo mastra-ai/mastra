@@ -1,24 +1,30 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
-import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { WebAuthUser } from '../auth';
 import { getWebAuthOrgId, getWebAuthUserId } from '../auth';
-import { getInstallationOctokit } from './client';
-import { getAppDb } from './db';
-import { githubProjects } from './schema';
+import type {
+  ProjectRepository,
+  ProjectSourceControlConnection,
+  SourceControlInstallation,
+  SourceControlRepository,
+} from '../storage/domains/source-control/base';
+import type { GithubIntegration } from './integration';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions';
 
-type GithubSessionState = { githubProjectId?: string };
+type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 
 const pullRequestInputSchema = z.object({
   pullRequest: z.union([z.number().int().positive(), z.string().min(1)]),
 });
 
 interface SessionTarget {
-  context: AgentControllerRequestContext<GithubSessionState>;
-  project: typeof githubProjects.$inferSelect;
+  context: AgentControllerRequestContext<RepositorySessionState>;
+  projectRepository: ProjectRepository;
+  connection: ProjectSourceControlConnection;
+  installation: SourceControlInstallation;
+  repository: SourceControlRepository;
   orgId: string;
   userId: string;
 }
@@ -33,43 +39,64 @@ function parsePullRequest(value: number | string, expectedRepo: string): number 
   return Number(match[2]);
 }
 
-async function resolveSessionTarget(requestContext: RequestContext): Promise<SessionTarget> {
-  const context = requestContext.get('controller') as AgentControllerRequestContext<GithubSessionState> | undefined;
+/**
+ * Whether the current request comes from a session that GitHub subscriptions
+ * can ever apply to: an authenticated org user on a GitHub-project session
+ * with an active thread. Mirrors the gate in `resolveSessionTarget` without
+ * throwing, for passive callers that should no-op instead of erroring.
+ */
+function isGithubProjectSession(requestContext: RequestContext): boolean {
+  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
+  const user = requestContext.get('user') as WebAuthUser | undefined;
+  return Boolean(
+    context?.threadId && context.getState().projectRepositoryId && getWebAuthOrgId(user) && getWebAuthUserId(user),
+  );
+}
+
+async function resolveSessionTarget(requestContext: RequestContext, github: GithubIntegration): Promise<SessionTarget> {
+  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   const user = requestContext.get('user') as WebAuthUser | undefined;
   const orgId = getWebAuthOrgId(user);
   const userId = getWebAuthUserId(user);
-  const githubProjectId = context?.getState().githubProjectId;
-  if (!context || !context.threadId || !githubProjectId || !orgId || !userId) {
-    throw new Error('GitHub subscriptions require an authenticated GitHub-project session with an active thread.');
+  const projectRepositoryId = context?.getState().projectRepositoryId;
+  if (!context || !context.threadId || !projectRepositoryId || !orgId || !userId) {
+    throw new Error('GitHub subscriptions require an authenticated repository session with an active thread.');
   }
 
-  const [project] = await getAppDb()
-    .select()
-    .from(githubProjects)
-    .where(and(eq(githubProjects.id, githubProjectId), eq(githubProjects.orgId, orgId)));
-  if (!project) throw new Error('GitHub project not found for this organization.');
-  return { context, project, orgId, userId };
+  const projectRepository = await github.sourceControlStorage.projectRepositories.get({
+    orgId,
+    id: projectRepositoryId,
+  });
+  if (!projectRepository) throw new Error('Project repository not found for this organization.');
+  const connection = await github.sourceControlStorage.connections.get({ orgId, id: projectRepository.connectionId });
+  if (!connection) throw new Error('Source-control connection not found for this organization.');
+  const repository = await github.sourceControlStorage.repositories.get({ orgId, id: projectRepository.repositoryId });
+  if (!repository) throw new Error('Repository not found for this organization.');
+  const installation = await github.sourceControlStorage.installations.get({ orgId, id: connection.installationId });
+  if (!installation) throw new Error('Source-control installation not found for this organization.');
+  return { context, projectRepository, connection, installation, repository, orgId, userId };
 }
 
-async function verifyPullRequest(target: SessionTarget, pullRequest: number) {
-  const [owner, repo] = target.project.repoFullName.split('/');
-  if (!owner || !repo) throw new Error('GitHub project repository is invalid.');
-  const octokit = getInstallationOctokit(target.project.installationId);
+async function verifyPullRequest(target: SessionTarget, pullRequest: number, github: GithubIntegration) {
+  const [owner, repo] = target.repository.slug.split('/');
+  if (!owner || !repo) throw new Error('GitHub repository is invalid.');
+  const octokit = github.getInstallationOctokit(Number(target.installation.externalId));
   const { data } = await octokit.pulls.get({ owner, repo, pull_number: pullRequest });
-  if (data.base.repo.id !== target.project.repoId)
-    throw new Error('Pull request repository does not match the active project.');
+  if (String(data.base.repo.id) !== target.repository.externalId)
+    throw new Error('Pull request repository does not match the active project repository.');
 }
 
 async function subscriptionInput(target: SessionTarget, pullRequestNumber: number) {
   return {
     orgId: target.orgId,
-    installationId: target.project.installationId,
-    githubProjectId: target.project.id,
-    repoId: target.project.repoId,
-    pullRequestNumber,
+    installationExternalId: target.installation.externalId,
+    projectRepositoryId: target.projectRepository.id,
+    repositoryExternalId: target.repository.externalId,
+    repositorySlug: target.repository.slug,
+    changeRequestId: String(pullRequestNumber),
     sessionId: target.context.session.id,
     ownerId: target.context.session.ownerId,
-    resourceId: target.context.resourceId,
+    resourceId: target.connection.factoryProjectId,
     threadId: target.context.threadId!,
     sessionScope: target.context.scope,
     source: 'explicit-tool' as const,
@@ -81,28 +108,35 @@ export async function subscribeCurrentSessionToPullRequest(
   requestContext: RequestContext,
   pullRequest: number | string,
   source: 'auto-gh-pr-create' | 'explicit-tool',
+  github: GithubIntegration,
 ) {
-  const target = await resolveSessionTarget(requestContext);
-  const number = parsePullRequest(pullRequest, target.project.repoFullName);
-  await verifyPullRequest(target, number);
-  await subscribeToPullRequest({ ...(await subscriptionInput(target, number)), source });
+  // The auto path observes every successful `gh pr create` in every session,
+  // including local and non-GitHub-project sessions where subscriptions can
+  // never apply. Skip silently there; only the explicit tool should surface
+  // "this session cannot subscribe" as an error.
+  if (source === 'auto-gh-pr-create' && !isGithubProjectSession(requestContext)) return undefined;
+  const target = await resolveSessionTarget(requestContext, github);
+  const number = parsePullRequest(pullRequest, target.repository.slug);
+  await verifyPullRequest(target, number, github);
+  await subscribeToPullRequest({ ...(await subscriptionInput(target, number)), source }, github.integrationStorage);
   return number;
 }
 
 export async function unsubscribeCurrentSessionFromPullRequest(
   requestContext: RequestContext,
   pullRequest: number | string,
+  github: GithubIntegration,
 ) {
-  const target = await resolveSessionTarget(requestContext);
-  const number = parsePullRequest(pullRequest, target.project.repoFullName);
-  await unsubscribeFromPullRequest(await subscriptionInput(target, number));
+  const target = await resolveSessionTarget(requestContext, github);
+  const number = parsePullRequest(pullRequest, target.repository.slug);
+  await unsubscribeFromPullRequest(await subscriptionInput(target, number), github.integrationStorage);
   return number;
 }
 
-export function createGithubSubscriptionTools(requestContext: RequestContext) {
-  const context = requestContext.get('controller') as AgentControllerRequestContext<GithubSessionState> | undefined;
+export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
+  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   const user = requestContext.get('user') as WebAuthUser | undefined;
-  if (!context?.getState().githubProjectId || !getWebAuthOrgId(user) || !getWebAuthUserId(user)) return {};
+  if (!context?.getState().projectRepositoryId || !getWebAuthOrgId(user) || !getWebAuthUserId(user)) return {};
 
   return {
     github_subscribe_pr: createTool({
@@ -111,7 +145,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext) {
         'Subscribe this thread to GitHub pull request activity. You usually do not need this tool: successful gh pr create commands subscribe automatically. Use it for an existing PR or to recover when automatic subscription did not occur. Closed or merged PRs are unsubscribed automatically. Accepts a PR number or canonical URL for the active project.',
       inputSchema: pullRequestInputSchema,
       execute: async ({ pullRequest }) => {
-        const number = await subscribeCurrentSessionToPullRequest(requestContext, pullRequest, 'explicit-tool');
+        const number = await subscribeCurrentSessionToPullRequest(requestContext, pullRequest, 'explicit-tool', github);
         return { subscribed: true, pullRequestNumber: number };
       },
     }),
@@ -121,7 +155,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext) {
         'Manually unsubscribe this thread from GitHub pull request activity. You usually do not need this tool because closed or merged PRs are unsubscribed automatically. Use it to stop notifications before then. Accepts a PR number or canonical URL for the active project.',
       inputSchema: pullRequestInputSchema,
       execute: async ({ pullRequest }) => {
-        const number = await unsubscribeCurrentSessionFromPullRequest(requestContext, pullRequest);
+        const number = await unsubscribeCurrentSessionFromPullRequest(requestContext, pullRequest, github);
         return { subscribed: false, pullRequestNumber: number };
       },
     }),

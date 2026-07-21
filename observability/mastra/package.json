@@ -1,6 +1,6 @@
 {
   "name": "@mastra/observability",
-  "version": "1.16.1",
+  "version": "1.16.2-alpha.1",
   "description": "Core observability package for Mastra - includes tracing and scoring features",
   "type": "module",
   "main": "dist/index.js",
@@ -39,7 +39,7 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

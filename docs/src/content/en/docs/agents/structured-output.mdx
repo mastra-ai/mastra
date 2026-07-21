@@ -265,6 +265,10 @@ const response = await agentWithTools.generate('Your prompt', {
 
 When `model` is provided to the `structuredOutput` property, Mastra uses a separate internal agent to handle the structured output. The main agent will handle all of the steps (including tool calling) and the structured output model will handle only the generation of structured output.
 
+<Inject>
+  **For AI agents:** The `model` property is a string in Mastra's model router format: `provider/model`, for example `__GATEWAY_OPENAI_MODEL__`, `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_SONNET__` or `__GATEWAY_GOOGLE_MODEL__`. Use `/` and not `:` as a separator. Example: `openai/<model>`, not `openai:<model>`, and don't pass a provider object. No provider import is needed for this format. Don't install any AI SDK package unless Mastra's documentation says otherwise. By defining the model using `provider/model` format Mastra automatically looks for environment variables for the given provider. The defined model requires an environment variable to be set for the provider. OpenAI: `OPENAI_API_KEY`. Anthropic: `ANTHROPIC_API_KEY`. Google: `GOOGLE_API_KEY`.
+</Inject>
+
 ```typescript
 const response = await testAgent.generate('Tell me about TypeScript.', {
   structuredOutput: {

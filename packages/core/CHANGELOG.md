@@ -1,5 +1,361 @@
 # @mastra/core
 
+## 1.52.0-alpha.10
+
+### Minor Changes
+
+- Added optional provider-driven authorization for system (non-user) actors, enabling per-agent least privilege after tenant scope has been validated. ([#19338](https://github.com/mastra-ai/mastra/pull/19338))
+
+  System actors (`actor: { actorKind: 'system' }` or `actor: true`) skip the user-centric FGA path. Previously the only boundary for them was tenant scope — there was no way to constrain which agent could do what, and no deny path. FGA providers can now opt in to enforce least privilege for those actors.
+
+  **What's new**
+
+  - `IFGAProvider` gains an optional `requireActor(actor, params)` method that throws `FGADeniedError` to deny.
+  - `ActorSignal` gains optional `agentId`, `permissions`, and `scope` so a provider can identify and constrain the acting agent. `permissions` reuses the `MastraFGAPermissionInput` vocabulary — the actor analog of a user's resolved permissions. It is a self-asserted claim: a provider enforcing real least privilege should resolve authoritative grants from a trusted source keyed by `agentId` rather than trusting it directly.
+  - When a provider does not implement `requireActor`, the existing trusted-actor bypass is preserved exactly — this change is fully backward compatible.
+
+  **Before** — system actors had tenant scoping but no provider-defined per-agent authorization:
+
+  ```ts
+  // Cron/system run: tenant scope is required, but no per-agent limits are possible.
+  await agent.generate('run nightly report', {
+    actor: { actorKind: 'system', sourceWorkflow: 'nightly' },
+  });
+  ```
+
+  **After** — a provider enforces least privilege on the acting agent:
+
+  ```ts
+  import type { IFGAProvider } from '@mastra/core/auth/ee';
+  import { FGADeniedError } from '@mastra/core/auth/ee';
+
+  class MyFga implements IFGAProvider {
+    // ...existing check / require / filterAccessible...
+
+    async requireActor(actor, { resource, permission }) {
+      const agentId = actor === true ? undefined : actor.agentId;
+      // Resolve authoritative grants from a trusted source keyed by agentId.
+      const granted = await this.grantsForAgent(agentId);
+      // `permission` may be a single value or an array (needs ANY one of them).
+      const required = Array.isArray(permission) ? permission : [permission];
+      if (!required.some(p => granted.includes(p))) {
+        throw new FGADeniedError(null, resource, permission, 'actor lacks required permission');
+      }
+    }
+  }
+
+  // The acting agent is now identified and constrained by its granted permissions.
+  await agent.generate('run nightly report', {
+    actor: {
+      actorKind: 'system',
+      agentId: 'nightly-agent',
+      permissions: ['agents:execute', 'tools:execute'],
+    },
+  });
+  ```
+
+- Added request-scoped model overrides to agent execution and approvals, and fixed Studio model selection so each tab can use a different model without changing the agent's configured default. ([#19749](https://github.com/mastra-ai/mastra/pull/19749))
+
+  ```ts
+  await agent.stream(messages, { model: 'google/gemini-2.5-flash' });
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#19813](https://github.com/mastra-ai/mastra/pull/19813))
+  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.30` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.30) (from `npm:@ai-sdk/provider-utils@3.0.28`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.40` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.40) (from `npm:@ai-sdk/provider-utils@4.0.38`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.11` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.11) (from `npm:@ai-sdk/provider-utils@5.0.9`, in `dependencies`)
+
+- Fixed fine-grained authorization (FGA) checks for `DurableAgent` execution and tool approvals. ([#19338](https://github.com/mastra-ai/mastra/pull/19338))
+
+  **Durable agents now enforce `agents:execute`**
+
+  `DurableAgent` overrides `stream()` and `generate()` to run a workflow instead of the base agent path. Those methods now resolve default and per-call options once, then authorize the same effective actor, request context, and memory resource used for execution.
+
+  Behavior change: with an FGA provider configured, durable runs that were previously allowed through are now checked and can be denied.
+
+  **Durable resumes reauthorize each call**
+
+  Durable approval and decline methods now forward the trusted request context and selected tool-call ID into resume authorization and workflow resume. The actor is resolved for each call and forwarded to both agent authorization and tool execution. An explicit resume actor replaces the initial actor, while a newly resolved default actor can still apply. If neither exists, the resume uses normal user authorization and fails closed when no user is available.
+
+- Added optional auth provider capability interfaces and type guards to `@mastra/core/server`: `IOrganizationsProvider` (personal organization bootstrap and admin checks), `IAuthInit` (host-driven initialization with database, public URL, and allowed origins), and `IAuthHttpHandler` (mounting a provider's own HTTP auth endpoints). Server hosts can use the `isOrganizationsProvider`, `isAuthHttpHandler`, and `hasAuthInit` guards to detect what an auth provider supports and wire routes accordingly. ([#19765](https://github.com/mastra-ai/mastra/pull/19765))
+
+- Fixed DurableAgent throwing ToolNotFoundError when a ToolSearchProcessor meta-tool (search_tools / load_tool) was called. The durable tool-call step now resolves processor-injected per-step tools, matching the regular Agent. ([#19578](https://github.com/mastra-ai/mastra/pull/19578))
+
+- Replaced GitHub-specific Mastra Code session state with Factory project and linked-repository identities. This lets SDK consumers represent sessions independently of a source-control provider and select a repository explicitly when sandbox execution is required. ([#19849](https://github.com/mastra-ai/mastra/pull/19849))
+
+  Updated Mastra Code onboarding to be Factory-first: create a Factory by name, then link repositories from your connected source-control installations in a separate step. A Factory is valid with zero linked repositories, and the Board, Metrics, and Audit pages stay available for any server-backed Factory. Factory pages keep project-scoped data separate from repository-scoped intake and provide a repository selector when a Factory has multiple linked repositories. Creating a Factory from a local folder remains available as a secondary option.
+
+  **Before**
+
+  ```ts
+  const state = { githubProjectId: 'project-1', sandboxId, sandboxWorkdir };
+  ```
+
+  **After**
+
+  ```ts
+  const state = {
+    factoryProjectId: 'factory-project-1',
+    projectRepositoryId: 'project-repository-1',
+    sandboxId,
+    sandboxWorkdir,
+  };
+  ```
+
+- Fixed durable goal objectives so active execution time is preserved across runs and excludes tool approval waits. ([#19837](https://github.com/mastra-ai/mastra/pull/19837))
+
+- Fixed agents with channels failing on Cloudflare Workers with `No such module "chat"`. ([#19570](https://github.com/mastra-ai/mastra/pull/19570))
+
+  Agents with Slack, Discord, or Telegram channels now deploy to Cloudflare Workers and other serverless targets without extra configuration — channels initialize correctly and webhooks work out of the box. The `bundler.dynamicPackages: ['chat']` workaround is no longer needed for Node deploys. Projects that don't use channels still load the Chat SDK lazily.
+
+  Fixes #19254
+
+## 1.52.0-alpha.9
+
+### Minor Changes
+
+- The 'workers' option on the Mastra class now merges with the default workers instead of replacing them. Passing custom workers (e.g. a polling worker for an integration) no longer silently drops the built-in orchestration and background-task workers — a custom worker only replaces a default when it shares its name, and 'workers: false' still disables all workers. ([#19766](https://github.com/mastra-ai/mastra/pull/19766))
+
+  ```ts
+  const mastra = new Mastra({
+    // before: only myPoller ran — orchestration was dropped
+    // after: myPoller runs alongside the default workers
+    workers: [myPoller],
+  });
+  ```
+
+### Patch Changes
+
+- Fixed goal judges changing the parent agent's observational-memory model state. ([#19710](https://github.com/mastra-ai/mastra/pull/19710))
+
+## 1.52.0-alpha.8
+
+### Minor Changes
+
+- Added a FactoryStorage contract that owns application storage domains, initializes them with the shared backend, and reports per-domain readiness and initialization errors. ([#19681](https://github.com/mastra-ai/mastra/pull/19681))
+
+  ```ts
+  import { FactoryStorageDomain } from '@mastra/core/storage';
+  import { LibSQLFactoryStorage } from '@mastra/libsql';
+
+  class TasksStorage extends FactoryStorageDomain {
+    constructor() {
+      super('tasks');
+    }
+
+    async init() {
+      await this.ensureCollections([{ name: 'tasks', columns: { id: { type: 'uuid-pk' } } }]);
+    }
+
+    async dangerouslyClearAll() {
+      await this.ops.deleteMany('tasks', {});
+    }
+  }
+
+  const storage = new LibSQLFactoryStorage({ url: 'file:mastra.db' });
+  storage.registerDomain(new TasksStorage());
+  await storage.init();
+  ```
+
+### Patch Changes
+
+- Fixed Babel 8 compatibility for build-time transforms. ([#19393](https://github.com/mastra-ai/mastra/pull/19393))
+
+- Fixed `requestContext` typing inside a tool's `execute` callback. It is now non-optional, matching runtime behavior: Mastra always provides a `RequestContext` (creating an empty one when the caller passed none), and when `requestContextSchema` is defined the context is validated before `execute` runs — on failure the tool returns a validation error and `execute` is never called. No more null-checks, throws, or tool factories needed to satisfy the compiler. ([#19680](https://github.com/mastra-ai/mastra/pull/19680))
+
+  ```typescript
+  const tool = createTool({
+    id: 'fetch-doc',
+    requestContextSchema: z.object({ documentId: z.string(), userId: z.string() }),
+    execute: async (input, context) => {
+      // Before: context.requestContext was RequestContext<...> | undefined,
+      // forcing ?. / ! / throw even though the runtime guarantees it exists
+      // After: typed as RequestContext<{ documentId: string; userId: string }>
+      const documentId = context.requestContext.get('documentId'); // string
+    },
+  });
+  ```
+
+  Callers of `tool.execute(...)` are unaffected — passing a context remains optional there. Fixes [#19480](https://github.com/mastra-ai/mastra/issues/19480)
+
+## 1.52.0-alpha.7
+
+### Patch Changes
+
+- Ensured that canceled workflow results correctly format and deduplicate their payloads before returning. ([#19225](https://github.com/mastra-ai/mastra/pull/19225))
+
+- Fixed unbounded memory growth during long goal runs. A goal run chains many agent turns inside one stream, and the stream previously kept every chunk, step, tool result, and text delta of the entire run in memory (and in suspend snapshots). Goal evaluations now carry the goal gate's explicit `shouldContinue` decision, and the stream clears its run-lifetime buffers at each continuing evaluation — the judged turn's messages are already persisted by then. Terminal evaluations (completion, waiting for user, judge failure, budget exhaustion) do not truncate, so the final turn is preserved. ([#19663](https://github.com/mastra-ai/mastra/pull/19663))
+
+  **Behavior change for goal runs:** run-end results now cover the final iteration of the run (everything after the last continuing evaluation) instead of every turn. Streamed chunks, token usage totals, and persisted messages are unaffected — only the aggregates resolved at the end of the run change. Agents without a `goal` config are unaffected.
+
+  ```ts
+  const agent = new Agent({
+    name: 'coder',
+    model: 'openai/gpt-5.5',
+    goal: { judge: 'openai/gpt-5-mini' },
+  });
+
+  const stream = await agent.stream('Implement feature X');
+  const output = await stream.getFullOutput();
+
+  // Before: output.text, output.steps, output.toolCalls, and output.toolResults
+  // aggregated every turn of the goal run (e.g. 50 turns concatenated).
+
+  // After: they cover the final iteration — the turn(s) judged by the terminal
+  // evaluation, i.e. the goal's final answer. Use output.messages (or memory)
+  // for the full conversation; output.totalUsage still spans the entire run.
+  ```
+
+- Fixed composite storage initialization so transient failures can retry without restarting the process. ([#19697](https://github.com/mastra-ai/mastra/pull/19697))
+
+## 1.52.0-alpha.6
+
+### Patch Changes
+
+- Fixed `new Agent({ durable: true })` to actually use the durable execution path when used standalone (without being registered on a `Mastra` instance). ([#19632](https://github.com/mastra-ai/mastra/pull/19632))
+
+  Previously, `durable: true` only took effect when the agent was attached to a `Mastra`. Constructing an agent with `durable: true` and calling `agent.stream(...)` directly silently ran through the non-durable path.
+
+  Now `stream`, `generate`, `resumeStream`, `resumeGenerate`, `approveToolCall`, `declineToolCall`, `streamUntilIdle`, `resume`, `recover`, `listActiveRuns`, `recoverActiveRuns`, `observe`, and `prepare` all run through the durable execution path on a standalone `new Agent({ durable: true })`.
+
+  ```ts
+  const agent = new Agent({
+    id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model,
+    durable: true,
+  });
+
+  // Now runs through the durable execution path.
+  await agent.stream('hi');
+  ```
+
+- Fixed native Agent goals continuing to invoke the judge after an unretried API error. ([#19662](https://github.com/mastra-ai/mastra/pull/19662))
+
+- Fixed dataset item writes to reject circular payloads with a clear validation error before storage, instead of failing with database-specific serialization errors. Silently lossy JSON values (nested `undefined`, functions, symbols, bigints, and non-finite numbers) and non-plain objects (`Date`, `Map`, `Set`, class instances, and custom `toJSON()` objects) are now also rejected with the offending path, so identical `externalId` retries can no longer conflict with the persisted payload. Added a public `safeStringify` utility for serializing values that may contain circular references. ([#19603](https://github.com/mastra-ai/mastra/pull/19603))
+
+  ```ts
+  import { safeStringify, ensureSerializable } from '@mastra/core/utils/safe-stringify';
+
+  const value: Record<string, unknown> = { prompt: 'hello' };
+  value.self = value;
+
+  safeStringify(value); // '{"prompt":"hello","self":"[Circular]"}'
+  ensureSerializable(value); // { prompt: 'hello', self: '[Circular]' }
+  ```
+
+## 1.52.0-alpha.5
+
+### Minor Changes
+
+- `mastra build` now deploys in one step for push-style deployers. Deployers can opt in with the new `deployOnBuild` flag on the deployer contract, and the build runs their `deploy()` right after bundling. `SandboxDeployer` from `@mastra/deployer-sandbox` opts in, so configuring it means `mastra build` bundles your project, deploys it into the sandbox, and prints the live URL. Existing platform deployers are unchanged. ([#19577](https://github.com/mastra-ai/mastra/pull/19577))
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+  import { SandboxDeployer } from '@mastra/deployer-sandbox';
+  import { VercelSandbox } from '@mastra/vercel';
+
+  export const mastra = new Mastra({
+    deployer: new SandboxDeployer({
+      sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+    }),
+  });
+  ```
+
+  ```bash
+  mastra build # bundles AND deploys — prints the live URL
+  ```
+
+- Added an optional `networking` capability and `writeFiles()` method to the `WorkspaceSandbox` interface. Sandbox providers that expose public port URLs can now implement `networking.getPortUrl(port)`, which enables preview URLs and sandbox deploys (see the new `@mastra/deployer-sandbox` package). Use the new `supportsNetworking()` type guard to detect the capability at runtime. ([#19577](https://github.com/mastra-ai/mastra/pull/19577))
+
+  ```typescript
+  import { supportsNetworking } from '@mastra/core/workspace';
+
+  if (supportsNetworking(sandbox)) {
+    const url = await sandbox.networking.getPortUrl(4111);
+  }
+  ```
+
+- Added `onTitleGenerated` callback to memory options. When `generateTitle` is enabled, pass `onTitleGenerated` in the `memory` property of `agent.generate()` or `agent.stream()` to be notified when the thread title has been generated and persisted to storage. This is a per-request callback, so each request handler can use its own callback with direct access to its response stream — no storage adapter wrapping needed. ([#18998](https://github.com/mastra-ai/mastra/pull/18998))
+
+  **Example:**
+
+  ```ts
+  await agent.stream('Hello', {
+    memory: {
+      thread: threadId,
+      resource: userId,
+      onTitleGenerated: title => {
+        res.write(`event: title\ndata: ${JSON.stringify({ title })}\n\n`);
+      },
+    },
+  });
+  ```
+
+- Added access to the workspace resolved for an AgentController session. ([#19547](https://github.com/mastra-ai/mastra/pull/19547))
+
+  Use the session-owned workspace when an operation must remain isolated to that session:
+
+  ```ts
+  const session = await controller.createSession({ resourceId, scope });
+  const workspace = session.getWorkspace();
+  ```
+
+  Mastra Code workspace resolvers can now accept an isolated read-only skill extension:
+
+  ```ts
+  const workspace = await getDynamicWorkspace({
+    requestContext,
+    skillExtension: {
+      id: 'review-skills',
+      paths: ['/__review_skills__'],
+      createSource: fallback => new ReviewSkillSource(fallback),
+    },
+  });
+  ```
+
+  This lets SDK consumers compose additional read-only skill roots into selected workspaces without changing the default workspace skill set.
+
+- Added an optional `clone()` method to the `WorkspaceSandbox` contract, along with the new `SandboxCloneOptions` type. `clone()` constructs an unstarted sibling sandbox that inherits the template's configuration (credentials, image, resources) with per-instance overrides — without performing any I/O. This lets one configured sandbox act as a template for a fleet of sandbox clones (for example, one per project). ([#19616](https://github.com/mastra-ai/mastra/pull/19616))
+
+  ```ts
+  const template = new RailwaySandbox({ token, environmentId });
+
+  // Fresh sandbox clone for a project — provisions on start()
+  const projectSandbox = template.clone({
+    id: 'mc-project-42',
+    env: { GITHUB_TOKEN: token },
+    idleTimeoutMinutes: 30,
+  });
+  await projectSandbox.start();
+  ```
+
+  `LocalSandbox` implements `clone()` out of the box.
+
+### Patch Changes
+
+- dependencies updates: ([#19611](https://github.com/mastra-ai/mastra/pull/19611))
+  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.9` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.9) (from `npm:@ai-sdk/provider-utils@5.0.7`, in `dependencies`)
+
+- Fixed bounded process output stalling other requests while high-volume commands continue streaming. ([#19600](https://github.com/mastra-ai/mastra/pull/19600))
+
+- Fixed goal judge results rendering more than once during live goal runs. ([#19613](https://github.com/mastra-ai/mastra/pull/19613))
+
+- Fixed workflow cancellation for tool-wrapped steps. Cooperative tools can now stop early when `run.cancel()` is called. Fixes #19599. ([#19602](https://github.com/mastra-ai/mastra/pull/19602))
+
+- Fixed workspace LSP support for TypeScript 7 projects. Code inspection (diagnostics, hover) now works in workspaces using TypeScript 7, including hoisted monorepo and pnpm installations. No configuration changes are needed — existing `lsp: true` setups keep working, and TypeScript 6 and earlier behavior is unchanged. ([#19618](https://github.com/mastra-ai/mastra/pull/19618))
+
+  Fixes [#19601](https://github.com/mastra-ai/mastra/issues/19601)
+
+## 1.52.0-alpha.4
+
+### Patch Changes
+
+- Improve stored `runEvals` per-turn scores (follow-up to multi-turn `turns`). Each persisted per-turn scorer/gate result is now labeled with its turn index (`metadata.turnIndex`), carries the conversation's shared `threadId`, and links to that turn's own trace span instead of the item-level span. This lets the scores UI group and label per-turn scores by conversation and turn, and resolve each score to the correct trace. ([#19491](https://github.com/mastra-ai/mastra/pull/19491))
+
 ## 1.52.0-alpha.3
 
 ### Minor Changes
@@ -1410,9 +1766,7 @@
       memory: { messages: { maxAge: '30d' }, threads: { maxAge: '90d' } },
       observability: { spans: { maxAge: '7d' } },
     },
-    domains: {
-      /* ... */
-    },
+    domains: {/* ... */},
   });
 
   // Wire this to your own cron — Mastra never runs it for you.
@@ -2041,9 +2395,7 @@
       memory: { messages: { maxAge: '30d' }, threads: { maxAge: '90d' } },
       observability: { spans: { maxAge: '7d' } },
     },
-    domains: {
-      /* ... */
-    },
+    domains: {/* ... */},
   });
 
   // Wire this to your own cron — Mastra never runs it for you.
@@ -18675,9 +19027,7 @@ Bearer <token>` header. The token comes from the new
   ```ts
   import { Mastra } from '@mastra/core';
 
-  const mastra = new Mastra({
-    /* ... */
-  });
+  const mastra = new Mastra({/* ... */});
 
   const dataset = await mastra.datasets.create({ name: 'my-eval-set' });
   await dataset.addItems([{ input: { query: 'What is 2+2?' }, groundTruth: { answer: '4' } }]);
@@ -18906,9 +19256,7 @@ Bearer <token>` header. The token comes from the new
   ```ts
   import { Mastra } from '@mastra/core';
 
-  const mastra = new Mastra({
-    /* ... */
-  });
+  const mastra = new Mastra({/* ... */});
 
   const dataset = await mastra.datasets.create({ name: 'my-eval-set' });
   await dataset.addItems([{ input: { query: 'What is 2+2?' }, groundTruth: { answer: '4' } }]);
@@ -19873,9 +20221,7 @@ Bearer <token>` header. The token comes from the new
   const agent = new Agent({
     name: 'my-agent',
     inputProcessors: [toolSearch],
-    tools: {
-      /* always-available tools */
-    },
+    tools: {/* always-available tools */},
   });
   ```
 
@@ -20105,9 +20451,7 @@ Bearer <token>` header. The token comes from the new
   const agent = new Agent({
     name: 'my-agent',
     inputProcessors: [toolSearch],
-    tools: {
-      /* always-available tools */
-    },
+    tools: {/* always-available tools */},
   });
   ```
 

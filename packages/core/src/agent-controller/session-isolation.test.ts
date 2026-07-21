@@ -351,6 +351,32 @@ describe('AgentController session registry', () => {
     expect(b.mode.get()).toBe('build');
   });
 
+  it('keeps the resolved workspace isolated on each scoped session', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+    const workspaceA = createMockWorkspace();
+    const workspaceB = createMockWorkspace();
+
+    const a = await controller.createSession({
+      id: 'user-a::wt-a',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/a',
+      workspace: workspaceA,
+    });
+    const b = await controller.createSession({
+      id: 'user-a::wt-b',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/b',
+      workspace: workspaceB,
+    });
+
+    expect(a.getWorkspace()).toBe(workspaceA);
+    expect(b.getWorkspace()).toBe(workspaceB);
+    expect(a.getWorkspace()).not.toBe(b.getWorkspace());
+  });
+
   it('returns the same session for the same resourceId and scope (get-or-create)', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();

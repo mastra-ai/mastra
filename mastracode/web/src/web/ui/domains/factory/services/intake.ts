@@ -1,19 +1,21 @@
 /**
  * Browser-side helpers for the intake source configuration (Settings › Intake).
  *
- * The config is stored per `(org, user)` on the server; `null` id lists mean
- * "no explicit selection" (GitHub: the active project; Linear: all projects).
+ * The config is stored per `(org, user)` on the server. GitHub uses
+ * `repositoryIds` (connected repository UUIDs); Linear keeps `projectIds`
+ * (Linear Project is the external provider concept). `null` id lists mean
+ * "nothing selected" — nothing syncs until the user picks entries.
  */
 
 export interface IntakeConfig {
   github: {
     enabled: boolean;
-    /** GitHub project ids to sync; `null` = the active project. */
-    projectIds: string[] | null;
+    /** Connected GitHub repository ids to sync; `null` = nothing selected. */
+    repositoryIds: string[] | null;
   };
   linear: {
     enabled: boolean;
-    /** Linear project ids to sync; `null` = all projects. */
+    /** Linear project ids to sync; `null` = nothing selected. */
     projectIds: string[] | null;
   };
 }

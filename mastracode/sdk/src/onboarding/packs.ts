@@ -58,9 +58,9 @@ export function getAvailableModePacks(
 ): ModePack[] {
   const packs: ModePack[] = [];
 
-  const openaiCodex = 'openai/gpt-5.5';
+  const openaiCodex = 'openai/gpt-5.6';
   const openaiFast = 'openai/gpt-5.4-mini';
-  const anthropicBuild = access.anthropic === 'oauth' ? 'anthropic/claude-opus-4-7' : 'anthropic/claude-sonnet-4-6';
+  const anthropicBuild = 'anthropic/claude-fable-5';
 
   if (access.anthropic) {
     packs.push({
@@ -141,7 +141,7 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
       id: 'gemini',
       name: 'Gemini Flash',
       description: access.google === 'oauth' ? 'Via Google OAuth' : 'Via Google API key',
-      modelId: 'google/gemini-2.5-flash',
+      modelId: 'google/gemini-3.5-flash',
     });
   }
 
@@ -168,7 +168,7 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
       id: 'deepseek',
       name: 'DeepSeek',
       description: 'Via DeepSeek API key',
-      modelId: 'deepseek/deepseek-chat',
+      modelId: 'deepseek/deepseek-v4-flash',
     });
   }
 

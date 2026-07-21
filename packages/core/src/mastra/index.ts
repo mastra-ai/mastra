@@ -565,7 +565,9 @@ export interface Config<
    *
    * - `undefined` (default): Auto-creates default workers (existing behavior)
    * - `false`: Disables all event processing — useful when running standalone workers separately
-   * - `MastraWorker[]`: Use exactly these workers
+   * - `MastraWorker[]`: Additional workers merged with the auto-created
+   *   defaults. A custom worker replaces a default with the same `name`;
+   *   duplicate names within the array throw. Use `false` to run no workers.
    */
   workers?: MastraWorker[] | false;
 
@@ -860,8 +862,7 @@ export class Mastra<
                 const isOwnedHere = (() => {
                   if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
                   let parent = data?.parentWorkflow as
-                    | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
-                    | undefined;
+                    { workflowId?: string; runId?: string; parentWorkflow?: unknown } | undefined;
                   let depth = 0;
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;
@@ -1337,13 +1338,8 @@ export class Mastra<
       // runtime triggers (e.g. schedules.create()) don't lazily inject
       // scheduler / agent-schedule workers behind the user's back.
       this.#workersDisabled = true;
-    } else if (Array.isArray(workersOption)) {
-      this.#workers = workersOption;
-      for (const w of this.#workers) {
-        w.__registerMastra(this);
-      }
     } else {
-      // Default: auto-create workers based on config.
+      // Auto-create default workers based on config.
       //
       // Skip OrchestrationWorker when the configured pubsub doesn't support
       // pull delivery (e.g. EventEmitter, GCP Pub/Sub push) — those transports
@@ -1360,7 +1356,18 @@ export class Mastra<
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
       }
-      this.#workers = defaultWorkers;
+      // Merge custom workers with the defaults: a custom worker replaces a
+      // default sharing its name (e.g. a custom OrchestrationWorker), and
+      // duplicate names within the custom array fail loud.
+      const customWorkers = workersOption ?? [];
+      const customNames = new Set<string>();
+      for (const w of customWorkers) {
+        if (customNames.has(w.name)) {
+          throw new Error(`Duplicate worker name "${w.name}" in the 'workers' option`);
+        }
+        customNames.add(w.name);
+      }
+      this.#workers = [...defaultWorkers.filter(w => !customNames.has(w.name)), ...customWorkers];
       for (const w of this.#workers) {
         w.__registerMastra(this);
       }
@@ -2253,7 +2260,14 @@ export class Mastra<
     // Statically importing `createDurableAgent` here is safe because `agent.ts`
     // imports `Mastra` type-only, so there is no `agent → mastra` runtime edge
     // to close the init cycle. See the import note in `agent/agent.ts`.
-    if (!isDurableAgentLike(agent) && (agent as Agent).durable) {
+    //
+    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
+    // self-referential `.agent` getter (see `Agent#agent`), so we must
+    // discriminate against a real wrapper by checking `agent.agent !== agent`.
+    // Real wrappers (e.g. `DurableAgent`, `InngestAgent`) point `.agent` at a
+    // distinct inner `Agent`; the standalone placeholder points at itself.
+    const isRealDurableWrapper = isDurableAgentLike(agent) && (agent as DurableAgentLike).agent !== (agent as unknown);
+    if (!isRealDurableWrapper && (agent as Agent).durable) {
       const durableOption = (agent as Agent).durable;
       const opts = durableOption === true ? {} : { ...(durableOption as object) };
       agent = createDurableAgent({ agent: agent as Agent, ...opts }) as unknown as A;
@@ -3432,25 +3446,10 @@ export class Mastra<
       return { agents: 0, recovered: 0, succeeded: 0, failed: 0 };
     }
 
-    // Duck-type on the presence of `recoverActiveRuns()` rather than
-    // `instanceof DurableAgent` — importing the concrete class here would
-    // pull the entire durable-agent module into `mastra/index.ts` and
-    // introduce a runtime import cycle (`Mastra` <-> `DurableAgent`).
-    // The recovery API is only surfaced by default-engine `DurableAgent`
-    // instances; Inngest-style wrappers legitimately lack it and are
-    // skipped automatically.
-    type RecoverableDurableAgent = {
-      id: string;
-      recoverActiveRuns(): Promise<{
-        recovered: Array<{ runId: string }>;
-        succeeded: number;
-        failed: number;
-      }>;
-    };
-    const durableAgents: RecoverableDurableAgent[] = [];
+    const durableAgents: DurableAgentLike[] = [];
     for (const agent of Object.values(this.#agents ?? {})) {
-      if (agent && typeof (agent as any).recoverActiveRuns === 'function') {
-        durableAgents.push(agent as unknown as RecoverableDurableAgent);
+      if (agent && isDurableAgentLike(agent)) {
+        durableAgents.push(agent);
       }
     }
 

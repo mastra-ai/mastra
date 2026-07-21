@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CSSProperties, KeyboardEvent } from 'react';
+import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
 import { getSankeyChartCurveSelection } from './sankey-chart-utils';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
@@ -11,13 +11,23 @@ import { cn } from '@/lib/utils';
 export type SankeyChartProps = {
   height?: CSSProperties['height'];
   className?: string;
+  margin?: ComponentProps<typeof RechartsSankey>['margin'];
   onCurveClick?: (selection: SankeyChartCurveSelection) => void;
 };
 
-export function SankeyChart({ height = 320, className, onCurveClick }: SankeyChartProps) {
+export function SankeyChart({
+  height = 320,
+  className,
+  margin = { top: 64, right: 160, bottom: 12, left: 160 },
+  onCurveClick,
+}: SankeyChartProps) {
   const { graph, enabledColumns, hueMap } = useSankeyRenderContext();
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
-  const lastColumnId = enabledColumns.at(-1)?.id;
+  const firstColumnId = enabledColumns[0]?.id;
+  const total = graph.links.reduce(
+    (sum, link) => (link.sourceNode.column.id === firstColumnId ? sum + link.value : sum),
+    0,
+  );
 
   return (
     <div className={cn('min-w-0', className)}>
@@ -38,8 +48,8 @@ export function SankeyChart({ height = 320, className, onCurveClick }: SankeyCha
             <RechartsSankey
               data={graph}
               nodeWidth={7}
-              nodePadding={18}
-              margin={{ top: 40, right: 120, bottom: 12, left: 120 }}
+              nodePadding={56}
+              margin={margin}
               node={(props: SankeyNodeRendererProps) => {
                 const node = graph.nodes[props.index];
                 const showColumnLabel = node
@@ -50,8 +60,8 @@ export function SankeyChart({ height = 320, className, onCurveClick }: SankeyCha
                     {...props}
                     hueMap={hueMap}
                     columnLabel={node?.column.label}
+                    total={total}
                     showColumnLabel={showColumnLabel}
-                    isLastColumn={node?.column.id === lastColumnId}
                     onHoverChange={setHoveredSourceName}
                   />
                 );
@@ -103,8 +113,8 @@ type SankeyLinkRendererProps = {
 type SankeyNodeProps = SankeyNodeRendererProps & {
   hueMap: Record<string, number>;
   columnLabel?: string;
+  total: number;
   showColumnLabel: boolean;
-  isLastColumn: boolean;
   onHoverChange: (sourceName: string | undefined) => void;
 };
 
@@ -116,40 +126,38 @@ function SankeyNode({
   payload,
   hueMap,
   columnLabel,
+  total,
   showColumnLabel,
-  isLastColumn,
   onHoverChange,
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
-  const value = typeof payload.value === 'string' || typeof payload.value === 'number' ? String(payload.value) : '';
-  const labelX = isLastColumn ? x - 8 : x + width + 8;
-  const textAnchor = isLastColumn ? 'end' : 'start';
+  const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
+  const value = Number.isFinite(numericValue) ? String(numericValue) : '';
+  const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
+  const labelX = x + width / 2;
+  const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
 
   return (
     <g onMouseEnter={() => onHoverChange(name)} onMouseLeave={() => onHoverChange(undefined)}>
       {showColumnLabel && columnLabel ? (
-        <text x={x + width / 2} y={18} textAnchor="middle" fill={Colors.neutral5} fontSize={12} fontWeight={600}>
+        <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
           {columnLabel}
         </text>
       ) : null}
       <rect x={x} y={y} width={width} height={height} rx={3} fill={nodeColor(hue)} />
       <text
         x={labelX}
-        y={y + height / 2 - 4}
-        textAnchor={textAnchor}
+        y={y - 24}
+        textAnchor="middle"
         fill={Colors.neutral5}
-        fontSize={12.5}
+        fontSize={11}
         fontFamily="var(--font-mono)"
-        paintOrder="stroke"
-        stroke={Colors.surface1}
-        strokeWidth={3}
-        strokeLinejoin="round"
       >
         {name}
       </text>
-      <text x={labelX} y={y + height / 2 + 10} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={10.5}>
-        {value}
+      <text x={labelX} y={y - 8} textAnchor="middle" fill={Colors.neutral3} fontSize={9.5}>
+        {value} ({percentage}%)
       </text>
     </g>
   );

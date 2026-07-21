@@ -1,12 +1,13 @@
 import type { ToolCategory } from '@mastra/client-js';
 
-import { useActiveProjectContext } from '../../workspaces';
+import { useActiveFactoryContext } from '../../workspaces';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
 } from '../../../../../shared/hooks/useAgentControllerGoalMutations';
 import { useAbortAgentControllerMutation } from '../../../../../shared/hooks/useAgentControllerRunMutations';
+import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { SLASH_COMMANDS } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useChatModes } from './useChatModes';
@@ -20,7 +21,7 @@ import { useChatTranscript } from './useChatTranscript';
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
 export function useRunChatCommand() {
-  const { activeProject } = useActiveProjectContext();
+  const { activeFactory } = useActiveFactoryContext();
   const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { busy, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
@@ -85,8 +86,8 @@ export function useRunChatCommand() {
       case 'settings':
         pushNotice(
           [
-            `Project: ${activeProject?.name ?? '(none)'}`,
-            `Path: ${activeProject?.path ?? '(default workspace)'}`,
+            `Factory: ${activeFactory?.name ?? '(none)'}`,
+            `Path: ${activeFactory ? deriveProjectPath(activeFactory) || '(no workspace selected)' : '(none)'}`,
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${threadId ?? '—'}`,

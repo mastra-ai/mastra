@@ -127,10 +127,12 @@ export function createDurableGoalStep() {
           toolCalls?: Array<{ toolName?: string; args?: unknown }>;
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
         }>;
-        lastStepResult?: { isContinued?: boolean };
+        lastStepResult?: { isContinued?: boolean; reason?: string };
         options?: { maxSteps?: number };
         backgroundTaskPending?: boolean;
       };
+      if (state.lastStepResult?.reason === 'error') return state;
+
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       const initData = getInitData() as {
         agentId?: string;
@@ -217,6 +219,7 @@ export function createDurableGoalStep() {
                 timedOut: false,
                 maxRunsReached: true,
                 suppressFeedback: false,
+                shouldContinue: false,
               },
             } as any);
           } catch {
@@ -322,8 +325,7 @@ export function createDurableGoalStep() {
           const goalTools: ToolsInput | undefined =
             typeof goalConfig.tools === 'function'
               ? ((await (goalConfig.tools as (args: any) => unknown)({ requestContext, mastra })) as
-                  | ToolsInput
-                  | undefined)
+                  ToolsInput | undefined)
               : goalConfig.tools;
 
           scorer = createGoalScorer({
@@ -466,6 +468,7 @@ export function createDurableGoalStep() {
         timedOut: result.timedOut,
         maxRunsReached,
         suppressFeedback,
+        shouldContinue,
       };
 
       // Inject feedback into messageList via signal so the next LLM call sees it.

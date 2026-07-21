@@ -2,7 +2,7 @@
  * BDD coverage for the propless `ThreadList` (`domains/chat/components`).
  *
  * The list owns the thread-section behavior end-to-end: it reads threads from
- * focused chat hooks, gates itself on the active project, closes the sidebar
+ * focused chat hooks, gates itself on the active factory, closes the sidebar
  * drawer on navigation, and toasts on thread CRUD. Driven through the real
  * fetch transport with MSW at the network boundary.
  */
@@ -13,42 +13,52 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import { ToastProvider } from '../../../../ui';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { ThreadList } from '../ThreadList';
 
 const RESOURCE_ID = 'res-alpha';
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 
-const project: Project = {
+const project: Factory = {
   id: 'p-alpha',
   name: 'Alpha',
-  path: '/projects/alpha',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/alpha',
+  },
 };
 
-/** GitHub project with a feature worktree selected — thread list is read-only. */
-const worktreeProject: Project = {
-  id: 'p-gh',
-  name: 'Mastra',
-  source: 'github',
-  githubProjectId: 'gh-1',
-  sandboxWorkdir: '/sandbox/mastra',
-  resourceId: RESOURCE_ID,
+/** Server factory with a feature worktree selected — thread list is read-only. */
+const worktreeRepository = {
+  projectRepositoryId: 'pr-gh-1',
+  slug: 'mastra-ai/mastra',
   gitBranch: 'main',
+  sandboxWorkdir: '/sandbox/mastra',
+  selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
   worktrees: [
     { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
     { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
   ],
-  selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
+};
+const worktreeProject: Factory = {
+  id: 'p-gh',
+  name: 'Mastra',
+  resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'factory',
+    factoryProjectId: 'fp-gh-1',
+    repositories: [worktreeRepository],
+  },
 };
 
 function thread(id: string, title: string, updatedAt: string): AgentControllerThreadInfo {
@@ -62,9 +72,9 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject(seeded: Project = project) {
-  localStorage.setItem('mastracode-projects', JSON.stringify([seeded]));
-  localStorage.setItem('mastracode-active-project', seeded.id);
+function seedFactory(seeded: Factory = project) {
+  localStorage.setItem('mastracode-factories', JSON.stringify([seeded]));
+  localStorage.setItem('mastracode-active-factory', seeded.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -159,7 +169,7 @@ function renderThreadList() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/chat']}>
       <ToastProvider>
-        <ActiveProjectProvider>
+        <ActiveFactoryProvider>
           <ChatSessionProvider>
             <OverlaysProvider>
               <ThreadList />
@@ -167,7 +177,7 @@ function renderThreadList() {
               <LocationProbe />
             </OverlaysProvider>
           </ChatSessionProvider>
-        </ActiveProjectProvider>
+        </ActiveFactoryProvider>
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -181,7 +191,7 @@ async function openThreadActions(title: string) {
 }
 
 describe('ThreadList', () => {
-  it('given no active project, then nothing renders', () => {
+  it('given no active factory, then nothing renders', () => {
     useAgentControllerHandlers([]);
     renderThreadList();
 
@@ -189,8 +199,8 @@ describe('ThreadList', () => {
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
   });
 
-  it('given threads, then they render sorted by updatedAt desc, capped at 5 with an overflow hint', async () => {
-    seedProject();
+  it('given threads, then every fetched thread renders sorted by updatedAt desc', async () => {
+    seedFactory();
     const threads = [
       thread('t1', 'Thread 1', '2026-06-01T00:00:00.000Z'),
       thread('t2', 'Thread 2', '2026-06-02T00:00:00.000Z'),
@@ -207,12 +217,20 @@ describe('ThreadList', () => {
     const titles = within(screen.getByRole('list'))
       .getAllByRole('listitem')
       .map(item => within(item).getByRole('button', { name: /Thread \d/ }).textContent);
-    expect(titles.map(t => t?.slice(0, 8))).toEqual(['Thread 7', 'Thread 6', 'Thread 5', 'Thread 4', 'Thread 3']);
-    expect(screen.getByText('+2 more')).toBeInTheDocument();
+    expect(titles.map(t => t?.slice(0, 8))).toEqual([
+      'Thread 7',
+      'Thread 6',
+      'Thread 5',
+      'Thread 4',
+      'Thread 3',
+      'Thread 2',
+      'Thread 1',
+    ]);
+    expect(screen.queryByText(/more$/)).not.toBeInTheDocument();
   });
 
   it('given a feature worktree is active, then thread titles render read-only without actions or a new-thread control', async () => {
-    seedProject(worktreeProject);
+    seedFactory(worktreeProject);
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -227,7 +245,14 @@ describe('ThreadList', () => {
   it('given a GitHub project, then the list is read-only even when the repo-root path was persisted as selected', async () => {
     // Legacy projects could persist the repo root as the selected worktree;
     // it is no longer a workspace, so GitHub lists never expose thread controls.
-    seedProject({ ...worktreeProject, selectedWorktreePath: '/sandbox/mastra' });
+    seedFactory({
+      ...worktreeProject,
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'fp-gh-1',
+        repositories: [{ ...worktreeRepository, selectedWorktreePath: '/sandbox/mastra' }],
+      },
+    });
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -237,7 +262,7 @@ describe('ThreadList', () => {
   });
 
   it('when a thread is clicked, then the app navigates to its page and the sidebar closes', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([threadOne, threadTwo]);
     renderThreadList();
 
@@ -249,7 +274,7 @@ describe('ThreadList', () => {
   });
 
   it('when "New thread" is clicked, then it opens the /new draft page without persisting a thread and the sidebar closes', async () => {
-    seedProject();
+    seedFactory();
     const captured = useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -263,7 +288,7 @@ describe('ThreadList', () => {
   });
 
   it('when a rename is committed with Enter, then the rename request fires with the new title and a toast shows', async () => {
-    seedProject();
+    seedFactory();
     const captured = useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -280,7 +305,7 @@ describe('ThreadList', () => {
   });
 
   it('when a rename is cancelled with Escape, then no rename request fires', async () => {
-    seedProject();
+    seedFactory();
     const captured = useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -296,7 +321,7 @@ describe('ThreadList', () => {
   });
 
   it('when Clone is picked, then the clone request fires and a toast shows', async () => {
-    seedProject();
+    seedFactory();
     const captured = useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -310,7 +335,7 @@ describe('ThreadList', () => {
   });
 
   it('when Delete is picked, then the delete request fires and a toast shows', async () => {
-    seedProject();
+    seedFactory();
     const captured = useAgentControllerHandlers([threadOne, threadTwo]);
     renderThreadList();
 
@@ -322,7 +347,7 @@ describe('ThreadList', () => {
   });
 
   it('when the actions menu is open, then clicking the trigger again closes it', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 

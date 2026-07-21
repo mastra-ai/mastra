@@ -20,13 +20,7 @@ const NON_IDLE_SELECTION_MODES = new Set([
   'compare-items',
 ] as const);
 export type DatasetSelectionMode =
-  | 'idle'
-  | 'export'
-  | 'export-json'
-  | 'create-dataset'
-  | 'add-to-dataset'
-  | 'delete'
-  | 'compare-items';
+  'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete' | 'compare-items';
 
 export type SetURLSearchParamsLike = (
   next: URLSearchParams | ((prev: URLSearchParams) => URLSearchParams),

@@ -1,171 +1,37 @@
 /**
- * Sandbox provisioning + repo materialization for GitHub-backed projects.
+ * Repo materialization for GitHub-backed repositories.
  *
  * A GitHub repo is never cloned onto the server host. Instead each project gets
- * its own isolated cloud sandbox (a `MastraSandbox`, e.g. a Railway VM) and the
- * repo is cloned *inside* that sandbox. The agent's file tools and command tools
- * then operate entirely against the remote checkout.
+ * its own isolated sandbox (provisioned by the fleet in `../sandbox/fleet`) and
+ * the repo is cloned *inside* that sandbox. The agent's file tools and command
+ * tools then operate entirely against the remote checkout.
  *
- * - `ensureProjectSandbox(row)` provisions a new sandbox (persisting its provider
- *   id so re-opens reattach) or reattaches to the stored one.
+ * - `ensureProjectSandbox(row)` / `teardownProjectSandbox(row)` bind the fleet's
+ *   provision/reattach/teardown lifecycle to the per-(project,user) sandbox row.
  * - `materializeRepo(row, token)` runs `git clone` (first open) or `git pull`
  *   (re-open) inside the sandbox, using a short-lived installation token that is
  *   scrubbed from the git remote afterwards so it never persists in the VM.
  *
- * The provider is whatever `WebSandboxProvider` the factory was configured
- * with (`sandbox` slot, seeded into the runtime-config registry) — this
- * module never selects a provider or reads deployment env itself. Tests can
- * additionally swap the low-level construction via `setSandboxFactory`.
+ * This module owns everything git/GitHub: clone/pull, commit/push, worktrees,
+ * and `gh pr create`. Sandbox provisioning, budgets, and workdir layout live in
+ * the fleet module.
  */
 
 import { createHash } from 'node:crypto';
-import { eq } from 'drizzle-orm';
-import type { MaterializationSandbox, SandboxCommandResult, SandboxCreateOptions } from '../sandbox-provider';
-import { getSeededSandboxProvider } from '../runtime-config';
-import { getAppDb } from './db';
-import { githubProjectSandboxes } from './schema';
-import type { GithubProjectSandboxRow } from './schema';
+import { ensureSandbox, reportProgress, teardownSandbox } from '../sandbox/fleet';
+import type { MaterializationSandbox, ProgressFn, SandboxBindingStore, SandboxCommandResult } from '../sandbox/fleet';
+import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
 
-export type { MaterializationSandbox, SandboxCommandResult, SandboxCreateOptions } from '../sandbox-provider';
+type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
 
-/**
- * A coarse-grained step of the sandbox-preparation flow, reported as it happens
- * so the UI can show the user what the server is doing instead of a static
- * "Preparing…" toast. `phase` is a stable machine token; `message` is
- * user-facing copy.
- */
-export interface PrepareProgress {
-  phase: 'reattaching' | 'provisioning' | 'preparing-workspace' | 'cloning' | 'pulling' | 'finalizing' | 'done';
-  message: string;
-}
-
-/** Callback invoked with each preparation step. Best-effort; never throws. */
-export type ProgressFn = (event: PrepareProgress) => void;
-
-function reportProgress(onProgress: ProgressFn | undefined, event: PrepareProgress): void {
-  if (!onProgress) return;
-  try {
-    onProgress(event);
-  } catch {
-    // Progress reporting must never break the actual work.
-  }
-}
-
-/**
- * Factory that builds a (not-yet-started) sandbox. When `providerSandboxId` is
- * provided the sandbox should reattach to that existing VM instead of
- * provisioning a new one.
- */
-export type SandboxFactory = (opts: SandboxCreateOptions) => MaterializationSandbox;
-
-/**
- * Name of the active sandbox provider — the seeded provider's `kind`, or
- * `'none'` when the factory was configured without a `sandbox` slot.
- * Diagnostic only; feature gating goes through {@link isSandboxEnabled}.
- */
-export function getSandboxProvider(): string {
-  return getSeededSandboxProvider()?.kind ?? 'none';
-}
-
-/**
- * True when the configured sandbox provider is usable. `false` when no
- * `sandbox` provider was configured or the provider reports itself
- * misconfigured (e.g. Railway without a token) — GitHub-backed projects stay
- * off in both cases.
- */
-export function isSandboxEnabled(): boolean {
-  return getSeededSandboxProvider()?.isEnabled() ?? false;
-}
-
-/**
- * Compute the in-sandbox working directory for a repo. Server-side only; never
- * derived from client input. Delegates to the active provider, which owns the
- * provider-specific layout (cloud `/workspace` base vs local checkout root).
- */
-export function computeSandboxWorkdir(repoFullName: string): string {
-  const provider = getSeededSandboxProvider();
-  if (!provider) throw new Error('No sandbox provider configured');
-  return provider.workdirFor(repoFullName);
-}
-
-/**
- * Idle teardown window for provisioned sandboxes, in minutes; defaults to 30.
- * The provider stops an idle VM after this window so abandoned sandboxes don't
- * linger (GC). A re-open detects the stopped VM and re-provisions cleanly.
- */
-export function getSandboxIdleMinutes(): number {
-  return getSeededSandboxProvider()?.idleMinutes ?? 30;
-}
-
-/**
- * Per-replica cap on concurrently *provisioned* sandboxes. 0 means unlimited.
- * This is a lightweight per-process budget to keep a single replica from
- * exhausting provider quota — it is not a global, cross-replica scheduler
- * (that is a deferred follow-up).
- */
-export function getMaxSandboxes(): number {
-  return getSeededSandboxProvider()?.maxSandboxes ?? 0;
-}
-
-/**
- * Count of sandboxes this replica has freshly provisioned and not yet torn
- * down. Reattaches to existing VMs do not count (they reuse an already-billed
- * sandbox). Used to enforce `getMaxSandboxes()`.
- */
-let liveSandboxCount = 0;
-
-/** Current live (freshly provisioned, not torn down) sandbox count. */
-export function getLiveSandboxCount(): number {
-  return liveSandboxCount;
-}
-
-/** For tests: reset the live-sandbox counter to a known state. */
-export function __resetLiveSandboxCount(value = 0): void {
-  liveSandboxCount = value;
-}
-
-/** Raised when provisioning would exceed the per-replica sandbox budget. */
-export class SandboxBudgetError extends Error {
-  readonly code = 'sandbox-budget-exceeded' as const;
-  constructor(readonly max: number) {
-    super(
-      `Sandbox budget exceeded: this server already has ${max} active sandbox(es), ` +
-        `the configured per-replica maximum. Close an existing project's sandbox and try again.`,
-    );
-    this.name = 'SandboxBudgetError';
-  }
-}
-
-/**
- * Default factory: build via the provider the factory was configured with.
- * Resolved per call so seeding order doesn't matter at import time.
- */
-const defaultFactory: SandboxFactory = opts => {
-  const provider = getSeededSandboxProvider();
-  if (!provider) throw new Error('No sandbox provider configured');
-  return provider.create(opts);
-};
-
-let sandboxFactory: SandboxFactory = defaultFactory;
-
-/** Override the sandbox factory (tests). */
-export function setSandboxFactory(factory: SandboxFactory): void {
-  sandboxFactory = factory;
-}
-
-/** Reset to the default provider-delegating factory. */
-export function resetSandboxFactory(): void {
-  sandboxFactory = defaultFactory;
-}
-
-/**
- * The provider's reattach id for a started sandbox. For Railway this is the
- * underlying `railwaySandboxId` in `getInfo().metadata`.
- */
-async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<string | undefined> {
-  const info = await sandbox.getInfo();
-  const id = info.metadata?.railwaySandboxId ?? info.metadata?.sandboxId;
-  return typeof id === 'string' ? id : undefined;
+/** Adapt a per-(project,user) sandbox binding row to the fleet's persistence seam. */
+function bindingStore(row: ProjectRepositorySandbox, storage: SourceControlSandboxStorage): SandboxBindingStore {
+  return {
+    sandboxId: row.sandboxId,
+    setSandboxId: id =>
+      id === null ? storage.clearBinding({ id: row.id }) : storage.setSandboxId({ id: row.id, sandboxId: id }),
+    clear: () => storage.clearBinding({ id: row.id }),
+  };
 }
 
 /**
@@ -173,91 +39,27 @@ async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<s
  * reattach to the stored one. Returns a started, live sandbox.
  */
 export async function ensureProjectSandbox(
-  row: GithubProjectSandboxRow,
+  row: ProjectRepositorySandbox,
+  storage: SourceControlSandboxStorage,
   onProgress?: ProgressFn,
 ): Promise<MaterializationSandbox> {
-  const idleTimeoutMinutes = getSandboxIdleMinutes();
-
-  // Reattach path: if we have a stored sandbox id, try to reattach. The VM may
-  // have been torn down by the provider's idle GC (or otherwise died), in which
-  // case `start()` fails. Recover by clearing the stale id and provisioning a
-  // fresh sandbox so the next open succeeds instead of being permanently wedged.
-  if (row.sandboxId) {
-    reportProgress(onProgress, { phase: 'reattaching', message: 'Reconnecting to your sandbox…' });
-    const reattached = sandboxFactory({ providerSandboxId: row.sandboxId, idleTimeoutMinutes });
-    try {
-      await reattached.start();
-      return reattached;
-    } catch {
-      await getAppDb()
-        .update(githubProjectSandboxes)
-        .set({ sandboxId: null })
-        .where(eq(githubProjectSandboxes.id, row.id));
-      // fall through to fresh provision below
-    }
-  }
-
-  // Fresh provision: enforce the per-replica budget before spending quota.
-  const max = getMaxSandboxes();
-  if (max > 0 && liveSandboxCount >= max) {
-    throw new SandboxBudgetError(max);
-  }
-
-  reportProgress(onProgress, { phase: 'provisioning', message: 'Provisioning a new sandbox…' });
-  const sandbox = sandboxFactory({ idleTimeoutMinutes });
-  await sandbox.start();
-  liveSandboxCount += 1;
-
-  const providerSandboxId = await readProviderSandboxId(sandbox);
-  if (providerSandboxId) {
-    await getAppDb()
-      .update(githubProjectSandboxes)
-      .set({ sandboxId: providerSandboxId })
-      .where(eq(githubProjectSandboxes.id, row.id));
-  }
-
-  return sandbox;
+  return ensureSandbox(bindingStore(row, storage), onProgress);
 }
 
 /**
  * Tear down a user's sandbox for a project: stop the live VM (best-effort) and
  * clear the persisted `sandboxId`/`materializedAt` on the per-(project,user)
- * binding row so the next open re-provisions cleanly. Decrements the
- * per-replica live-sandbox counter.
+ * binding row so the next open re-provisions cleanly.
  *
  * @param row     the per-(project,user) sandbox binding to tear down
  * @param sandbox an already-reattached live sandbox to stop, when available
  */
 export async function teardownProjectSandbox(
-  row: GithubProjectSandboxRow,
+  row: ProjectRepositorySandbox,
+  storage: SourceControlSandboxStorage,
   sandbox?: MaterializationSandbox,
 ): Promise<void> {
-  if (sandbox?.stop) {
-    try {
-      await sandbox.stop();
-    } catch {
-      // Best-effort: the VM may already be gone (idle GC). Still clear the row.
-    }
-  }
-  if (row.sandboxId) {
-    if (liveSandboxCount > 0) liveSandboxCount -= 1;
-    await getAppDb()
-      .update(githubProjectSandboxes)
-      .set({ sandboxId: null, materializedAt: null })
-      .where(eq(githubProjectSandboxes.id, row.id));
-  }
-}
-
-/**
- * Reattach to an already-provisioned sandbox by its provider id and start it.
- * Used by the workspace seam when opening a GitHub project that was already
- * materialized (sandbox id + workdir carried on controller state), so no DB
- * round-trip is needed.
- */
-export async function reattachProjectSandbox(providerSandboxId: string): Promise<MaterializationSandbox> {
-  const sandbox = sandboxFactory({ providerSandboxId, idleTimeoutMinutes: getSandboxIdleMinutes() });
-  await sandbox.start();
-  return sandbox;
+  return teardownSandbox(bindingStore(row, storage), sandbox);
 }
 
 /**
@@ -326,10 +128,11 @@ export interface RepoMaterializeInfo {
  * @param token      a freshly minted, short-lived installation access token
  */
 export async function materializeRepo(
-  sandboxRow: GithubProjectSandboxRow,
+  sandboxRow: ProjectRepositorySandbox,
   repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,
+  storage: SourceControlSandboxStorage,
   onProgress?: ProgressFn,
 ): Promise<void> {
   const workdir = sandboxRow.sandboxWorkdir;
@@ -403,10 +206,7 @@ export async function materializeRepo(
 
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
-  await getAppDb()
-    .update(githubProjectSandboxes)
-    .set({ materializedAt: new Date() })
-    .where(eq(githubProjectSandboxes.id, sandboxRow.id));
+  await storage.markMaterialized({ id: sandboxRow.id });
 }
 
 /**

@@ -1,362 +1,182 @@
 /**
- * Validation + persistence for Factory work items (the kanban board records).
- *
- * Validation mirrors `../intake/store` — untrusted route bodies are parsed
- * into bounded, sanitized shapes or rejected wholesale. Stage history is
- * appended exclusively here (server-side) on every stage transition so it can
- * never drift from `stages`.
+ * Factory work-item input validation and persistence helpers.
  */
 
-import { and, eq } from 'drizzle-orm';
-import type { SQL } from 'drizzle-orm';
+import { getFactoryStorage } from '../runtime-config';
+import { getWorkItemsStorage } from '../storage/domains';
+import { WorkItemRelationError } from '../storage/domains/work-items/base';
+import type {
+  CreateWorkItemInput,
+  ExternalWorkItemSource,
+  UpsertWorkItemResult,
+  UpdateWorkItemInput,
+  WorkItemPriorState,
+  WorkItemRow,
+  WorkItemSessionInput,
+  WorkItemSessionRef,
+  WorkItemStage,
+} from '../storage/domains/work-items/base';
 
-import { getAppDb } from '../github/db';
-import type { AppDb } from '../github/db';
-import { workItems } from './schema';
-import type { WorkItemRow, WorkItemSessionRef, WorkItemSource, WorkItemStageEntry } from './schema';
+export { WorkItemRelationError };
+export type {
+  CreateWorkItemInput,
+  ExternalWorkItemSource,
+  UpdateWorkItemInput,
+  WorkItemPriorState,
+  WorkItemRow,
+  WorkItemSessionInput,
+  WorkItemSessionRef,
+  WorkItemStage,
+};
 
-const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['github-issue', 'github-pr', 'linear-issue', 'manual'];
-
-const MAX_STAGES = 8;
+const MAX_STAGES = 16;
 const MAX_STAGE_LENGTH = 64;
-const MAX_TITLE_LENGTH = 512;
-const MAX_URL_LENGTH = 2048;
-const MAX_SOURCE_KEY_LENGTH = 256;
-const MAX_SESSION_ROLES = 8;
-const MAX_ROLE_LENGTH = 32;
-const MAX_SESSION_FIELD_LENGTH = 1024;
-const MAX_METADATA_JSON_LENGTH = 16_384;
+const MAX_METADATA_BYTES = 16 * 1024;
 
-/** Session ref as accepted from clients — `startedBy` is stamped server-side. */
-export interface WorkItemSessionInput {
-  projectPath: string;
-  branch: string;
-  threadId: string;
-}
-
-export interface CreateWorkItemInput {
-  source: WorkItemSource;
-  sourceKey: string | null;
-  title: string;
-  url: string | null;
-  stages: string[];
-  sessions: Record<string, WorkItemSessionInput>;
-  metadata: Record<string, unknown>;
-}
-
-export interface UpdateWorkItemInput {
-  title?: string;
-  url?: string | null;
-  stages?: string[];
-  sessions?: Record<string, WorkItemSessionInput>;
-  metadata?: Record<string, unknown>;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Bounded, deduplicated stage list (e.g. `['execute','review']`), or `undefined` when invalid. */
-function sanitizeStages(value: unknown): string[] | undefined {
-  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_STAGES) return undefined;
-  const stages = value.filter(
-    (v): v is string => typeof v === 'string' && /^[a-z0-9][a-z0-9_-]*$/i.test(v) && v.length <= MAX_STAGE_LENGTH,
+function validStages(value: unknown): value is WorkItemStage[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= MAX_STAGES &&
+    value.every(
+      stage => typeof stage === 'string' && stage.length <= MAX_STAGE_LENGTH && /^[a-z0-9][a-z0-9_-]*$/i.test(stage),
+    ) &&
+    new Set(value).size === value.length
   );
-  if (stages.length !== value.length) return undefined;
-  if (new Set(stages).size !== stages.length) return undefined;
-  return stages;
 }
 
-/** Non-empty trimmed title within bounds, or `undefined` when invalid. */
-function sanitizeTitle(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const title = value.trim();
-  if (title.length === 0 || title.length > MAX_TITLE_LENGTH) return undefined;
-  return title;
-}
-
-/** `http(s)` URL within bounds, `null` for absent, or `undefined` when invalid. */
-function sanitizeUrl(value: unknown): string | null | undefined {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== 'string' || value.length > MAX_URL_LENGTH) return undefined;
-  if (!/^https?:\/\//.test(value)) return undefined;
-  return value;
-}
-
-/** Dedupe key within bounds, `null` for manual cards, or `undefined` when invalid. */
-function sanitizeSourceKey(value: unknown): string | null | undefined {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== 'string' || value.length === 0 || value.length > MAX_SOURCE_KEY_LENGTH) return undefined;
-  return value;
-}
-
-/** Role-keyed session refs with bounded string fields, or `undefined` when invalid. */
-function sanitizeSessions(value: unknown): Record<string, WorkItemSessionInput> | undefined {
-  if (value === undefined) return {};
-  if (!isPlainObject(value)) return undefined;
-  const entries = Object.entries(value);
-  if (entries.length > MAX_SESSION_ROLES) return undefined;
-  const sessions: Record<string, WorkItemSessionInput> = {};
-  for (const [role, ref] of entries) {
-    if (!/^[a-z0-9][a-z0-9_-]*$/i.test(role) || role.length > MAX_ROLE_LENGTH) return undefined;
-    if (!isPlainObject(ref)) return undefined;
-    const { projectPath, branch, threadId } = ref as Record<string, unknown>;
-    for (const field of [projectPath, branch, threadId]) {
-      if (typeof field !== 'string' || field.length === 0 || field.length > MAX_SESSION_FIELD_LENGTH) return undefined;
-    }
-    sessions[role] = { projectPath: projectPath as string, branch: branch as string, threadId: threadId as string };
-  }
-  return sessions;
-}
-
-/** Plain metadata object bounded by serialized size, or `undefined` when invalid. */
-function sanitizeMetadata(value: unknown): Record<string, unknown> | undefined {
-  if (value === undefined) return {};
-  if (!isPlainObject(value)) return undefined;
+function validMetadata(value: unknown): value is Record<string, unknown> | null {
+  if (value === null) return true;
+  if (!isRecord(value)) return false;
   try {
-    if (JSON.stringify(value).length > MAX_METADATA_JSON_LENGTH) return undefined;
+    return JSON.stringify(value).length <= MAX_METADATA_BYTES;
   } catch {
-    return undefined;
+    return false;
   }
+}
+
+function parseExternalSource(value: unknown): ExternalWorkItemSource | null | undefined {
+  if (value === undefined || value === null) return value;
+  if (!isRecord(value)) return undefined;
+  const { integrationId, type, externalId, url } = value;
+  if (typeof integrationId !== 'string' || integrationId.length === 0 || integrationId.length > 128) return undefined;
+  if (typeof type !== 'string' || type.length === 0 || type.length > 128) return undefined;
+  if (typeof externalId !== 'string' || externalId.length === 0 || externalId.length > 512) return undefined;
+  if (url !== undefined && (typeof url !== 'string' || url.length > 2048)) return undefined;
+  return { integrationId, type, externalId, ...(url !== undefined ? { url } : {}) };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseParentWorkItemId(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== 'string' || !UUID_RE.test(value)) return undefined;
   return value;
 }
 
-/** Validate an untrusted POST body into a {@link CreateWorkItemInput}, or `null`. */
+function parseSessions(value: unknown): Record<string, WorkItemSessionInput> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: Record<string, WorkItemSessionInput> = {};
+  for (const [role, session] of Object.entries(value)) {
+    if (!role || role.length > 64 || !isRecord(session)) return undefined;
+    const { projectPath, branch, threadId } = session;
+    if (typeof projectPath !== 'string' || projectPath.length === 0 || projectPath.length > 2048) return undefined;
+    if (typeof branch !== 'string' || branch.length === 0 || branch.length > 512) return undefined;
+    if (typeof threadId !== 'string' || threadId.length === 0 || threadId.length > 512) return undefined;
+    out[role] = { projectPath, branch, threadId };
+  }
+  return out;
+}
+
+/** Validate an untrusted create body. Unknown keys are dropped. */
 export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
-  if (!isPlainObject(body)) return null;
-  const source = body.source;
-  if (typeof source !== 'string' || !WORK_ITEM_SOURCES.includes(source as WorkItemSource)) return null;
+  if (!isRecord(body)) return null;
+  const { externalSource, title, stages, sessions, metadata } = body;
+  if (typeof title !== 'string' || title.trim().length === 0 || title.length > 500) return null;
 
-  const sourceKey = sanitizeSourceKey(body.sourceKey);
-  const title = sanitizeTitle(body.title);
-  const url = sanitizeUrl(body.url);
-  const stages = sanitizeStages(body.stages);
-  const sessions = sanitizeSessions(body.sessions);
-  const metadata = sanitizeMetadata(body.metadata);
-  if (sourceKey === undefined || !title || url === undefined || !stages || !sessions || !metadata) return null;
+  const hasParentWorkItemId = 'parentWorkItemId' in body;
+  const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
+  if (hasParentWorkItemId && parentWorkItemId === undefined) return null;
+  const parsedSource = parseExternalSource(externalSource);
+  if (externalSource !== undefined && parsedSource === undefined) return null;
+  if (stages !== undefined && !validStages(stages)) return null;
+  const parsedSessions = sessions === undefined ? undefined : parseSessions(sessions);
+  if (sessions !== undefined && parsedSessions === undefined) return null;
+  if (metadata !== undefined && !validMetadata(metadata)) return null;
 
-  return { source: source as WorkItemSource, sourceKey, title, url, stages, sessions, metadata };
+  return {
+    title: title.trim(),
+    ...(parsedSource !== undefined ? { externalSource: parsedSource } : {}),
+    ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
+    ...(stages !== undefined ? { stages } : {}),
+    ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
+  };
 }
 
-/** Validate an untrusted PATCH body into an {@link UpdateWorkItemInput}, or `null`. */
+/** Validate an untrusted patch body. Unknown keys are dropped. */
 export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
-  if (!isPlainObject(body)) return null;
-  const patch: UpdateWorkItemInput = {};
+  if (!isRecord(body)) return null;
+  const { title, stages, sessions, metadata } = body;
+  const hasParentWorkItemId = 'parentWorkItemId' in body;
+  if (title === undefined && stages === undefined && sessions === undefined && metadata === undefined && !hasParentWorkItemId)
+    return null;
+  const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
+  if (hasParentWorkItemId && parentWorkItemId === undefined) return null;
+  if (title !== undefined && (typeof title !== 'string' || title.trim().length === 0 || title.length > 500))
+    return null;
+  if (stages !== undefined && !validStages(stages)) return null;
+  const parsedSessions = sessions === undefined ? undefined : parseSessions(sessions);
+  if (sessions !== undefined && parsedSessions === undefined) return null;
+  if (metadata !== undefined && !validMetadata(metadata)) return null;
 
-  if ('title' in body) {
-    const title = sanitizeTitle(body.title);
-    if (!title) return null;
-    patch.title = title;
-  }
-  if ('url' in body) {
-    const url = sanitizeUrl(body.url);
-    if (url === undefined) return null;
-    patch.url = url;
-  }
-  if ('stages' in body) {
-    const stages = sanitizeStages(body.stages);
-    if (!stages) return null;
-    patch.stages = stages;
-  }
-  if ('sessions' in body) {
-    const sessions = sanitizeSessions(body.sessions);
-    if (!sessions) return null;
-    patch.sessions = sessions;
-  }
-  if ('metadata' in body) {
-    const metadata = sanitizeMetadata(body.metadata);
-    if (!metadata) return null;
-    patch.metadata = metadata;
-  }
-
-  if (Object.keys(patch).length === 0) return null;
-  return patch;
+  return {
+    ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
+    ...(title !== undefined ? { title: title.trim() } : {}),
+    ...(stages !== undefined ? { stages } : {}),
+    ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
+  };
 }
 
-/**
- * Diff `oldStages` → `newStages` and return the updated history: exited stages
- * get `exitedAt` stamped on their open entry, entered stages get a new entry.
- */
-function applyStageTransition(
-  history: WorkItemStageEntry[],
-  oldStages: string[],
-  newStages: string[],
-  by: string,
-  now: Date,
-): WorkItemStageEntry[] {
-  const timestamp = now.toISOString();
-  const next = history.map(entry => ({ ...entry }));
-  for (const stage of oldStages) {
-    if (newStages.includes(stage)) continue;
-    // Close the most recent open entry for the exited stage.
-    for (let i = next.length - 1; i >= 0; i--) {
-      const entry = next[i]!;
-      if (entry.stage === stage && entry.exitedAt === undefined) {
-        entry.exitedAt = timestamp;
-        break;
-      }
-    }
-  }
-  for (const stage of newStages) {
-    if (oldStages.includes(stage)) continue;
-    next.push({ stage, enteredAt: timestamp, by });
-  }
-  return next;
+async function workItemsDomain() {
+  const storage = getFactoryStorage();
+  await storage.ensureDomainReady('work-items');
+  return getWorkItemsStorage();
 }
 
-/** Stamp `startedBy` onto client-supplied session refs. */
-function stampSessions(sessions: Record<string, WorkItemSessionInput>, by: string): Record<string, WorkItemSessionRef> {
-  const stamped: Record<string, WorkItemSessionRef> = {};
-  for (const [role, ref] of Object.entries(sessions)) {
-    stamped[role] = { ...ref, startedBy: by };
-  }
-  return stamped;
+export async function listWorkItems({
+  orgId,
+  factoryProjectId,
+}: {
+  orgId: string;
+  factoryProjectId: string;
+}): Promise<WorkItemRow[]> {
+  return (await workItemsDomain()).list({ orgId, factoryProjectId });
 }
 
-/** List the org's work items for a project, newest first. */
-export async function listWorkItems(orgId: string, githubProjectId: string): Promise<WorkItemRow[]> {
-  const rows = await getAppDb()
-    .select()
-    .from(workItems)
-    .where(and(eq(workItems.orgId, orgId), eq(workItems.githubProjectId, githubProjectId)));
-  return rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-}
-
-/** Discriminated result of `upsertWorkItem`: fresh insert vs source-key reuse. */
-export type UpsertWorkItemResult =
-  | { created: true; item: WorkItemRow }
-  | { created: false; item: WorkItemRow; previous: WorkItemPriorState };
-
-/**
- * Create a work item, reusing the existing record when `sourceKey` already has
- * one for the project (acting twice on the same issue must not duplicate the
- * card). On reuse the provided stages replace the current ones (with the
- * transition recorded in history) and sessions/metadata are merged in. The
- * result discriminates insert from reuse so callers can audit the actual
- * outcome.
- */
 export async function upsertWorkItem(params: {
   orgId: string;
   userId: string;
-  githubProjectId: string;
+  factoryProjectId: string;
   input: CreateWorkItemInput;
 }): Promise<UpsertWorkItemResult> {
-  const { orgId, userId, githubProjectId, input } = params;
-  const now = new Date();
-
-  const reuseExisting = async (): Promise<UpsertWorkItemResult | null> => {
-    if (input.sourceKey === null) return null;
-    const updated = await getAppDb().transaction(tx =>
-      applyUpdateLocked(
-        tx,
-        and(eq(workItems.githubProjectId, githubProjectId), eq(workItems.sourceKey, input.sourceKey!)),
-        input,
-        userId,
-        now,
-      ),
-    );
-    return updated ? { created: false, item: updated.item, previous: updated.previous } : null;
-  };
-
-  const reused = await reuseExisting();
-  if (reused) return reused;
-
-  const row = {
-    orgId,
-    createdBy: userId,
-    githubProjectId,
-    source: input.source,
-    sourceKey: input.sourceKey,
-    title: input.title,
-    url: input.url,
-    stages: input.stages,
-    stageHistory: applyStageTransition([], [], input.stages, userId, now),
-    sessions: stampSessions(input.sessions, userId),
-    metadata: input.metadata,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  try {
-    const [inserted] = await getAppDb().insert(workItems).values(row).returning();
-    return { created: true, item: inserted! };
-  } catch (err) {
-    // Concurrent create for the same sourceKey: the partial unique index won
-    // the race — fall back to updating the row it protected.
-    const fallback = await reuseExisting();
-    if (fallback) return fallback;
-    throw err;
-  }
+  return (await workItemsDomain()).upsert(params);
 }
 
-/** The transaction client drizzle hands to `db.transaction` callbacks. */
-type DbTx = Parameters<Parameters<AppDb['transaction']>[0]>[0];
-
-/** Pre-patch state returned alongside an update so callers can diff for auditing. */
-export interface WorkItemPriorState {
-  stages: string[];
-  sessionRoles: string[];
+export async function updateWorkItem(params: {
+  orgId: string;
+  id: string;
+  userId: string;
+  patch: UpdateWorkItemInput;
+}): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
+  return (await workItemsDomain()).update(params);
 }
 
-/**
- * Shared update path for upsert-reuse and PATCH: stage diff + merges. Must run
- * inside a transaction — the row is read with `FOR UPDATE` so concurrent
- * read-modify-writes of `stageHistory`/`sessions`/`metadata` serialize instead
- * of silently dropping each other's merges. Returns `null` when no row
- * matches `where`; otherwise the updated row plus the pre-patch state.
- */
-async function applyUpdateLocked(
-  tx: DbTx,
-  where: SQL | undefined,
-  patch: UpdateWorkItemInput,
-  userId: string,
-  now: Date,
-): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
-  const [existing] = await tx.select().from(workItems).where(where).for('update');
-  if (!existing) return null;
-  const previous: WorkItemPriorState = {
-    stages: [...existing.stages],
-    sessionRoles: Object.keys(existing.sessions),
-  };
-  const set: Partial<WorkItemRow> = { updatedAt: now };
-  if (patch.title !== undefined) set.title = patch.title;
-  if (patch.url !== undefined) set.url = patch.url;
-  if (patch.stages !== undefined) {
-    set.stages = patch.stages;
-    set.stageHistory = applyStageTransition(existing.stageHistory, existing.stages, patch.stages, userId, now);
-  }
-  if (patch.sessions !== undefined && Object.keys(patch.sessions).length > 0) {
-    set.sessions = { ...existing.sessions, ...stampSessions(patch.sessions, userId) };
-  }
-  if (patch.metadata !== undefined && Object.keys(patch.metadata).length > 0) {
-    set.metadata = { ...existing.metadata, ...patch.metadata };
-  }
-  const [updated] = await tx.update(workItems).set(set).where(eq(workItems.id, existing.id)).returning();
-  return { item: updated ?? { ...existing, ...set }, previous };
-}
-
-/**
- * Patch an org's work item: stage changes are diffed into history, sessions
- * and metadata are merged. Returns the updated row plus the pre-patch stages
- * and session roles (for audit diffing), or `null` when the item doesn't
- * exist in the caller's org.
- */
-export async function updateWorkItem(
-  orgId: string,
-  id: string,
-  userId: string,
-  patch: UpdateWorkItemInput,
-): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
-  return getAppDb().transaction(tx =>
-    applyUpdateLocked(tx, and(eq(workItems.id, id), eq(workItems.orgId, orgId)), patch, userId, new Date()),
-  );
-}
-
-/** Delete an org's work item. Returns the row actually deleted, or `null` when it doesn't exist in the org. */
-export async function deleteWorkItem(orgId: string, id: string): Promise<WorkItemRow | null> {
-  const [deleted] = await getAppDb()
-    .delete(workItems)
-    .where(and(eq(workItems.id, id), eq(workItems.orgId, orgId)))
-    .returning();
-  return deleted ?? null;
+export async function deleteWorkItem({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
+  return (await workItemsDomain()).delete({ orgId, id });
 }

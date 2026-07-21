@@ -35,12 +35,12 @@ const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-interface GeneralTabProps {
+interface GeneralSettingsProps {
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
 }
 
-export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
+export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) {
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
   const changeDoneSound = (next: DoneSound) => {
     setDoneSound(next);
@@ -74,29 +74,14 @@ export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
   );
 }
 
-interface ModelTabProps {
-  models: AgentControllerAvailableModel[];
-  currentModelId: string | null;
+interface ModelSettingsProps {
   settings: AgentControllerSessionSettings | null;
-  onModelChange: (modelId: string) => void;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
 }
 
-export function ModelTab({ models, currentModelId, settings, onModelChange, onBehaviorChange }: ModelTabProps) {
+export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps) {
   return (
     <>
-      <div className="flex flex-col gap-2 py-3 border-b border-border1/40">
-        <div className="flex flex-col gap-0.5">
-          <Txt variant="ui-md" className="text-icon5">
-            Model
-          </Txt>
-          <Txt variant="ui-sm" className="text-icon3">
-            Default model for this session
-          </Txt>
-        </div>
-        <ModelPicker models={models} currentModelId={currentModelId} onModelChange={onModelChange} />
-      </div>
-
       <FieldRow label="Thinking level" hint="Extended-reasoning budget for the agent">
         <Segmented
           ariaLabel="Thinking level"
@@ -110,7 +95,7 @@ export function ModelTab({ models, currentModelId, settings, onModelChange, onBe
   );
 }
 
-interface BehaviorTabProps {
+interface BehaviorSettingsProps {
   settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
   permissions: PermissionRules | null;
@@ -118,13 +103,13 @@ interface BehaviorTabProps {
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
 }
 
-export function BehaviorTab({
+export function BehaviorSettings({
   settings,
   onBehaviorChange,
   permissions,
   pendingPermissionCategory,
   setPermissionForCategory,
-}: BehaviorTabProps) {
+}: BehaviorSettingsProps) {
   return (
     <>
       <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
@@ -178,7 +163,7 @@ function PermissionsSection({
   permissions,
   pendingPermissionCategory,
   setPermissionForCategory,
-}: Pick<BehaviorTabProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
+}: Pick<BehaviorSettingsProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
   const update = async (category: ToolCategory, policy: PermissionPolicy) => {
     await setPermissionForCategory(category, policy);
   };

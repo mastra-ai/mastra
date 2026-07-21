@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
@@ -83,7 +83,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -165,14 +165,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     });
     if (accepted.length === 0) return;
     const additions = await Promise.all(
-      accepted.map(
-        async (file): Promise<PendingImage> => ({
-          id: `pending-image-${pendingImageSeq++}`,
-          data: await readFileAsBase64(file),
-          mediaType: file.type,
-          filename: file.name || undefined,
-        }),
-      ),
+      accepted.map(async (file): Promise<PendingImage> => ({
+        id: `pending-image-${pendingImageSeq++}`,
+        data: await readFileAsBase64(file),
+        mediaType: file.type,
+        filename: file.name || undefined,
+      })),
     );
     setImages(prev => [...prev, ...additions]);
   };

@@ -1,57 +1,47 @@
+import type { IMastraAuthProvider } from '@mastra/core/server';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { WebAuthAdapter } from './auth-adapter';
 import {
   __resetRuntimeConfigForTests,
-  getAppDatabaseUrl,
+  getFactoryStorage,
   getPublicUrl,
-  getSeededAuthAdapter,
+  getSeededAuthProvider,
+  getSeededStorage,
   isRuntimeConfigSeeded,
   seedRuntimeConfig,
 } from './runtime-config';
 
-const ORIGINAL_APP_DATABASE_URL = process.env.APP_DATABASE_URL;
-
 describe('runtime-config', () => {
   beforeEach(() => {
     __resetRuntimeConfigForTests();
-    delete process.env.APP_DATABASE_URL;
   });
 
   afterEach(() => {
     __resetRuntimeConfigForTests();
-    if (ORIGINAL_APP_DATABASE_URL === undefined) {
-      delete process.env.APP_DATABASE_URL;
-    } else {
-      process.env.APP_DATABASE_URL = ORIGINAL_APP_DATABASE_URL;
-    }
   });
 
-  describe('getAppDatabaseUrl', () => {
-    it('returns the seeded database URL', () => {
-      seedRuntimeConfig({ databaseUrl: 'postgres://seeded/app' });
-      expect(getAppDatabaseUrl()).toBe('postgres://seeded/app');
+  describe('storage slot', () => {
+    it('returns the seeded storage backend', () => {
+      const storage = new LibSQLFactoryStorage({ id: 'test-storage', url: ':memory:' });
+      seedRuntimeConfig({ storage });
+      expect(getSeededStorage()).toBe(storage);
     });
 
-    it('prefers the seeded config over the env fallback', () => {
-      process.env.APP_DATABASE_URL = 'postgres://env/app';
-      seedRuntimeConfig({ databaseUrl: 'postgres://seeded/app' });
-      expect(getAppDatabaseUrl()).toBe('postgres://seeded/app');
-    });
-
-    it('seeding without a database wins over env (factory config is authoritative)', () => {
-      process.env.APP_DATABASE_URL = 'postgres://env/app';
+    it('is undefined when the factory seeded without storage', () => {
       seedRuntimeConfig({});
-      expect(getAppDatabaseUrl()).toBeUndefined();
+      expect(getSeededStorage()).toBeUndefined();
+    });
+  });
+
+  describe('getFactoryStorage', () => {
+    it('exposes the factory storage backend for app-table consumers', () => {
+      const storage = new LibSQLFactoryStorage({ id: 'test-storage', url: ':memory:' });
+      seedRuntimeConfig({ storage });
+      expect(getFactoryStorage()).toBe(storage);
     });
 
-    it('falls back to APP_DATABASE_URL when the factory has not seeded (back-compat)', () => {
-      process.env.APP_DATABASE_URL = 'postgres://env/app';
-      expect(getAppDatabaseUrl()).toBe('postgres://env/app');
-    });
-
-    it('treats an empty env var as unconfigured', () => {
-      process.env.APP_DATABASE_URL = '';
-      expect(getAppDatabaseUrl()).toBeUndefined();
+    it('throws before seeding (no env fallback — factory config is authoritative)', () => {
+      expect(() => getFactoryStorage()).toThrow(/MastraFactory\.prepare\(\) has not run/);
     });
   });
 
@@ -66,31 +56,33 @@ describe('runtime-config', () => {
     });
   });
 
-  describe('auth adapter slot', () => {
-    const adapter = { kind: 'fake' } as WebAuthAdapter;
+  describe('auth provider slot', () => {
+    const provider = { name: 'fake' } as IMastraAuthProvider;
 
     it('is unseeded before the factory runs', () => {
       expect(isRuntimeConfigSeeded()).toBe(false);
-      expect(getSeededAuthAdapter()).toBeUndefined();
+      expect(getSeededAuthProvider()).toBeUndefined();
     });
 
-    it('returns the seeded adapter', () => {
-      seedRuntimeConfig({ authAdapter: adapter });
+    it('returns the seeded provider', () => {
+      seedRuntimeConfig({ authProvider: provider });
       expect(isRuntimeConfigSeeded()).toBe(true);
-      expect(getSeededAuthAdapter()).toBe(adapter);
+      expect(getSeededAuthProvider()).toBe(provider);
     });
 
-    it('seeding without an adapter marks auth explicitly disabled', () => {
+    it('seeding without a provider marks auth explicitly disabled', () => {
       seedRuntimeConfig({});
       expect(isRuntimeConfigSeeded()).toBe(true);
-      expect(getSeededAuthAdapter()).toBeUndefined();
+      expect(getSeededAuthProvider()).toBeUndefined();
     });
   });
 
   it('__resetRuntimeConfigForTests clears the seeded config', () => {
-    seedRuntimeConfig({ databaseUrl: 'postgres://seeded/app', publicUrl: 'https://factory.acme.com' });
+    const storage = new LibSQLFactoryStorage({ id: 'test-storage', url: ':memory:' });
+    seedRuntimeConfig({ storage, publicUrl: 'https://factory.acme.com' });
     __resetRuntimeConfigForTests();
     expect(getPublicUrl()).toBeUndefined();
-    expect(getAppDatabaseUrl()).toBeUndefined();
+    expect(getSeededStorage()).toBeUndefined();
+    expect(() => getFactoryStorage()).toThrow(/MastraFactory\.prepare\(\) has not run/);
   });
 });

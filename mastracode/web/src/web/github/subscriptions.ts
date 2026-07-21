@@ -1,21 +1,33 @@
-import { and, eq } from 'drizzle-orm';
-import { getAppDb } from './db';
-import type { AppDb } from './db';
-import {
-  githubProjects,
-  githubSignalSubscriptions,
-  type GithubSignalSubscriptionRow,
-  type NewGithubSignalSubscriptionRow,
-} from './schema';
+import type { IntegrationStorageHandle, IntegrationSubscription } from '../storage/domains/integrations/base';
 
-export type GithubSignalSubscriptionSource = NewGithubSignalSubscriptionRow['source'];
+export type GithubSignalSubscriptionSource = 'auto-gh-pr-create' | 'factory-pr-create' | 'explicit-tool';
+export type GithubSignalSubscriptionStatus = 'open' | 'closed' | 'merged';
+
+export interface GithubSignalSubscriptionData {
+  installationExternalId: string;
+  projectRepositoryId: string;
+  repositoryExternalId: string;
+  repositorySlug: string;
+  changeRequestId: string;
+  ownerId: string;
+  source: GithubSignalSubscriptionSource;
+  subscribedByUserId: string | null;
+}
+
+export type GithubSignalSubscriptionRow = IntegrationSubscription<GithubSignalSubscriptionData>;
+export type GithubSubscriptionStorage = IntegrationStorageHandle<
+  Record<string, unknown>,
+  Record<string, unknown>,
+  GithubSignalSubscriptionData
+>;
 
 export interface SubscribeToPullRequestInput {
   orgId: string;
-  installationId: number;
-  githubProjectId: string;
-  repoId: number;
-  pullRequestNumber: number;
+  installationExternalId: string;
+  projectRepositoryId: string;
+  repositoryExternalId: string;
+  repositorySlug: string;
+  changeRequestId: string;
   sessionId: string;
   ownerId: string;
   resourceId: string;
@@ -34,177 +46,110 @@ export interface ThreadSubscriptionTarget {
 
 export interface PullRequestSubscriptionTarget {
   orgId: string;
-  installationId: number;
-  repoId: number;
-  pullRequestNumber: number;
+  installationExternalId: string;
+  repositoryExternalId: string;
+  changeRequestId: string;
 }
 
 export type GithubWebhookPullRequestTarget = Omit<PullRequestSubscriptionTarget, 'orgId'>;
 
-function normalizedScope(scope: string | undefined): string {
-  return scope ?? '';
+export function changeRequestTargetKey(input: GithubWebhookPullRequestTarget): string {
+  return `change-request:${input.installationExternalId}:${input.repositoryExternalId}:${input.changeRequestId}`;
 }
 
-async function loadOwnedProject(db: AppDb, input: SubscribeToPullRequestInput) {
-  const [project] = await db
-    .select()
-    .from(githubProjects)
-    .where(and(eq(githubProjects.id, input.githubProjectId), eq(githubProjects.orgId, input.orgId)));
-
-  if (!project || project.installationId !== input.installationId || project.repoId !== input.repoId) {
-    throw new Error('GitHub project not found for this organization and repository.');
-  }
-
-  return project;
-}
-
-function targetConditions(input: SubscribeToPullRequestInput) {
-  return and(
-    eq(githubSignalSubscriptions.orgId, input.orgId),
-    eq(githubSignalSubscriptions.githubProjectId, input.githubProjectId),
-    eq(githubSignalSubscriptions.repoId, input.repoId),
-    eq(githubSignalSubscriptions.pullRequestNumber, input.pullRequestNumber),
-    eq(githubSignalSubscriptions.sessionId, input.sessionId),
-    eq(githubSignalSubscriptions.resourceId, input.resourceId),
-    eq(githubSignalSubscriptions.threadId, input.threadId),
-    eq(githubSignalSubscriptions.sessionScope, normalizedScope(input.sessionScope)),
+function sameSession(row: GithubSignalSubscriptionRow, input: SubscribeToPullRequestInput): boolean {
+  return (
+    row.orgId === input.orgId &&
+    row.sessionId === input.sessionId &&
+    row.resourceId === input.resourceId &&
+    row.threadId === input.threadId &&
+    (row.sessionScope ?? '') === (input.sessionScope ?? '')
   );
 }
 
 export async function subscribeToPullRequest(
   input: SubscribeToPullRequestInput,
-  db: AppDb = getAppDb(),
+  storage: GithubSubscriptionStorage,
 ): Promise<GithubSignalSubscriptionRow> {
-  const project = await loadOwnedProject(db, input);
-  const values: NewGithubSignalSubscriptionRow = {
+  const targetKey = changeRequestTargetKey(input);
+  const existing = (await storage.subscriptions.listByTarget(targetKey)).find(row => sameSession(row, input));
+  if (existing) {
+    if (existing.status !== 'open') await storage.subscriptions.updateStatus(existing.id, 'open');
+    return { ...existing, status: 'open' };
+  }
+
+  return storage.subscriptions.create({
     orgId: input.orgId,
-    installationId: input.installationId,
-    githubProjectId: input.githubProjectId,
-    repoId: input.repoId,
-    repoFullName: project.repoFullName,
-    pullRequestNumber: input.pullRequestNumber,
+    targetKey,
     sessionId: input.sessionId,
-    ownerId: input.ownerId,
     resourceId: input.resourceId,
     threadId: input.threadId,
-    sessionScope: normalizedScope(input.sessionScope),
-    source: input.source,
-    subscribedByUserId: input.subscribedByUserId,
-  };
-
-  const [created] = await db
-    .insert(githubSignalSubscriptions)
-    .values(values)
-    .onConflictDoNothing({
-      target: [
-        githubSignalSubscriptions.orgId,
-        githubSignalSubscriptions.githubProjectId,
-        githubSignalSubscriptions.repoId,
-        githubSignalSubscriptions.pullRequestNumber,
-        githubSignalSubscriptions.sessionId,
-        githubSignalSubscriptions.resourceId,
-        githubSignalSubscriptions.threadId,
-        githubSignalSubscriptions.sessionScope,
-      ],
-    })
-    .returning();
-
-  if (created) return created;
-
-  const [existing] = await db.select().from(githubSignalSubscriptions).where(targetConditions(input));
-  if (!existing) throw new Error('GitHub signal subscription conflict could not be resolved.');
-  if (existing.status !== 'open') {
-    const updatedAt = new Date();
-    await db
-      .update(githubSignalSubscriptions)
-      .set({ status: 'open', updatedAt })
-      .where(eq(githubSignalSubscriptions.id, existing.id));
-    return { ...existing, status: 'open', updatedAt };
-  }
-  return existing;
+    sessionScope: input.sessionScope ?? '',
+    status: 'open',
+    data: {
+      installationExternalId: input.installationExternalId,
+      projectRepositoryId: input.projectRepositoryId,
+      repositoryExternalId: input.repositoryExternalId,
+      repositorySlug: input.repositorySlug,
+      changeRequestId: input.changeRequestId,
+      ownerId: input.ownerId,
+      source: input.source,
+      subscribedByUserId: input.subscribedByUserId ?? null,
+    },
+  });
 }
 
 export async function unsubscribeFromPullRequest(
   input: SubscribeToPullRequestInput,
-  db: AppDb = getAppDb(),
+  storage: GithubSubscriptionStorage,
 ): Promise<void> {
-  await loadOwnedProject(db, input);
-  await db.delete(githubSignalSubscriptions).where(targetConditions(input));
+  const rows = await storage.subscriptions.listByTarget(changeRequestTargetKey(input));
+  await Promise.all(rows.filter(row => sameSession(row, input)).map(row => storage.subscriptions.delete(row.id)));
 }
 
 export async function listPullRequestSubscriptionsForThread(
   input: ThreadSubscriptionTarget,
-  db: AppDb = getAppDb(),
+  storage: GithubSubscriptionStorage,
 ): Promise<GithubSignalSubscriptionRow[]> {
-  return db
-    .select()
-    .from(githubSignalSubscriptions)
-    .where(
-      and(
-        eq(githubSignalSubscriptions.orgId, input.orgId),
-        eq(githubSignalSubscriptions.resourceId, input.resourceId),
-        eq(githubSignalSubscriptions.threadId, input.threadId),
-        eq(githubSignalSubscriptions.sessionScope, normalizedScope(input.sessionScope)),
-      ),
-    );
+  const rows = await storage.subscriptions.listByThread(input.resourceId, input.threadId);
+  return rows.filter(
+    row =>
+      row.orgId === input.orgId &&
+      row.resourceId === input.resourceId &&
+      row.threadId === input.threadId &&
+      (row.sessionScope ?? '') === (input.sessionScope ?? ''),
+  );
 }
 
 export async function listPullRequestSubscriptions(
   input: PullRequestSubscriptionTarget,
-  db: AppDb = getAppDb(),
+  storage: GithubSubscriptionStorage,
 ): Promise<GithubSignalSubscriptionRow[]> {
-  return db
-    .select()
-    .from(githubSignalSubscriptions)
-    .where(
-      and(
-        eq(githubSignalSubscriptions.orgId, input.orgId),
-        eq(githubSignalSubscriptions.installationId, input.installationId),
-        eq(githubSignalSubscriptions.repoId, input.repoId),
-        eq(githubSignalSubscriptions.pullRequestNumber, input.pullRequestNumber),
-      ),
-    );
+  const rows = await storage.subscriptions.listByTarget(changeRequestTargetKey(input));
+  return rows.filter(row => row.orgId === input.orgId && row.status === 'open');
 }
 
 export async function listPullRequestSubscriptionsForWebhook(
   input: GithubWebhookPullRequestTarget,
-  options: { includeTerminal?: boolean } = {},
-  db: AppDb = getAppDb(),
+  options: { includeTerminal?: boolean } | undefined,
+  storage: GithubSubscriptionStorage,
 ): Promise<GithubSignalSubscriptionRow[]> {
-  const target = and(
-    eq(githubSignalSubscriptions.installationId, input.installationId),
-    eq(githubSignalSubscriptions.repoId, input.repoId),
-    eq(githubSignalSubscriptions.pullRequestNumber, input.pullRequestNumber),
-  );
-  return db
-    .select()
-    .from(githubSignalSubscriptions)
-    .where(options.includeTerminal ? target : and(target, eq(githubSignalSubscriptions.status, 'open')));
+  const rows = await storage.subscriptions.listByTarget(changeRequestTargetKey(input));
+  return options?.includeTerminal ? rows : rows.filter(row => row.status === 'open');
 }
 
-export async function retirePullRequestSubscription(
+export function retirePullRequestSubscription(
   id: string,
-  status: 'open' | 'closed' | 'merged',
-  db: AppDb = getAppDb(),
+  status: GithubSignalSubscriptionStatus,
+  storage: GithubSubscriptionStorage,
 ): Promise<void> {
-  await db
-    .update(githubSignalSubscriptions)
-    .set({ status, updatedAt: new Date() })
-    .where(eq(githubSignalSubscriptions.id, id));
+  return storage.subscriptions.updateStatus(id, status);
 }
 
 export async function retirePullRequestSubscriptions(
   input: PullRequestSubscriptionTarget,
-  db: AppDb = getAppDb(),
+  storage: GithubSubscriptionStorage,
 ): Promise<void> {
-  await db
-    .delete(githubSignalSubscriptions)
-    .where(
-      and(
-        eq(githubSignalSubscriptions.orgId, input.orgId),
-        eq(githubSignalSubscriptions.installationId, input.installationId),
-        eq(githubSignalSubscriptions.repoId, input.repoId),
-        eq(githubSignalSubscriptions.pullRequestNumber, input.pullRequestNumber),
-      ),
-    );
+  const rows = await listPullRequestSubscriptions(input, storage);
+  await Promise.all(rows.map(row => storage.subscriptions.updateStatus(row.id, 'closed')));
 }

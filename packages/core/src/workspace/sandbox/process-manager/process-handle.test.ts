@@ -1,6 +1,6 @@
 import { once } from 'node:events';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { MastraSandbox } from '../mastra-sandbox';
 import type { CommandResult } from '../types';
@@ -144,6 +144,13 @@ describe('ProcessHandle output retention', () => {
 
     expect(handle.stdout).toBe('-after');
     expect(handle.stdoutDroppedBytes).toBe(Buffer.byteLength('before'));
+
+    handle.emitStdout('🙂');
+
+    expect(handle.stdout).toBe('er🙂');
+    expect(Buffer.byteLength(handle.stdout)).toBe(6);
+    expect(handle.stdoutTruncated).toBe(true);
+    expect(handle.stdoutDroppedBytes).toBe(Buffer.byteLength('before-aft'));
   });
 
   it('does not split multibyte characters when trimming to a byte limit', () => {
@@ -175,6 +182,40 @@ describe('ProcessHandle output retention', () => {
 
     expect(handle.stdout).toBe('0123456789');
     expect(handle.stdoutDroppedBytes).toBe(140);
+  });
+
+  it('advances through compacted multibyte output across repeated appends', () => {
+    const retainedCodePoints = 256;
+    const output = Array.from({ length: retainedCodePoints + 150 }, (_, index) => ['🙂', '🚀', '🧠'][index % 3]!);
+    const handle = new TestProcessHandle({ maxRetainedBytes: retainedCodePoints * 4 });
+
+    for (const chunk of output) {
+      handle.emitStdout(chunk);
+    }
+
+    expect(handle.stdout).toBe(output.slice(-retainedCodePoints).join(''));
+    expect(Buffer.byteLength(handle.stdout)).toBe(retainedCodePoints * 4);
+    expect(handle.stdoutDroppedBytes).toBe(150 * 4);
+  });
+
+  it('does not rescan retained output for a small overflow after compaction', () => {
+    const maxRetainedBytes = 1024;
+    const handle = new TestProcessHandle({ maxRetainedBytes });
+
+    for (let index = 0; index < maxRetainedBytes; index += 1) {
+      handle.emitStdout('a');
+    }
+
+    const byteLengthSpy = vi.spyOn(Buffer, 'byteLength');
+    try {
+      handle.emitStdout('b');
+
+      expect(byteLengthSpy.mock.calls.length).toBeLessThan(10);
+      expect(handle.stdout).toBe(`${'a'.repeat(maxRetainedBytes - 1)}b`);
+      expect(handle.stdoutDroppedBytes).toBe(1);
+    } finally {
+      byteLengthSpy.mockRestore();
+    }
   });
 
   it('returns retained output from wait after output is truncated', async () => {

@@ -9,7 +9,7 @@ import {
 interface AgentControllerMutationArgs {
   agentControllerId: string;
   resourceId: string;
-  projectPath?: string;
+  scope?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -17,24 +17,24 @@ interface AgentControllerMutationArgs {
 export function useSetAgentControllerStateMutation({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
   baseUrl = '',
   enabled = true,
 }: AgentControllerMutationArgs) {
   const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope, baseUrl, enabled });
 
   return useMutation({
     mutationFn: (updates: Record<string, unknown>) => requireAgentControllerSession(session).setState(updates),
     onSuccess: async (_data, updates) => {
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, projectPath),
+          queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope),
           exact: true,
         }),
         'settings' in updates
           ? queryClient.invalidateQueries({
-              queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, projectPath),
+              queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, scope),
               exact: true,
             })
           : Promise.resolve(),
@@ -44,16 +44,10 @@ export function useSetAgentControllerStateMutation({
 }
 
 export function useSwitchAgentControllerModeMutation(args: AgentControllerMutationArgs) {
-  const queryClient = useQueryClient();
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
     mutationFn: (modeId: string) => requireAgentControllerSession(session).switchMode(modeId),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.projectPath),
-        exact: true,
-      }),
   });
 }
 
@@ -65,7 +59,7 @@ export function useSwitchAgentControllerModelMutation(args: AgentControllerMutat
     mutationFn: (modelId: string) => requireAgentControllerSession(session).switchModel(modelId),
     onSuccess: () =>
       queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.projectPath),
+        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
         exact: true,
       }),
   });

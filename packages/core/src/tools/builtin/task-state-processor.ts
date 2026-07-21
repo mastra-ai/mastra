@@ -73,9 +73,7 @@ const DELTA_SNAPSHOT_CAP = 10;
 
 // A single task-list change carried on a `delta`-mode signal.
 type TaskDeltaOp =
-  | { op: 'add'; task: TaskItemSnapshot }
-  | { op: 'remove'; id: string }
-  | { op: 'update'; task: TaskItemSnapshot };
+  { op: 'add'; task: TaskItemSnapshot } | { op: 'remove'; id: string } | { op: 'update'; task: TaskItemSnapshot };
 
 function getTasksFromSnapshot(snapshot: ComputeStateSignalArgs['lastSnapshot']): TaskItemSnapshot[] {
   const value = snapshot?.metadata?.value as { tasks?: unknown } | undefined;

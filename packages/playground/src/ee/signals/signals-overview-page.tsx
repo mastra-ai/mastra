@@ -1,55 +1,35 @@
-import { SignalsOverviewPage as SignalsOverviewPageContent } from '@mastra/playground-ui/ee/signals/components/signals-overview-page';
-import type { SignalsOverviewPageProps } from '@mastra/playground-ui/ee/signals/components/signals-overview-page';
-import { useCallback, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
+
+import { Link } from '../../lib/link';
+import { useThemeEntities } from './hooks';
+import { SankeySignals } from './sankey-signals';
+import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
+import type { TraceSignalName } from './types';
+
+const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
 
 export function SignalsOverviewPage() {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const entitiesQuery = useThemeEntities('agent');
 
-  const entityId = searchParams.get('entityId');
-  const selectedEntity = useMemo(() => (entityId ? { entityType: 'agent', entityId } : null), [entityId]);
+  if (entitiesQuery.isPending) {
+    return <SignalsLoadingSkeleton />;
+  }
 
-  const handleEntityChange = useCallback<SignalsOverviewPageProps['onEntityChange']>(
-    selected => {
-      setSearchParams(
-        prev => {
-          const next = new URLSearchParams(prev);
-          if (selected) {
-            next.set('entityId', selected.entityId);
-          } else {
-            next.delete('entityId');
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
+  if (entitiesQuery.isError) {
+    return <p>Unable to load signal entities.</p>;
+  }
 
-  const handleSignalSelect = useCallback<SignalsOverviewPageProps['onSignalSelect']>(
-    (signalName, topicId) => {
-      const params = new URLSearchParams();
-      if (selectedEntity) {
-        params.set('entityId', selectedEntity.entityId);
-      }
-      if (topicId) {
-        params.set('topicId', topicId);
-      }
-      const query = params.toString();
-      void navigate(`/signals/${signalName}${query ? `?${query}` : ''}`, { viewTransition: true });
-    },
-    [navigate, selectedEntity],
-  );
+  const entity = entitiesQuery.data?.entities.find(currentEntity => currentEntity.availableSignals.length >= 2);
 
-  return (
-    <SignalsOverviewPageContent
-      selectedEntity={selectedEntity}
-      onEntityChange={handleEntityChange}
-      onSignalSelect={handleSignalSelect}
-    />
-  );
+  if (!entity) {
+    return <SignalsEmptyState LinkComponent={Link} />;
+  }
+
+  const signalNames = SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName));
+
+  if (signalNames.length < 2) {
+    return <SignalsEmptyState LinkComponent={Link} />;
+  }
+
+  return <SankeySignals entityId={entity.entityId} entityType="agent" signalNames={signalNames} />;
 }
-
-export default SignalsOverviewPage;

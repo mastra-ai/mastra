@@ -1,0 +1,242 @@
+---
+title: "Reference: PlatformFilesystem | Workspace"
+description: "Documentation for the PlatformFilesystem provider for bucket-backed storage on Mastra Platform."
+packages:
+  - "@mastra/platform-workspace"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# PlatformFilesystem
+
+Stores files in a Mastra Platform workspace bucket. Each Mastra Platform environment can have one bucket, and `PlatformFilesystem` gives agents `read`, `write`, `list`, `delete`, and `move` operations against it.
+
+Use `PlatformFilesystem` when your agent runs on a Mastra Platform deployment and you want the filesystem to be backed by the platform-provisioned bucket. For direct S3 access, see [`S3Filesystem`](/reference/workspace/s3-filesystem). For a local directory during development, see [`LocalFilesystem`](/reference/workspace/local-filesystem).
+
+:::info
+
+For interface details, see [WorkspaceFilesystem interface](/reference/workspace/filesystem).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/platform-workspace
+```
+
+Configure the platform credentials. The access token, project ID, and bucket name fall back to environment variables, so a Mastra Platform deployment can pass zero constructor options.
+
+<Tabs>
+  <TabItem value="env-file" label=".env file">
+    ```bash
+    MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
+    MASTRA_PROJECT_ID=your-project-id
+    MASTRA_PLATFORM_BUCKET_NAME=your-bucket-name
+    ```
+  </TabItem>
+
+  <TabItem value="constructor" label="Constructor">
+    ```typescript
+    new PlatformFilesystem({
+      accessToken: 'your-platform-access-token',
+      projectId: 'your-project-id',
+      bucketName: 'your-bucket-name',
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+On a Mastra Platform deployment these variables are injected automatically, so the constructor can be called with no options.
+
+## Usage
+
+Add a `PlatformFilesystem` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { PlatformFilesystem } from '@mastra/platform-workspace'
+
+const workspace = new Workspace({
+  filesystem: new PlatformFilesystem({
+    // accessToken, projectId, bucketName all fall back to env vars
+  }),
+})
+
+const agent = new Agent({
+  id: 'file-agent',
+  name: 'File Agent',
+  instructions: 'You are a research assistant that reads and writes reports.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  workspace,
+})
+```
+
+### Reading and writing files
+
+Object keys are percent-encoded per segment, so filenames with `?`, `#`, `%`, `&`, `+`, or spaces are preserved end-to-end:
+
+```typescript
+const fs = new PlatformFilesystem()
+
+await fs.writeFile('/analyses/repo.md', markdown)
+const content = await fs.readFile('/analyses/repo.md')
+const entries = await fs.readdir('/analyses')
+await fs.moveFile('/analyses/repo.md', '/analyses/repo-final.md')
+```
+
+### Read-only mode
+
+Pass `readOnly: true` to mount the bucket read-only. Any mutating call throws `WorkspaceReadOnlyError`:
+
+```typescript
+const fs = new PlatformFilesystem({ readOnly: true })
+
+await fs.readFile('/analyses/repo.md') // ok
+await fs.writeFile('/analyses/repo.md', 'x') // throws WorkspaceReadOnlyError
+```
+
+### Overwrite semantics
+
+`writeFile` supports `overwrite: false` and throws `FileExistsError` when the destination already exists.
+
+`copyFile` and `moveFile` always overwrite the destination. Passing `overwrite: false` to either method throws an error rather than silently overwriting.
+
+### Appending files
+
+`appendFile` is a read-modify-write and is not atomic. Concurrent appends to the same path can overwrite each other. For concurrent writers, use `writeFile` with distinct keys.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'Platform access token. Falls back to the MASTRA_PLATFORM_ACCESS_TOKEN environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description: 'Platform project ID. Falls back to the MASTRA_PROJECT_ID environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'bucketName',
+    type: 'string',
+    description:
+      'Platform bucket name to store files in. Falls back to the MASTRA_PLATFORM_BUCKET_NAME environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean',
+    description: 'When true, all mutating calls throw WorkspaceReadOnlyError.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'displayName',
+    type: 'string',
+    description: 'Human-readable name shown in workspace UIs.',
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Short description shown in workspace UIs.',
+    isOptional: true,
+  },
+  {
+    name: 'icon',
+    type: 'FilesystemIcon',
+    description: 'Icon shown in workspace UIs.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string)',
+    description:
+      'Custom instructions returned by getInstructions(). A string fully replaces the defaults; a function receives the defaults and can extend or customize them per-request.',
+    isOptional: true,
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this filesystem instance.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'fetch',
+    type: 'typeof fetch',
+    description: 'Custom fetch implementation, mainly for testing.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Filesystem instance identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('PlatformFilesystem').",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('platform').",
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean | undefined',
+    description: 'Whether the filesystem was mounted read-only.',
+  },
+]}
+/>
+
+## Errors
+
+Filesystem-specific errors match the standard workspace error types:
+
+- `FileNotFoundError`: The path does not exist. Thrown by `readFile`, `stat`, and `deleteFile` (unless `force: true` is set).
+- `FileExistsError`: `writeFile` was called with `overwrite: false` and the destination already exists.
+- `WorkspaceReadOnlyError`: A mutating call was made on a read-only filesystem.
+
+Other Platform API failures raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string):
+
+```typescript
+import { FileNotFoundError, PlatformApiError } from '@mastra/platform-workspace'
+
+try {
+  await fs.readFile('/missing.txt')
+} catch (err) {
+  if (err instanceof FileNotFoundError) {
+    // handle missing file
+  } else if (err instanceof PlatformApiError) {
+    if (err.code === 'authentication_error') {
+      // refresh token
+    }
+    console.error(err.status, err.code, err.proxyMessage)
+  }
+}
+```
+
+`code` and `proxyMessage` are `undefined` when the response body is not JSON, for example an HTML 502 from a load balancer.
+
+## Related
+
+- [PlatformSandbox reference](/reference/workspace/platform-sandbox)
+- [S3Filesystem reference](/reference/workspace/s3-filesystem)
+- [WorkspaceFilesystem interface](/reference/workspace/filesystem)

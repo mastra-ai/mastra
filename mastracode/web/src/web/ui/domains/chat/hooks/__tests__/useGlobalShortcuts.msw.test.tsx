@@ -2,23 +2,24 @@
  * BDD coverage for `useGlobalShortcuts` (`domains/chat/hooks`).
  *
  * The hook is now zero-args: it observes `useOverlays()`,
- * `useChatTranscript()` (busy + abort), and `useActiveProjectContext()` (zero
- * projects force the projects modal open) directly. Specs preserve the
+ * `useChatTranscript()` (busy + abort), and `useActiveFactoryContext()` (zero
+ * projects force the Factory creation view open) directly. Specs preserve the
  * `?` shortcuts toggle unless typing, and the Escape priority cascade.
  */
 import type { AgentControllerEvent } from '@mastra/client-js';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { OverlayName } from '../../../../lib/overlays';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { useGlobalShortcuts } from '../useGlobalShortcuts';
@@ -28,22 +29,25 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 
-const OVERLAYS: OverlayName[] = ['sidebar', 'settings', 'shortcuts', 'projects'];
+const OVERLAYS: OverlayName[] = ['sidebar', 'settings', 'shortcuts', 'factories'];
 
 afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject() {
-  const project: Project = {
+function seedFactory() {
+  const project: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
-    path: '/tmp/mastracode-test',
     resourceId: RESOURCE_ID,
     createdAt: 1,
+    binding: {
+      kind: 'local',
+      path: '/tmp/mastracode-test',
+    },
   };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sse(events: AgentControllerEvent[] = []): Response {
@@ -109,13 +113,15 @@ function Probe() {
 
 function renderProbe(threadId?: string) {
   return renderWithProviders(
-    <ActiveProjectProvider>
-      <ChatSessionProvider threadId={threadId}>
-        <OverlaysProvider>
-          <Probe />
-        </OverlaysProvider>
-      </ChatSessionProvider>
-    </ActiveProjectProvider>,
+    <MainSidebarProvider storageKey="global-shortcuts-test" mobileBreakpoint={768}>
+      <ActiveFactoryProvider>
+        <ChatSessionProvider threadId={threadId}>
+          <OverlaysProvider>
+            <Probe />
+          </OverlaysProvider>
+        </ChatSessionProvider>
+      </ActiveFactoryProvider>
+    </MainSidebarProvider>,
   );
 }
 
@@ -129,7 +135,7 @@ async function ready() {
 
 describe('useGlobalShortcuts', () => {
   it('given focus is not in a text field, when ? is pressed, then the shortcuts overlay toggles', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
@@ -141,7 +147,7 @@ describe('useGlobalShortcuts', () => {
   });
 
   it('given focus is in a text field, when ? is typed, then the shortcuts overlay stays closed', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
@@ -151,7 +157,7 @@ describe('useGlobalShortcuts', () => {
   });
 
   it('given Cmd/Ctrl+K is pressed, when a retained overlay is open, then it stays open', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
@@ -163,7 +169,7 @@ describe('useGlobalShortcuts', () => {
   });
 
   it('given several overlays are open, when Escape is pressed repeatedly, then they close in priority order shortcuts → settings → sidebar', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
@@ -184,22 +190,22 @@ describe('useGlobalShortcuts', () => {
     expectOverlay('sidebar', 'closed');
   });
 
-  it('given the projects modal is open, when Escape is pressed, then nothing closes', async () => {
-    seedProject();
+  it('given the Factory creation view is open, when Escape is pressed, then the global handler yields to it', async () => {
+    seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
 
-    await userEvent.click(screen.getByRole('button', { name: 'open projects' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open factories' }));
     await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
 
     await userEvent.keyboard('{Escape}');
-    expectOverlay('projects', 'open');
+    expectOverlay('factories', 'open');
     expectOverlay('settings', 'open');
   });
 
-  it('given zero projects (forced projects modal), when Escape is pressed, then it is a no-op even with overlays open', async () => {
-    // No seedProject(): the projects modal is force-opened by derivation.
+  it('given zero factories (forced creation view), when Escape is pressed, then it is a no-op even with overlays open', async () => {
+    // No seedFactory(): Factory creation is forced open by derivation.
     useAgentControllerHandlers();
     renderProbe(undefined);
 
@@ -209,7 +215,7 @@ describe('useGlobalShortcuts', () => {
   });
 
   it('given a running turn and no open overlays, when Escape is pressed, then the run is aborted', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([{ type: 'agent_start' }]);
     let aborted = false;
     server.use(

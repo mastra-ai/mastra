@@ -1,5 +1,100 @@
 # mastracode
 
+## 0.31.1-alpha.10
+
+### Patch Changes
+
+- dependencies updates: ([#19813](https://github.com/mastra-ai/mastra/pull/19813))
+  - Updated dependency [`@ai-sdk/amazon-bedrock@^3.0.107` ↗︎](https://www.npmjs.com/package/@ai-sdk/amazon-bedrock/v/3.0.107) (from `^3.0.105`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.98` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.98) (from `^3.0.96`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.86` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.86) (from `^3.0.84`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai-compatible@^2.0.62` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai-compatible/v/2.0.62) (from `^2.0.59`, in `dependencies`)
+  - Updated dependency [`ai@^6.0.230` ↗︎](https://www.npmjs.com/package/ai/v/6.0.230) (from `^6.0.225`, in `dependencies`)
+
+- Preserved Mastra Code's displayed active goal time across pauses, approval waits, and thread reloads. ([#19837](https://github.com/mastra-ai/mastra/pull/19837))
+
+- Updated dependencies [[`41a5392`](https://github.com/mastra-ai/mastra/commit/41a5392d9f6c5e18d6b227f0fc0ddf49c50774e9), [`41a5392`](https://github.com/mastra-ai/mastra/commit/41a5392d9f6c5e18d6b227f0fc0ddf49c50774e9), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`da009e1`](https://github.com/mastra-ai/mastra/commit/da009e1aacd89ed94b8d1b2af09c9d4fe7c4db49), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`35c2181`](https://github.com/mastra-ai/mastra/commit/35c2181e6a50e47c90ba36260db7c9723d54696f), [`232fcbc`](https://github.com/mastra-ai/mastra/commit/232fcbc14fce625dd672ba043329c0b732c62be2), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`6deac4a`](https://github.com/mastra-ai/mastra/commit/6deac4a520750d807a2154333bf1b91a2df958a5), [`c328769`](https://github.com/mastra-ai/mastra/commit/c3287698ff8ef98dba86d415faa566fa3e5f4d56), [`232fcbc`](https://github.com/mastra-ai/mastra/commit/232fcbc14fce625dd672ba043329c0b732c62be2), [`3491666`](https://github.com/mastra-ai/mastra/commit/34916663c4fdd43b48c21f4ab2d5fb6dcccc94f9)]:
+  - @mastra/code-sdk@1.0.0-alpha.10
+  - @mastra/core@1.52.0-alpha.10
+  - @mastra/libsql@1.17.0-alpha.2
+  - @mastra/pg@1.17.0-alpha.2
+  - @mastra/observability@1.16.2-alpha.1
+  - @mastra/mcp@1.15.0-alpha.0
+
+## 0.31.1-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`0a2c22c`](https://github.com/mastra-ai/mastra/commit/0a2c22c902604439ec490319e14c17f331e0c84c), [`3a8024c`](https://github.com/mastra-ai/mastra/commit/3a8024ce615f8aa89479c0d71fe61d10bb0040be)]:
+  - @mastra/core@1.52.0-alpha.9
+  - @mastra/code-sdk@0.2.0-alpha.9
+
+## 0.31.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`6b1bf3b`](https://github.com/mastra-ai/mastra/commit/6b1bf3b9494bd51aa8f654c68c9355d6046fa2a1), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9)]:
+  - @mastra/core@1.52.0-alpha.8
+  - @mastra/pg@1.17.0-alpha.1
+  - @mastra/libsql@1.17.0-alpha.1
+  - @mastra/code-sdk@0.2.0-alpha.8
+
+## 0.31.1-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`b7e79c3`](https://github.com/mastra-ai/mastra/commit/b7e79c3c02ac5cd415db34ba0975ceafc1464333), [`b75d749`](https://github.com/mastra-ai/mastra/commit/b75d749621ff5d17e86bcb4ee809d301fb4f7cf3), [`67dd8b5`](https://github.com/mastra-ai/mastra/commit/67dd8b594d8b87a3a4d4ca7659f57d89fe8312a6), [`c46bb46`](https://github.com/mastra-ai/mastra/commit/c46bb461636ce3a8d45ecd7fc5d4a58803360cd0), [`a8799bb`](https://github.com/mastra-ai/mastra/commit/a8799bb8e44f4a60d01e4e2acd3448ff80bf14f8)]:
+  - @mastra/core@1.52.0-alpha.7
+  - @mastra/code-sdk@0.2.0-alpha.7
+
+## 0.31.1-alpha.6
+
+### Patch Changes
+
+- Fixed quiet-mode tool previews jumping during streamed updates. ([#19651](https://github.com/mastra-ai/mastra/pull/19651))
+
+- Updated dependencies [[`a40adeb`](https://github.com/mastra-ai/mastra/commit/a40adeb222b961a56a58af56a106106525721b74), [`dfc7769`](https://github.com/mastra-ai/mastra/commit/dfc77695549e4434873051ddd1f6065330ed5ab8), [`821648b`](https://github.com/mastra-ai/mastra/commit/821648bf2871ef840100c7bacbecf676010bd12a), [`11f6cd9`](https://github.com/mastra-ai/mastra/commit/11f6cd96fe42582403416608beb212cc1a2cc79e)]:
+  - @mastra/core@1.52.0-alpha.6
+  - @mastra/code-sdk@0.2.0-alpha.6
+
+## 0.31.1-alpha.5
+
+### Patch Changes
+
+- Fixed goal judge results rendering more than once during live goal runs. ([#19613](https://github.com/mastra-ai/mastra/pull/19613))
+
+- dependencies updates: ([#19611](https://github.com/mastra-ai/mastra/pull/19611))
+  - Updated dependency [`ai@^6.0.225` ↗︎](https://www.npmjs.com/package/ai/v/6.0.225) (from `^6.0.224`, in `dependencies`)
+
+- Fixed delivered steer messages disappearing from the chat after replacing their pending state. ([#19613](https://github.com/mastra-ai/mastra/pull/19613))
+
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`d2ff897`](https://github.com/mastra-ai/mastra/commit/d2ff8979d3069c6101108cdb7815792b0cc1c1b3), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`bb92559`](https://github.com/mastra-ai/mastra/commit/bb9255954be8323a5ecab7595fe5365c564b3f52), [`89da3cd`](https://github.com/mastra-ai/mastra/commit/89da3cd80c7c9936791ff0c31e244bcc41b0dd12), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`d7f5f9e`](https://github.com/mastra-ai/mastra/commit/d7f5f9e5d76ed588842bce30fac076ec9e3ad98a), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`0c52047`](https://github.com/mastra-ai/mastra/commit/0c520470a4547666156b2f18eb794eb8bd2676c8), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`ec17152`](https://github.com/mastra-ai/mastra/commit/ec17152e7514b5fad37d6ed50f90a937b4bb87a2), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/code-sdk@0.2.0-alpha.5
+  - @mastra/core@1.52.0-alpha.5
+  - @mastra/tavily@1.1.1-alpha.0
+  - @mastra/libsql@1.16.1-alpha.0
+  - @mastra/memory@1.23.1-alpha.1
+  - @mastra/observability@1.16.2-alpha.0
+  - @mastra/mcp@1.15.0-alpha.0
+
+## 0.31.1-alpha.4
+
+### Patch Changes
+
+- Fixed the auto-updater falsely reporting success when the update landed somewhere the running binary doesn't use. Previously any exit code 0 from the package manager was treated as success, so if Mastra Code was installed by a different tool (for example via a wrapper that puts a shim on your PATH), `npm install -g` could update a copy you never run and Mastra Code would still tell you to restart onto the "new" version. ([#18792](https://github.com/mastra-ai/mastra/pull/18792))
+
+  Mastra Code now verifies the install before and after updating when the install location and version are detectable:
+  - Before installing, it checks that the running binary lives in the package manager's global directory when that directory can be determined. If it doesn't (for example when the install is managed by another tool), it skips the pointless install and tells you immediately which install to update instead.
+  - When the install is owned by a tool it recognizes, it delegates the update to that tool: vite-plus installs are updated by running `vp install -g` for you, and Homebrew installs (under any prefix, including Linuxbrew) get the exact `brew upgrade mastracode` command to run.
+  - On Windows, update commands now run through a shell so the package managers' `.cmd` shims launch correctly.
+  - When the installed version is readable, it only reports "Updated" when the running binary changed to the target version.
+  - If the package manager reports success but the running binary is unchanged, it tells you honestly that your installation is managed by another tool and to update it with that tool, instead of claiming success.
+  - When an update fails, it now surfaces the package manager's error output so you can see the cause, rather than just "Auto-update failed".
+
+- Updated dependencies [[`55b6ecd`](https://github.com/mastra-ai/mastra/commit/55b6ecd1083d21d00ea19488e721e451de75e76f), [`4cfdd64`](https://github.com/mastra-ai/mastra/commit/4cfdd645794feaea0c4ea711e70ecdfbef0c5b8e)]:
+  - @mastra/code-sdk@0.2.0-alpha.4
+  - @mastra/core@1.52.0-alpha.4
+
 ## 0.31.1-alpha.3
 
 ### Patch Changes

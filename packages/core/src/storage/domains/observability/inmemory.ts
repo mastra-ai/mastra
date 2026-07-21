@@ -618,24 +618,22 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     return {
       traceId,
-      spans: spans.map(
-        (span): LightSpanRecord => ({
-          traceId: span.traceId,
-          spanId: span.spanId,
-          parentSpanId: span.parentSpanId,
-          name: span.name,
-          spanType: span.spanType,
-          isEvent: span.isEvent,
-          startedAt: span.startedAt,
-          endedAt: span.endedAt,
-          error: span.error,
-          entityType: span.entityType,
-          entityId: span.entityId,
-          entityName: span.entityName,
-          createdAt: span.createdAt,
-          updatedAt: span.updatedAt,
-        }),
-      ),
+      spans: spans.map((span): LightSpanRecord => ({
+        traceId: span.traceId,
+        spanId: span.spanId,
+        parentSpanId: span.parentSpanId,
+        name: span.name,
+        spanType: span.spanType,
+        isEvent: span.isEvent,
+        startedAt: span.startedAt,
+        endedAt: span.endedAt,
+        error: span.error,
+        entityType: span.entityType,
+        entityId: span.entityId,
+        entityName: span.entityName,
+        createdAt: span.createdAt,
+        updatedAt: span.updatedAt,
+      })),
     };
   }
 

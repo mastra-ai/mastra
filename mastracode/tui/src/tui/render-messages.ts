@@ -43,6 +43,7 @@ import {
   getReminderView,
   getSignalKind,
   getStateSignalView,
+  getUserSignalView,
   isSignalMessage,
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
@@ -287,7 +288,12 @@ export function addPendingUserMessage(
   state.ui.requestRender();
 }
 
-export function confirmPendingUserMessage(state: TUIState, messageId: string, text: string): void {
+export function confirmPendingUserMessage(
+  state: TUIState,
+  messageId: string,
+  text: string,
+  attachments?: { imageCount: number; fileCount: number },
+): void {
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
@@ -296,15 +302,22 @@ export function confirmPendingUserMessage(state: TUIState, messageId: string, te
     state.streamingMessage = undefined;
   }
 
-  replacePendingUserMessage(state, messageId, text);
+  replacePendingUserMessage(state, messageId, text, attachments);
 }
 
-function replacePendingUserMessage(state: TUIState, messageId: string, text: string): void {
+function replacePendingUserMessage(
+  state: TUIState,
+  messageId: string,
+  text: string,
+  attachments?: { imageCount: number; fileCount: number },
+): void {
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  const imageCount = pending.images?.length ?? 0;
-  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
+  const prefix = formatAttachmentPrefix(
+    attachments?.imageCount ?? pending.images?.length ?? 0,
+    attachments?.fileCount ?? 0,
+  );
   const label = getPendingUserMessageLabel(pending.isInterjection);
   const confirmed = new UserMessageComponent(prefix + text, getMarkdownTheme(), {
     ...(label ? { label } : {}),
@@ -346,15 +359,24 @@ export function clearPendingUserMessages(state: TUIState): void {
   state.ui.requestRender();
 }
 
-function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, text: string): boolean {
+function confirmMatchingPendingUserMessage(
+  state: TUIState,
+  messageId: string,
+  text: string,
+  attachments: { imageCount: number; fileCount: number },
+): boolean {
   const normalizedText = text.trim();
   for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
     if (pending.text.trim() !== normalizedText) continue;
 
     const label = getPendingUserMessageLabel(pending.isInterjection);
-    const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
-      ...(label ? { label } : {}),
-    });
+    const confirmed = new UserMessageComponent(
+      formatAttachmentPrefix(attachments.imageCount, attachments.fileCount) + text,
+      getMarkdownTheme(),
+      {
+        ...(label ? { label } : {}),
+      },
+    );
     const idx = state.chatContainer.children.indexOf(pending.component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
@@ -394,11 +416,19 @@ function isImagePart(part: { type?: string; mimeType?: string; mediaType?: strin
   return media.startsWith('image/');
 }
 
+function formatAttachmentPrefix(imageCount: number, fileCount: number): string {
+  const labels = [
+    imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}]` : '',
+    fileCount > 0 ? `[${fileCount} file${fileCount > 1 ? 's' : ''}]` : '',
+  ].filter(Boolean);
+  return labels.length > 0 ? `${labels.join(' ')} ` : '';
+}
+
 /**
  * Render a `role: 'signal'` message into its dedicated TUI component (reminder,
  * judge, state, reactive, notification, notification-summary). Returns true when
  * the signal was fully handled; returns false for `user`-kind signals so the
- * caller falls through to the shared user-message text rendering.
+ * caller renders it through the shared user-message component path.
  */
 export function renderSignalMessage(state: TUIState, message: MastraDBMessage): boolean {
   const kind = getSignalKind(message);
@@ -536,14 +566,21 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
     return;
   }
 
+  let textContent: string;
+  let imageCount: number;
+  let fileCount: number;
   if (isSignalMessage(message)) {
     if (renderSignalMessage(state, message)) return;
+    const userSignal = getUserSignalView(message);
+    textContent = userSignal.message;
+    imageCount = userSignal.imageCount;
+    fileCount = userSignal.fileCount;
+  } else {
+    const parts = getUserContentParts(message);
+    textContent = getMessageText(message);
+    imageCount = parts.filter(part => isImagePart(part)).length;
+    fileCount = parts.filter(part => part.type === 'file' && !isImagePart(part)).length;
   }
-
-  const parts = getUserContentParts(message);
-  const textContent = getMessageText(message);
-  const imageCount = parts.filter(part => isImagePart(part)).length;
-  const fileCount = parts.filter(part => part.type === 'file' && !isImagePart(part)).length;
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
@@ -603,12 +640,13 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
     return;
   }
 
+  const attachments = { imageCount, fileCount };
   if (state.pendingSignalMessageComponentsById.has(message.id)) {
-    confirmPendingUserMessage(state, message.id, displayText);
+    confirmPendingUserMessage(state, message.id, displayText, attachments);
     return;
   }
 
-  if (confirmMatchingPendingUserMessage(state, message.id, displayText)) {
+  if (confirmMatchingPendingUserMessage(state, message.id, displayText, attachments)) {
     return;
   }
 
@@ -646,11 +684,7 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
     return;
   }
 
-  const attachmentLabels = [
-    imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}]` : '',
-    fileCount > 0 ? `[${fileCount} file${fileCount > 1 ? 's' : ''}]` : '',
-  ].filter(Boolean);
-  const prefix = attachmentLabels.length > 0 ? `${attachmentLabels.join(' ')} ` : '';
+  const prefix = formatAttachmentPrefix(imageCount, fileCount);
   if (displayText || prefix) {
     const label = getUserMessageLabel(message, options?.label);
     const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
@@ -901,8 +935,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           // Render ask_user with the proper question component
           if (toolName === 'ask_user' && hasResult) {
             const askArgs = toolArgs as
-              | { question?: string; options?: Array<{ label: string; description?: string }> }
-              | undefined;
+              { question?: string; options?: Array<{ label: string; description?: string }> } | undefined;
             const answer = typeof resultValue === 'string' ? resultValue : formatToolResult(resultValue);
             const cancelled = answer === '(skipped)';
             if (askArgs?.question) {

@@ -1,23 +1,46 @@
 /**
- * Shared configuration + state-signing helpers for the GitHub App feature.
+ * Composite feature gate + diagnostics for the GitHub App project feature.
  *
  * The GitHub feature is enabled only when *all three* hold:
- *  - the GitHub App env vars are present (`isGithubAppConfigured`),
+ *  - a `GithubIntegration` instance is registered with the factory
+ *    (constructed by the deploy entry from the `GITHUB_APP_*` env vars),
  *  - web auth is enabled (a per-user installation requires a logged-in user),
  *  - the application database is configured (`isAppDbConfigured`).
+ *
+ * OAuth/install `state` signing lives in `../state-signing.ts` — the factory
+ * creates one shared signer at boot and hands it to every integration.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { isWebAuthEnabled } from '../auth';
-import { getMissingGithubAppEnvVars, isGithubAppConfigured } from './client';
-import { isAppDbConfigured } from './db';
-import { getSandboxProvider, isSandboxEnabled } from './sandbox';
+import { getSeededIntegration, getSeededStateSigner, getSeededStorage } from '../runtime-config';
+import { getSandboxProvider, isSandboxEnabled } from '../sandbox/fleet';
+import type { GithubIntegration } from './integration';
+
+function getGithubIntegration(): GithubIntegration | undefined {
+  const integration = getSeededIntegration('github');
+  return integration && 'getInstallationOctokit' in integration ? (integration as GithubIntegration) : undefined;
+}
+
+/**
+ * Env vars the deploy entry reads to construct a `GithubIntegration`. Names
+ * only — used by diagnostics to tell an operator what to set when the
+ * integration is absent. The entry enforces all-or-nothing: partial config
+ * fails the boot, so at runtime the integration is either fully configured or
+ * not configured at all.
+ */
+const GITHUB_APP_ENV_VARS = [
+  'GITHUB_APP_ID',
+  'GITHUB_APP_PRIVATE_KEY',
+  'GITHUB_APP_CLIENT_ID',
+  'GITHUB_APP_CLIENT_SECRET',
+  'GITHUB_APP_SLUG',
+] as const;
 
 /**
  * True when the GitHub App project feature should be active.
  */
 export function isGithubFeatureEnabled(): boolean {
-  return isGithubAppConfigured() && isWebAuthEnabled() && isAppDbConfigured();
+  return getGithubIntegration() !== undefined && isWebAuthEnabled();
 }
 
 /**
@@ -33,7 +56,7 @@ export interface GithubFeatureDiagnostics {
   stateSecretConfigured: boolean;
   sandboxEnabled: boolean;
   sandboxProvider: string;
-  /** Names of missing required GitHub App env vars (non-secret names only). */
+  /** Names of the GitHub App env vars still needed (empty when configured). */
   missingGithubAppEnvVars: string[];
 }
 
@@ -43,131 +66,14 @@ export interface GithubFeatureDiagnostics {
  * the same state. Does not change `isGithubFeatureEnabled()` behavior.
  */
 export function getGithubFeatureDiagnostics(): GithubFeatureDiagnostics {
+  const github = getGithubIntegration();
   return {
-    githubAppConfigured: isGithubAppConfigured(),
+    githubAppConfigured: github !== undefined,
     webAuthEnabled: isWebAuthEnabled(),
-    appDbConfigured: isAppDbConfigured(),
-    stateSecretConfigured: hasExplicitStateSecret(),
+    appDbConfigured: getSeededStorage() !== undefined,
+    stateSecretConfigured: getSeededStateSigner()?.stable ?? false,
     sandboxEnabled: isSandboxEnabled(),
     sandboxProvider: getSandboxProvider(),
-    missingGithubAppEnvVars: getMissingGithubAppEnvVars(),
+    missingGithubAppEnvVars: github ? [] : [...GITHUB_APP_ENV_VARS],
   };
-}
-
-/** Secret used by GitHub to sign webhook deliveries. */
-export function getGithubWebhookSecret(): string | undefined {
-  return process.env.GITHUB_APP_WEBHOOK_SECRET || undefined;
-}
-
-/**
- * Secret used to sign the OAuth/install `state`. Falls back to a per-process
- * random secret when no explicit one is configured (state is short-lived).
- */
-let stateSecret: string | undefined;
-function getStateSecret(): string {
-  if (stateSecret) return stateSecret;
-  stateSecret = explicitStateSecret() ?? randomBytes(32).toString('hex');
-  return stateSecret;
-}
-
-/**
- * The explicit, deployment-stable state secret if one is configured. When
- * undefined, `getStateSecret()` falls back to a per-process random secret, which
- * is NOT stable across replicas: a `state` signed by one replica cannot be
- * verified by another. Multi-replica deploys must set an explicit secret.
- */
-function explicitStateSecret(): string | undefined {
-  return process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined;
-}
-
-/**
- * True when a deployment-stable state secret is configured. Startup uses this to
- * fail loud when the GitHub feature is on but state signing would not be
- * replica-stable.
- */
-export function hasExplicitStateSecret(): boolean {
-  return explicitStateSecret() !== undefined;
-}
-
-/**
- * Fail loud at startup if the GitHub feature is on but no replica-stable state
- * secret is configured. A random per-process secret silently breaks the
- * OAuth/install callback whenever it lands on a different replica than the one
- * that signed the `state`. Returns without error when the feature is off (the
- * random fallback is acceptable for single-process/local dev).
- */
-export function assertReplicaStableStateSecret(): void {
-  if (!isGithubFeatureEnabled()) return;
-  if (hasExplicitStateSecret()) return;
-  throw new Error(
-    'GitHub App feature is enabled but no replica-stable state secret is set. ' +
-      'Set GITHUB_APP_WEBHOOK_SECRET (or WORKOS_COOKIE_PASSWORD) so OAuth/install ' +
-      '`state` can be verified across replicas. Without it, the install callback ' +
-      'fails whenever it lands on a different replica than the one that signed it.',
-  );
-}
-
-interface StatePayload {
-  orgId: string;
-  userId: string;
-  nonce: string;
-  issuedAt: number;
-}
-
-/** Verified `(orgId, userId)` tenant carried by a signed install `state`. */
-export interface StateTenant {
-  orgId: string;
-  userId: string;
-}
-
-/** Signed `state` values expire after this window to bound the CSRF token. */
-const STATE_MAX_AGE_MS = 10 * 60 * 1000;
-
-/**
- * Build a signed `state` bound to the `(orgId, userId)` tenant. The payload is
- * base64url JSON with an HMAC suffix so the callback can verify it was not
- * tampered with and belongs to the same org + user.
- */
-export function signState(orgId: string, userId: string): string {
-  const payload: StatePayload = {
-    orgId,
-    userId,
-    nonce: randomBytes(8).toString('hex'),
-    issuedAt: Date.now(),
-  };
-  const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
-  const sig = createHmac('sha256', getStateSecret()).update(body).digest('base64url');
-  return `${body}.${sig}`;
-}
-
-/**
- * Verify a signed `state` and return the bound `(orgId, userId)` tenant, or
- * `null` if invalid.
- */
-export function verifyState(state: string | undefined): StateTenant | null {
-  if (!state) return null;
-  const dot = state.lastIndexOf('.');
-  if (dot <= 0) return null;
-  const body = state.slice(0, dot);
-  const sig = state.slice(dot + 1);
-  const expected = createHmac('sha256', getStateSecret()).update(body).digest('base64url');
-  const sigBuf = Buffer.from(sig);
-  const expectedBuf = Buffer.from(expected);
-  if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as StatePayload;
-    if (typeof parsed.orgId !== 'string' || typeof parsed.userId !== 'string') return null;
-    if (typeof parsed.issuedAt !== 'number') return null;
-    if (Date.now() - parsed.issuedAt > STATE_MAX_AGE_MS) return null;
-    return { orgId: parsed.orgId, userId: parsed.userId };
-  } catch {
-    return null;
-  }
-}
-
-/** For tests: reset the cached state secret. */
-export function __resetStateSecretForTests(): void {
-  stateSecret = undefined;
 }

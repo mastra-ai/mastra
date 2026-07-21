@@ -53,6 +53,7 @@ export {
   WorkspacesLibSQL,
 };
 export type { LibSQLDomainConfig } from './db';
+export { LibSQLFactoryStorage, type LibSQLFactoryStorageConfig } from './factory-storage';
 
 export type LibSQLStorageDomain = keyof StorageDomains;
 

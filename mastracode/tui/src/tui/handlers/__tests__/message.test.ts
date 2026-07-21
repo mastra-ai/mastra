@@ -5,6 +5,7 @@ import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { JudgeDisplayComponent } from '../../components/judge-display.js';
 import { NotificationSummaryComponent } from '../../components/notification-summary.js';
 import { NotificationComponent } from '../../components/notification.js';
 import { ReactiveSignalComponent } from '../../components/reactive-signal.js';
@@ -14,13 +15,18 @@ import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
 import { UserMessageComponent } from '../../components/user-message.js';
-import { addPendingUserMessage, addUserMessage } from '../../render-messages.js';
+import { addPendingUserMessage, addUserMessage as renderUserMessage } from '../../render-messages.js';
 import type { TUIState } from '../../state.js';
+import { handleGoalEvaluation } from '../agent-lifecycle.js';
 import { handleMessageEnd, handleMessageStart, handleMessageUpdate } from '../message.js';
 import type { EventHandlerContext } from '../types.js';
 
 function visibleChildren(state: TUIState) {
   return state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));
+}
+
+function addUserMessage(state: TUIState, message: MastraDBMessage): void {
+  renderUserMessage(state, message);
 }
 
 type Part = Exclude<MastraDBMessage['content'], string>['parts'][number];
@@ -129,7 +135,7 @@ describe('handleMessageStart signals', () => {
 
     ctx = {
       state,
-      addUserMessage: (message: MastraDBMessage) => addUserMessage(state, message),
+      addUserMessage: message => renderUserMessage(state, message),
       addChildBeforeFollowUps: (child: any) => {
         state.chatContainer.addChild(child);
       },
@@ -162,6 +168,35 @@ describe('handleMessageStart signals', () => {
     const rendered = stripAnsi((visibleChildren(state)[0] as ReactiveSignalComponent).render(80).join('\n'));
     expect(rendered).toContain('Signal: build-status');
     expect(rendered).toContain('Build is still running');
+  });
+
+  it('confirms pending steering from the delivered DB-native user signal', () => {
+    addPendingUserMessage(state, 'steer-1', 'Change direction', [{ data: 'image-data', mimeType: 'image/png' }], {
+      isInterjection: true,
+    });
+
+    handleMessageStart(
+      ctx,
+      signalMessage(
+        {
+          id: 'steer-1',
+          type: 'user',
+          contents: [
+            { type: 'text', text: 'Change direction' },
+            { type: 'file', data: 'image-data', mediaType: 'image/png' },
+          ],
+          attributes: { delivery: 'while-active' },
+        },
+        'steer-1',
+      ),
+    );
+
+    expect(state.pendingSignalMessageComponentsById.has('steer-1')).toBe(false);
+    const component = state.messageComponentsById.get('steer-1');
+    expect(component).toBeInstanceOf(UserMessageComponent);
+    const rendered = stripAnsi((component as UserMessageComponent).render(100).join('\n'));
+    expect(rendered).toContain('steer');
+    expect(rendered).toContain('[1 image] Change direction');
   });
 
   it('does not render streamed GitHub subscribe operation signals', () => {
@@ -417,6 +452,98 @@ describe('handleMessageStart signals', () => {
   });
 });
 
+describe('goal evaluation live rendering ownership', () => {
+  const evaluation = {
+    objective: 'List whale facts',
+    iteration: 2,
+    maxRuns: 20,
+    passed: false,
+    status: 'active',
+    results: [],
+    reason: 'Need another fact.',
+    duration: 0,
+    timedOut: false,
+    maxRunsReached: false,
+    suppressFeedback: false,
+  } as Parameters<typeof handleGoalEvaluation>[1];
+
+  function createGoalJudgeSignal(): MastraDBMessage {
+    return signalMessage(
+      {
+        type: 'reactive',
+        tagName: 'system-reminder',
+        contents: '[Goal attempt 2/20] Continue.',
+        attributes: { type: 'goal-judge' },
+        metadata: { goalEvaluation: evaluation },
+      } as Parameters<typeof createSignal>[0],
+      'goal-judge-signal',
+    );
+  }
+
+  function createContext(): EventHandlerContext {
+    const state = {
+      chatContainer: new Container(),
+      followUpComponents: [],
+      ui: { requestRender: vi.fn() },
+      currentRunSystemReminderKeys: new Set(),
+      pendingTools: new Map(),
+      seenToolCallIds: new Set(),
+      subagentToolCallIds: new Set(),
+      allToolComponents: [],
+      allSlashCommandComponents: [],
+      allSystemReminderComponents: [],
+      messageComponentsById: new Map(),
+      pendingSubagents: new Map(),
+      hideThinkingBlock: false,
+      toolOutputExpanded: false,
+      pendingSignalMessageComponentsById: new Map(),
+      goalManager: {
+        getGoal: vi.fn(() => ({ id: 'goal-1', judgeModelId: 'openai/gpt-5.4-mini' })),
+        applyEvaluation: vi.fn(),
+      },
+      session: { displayState: { get: () => ({ isRunning: true }) } },
+      controller: { session: { displayState: { get: () => ({ isRunning: true }) } } },
+    } as unknown as TUIState;
+
+    return {
+      state,
+      addUserMessage: (message: MastraDBMessage) => renderUserMessage(state, message),
+      updateStatusLine: vi.fn(),
+      addChildBeforeFollowUps: (child: any) => state.chatContainer.addChild(child),
+    } as unknown as EventHandlerContext;
+  }
+
+  it.each([
+    ['goal_evaluation then live signal', true],
+    ['live signal then goal_evaluation', false],
+  ])('renders one judge component when delivery order is %s', (_label, lifecycleFirst) => {
+    const ctx = createContext();
+    const renderLifecycle = () => {
+      handleGoalEvaluation(ctx, evaluation);
+    };
+    const renderSignal = () => {
+      const signal = createGoalJudgeSignal();
+      handleMessageStart(ctx, signal);
+      handleMessageUpdate(ctx, signal);
+      handleMessageEnd(ctx, signal);
+    };
+
+    if (lifecycleFirst) {
+      renderLifecycle();
+      renderSignal();
+    } else {
+      renderSignal();
+      renderLifecycle();
+    }
+
+    const children = visibleChildren(ctx.state);
+    expect(children).toHaveLength(1);
+    expect(children[0]).toBeInstanceOf(JudgeDisplayComponent);
+    expect(ctx.state.messageComponentsById.has('goal-judge-signal')).toBe(false);
+    expect(ctx.state.goalManager.applyEvaluation).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('handleMessageUpdate assistant streaming', () => {
   let state: TUIState;
   let ctx: EventHandlerContext;
@@ -446,7 +573,7 @@ describe('handleMessageUpdate assistant streaming', () => {
 
     ctx = {
       state,
-      addUserMessage: (message: MastraDBMessage) => addUserMessage(state, message),
+      addUserMessage: message => renderUserMessage(state, message),
       addChildBeforeFollowUps: (child: any) => {
         state.chatContainer.addChild(child);
       },

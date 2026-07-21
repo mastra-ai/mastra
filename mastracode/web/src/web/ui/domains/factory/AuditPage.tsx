@@ -53,17 +53,16 @@ export function AuditPage() {
     <FactoryPageShell
       title="Audit"
       description="Who did what, when — every board change, run start, worktree change, and git action."
-      maxWidthClassName="max-w-5xl"
     >
-      {project => <AuditContent githubProjectId={project.githubProjectId} />}
+      {project => <AuditContent factoryProjectId={project.binding.factoryProjectId} />}
     </FactoryPageShell>
   );
 }
 
-function AuditContent({ githubProjectId }: { githubProjectId: string }) {
+function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [group, setGroup] = useState<GroupKey>('all');
   const actions = ACTION_GROUPS.find(entry => entry.key === group)?.actions;
-  const eventsQuery = useAuditEvents(githubProjectId, group, actions ? [...actions] : undefined);
+  const eventsQuery = useAuditEvents(factoryProjectId, group, actions ? [...actions] : undefined);
   const portalQuery = useAuditPortalLink(true);
 
   if (eventsQuery.isError) {
@@ -72,7 +71,7 @@ function AuditContent({ githubProjectId }: { githubProjectId: string }) {
   const events = eventsQuery.data?.pages.flatMap(page => page.events) ?? [];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <ButtonsGroup spacing="close" role="group" aria-label="Audit filter">
           {ACTION_GROUPS.map(entry => (

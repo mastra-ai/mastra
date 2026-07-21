@@ -18,6 +18,25 @@ import {
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 
+import { ensureWebAuthUser, isOrganizationAdmin, isWebAuthEnabled, webAuthTenant } from './auth.js';
+import {
+  getAuthProviderId,
+  listTenantCredentialsForRequest,
+  resolveCredentialContext,
+  tenantOrgId,
+  WEB_OAUTH_FLOW_KINDS,
+} from './provider-credentials.js';
+import { getFactoryStorage, isRuntimeConfigSeeded } from './runtime-config.js';
+import { getModelPacksStorage } from './storage/domains.js';
+import type { ModelPackRecord, ModelPacksStorage } from './storage/domains/model-packs/base';
+import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
+import type { CredentialRecord, LoginSessionKind } from './storage/domains/credentials/base';
+
+/** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
+function loose(c: unknown): import('hono').Context {
+  return c as import('hono').Context;
+}
+
 /**
  * Server-side configuration routes for the web app.
  *
@@ -29,21 +48,23 @@ import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings
  * Keys are never returned to the client; only their presence and source.
  */
 
+/**
+ * Where a provider's active credential comes from, as seen by the caller.
+ * Local mode reports `oauth`/`stored` (server-global `auth.json`); tenant mode
+ * reports the scoped variants (`oauth-user`/`stored-user`/`stored-org`).
+ */
+export type ProviderCredentialSource =
+  'oauth' | 'stored' | 'env' | 'none' | 'oauth-user' | 'stored-user' | 'stored-org';
+
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {
   provider: string;
   /** Env var the provider's key is read from, if any. */
   envVar?: string;
   /** Where the active credential comes from. */
-  source: 'oauth' | 'stored' | 'env' | 'none';
-}
-
-/**
- * OAuth credentials are stored under the auth provider id, which differs from
- * the catalog provider id for OpenAI (stored as `openai-codex`).
- */
-function getAuthProviderId(provider: string): string {
-  return provider === 'openai' ? 'openai-codex' : provider;
+  source: ProviderCredentialSource;
+  /** Web OAuth sign-in capability, when the provider supports it. */
+  oauth?: { supported: true; modes: LoginSessionKind[] };
 }
 
 /** Minimal session surface a pack activation touches. */
@@ -89,25 +110,46 @@ export interface OMSession extends PackSession {
 
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
 interface ModelCatalog {
-  listAvailableModels: () => Promise<Array<{ provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>>;
+  listAvailableModels: () => Promise<
+    Array<{ id?: string; modelName?: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
+  >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
-  getSessionByResource?: (resourceId: string) => Promise<OMSession | undefined>;
+  getSessionByResource?: (resourceId: string, scope?: string) => Promise<OMSession | undefined>;
 }
 
 /**
  * Build a deduplicated, sorted list of providers from the model catalog,
  * annotated with where each provider's credential currently comes from.
  * Mirrors the TUI's `/api-keys` provider list.
+ *
+ * When `tenantCredentials` is given (deployed mode), sources reflect the
+ * *caller's* tenant rows with user > org precedence and the server-global
+ * `authStorage` is ignored; otherwise the local `auth.json` view is reported.
  */
-export async function listProviders(controller: ModelCatalog, authStorage?: AuthStorage): Promise<ProviderInfo[]> {
+export async function listProviders(
+  controller: ModelCatalog,
+  authStorage?: AuthStorage,
+  tenantCredentials?: CredentialRecord[],
+): Promise<ProviderInfo[]> {
   const models = await controller.listAvailableModels();
   const seen = new Map<string, ProviderInfo>();
 
   for (const model of models) {
     if (seen.has(model.provider)) continue;
 
+    const authProviderId = getAuthProviderId(model.provider);
     let source: ProviderInfo['source'] = 'none';
-    if (authStorage?.isLoggedIn(getAuthProviderId(model.provider))) {
+    if (tenantCredentials) {
+      const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
+      const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
+      if (userRec?.credential.type === 'oauth') {
+        source = 'oauth-user';
+      } else if (userRec?.credential.type === 'api_key') {
+        source = 'stored-user';
+      } else if (orgRec?.credential.type === 'api_key') {
+        source = 'stored-org';
+      }
+    } else if (authStorage?.isLoggedIn(authProviderId)) {
       source = 'oauth';
     } else if (authStorage?.hasStoredApiKey(model.provider)) {
       source = 'stored';
@@ -117,7 +159,13 @@ export async function listProviders(controller: ModelCatalog, authStorage?: Auth
       source = 'env';
     }
 
-    seen.set(model.provider, { provider: model.provider, envVar: model.apiKeyEnvVar, source });
+    const flowKind = WEB_OAUTH_FLOW_KINDS[model.provider];
+    seen.set(model.provider, {
+      provider: model.provider,
+      envVar: model.apiKeyEnvVar,
+      source,
+      ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
+    });
   }
 
   return Array.from(seen.values()).sort((a, b) => a.provider.localeCompare(b.provider));
@@ -211,19 +259,80 @@ export async function buildProviderAccess(
 }
 
 /**
+ * Where a request's custom model packs live. Local mode (no auth adapter)
+ * keeps the file-backed `settings.json` store — unchanged TUI behavior. Tenant
+ * mode (auth adapter active) uses the `model-packs` factory storage domain,
+ * scoped per org. Mirrors `resolveCredentialContext`.
+ */
+export type PackContext =
+  { mode: 'local' } | { mode: 'tenant'; storage: ModelPacksStorage; orgId: string; userId: string };
+
+/** The tenant model-packs domain, when registered and ready (fail-soft). */
+async function getTenantModelPacksStorage(): Promise<ModelPacksStorage | undefined> {
+  if (!isRuntimeConfigSeeded()) return undefined;
+  let storage: ReturnType<typeof getFactoryStorage>;
+  try {
+    storage = getFactoryStorage();
+  } catch {
+    return undefined;
+  }
+  try {
+    await storage.ensureDomainReady('model-packs');
+  } catch {
+    return undefined;
+  }
+  return getModelPacksStorage();
+}
+
+/** Resolve the pack context for a request, or a ready-to-return error response. */
+async function resolvePackContext(c: import('hono').Context): Promise<PackContext | { response: Response }> {
+  await ensureWebAuthUser(c);
+  const tenant = webAuthTenant(c);
+  if (!tenant) {
+    if (isWebAuthEnabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
+    return { mode: 'local' };
+  }
+  const storage = await getTenantModelPacksStorage();
+  if (!storage) {
+    return {
+      response: c.json(
+        {
+          error: 'model_packs_unavailable',
+          message: 'Model pack storage is unavailable — the app database is not configured or failed to start.',
+        },
+        503,
+      ),
+    };
+  }
+  return { mode: 'tenant', storage, orgId: tenantOrgId(tenant), userId: tenant.userId };
+}
+
+/** DB row → the `ModePack` shape the packs list and activation flow consume. */
+function recordToModePack(record: ModelPackRecord): ModePack {
+  return { id: `custom:${record.id}`, name: record.name, description: 'Saved custom pack', models: record.models };
+}
+
+/**
  * List available model packs (built-in, gated by provider access, plus saved
- * custom packs). Drops the synthetic "New Custom" placeholder — the web client
- * has its own create flow. `active` is set from the given session's thread when
- * a resourceId is supplied.
+ * custom packs from the request's pack context). Drops the synthetic
+ * "New Custom" placeholder — the web client has its own create flow. `active`
+ * is set from the given session's thread when a resourceId is supplied.
  */
 export async function listModelPacks(
   controller: ModelCatalog,
-  authStorage?: AuthStorage,
+  authStorage: AuthStorage | undefined,
+  packContext: PackContext,
   activePackId?: string | null,
 ): Promise<ModelPackInfo[]> {
   const access = await buildProviderAccess(controller, authStorage);
-  const settings = loadSettings();
-  return getAvailableModePacks(access, settings.customModelPacks)
+  const packs =
+    packContext.mode === 'local'
+      ? getAvailableModePacks(access, loadSettings().customModelPacks)
+      : [
+          ...getAvailableModePacks(access),
+          ...(await packContext.storage.list({ orgId: packContext.orgId })).map(recordToModePack),
+        ];
+  return packs
     .filter(p => p.id !== 'custom') // synthetic "choose each model" placeholder
     .map(p => ({
       ...p,
@@ -331,6 +440,7 @@ function persistOmRoleOverride(
  *   - `GET    /web/config/providers`              — list providers + key source
  *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
  *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
+ *   - `GET    /web/config/models`                  — list available models (credentialed providers)
  *   - `GET    /web/config/custom-providers`        — list custom OpenAI-compatible providers
  *   - `POST   /web/config/custom-providers`        — create/update a custom provider
  *   - `DELETE /web/config/custom-providers/:id`    — remove a custom provider
@@ -348,7 +458,12 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       requiresAuth: false,
       handler: async c => {
         try {
-          return c.json({ providers: await listProviders(controller, authStorage) });
+          // Tenant mode lists the caller's rows and never exposes the
+          // server-global auth.json; local mode is unchanged.
+          const tenantCredentials = await listTenantCredentialsForRequest(loose(c));
+          return c.json({
+            providers: await listProviders(controller, tenantCredentials ? undefined : authStorage, tenantCredentials),
+          });
         } catch (error) {
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
         }
@@ -359,9 +474,11 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'PUT',
       requiresAuth: false,
       handler: async c => {
-        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const ctx = await resolveCredentialContext(loose(c));
+        if ('response' in ctx) return ctx.response;
+
         const provider = c.req.param('provider');
-        let body: { key?: unknown; envVar?: unknown };
+        let body: { key?: unknown; envVar?: unknown; scope?: unknown };
         try {
           body = await c.req.json();
         } catch {
@@ -370,7 +487,23 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
         const key = typeof body.key === 'string' ? body.key.trim() : '';
         if (!key) return c.json({ error: 'Missing required field: key' }, 400);
         const envVar = typeof body.envVar === 'string' ? body.envVar : undefined;
+        const scope = body.scope === 'org' ? 'org' : 'user';
         try {
+          if (ctx.mode === 'tenant') {
+            if (scope === 'org' && !(await isOrganizationAdmin(loose(c), ctx.orgId))) {
+              return c.json({ error: 'organization_admin_required' }, 403);
+            }
+            const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
+            // envVar is intentionally ignored: tenant credentials are resolved
+            // per-request, never written into process.env.
+            await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
+            invalidateTenantCredentialSnapshots(tenant);
+            const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
+            const providers = await listProviders(controller, undefined, records);
+            return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
+          }
+          if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+          // Local mode is single-user: scope is meaningless and ignored.
           authStorage.setStoredApiKey(provider, key, envVar);
           const providers = await listProviders(controller, authStorage);
           return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
@@ -384,9 +517,24 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const ctx = await resolveCredentialContext(loose(c));
+        if ('response' in ctx) return ctx.response;
+
         const provider = c.req.param('provider');
+        const scope = c.req.query('scope') === 'org' ? 'org' : 'user';
         try {
+          if (ctx.mode === 'tenant') {
+            if (scope === 'org' && !(await isOrganizationAdmin(loose(c), ctx.orgId))) {
+              return c.json({ error: 'organization_admin_required' }, 403);
+            }
+            const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
+            await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
+            invalidateTenantCredentialSnapshots(tenant);
+            const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
+            const providers = await listProviders(controller, undefined, records);
+            return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
+          }
+          if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
           authStorage.remove(`apikey:${provider}`);
           const providers = await listProviders(controller, authStorage);
           return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
@@ -457,20 +605,52 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       },
     }),
 
+    // ── Available models ────────────────────────────────────────────────────
+    // Session-independent model catalog for settings pickers (Factory default
+    // model, pack editors). Only models whose provider has a credential are
+    // returned — the same filter the session-scoped hook applies client-side.
+
+    registerApiRoute('/web/config/models', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        try {
+          const models = await controller.listAvailableModels();
+          return c.json({
+            models: models
+              .filter(m => m.hasApiKey && typeof m.id === 'string')
+              .map(m => ({ id: m.id, provider: m.provider, modelName: m.modelName, hasApiKey: true }))
+              .sort((a, b) =>
+                a.provider === b.provider ? a.id!.localeCompare(b.id!) : a.provider.localeCompare(b.provider),
+              ),
+          });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
+
     // ── Model packs ─────────────────────────────────────────────────────────
-    // Mirrors the TUI's /models-pack command. Listing + custom-pack CRUD are
-    // global-settings state; activation is session-scoped and resolves the
-    // session from the controller registry by resourceId.
+    // Mirrors the TUI's /models-pack command. Custom-pack CRUD is DB-backed in
+    // tenant mode (model-packs storage domain, org-scoped) and settings.json in
+    // local mode; activation is session-scoped and resolves the session from
+    // the controller registry by resourceId.
 
     registerApiRoute('/web/config/model-packs', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
+        const packContext = await resolvePackContext(loose(c));
+        if ('response' in packContext) return packContext.response;
         const resourceId = c.req.query('resourceId');
+        const scope = c.req.query('scope') || undefined;
         try {
-          const session = resourceId ? await controller.getSessionByResource?.(resourceId) : undefined;
+          const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
           const activePackId = await resolveActivePackId(session);
-          return c.json({ packs: await listModelPacks(controller, authStorage, activePackId), activePackId });
+          return c.json({
+            packs: await listModelPacks(controller, authStorage, packContext, activePackId),
+            activePackId,
+          });
         } catch (error) {
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
         }
@@ -481,6 +661,8 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
+        const packContext = await resolvePackContext(loose(c));
+        if ('response' in packContext) return packContext.response;
         let body: { name?: unknown; models?: unknown };
         try {
           body = await c.req.json();
@@ -497,6 +679,14 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
           return c.json({ error: 'models.build, models.plan and models.fast are required' }, 400);
         }
         try {
+          if (packContext.mode === 'tenant') {
+            const record = await packContext.storage.upsert({
+              orgId: packContext.orgId,
+              userId: packContext.userId,
+              input: { name, models: { build, plan, fast } },
+            });
+            return c.json({ ok: true, pack: recordToModePack(record) });
+          }
           const settings = loadSettings();
           const entry = { name, models: { build, plan, fast }, createdAt: new Date().toISOString() };
           const idx = settings.customModelPacks.findIndex(p => p.name === name);
@@ -513,9 +703,16 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
     registerApiRoute('/web/config/model-packs/:id', {
       method: 'DELETE',
       requiresAuth: false,
-      handler: c => {
+      handler: async c => {
+        const packContext = await resolvePackContext(loose(c));
+        if ('response' in packContext) return packContext.response;
         const id = decodeURIComponent(c.req.param('id'));
         try {
+          if (packContext.mode === 'tenant') {
+            const recordId = id.startsWith('custom:') ? id.slice('custom:'.length) : id;
+            const deleted = await packContext.storage.delete({ orgId: packContext.orgId, id: recordId });
+            return deleted ? c.json({ ok: true }) : c.json({ error: `Unknown pack "${id}"` }, 404);
+          }
           const settings = loadSettings();
           removeCustomPackFromSettings(settings, id);
           saveSettings(settings);
@@ -530,19 +727,22 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
+        const packContext = await resolvePackContext(loose(c));
+        if ('response' in packContext) return packContext.response;
         const id = decodeURIComponent(c.req.param('id'));
-        let body: { resourceId?: unknown };
+        let body: { resourceId?: unknown; scope?: unknown };
         try {
           body = await c.req.json();
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
         const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
+        const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
         if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
         try {
-          const session = await controller.getSessionByResource?.(resourceId);
+          const session = await controller.getSessionByResource?.(resourceId, scope);
           if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-          const packs = await listModelPacks(controller, authStorage);
+          const packs = await listModelPacks(controller, authStorage, packContext);
           const pack = packs.find(p => p.id === id);
           if (!pack) return c.json({ error: `Unknown pack "${id}"` }, 404);
           await applyPackToSession(controller, session, pack);
@@ -563,9 +763,10 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       requiresAuth: false,
       handler: async c => {
         const resourceId = c.req.query('resourceId');
+        const scope = c.req.query('scope') || undefined;
         if (!resourceId) return c.json({ error: 'Missing required query param: resourceId' }, 400);
         try {
-          const session = await controller.getSessionByResource?.(resourceId);
+          const session = await controller.getSessionByResource?.(resourceId, scope);
           if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
           return c.json({ config: readOMConfig(session) });
         } catch (error) {
@@ -582,18 +783,19 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
         if (role !== 'observer' && role !== 'reflector') {
           return c.json({ error: `Unknown OM role "${role}"` }, 400);
         }
-        let body: { resourceId?: unknown; modelId?: unknown };
+        let body: { resourceId?: unknown; modelId?: unknown; scope?: unknown };
         try {
           body = await c.req.json();
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
         const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
+        const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
         const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
         if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
         if (!modelId) return c.json({ error: 'Missing required field: modelId' }, 400);
         try {
-          const session = await controller.getSessionByResource?.(resourceId);
+          const session = await controller.getSessionByResource?.(resourceId, scope);
           if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
           const otherRole = role === 'observer' ? session.om.reflector : session.om.observer;
           const otherRoleCurrentModelId = otherRole.modelId() ?? null;
@@ -610,13 +812,19 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'PUT',
       requiresAuth: false,
       handler: async c => {
-        let body: { resourceId?: unknown; observationThreshold?: unknown; reflectionThreshold?: unknown };
+        let body: {
+          resourceId?: unknown;
+          observationThreshold?: unknown;
+          reflectionThreshold?: unknown;
+          scope?: unknown;
+        };
         try {
           body = await c.req.json();
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
         const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
+        const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
         if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
         const observation =
           typeof body.observationThreshold === 'number' && body.observationThreshold > 0
@@ -630,7 +838,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
           return c.json({ error: 'Provide observationThreshold and/or reflectionThreshold (positive numbers)' }, 400);
         }
         try {
-          const session = await controller.getSessionByResource?.(resourceId);
+          const session = await controller.getSessionByResource?.(resourceId, scope);
           if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
           if (observation !== undefined) {
             await session.state.set({ observationThreshold: observation });
@@ -653,13 +861,14 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'PUT',
       requiresAuth: false,
       handler: async c => {
-        let body: { resourceId?: unknown; value?: unknown };
+        let body: { resourceId?: unknown; value?: unknown; scope?: unknown };
         try {
           body = await c.req.json();
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
         const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
+        const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
         if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
         const raw = body.value;
         const value: 'auto' | boolean = raw === 'auto' || raw === true || raw === false ? raw : 'auto';
@@ -667,7 +876,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
           return c.json({ error: "value must be 'auto', true, or false" }, 400);
         }
         try {
-          const session = await controller.getSessionByResource?.(resourceId);
+          const session = await controller.getSessionByResource?.(resourceId, scope);
           if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
           await session.state.set({ observeAttachments: value });
           await session.thread.setSetting({ key: 'observeAttachments', value });
