@@ -4,7 +4,7 @@ import { EventEmitterPubSub } from '@mastra/core/events';
 import { RequestContext } from '@mastra/core/request-context';
 import { Inngest } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
-import { createInngestAgent } from '../index';
+import { createInngestAgent } from './index';
 
 function createMockModel() {
   return {
@@ -75,6 +75,8 @@ describe('InngestAgent resume runtime rehydration', () => {
       try {
         const placeholder = globalRunRegistry.get(runId);
         expect(placeholder?.isPlaceholder).toBe(true);
+        const placeholderAbortController = placeholder?.abortController;
+        expect(placeholderAbortController).toBeInstanceOf(AbortController);
 
         // The durable LLM step performs this resolution on the Inngest worker.
         const resolved = await resolveRuntimeDependencies({
@@ -87,6 +89,7 @@ describe('InngestAgent resume runtime rehydration', () => {
         expect(resolved.model).toBe(restoredModel);
         expect(resolved.tools).toBe(restoredTools);
         expect(placeholder?.isPlaceholder).toBe(false);
+        expect(placeholder?.abortController).toBe(placeholderAbortController);
         await placeholder?.workflowExecution;
       } finally {
         resumedResult.cleanup();
