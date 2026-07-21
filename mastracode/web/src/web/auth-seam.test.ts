@@ -6,10 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildAuthRoutes,
   getWorkOSProvider,
-  isWebAuthEnabled,
+  isFactoryAuthEnabled,
   isWorkOSAuth,
-  mountWebAuth,
-  webAuthTenant,
+  mountFactoryAuth,
+  factoryAuthTenant,
 } from './auth.js';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config.js';
 
@@ -82,20 +82,20 @@ afterEach(() => {
 describe('active provider resolution', () => {
   it('a seeded provider enables auth regardless of env', () => {
     seedRuntimeConfig({ authProvider: fakeProvider() });
-    expect(isWebAuthEnabled()).toBe(true);
+    expect(isFactoryAuthEnabled()).toBe(true);
   });
 
   it('seeding without a provider disables auth even when WORKOS env vars are set', () => {
     process.env.WORKOS_API_KEY = 'sk_test';
     process.env.WORKOS_CLIENT_ID = 'client_test';
     seedRuntimeConfig({});
-    expect(isWebAuthEnabled()).toBe(false);
+    expect(isFactoryAuthEnabled()).toBe(false);
   });
 
   it('falls back to env-implied WorkOS when the factory never seeded (back-compat)', () => {
     process.env.WORKOS_API_KEY = 'sk_test';
     process.env.WORKOS_CLIENT_ID = 'client_test';
-    expect(isWebAuthEnabled()).toBe(true);
+    expect(isFactoryAuthEnabled()).toBe(true);
     expect(isWorkOSAuth()).toBe(true);
   });
 
@@ -112,11 +112,11 @@ describe('active provider resolution', () => {
   });
 });
 
-describe('mountWebAuth with a seeded custom provider', () => {
+describe('mountFactoryAuth with a seeded custom provider', () => {
   function buildApp(provider: IMastraAuthProvider) {
     seedRuntimeConfig({ authProvider: provider });
     const app = new Hono();
-    const enabled = mountWebAuth(app);
+    const enabled = mountFactoryAuth(app);
     app.get('*', c => c.text('ok'));
     return { app, enabled };
   }
@@ -125,7 +125,7 @@ describe('mountWebAuth with a seeded custom provider', () => {
     process.env.WORKOS_API_KEY = 'sk_test';
     process.env.WORKOS_CLIENT_ID = 'client_test';
     seedRuntimeConfig({});
-    const enabled = mountWebAuth(new Hono());
+    const enabled = mountFactoryAuth(new Hono());
     expect(enabled).toBe(false);
   });
 
@@ -159,8 +159,8 @@ describe('mountWebAuth with a seeded custom provider', () => {
     const provider = fakeProvider();
     seedRuntimeConfig({ authProvider: provider });
     const app = new Hono();
-    mountWebAuth(app);
-    app.get('/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
+    mountFactoryAuth(app);
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c) ?? { tenant: null }));
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
@@ -177,8 +177,8 @@ describe('mountWebAuth with a seeded custom provider', () => {
     });
     seedRuntimeConfig({ authProvider: provider });
     const app = new Hono();
-    mountWebAuth(app);
-    app.get('/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
+    mountFactoryAuth(app);
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c) ?? { tenant: null }));
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(await res.json()).toEqual({ orgId: 'org_boot', userId: 'user_solo' });

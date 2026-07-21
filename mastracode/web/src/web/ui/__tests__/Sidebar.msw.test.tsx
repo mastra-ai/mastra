@@ -2,7 +2,7 @@
  * BDD coverage for the propless `Sidebar`.
  *
  * The sidebar consumes the domain contexts directly (`useActiveFactoryContext`,
- * focused chat hooks, `useOverlays`, toast feedback, and `useWebAuth`) instead of a
+ * focused chat hooks, `useOverlays`, toast feedback, and `useFactoryAuth`) instead of a
  * drilled prop bag, so the spec drives it end-to-end: real fetch transport,
  * MSW at the network boundary, assertions on the requests the thread actions
  * produce.

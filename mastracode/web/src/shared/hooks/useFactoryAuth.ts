@@ -4,9 +4,9 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { getRuntimeConfig } from '../../web/ui/runtime-config';
 import { fetchAuthState } from '../../web/ui/domains/auth/services/auth';
-import type { WebAuthState } from '../../web/ui/domains/auth/services/auth';
+import type { FactoryAuthState } from '../../web/ui/domains/auth/services/auth';
 
-const AUTH_DISABLED_STATE: WebAuthState = { authEnabled: false, authenticated: false };
+const AUTH_DISABLED_STATE: FactoryAuthState = { authEnabled: false, authenticated: false };
 
 /**
  * Web auth state, shared across the router guards and sidebar identity UI via
@@ -16,11 +16,11 @@ const AUTH_DISABLED_STATE: WebAuthState = { authEnabled: false, authenticated: f
  * the SPA fallback and return ambiguous HTML). Absent flag = old HTML or tests:
  * fall back to fetch-and-degrade.
  */
-export function useWebAuth() {
+export function useFactoryAuth() {
   const { baseUrl } = useApiConfig();
   const authDisabled = getRuntimeConfig().authEnabled === false;
   return useQuery({
-    queryKey: queryKeys.webAuth(),
+    queryKey: queryKeys.factoryAuth(),
     queryFn: authDisabled ? () => Promise.resolve(AUTH_DISABLED_STATE) : () => fetchAuthState(baseUrl),
   });
 }

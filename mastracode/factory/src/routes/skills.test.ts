@@ -2,16 +2,10 @@ import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../auth', () => ({
-  ensureWebAuthUser: vi.fn(async () => ({})),
-  isWebAuthEnabled: vi.fn(() => true),
-  webAuthTenant: vi.fn(),
-}));
-
-import { webAuthTenant } from '../auth';
-import { SourceControlStorageInMemory } from '@mastra/factory/storage/domains/source-control/inmemory';
-import { mountApiRoutes } from '../test-utils';
-import { buildSkillRoutes } from './routes';
+import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
+import { SkillRoutes } from './skills';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils';
+import type { TestAuthUser } from './test-utils';
 
 const skill: Skill = {
   name: 'understand-pr',
@@ -72,11 +66,12 @@ function createHarness(
   const app = new Hono();
   mountApiRoutes(
     app as never,
-    buildSkillRoutes({
+    new SkillRoutes({
+      auth: fakeRouteAuth(),
       controllerId: 'code',
       controller: { getSessionByResource } as never,
       authorizeSessionAddress,
-    }),
+    }).routes(),
   );
   return {
     app,
@@ -117,7 +112,6 @@ function prepare(app: Hono, body: Record<string, unknown>, controllerId = 'code'
 describe('workspace skill invocation route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(webAuthTenant).mockReset();
   });
 
   it('formats and dispatches a workspace skill once with escaped arguments', async () => {
@@ -288,7 +282,6 @@ describe('workspace skill invocation route', () => {
   });
 
   it('enforces authenticated tenant worktree ownership before session lookup', async () => {
-    vi.mocked(webAuthTenant).mockReturnValue({ userId: 'user-1', orgId: 'org-1' });
     const sourceControlStorage = new SourceControlStorageInMemory();
     const sendMessage = vi.fn(async () => {});
     const getSessionByResource = vi.fn(async () => ({
@@ -298,13 +291,21 @@ describe('workspace skill invocation route', () => {
       sendMessage,
     }));
     const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set(
+        'factoryAuthUser' as never,
+        { workosId: 'user-1', organizationId: 'org-1' } satisfies TestAuthUser as never,
+      );
+      await next();
+    });
     mountApiRoutes(
       app as never,
-      buildSkillRoutes({
+      new SkillRoutes({
+        auth: fakeRouteAuth(),
         controllerId: 'code',
         controller: { getSessionByResource } as never,
         sourceControlStorage,
-      }),
+      }).routes(),
     );
 
     const malformed = await invoke(app, {

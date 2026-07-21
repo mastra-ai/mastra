@@ -11,7 +11,7 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
+import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
 import { userSessionResourceId } from '../../auth/services/auth';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
@@ -54,7 +54,7 @@ function sessionLabel(worktree: Worktree): string {
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
   const { activeFactory } = useActiveFactoryContext();
-  const auth = useWebAuth();
+  const auth = useFactoryAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();

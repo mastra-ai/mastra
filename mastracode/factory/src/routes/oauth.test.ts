@@ -60,7 +60,7 @@ function buildApp(
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
-    if (user) c.set('webAuthUser' as never, user as never);
+    if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
   mountApiRoutes(

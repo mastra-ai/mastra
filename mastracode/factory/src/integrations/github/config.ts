@@ -64,7 +64,7 @@ export function isGithubFeatureEnabled(options: Pick<GithubFeatureGateOptions, '
  */
 export interface GithubFeatureDiagnostics {
   githubAppConfigured: boolean;
-  webAuthEnabled: boolean;
+  factoryAuthEnabled: boolean;
   appDbConfigured: boolean;
   stateSecretConfigured: boolean;
   sandboxEnabled: boolean;
@@ -82,7 +82,7 @@ export function getGithubFeatureDiagnostics(options: GithubFeatureGateOptions): 
   const { github, auth, appDbConfigured, stateSigner, fleet } = options;
   return {
     githubAppConfigured: github !== undefined,
-    webAuthEnabled: auth.enabled(),
+    factoryAuthEnabled: auth.enabled(),
     appDbConfigured,
     stateSecretConfigured: stateSigner?.stable ?? false,
     sandboxEnabled: fleet?.enabled ?? false,

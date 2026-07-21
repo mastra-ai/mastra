@@ -166,7 +166,7 @@ describe('provider key routes with a tenant', () => {
   function buildApp(user: { workosId: string; organizationId?: string } | null, authStorage?: AuthStorage) {
     const app = new Hono();
     app.use('*', async (c, next) => {
-      if (user) c.set('webAuthUser' as never, user as never);
+      if (user) c.set('factoryAuthUser' as never, user as never);
       await next();
     });
     mountApiRoutes(
@@ -326,7 +326,7 @@ describe('model pack routes with a tenant', () => {
   function buildApp(user: { workosId: string; organizationId?: string } | null) {
     const app = new Hono();
     app.use('*', async (c, next) => {
-      if (user) c.set('webAuthUser' as never, user as never);
+      if (user) c.set('factoryAuthUser' as never, user as never);
       await next();
     });
     mountApiRoutes(

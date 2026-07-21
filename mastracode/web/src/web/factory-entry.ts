@@ -29,8 +29,14 @@ import { hasAuthInit } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { observeAgentGitAction } from '@mastra/factory/storage/domains/audit/agent-audit';
 import { AuditDomain } from '@mastra/factory/storage/domains/audit/domain';
-import type { WebAuthUser } from './auth.js';
-import { buildAuthRoutes, createFactoryAuthGate, factoryRouteAuth, getWebAuthOrgId, getWebAuthUserId } from './auth.js';
+import type { FactoryAuthUser } from './auth.js';
+import {
+  buildAuthRoutes,
+  createFactoryAuthGate,
+  factoryRouteAuth,
+  getFactoryAuthOrgId,
+  getFactoryAuthUserId,
+} from './auth.js';
 import type {
   FactoryIntegration,
   IntegrationPostToolContext,
@@ -329,8 +335,8 @@ export class MastraFactory {
       projects: factoryProjectsStorage,
       sinks: integrations,
       agentTenant: requestContext => {
-        const user = requestContext.get('user') as WebAuthUser | undefined;
-        return { orgId: getWebAuthOrgId(user), userId: getWebAuthUserId(user) };
+        const user = requestContext.get('user') as FactoryAuthUser | undefined;
+        return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });
 

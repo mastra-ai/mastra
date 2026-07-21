@@ -26,7 +26,7 @@ export type GithubStatusReason =
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
   githubAppConfigured: boolean;
-  webAuthEnabled: boolean;
+  factoryAuthEnabled: boolean;
   appDbConfigured: boolean;
   stateSecretConfigured: boolean;
   sandboxEnabled: boolean;

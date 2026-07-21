@@ -197,7 +197,7 @@ describe('createTenantCredentialPrimer', () => {
   function buildApp(user: { workosId: string; organizationId?: string } | null) {
     const app = new Hono();
     app.use('*', async (c, next) => {
-      if (user) c.set('webAuthUser' as never, user as never);
+      if (user) c.set('factoryAuthUser' as never, user as never);
       await next();
     });
     app.use('*', createTenantCredentialPrimer({ auth: fakeRouteAuth(), credentials: seed.credentials }));

@@ -34,7 +34,7 @@ function loose(c: unknown): RouteContext {
  */
 export interface LinearFeatureDiagnostics {
   linearAppConfigured: boolean;
-  webAuthEnabled: boolean;
+  factoryAuthEnabled: boolean;
   appDbConfigured: boolean;
 }
 
@@ -121,7 +121,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
   const enabled = Boolean(linear) && auth.enabled();
   const diagnostics = (): LinearFeatureDiagnostics => ({
     linearAppConfigured: Boolean(linear),
-    webAuthEnabled: auth.enabled(),
+    factoryAuthEnabled: auth.enabled(),
     appDbConfigured: true,
   });
 

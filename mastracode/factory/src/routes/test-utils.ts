@@ -30,7 +30,7 @@ export interface TestAuthUser {
 }
 
 /**
- * A `RouteAuth` fake backed by a `webAuthUser` context variable, mirroring how
+ * A `RouteAuth` fake backed by a `factoryAuthUser` context variable, mirroring how
  * the web host resolves its signed-in user. Tests put a {@link TestAuthUser}
  * on the context (via middleware) and the fake derives the tenant from it.
  */
@@ -44,7 +44,7 @@ export function fakeRouteAuth(
 ): RouteAuth {
   const enabled = options.enabled ?? true;
   const isAdmin = options.isOrganizationAdmin ?? (async () => true);
-  const user = (c: Context): TestAuthUser | undefined => c.get('webAuthUser' as never) as TestAuthUser | undefined;
+  const user = (c: Context): TestAuthUser | undefined => c.get('factoryAuthUser' as never) as TestAuthUser | undefined;
   return {
     enabled: () => enabled,
     ensureUser: async c => user(c),

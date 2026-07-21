@@ -2,12 +2,12 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  getWebAuthOrgId,
-  getWebAuthUser,
-  getWebAuthUserId,
-  isWebAuthEnabled,
-  mountWebAuth,
-  webAuthTenant,
+  getFactoryAuthOrgId,
+  getFactoryAuthUser,
+  getFactoryAuthUserId,
+  isFactoryAuthEnabled,
+  mountFactoryAuth,
+  factoryAuthTenant,
 } from './auth.js';
 
 // Mock @mastra/auth-workos so the tests exercise the gating/routing logic in
@@ -69,29 +69,29 @@ afterEach(() => {
 /** Build a gated app where the protected catch-all returns 200 "ok". */
 function buildApp() {
   const app = new Hono();
-  const enabled = mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+  const enabled = mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
   app.get('*', c => c.text('ok'));
   app.post('*', c => c.text('ok'));
   return { app, enabled };
 }
 
-describe('isWebAuthEnabled', () => {
+describe('isFactoryAuthEnabled', () => {
   it('is false when env vars are missing', () => {
-    expect(isWebAuthEnabled()).toBe(false);
+    expect(isFactoryAuthEnabled()).toBe(false);
   });
 
   it('is false when only one env var is set', () => {
     process.env.WORKOS_API_KEY = 'sk_test';
-    expect(isWebAuthEnabled()).toBe(false);
+    expect(isFactoryAuthEnabled()).toBe(false);
   });
 
   it('is true when both env vars are set', () => {
     enableEnv();
-    expect(isWebAuthEnabled()).toBe(true);
+    expect(isFactoryAuthEnabled()).toBe(true);
   });
 });
 
-describe('mountWebAuth (disabled)', () => {
+describe('mountFactoryAuth (disabled)', () => {
   it('is a no-op and leaves routes ungated', async () => {
     const { app, enabled } = buildApp();
     expect(enabled).toBe(false);
@@ -102,7 +102,7 @@ describe('mountWebAuth (disabled)', () => {
   });
 });
 
-describe('mountWebAuth gate (enabled)', () => {
+describe('mountFactoryAuth gate (enabled)', () => {
   beforeEach(enableEnv);
 
   it('redirects unauthenticated HTML navigation to /signin with returnTo', async () => {
@@ -200,10 +200,10 @@ describe('mountWebAuth gate (enabled)', () => {
   it('stashes the authenticated user on the context for downstream routes', async () => {
     mockAuthenticate.mockResolvedValue({ workosId: 'user_123', email: 'user@example.com', name: 'User' });
     const app = new Hono();
-    mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
     app.get('/web/whoami', c => {
-      const user = getWebAuthUser(c);
-      return c.json({ userId: getWebAuthUserId(user) });
+      const user = getFactoryAuthUser(c);
+      return c.json({ userId: getFactoryAuthUserId(user) });
     });
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
@@ -212,7 +212,7 @@ describe('mountWebAuth gate (enabled)', () => {
   });
 });
 
-describe('mountWebAuth /auth routes (enabled)', () => {
+describe('mountFactoryAuth /auth routes (enabled)', () => {
   beforeEach(enableEnv);
 
   it('redirects /auth/login to the WorkOS login URL', async () => {
@@ -328,17 +328,17 @@ describe('mountWebAuth /auth routes (enabled)', () => {
 describe('org-tenant identity', () => {
   beforeEach(enableEnv);
 
-  it('getWebAuthOrgId reads the organization id from the user shape', () => {
-    expect(getWebAuthOrgId({ workosId: 'user_1', organizationId: 'org_a' })).toBe('org_a');
-    expect(getWebAuthOrgId({ workosId: 'user_1' })).toBeUndefined();
-    expect(getWebAuthOrgId(undefined)).toBeUndefined();
+  it('getFactoryAuthOrgId reads the organization id from the user shape', () => {
+    expect(getFactoryAuthOrgId({ workosId: 'user_1', organizationId: 'org_a' })).toBe('org_a');
+    expect(getFactoryAuthOrgId({ workosId: 'user_1' })).toBeUndefined();
+    expect(getFactoryAuthOrgId(undefined)).toBeUndefined();
   });
 
-  it('gate stashes organizationId and webAuthTenant returns { orgId, userId }', async () => {
+  it('gate stashes organizationId and factoryAuthTenant returns { orgId, userId }', async () => {
     mockAuthenticate.mockResolvedValue({ workosId: 'user_1', organizationId: 'org_a', email: 'u@e.com' });
     const app = new Hono();
-    mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
-    app.get('/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c) ?? { tenant: null }));
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
@@ -347,11 +347,11 @@ describe('org-tenant identity', () => {
     expect(mockEnsureOrganization).not.toHaveBeenCalled();
   });
 
-  it('gate bootstraps a no-org user so webAuthTenant yields the new org', async () => {
+  it('gate bootstraps a no-org user so factoryAuthTenant yields the new org', async () => {
     mockAuthenticate.mockResolvedValue({ workosId: 'user_boot', email: 'boot@example.com' });
     const app = new Hono();
-    mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
-    app.get('/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c) ?? { tenant: null }));
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
@@ -359,15 +359,15 @@ describe('org-tenant identity', () => {
     expect(mockEnsureOrganization).toHaveBeenCalledWith('user_boot');
   });
 
-  it('webAuthTenant omits orgId for personal (no-org) users but keeps userId', async () => {
+  it('factoryAuthTenant omits orgId for personal (no-org) users but keeps userId', async () => {
     // Bootstrap is best-effort: when org creation fails, the user genuinely
     // stays no-org, so the tenant must still expose a userId without an orgId.
     mockEnsureOrganization.mockResolvedValue(undefined as unknown as string);
     mockAuthenticate.mockResolvedValue({ workosId: 'user_solo', email: 'solo@e.com' });
     const app = new Hono();
-    mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
     app.get('/web/whoami', c => {
-      const tenant = webAuthTenant(c);
+      const tenant = factoryAuthTenant(c);
       return c.json({ orgId: tenant?.orgId ?? null, userId: tenant?.userId ?? null });
     });
 
@@ -380,9 +380,9 @@ describe('org-tenant identity', () => {
     mockEnsureOrganization.mockRejectedValue(new Error('workos unavailable'));
     mockAuthenticate.mockResolvedValue({ workosId: 'user_err', email: 'err@e.com' });
     const app = new Hono();
-    mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
     app.get('/web/whoami', c => {
-      const tenant = webAuthTenant(c);
+      const tenant = factoryAuthTenant(c);
       return c.json({ orgId: tenant?.orgId ?? null, userId: tenant?.userId ?? null });
     });
 

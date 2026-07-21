@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { listArtifacts, listWorkspaceRenderedPath, readWorkspaceFile } from './fs-routes.js';
+import { listArtifacts, listWorkspaceRenderedPath, readWorkspaceFile } from './fs.js';
 
 describe('listArtifacts', () => {
   it('returns an empty list when .artifacts does not exist', async () => {

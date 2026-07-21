@@ -24,7 +24,7 @@ import { getPublicUrl, getSeededAuthProvider, isRuntimeConfigSeeded } from './ru
  * redirected to the SPA's `/signin` page, API/XHR calls receive a 401, and a
  * small set of public routes stay reachable while signed out — the provider's
  * `/auth/*` routes plus `/auth/me`, the `/signin` page and its `/assets/*`
- * bundle. When no provider is active, `mountWebAuth` is a no-op and the server
+ * bundle. When no provider is active, `mountFactoryAuth` is a no-op and the server
  * behaves exactly as it does without auth.
  *
  * Provider specifics stay in the providers (`@mastra/auth-workos`,
@@ -39,7 +39,7 @@ import { getPublicUrl, getSeededAuthProvider, isRuntimeConfigSeeded } from './ru
  */
 
 /** Minimal shape of the signed-in user surfaced to the SPA (no tokens). */
-export interface WebAuthUser {
+export interface FactoryAuthUser {
   /** Stable WorkOS user id used to scope per-user data (GitHub installs etc.). */
   workosId?: string;
   /** Provider user id; WorkOS shapes may use `workosId` instead (see {@link workosId}). */
@@ -59,7 +59,7 @@ export interface WebAuthUser {
  * an isolated builder. Agent state, worktrees and sandboxes are scoped per
  * `(orgId, userId)`. Personal (no-org) users have `orgId === undefined`.
  */
-export interface WebAuthTenant {
+export interface FactoryAuthTenant {
   /** Organization id, or `undefined` for personal (no-org) accounts. */
   orgId?: string;
   /** Stable provider user id. */
@@ -97,29 +97,29 @@ export function isCrossSiteAuth(): boolean {
 }
 
 /** Hono context variables set by the auth gate. */
-export interface WebAuthVariables {
-  webAuthUser: WebAuthUser;
+export interface FactoryAuthVariables {
+  factoryAuthUser: FactoryAuthUser;
 }
 
 /** Context key under which the gate stashes the authenticated user. */
-const WEB_AUTH_USER_KEY = 'webAuthUser';
+const FACTORY_AUTH_USER_KEY = 'factoryAuthUser';
 
 /**
  * Read the authenticated user the gate stashed on the context, or
  * `undefined` when unauthenticated / auth disabled. Used by downstream routes
  * (e.g. GitHub) to scope rows per user.
  */
-export function getWebAuthUser(c: Context): WebAuthUser | undefined {
-  return c.get(WEB_AUTH_USER_KEY) as WebAuthUser | undefined;
+export function getFactoryAuthUser(c: Context): FactoryAuthUser | undefined {
+  return c.get(FACTORY_AUTH_USER_KEY) as FactoryAuthUser | undefined;
 }
 
 /** Resolve the stable user id from an authenticated user shape. */
-export function getWebAuthUserId(user: WebAuthUser | undefined): string | undefined {
+export function getFactoryAuthUserId(user: FactoryAuthUser | undefined): string | undefined {
   return user?.workosId ?? user?.id;
 }
 
 /** Resolve the organization id from a user shape, if present. */
-export function getWebAuthOrgId(user: WebAuthUser | undefined): string | undefined {
+export function getFactoryAuthOrgId(user: FactoryAuthUser | undefined): string | undefined {
   return user?.organizationId;
 }
 
@@ -130,11 +130,11 @@ export function getWebAuthOrgId(user: WebAuthUser | undefined): string | undefin
  * callers gate org-scoped GitHub features on its presence while agent state
  * falls back to a user-only tenant.
  */
-export function webAuthTenant(c: Context): WebAuthTenant | undefined {
-  const user = getWebAuthUser(c);
-  const userId = getWebAuthUserId(user);
+export function factoryAuthTenant(c: Context): FactoryAuthTenant | undefined {
+  const user = getFactoryAuthUser(c);
+  const userId = getFactoryAuthUserId(user);
   if (!userId) return undefined;
-  return { orgId: getWebAuthOrgId(user), userId };
+  return { orgId: getFactoryAuthOrgId(user), userId };
 }
 
 /** True when both WorkOS credential env vars are present (legacy env gate). */
@@ -146,7 +146,7 @@ function envWorkosConfigured(): boolean {
  * Module-level provider used when the factory never seeded the registry but
  * the WorkOS env vars are set — back-compat for modules and test suites
  * exercised without booting the factory (route suites set `WORKOS_*`
- * directly). Kept module-level so callers outside `mountWebAuth` — such as the
+ * directly). Kept module-level so callers outside `mountFactoryAuth` — such as the
  * GitHub routes, which are mounted on a separate sub-app — reuse one provider.
  */
 let envFallbackProvider: MastraAuthWorkos | undefined;
@@ -157,7 +157,7 @@ let envFallbackProvider: MastraAuthWorkos | undefined;
  * otherwise a WorkOS provider implied by the `WORKOS_*` env vars (back-compat;
  * slated for removal once all consumers seed the registry).
  */
-export function getActiveWebAuthProvider(): IMastraAuthProvider | undefined {
+export function getActiveFactoryAuthProvider(): IMastraAuthProvider | undefined {
   if (isRuntimeConfigSeeded()) return getSeededAuthProvider();
   if (!envWorkosConfigured()) return undefined;
   // `fetchMemberships: true` lets `authenticateToken` resolve `organizationId`
@@ -171,8 +171,8 @@ export function getActiveWebAuthProvider(): IMastraAuthProvider | undefined {
 }
 
 /** Web auth is enabled when a provider is active. */
-export function isWebAuthEnabled(): boolean {
-  return getActiveWebAuthProvider() !== undefined;
+export function isFactoryAuthEnabled(): boolean {
+  return getActiveFactoryAuthProvider() !== undefined;
 }
 
 /**
@@ -184,7 +184,7 @@ export function isWebAuthEnabled(): boolean {
  * - session-shaped results (better-auth `BetterAuthUser`): `{ session, user }`
  *   with the active org on the session.
  */
-function toWebAuthUser(result: unknown): WebAuthUser | null {
+function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
   if (!result || typeof result !== 'object') return null;
   const record = result as Record<string, unknown>;
 
@@ -229,10 +229,10 @@ async function authenticateRequest(
   provider: IMastraAuthProvider,
   token: string,
   raw: Request,
-): Promise<WebAuthUser | null> {
+): Promise<FactoryAuthUser | null> {
   try {
     const result = await provider.authenticateToken(token, raw);
-    return toWebAuthUser(result);
+    return toFactoryAuthUser(result);
   } catch {
     return null;
   }
@@ -246,10 +246,10 @@ async function authenticateRequest(
  * Best-effort: providers swallow their own bootstrap failures, and any
  * unexpected throw leaves the user no-org.
  */
-async function ensureUserOrg(provider: IMastraAuthProvider, user: WebAuthUser): Promise<void> {
-  if (getWebAuthOrgId(user)) return;
+async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUser): Promise<void> {
+  if (getFactoryAuthOrgId(user)) return;
   if (!isOrganizationsProvider(provider)) return;
-  const userId = getWebAuthUserId(user);
+  const userId = getFactoryAuthUserId(user);
   if (!userId) return;
   try {
     const orgId = await provider.ensureOrganization(userId);
@@ -279,12 +279,12 @@ function providerClearCookies(provider: IMastraAuthProvider): string[] {
  * explicitly confirm an admin/owner role.
  */
 export async function isOrganizationAdmin(c: Context, organizationId: string): Promise<boolean> {
-  const user = await ensureWebAuthUser(c);
-  const provider = getActiveWebAuthProvider();
+  const user = await ensureFactoryAuthUser(c);
+  const provider = getActiveFactoryAuthProvider();
   if (!user || user.organizationId !== organizationId || !provider || !isOrganizationsProvider(provider)) {
     return false;
   }
-  const userId = getWebAuthUserId(user);
+  const userId = getFactoryAuthUserId(user);
   if (!userId) return false;
   try {
     return await provider.isOrganizationAdmin(organizationId, userId);
@@ -299,25 +299,25 @@ export async function isOrganizationAdmin(c: Context, organizationId: string): P
  * web auth module directly.
  */
 export const factoryRouteAuth: RouteAuth = {
-  enabled: () => isWebAuthEnabled(),
-  ensureUser: (c: Context) => ensureWebAuthUser(c),
-  tenant: (c: Context) => webAuthTenant(c),
+  enabled: () => isFactoryAuthEnabled(),
+  ensureUser: (c: Context) => ensureFactoryAuthUser(c),
+  tenant: (c: Context) => factoryAuthTenant(c),
   isOrganizationAdmin: (c: Context, organizationId: string) => isOrganizationAdmin(c, organizationId),
 };
 
 /** True when the active provider is WorkOS. Gates WorkOS-only capabilities. */
 export function isWorkOSAuth(): boolean {
-  return getActiveWebAuthProvider() instanceof MastraAuthWorkos;
+  return getActiveFactoryAuthProvider() instanceof MastraAuthWorkos;
 }
 
 /**
  * Shared WorkOS auth provider, exposed for features that need the raw WorkOS
  * client (audit-log export, Admin Portal links). Callers must gate on
- * {@link isWorkOSAuth} (or {@link isWebAuthEnabled} on WorkOS-only deploys)
+ * {@link isWorkOSAuth} (or {@link isFactoryAuthEnabled} on WorkOS-only deploys)
  * first — throws when the active provider is not WorkOS.
  */
 export function getWorkOSProvider(): MastraAuthWorkos {
-  const provider = getActiveWebAuthProvider();
+  const provider = getActiveFactoryAuthProvider();
   if (provider instanceof MastraAuthWorkos) return provider;
   throw new Error('WorkOS provider requested but the active web auth provider is not WorkOS');
 }
@@ -330,14 +330,14 @@ export function getWorkOSProvider(): MastraAuthWorkos {
  * GitHub connect/callback flow) arrive without a gate-stashed user. This reads
  * the session cookie from the raw request the same way `/auth/me` does,
  * caches the result on the context, and returns it so downstream helpers like
- * {@link webAuthTenant} work uniformly on both gated and public routes.
+ * {@link factoryAuthTenant} work uniformly on both gated and public routes.
  *
  * Returns `undefined` when there is no valid session (or auth is disabled).
  */
-export async function ensureWebAuthUser(c: Context): Promise<WebAuthUser | undefined> {
-  const existing = getWebAuthUser(c);
+export async function ensureFactoryAuthUser(c: Context): Promise<FactoryAuthUser | undefined> {
+  const existing = getFactoryAuthUser(c);
   if (existing) return existing;
-  const provider = getActiveWebAuthProvider();
+  const provider = getActiveFactoryAuthProvider();
   if (!provider) return undefined;
 
   const token = getBearerToken(c.req.header('Authorization'));
@@ -346,11 +346,11 @@ export async function ensureWebAuthUser(c: Context): Promise<WebAuthUser | undef
 
   await ensureUserOrg(provider, user);
 
-  c.set(WEB_AUTH_USER_KEY, user);
+  c.set(FACTORY_AUTH_USER_KEY, user);
   return user;
 }
 
-export interface MountWebAuthOptions {
+export interface MountFactoryAuthOptions {
   /**
    * Absolute URL the identity provider redirects back to after login (WorkOS
    * env-fallback path only). Defaults to the `WORKOS_REDIRECT_URI` env var.
@@ -390,7 +390,12 @@ async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<
   await ensureUserOrg(provider, user);
   return c.json({
     authenticated: true,
-    user: { userId: getWebAuthUserId(user), email: user.email, name: user.name, organizationId: user.organizationId },
+    user: {
+      userId: getFactoryAuthUserId(user),
+      email: user.email,
+      name: user.name,
+      organizationId: user.organizationId,
+    },
     ...meta,
   });
 }
@@ -575,7 +580,7 @@ function providerAuthRoutes(provider: IMastraAuthProvider): AuthRouteSpec[] {
 /**
  * Register the public `/auth/*` routes on a Hono app: the capability-derived
  * provider routes (login/callback/logout/provider APIs) plus the
- * provider-neutral `/auth/me`. Split out from `mountWebAuth` so both the local
+ * provider-neutral `/auth/me`. Split out from `mountFactoryAuth` so both the local
  * Hono server and the platform Mastra entry can reuse the exact same handlers.
  */
 export function registerAuthRoutes(app: Hono<any>, provider: IMastraAuthProvider): void {
@@ -623,7 +628,7 @@ export function buildAuthRoutes(provider: IMastraAuthProvider): ApiRoute[] {
  * everything that is not a public `/auth/*` route: authenticated requests stash
  * the user on the context and continue; unauthenticated navigations redirect to
  * login and XHR/API calls get a 401 JSON. Shared by the local Hono server
- * (`mountWebAuth`) and the platform Mastra entry (`server.middleware`).
+ * (`mountFactoryAuth`) and the platform Mastra entry (`server.middleware`).
  */
 export function createFactoryAuthGate(provider: IMastraAuthProvider) {
   return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
@@ -645,9 +650,9 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
 
     if (user) {
       // Bootstrap a personal org for no-org accounts so the org id resolves on
-      // this request (see ensureWebAuthUser for the rationale).
+      // this request (see ensureFactoryAuthUser for the rationale).
       await ensureUserOrg(provider, user);
-      c.set(WEB_AUTH_USER_KEY, user);
+      c.set(FACTORY_AUTH_USER_KEY, user);
       c.get('requestContext')?.set('user', user);
       return next();
     }
@@ -671,7 +676,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
  * `registerAuthRoutes` + `createFactoryAuthGate` factories so the local Hono server
  * and the platform Mastra entry stay behavior-identical.
  */
-export function mountWebAuth(app: Hono<any>, options: MountWebAuthOptions = {}): boolean {
+export function mountFactoryAuth(app: Hono<any>, options: MountFactoryAuthOptions = {}): boolean {
   let provider: IMastraAuthProvider | undefined;
   if (isRuntimeConfigSeeded()) {
     provider = getSeededAuthProvider();

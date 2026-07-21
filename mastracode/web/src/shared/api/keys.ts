@@ -7,7 +7,7 @@
  * unambiguous.
  */
 export const queryKeys = {
-  webAuth: () => ['web-auth'] as const,
+  factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,

@@ -363,7 +363,13 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
   function buildApp(workosId: string) {
     const app = new Hono();
     app.use('*', async (c, next) => {
-      (c as any).set('webAuthUser', { id: workosId, workosId, organizationId: 'org1', name: 'Test', email: 't@e.co' });
+      (c as any).set('factoryAuthUser', {
+        id: workosId,
+        workosId,
+        organizationId: 'org1',
+        name: 'Test',
+        email: 't@e.co',
+      });
       await next();
     });
     mountApiRoutes(app as any, buildGithubRoutes({ github: githubStub, stateSigner, auth: fakeRouteAuth(), fleet }));

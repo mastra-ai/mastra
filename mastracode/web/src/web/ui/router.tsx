@@ -2,7 +2,7 @@
  * SPA route table (React Router v7, data mode).
  *
  * Auth gating happens in React layout components, not loaders: `RequireAuth`
- * wraps the app routes and reads `/auth/me` through the `useWebAuth` custom
+ * wraps the app routes and reads `/auth/me` through the `useFactoryAuth` custom
  * React Query hook (shared cache key with the rest of the UI), redirecting
  * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
@@ -13,7 +13,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { createBrowserRouter, Navigate, Outlet, useLocation, useSearchParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import { safeReturnTo, SignInPage, useWebAuth } from './domains/auth';
+import { safeReturnTo, SignInPage, useFactoryAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
@@ -47,7 +47,7 @@ function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string })
  * flashes protected content nor bounces through /signin on refresh.
  */
 function RequireAuth() {
-  const auth = useWebAuth();
+  const auth = useFactoryAuth();
   const location = useLocation();
   if (auth.isPending) return <AuthPendingSkeleton />;
   const state = auth.data;
@@ -60,7 +60,7 @@ function RequireAuth() {
 
 /** Inverse guard for /signin: only unauthenticated (auth-enabled) users stay. */
 function SignInGate() {
-  const auth = useWebAuth();
+  const auth = useFactoryAuth();
   const [searchParams] = useSearchParams();
   if (auth.isPending) return <AuthPendingSkeleton />;
   const state = auth.data;

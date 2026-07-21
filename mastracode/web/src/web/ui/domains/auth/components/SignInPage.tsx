@@ -8,7 +8,7 @@ import type { FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
+import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
 import { navigateAfterSignIn, redirectToLogin, signInWithPassword, signUpWithPassword } from '../services/auth';
 
 /**
@@ -137,7 +137,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
  */
 export function SignInPage() {
   const { baseUrl } = useApiConfig();
-  const auth = useWebAuth();
+  const auth = useFactoryAuth();
   const [searchParams] = useSearchParams();
   const [redirecting, setRedirecting] = useState(false);
   const returnTo = safeReturnTo(searchParams.get('returnTo')?.toString());

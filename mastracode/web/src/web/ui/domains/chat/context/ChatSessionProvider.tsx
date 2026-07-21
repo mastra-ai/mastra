@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
+import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
 import { SkeletonRows } from '../../../ui';
 import { userSessionResourceId } from '../../auth/services/auth';
 import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
@@ -38,7 +38,7 @@ export function ChatSessionConfigProvider({
   userScoped?: boolean;
 }) {
   const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
-  const auth = useWebAuth();
+  const auth = useFactoryAuth();
   const { baseUrl } = useApiConfig();
   const projectPath = deriveProjectPath(activeFactory);
   const userSession = userScoped && threadId ? findUserSessionByThreadId(threadId) : undefined;

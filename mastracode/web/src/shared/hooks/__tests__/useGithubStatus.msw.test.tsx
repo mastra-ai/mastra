@@ -105,7 +105,7 @@ describe('useGithubStatusQuery', () => {
       reason: 'missing_config',
       diagnostics: {
         githubAppConfigured: false,
-        webAuthEnabled: true,
+        factoryAuthEnabled: true,
         appDbConfigured: true,
         stateSecretConfigured: true,
         sandboxEnabled: true,

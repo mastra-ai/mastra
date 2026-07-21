@@ -12,10 +12,10 @@ import type { FactoryIntegration, IntegrationContext } from '@mastra/factory/int
 import { getGithubFeatureDiagnostics } from '@mastra/factory/integrations/github/config';
 import type { SandboxFleet } from '@mastra/factory/sandbox/fleet';
 import { WorkItemRoutes } from '@mastra/factory/routes/work-items';
-import { buildFsRoutes } from './fs-routes.js';
+import { buildFsRoutes } from '@mastra/factory/routes/fs';
 import { IntakeRoutes } from '@mastra/factory/routes/intake';
 import { OAuthRoutes } from '@mastra/factory/routes/oauth';
-import { buildSkillRoutes } from './skills/routes.js';
+import { SkillRoutes } from '@mastra/factory/routes/skills';
 import type { StateSigner } from '@mastra/factory/state-signing';
 import { invalidateTenantCredentialSnapshots } from '@mastra/factory/routes/tenant-credentials';
 import { ConfigRoutes } from '@mastra/factory/routes/config';
@@ -185,7 +185,7 @@ function disabledIntegrationStatusRoutes(deps: WebApiRoutesDeps, id: string, con
             reason: 'missing_config',
             diagnostics: {
               linearAppConfigured: configured,
-              webAuthEnabled: factoryRouteAuth.enabled(),
+              factoryAuthEnabled: factoryRouteAuth.enabled(),
               appDbConfigured: true,
             },
           }),
@@ -234,12 +234,13 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
       modelCredentials: deps.domains.modelCredentials,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
-    ...buildSkillRoutes({
+    ...new SkillRoutes({
+      auth: factoryRouteAuth,
       controllerId: deps.controllerId,
       controller: deps.controller,
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
-    }),
+    }).routes(),
     ...integrationRoutes,
     ...absentStubs,
     ...(deps.intakeReady

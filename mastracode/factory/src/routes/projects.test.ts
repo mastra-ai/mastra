@@ -19,7 +19,7 @@ describe('ProjectRoutes', () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed));
@@ -57,7 +57,7 @@ describe('ProjectRoutes', () => {
     const buildApp = (user?: { workosId: string; organizationId?: string }) => {
       const app = new Hono();
       app.use('*', async (context, next) => {
-        if (user) context.set('webAuthUser' as never, user as never);
+        if (user) context.set('factoryAuthUser' as never, user as never);
         await next();
       });
       mountApiRoutes(app as never, projectRoutes(seed));
@@ -109,7 +109,7 @@ describe('ProjectRoutes', () => {
     });
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed, ['github', 'gitlab']));
@@ -198,7 +198,7 @@ describe('ProjectRoutes', () => {
     });
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed, ['github']));
@@ -241,7 +241,7 @@ describe('ProjectRoutes', () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed));

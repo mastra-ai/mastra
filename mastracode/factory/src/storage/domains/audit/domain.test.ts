@@ -86,7 +86,7 @@ describe('AuditDomain', () => {
     const domain = auditDomain(seed);
     const app = new Hono();
     app.post('/emit', async c => {
-      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await domain.emit({
         context: c,
         input: {
@@ -132,7 +132,7 @@ describe('AuditDomain', () => {
     const buildApp = (domain: AuditDomain, user?: { workosId: string; organizationId?: string }) => {
       const app = new Hono();
       app.use('*', async (c, next) => {
-        if (user) c.set('webAuthUser' as never, user as never);
+        if (user) c.set('factoryAuthUser' as never, user as never);
         await next();
       });
       mountApiRoutes(app as never, domain.routes());
@@ -171,7 +171,7 @@ describe('AuditDomain', () => {
     const list = vi.spyOn(domain, 'list').mockResolvedValue({ events: [], nextCursor: undefined });
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, domain.routes());

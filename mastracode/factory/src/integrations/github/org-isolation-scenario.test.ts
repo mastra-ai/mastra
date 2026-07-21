@@ -33,7 +33,7 @@ let bootstrapSucceeds = true;
 const testAuth: RouteAuth = {
   enabled: () => true,
   ensureUser: async (c: any) => {
-    const existing = c.get('webAuthUser');
+    const existing = c.get('factoryAuthUser');
     if (existing) return existing;
     if (!cookieUser) return undefined;
     const u = cookieUser;
@@ -41,11 +41,11 @@ const testAuth: RouteAuth = {
     // create fails, the user stays no-org and the org gate still fires.
     const organizationId = u.organizationId ?? (bootstrapSucceeds ? `org-personal-${u.workosId}` : undefined);
     const resolved: { workosId: string; organizationId?: string } = { workosId: u.workosId, organizationId };
-    c.set('webAuthUser', resolved);
+    c.set('factoryAuthUser', resolved);
     return resolved;
   },
   tenant: (c: any) => {
-    const u = c.get('webAuthUser') as { workosId: string; organizationId?: string } | undefined;
+    const u = c.get('factoryAuthUser') as { workosId: string; organizationId?: string } | undefined;
     return u ? { orgId: u.organizationId, userId: u.workosId } : undefined;
   },
   isOrganizationAdmin: async () => true,
@@ -348,7 +348,7 @@ sandboxesRef = githubProjectSandboxes;
 function buildApp(user: { workosId: string; organizationId?: string } | null) {
   const app = new Hono();
   app.use('*', async (c, next) => {
-    if (user) c.set('webAuthUser' as never, user as never);
+    if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
   mountApiRoutes(
@@ -604,7 +604,7 @@ describe('install flow binds the installation to the org', () => {
 
 // ── Personal-org bootstrap: no-org cookie connect reaches install ─────────
 // A user who signs in with no WorkOS organization used to dead-end at the org
-// gate (`organization_required`). With bootstrap, `ensureWebAuthUser` gives the
+// gate (`organization_required`). With bootstrap, `ensureFactoryAuthUser` gives the
 // personal account an org on first authenticated use, so a cookie-only
 // navigation to `/auth/github/connect` redirects to the GitHub App install with
 // the bootstrapped org encoded in the signed state — not a 403.

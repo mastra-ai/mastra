@@ -449,25 +449,25 @@ vi.mock('./config', () => ({
 }));
 
 // RouteAuth fake mirroring the web host: the harness middleware stashes a
-// `webAuthUser` on the context, and `ensureUser` additionally simulates
+// `factoryAuthUser` on the context, and `ensureUser` additionally simulates
 // cookie-based session resolution (`cookieUser`) the same way production
 // resolves a session cookie before scoping the tenant.
 let cookieUser: { workosId: string; organizationId?: string } | null = null;
 const testAuth: RouteAuth = {
   enabled: () => true,
   ensureUser: async (c: any) => {
-    const existing = c.get('webAuthUser');
+    const existing = c.get('factoryAuthUser');
     if (existing) return existing;
     if (!cookieUser) return undefined;
     const withOrg: { workosId: string; organizationId?: string } = {
       workosId: cookieUser.workosId,
       organizationId: cookieUser.organizationId ?? 'org1',
     };
-    c.set('webAuthUser', withOrg);
+    c.set('factoryAuthUser', withOrg);
     return withOrg;
   },
   tenant: (c: any) => {
-    const u = c.get('webAuthUser') as { workosId: string; organizationId?: string } | undefined;
+    const u = c.get('factoryAuthUser') as { workosId: string; organizationId?: string } | undefined;
     return u ? { orgId: u.organizationId, userId: u.workosId } : undefined;
   },
   isOrganizationAdmin: async () => true,
@@ -580,7 +580,7 @@ function buildApp(
       // Default to an organization so org-scoped GitHub features are enabled;
       // tests that need a personal (no-org) account pass `organizationId` null.
       const withOrg = 'organizationId' in user ? user : { ...user, organizationId: 'org1' };
-      c.set('webAuthUser' as never, withOrg as never);
+      c.set('factoryAuthUser' as never, withOrg as never);
     }
     await next();
   });
@@ -596,7 +596,7 @@ function buildApp(
       emitAudit: async ({ context, input }) => {
         try {
           if (auditFailure) throw auditFailure;
-          const tenant = (context as any).get('webAuthUser');
+          const tenant = (context as any).get('factoryAuthUser');
           if (!tenant?.organizationId) return;
           auditRecorded.push({
             orgId: tenant.organizationId,
@@ -981,7 +981,7 @@ describe('auth scoping', () => {
 
   // Platform-adapter topology: custom apiRoutes run on an isolated sub-app
   // context where the outer gate's stashed user is invisible. The routes must
-  // resolve the session cookie themselves (ensureWebAuthUser), not rely on the
+  // resolve the session cookie themselves (ensureFactoryAuthUser), not rely on the
   // gate's c.set(...).
   describe('without the gate (isolated custom-route context)', () => {
     it('status resolves the session from the cookie', async () => {
@@ -1042,7 +1042,7 @@ describe('connect + callback', () => {
     // A top-level browser navigation to /auth/github/connect carries only the
     // session cookie — no Authorization header — and the auth gate skips
     // `/auth/*`, so no user is stashed up front. The route must still resolve
-    // the session (via ensureWebAuthUser) and redirect to install, not 401.
+    // the session (via ensureFactoryAuthUser) and redirect to install, not 401.
     cookieUser = { workosId: 'u1' };
     const res = await buildApp(null).request('/auth/github/connect');
     expect(res.status).toBe(302);

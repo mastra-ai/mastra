@@ -12,7 +12,7 @@ const audit: AuditEmitter = {
   async emit({ context, input }) {
     try {
       if (auditFailure) throw auditFailure;
-      const user = context.get('webAuthUser' as never) as { workosId: string; organizationId?: string } | undefined;
+      const user = context.get('factoryAuthUser' as never) as { workosId: string; organizationId?: string } | undefined;
       if (!user?.organizationId) return;
       auditRecorded.push({
         orgId: user.organizationId,
@@ -40,7 +40,7 @@ import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work
 function buildApp(user: { workosId: string; organizationId?: string } | null) {
   const app = new Hono();
   app.use('*', async (c, next) => {
-    if (user) c.set('webAuthUser' as never, user as never);
+    if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
   mountApiRoutes(

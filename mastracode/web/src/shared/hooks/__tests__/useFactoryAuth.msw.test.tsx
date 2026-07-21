@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
-import { useWebAuth } from '../useWebAuth';
+import { useFactoryAuth } from '../useFactoryAuth';
 
 const AUTH_ME_URL = `${TEST_BASE_URL}/auth/me`;
 
@@ -21,14 +21,14 @@ afterEach(() => {
   delete window.__MASTRACODE_CONFIG__;
 });
 
-describe('useWebAuth', () => {
+describe('useFactoryAuth', () => {
   describe('given the server injected authEnabled: false', () => {
     it('resolves the disabled state without touching the network', async () => {
       window.__MASTRACODE_CONFIG__ = { authEnabled: false };
       // No `/auth/me` handler registered: any fetch would trip MSW's
       // onUnhandledRequest: 'error' and fail this test.
 
-      const { result, client } = renderHookWithProviders(() => useWebAuth());
+      const { result, client } = renderHookWithProviders(() => useFactoryAuth());
 
       await waitFor(() => expect(result.current.data).toBeDefined());
       expect(result.current.data).toEqual({ authEnabled: false, authenticated: false });
@@ -45,7 +45,7 @@ describe('useWebAuth', () => {
         ),
       );
 
-      const { result } = renderHookWithProviders(() => useWebAuth());
+      const { result } = renderHookWithProviders(() => useFactoryAuth());
 
       await waitFor(() => expect(result.current.data).toBeDefined());
       expect(result.current.data).toEqual({
@@ -59,7 +59,7 @@ describe('useWebAuth', () => {
       window.__MASTRACODE_CONFIG__ = { authEnabled: true };
       server.use(http.get(AUTH_ME_URL, () => HttpResponse.json({ error: 'unauthenticated' }, { status: 401 })));
 
-      const { result } = renderHookWithProviders(() => useWebAuth());
+      const { result } = renderHookWithProviders(() => useFactoryAuth());
 
       await waitFor(() => expect(result.current.data).toBeDefined());
       expect(result.current.data).toEqual({ authEnabled: true, authenticated: false });
@@ -76,7 +76,7 @@ describe('useWebAuth', () => {
         }),
       );
 
-      const { result } = renderHookWithProviders(() => useWebAuth());
+      const { result } = renderHookWithProviders(() => useFactoryAuth());
 
       await waitFor(() => expect(result.current.data).toBeDefined());
       expect(result.current.data).toEqual({ authEnabled: false, authenticated: false });

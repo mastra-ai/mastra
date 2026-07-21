@@ -18,7 +18,7 @@ import type {
   WorkspaceFile,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
-} from '../../web/fs-routes.js';
+} from '@mastra/factory/routes/fs';
 
 export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo };
 export type {
