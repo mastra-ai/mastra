@@ -22,6 +22,7 @@ import { ScorerDefinitionsMySQL } from './domains/scorer-definitions';
 import { ScoresMySQL } from './domains/scores';
 import { SkillsMySQL } from './domains/skills';
 import { ToolProviderConnectionsMySQL } from './domains/tool-provider-connections';
+import { WorkflowDefinitionsMySQL } from './domains/workflow-definitions';
 import { WorkflowsMySQL } from './domains/workflows';
 import { WorkspacesMySQL } from './domains/workspaces';
 
@@ -46,6 +47,7 @@ export {
   SkillsMySQL,
   ToolProviderConnectionsMySQL,
   WorkflowsMySQL,
+  WorkflowDefinitionsMySQL,
   WorkspacesMySQL,
 };
 
@@ -309,6 +311,11 @@ export class MySQLStore extends MastraCompositeStore {
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
     });
+    const workflowDefinitions = new WorkflowDefinitionsMySQL({
+      pool: this.pool,
+      operations,
+      database,
+    });
 
     this.stores = {
       memory,
@@ -330,6 +337,7 @@ export class MySQLStore extends MastraCompositeStore {
       favorites,
       schedules,
       toolProviderConnections,
+      workflowDefinitions,
     };
   }
 
@@ -366,6 +374,7 @@ const ALL_DOMAINS = [
   PromptBlocksMySQL,
   AgentsMySQL,
   WorkflowsMySQL,
+  WorkflowDefinitionsMySQL,
   DatasetsMySQL,
   ExperimentsMySQL,
   BackgroundTasksMySQL,
