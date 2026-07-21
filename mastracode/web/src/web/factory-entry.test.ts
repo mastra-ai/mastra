@@ -44,6 +44,16 @@ vi.mock('@mastra/code-sdk', () => ({
   prepareAgentControllerMount: (config: Record<string, unknown>) => prepareMock(config),
 }));
 
+// Keep the real tenant-credentials module but spy on the registration so tests
+// can assert whether the factory registers the per-tenant resolver. Registering
+// in local/auth-disabled mode would force model calls through an empty tenant
+// store and break chat with "Not logged in", so the factory must gate it.
+const registerTenantCredentialResolverMock = vi.fn();
+vi.mock('./tenant-credentials.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('./tenant-credentials.js')>();
+  return { ...actual, registerTenantCredentialResolver: () => registerTenantCredentialResolverMock() };
+});
+
 /** An SSO-shaped fake provider: gets the hosted-login `/auth/*` routes. */
 function fakeProvider(
   overrides: Record<string, unknown> = {},
@@ -268,6 +278,23 @@ describe('MastraFactory.prepare', () => {
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
     expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
+  });
+
+  it('registers the per-tenant credential resolver when auth is configured', async () => {
+    registerTenantCredentialResolverMock.mockClear();
+    await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
+    expect(registerTenantCredentialResolverMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the per-tenant credential resolver when auth is disabled (auth: null)', async () => {
+    // With no auth adapter there is no authenticated tenant. Registering the
+    // resolver would route every model call through an empty tenant store
+    // (fail-closed, no env fallback) and break local chat with "Not logged in".
+    // Leaving it unregistered lets the SDK fall back to the file-backed
+    // AuthStorage (auth.json) — the store the local /login + Settings use.
+    registerTenantCredentialResolverMock.mockClear();
+    await prepareFactory({ storage: fakeStorage(), auth: null });
+    expect(registerTenantCredentialResolverMock).not.toHaveBeenCalled();
   });
 
   it('defaults to MastraAuthStudio when no auth is configured', async () => {
