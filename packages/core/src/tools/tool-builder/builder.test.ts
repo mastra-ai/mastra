@@ -769,4 +769,132 @@ describe('CoreToolBuilder requestContext merge', () => {
     // With no exec RC, closure RC is used directly
     expect(receivedCtx.requestContext!.get('controller')).toEqual({ controllerId: 'c-1' });
   });
+
+  // Same public API as RequestContext but a different prototype — simulates an
+  // RC constructed by a duplicate @mastra/core copy (bundlers, monorepos),
+  // where `instanceof RequestContext` is false (#19772).
+  class ForeignRequestContext {
+    private map = new Map<string, unknown>();
+    set(key: string, value: unknown) {
+      this.map.set(key, value);
+    }
+    get(key: string) {
+      return this.map.get(key);
+    }
+    has(key: string) {
+      return this.map.has(key);
+    }
+    entries() {
+      return this.map.entries();
+    }
+    size() {
+      return this.map.size;
+    }
+  }
+
+  it('uses a foreign-copy exec requestContext when no closure requestContext is provided', async () => {
+    const foreignRC = new ForeignRequestContext();
+    foreignRC.set('exec-key', 'exec-value');
+    expect(foreignRC instanceof RequestContext).toBe(false);
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'test_tool',
+      description: 'Test',
+      inputSchema: z.object({}),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'test_tool',
+        logger: noopLogger,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({}, { toolCallId: 'call-1', messages: [], requestContext: foreignRC as any });
+
+    expect(receivedCtx.requestContext!.get('exec-key')).toBe('exec-value');
+  });
+
+  it('merges a foreign-copy exec requestContext with the closure requestContext', async () => {
+    const closureRC = new RequestContext();
+    closureRC.set('shared-key', 'from-closure');
+    closureRC.set('closure-only-key', 'closure-only');
+
+    const foreignRC = new ForeignRequestContext();
+    foreignRC.set('shared-key', 'from-exec');
+    foreignRC.set('exec-only-key', 42);
+    expect(foreignRC instanceof RequestContext).toBe(false);
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'test_tool',
+      description: 'Test',
+      inputSchema: z.object({}),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'test_tool',
+        logger: noopLogger,
+        requestContext: closureRC,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({}, { toolCallId: 'call-1', messages: [], requestContext: foreignRC as any });
+
+    const merged = receivedCtx.requestContext!;
+    // Exec-only entries from the foreign copy are preserved
+    expect(merged.get('exec-only-key')).toBe(42);
+    // Closure value wins for shared keys (merge semantics unchanged)
+    expect(merged.get('shared-key')).toBe('from-closure');
+    expect(merged.get('closure-only-key')).toBe('closure-only');
+  });
+
+  it('passes a same-copy exec requestContext through by identity when no closure RC exists', async () => {
+    const execRC = new RequestContext();
+    execRC.set('exec-key', 'exec-value');
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'test_tool',
+      description: 'Test',
+      inputSchema: z.object({}),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'test_tool',
+        logger: noopLogger,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({}, { toolCallId: 'call-1', messages: [], requestContext: execRC });
+
+    expect(receivedCtx.requestContext).toBe(execRC);
+  });
 });
