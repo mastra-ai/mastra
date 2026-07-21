@@ -117,6 +117,7 @@ function delayedSse(event: AgentControllerEvent) {
     );
   return {
     response,
+    ready,
     emit: () =>
       ready.then(() => {
         pending = true;
@@ -338,6 +339,8 @@ describe('MastraCode message rendering', () => {
     renderChat();
 
     expect(await screen.findByRole('group', { name: 'Tool: view' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Tool: task_write' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Tool: task_check' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /expand all/i })).not.toBeInTheDocument();
   });
 
@@ -601,7 +604,7 @@ describe('MastraCode message rendering', () => {
       renderChat();
 
       await screen.findByRole('button', { name: 'Select factory' });
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await stream.ready;
       expect(screen.queryByPlaceholderText('Type your answer...')).not.toBeInTheDocument();
       expect(screen.queryByRole('group', { name: 'Question from the agent' })).not.toBeInTheDocument();
 

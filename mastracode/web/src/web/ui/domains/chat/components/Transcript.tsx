@@ -381,9 +381,11 @@ function ToolCard({
 
 function ApprovalCard({
   prompt,
+  isSubmitting,
   onApprove,
 }: {
   prompt: ApprovalPrompt;
+  isSubmitting: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
 }) {
   return (
@@ -398,6 +400,7 @@ function ApprovalCard({
           size="sm"
           aria-label={`Approve ${prompt.toolName}`}
           autoFocus
+          disabled={isSubmitting}
           onClick={() => onApprove(prompt.toolCallId, true, prompt.id)}
         >
           Approve
@@ -405,6 +408,7 @@ function ApprovalCard({
         <Button
           size="sm"
           aria-label={`Decline ${prompt.toolName}`}
+          disabled={isSubmitting}
           onClick={() => onApprove(prompt.toolCallId, false, prompt.id)}
         >
           Decline
@@ -459,9 +463,11 @@ function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
 
 function SuspensionCard({
   prompt,
+  isSubmitting,
   onRespond,
 }: {
   prompt: SuspensionPrompt;
+  isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const payload = suspensionPayloadShape(prompt.suspendPayload);
@@ -481,6 +487,7 @@ function SuspensionCard({
             size="sm"
             aria-label="Approve the plan and switch to build"
             autoFocus
+            disabled={isSubmitting}
             onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
           >
             Approve &amp; build
@@ -488,6 +495,7 @@ function SuspensionCard({
           <Button
             size="sm"
             aria-label="Reject the plan"
+            disabled={isSubmitting}
             onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
           >
             Reject
@@ -508,6 +516,7 @@ function SuspensionCard({
             size="sm"
             aria-label={`Allow access to ${payload.requestedPath ?? 'the requested path'}`}
             autoFocus
+            disabled={isSubmitting}
             onClick={() => onRespond(prompt.toolCallId, 'Yes', prompt.id)}
           >
             Allow
@@ -515,6 +524,7 @@ function SuspensionCard({
           <Button
             size="sm"
             aria-label={`Deny access to ${payload.requestedPath ?? 'the requested path'}`}
+            disabled={isSubmitting}
             onClick={() => onRespond(prompt.toolCallId, 'No', prompt.id)}
           >
             Deny
@@ -524,16 +534,20 @@ function SuspensionCard({
     );
   }
 
-  return <AskUserCard prompt={prompt} payload={payload} onRespond={onRespond} />;
+  return (
+    <AskUserCard prompt={prompt} payload={payload} isSubmitting={isSubmitting} onRespond={onRespond} />
+  );
 }
 
 function AskUserCard({
   prompt,
   payload,
+  isSubmitting,
   onRespond,
 }: {
   prompt: SuspensionPrompt;
   payload: SuspendPayloadShape;
+  isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[], promptId: string) => void;
 }) {
   const [draft, setDraft] = useState('');
@@ -551,6 +565,7 @@ function AskUserCard({
               size="sm"
               className="justify-start"
               aria-label={opt.description ? `${opt.label}: ${opt.description}` : opt.label}
+              disabled={isSubmitting}
               onClick={() => onRespond(prompt.toolCallId, opt.label, prompt.id)}
             >
               <strong>{opt.label}</strong>
@@ -571,9 +586,10 @@ function AskUserCard({
             onChange={e => setDraft(e.target.value)}
             placeholder="Your answer…"
             aria-label={question}
+            disabled={isSubmitting}
             autoFocus
           />
-          <Button variant="primary" size="sm" type="submit">
+          <Button variant="primary" size="sm" type="submit" disabled={isSubmitting}>
             Reply
           </Button>
         </form>
@@ -704,15 +720,24 @@ export function Transcript() {
     resolvePrompt(promptId);
   };
 
-  return <TranscriptEntries entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />;
+  return (
+    <TranscriptEntries
+      entries={transcript.entries}
+      isSubmitting={approveMutation.isPending || respondMutation.isPending}
+      onApprove={onApprove}
+      onRespond={onRespond}
+    />
+  );
 }
 
 export function TranscriptEntries({
   entries,
+  isSubmitting = false,
   onApprove,
   onRespond,
 }: {
   entries: TimelineEntry[];
+  isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
@@ -734,18 +759,33 @@ export function TranscriptEntries({
       {entries.map(entry => {
         switch (entry.kind) {
           case 'message':
-            return <MessageBubble key={entry.id} entry={entry} suspensions={suspensions} onRespond={onRespond} />;
+            return (
+              <MessageBubble
+                key={entry.id}
+                entry={entry}
+                suspensions={suspensions}
+                isSubmitting={isSubmitting}
+                onRespond={onRespond}
+              />
+            );
           case 'notice':
             return <NoticeCard key={entry.id} entry={entry} />;
           case 'approval':
-            return <ApprovalCard key={entry.id} prompt={entry} onApprove={onApprove} />;
+            return (
+              <ApprovalCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />
+            );
           case 'notification':
             return <NotificationCard key={entry.id} entry={entry} />;
           case 'notification_summary':
             return <NotificationSummaryCard key={entry.id} entry={entry} />;
           case 'suspension':
             return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
-              <SuspensionCard key={entry.id} prompt={entry} onRespond={onRespond} />
+              <SuspensionCard
+                key={entry.id}
+                prompt={entry}
+                isSubmitting={isSubmitting}
+                onRespond={onRespond}
+              />
             ) : null;
           case 'subagent':
             return <SubagentCard key={entry.id} entry={entry} />;
@@ -760,10 +800,12 @@ export function TranscriptEntries({
 function MessageBubble({
   entry,
   suspensions,
+  isSubmitting,
   onRespond,
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   // null = no group override; true/false = expand/collapse all in this bubble.
@@ -877,6 +919,7 @@ function MessageBubble({
           input={suspension?.suspendPayload ?? tool.args}
           output={tool.result}
           status={suspension ? 'running' : tool.status}
+          isSubmitting={isSubmitting}
           onRespond={suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined}
           fallback={() => <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />}
         />
@@ -907,7 +950,7 @@ function MessageBubble({
   // Some harness status parts (e.g. om_* markers) carry no text. Ignore the
   // marker while preserving any ordinary assistant content in the message.
   if (status?.text.trim()) return <StatusMetadataCard status={status} />;
-  if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
+  if (!hasRenderablePart) return null;
 
   return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
 }

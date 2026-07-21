@@ -606,7 +606,7 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   const nextMessage = message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
   const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
 
-  if (message.role === 'assistant') {
+  if (message.role === 'assistant' && !streaming) {
     const ownedToolCallIds = new Set(
       nextMessage.content.parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)),
     );
