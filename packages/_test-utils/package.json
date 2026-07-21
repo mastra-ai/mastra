@@ -32,7 +32,7 @@
     }
   },
   "scripts": {
-    "build": "tsup --config tsup.config.ts",
+    "build": "tsdown --config tsdown.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
@@ -46,7 +46,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

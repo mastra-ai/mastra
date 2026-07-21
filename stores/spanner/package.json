@@ -19,9 +19,9 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
-    "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do nc -z localhost 9010 && exit 0; sleep 1; done; echo 'Spanner emulator did not become ready on localhost:9010 within 30s' >&2; exit 1)",
     "test": "vitest run",
     "posttest": "docker compose down -v",
@@ -43,7 +43,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

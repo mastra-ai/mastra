@@ -23,9 +23,9 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
-    "dev": "tsup --watch && tsc -p tsconfig.build.json",
+    "dev": "tsdown --watch && tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "lint": "eslint .",
     "pretest": "docker compose up -d",
@@ -53,7 +53,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

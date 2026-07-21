@@ -77,7 +77,7 @@
   "scripts": {
     "cli": "tsx src/main.ts",
     "check": "tsc --noEmit",
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "render-smoke:install": "node scripts/install-render-smoke-settings.mjs",
     "render-smoke:server": "node scripts/render-smoke-server.mjs",
@@ -139,7 +139,7 @@
     "@vitest/ui": "catalog:",
     "@xterm/headless": "6.0.0",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "^8.57.0",

@@ -12,8 +12,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "dev": "tsup --watch",
-    "build": "tsup --silent --config tsup.config.ts",
+    "dev": "tsdown --watch",
+    "build": "tsdown --silent --config tsdown.config.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "typecheck": "tsc --noEmit --incremental",
@@ -41,7 +41,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

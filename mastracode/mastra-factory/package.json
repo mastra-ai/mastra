@@ -13,7 +13,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build": "tsdown --silent --config tsdown.config.ts",
     "prepack": "npm run build",
     "check": "tsc --noEmit",
     "test": "vitest run",
@@ -50,7 +50,7 @@
     "@internal/lint": "workspace:*",
     "@types/node": "22.20.1",
     "eslint": "^10.4.1",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -21,8 +21,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "build:cli": "tsup src/stdio.ts --format esm --no-dts --treeshake=smallest --splitting && tsc -p tsconfig.build.json",
+    "build": "tsdown --silent --config tsdown.config.ts",
+    "build:cli": "tsdown src/stdio.ts --format esm --no-dts --treeshake=smallest --splitting && tsc -p tsconfig.build.json",
     "pretest": "pnpm turbo build --filter @mastra/mcp-registry-registry",
     "test": "vitest run",
     "lint": "eslint ."
@@ -47,7 +47,7 @@
     "cross-env": "^10.1.0",
     "eslint": "^10.7.0",
     "hono": "^4.12.8",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
