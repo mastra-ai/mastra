@@ -1,4 +1,3 @@
-import type { Client } from '@libsql/client';
 import {
   ChannelsStorage,
   TABLE_CHANNEL_INSTALLATIONS,
@@ -9,6 +8,7 @@ import type { ChannelInstallation, ChannelConfig } from '@mastra/core/storage';
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client } from '../../db/client';
 
 export class ChannelsLibSQL extends ChannelsStorage {
   #db: LibSQLDB;

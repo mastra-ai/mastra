@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import { createClient } from '@libsql/client';
-import type { Client, InValue } from '@libsql/client';
 import { FactoryStorage, UniqueViolationError } from '@mastra/core/storage';
 import type {
   CollectionColumnSpec,
@@ -16,6 +15,7 @@ import type {
 } from '@mastra/core/storage';
 
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from './db/client';
 import { LibSQLStore } from './index';
 
 export interface LibSQLFactoryStorageConfig {
@@ -436,7 +436,7 @@ export class LibSQLFactoryStorage extends FactoryStorage {
   }
 
   async close(): Promise<void> {
-    this.#client.close();
+    await this.#client.close();
   }
 
   authDatabase(): FactoryAuthDatabase {

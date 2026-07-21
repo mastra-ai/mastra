@@ -1,9 +1,9 @@
 import { createClient } from '@libsql/client';
-import type { Client } from '@libsql/client';
 import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
+import type { SqliteClient as Client } from './db/client';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
@@ -53,6 +53,16 @@ export {
   WorkspacesLibSQL,
 };
 export type { LibSQLDomainConfig } from './db';
+export type {
+  SqliteClient,
+  SqliteInArgs,
+  SqliteInValue,
+  SqliteResultSet,
+  SqliteStatement,
+  SqliteTransaction,
+  SqliteTransactionMode,
+  SqliteValue,
+} from './db/client';
 export { LibSQLFactoryStorage, type LibSQLFactoryStorageConfig } from './factory-storage';
 
 export type LibSQLStorageDomain = keyof StorageDomains;
@@ -370,7 +380,7 @@ export class LibSQLStore extends MastraCompositeStore {
       }
     }
 
-    this.client.close();
+    await this.client.close();
   }
 }
 
