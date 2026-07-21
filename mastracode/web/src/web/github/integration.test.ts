@@ -3,7 +3,7 @@ import { Octokit } from '@octokit/rest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createStateSigner } from '../state-signing.js';
-import { GithubIntegration, normalizePrivateKey } from './integration.js';
+import { GithubIntegration, GithubProviderRequestError, normalizePrivateKey } from './integration.js';
 
 // Real RSA key so we can prove Node's PEM decoder accepts the normalized
 // output (the failure mode is `error:1E08010C:DECODER routines::unsupported`).
@@ -185,15 +185,38 @@ describe('GithubIntegration task detail reads', () => {
     });
   });
 
-  it('returns null only for not-found responses and propagates other failures', async () => {
+  it('returns null only for not-found responses and types other provider failures', async () => {
     const github = new GithubIntegration(validConfig());
     const { issueGet, pullGet } = mockInstallationClient(github);
     issueGet.mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }));
     pullGet.mockRejectedValue(Object.assign(new Error('token leaked in upstream failure'), { status: 500 }));
 
     await expect(github.getIssueDetail(123, 'mastra-ai/mastra', 42)).resolves.toBeNull();
-    await expect(github.getPullRequestDetail(123, 'mastra-ai/mastra', 77)).rejects.toThrow(
-      'token leaked in upstream failure',
+    await expect(github.getPullRequestDetail(123, 'mastra-ai/mastra', 77)).rejects.toBeInstanceOf(
+      GithubProviderRequestError,
     );
+  });
+
+  it('does not classify successful-response mapping failures as provider failures', async () => {
+    const github = new GithubIntegration(validConfig());
+    const { issueGet } = mockInstallationClient(github);
+    issueGet.mockResolvedValue({
+      data: {
+        number: 42,
+        title: 'Issue',
+        body: null,
+        state: 'open',
+        labels: undefined,
+        assignees: [],
+        html_url: 'https://github.com/mastra-ai/mastra/issues/42',
+      },
+      headers: {},
+      status: 200,
+      url: 'https://api.github.com/repos/mastra-ai/mastra/issues/42',
+    } as unknown as Awaited<ReturnType<typeof issueGet>>);
+
+    const error = await github.getIssueDetail(123, 'mastra-ai/mastra', 42).catch(error => error);
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error).not.toBeInstanceOf(GithubProviderRequestError);
   });
 });

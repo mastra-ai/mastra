@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { LinearIntegration } from './integration';
+import { LinearIntegration, LinearProviderRequestError } from './integration';
 
 function integration() {
   return new LinearIntegration({ clientId: 'linear-client', clientSecret: 'linear-secret' });
@@ -95,5 +95,56 @@ describe('LinearIntegration.fetchIssueContext', () => {
     await expect(linear.fetchIssueContext('access-token', 'ENG-404')).resolves.toBeNull();
     await expect(linear.fetchIssueContext('access-token', 'ENG-405')).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('types network and HTTP failures as provider request errors', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network token must not leak'))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ errors: [{ message: 'upstream token must not leak' }] }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const linear = integration();
+
+    await expect(linear.fetchIssueContext('access-token', 'ENG-42')).rejects.toBeInstanceOf(
+      LinearProviderRequestError,
+    );
+    const httpError = await linear.fetchIssueContext('access-token', 'ENG-42').catch(error => error);
+    expect(httpError).toBeInstanceOf(LinearProviderRequestError);
+    expect(httpError).toMatchObject({ status: 503 });
+  });
+
+  it('does not classify GraphQL operation or successful-response mapping failures as provider failures', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(graphqlResponse(undefined, [{ message: 'Invalid task-context query' }]))
+      .mockResolvedValueOnce(
+        graphqlResponse({
+          issue: {
+            identifier: 'ENG-42',
+            title: 'Task context',
+            description: null,
+            url: 'https://linear.app/mastra/issue/ENG-42/task-context',
+            state: null,
+            assignee: null,
+            labels: { nodes: [] },
+          },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const linear = integration();
+
+    const operationError = await linear.fetchIssueContext('access-token', 'ENG-42').catch(error => error);
+    expect(operationError).toBeInstanceOf(Error);
+    expect(operationError).not.toBeInstanceOf(LinearProviderRequestError);
+    expect(operationError).toHaveProperty('message', 'Linear API error: Invalid task-context query');
+
+    const mappingError = await linear.fetchIssueContext('access-token', 'ENG-42').catch(error => error);
+    expect(mappingError).toBeInstanceOf(TypeError);
+    expect(mappingError).not.toBeInstanceOf(LinearProviderRequestError);
   });
 });

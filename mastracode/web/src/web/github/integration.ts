@@ -114,6 +114,22 @@ function isGithubNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'status' in error && error.status === 404;
 }
 
+export class GithubProviderRequestError extends Error {
+  constructor(cause: unknown) {
+    super('GitHub provider request failed.', { cause });
+    this.name = 'GithubProviderRequestError';
+  }
+}
+
+async function requestGithubTask<T>(request: () => Promise<T>): Promise<T | null> {
+  try {
+    return await request();
+  } catch (error) {
+    if (isGithubNotFound(error)) return null;
+    throw new GithubProviderRequestError(error);
+  }
+}
+
 export interface IssuePage {
   issues: IssueSummary[];
   /** Next page number to request, or `null` when this was the last page. */
@@ -367,28 +383,26 @@ export class GithubIntegration implements FactoryIntegration {
   ): Promise<GithubTaskDetail | null> {
     const parts = splitRepoFullName(repoFullName);
     if (!parts) return null;
-    try {
-      const { data } = await this.getInstallationOctokit(installationId).issues.get({
+    const response = await requestGithubTask(() =>
+      this.getInstallationOctokit(installationId).issues.get({
         ...parts,
         issue_number: issueNumber,
-      });
-      const description = boundedOptionalText(data.body, TASK_DESCRIPTION_MAX_LENGTH);
-      const url = boundedTaskUrl(data.html_url);
-      return {
-        number: data.number,
-        title: data.title.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
-        ...(description !== undefined ? { description } : {}),
-        state: data.state.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
-        labels: boundedTaskNames(
-          data.labels.map(label => (typeof label === 'string' ? label : label.name)),
-        ),
-        assignees: boundedTaskNames(data.assignees?.map(assignee => assignee.login) ?? []),
-        ...(url !== undefined ? { url } : {}),
-      };
-    } catch (error) {
-      if (isGithubNotFound(error)) return null;
-      throw error;
-    }
+      }),
+    );
+    if (!response) return null;
+
+    const { data } = response;
+    const description = boundedOptionalText(data.body, TASK_DESCRIPTION_MAX_LENGTH);
+    const url = boundedTaskUrl(data.html_url);
+    return {
+      number: data.number,
+      title: data.title.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
+      ...(description !== undefined ? { description } : {}),
+      state: data.state.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
+      labels: boundedTaskNames(data.labels.map(label => (typeof label === 'string' ? label : label.name))),
+      assignees: boundedTaskNames(data.assignees?.map(assignee => assignee.login) ?? []),
+      ...(url !== undefined ? { url } : {}),
+    };
   }
 
   /** Fetch the basic fields for one pull request through the project's installation. */
@@ -399,27 +413,27 @@ export class GithubIntegration implements FactoryIntegration {
   ): Promise<GithubTaskDetail | null> {
     const parts = splitRepoFullName(repoFullName);
     if (!parts) return null;
-    try {
-      const { data } = await this.getInstallationOctokit(installationId).pulls.get({
+    const response = await requestGithubTask(() =>
+      this.getInstallationOctokit(installationId).pulls.get({
         ...parts,
         pull_number: pullRequestNumber,
-      });
-      const state = data.merged ? 'merged' : data.state;
-      const description = boundedOptionalText(data.body, TASK_DESCRIPTION_MAX_LENGTH);
-      const url = boundedTaskUrl(data.html_url);
-      return {
-        number: data.number,
-        title: data.title.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
-        ...(description !== undefined ? { description } : {}),
-        state: state.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
-        labels: boundedTaskNames(data.labels.map(label => label.name)),
-        assignees: boundedTaskNames(data.assignees?.map(assignee => assignee.login) ?? []),
-        ...(url !== undefined ? { url } : {}),
-      };
-    } catch (error) {
-      if (isGithubNotFound(error)) return null;
-      throw error;
-    }
+      }),
+    );
+    if (!response) return null;
+
+    const { data } = response;
+    const state = data.merged ? 'merged' : data.state;
+    const description = boundedOptionalText(data.body, TASK_DESCRIPTION_MAX_LENGTH);
+    const url = boundedTaskUrl(data.html_url);
+    return {
+      number: data.number,
+      title: data.title.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
+      ...(description !== undefined ? { description } : {}),
+      state: state.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
+      labels: boundedTaskNames(data.labels.map(label => label.name)),
+      assignees: boundedTaskNames(data.assignees?.map(assignee => assignee.login) ?? []),
+      ...(url !== undefined ? { url } : {}),
+    };
   }
 
   /** Add labels to an issue (deduplicated; no-op on empty/malformed input). */

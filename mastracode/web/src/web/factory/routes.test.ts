@@ -24,8 +24,8 @@ vi.mock('../audit/store', () => ({
   listAuditEvents: async () => ({ events: [] }),
 }));
 
-import { GithubIntegration } from '../github/integration';
-import { LinearIntegration } from '../linear/integration';
+import { GithubIntegration, GithubProviderRequestError } from '../github/integration';
+import { LinearIntegration, LinearProviderRequestError } from '../linear/integration';
 import { upsertLinearConnection } from '../linear/storage';
 import { __resetRuntimeConfigForTests } from '../runtime-config';
 import { handleServerError } from '../server-error';
@@ -380,7 +380,9 @@ describe('GET /web/factory/repositories/:id/threads/:threadId/context', () => {
     expect((await githubNotFound.json()).context.resolution).toEqual({ mode: 'stored', reason: 'not-found' });
 
     await createLinkedItem('github-error', { sourceKey: 'github-issue:44' });
-    vi.spyOn(githubIntegration, 'getIssueDetail').mockRejectedValueOnce(new Error('provider token must not leak'));
+    vi.spyOn(githubIntegration, 'getIssueDetail').mockRejectedValueOnce(
+      new GithubProviderRequestError(new Error('provider token must not leak')),
+    );
     const githubError = await requestContext('github-error');
     const githubErrorBody = await githubError.json();
     expect(githubErrorBody.context.resolution).toEqual({ mode: 'stored', reason: 'provider-unavailable' });
@@ -406,6 +408,23 @@ describe('GET /web/factory/repositories/:id/threads/:threadId/context', () => {
     const unavailableBody = await unavailable.json();
     expect(unavailableBody.context.resolution).toEqual({ mode: 'stored', reason: 'provider-unavailable' });
     expect(JSON.stringify(unavailableBody)).not.toContain('upstream token secret');
+
+    vi.restoreAllMocks();
+    await createLinkedItem('linear-provider-error', {
+      source: 'linear-issue',
+      sourceKey: 'linear:ENG-43',
+      title: 'Stored Linear provider title',
+    });
+    await connectLinear();
+    vi.spyOn(linearIntegration, 'fetchIssueContext').mockRejectedValueOnce(
+      new LinearProviderRequestError('Linear provider request failed.', {
+        cause: new Error('provider token must not leak'),
+      }),
+    );
+    const linearError = await requestContext('linear-provider-error');
+    const linearErrorBody = await linearError.json();
+    expect(linearErrorBody.context.resolution).toEqual({ mode: 'stored', reason: 'provider-unavailable' });
+    expect(JSON.stringify(linearErrorBody)).not.toContain('provider token must not leak');
   });
 
   it('keeps integration storage readiness failures on the normal 500 path', async () => {
@@ -450,18 +469,29 @@ describe('GET /web/factory/repositories/:id/threads/:threadId/context', () => {
     expect(storageFailure.status).toBe(500);
 
     vi.restoreAllMocks();
+    await createLinkedItem('github-mapping', { sourceKey: 'github-issue:45' });
+    vi.spyOn(githubIntegration, 'getIssueDetail').mockRejectedValueOnce(new Error('github mapping bug'));
+    const githubMappingFailure = await requestContext('github-mapping');
+    expect(githubMappingFailure.status).toBe(500);
+
+    vi.restoreAllMocks();
     await connectLinear();
+    vi.spyOn(linearIntegration, 'fetchIssueContext').mockRejectedValueOnce(new Error('linear mapping bug'));
+    const linearIntegrationMappingFailure = await requestContext('linear-storage');
+    expect(linearIntegrationMappingFailure.status).toBe(500);
+
+    vi.restoreAllMocks();
     vi.spyOn(linearIntegration, 'fetchIssueContext').mockResolvedValue({
       identifier: 'ENG-42',
       get title(): string {
-        throw new Error('mapping bug');
+        throw new Error('context mapping bug');
       },
       state: 'open',
       labels: [],
       assignees: [],
     });
-    const mappingFailure = await requestContext('linear-storage');
-    expect(mappingFailure.status).toBe(500);
+    const contextMappingFailure = await requestContext('linear-storage');
+    expect(contextMappingFailure.status).toBe(500);
   });
 
   it('fails with 500 when a rotated Linear token cannot be persisted or the connection disappears', async () => {

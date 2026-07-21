@@ -230,17 +230,40 @@ interface CommentCreateMutationData {
   commentCreate: { success: boolean; comment: { id: string; url: string } | null };
 }
 
+export class LinearProviderRequestError extends Error {
+  readonly status?: number;
+
+  constructor(message: string, options?: { cause?: unknown; status?: number }) {
+    super(message, { cause: options?.cause });
+    this.name = 'LinearProviderRequestError';
+    this.status = options?.status;
+  }
+}
+
+class LinearGraphqlOperationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LinearGraphqlOperationError';
+  }
+}
+
 /** POST a GraphQL query to Linear with the given OAuth access token. */
 async function linearGraphql<T>(accessToken: string, query: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = await fetch(LINEAR_GRAPHQL_URL, {
-    method: 'POST',
-    signal: AbortSignal.timeout(15_000),
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(LINEAR_GRAPHQL_URL, {
+      method: 'POST',
+      signal: AbortSignal.timeout(15_000),
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+  } catch (error) {
+    throw new LinearProviderRequestError('Linear API request failed.', { cause: error });
+  }
+
   if (!res.ok) {
     // Linear returns GraphQL errors (validation, missing scopes, …) with a
     // 400 status — surface the actual message instead of just the code.
@@ -251,16 +274,23 @@ async function linearGraphql<T>(accessToken: string, query: string, variables?: 
     } catch {
       // Non-JSON error body; fall back to the status code alone.
     }
-    const err = new Error(`Linear API request failed (${res.status})${detail ? `: ${detail}` : ''}`);
-    (err as { status?: number }).status = res.status;
-    throw err;
+    throw new LinearProviderRequestError(
+      `Linear API request failed (${res.status})${detail ? `: ${detail}` : ''}`,
+      { status: res.status },
+    );
   }
-  const body = (await res.json()) as { data?: T; errors?: Array<{ message?: string }> };
+
+  let body: { data?: T; errors?: Array<{ message?: string }> };
+  try {
+    body = (await res.json()) as { data?: T; errors?: Array<{ message?: string }> };
+  } catch (error) {
+    throw new LinearProviderRequestError('Linear API returned invalid JSON.', { cause: error });
+  }
   if (body.errors?.length) {
-    throw new Error(`Linear API error: ${body.errors[0]?.message ?? 'unknown error'}`);
+    throw new LinearGraphqlOperationError(`Linear API error: ${body.errors[0]?.message ?? 'unknown error'}`);
   }
   if (!body.data) {
-    throw new Error('Linear API returned no data.');
+    throw new LinearProviderRequestError('Linear API returned no data.');
   }
   return body.data;
 }
@@ -469,7 +499,7 @@ export class LinearIntegration implements FactoryIntegration {
         { id: idOrIdentifier },
       );
     } catch (error) {
-      if (error instanceof Error && /entity not found/i.test(error.message)) return null;
+      if (error instanceof LinearGraphqlOperationError && /entity not found/i.test(error.message)) return null;
       throw error;
     }
     const issue = data.issue;
