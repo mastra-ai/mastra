@@ -856,6 +856,8 @@ const sidebars = {
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/mesa-filesystem', label: 'MesaFilesystem' },
         { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
+        { type: 'doc', id: 'workspace/platform-filesystem', label: 'PlatformFilesystem' },
+        { type: 'doc', id: 'workspace/platform-sandbox', label: 'PlatformSandbox' },
         { type: 'doc', id: 'workspace/railway-sandbox', label: 'RailwaySandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
