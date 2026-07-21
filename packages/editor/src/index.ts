@@ -360,7 +360,7 @@ export class MastraEditor implements IMastraEditor {
 
     await this.assertBuilderLicensed('Workflow Builder');
     const { EditorWorkflowBuilder } = await import('./ee');
-    this.__workflowBuilderInstance = new EditorWorkflowBuilder(this.__workflowBuilderConfig);
+    this.__workflowBuilderInstance = new EditorWorkflowBuilder(this.__workflowBuilderConfig, this.__mastra);
     this.__workflowBuilderResolved = true;
     return this.__workflowBuilderInstance;
   }

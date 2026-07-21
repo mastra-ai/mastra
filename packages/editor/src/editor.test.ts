@@ -1538,6 +1538,18 @@ describe('MastraEditor.resolveWorkflowBuilder', () => {
     expect(first?.getAgent()).toBeDefined();
     expect(first?.getModelPolicy()).toEqual(modelPolicy);
   });
+
+  it('registers the hidden workflow builder agent with Mastra storage', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({ workflowBuilder: {} });
+    new Mastra({ storage, editor });
+
+    const builder = await editor.resolveWorkflowBuilder();
+    const memory = await builder?.getAgent().getMemory();
+
+    expect(memory?.storage).toBeDefined();
+    expect(memory?.storage.id).toBe(storage.id);
+  });
 });
 
 describe('MastraEditor.resolveBuilder', () => {
