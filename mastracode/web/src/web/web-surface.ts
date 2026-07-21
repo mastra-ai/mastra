@@ -16,7 +16,12 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { buildAuditRoutes } from './audit/routes.js';
 import { buildConfigRoutes } from './config-routes.js';
-import type { FactoryIntegration, IssueTriageRunInput, IssueTriageRunResult } from './factory-integration.js';
+import type {
+  FactoryIntegration,
+  IntegrationContext,
+  IssueTriageRunInput,
+  IssueTriageRunResult,
+} from './factory-integration.js';
 import { buildFsRoutes } from './fs-routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './github/config.js';
@@ -333,6 +338,30 @@ async function runIssueTriage(
 }
 
 /**
+ * Build the {@link IntegrationContext} handed to an integration when the
+ * factory collects its capabilities (routes, workers). One shape everywhere:
+ * `assembleWebApiRoutes` uses it per registration, and `MastraFactory` uses it
+ * when collecting integration workers at finalize.
+ */
+export function buildIntegrationContext(
+  deps: Pick<WebApiRoutesDeps, 'controller' | 'publicOrigin' | 'integrationStorage' | 'sourceControlStorage'> & {
+    stateSigner: StateSigner;
+  },
+  integrationId: string,
+): IntegrationContext {
+  return {
+    baseUrl: deps.publicOrigin,
+    controller: deps.controller,
+    stateSigner: deps.stateSigner,
+    storage: {
+      generic: deps.integrationStorage.forIntegration(integrationId),
+      sourceControl: deps.sourceControlStorage.forIntegration(integrationId),
+    },
+    hooks: { runIssueTriage: (input: IssueTriageRunInput) => runIssueTriage(deps, input) },
+  };
+}
+
+/**
  * Disabled-status stub for the well-known integration ids. The SPA polls
  * `/web/github/status` and `/web/linear/status` unconditionally, so when an
  * integration is absent (or not ready) the status contract must still hold.
@@ -388,16 +417,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration, ready, ensureReady } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(integration.id);
-    const ctx = {
-      baseUrl: deps.publicOrigin,
-      controller: deps.controller,
-      stateSigner: deps.stateSigner,
-      storage: {
-        generic: deps.integrationStorage.forIntegration(integration.id),
-        sourceControl: deps.sourceControlStorage.forIntegration(integration.id),
-      },
-      hooks: { runIssueTriage: (input: IssueTriageRunInput) => runIssueTriage(deps, input) },
-    };
+    const ctx = buildIntegrationContext({ ...deps, stateSigner: deps.stateSigner }, integration.id);
     if (ready) return integration.routes(ctx);
     if (!ensureReady) return disabledIntegrationStatusRoutes(integration.id);
     return integration.routes(ctx).map(route => {
