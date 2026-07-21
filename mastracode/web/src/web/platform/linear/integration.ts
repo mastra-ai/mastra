@@ -274,7 +274,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         const tenant = ctx.auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
-        const query = new URLSearchParams({ return_to: c.req.query('return_to') || '/' });
+        const returnTo = c.req.query('return_to') || `/orgs/${tenant.orgId}/settings/general`;
+        const query = new URLSearchParams({ return_to: returnTo });
         const location = await this.#client.requestRedirect('GET', `${API_PREFIX}/authorize?${query}`);
         return c.redirect(location);
       },
