@@ -243,10 +243,39 @@ describe('getFactoryWorkspace', () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const assetNames = (await fs.readdir(assetRoot)).sort();
 
-    expect(assetNames).toEqual(['configure-factory-rules', 'understand-issue', 'understand-pr']);
+    expect(assetNames).toEqual([
+      'configure-factory-rules',
+      'factory-plan',
+      'factory-review',
+      'factory-triage',
+      'understand-issue',
+      'understand-pr',
+    ]);
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
+  });
+
+  it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
+
+    for (const skillName of ['factory-triage', 'factory-plan', 'factory-review']) {
+      const prose = await read(skillName);
+      // Terminal batched handoff + governed transition, never a mid-run human gate.
+      expect(prose).toContain('factory_transition_work_item');
+      expect(prose).toContain('as an assumption');
+      expect(prose).toContain('Never wait for or solicit human input mid-run');
+      expect(prose).not.toContain('ask_user');
+    }
+
+    const plan = await read('factory-plan');
+    expect(plan).toContain('if this conversation already contains a triage/understanding pass');
+    expect(plan).toContain('Do not call `submit_plan`');
+
+    const review = await read('factory-review');
+    expect(review).toContain('Verdict: approve');
+    expect(review).toContain('Verdict: request changes');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
