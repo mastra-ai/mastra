@@ -171,10 +171,6 @@ describe('WorkItemsStorage', () => {
     await storage.update({ orgId: 'org1', id: child.item.id, userId: 'u', patch: { parentWorkItemId: null } });
     await storage.delete({ orgId: 'org1', id: parent.item.id });
 
-    expect(locks).toEqual([
-      'work-items:org1:p1',
-      'work-items:org1:p1',
-      'work-items:org1:p1',
-    ]);
+    expect(locks).toEqual(['work-items:org1:p1', 'work-items:org1:p1', 'work-items:org1:p1']);
   });
 });
