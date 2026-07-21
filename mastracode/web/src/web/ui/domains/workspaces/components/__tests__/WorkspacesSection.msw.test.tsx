@@ -303,7 +303,7 @@ describe('WorkspacesSection', () => {
         id: `item-${index}`,
         orgId: 'org-1',
         createdBy: 'user-1',
-            githubProjectId: GITHUB_PROJECT_ID,
+        githubProjectId: GITHUB_PROJECT_ID,
         source: review ? 'github-pr' : 'github-issue',
         sourceKey: `${review ? 'github-pr' : 'github-issue'}:${index}`,
         parentWorkItemId: null,
