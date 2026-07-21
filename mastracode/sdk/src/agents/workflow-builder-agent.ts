@@ -11,6 +11,7 @@
  * no per-step mutations.
  */
 import { Agent } from '@mastra/core/agent';
+import { WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS } from '@mastra/core/workflows/builder';
 import { listAvailableAgentsTool } from '../tools/workflows/list-available-agents.js';
 import { listAvailableToolsTool } from '../tools/workflows/list-available-tools.js';
 import { saveWorkflowTool } from '../tools/workflows/save-workflow.js';
@@ -28,6 +29,8 @@ export const workflowBuilderAgent = new Agent({
   instructions: `You are the Workflow Builder.
 
 Your job: turn a plain-language description into a complete static workflow definition that you then persist by calling save-workflow exactly once.
+
+${WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS}
 
 # How a workflow runs
 

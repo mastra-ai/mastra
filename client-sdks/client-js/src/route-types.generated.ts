@@ -89080,6 +89080,230 @@ export interface GetEditorBuilderSettings_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /editor/workflow-builder/settings
+// ============================================================================
+export type GetEditorWorkflowBuilderSettings_Response = {
+  enabled: boolean;
+  modelPolicy?:
+    | {
+        active: boolean;
+        pickerVisible?: boolean | undefined;
+        allowed?:
+          | (
+              | {
+                  kind: 'custom';
+                  provider: string;
+                  modelId?: string | undefined;
+                }
+              | {
+                  provider: string;
+                  modelId?: string | undefined;
+                }
+            )[]
+          | undefined;
+        default?:
+          | (
+              | {
+                  kind: 'custom';
+                  provider: string;
+                  modelId: string;
+                }
+              | {
+                  provider: string;
+                  modelId: string;
+                }
+            )
+          | undefined;
+      }
+    | undefined;
+};
+
+export type GetEditorWorkflowBuilderSettings_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorWorkflowBuilderSettings_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetEditorWorkflowBuilderSettings_Request;
+  response: GetEditorWorkflowBuilderSettings_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /editor/workflow-builder/stream
+// ============================================================================
+export type PostEditorWorkflowBuilderStream_Body = {
+  messages: any[] | string;
+  instructions?: (string | string[] | any | any[]) | undefined;
+  system?: (string | string[] | any | any[]) | undefined;
+  context?: any[] | undefined;
+  memory?:
+    | {
+        thread:
+          | string
+          | {
+              id: string;
+              [x: string]: unknown;
+            };
+        resource: string;
+        options?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        readOnly?: boolean | undefined;
+      }
+    | undefined;
+  runId?: string | undefined;
+  savePerStep?: boolean | undefined;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
+      }
+    | undefined;
+  maxSteps?: number | undefined;
+  stopWhen?: any | undefined;
+  providerOptions?:
+    | {
+        anthropic?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        google?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        openai?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        xai?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+      }
+    | undefined;
+  modelSettings?: any | undefined;
+  activeTools?: string[] | undefined;
+  toolsets?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  clientTools?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  toolChoice?:
+    | (
+        | ('auto' | 'none' | 'required')
+        | {
+            type: 'tool';
+            toolName: string;
+          }
+      )
+    | undefined;
+  requireToolApproval?: boolean | undefined;
+  scorers?:
+    | (
+        | {
+            [key: string]: any;
+          }
+        | {
+            [key: string]: {
+              scorer: string;
+              sampling?: any | undefined;
+            };
+          }
+      )
+    | undefined;
+  returnScorerData?: boolean | undefined;
+  tracingOptions?:
+    | {
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContextKeys?: string[] | undefined;
+        traceId?: string | undefined;
+        parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
+      }
+    | undefined;
+  output?: any | undefined;
+  structuredOutput?:
+    | {
+        schema: {
+          [x: string]: unknown;
+        };
+        model?: (string | any) | undefined;
+        instructions?: string | undefined;
+        jsonPromptInjection?: boolean | undefined;
+        errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
+        fallbackValue?: any | undefined;
+      }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
+  [x: string]: unknown;
+};
+
+export type PostEditorWorkflowBuilderStream_Response = any;
+
+export type PostEditorWorkflowBuilderStream_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostEditorWorkflowBuilderStream_Body extends never
+      ? {}
+      : {} extends PostEditorWorkflowBuilderStream_Body
+        ? { body?: PostEditorWorkflowBuilderStream_Body }
+        : { body: PostEditorWorkflowBuilderStream_Body })
+>;
+
+export interface PostEditorWorkflowBuilderStream_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostEditorWorkflowBuilderStream_Body;
+  request: PostEditorWorkflowBuilderStream_Request;
+  response: PostEditorWorkflowBuilderStream_Response;
+  responseType: 'stream';
+}
+
+// ============================================================================
 // Route: GET /editor/builder/models/available
 // ============================================================================
 export type GetEditorBuilderModelsAvailable_Response = {
@@ -93609,6 +93833,8 @@ export interface RouteTypes {
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
+  'GET /editor/workflow-builder/settings': GetEditorWorkflowBuilderSettings_RouteContract;
+  'POST /editor/workflow-builder/stream': PostEditorWorkflowBuilderStream_RouteContract;
   'GET /editor/builder/models/available': GetEditorBuilderModelsAvailable_RouteContract;
   'GET /editor/builder/infrastructure': GetEditorBuilderInfrastructure_RouteContract;
   'GET /editor/builder/registries': GetEditorBuilderRegistries_RouteContract;
@@ -94107,6 +94333,12 @@ export interface Client {
   };
   '/editor/builder/settings': {
     GET: GetEditorBuilderSettings_RouteContract;
+  };
+  '/editor/workflow-builder/settings': {
+    GET: GetEditorWorkflowBuilderSettings_RouteContract;
+  };
+  '/editor/workflow-builder/stream': {
+    POST: PostEditorWorkflowBuilderStream_RouteContract;
   };
   '/embedders': {
     GET: GetEmbedders_RouteContract;
