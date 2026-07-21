@@ -14,6 +14,9 @@ importers:
       '@mastra/auth-better-auth':
         specifier: link:../../auth/better-auth
         version: link:../../auth/better-auth
+      '@mastra/auth-studio':
+        specifier: link:../../auth/studio
+        version: link:../../auth/studio
       '@mastra/auth-workos':
         specifier: link:../../auth/workos
         version: link:../../auth/workos

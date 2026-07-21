@@ -9,7 +9,7 @@ export function ChatMessageList() {
   if (!activeFactory) return null;
 
   return (
-    <div className="flex min-h-0 flex-col overflow-y-auto">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <GoalPanel />
       <ConnectionNotice />
       <TranscriptPanel />

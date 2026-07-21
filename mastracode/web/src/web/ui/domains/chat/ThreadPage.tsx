@@ -10,6 +10,7 @@ import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
+import { FactorySessionHeader } from '../factory/components/RelatedFactorySessions';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TaskPanel } from './components/TaskPanel';
@@ -97,5 +98,12 @@ function ThreadPageContent() {
   useRouteThreadSync();
   useThreadPageKickoffs();
 
-  return <ChatMessageList />;
+  return (
+    <div className="flex min-h-0 flex-col">
+      <FactorySessionHeader />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <ChatMessageList />
+      </div>
+    </div>
+  );
 }
