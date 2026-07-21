@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SankeyChart } from './sankey-chart';
+import type { SankeyChartNodeSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
 import { buildSankeyHueMap, nodeColor, nodeColorVivid } from './sankeyColor';
 
@@ -50,6 +51,7 @@ function TestControls() {
 function Example({
   onCurveClick,
   onNodeClick,
+  isNodeClickable,
   columnOrder,
   onColumnOrderChange,
   visibleColumnIds,
@@ -58,6 +60,7 @@ function Example({
 }: {
   onCurveClick?: (selection: unknown) => void;
   onNodeClick?: (selection: unknown) => void;
+  isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
   columnOrder?: Array<string>;
   onColumnOrderChange?: (columnOrder: Array<string>) => void;
   visibleColumnIds?: Array<string>;
@@ -75,7 +78,7 @@ function Example({
       getColumnHue={getColumnHue}
     >
       <TestControls />
-      <SankeyChart onCurveClick={onCurveClick} onNodeClick={onNodeClick} />
+      <SankeyChart onCurveClick={onCurveClick} onNodeClick={onNodeClick} isNodeClickable={isNodeClickable} />
     </Sankey>
   );
 }
@@ -477,6 +480,16 @@ describe('SankeyChart', () => {
         column: { id: 'channel', label: 'Channel' },
         value: 'Search',
       });
+    });
+
+    it('leaves ineligible nodes noninteractive', async () => {
+      const onNodeClick = vi.fn();
+      render(<Example onNodeClick={onNodeClick} isNodeClickable={selection => selection.value !== 'Referral'} />);
+
+      await screen.findByLabelText('Referral: 1 trace (25%)');
+
+      expect(screen.queryByRole('button', { name: 'Referral: 1 trace (25%)' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Search: 3 traces (75%)' })).not.toBeNull();
     });
   });
 

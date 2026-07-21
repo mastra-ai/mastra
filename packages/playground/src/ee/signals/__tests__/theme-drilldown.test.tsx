@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -428,6 +428,53 @@ describe('SankeySignals drill-in', () => {
     });
   });
 
+  describe('when the agent changes during a drill-in', () => {
+    it('clears the filter before loading the new agent', async () => {
+      let replacementPathsRequests = 0;
+      useFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/replacement-agent/theme-snapshots`, () =>
+          HttpResponse.json(drilldownThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/replacement-agent/theme-flow`, () =>
+          HttpResponse.json(drilldownThemeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/replacement-agent/theme-paths`, () => {
+          replacementPathsRequests += 1;
+          return HttpResponse.json(allThemePathsResponse);
+        }),
+      );
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const result = render(
+        <QueryClientProvider client={queryClient}>
+          <SankeySignals
+            key="support-agent"
+            entityId="support-agent"
+            entityType="agent"
+            signalNames={['goal', 'outcome', 'behavior']}
+          />
+        </QueryClientProvider>,
+      );
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      await screen.findByText('Drill-in: Goal = "Add transcript"');
+
+      result.rerender(
+        <QueryClientProvider client={queryClient}>
+          <SankeySignals
+            key="replacement-agent"
+            entityId="replacement-agent"
+            entityType="agent"
+            signalNames={['goal', 'outcome', 'behavior']}
+          />
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText(/replacement-agent · Snapshot/)).not.toBeNull();
+      expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
+      expect(replacementPathsRequests).toBe(0);
+    });
+  });
+
   describe('when only one snapshot exists', () => {
     it('omits theme history from the detail panel', async () => {
       useFlowHandlers();
@@ -475,20 +522,109 @@ describe('SankeySignals drill-in', () => {
     });
   });
 
-  describe('when a non-theme node is activated', () => {
-    it('does not start a drill-in or request paths', async () => {
+  describe('when paths fail during a drill-in', () => {
+    it('keeps a clear action available', async () => {
+      useFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, () =>
+          HttpResponse.json({ error: 'failed' }, { status: 500 }),
+        ),
+      );
+      renderSignals();
+
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+
+      expect(await screen.findByText('Unable to load signal flow.')).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Clear drill-in' })).not.toBeNull();
+    });
+  });
+
+  describe('when a durable filter moves to a snapshot above the client limit', () => {
+    it('does not request paths for the large snapshot', async () => {
+      const requestedSnapshotIds: string[] = [];
+      useFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(twoDrilldownThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, async ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          if (snapshotId === 'older-opaque-snapshot-cursor') {
+            await delay(50);
+            return HttpResponse.json({
+              ...largeThemeFlowResponse,
+              snapshot: { ...olderDrilldownThemeFlowResponse.snapshot, traceCount: 2001 },
+            });
+          }
+          return HttpResponse.json(drilldownThemeFlowResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, ({ request }) => {
+          requestedSnapshotIds.push(new URL(request.url).searchParams.get('snapshotId') ?? '');
+          return HttpResponse.json(allThemePathsResponse);
+        }),
+      );
+      const { container } = renderSignals();
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      await screen.findByText('2 traces analyzed');
+      const sliderInput = container.querySelector('input[type="range"]');
+      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
+
+      fireEvent.change(sliderInput, { target: { value: '0' } });
+      await screen.findByTitle('Drill-in is unavailable for snapshots with more than 2,000 traces.');
+
+      expect(requestedSnapshotIds).not.toContain('older-opaque-snapshot-cursor');
+    });
+  });
+
+  describe('when the snapshot changes while theme details are paginated', () => {
+    it('starts the new snapshot at the first examples page', async () => {
+      const observedExampleQueries: Array<{ snapshotId: string; offset: string }> = [];
+      useFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(twoDrilldownThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const isOlder = new URL(request.url).searchParams.get('snapshotId') === 'older-opaque-snapshot-cursor';
+          return HttpResponse.json(isOlder ? olderDrilldownThemeFlowResponse : drilldownThemeFlowResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101/examples`, ({ request }) => {
+          const url = new URL(request.url);
+          observedExampleQueries.push({
+            snapshotId: url.searchParams.get('snapshotId') ?? '',
+            offset: url.searchParams.get('offset') ?? '',
+          });
+          return HttpResponse.json(
+            url.searchParams.get('offset') === '1' ? secondThemeExamplesResponse : firstThemeExamplesResponse,
+          );
+        }),
+      );
+      const { container } = renderSignals();
+      fireEvent.click(await screen.findByRole('button', { name: 'View Add transcript theme details' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Next examples' }));
+      await screen.findByText('Save the transcript with the project.');
+      const sliderInput = container.querySelector('input[type="range"]');
+      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
+
+      fireEvent.change(sliderInput, { target: { value: '0' } });
+      await waitFor(() =>
+        expect(observedExampleQueries).toContainEqual({ snapshotId: 'older-opaque-snapshot-cursor', offset: '0' }),
+      );
+    });
+  });
+
+  describe('when a non-theme node is rendered', () => {
+    it('does not expose activation semantics or request paths', async () => {
       let pathsRequestCount = 0;
       useFlowHandlers(() => {
         pathsRequestCount += 1;
       });
       renderSignals();
-      const otherNodes = await screen.findAllByRole('button', { name: 'Other: 1 trace (33%)' });
-      const noiseNode = screen.getByRole('button', { name: 'Noise: 2 traces (67%)' });
+      const otherNodes = await screen.findAllByLabelText('Other: 1 trace (33%)');
+      const noiseNode = screen.getByLabelText('Noise: 2 traces (67%)');
 
-      for (const node of otherNodes) fireEvent.click(node);
-      fireEvent.click(noiseNode);
-      await new Promise(resolve => setTimeout(resolve, 20));
-
+      expect(otherNodes.every(node => node.getAttribute('role') === null)).toBe(true);
+      expect(noiseNode.getAttribute('role')).toBeNull();
       expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
       expect(pathsRequestCount).toBe(0);
     });
@@ -516,7 +652,7 @@ describe('SankeySignals drill-in', () => {
   });
 
   describe('when a theme id is not numeric', () => {
-    it('does not start a drill-in or request paths', async () => {
+    it('does not expose activation semantics or request paths', async () => {
       let pathsRequestCount = 0;
       useFlowHandlers(() => {
         pathsRequestCount += 1;
@@ -527,11 +663,9 @@ describe('SankeySignals drill-in', () => {
         ),
       );
       renderSignals();
-      const themeNode = await screen.findByRole('button', { name: 'Legacy theme: 1 trace (33%)' });
+      const themeNode = await screen.findByLabelText('Legacy theme: 1 trace (33%)');
 
-      fireEvent.click(themeNode);
-      await new Promise(resolve => setTimeout(resolve, 20));
-
+      expect(themeNode.getAttribute('role')).toBeNull();
       expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
       expect(pathsRequestCount).toBe(0);
     });
