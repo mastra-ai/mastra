@@ -15,13 +15,13 @@ Choose the setup path that matches your project.
 
 ### New project
 
-Create a Mastra project, then follow the [manual setup](#manual-setup) steps to connect it to Mastra Platform Observability:
+Create a managed Mastra project. When prompted, opt into Mastra Platform Observability to configure it automatically:
 
 ```bash npm2yarn
 npm create mastra@latest
 ```
 
-The default template includes observability support, but the create command doesn't authenticate with Mastra platform or provision a platform project.
+When you select observability, the create command authenticates with Mastra Platform, provisions a platform project, and writes the credentials to your project. If you skip platform setup or use a prompt-free creation flow, follow the [manual setup](#manual-setup) steps instead.
 
 ### Existing non-Mastra projects
 
