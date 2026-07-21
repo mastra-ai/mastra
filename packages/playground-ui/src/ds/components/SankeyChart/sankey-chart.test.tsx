@@ -355,6 +355,21 @@ describe('SankeyChart', () => {
     expect(curves[2]?.getAttribute('fill-opacity')).toBe('0.32');
   });
 
+  it('restores the focused source after the pointer leaves another node', async () => {
+    render(<Example onCurveClick={() => {}} />);
+    const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+    const searchNode = screen.getByLabelText('Search: 3 traces (75%)');
+    const referralNode = screen.getByLabelText('Referral: 1 trace (25%)');
+
+    fireEvent.focus(searchNode);
+    fireEvent.mouseEnter(referralNode);
+    fireEvent.mouseLeave(referralNode);
+
+    expect(curves[0]?.getAttribute('fill-opacity')).toBe('0.75');
+    expect(curves[1]?.getAttribute('fill-opacity')).toBe('0.75');
+    expect(curves[2]?.getAttribute('fill-opacity')).toBe('0.32');
+  });
+
   it('lets user-land controls toggle columns and recomputes the rendered flow', async () => {
     render(<Example />);
 

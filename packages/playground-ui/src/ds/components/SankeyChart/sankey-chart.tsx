@@ -24,6 +24,8 @@ export function SankeyChart({
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap } = useSankeyRenderContext();
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
+  const [focusedSourceName, setFocusedSourceName] = useState<string>();
+  const activeSourceName = hoveredSourceName ?? focusedSourceName;
   const firstColumnId = enabledColumns[0]?.id;
   const lastColumnId = enabledColumns.at(-1)?.id;
   const total = graph.links.reduce(
@@ -67,6 +69,7 @@ export function SankeyChart({
                     showColumnLabel={showColumnLabel}
                     isFirstColumn={node?.column.id === firstColumnId}
                     isLastColumn={node?.column.id === lastColumnId}
+                    onFocusChange={setFocusedSourceName}
                     onHoverChange={setHoveredSourceName}
                   />
                 );
@@ -77,7 +80,7 @@ export function SankeyChart({
                   <SankeyLink
                     {...props}
                     hueMap={hueMap}
-                    highlighted={String(props.payload.source.name ?? '') === hoveredSourceName}
+                    highlighted={String(props.payload.source.name ?? '') === activeSourceName}
                     onHoverChange={setHoveredSourceName}
                     clickable={onCurveClick !== undefined}
                     onSelect={() => {
@@ -123,6 +126,7 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
   showColumnLabel: boolean;
   isFirstColumn: boolean;
   isLastColumn: boolean;
+  onFocusChange: (sourceName: string | undefined) => void;
   onHoverChange: (sourceName: string | undefined) => void;
 };
 
@@ -139,6 +143,7 @@ function SankeyNode({
   showColumnLabel,
   isFirstColumn,
   isLastColumn,
+  onFocusChange,
   onHoverChange,
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
@@ -182,12 +187,12 @@ function SankeyNode({
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
         className="outline-none focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
         onFocus={event => {
-          onHoverChange(name);
+          onFocusChange(name);
           setIsFocused(true);
           showTooltipAt(event.currentTarget);
         }}
         onBlur={() => {
-          if (!isHovered) onHoverChange(undefined);
+          onFocusChange(undefined);
           setIsFocused(false);
         }}
         onMouseEnter={event => {
@@ -196,7 +201,7 @@ function SankeyNode({
           showTooltipAt(event.currentTarget);
         }}
         onMouseLeave={() => {
-          if (!isFocused) onHoverChange(undefined);
+          onHoverChange(undefined);
           setIsHovered(false);
         }}
         tabIndex={0}
