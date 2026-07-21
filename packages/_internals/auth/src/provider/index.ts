@@ -1,6 +1,10 @@
 import { MastraBase } from '@internal/core/base';
 import type {
   CredentialsResult,
+  IAuthHttpHandler,
+  IAuthInit,
+  ICredentialsProvider,
+  IOrganizationsProvider,
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
@@ -116,7 +120,7 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase imp
 type PrimitiveAuthUser = string | number | boolean | bigint | symbol | null | undefined;
 
 // Type guards for interface detection
-function isSSOProvider(p: unknown): p is ISSOProvider {
+export function isSSOProvider(p: unknown): p is ISSOProvider {
   return (
     p !== null &&
     typeof p === 'object' &&
@@ -125,7 +129,7 @@ function isSSOProvider(p: unknown): p is ISSOProvider {
   );
 }
 
-function isSessionProvider(p: unknown): p is ISessionProvider {
+export function isSessionProvider(p: unknown): p is ISessionProvider {
   return (
     p !== null &&
     typeof p === 'object' &&
@@ -134,11 +138,28 @@ function isSessionProvider(p: unknown): p is ISessionProvider {
   );
 }
 
-function isUserProvider(p: unknown): p is IUserProvider {
+export function isUserProvider(p: unknown): p is IUserProvider {
   return p !== null && typeof p === 'object' && typeof (p as any).getCurrentUser === 'function';
 }
-function isCredentialsProvider(p: unknown): boolean {
+export function isCredentialsProvider(p: unknown): p is ICredentialsProvider {
   return p !== null && typeof p === 'object' && typeof (p as any).signIn === 'function';
+}
+
+export function isOrganizationsProvider(p: unknown): p is IOrganizationsProvider {
+  return (
+    p !== null &&
+    typeof p === 'object' &&
+    typeof (p as any).ensureOrganization === 'function' &&
+    typeof (p as any).isOrganizationAdmin === 'function'
+  );
+}
+
+export function isAuthHttpHandler(p: unknown): p is IAuthHttpHandler {
+  return p !== null && typeof p === 'object' && typeof (p as any).handleAuthRequest === 'function';
+}
+
+export function hasAuthInit(p: unknown): p is IAuthInit {
+  return p !== null && typeof p === 'object' && typeof (p as any).init === 'function';
 }
 
 function isObjectLike(value: unknown): value is object {
@@ -187,7 +208,7 @@ export class CompositeAuth
       this.getUsers = undefined as any;
     }
     // Proxy credentials provider methods if any inner provider supports them.
-    const credProvider = this.findProvider(isCredentialsProvider as (p: unknown) => p is IMastraAuthProvider) as any;
+    const credProvider = providers.find(isCredentialsProvider) as any;
     if (credProvider) {
       (this as any).signIn = credProvider.signIn.bind(credProvider);
       if (typeof credProvider.signUp === 'function') {

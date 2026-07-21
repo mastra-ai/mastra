@@ -1,7 +1,7 @@
 import { useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
-import Chat from '../../chat/Chat';
+import { Chat } from '../../chat/Chat';
 import { isGithubFactory } from '../../workspaces/services/factories';
 
 export function DashboardRoute() {

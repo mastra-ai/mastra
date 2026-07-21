@@ -248,13 +248,17 @@ describe('createToolCallStep tool execution error handling', () => {
   });
 });
 
-describe('createToolCallStep FGA checks', () => {
+describe('createToolCallStep tool-level FGA delegation', () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 
-  it('should bypass membership resolution for a tenant-scoped trusted actor', async () => {
+  // Tool FGA is enforced by the tool wrapper (builder.ts), not by tool-call-step
+  // itself, so regular and durable paths authorize the same canonical id. This
+  // guards that tool-call-step does not run its own (bare-id) check and still
+  // forwards the actor to the wrapped tool.
+  it('does not call the FGA provider directly and forwards the actor to the tool', async () => {
     const controller = { enqueue: vi.fn() };
     const suspend = vi.fn();
     const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };

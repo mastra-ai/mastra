@@ -1,21 +1,25 @@
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import type { ReactNode } from 'react';
-import { Outlet, useLocation } from 'react-router';
+import { Outlet, useLocation, useParams } from 'react-router';
 
-import { OverlaysProvider } from '../../lib/overlays';
+import { useGithubStatusQuery } from '../../../../shared/hooks/useGithubStatus';
+import { OverlaysProvider, useOverlays } from '../../lib/overlays';
 import { ProjectRouteProvider } from '../../lib/ProjectRouteContext';
-import { ActiveFactoryProvider } from '../workspaces';
+import { ChatLayout } from '../../ui/ChatLayout';
+import { ActiveFactoryProvider } from '../workspaces/context/ActiveFactoryProvider';
+import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
 import { ChatOverlays } from './components/ChatOverlays';
-import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
+import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 
-/**
- * Shared chat app providers. Route leaves render their own pages so `/new` is a
- * real page boundary instead of a branch inside the thread transcript.
- */
-export default function Chat({ factoryId, namespace }: { factoryId: string; namespace: 'local' | 'dashboard' }) {
+interface ChatProps {
+  factoryId: string;
+  namespace: 'local' | 'dashboard';
+}
+
+export function Chat({ factoryId, namespace }: ChatProps) {
   return (
-    <MainSidebarProvider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
+    <MainSidebarProvider storageKey="mastracode-sidebar" mobileBreakpoint={768}>
       <ActiveFactoryProvider factoryId={factoryId}>
         <ProjectRouteProvider namespace={namespace}>
           <ChatSessionRouteProvider>
@@ -30,24 +34,37 @@ export default function Chat({ factoryId, namespace }: { factoryId: string; name
 }
 
 function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
-  const { pathname } = useLocation();
-  const userThreadMatch = pathname.match(/\/user\/threads\/([^/]+)$/);
-  const projectThreadMatch = pathname.match(/\/threads\/([^/]+)$/);
-  const userScoped = Boolean(userThreadMatch);
-  const encodedThreadId = userThreadMatch?.[1] ?? projectThreadMatch?.[1];
-  const threadId = encodedThreadId ? decodeURIComponent(encodedThreadId) : undefined;
+  const { threadId } = useParams();
+  const location = useLocation();
+  const userScoped = location.pathname.includes('/user/threads/');
 
   return (
-    <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>
+    <ChatSessionConfigProvider threadId={threadId ? decodeURIComponent(threadId) : undefined} userScoped={userScoped}>
       <ChatPermissionsProvider>{children}</ChatPermissionsProvider>
     </ChatSessionConfigProvider>
   );
 }
 
 function ChatShell() {
+  const overlays = useOverlays();
+  const githubStatus = useGithubStatusQuery();
+  const factoryPanel = overlays.isOpen('factories') ? (
+    <FactoriesPanel
+      onOpenGithub={
+        githubStatus.data
+          ? () => {
+              overlays.close('factories');
+              overlays.open('github');
+            }
+          : undefined
+      }
+      onClose={() => overlays.close('factories')}
+    />
+  ) : undefined;
+
   return (
     <>
-      <Outlet />
+      <ChatLayout main={factoryPanel ?? <Outlet />} />
       <ChatOverlays />
     </>
   );

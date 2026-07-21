@@ -7,11 +7,15 @@ import { MastraAuthWorkos } from './index';
 const mockListOrganizationMemberships = vi.fn();
 const mockGetUser = vi.fn();
 const mockWorkOSConstructor = vi.fn();
+const mockCreateOrganizationMembership = vi.fn();
+const mockCreateOrganization = vi.fn();
+const mockGetOrganizationByExternalId = vi.fn();
 
 vi.mock('@workos-inc/node', () => {
   // Use a class for constructor (Vitest v4 requirement)
   class MockWorkOS {
     userManagement: any;
+    organizations: any;
 
     constructor(apiKey?: string, options?: any) {
       mockWorkOSConstructor(apiKey, options);
@@ -19,6 +23,11 @@ vi.mock('@workos-inc/node', () => {
         getJwksUrl: vi.fn().mockReturnValue('https://mock-jwks-url'),
         listOrganizationMemberships: mockListOrganizationMemberships,
         getUser: mockGetUser,
+        createOrganizationMembership: mockCreateOrganizationMembership,
+      };
+      this.organizations = {
+        createOrganization: mockCreateOrganization,
+        getOrganizationByExternalId: mockGetOrganizationByExternalId,
       };
     }
   }
@@ -76,6 +85,9 @@ describe('MastraAuthWorkos', () => {
     mockWithAuth.mockReset();
     mockListOrganizationMemberships.mockReset();
     mockGetUser.mockReset();
+    mockCreateOrganizationMembership.mockReset();
+    mockCreateOrganization.mockReset();
+    mockGetOrganizationByExternalId.mockReset();
     vi.mocked(verifyJwks).mockReset();
     // Reset environment variables
     delete process.env.WORKOS_API_KEY;
@@ -134,15 +146,20 @@ describe('MastraAuthWorkos', () => {
       expect(() => new MastraAuthWorkos()).toThrow('WorkOS API key and client ID are required');
     });
 
-    it('should throw error when redirect URI is not provided', () => {
-      expect(
-        () =>
-          new MastraAuthWorkos({
-            apiKey: mockApiKey,
-            clientId: mockClientId,
-            session: { cookiePassword: mockCookiePassword },
-          }),
-      ).toThrow('WorkOS redirect URI is required');
+    it('should defer redirect URI resolution to init()/getLoginUrl when not provided', async () => {
+      const auth = new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        session: { cookiePassword: mockCookiePassword },
+      });
+
+      // Unresolvable without a publicUrl: both init() and getLoginUrl() fail clearly.
+      await expect(auth.init({})).rejects.toThrow('could not resolve a callback URL');
+      expect(() => auth.getLoginUrl('', 'state')).toThrow('WorkOS redirect URI is required');
+
+      // Resolvable from the host's publicUrl.
+      await auth.init({ publicUrl: 'https://factory.example.com' });
+      expect(auth.getRedirectUri()).toBe('https://factory.example.com/auth/callback');
     });
 
     it('should wire mapUserToResourceId from options', () => {
@@ -510,6 +527,123 @@ describe('MastraAuthWorkos', () => {
       });
       expect(mockListOrganizationMemberships).toHaveBeenCalledTimes(1);
       expect(autoPagination).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('ensureOrganization', () => {
+    const makeAuth = () =>
+      new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword },
+      });
+
+    const seedMemberships = (memberships: any[]) => {
+      mockListOrganizationMemberships.mockResolvedValue({
+        data: memberships,
+        autoPagination: vi.fn().mockResolvedValue(memberships),
+      });
+    };
+
+    it('returns the existing org without creating one when the user has a membership', async () => {
+      seedMemberships([{ id: 'om-1', organizationId: 'org-existing', role: { slug: 'member' } }]);
+
+      const orgId = await makeAuth().ensureOrganization('user_1');
+
+      expect(orgId).toBe('org-existing');
+      expect(mockCreateOrganization).not.toHaveBeenCalled();
+      expect(mockCreateOrganizationMembership).not.toHaveBeenCalled();
+    });
+
+    it('creates a personal org + membership with a stable idempotency key when the user has none', async () => {
+      seedMemberships([]);
+      mockCreateOrganization.mockResolvedValue({ id: 'org-new' });
+      mockCreateOrganizationMembership.mockResolvedValue({ id: 'om-new' });
+
+      const orgId = await makeAuth().ensureOrganization('user_1');
+
+      expect(orgId).toBe('org-new');
+      expect(mockCreateOrganization).toHaveBeenCalledWith(
+        expect.objectContaining({ externalId: 'user_1', name: "test@example.com's org" }),
+        { idempotencyKey: 'mastra-personal-org:user_1' },
+      );
+      expect(mockCreateOrganizationMembership).toHaveBeenCalledWith({
+        organizationId: 'org-new',
+        userId: 'user_1',
+      });
+    });
+
+    it('recovers the existing org when create fails with external_id_already_used', async () => {
+      seedMemberships([]);
+      mockCreateOrganization.mockRejectedValue({ code: 'external_id_already_used' });
+      mockGetOrganizationByExternalId.mockResolvedValue({ id: 'org-recovered' });
+      mockCreateOrganizationMembership.mockResolvedValue({ id: 'om-new' });
+
+      const orgId = await makeAuth().ensureOrganization('user_1');
+
+      expect(orgId).toBe('org-recovered');
+      expect(mockGetOrganizationByExternalId).toHaveBeenCalledWith('user_1');
+      expect(mockCreateOrganizationMembership).toHaveBeenCalledWith({
+        organizationId: 'org-recovered',
+        userId: 'user_1',
+      });
+    });
+
+    it('tolerates organization_membership_already_exists on the membership step', async () => {
+      seedMemberships([]);
+      mockCreateOrganization.mockResolvedValue({ id: 'org-new' });
+      mockCreateOrganizationMembership.mockRejectedValue({
+        rawData: { code: 'organization_membership_already_exists' },
+      });
+
+      await expect(makeAuth().ensureOrganization('user_1')).resolves.toBe('org-new');
+    });
+
+    it('returns undefined instead of throwing when WorkOS rejects the bootstrap', async () => {
+      seedMemberships([]);
+      mockCreateOrganization.mockRejectedValue(new Error('forbidden'));
+
+      await expect(makeAuth().ensureOrganization('user_1')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('isOrganizationAdmin', () => {
+    const makeAuth = () =>
+      new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword },
+      });
+
+    const seedMemberships = (memberships: any[]) => {
+      mockListOrganizationMemberships.mockResolvedValue({
+        data: memberships,
+        autoPagination: vi.fn().mockResolvedValue(memberships),
+      });
+    };
+
+    it('accepts legacy single-role admin and owner slugs', async () => {
+      seedMemberships([{ organizationId: 'org-1', role: { slug: 'admin' } }]);
+      expect(await makeAuth().isOrganizationAdmin('org-1', 'user_1')).toBe(true);
+
+      seedMemberships([{ organizationId: 'org-1', role: { slug: 'owner' } }]);
+      expect(await makeAuth().isOrganizationAdmin('org-1', 'user_1')).toBe(true);
+    });
+
+    it('prefers the multi-role roles array over the legacy role field', async () => {
+      seedMemberships([{ organizationId: 'org-1', role: { slug: 'member' }, roles: [{ slug: 'owner' }] }]);
+      expect(await makeAuth().isOrganizationAdmin('org-1', 'user_1')).toBe(true);
+    });
+
+    it('rejects non-admin members, other orgs, and provider errors', async () => {
+      seedMemberships([{ organizationId: 'org-1', role: { slug: 'member' } }]);
+      expect(await makeAuth().isOrganizationAdmin('org-1', 'user_1')).toBe(false);
+      expect(await makeAuth().isOrganizationAdmin('org-other', 'user_1')).toBe(false);
+
+      mockListOrganizationMemberships.mockRejectedValue(new Error('boom'));
+      expect(await makeAuth().isOrganizationAdmin('org-1', 'user_1')).toBe(false);
     });
   });
 

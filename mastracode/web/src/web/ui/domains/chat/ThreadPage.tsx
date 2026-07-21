@@ -12,7 +12,6 @@ import {
   useActiveFactoryContext,
 } from '../workspaces';
 import { ChatMessageList } from './components/ChatMessageList';
-import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
@@ -63,7 +62,6 @@ export function ThreadPage() {
           ) : (
             <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
           )}
-          <ChatOverlays />
         </ChatSessionBoundary>
       }
     />
@@ -83,19 +81,19 @@ function ThreadPageMain() {
   );
 }
 
-function ThreadComposer() {
-  return (
-    <div className={threadComposerContainerClass}>
-      <div className={threadComposerInnerClass} role="region" aria-label="Thread composer">
-        <ComposerPanel />
-      </div>
-    </div>
-  );
-}
-
 function ThreadPageContent() {
   useRouteThreadSync();
   useThreadPageKickoffs();
 
   return <ChatMessageList />;
+}
+
+function ThreadComposer() {
+  return (
+    <div className={threadComposerContainerClass}>
+      <div className={threadComposerInnerClass} role="region" aria-label="Thread composer">
+        <ComposerPanel composerVariant="textarea" />
+      </div>
+    </div>
+  );
 }

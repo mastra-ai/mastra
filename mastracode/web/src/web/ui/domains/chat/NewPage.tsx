@@ -7,7 +7,6 @@ import { FolderIcon } from '../../ui';
 import type { Factory } from '../workspaces';
 import { EmptyFactoryState, useActiveFactoryContext } from '../workspaces';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
-import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
 import { ChatSessionBoundary } from './context/ChatSessionProvider';
@@ -27,7 +26,6 @@ export function NewPage() {
       ) : (
         <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
       )}
-      <ChatOverlays />
     </ChatSessionBoundary>
   );
 }
@@ -67,7 +65,7 @@ function DraftStart({ activeFactory }: { activeFactory: Factory }) {
         <FactoryContext activeFactory={activeFactory} />
       </div>
 
-      {activeFactory && <ComposerPanel composerVariant="textarea" />}
+      <ComposerPanel composerVariant="textarea" />
     </section>
   );
 }
@@ -82,7 +80,6 @@ function BrandLockup() {
 }
 
 function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
-  // GitHub factories have no local `path`; show the sandbox worktree path instead.
   const projectPath = deriveProjectPath(activeFactory);
   return (
     <p className="m-0 flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
