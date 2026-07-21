@@ -466,6 +466,7 @@ describe('DurableAgent in-execution tool suspension', () => {
       instructions: 'Use the interactive approval tool',
       model: mockModel as LanguageModelV2,
       tools: { interactiveApprovalTool },
+      memory: new MockMemory(),
       goal: {},
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -478,9 +479,14 @@ describe('DurableAgent in-execution tool suspension', () => {
     });
 
     const result = await durableAgent.stream('Use the interactive approval tool', { memory });
+    let sawApproval = false;
     for await (const chunk of result.fullStream) {
-      if (chunk.type === 'tool-call-approval') break;
+      if (chunk.type === 'tool-call-approval') {
+        sawApproval = true;
+        break;
+      }
     }
+    expect(sawApproval).toBe(true);
 
     let durationAtApproval = 0;
     await vi.waitFor(async () => {

@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
@@ -395,6 +396,7 @@ describe('DurableAgent tool approval', () => {
         instructions: 'You can search for information',
         model: mockModel as LanguageModelV2,
         tools: { searchTool },
+        memory: new MockMemory(),
         goal: {},
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -406,9 +408,16 @@ describe('DurableAgent tool approval', () => {
       });
 
       const result = await durableAgent.stream('Search for test', { memory });
+      let sawApproval = false;
+      const chunkTypes: string[] = [];
       for await (const chunk of result.fullStream) {
-        if (chunk.type === 'tool-call-approval') break;
+        chunkTypes.push(chunk.type === 'error' ? `${chunk.type}:${JSON.stringify(chunk.payload)}` : chunk.type);
+        if (chunk.type === 'tool-call-approval') {
+          sawApproval = true;
+          break;
+        }
       }
+      expect(sawApproval, `Observed chunks: ${chunkTypes.join(', ')}`).toBe(true);
       let durationAtApproval = 0;
       await vi.waitFor(async () => {
         durationAtApproval = (await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs ?? 0;
