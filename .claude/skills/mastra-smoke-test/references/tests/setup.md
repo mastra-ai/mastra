@@ -123,9 +123,7 @@ import { LibSQLStore } from '@mastra/libsql'; // or PgStore, TursoStore
 
 export const mastra = new Mastra({
   // ...
-  storage: new LibSQLStore({
-    /* config */
-  }),
+  storage: new LibSQLStore({/* config */}),
 });
 ```
 

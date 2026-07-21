@@ -58,8 +58,7 @@ export type WorkflowScheduleConfig<TInput = unknown, TState = unknown, TRequestC
  * When using the array form, every entry must specify a unique `id`.
  */
 export type WorkflowScheduleInput<TInput = unknown, TState = unknown, TRequestContext = unknown> =
-  | WorkflowScheduleConfig<TInput, TState, TRequestContext>
-  | WorkflowScheduleConfig<TInput, TState, TRequestContext>[];
+  WorkflowScheduleConfig<TInput, TState, TRequestContext> | WorkflowScheduleConfig<TInput, TState, TRequestContext>[];
 
 /**
  * Configuration for the `Scheduler` component owned by Mastra.

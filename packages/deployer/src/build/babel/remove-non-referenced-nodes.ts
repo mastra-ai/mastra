@@ -1,4 +1,4 @@
-import babel from '@babel/core';
+import * as babel from '@babel/core';
 
 export function removeNonReferencedNodes() {
   const t = babel.types;
@@ -62,5 +62,5 @@ export function removeNonReferencedNodes() {
         );
       },
     },
-  } as babel.PluginObj;
+  } as babel.PluginObject;
 }

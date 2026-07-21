@@ -1,5 +1,23 @@
 # @mastra/libsql
 
+## 1.17.0-alpha.1
+
+### Minor Changes
+
+- Added LibSQLFactoryStorage for persisting Mastra agent state and lifecycle-managed application domains through one LibSQL connection. ([#19681](https://github.com/mastra-ai/mastra/pull/19681))
+
+  ```ts
+  import { LibSQLFactoryStorage } from '@mastra/libsql';
+
+  const storage = new LibSQLFactoryStorage({ url: 'file:mastra.db' });
+  await storage.init();
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`6b1bf3b`](https://github.com/mastra-ai/mastra/commit/6b1bf3b9494bd51aa8f654c68c9355d6046fa2a1), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9)]:
+  - @mastra/core@1.52.0-alpha.8
+
 ## 1.16.1-alpha.0
 
 ### Patch Changes
@@ -926,9 +944,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({
@@ -956,9 +972,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({
