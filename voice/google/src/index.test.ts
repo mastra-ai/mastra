@@ -10,6 +10,11 @@ vi.mock('@google-cloud/speech', () => ({
   SpeechClient: vi.fn().mockImplementation(() => ({
     recognize: vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'test' }] }] }]),
   })),
+  v2: {
+    SpeechClient: vi.fn().mockImplementation(() => ({
+      recognize: vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'test v2' }] }] }]),
+    })),
+  },
 }));
 
 vi.mock('@google-cloud/text-to-speech', () => ({
@@ -137,6 +142,318 @@ describe('GoogleVoice Unit Tests', () => {
         speaker: 'en-US-Studio-O',
       });
       expect(voice.speaker).toBe('en-US-Studio-O');
+    });
+  });
+
+  describe('speak', () => {
+    it('should build a text-only request by default', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hello');
+      expect(mockSynthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: { text: 'Hello' },
+          voice: expect.objectContaining({ name: 'en-US-Casual-K', languageCode: 'en-US' }),
+          audioConfig: { audioEncoding: 'LINEAR16' },
+        }),
+      );
+    });
+
+    it('should pass SSML via options.input', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      const ssml = '<speak>Hello <break time="200ms"/> world</speak>';
+      await voice.speak('ignored', { input: { ssml } });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.input.ssml).toBe(ssml);
+      expect(call.input.text).toBeUndefined();
+    });
+
+    it('should populate text from positional input when options.input has no text/ssml/markup', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hello world', {
+        input: { customPronunciations: { pronunciations: [] } },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.input.text).toBe('Hello world');
+      expect(call.input.customPronunciations).toEqual({ pronunciations: [] });
+    });
+
+    it('should merge caller voice fields on top of defaults', async () => {
+      const voice = new GoogleVoice({ speaker: 'en-US-Studio-O' });
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hi', {
+        voice: { modelName: 'gemini-2.5-flash-tts' },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.voice.modelName).toBe('gemini-2.5-flash-tts');
+      expect(call.voice.name).toBe('en-US-Studio-O');
+      expect(call.voice.languageCode).toBe('en-US');
+    });
+
+    it('should derive languageCode from non-en-US default speaker', async () => {
+      const voice = new GoogleVoice({ speaker: 'cmn-CN-Standard-A' });
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hi', {
+        voice: { modelName: 'gemini-2.5-flash-tts' },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.voice.name).toBe('cmn-CN-Standard-A');
+      expect(call.voice.languageCode).toBe('cmn-CN');
+      expect(call.voice.modelName).toBe('gemini-2.5-flash-tts');
+    });
+
+    it('should allow caller voice fields to override defaults', async () => {
+      const voice = new GoogleVoice({ speaker: 'en-US-Studio-O' });
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hi', {
+        voice: { name: 'custom-voice', languageCode: 'fr-FR' },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.voice.name).toBe('custom-voice');
+      expect(call.voice.languageCode).toBe('fr-FR');
+    });
+
+    it('should pass custom audioConfig', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hi', { audioConfig: { audioEncoding: 'MP3' } });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.audioConfig).toEqual({ audioEncoding: 'MP3' });
+    });
+
+    it('should not inject text when input uses multiSpeakerMarkup', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      const multiSpeakerMarkup = { turns: [{ speaker: 'R', text: 'Hi' }] };
+      await voice.speak('ignored', { input: { multiSpeakerMarkup } });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.input.multiSpeakerMarkup).toEqual(multiSpeakerMarkup);
+      expect(call.input.text).toBeUndefined();
+    });
+
+    it('should not mutate caller input object', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      const callerInput = { customPronunciations: { pronunciations: [] } };
+      await voice.speak('Hi', { input: callerInput });
+      expect(callerInput).toEqual({ customPronunciations: { pronunciations: [] } });
+    });
+
+    it('should handle stream input with rich options', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      const textStream = Readable.from(['Hello', ' stream']);
+      await voice.speak(textStream, {
+        input: { customPronunciations: { pronunciations: [] } },
+        voice: { modelName: 'gemini-2.5-flash-tts' },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.input.text).toBe('Hello stream');
+      expect(call.voice.modelName).toBe('gemini-2.5-flash-tts');
+    });
+  });
+
+  describe('listen v1 (default)', () => {
+    it('should call v1 recognize by default', async () => {
+      const voice = new GoogleVoice();
+      const mockRecognize = vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'hello' }] }] }]);
+      (voice as any).speechClient = { recognize: mockRecognize };
+
+      const audioStream = Readable.from([Buffer.from('fake audio')]);
+      const result = await voice.listen(audioStream);
+      expect(result).toBe('hello');
+      expect(mockRecognize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({ encoding: 'LINEAR16', languageCode: 'en-US' }),
+          audio: expect.objectContaining({ content: expect.any(String) }),
+        }),
+      );
+    });
+
+    it('should pass custom v1 config', async () => {
+      const voice = new GoogleVoice();
+      const mockRecognize = vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'bonjour' }] }] }]);
+      (voice as any).speechClient = { recognize: mockRecognize };
+
+      const audioStream = Readable.from([Buffer.from('fake audio')]);
+      await voice.listen(audioStream, { config: { encoding: 'FLAC', languageCode: 'fr-FR' } });
+      expect(mockRecognize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({ encoding: 'FLAC', languageCode: 'fr-FR' }),
+        }),
+      );
+    });
+  });
+
+  describe('listen v2', () => {
+    it('should call v2 recognize when v2: true', async () => {
+      const voice = new GoogleVoice();
+      const mockV1Recognize = vi.fn();
+      const mockV2Recognize = vi
+        .fn()
+        .mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'v2 hello' }] }] }]);
+      (voice as any).speechClient = { recognize: mockV1Recognize };
+      (voice as any).speechClientV2 = {
+        recognize: mockV2Recognize,
+        getProjectId: vi.fn().mockResolvedValue('test-project'),
+      };
+
+      const audioStream = Readable.from([Buffer.from('fake audio')]);
+      const result = await voice.listen(audioStream, { v2: true });
+      expect(result).toBe('v2 hello');
+      expect(mockV2Recognize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recognizer: 'projects/test-project/locations/global/recognizers/_',
+          config: expect.objectContaining({ autoDecodingConfig: {}, languageCodes: ['en-US'] }),
+          content: expect.any(Buffer),
+        }),
+      );
+      expect(mockV1Recognize).not.toHaveBeenCalled();
+    });
+
+    it('should use project from constructor for recognizer', async () => {
+      const voice = new GoogleVoice({ vertexAI: true, project: 'my-vertex-project' });
+      const mockV2Recognize = vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'ok' }] }] }]);
+      (voice as any).speechClientV2 = { recognize: mockV2Recognize };
+
+      const audioStream = Readable.from([Buffer.from('fake audio')]);
+      await voice.listen(audioStream, { v2: true });
+      expect(mockV2Recognize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recognizer: 'projects/my-vertex-project/locations/global/recognizers/_',
+        }),
+      );
+    });
+
+    it('should use autoDecodingConfig by default when no decoding config specified', async () => {
+      const voice = new GoogleVoice();
+      const mockV2Recognize = vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'ok' }] }] }]);
+      (voice as any).speechClientV2 = {
+        recognize: mockV2Recognize,
+        getProjectId: vi.fn().mockResolvedValue('test-project'),
+      };
+
+      const audioStream = Readable.from([Buffer.from('fake audio')]);
+      await voice.listen(audioStream, { v2: true, config: { languageCodes: ['fr-FR'] } });
+      expect(mockV2Recognize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({ autoDecodingConfig: {}, languageCodes: ['fr-FR'] }),
+        }),
+      );
+    });
+
+    it('should default languageCodes to en-US and model to long', async () => {
+      const voice = new GoogleVoice();
+      const mockV2Recognize = vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'ok' }] }] }]);
+      (voice as any).speechClientV2 = {
+        recognize: mockV2Recognize,
+        getProjectId: vi.fn().mockResolvedValue('test-project'),
+      };
+
+      const audioStream = Readable.from([Buffer.from('fake audio')]);
+      await voice.listen(audioStream, { v2: true });
+      expect(mockV2Recognize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({ languageCodes: ['en-US'], model: 'long' }),
+        }),
+      );
+    });
+
+    it('should pass explicit decoding config without adding auto', async () => {
+      const voice = new GoogleVoice();
+      const mockV2Recognize = vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'ok' }] }] }]);
+      (voice as any).speechClientV2 = {
+        recognize: mockV2Recognize,
+        getProjectId: vi.fn().mockResolvedValue('test-project'),
+      };
+
+      const audioStream = Readable.from([Buffer.from('fake audio')]);
+      await voice.listen(audioStream, {
+        v2: true,
+        config: { explicitDecodingConfig: { encoding: 'MP4_AAC', sampleRateHertz: 44100, audioChannelCount: 1 } },
+      });
+      const call = mockV2Recognize.mock.calls[0][0];
+      expect(call.config.explicitDecodingConfig).toEqual({
+        encoding: 'MP4_AAC',
+        sampleRateHertz: 44100,
+        audioChannelCount: 1,
+      });
+      expect(call.config.autoDecodingConfig).toBeUndefined();
+    });
+
+    it('should accept a custom recognizer path', async () => {
+      const voice = new GoogleVoice();
+      const mockV2Recognize = vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'ok' }] }] }]);
+      (voice as any).speechClientV2 = { recognize: mockV2Recognize };
+
+      const audioStream = Readable.from([Buffer.from('fake audio')]);
+      await voice.listen(audioStream, {
+        v2: true,
+        recognizer: 'projects/my-project/locations/global/recognizers/my-recognizer',
+      });
+      expect(mockV2Recognize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recognizer: 'projects/my-project/locations/global/recognizers/my-recognizer',
+        }),
+      );
+    });
+
+    it('should not mutate caller config object', async () => {
+      const voice = new GoogleVoice();
+      const mockV2Recognize = vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'ok' }] }] }]);
+      (voice as any).speechClientV2 = {
+        recognize: mockV2Recognize,
+        getProjectId: vi.fn().mockResolvedValue('test-project'),
+      };
+
+      const callerConfig = { languageCodes: ['ja-JP'] };
+      const audioStream = Readable.from([Buffer.from('fake audio')]);
+      await voice.listen(audioStream, { v2: true, config: callerConfig });
+      // Caller's original object should not have autoDecodingConfig added
+      expect(callerConfig).toEqual({ languageCodes: ['ja-JP'] });
+    });
+
+    it('should lazily construct v2 client', async () => {
+      const voice = new GoogleVoice();
+      expect((voice as any).speechClientV2).toBeUndefined();
+
+      const mockV2Recognize = vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'ok' }] }] }]);
+      let constructed = false;
+      (voice as any).getV2SpeechClient = () => {
+        constructed = true;
+        const mock = {
+          recognize: mockV2Recognize,
+          getProjectId: vi.fn().mockResolvedValue('test-project'),
+        };
+        (voice as any).speechClientV2 = mock;
+        return mock;
+      };
+
+      const audioStream = Readable.from([Buffer.from('fake audio')]);
+      await voice.listen(audioStream, { v2: true });
+      expect(constructed).toBe(true);
     });
   });
 });

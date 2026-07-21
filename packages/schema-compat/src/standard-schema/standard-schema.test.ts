@@ -502,6 +502,33 @@ describe('toStandardSchema', () => {
       expect(() => toStandardSchema(123 as any)).toThrow('Unsupported schema type');
     });
   });
+
+  describe('zod v4 record workaround (#17051)', () => {
+    // Zod v4 < 4.4.0 has a bug where single-arg z.record(valueSchema) stores
+    // the value schema in def.keyType and leaves def.valueType undefined,
+    // which crashes z.toJSONSchema()'s recordProcessor. The workspace zod has
+    // the upstream fix, so recreate the buggy def shape directly to keep this
+    // regression testable regardless of the installed zod version.
+    const simulateZodRecordBug = (recordSchema: unknown) => {
+      const def = (recordSchema as any)._zod.def;
+      def.keyType = def.valueType;
+      def.valueType = undefined;
+    };
+
+    it('patches records before the native ~standard.jsonSchema short-circuit', () => {
+      const schema = z4.object({ flags: z4.record(z4.string(), z4.boolean()) });
+      simulateZodRecordBug(schema.shape.flags);
+
+      // Zod >= 4.2 exposes ~standard.jsonSchema natively, so toStandardSchema
+      // returns the schema as-is without going through the v4 adapter. The
+      // record patch must still be applied for that path.
+      const result = toStandardSchema(schema);
+      const json = standardSchemaToJSONSchema(result, { io: 'input' }) as Record<string, any>;
+
+      expect(json.properties.flags.type).toBe('object');
+      expect(json.properties.flags.additionalProperties).toEqual({ type: 'boolean' });
+    });
+  });
 });
 
 // ============================================================================

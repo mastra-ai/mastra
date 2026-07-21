@@ -1,0 +1,338 @@
+---
+title: "Guide: Building a coding agent"
+description: Build and run your own interactive coding agent with Mastra.
+---
+
+import { VideoPlayer } from '@site/src/components/video-player'
+
+# Building a coding agent
+
+In this guide, you'll build a small coding-agent application in the same category as Mastra Code, Claude Code, or Codex. You'll create the coding agent with `buildBasePrompt()` and `createCodingAgent()`, wrap it in an `AgentController` for interactive sessions and tool approvals, and run the controller in a terminal UI built with pi-tui.
+
+The video below shows the coding agent you'll build in action.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1784018138/coding-agent-demo_a8p4vf.mp4" />
+
+## Prerequisites
+
+- Node.js `v22.19.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project. Follow the [installation guide](/guides/getting-started/quickstart) if needed.
+
+## Install the terminal dependencies
+
+Install [pi-tui](https://github.com/earendil-works/pi/tree/main/packages/tui) and `tsx`:
+
+```bash npm2yarn
+npm install @earendil-works/pi-tui
+npm install --save-dev tsx
+```
+
+pi-tui provides the terminal renderer and input editor. `tsx` runs the TypeScript entry point directly.
+
+## Create the coding agent
+
+Create `src/mastra/agents/coding-agent.ts`. The prompt describes the current project and maps the prompt's generic tool names to the tools supplied by the default workspace.
+
+```typescript title="src/mastra/agents/coding-agent.ts"
+import { basename } from 'node:path'
+import { buildBasePrompt, createCodingAgent } from '@mastra/core/coding-agent'
+
+export const projectPath = process.cwd()
+const model = '__GATEWAY_OPENAI_MODEL__'
+
+const instructions = buildBasePrompt({
+  projectPath,
+  projectName: basename(projectPath),
+  platform: process.platform,
+  date: new Date().toISOString().slice(0, 10),
+  mode: 'build',
+  modelId: model,
+  productName: 'My Coding Agent',
+  coAuthorName: 'My Coding Agent',
+  coAuthorEmail: 'coding-agent@example.com',
+  toolGuidance: `# Workspace tools
+- Use mastra_workspace_read_file for view.
+- Use mastra_workspace_list_files for find_files.
+- Use mastra_workspace_grep for search_content.
+- Use mastra_workspace_execute_command for execute_command.
+- Use mastra_workspace_write_file, mastra_workspace_edit_file, and mastra_workspace_file_stat for writing, editing, and inspecting file metadata.
+- Use only the workspace tools provided to you. Do not attempt unavailable capabilities.`,
+})
+
+export const codingAgent = createCodingAgent({
+  id: 'coding-agent',
+  name: 'Coding Agent',
+  model,
+  instructions,
+  basePath: projectPath,
+})
+```
+
+Replace the branding values with the name and co-author details for your agent. `createCodingAgent()` supplies a local filesystem and sandbox workspace, along with defaults for recovering from transient provider errors. The `basePath` scopes the filesystem tools and sets the initial working directory for commands. Any configuration you pass to the factory takes precedence over its defaults.
+
+The default local sandbox runs commands directly on the host without isolation, so `basePath` isn't an operating-system security boundary. This example adds per-tool-call approval in the terminal, but you should still run it only against a trusted local project.
+
+## Register the coding agent
+
+Register the returned agent like any other Mastra agent in `src/mastra/index.ts`. Registration also makes the underlying agent available in Studio and through the Mastra server.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+// highlight-next-line
+import { codingAgent } from './agents/coding-agent'
+
+export const mastra = new Mastra({
+  // highlight-next-line
+  agents: { codingAgent },
+})
+```
+
+## Test the coding agent
+
+Before adding the terminal interface, verify the underlying agent in Studio. When the development server starts, its working directory is `src/mastra/public`, so add a non-sensitive file there for the agent to inspect:
+
+```md title="src/mastra/public/project-notes.md"
+# Project notes
+
+Name: Acme support portal
+Status: In development
+Owner: Platform team
+```
+
+Start the development server:
+
+```bash npm2yarn
+npm run dev
+```
+
+Open [Studio](/docs/studio/overview), select **Coding Agent**, and enter:
+
+```text
+Inspect project-notes.md and report the project name, status, and owner. Do not modify files.
+```
+
+The response should identify the Acme support portal, its development status, and the Platform team without changing the file. Model wording may vary.
+
+## Create the agent controller
+
+Create `src/mastra/coding-agent-controller.ts`. The controller owns the interactive session, exposes UI events, and pauses workspace tools for approval.
+
+```typescript title="src/mastra/coding-agent-controller.ts"
+import { AgentController } from '@mastra/core/agent-controller'
+import { codingAgent, projectPath } from './agents/coding-agent'
+
+export async function createCodingAgentSession() {
+  const workspace = await codingAgent.getWorkspace()
+
+  if (!workspace) {
+    throw new Error('The coding agent requires a workspace.')
+  }
+
+  const controller = new AgentController({
+    id: 'coding-agent-controller',
+    agent: codingAgent,
+    workspace,
+    modes: [{ id: 'build', name: 'Build', metadata: { default: true } }],
+    disableBuiltinTools: [
+      'ask_user',
+      'submit_plan',
+      'task_write',
+      'task_update',
+      'task_complete',
+      'task_check',
+      'subagent',
+    ],
+  })
+
+  await controller.init()
+
+  const session = await controller.createSession({
+    id: 'local-session',
+    ownerId: 'local-user',
+    resourceId: projectPath,
+  })
+
+  return { controller, session }
+}
+```
+
+This example uses one mode and disables the controller's additional built-in tools so the introductory UI can focus on workspace execution. This is a tutorial simplification, not a production recommendation. In a production application, enable the built-in tools your product needs and implement their UI flows: interactive tools such as `ask_user` and `submit_plan` suspend until your interface resumes them, while task and subagent tools have their own lifecycle events. See [tool approvals and suspensions](/docs/agent-controller/tool-approvals).
+
+The example also omits storage, so the conversation lasts only for the current process. You can add storage later when you want to resume sessions.
+
+## Build the terminal UI
+
+Create `src/coding-agent-tui.ts`. The UI renders assistant message updates, shows tool activity, and asks the user to approve or decline each workspace tool call.
+
+```typescript title="src/coding-agent-tui.ts"
+import { pathToFileURL } from 'node:url'
+import {
+  Editor,
+  matchesKey,
+  ProcessTerminal,
+  Text,
+  TUI,
+  type EditorTheme,
+  type Terminal,
+} from '@earendil-works/pi-tui'
+import { createCodingAgentSession } from './mastra/coding-agent-controller'
+
+const plain = (text: string) => text
+const editorTheme: EditorTheme = {
+  borderColor: plain,
+  selectList: {
+    selectedPrefix: plain,
+    selectedText: plain,
+    description: plain,
+    scrollInfo: plain,
+    noMatch: plain,
+  },
+}
+
+function getText(message: { content: Array<{ type: string; text?: string }> }) {
+  return message.content
+    .filter(part => part.type === 'text')
+    .map(part => part.text ?? '')
+    .join('')
+}
+
+export async function startCodingAgentTui(terminal: Terminal = new ProcessTerminal()) {
+  const { controller, session } = await createCodingAgentSession()
+  const tui = new TUI(terminal)
+  const output = new Text('Ask me to inspect or change this project.', 1, 0)
+  const editor = new Editor(tui, editorTheme)
+
+  let busy = false
+  let pendingApproval: { toolCallId: string; toolName: string } | undefined
+
+  const showError = (error: unknown) => {
+    output.setText(`Error: ${error instanceof Error ? error.message : String(error)}`)
+    busy = false
+    pendingApproval = undefined
+    tui.requestRender()
+  }
+
+  const unsubscribe = session.subscribe(event => {
+    if (event.type === 'message_update' && event.message.role === 'assistant') {
+      output.setText(getText(event.message))
+    } else if (event.type === 'tool_start') {
+      output.setText(`Running ${event.toolName}...`)
+    } else if (event.type === 'tool_approval_required') {
+      pendingApproval = { toolCallId: event.toolCallId, toolName: event.toolName }
+      output.setText(`Allow ${event.toolName}? Enter y or n.`)
+    } else if (event.type === 'agent_end') {
+      busy = false
+    } else if (event.type === 'error') {
+      showError(event.error)
+      return
+    }
+
+    tui.requestRender()
+  })
+
+  editor.onSubmit = value => {
+    if (pendingApproval) {
+      const answer = value.trim().toLowerCase()
+      if (answer !== 'y' && answer !== 'n') {
+        output.setText(`Allow ${pendingApproval.toolName}? Enter y or n.`)
+        tui.requestRender()
+        return
+      }
+
+      const approval = pendingApproval
+      pendingApproval = undefined
+      session.respondToToolApproval({
+        toolCallId: approval.toolCallId,
+        decision: answer === 'y' ? 'approve' : 'decline',
+      })
+      return
+    }
+
+    if (busy || !value.trim()) return
+
+    busy = true
+    output.setText('Thinking...')
+    tui.requestRender()
+    void session.sendMessage({ content: value.trim() }).catch(showError)
+  }
+
+  tui.addChild(new Text('My Coding Agent', 1, 0))
+  tui.addChild(output)
+  tui.addChild(editor)
+  tui.setFocus(editor)
+
+  let stopPromise: Promise<void> | undefined
+  let removeInputListener = () => {}
+
+  const stop = () => {
+    stopPromise ??= (async () => {
+      process.off('SIGINT', handleExit)
+      removeInputListener()
+      session.abort()
+      unsubscribe()
+      tui.stop()
+      await controller.destroy()
+    })()
+    return stopPromise
+  }
+
+  const handleExit = () => {
+    void stop().catch(error => {
+      console.error(error)
+      process.exitCode = 1
+    })
+  }
+
+  removeInputListener = tui.addInputListener(data => {
+    if (!matchesKey(data, 'ctrl+c')) return
+    handleExit()
+    return { consume: true }
+  })
+  process.once('SIGINT', handleExit)
+  tui.start()
+
+  return { stop }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await startCodingAgentTui()
+}
+```
+
+The optional `Terminal` parameter supports automated tests while using `ProcessTerminal` during normal execution. The UI intentionally renders only the latest response; the `Session` still maintains the conversation context for follow-up prompts.
+
+## Run the coding agent
+
+Start the terminal application from the project root so `process.cwd()` points to the project you want the agent to use:
+
+```bash npm2yarn
+npx tsx src/coding-agent-tui.ts
+```
+
+Enter this prompt:
+
+```text
+Inspect package.json and report the package name and available scripts. Do not modify files.
+```
+
+When the controller asks whether to allow `mastra_workspace_read_file`, enter `y`. The agent reads `package.json` and reports what it finds. Model wording varies, but the response should include the package name and its scripts without changing the file.
+
+Press **Ctrl+C** to close the application and destroy the controller.
+
+## Next steps
+
+You can extend this foundation to:
+
+- Add storage to persist and resume controller sessions
+- Add more modes with different instructions and workspace-tool allowlists
+- Replace the latest-response component with a transcript that renders tool calls and results
+- Add sandbox isolation before accepting untrusted prompts or distributing the application
+
+Learn more:
+
+- [`createCodingAgent()` reference](/reference/coding-agent/create-coding-agent)
+- [`buildBasePrompt()` reference](/reference/coding-agent/build-base-prompt)
+- [AgentController overview](/docs/agent-controller/overview)
+- [`AgentController` reference](/reference/agent-controller/agent-controller-class)
+- [Workspace overview](/docs/workspace/overview)

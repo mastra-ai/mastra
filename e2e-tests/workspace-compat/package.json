@@ -1,6 +1,6 @@
 {
   "name": "workspace-compat-e2e-test",
-  "version": "0.0.59",
+  "version": "0.0.60",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,11 +8,11 @@
   },
   "devDependencies": {
     "execa": "^9.6.1",
-    "get-port": "^7.1.0",
-    "tinyglobby": "^0.2.16",
+    "get-port": "^7.2.0",
+    "tinyglobby": "^0.2.17",
     "typescript": "catalog:",
-    "verdaccio": "^6.3.2",
-    "verdaccio-auth-memory": "^10.3.1",
+    "verdaccio": "^6.7.4",
+    "verdaccio-auth-memory": "^13.0.3",
     "vitest": "catalog:"
   }
 }

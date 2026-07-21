@@ -15,9 +15,7 @@ Both signals are enabled by default and share the same provider configuration. T
 
 ```typescript
 new OtelExporter({
-  provider: {
-    /* ... */
-  },
+  provider: {/* ... */},
   signals: {
     traces: true, // default
     logs: true, // default
@@ -534,9 +532,7 @@ To enable content attributes:
 
 ```typescript
 new OtelExporter({
-  provider: {
-    /* your provider config */
-  },
+  provider: {/* your provider config */},
   genAiConventions: {
     includeContentAttributes: true, // Default: false
   },

@@ -18,26 +18,20 @@
 
 import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
-import { getLocalSandboxRoot } from '../web/github/local-sandbox.js';
-import { getSandboxProvider } from '../web/github/sandbox.js';
+import { getSeededSandbox } from '../web/runtime-config.js';
 
 /**
- * The base directory under which per-session scratch dirs are created. Mirrors
- * `computeSandboxWorkdir`'s provider-aware precedence: the local provider runs
- * on the host filesystem (where a cloud path like `/workspace` is not writable),
- * so it uses the local sandbox root; cloud providers use
- * `MASTRACODE_SANDBOX_WORKDIR` (default `/workspace`).
- *
- * `computeSandboxWorkdir` (web/github/sandbox.ts) is the canonical version of
- * this precedence — keep the two in sync if that base selection ever changes.
+ * The base directory under which per-session scratch dirs are created. Reuses
+ * the seeded sandbox's resolved `workdirBase` — the same provider-aware
+ * checkout root `computeSandboxWorkdir` (web/sandbox/fleet.ts) derives repo
+ * paths from — so channel scratch dirs and GitHub checkouts share one root
+ * (host path for local sandboxes, `/workspace` for cloud) without duplicating
+ * the provider precedence here.
  */
 function getSessionWorkspaceBase(): string {
-  if (getSandboxProvider() === 'local') {
-    return getLocalSandboxRoot().replace(/\/$/, '');
-  }
-  const base = process.env.MASTRACODE_SANDBOX_WORKDIR;
-  if (base) return base.replace(/\/$/, '');
-  return '/workspace';
+  const seeded = getSeededSandbox();
+  if (!seeded) throw new Error('No sandbox configured for channel session workspace');
+  return seeded.workdirBase.replace(/\/$/, '');
 }
 
 /**

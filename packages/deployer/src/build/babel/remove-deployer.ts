@@ -1,16 +1,19 @@
-import babel from '@babel/core';
+import { types as t } from '@babel/core';
+import type { NodePath, PluginObject, PluginPass } from '@babel/core';
 
-export function removeDeployer() {
-  const t = babel.types;
+interface RemoveDeployerState extends PluginPass {
+  hasReplaced?: boolean;
+}
 
+export function removeDeployer(): PluginObject<RemoveDeployerState> {
   // Helper to remove deployer property from an object and clean up its binding
   function removeDeployerFromObject(
-    objectExpr: babel.types.ObjectExpression,
-    scope: { getBinding: (name: string) => { path?: babel.NodePath } | undefined },
-  ): babel.types.ObjectProperty | undefined {
+    objectExpr: t.ObjectExpression,
+    scope: { getBinding: (name: string) => { path?: NodePath } | undefined },
+  ): t.ObjectProperty | undefined {
     const deployerProp = objectExpr.properties.find(
       prop => t.isObjectProperty(prop) && t.isIdentifier(prop.key) && prop.key.name === 'deployer',
-    ) as babel.types.ObjectProperty | undefined;
+    ) as t.ObjectProperty | undefined;
 
     if (deployerProp) {
       objectExpr.properties = objectExpr.properties.filter(prop => prop !== deployerProp);
@@ -30,7 +33,7 @@ export function removeDeployer() {
   return {
     name: 'remove-deployer',
     visitor: {
-      NewExpression(path, state) {
+      NewExpression(path, state: RemoveDeployerState) {
         // is a variable declaration
         const varDeclaratorPath = path.findParent(path => t.isVariableDeclarator(path.node));
         if (!varDeclaratorPath) {
@@ -79,5 +82,5 @@ export function removeDeployer() {
         }
       },
     },
-  } as babel.PluginObj;
+  } as PluginObject<RemoveDeployerState>;
 }

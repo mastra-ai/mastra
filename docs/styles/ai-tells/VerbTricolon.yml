@@ -1,0 +1,78 @@
+---
+extends: existence
+message: "AI tricolon: '%s'. Exactly three parallel verbs in series. Restructure or vary the count."
+level: error
+nonword: true
+tokens:
+  # ==========================================================================
+  # Verb tricolons: three parallel verb phrases in a comma series.
+  #
+  # LLMs produce prose where nearly every enumeration is exactly three items
+  # and almost never two or four. This rule flags each instance.
+  #
+  # Optional adverb prefix (?:\w+ly )? catches "carefully analyzes data,
+  # thoroughly processes results, and accurately generates reports."
+  # ==========================================================================
+
+  # --- Gerund: "[adv] verbing X, [adv] verbing Y, and/or [adv] verbing Z" ---
+  - "(?:\\w+ly )?\\w+ing [^,]+, (?:\\w+ly )?\\w+ing [^,]+, and (?:\\w+ly )?\\w+ing [^.!?]+"
+  - "(?:\\w+ly )?\\w+ing [^,]+, (?:\\w+ly )?\\w+ing [^,]+, or (?:\\w+ly )?\\w+ing [^.!?]+"
+
+  # --- Past tense -ed: "[adv] verbed X, [adv] verbed Y, and/or [adv] verbed Z"
+  - "(?:\\w+ly )?\\w+ed [^,]+, (?:\\w+ly )?\\w+ed [^,]+, and (?:\\w+ly )?\\w+ed [^.!?]+"
+  - "(?:\\w+ly )?\\w+ed [^,]+, (?:\\w+ly )?\\w+ed [^,]+, or (?:\\w+ly )?\\w+ed [^.!?]+"
+
+  # --- Third person -s: "[adv] verbs X, [adv] verbs Y, and/or [adv] verbs Z"
+  - "(?:\\w+ly )?\\w+s [^,]+, (?:\\w+ly )?\\w+s [^,]+, and (?:\\w+ly )?\\w+s [^.!?]+"
+  - "(?:\\w+ly )?\\w+s [^,]+, (?:\\w+ly )?\\w+s [^,]+, or (?:\\w+ly )?\\w+s [^.!?]+"
+
+  # --- Base form after modals -----------------------------------------------
+  - "(?:can|could|will|would|should|shall|may|might|must) (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, and (?:\\w+ly )?\\w+ [^.!?]+"
+  - "(?:can|could|will|would|should|shall|may|might|must) (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, or (?:\\w+ly )?\\w+ [^.!?]+"
+
+  # --- Base form after pronoun subjects: "They/We/You [adv] verb X, ..." -----
+  - "(?:They|We|You) (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, and (?:\\w+ly )?\\w+ [^.!?]+"
+  - "(?:They|We|You) (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, or (?:\\w+ly )?\\w+ [^.!?]+"
+
+  # --- Infinitive (shared "to"): "to verb X, verb Y, and/or verb Z" ---------
+  - "to (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, and (?:\\w+ly )?\\w+ [^.!?]+"
+  - "to (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, or (?:\\w+ly )?\\w+ [^.!?]+"
+
+  # --- Infinitive (repeated "to"): "to verb X, to verb Y, to verb Z" --------
+  - "to (?:\\w+ly )?\\w+ [^,]+, to (?:\\w+ly )?\\w+ [^,]+, and to (?:\\w+ly )?\\w+ [^.!?]+"
+  - "to (?:\\w+ly )?\\w+ [^,]+, to (?:\\w+ly )?\\w+ [^,]+, or to (?:\\w+ly )?\\w+ [^.!?]+"
+
+  # --- Base form after colon: "discipline: verb X, verb Y, and/or verb Z" -----
+  - ": (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, and (?:\\w+ly )?\\w+ [^.!?]+"
+  - ": (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, or (?:\\w+ly )?\\w+ [^.!?]+"
+
+  # ==========================================================================
+  # Asyndetic tricolons: three parallel verb phrases with NO conjunction.
+  # "parse input, call a service method, format output."
+  #
+  # Even punchier than the syndetic form — AI loves the drumroll without
+  # the cymbal crash. Third item uses [^,.!?]+ to prevent matching into
+  # a fourth item in longer lists.
+  # ==========================================================================
+
+  # --- Asyndetic gerund: "verbing X, verbing Y, verbing Z" -----------------
+  - "(?:\\w+ly )?\\w+ing [^,]+, (?:\\w+ly )?\\w+ing [^,]+, (?:\\w+ly )?\\w+ing [^,.!?]+"
+
+  # --- Asyndetic past tense -ed -------------------------------------------
+  - "(?:\\w+ly )?\\w+ed [^,]+, (?:\\w+ly )?\\w+ed [^,]+, (?:\\w+ly )?\\w+ed [^,.!?]+"
+
+  # --- Asyndetic third person -s ------------------------------------------
+  - "(?:\\w+ly )?\\w+s [^,]+, (?:\\w+ly )?\\w+s [^,]+, (?:\\w+ly )?\\w+s [^,.!?]+"
+
+  # --- Asyndetic base form after modals -----------------------------------
+  - "(?:can|could|will|would|should|shall|may|might|must) (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,.!?]+"
+
+  # --- Asyndetic base form after pronoun subjects -------------------------
+  - "(?:They|We|You) (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,.!?]+"
+
+  # --- Asyndetic base form after colon ------------------------------------
+  - ": (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,]+, (?:\\w+ly )?\\w+ [^,.!?]+"
+
+  # --- Subject-verb tricolon: "the [adj] X verbs A, the [adj] Y verbs B, ..." -
+  - "[Tt]he (?:\\w+ ){1,3}\\w+s [^,]+, the (?:\\w+ ){1,3}\\w+s [^,]+, and the (?:\\w+ ){1,3}\\w+s [^.!?]+"
+  - "[Tt]he (?:\\w+ ){1,3}\\w+s [^,]+, the (?:\\w+ ){1,3}\\w+s [^,]+, or the (?:\\w+ ){1,3}\\w+s [^.!?]+"

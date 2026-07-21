@@ -57,7 +57,12 @@ describe('web model packs (TUI /models-pack parity)', () => {
     // Sanity: anthropic is reachable, so the built-in anthropic pack must list.
     expect(access.anthropic).toBe('apikey');
 
-    const packs = await listModelPacks(catalog([{ provider: 'anthropic', hasApiKey: true }]), auth, null);
+    const packs = await listModelPacks(
+      catalog([{ provider: 'anthropic', hasApiKey: true }]),
+      auth,
+      { mode: 'local' },
+      null,
+    );
     const anthropic = packs.find(p => p.id === 'anthropic');
     expect(anthropic).toBeDefined();
     expect(anthropic!.models.build).toBeTruthy();

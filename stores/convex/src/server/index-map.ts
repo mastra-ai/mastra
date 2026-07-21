@@ -79,6 +79,10 @@ export const TABLE_INDEX_MAP: Record<string, Array<{ name: string; fields: strin
     { name: 'by_name', fields: ['indexName'] },
     { name: 'by_record_id', fields: ['id'] },
   ],
+  mastra_observational_memory: [
+    { name: 'by_lookup_key', fields: ['lookupKey', 'generationCount'] },
+    { name: 'by_record_id', fields: ['id'] },
+  ],
 };
 
 /**

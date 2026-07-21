@@ -1,7 +1,7 @@
 /**
  * Tests for packages/core/src/agent/message-list/prompt/image-utils.ts
  *
- * All seven exported helpers are pure functions — no I/O, no async behaviour,
+ * All exported helpers are pure functions — no I/O, no async behaviour,
  * no mocking required. The only external dependency is
  * `convertDataContentToBase64String` which is tested indirectly via the
  * binary-data paths of `imageContentToString`.
@@ -17,6 +17,7 @@ import {
   imageContentToString,
   isValidUrl,
   parseDataUri,
+  resolveFilePartMediaTypeAndData,
 } from './image-utils';
 
 // ---------------------------------------------------------------------------
@@ -305,5 +306,36 @@ describe('classifyFileData', () => {
   it('returns no mimeType for base64', () => {
     const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNby';
     expect(classifyFileData(b64).mimeType).toBeUndefined();
+  });
+});
+
+describe('resolveFilePartMediaTypeAndData', () => {
+  it('reads the v4 shape (mimeType/data)', () => {
+    expect(resolveFilePartMediaTypeAndData({ mimeType: 'application/pdf', data: 'JVBERi0=' })).toEqual({
+      mediaType: 'application/pdf',
+      data: 'JVBERi0=',
+    });
+  });
+
+  it('reads the v5 shape (mediaType/url)', () => {
+    expect(resolveFilePartMediaTypeAndData({ mediaType: 'image/png', url: 'https://example.com/a.png' })).toEqual({
+      mediaType: 'image/png',
+      data: 'https://example.com/a.png',
+    });
+  });
+
+  it('prefers the v4 fields when both shapes are present', () => {
+    expect(
+      resolveFilePartMediaTypeAndData({
+        mimeType: 'application/pdf',
+        data: 'v4-data',
+        mediaType: 'image/png',
+        url: 'v5-url',
+      }),
+    ).toEqual({ mediaType: 'application/pdf', data: 'v4-data' });
+  });
+
+  it('preserves undefined when neither shape carries the field', () => {
+    expect(resolveFilePartMediaTypeAndData({ type: 'file' })).toEqual({ mediaType: undefined, data: undefined });
   });
 });

@@ -733,6 +733,22 @@ describe('CustomEditor voice push-to-talk', () => {
     expect(requestRender).toHaveBeenCalledTimes(1); // only the stop's own render
   });
 
+  it('uses only the assigned render callback for listening animation', () => {
+    const fallbackRender = vi.fn();
+    const assignedRender = vi.fn();
+    const editor = new CustomEditor({ requestRender: fallbackRender } as any, {} as any);
+    editor.requestRender = assignedRender;
+
+    editor.setVoiceListening(true);
+    fallbackRender.mockClear();
+    assignedRender.mockClear();
+    vi.advanceTimersByTime(120);
+
+    expect(assignedRender).toHaveBeenCalledOnce();
+    expect(fallbackRender).not.toHaveBeenCalled();
+    editor.setVoiceListening(false);
+  });
+
   it('renders dictated text greyed-out and stops greying once edited', async () => {
     const { theme } = await import('../../theme.js');
     const [r, g, b] = theme

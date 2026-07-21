@@ -5,39 +5,41 @@ import { useLocation } from 'react-router';
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout, FolderIcon } from '../../ui';
-import type { Project } from '../workspaces';
-import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
-import { deriveProjectPath } from '../workspaces/hooks/useWorkspaces';
+import type { Factory } from '../workspaces';
+import { EmptyFactoryState, isLocalFactory, selectedRepository, useActiveFactoryContext } from '../workspaces';
+import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
+import { ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useChatTranscript } from './context/useChatTranscript';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
   const overlays = useOverlays();
-  const { activeProject } = useActiveProjectContext();
+  const { activeFactory } = useActiveFactoryContext();
 
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
-      sidebarOpen={overlays.isOpen('sidebar')}
-      onSidebarClose={() => overlays.close('sidebar')}
-      content={
-        activeProject ? (
-          <NewPageContent activeProject={activeProject} />
-        ) : (
-          <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
-        )
+      main={
+        <ChatSessionBoundary>
+          {activeFactory ? (
+            <NewPageContent activeFactory={activeFactory} />
+          ) : (
+            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+          )}
+        </ChatSessionBoundary>
       }
-      footer={null}
     />
   );
 }
 
-function NewPageContent({ activeProject }: { activeProject: Project }) {
+function NewPageContent({ activeFactory }: { activeFactory: Factory }) {
+  useGlobalShortcuts();
   const { transcript } = useChatTranscript();
   const location = useLocation();
   const locationState = location.state as { routeErrorNotice?: string } | null;
@@ -48,7 +50,7 @@ function NewPageContent({ activeProject }: { activeProject: Project }) {
   return (
     <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-4 py-10 md:px-6">
       <div className="flex w-full max-w-xl flex-col items-center gap-4">
-        <DraftStart activeProject={activeProject} />
+        <DraftStart activeFactory={activeFactory} />
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">
             {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
@@ -60,7 +62,7 @@ function NewPageContent({ activeProject }: { activeProject: Project }) {
   );
 }
 
-function DraftStart({ activeProject }: { activeProject: Project }) {
+function DraftStart({ activeFactory }: { activeFactory: Factory }) {
   return (
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <div className="flex flex-col items-center gap-3 text-center">
@@ -68,10 +70,10 @@ function DraftStart({ activeProject }: { activeProject: Project }) {
         <h1 id="draft-start-heading" className="m-0 text-2xl text-icon6">
           What do you want to work on?
         </h1>
-        <ProjectContext activeProject={activeProject} />
+        <FactoryContext activeFactory={activeFactory} />
       </div>
 
-      {activeProject && <ComposerPanel composerVariant="textarea" />}
+      {activeFactory && <ComposerPanel composerVariant="textarea" />}
     </section>
   );
 }
@@ -85,17 +87,20 @@ function BrandLockup() {
   );
 }
 
-function ProjectContext({ activeProject }: { activeProject: Project }) {
-  // GitHub projects have no local `path`; show the sandbox worktree path instead.
-  const projectPath = deriveProjectPath(activeProject);
+function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
+  // Server factories have no local `path`; show the sandbox worktree path instead.
+  const projectPath = deriveProjectPath(activeFactory);
+  const gitBranch = isLocalFactory(activeFactory)
+    ? activeFactory.binding.gitBranch
+    : selectedRepository(activeFactory)?.gitBranch;
   return (
     <p className="m-0 flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
       <FolderIcon size={13} className="shrink-0 text-icon2" />
-      <span className="shrink-0 font-medium">{activeProject.name}</span>
-      {activeProject.gitBranch && (
+      <span className="shrink-0 font-medium">{activeFactory.name}</span>
+      {gitBranch && (
         <>
           <span className="shrink-0 text-icon2">·</span>
-          <span className="shrink-0">{activeProject.gitBranch}</span>
+          <span className="shrink-0">{gitBranch}</span>
         </>
       )}
       {projectPath && (

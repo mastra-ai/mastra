@@ -4,6 +4,7 @@
  */
 import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
+import { flushRender, requestRender } from '../render-scheduler.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -37,7 +38,7 @@ export function handleSubagentStart(
     insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   }
 
-  state.ui.requestRender();
+  flushRender(state);
 }
 
 export function handleSubagentToolStart(
@@ -49,7 +50,7 @@ export function handleSubagentToolStart(
   const component = ctx.state.pendingSubagents.get(toolCallId);
   if (component) {
     component.addToolStart(subToolName, subToolArgs);
-    ctx.state.ui.requestRender();
+    requestRender(ctx.state);
   }
 }
 
@@ -63,7 +64,7 @@ export function handleSubagentToolEnd(
   const component = ctx.state.pendingSubagents.get(toolCallId);
   if (component) {
     component.addToolEnd(subToolName, subToolResult, isError);
-    ctx.state.ui.requestRender();
+    requestRender(ctx.state);
   }
 }
 
@@ -78,6 +79,6 @@ export function handleSubagentEnd(
   if (component) {
     component.finish(isError, durationMs, result);
     ctx.state.pendingSubagents.delete(toolCallId);
-    ctx.state.ui.requestRender();
+    flushRender(ctx.state);
   }
 }

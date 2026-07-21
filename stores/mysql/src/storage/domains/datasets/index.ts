@@ -13,6 +13,7 @@ import {
   DatasetsStorage,
   calculatePagination,
   normalizePerPage,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
@@ -91,8 +92,14 @@ export class DatasetsMySQL extends DatasetsStorage {
    * Returns default index definitions for the datasets domain tables.
    * Currently no default indexes are defined for datasets.
    */
-  static getDefaultIndexDefs(_prefix: string = ''): CreateIndexOptions[] {
-    return [];
+  static getDefaultIndexDefs(prefix: string = ''): CreateIndexOptions[] {
+    return [
+      {
+        name: `${prefix}idx_dataset_items_dataset_externalid_version`,
+        table: TABLE_DATASET_ITEMS,
+        columns: ['datasetId', 'externalId', 'datasetVersion'],
+      },
+    ];
   }
 
   /**
@@ -141,7 +148,9 @@ export class DatasetsMySQL extends DatasetsStorage {
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) return;
-    // No default indexes for datasets domain
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   /**
@@ -178,7 +187,15 @@ export class DatasetsMySQL extends DatasetsStorage {
     await this.operations.alterTable({
       tableName: TABLE_DATASET_ITEMS as any,
       schema: DATASET_ITEMS_SCHEMA,
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: [
+        'organizationId',
+        'projectId',
+        'requestContext',
+        'source',
+        'expectedTrajectory',
+        'toolMocks',
+        'externalId',
+      ],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -234,11 +251,18 @@ export class DatasetsMySQL extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      externalId: (row.externalId as string | null | undefined) ?? null,
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
       input: parseJSON<Record<string, unknown>>(row.input),
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : undefined,
+      expectedTrajectory: row.expectedTrajectory
+        ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
+        : undefined,
+      toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : undefined,
+      requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : undefined,
       metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
+      source: row.source ? parseJSON<DatasetItem['source']>(row.source) : undefined,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
     };
@@ -249,13 +273,20 @@ export class DatasetsMySQL extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      externalId: (row.externalId as string | null | undefined) ?? null,
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
       input: parseJSON<Record<string, unknown>>(row.input),
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : undefined,
+      expectedTrajectory: row.expectedTrajectory
+        ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
+        : undefined,
+      toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : undefined,
+      requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : undefined,
       metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
+      source: row.source ? parseJSON<DatasetItem['source']>(row.source) : undefined,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
     };
@@ -274,10 +305,15 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = randomUUID();
+      const id = input.id ?? randomUUID();
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
 
-      await this.operations.insert({
+      const insert =
+        input.id === undefined
+          ? this.operations.insert.bind(this.operations)
+          : this.operations.insertOnly.bind(this.operations);
+      await insert({
         tableName: TABLE_DATASETS,
         record: {
           id,
@@ -320,6 +356,11 @@ export class DatasetsMySQL extends DatasetsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (input.id !== undefined && hasErrorCode(error, new Set([1062, 'ER_DUP_ENTRY']))) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
+      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: 'MYSQL_CREATE_DATASET_FAILED',
@@ -701,7 +742,11 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       const mergedInput = args.input ?? existing.input;
       const mergedGroundTruth = args.groundTruth ?? existing.groundTruth;
+      const mergedExpectedTrajectory = args.expectedTrajectory ?? existing.expectedTrajectory;
+      const mergedToolMocks = args.toolMocks ?? existing.toolMocks;
+      const mergedRequestContext = args.requestContext ?? existing.requestContext;
       const mergedMetadata = args.metadata ?? existing.metadata;
+      const mergedSource = args.source ?? existing.source;
 
       // Bump version
       await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [
@@ -725,16 +770,21 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       // Insert new row (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           args.id,
           args.datasetId,
           newVersion,
+          existing.externalId ?? null,
           parentOrganizationId,
           parentProjectId,
           jsonArg(mergedInput),
           jsonArg(mergedGroundTruth),
+          jsonArg(mergedExpectedTrajectory),
+          jsonArg(mergedToolMocks),
+          jsonArg(mergedRequestContext),
           jsonArg(mergedMetadata),
+          jsonArg(mergedSource),
           transformToSqlValue(existing.createdAt),
           transformToSqlValue(now),
         ],
@@ -755,7 +805,11 @@ export class DatasetsMySQL extends DatasetsStorage {
         projectId: parentProjectId,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
+        expectedTrajectory: mergedExpectedTrajectory,
+        toolMocks: mergedToolMocks,
+        requestContext: mergedRequestContext,
         metadata: mergedMetadata,
+        source: mergedSource,
         updatedAt: now,
       };
     } catch (error) {
@@ -818,16 +872,21 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       // Insert tombstone (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           datasetId,
           newVersion,
+          existing.externalId ?? null,
           parentOrganizationId,
           parentProjectId,
           jsonArg(existing.input),
           jsonArg(existing.groundTruth),
+          jsonArg(existing.expectedTrajectory),
+          jsonArg(existing.toolMocks),
+          jsonArg(existing.requestContext),
           jsonArg(existing.metadata),
+          jsonArg(existing.source),
           transformToSqlValue(existing.createdAt),
           transformToSqlValue(now),
         ],
@@ -1096,82 +1155,97 @@ export class DatasetsMySQL extends DatasetsStorage {
     for (const item of input.items) {
       this.#rejectToolMocks(item.toolMocks);
     }
-    const dataset = await this.getDatasetById({ id: input.datasetId });
-    if (!dataset) {
-      throw new MastraError({
-        id: 'MYSQL_BULK_ADD_ITEMS_DATASET_NOT_FOUND',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { datasetId: input.datasetId },
-      });
-    }
 
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
 
-      const now = new Date();
-      const versionId = randomUUID();
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
+      const [datasetRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT \`version\`, \`organizationId\`, \`projectId\` FROM ${tableDatasetsName} WHERE id = ? FOR UPDATE`,
+        [input.datasetId],
+      );
+      const dataset = datasetRows[0];
+      if (!dataset) {
+        throw new MastraError({
+          id: 'MYSQL_BULK_ADD_ITEMS_DATASET_NOT_FOUND',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { datasetId: input.datasetId },
+        });
+      }
 
-      // Single version increment
-      await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [
+      const externalIds = [...new Set(input.items.flatMap(item => (item.externalId ? [item.externalId] : [])))];
+      let historyRows: DatasetItemRow[] = [];
+      if (externalIds.length > 0) {
+        const placeholders = externalIds.map(() => '?').join(', ');
+        const [rows] = await connection.execute<RowDataPacket[]>(
+          `SELECT * FROM ${tableItemsName} WHERE \`datasetId\` = ? AND \`externalId\` IN (${placeholders}) ORDER BY \`datasetVersion\` ASC`,
+          [input.datasetId, ...externalIds],
+        );
+        historyRows = rows.map(row => this.mapItemFull(row));
+      }
+
+      const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
+      const existingItems = new Map<string, DatasetItem>(
+        [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+      );
+      if (plan.inserts.length === 0) {
+        await connection.commit();
+        return plan.resolvedIds.map(id => existingItems.get(id)!);
+      }
+
+      const now = new Date();
+      const newVersion = Number(dataset.version) + 1;
+      await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = ? WHERE id = ?`, [
+        newVersion,
         input.datasetId,
       ]);
 
-      const [versionRows] = await connection.execute<RowDataPacket[]>(
-        `SELECT \`version\` FROM ${tableDatasetsName} WHERE id = ?`,
-        [input.datasetId],
-      );
-      const newVersion = (versionRows as any[])[0]?.version as number;
-
-      const parentOrganizationId = dataset.organizationId ?? null;
-      const parentProjectId = dataset.projectId ?? null;
-
-      const items: { id: string; itemInput: BatchInsertItemsInput['items'][number] }[] = [];
-      for (const itemInput of input.items) {
-        const id = randomUUID();
-        items.push({ id, itemInput });
-
+      const inserted = new Map<string, DatasetItem>();
+      for (const { id, item } of plan.inserts) {
         await connection.execute(
-          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
+          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             input.datasetId,
             newVersion,
-            parentOrganizationId,
-            parentProjectId,
-            jsonArg(itemInput.input),
-            jsonArg(itemInput.groundTruth),
-            jsonArg(itemInput.metadata),
+            item.externalId ?? null,
+            dataset.organizationId ?? null,
+            dataset.projectId ?? null,
+            jsonArg(item.input),
+            jsonArg(item.groundTruth),
+            jsonArg(item.expectedTrajectory),
+            jsonArg(item.toolMocks),
+            jsonArg(item.requestContext),
+            jsonArg(item.metadata),
+            jsonArg(item.source),
             transformToSqlValue(now),
             transformToSqlValue(now),
           ],
         );
+        inserted.set(id, {
+          id,
+          datasetId: input.datasetId,
+          datasetVersion: newVersion,
+          externalId: item.externalId ?? null,
+          organizationId: dataset.organizationId ?? null,
+          projectId: dataset.projectId ?? null,
+          ...item,
+          createdAt: now,
+          updatedAt: now,
+        });
       }
 
-      // Single dataset_version record
       await connection.execute(
         `INSERT INTO ${tableVersionsName} (\`id\`, \`datasetId\`, \`version\`, \`createdAt\`) VALUES (?, ?, ?, ?)`,
-        [versionId, input.datasetId, newVersion, transformToSqlValue(now)],
+        [randomUUID(), input.datasetId, newVersion, transformToSqlValue(now)],
       );
-
       await connection.commit();
 
-      return items.map(({ id, itemInput }) => ({
-        id,
-        datasetId: input.datasetId,
-        datasetVersion: newVersion,
-        organizationId: parentOrganizationId,
-        projectId: parentProjectId,
-        input: itemInput.input,
-        groundTruth: itemInput.groundTruth,
-        metadata: itemInput.metadata,
-        createdAt: now,
-        updatedAt: now,
-      }));
+      return plan.resolvedIds.map(id => inserted.get(id) ?? existingItems.get(id)!);
     } catch (error) {
       await connection.rollback();
       if (error instanceof MastraError) throw error;
@@ -1243,16 +1317,21 @@ export class DatasetsMySQL extends DatasetsStorage {
 
         // Insert tombstone (tenancy inherited from parent dataset)
         await connection.execute(
-          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)`,
+          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             item.id,
             input.datasetId,
             newVersion,
+            item.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
             jsonArg(item.input),
             jsonArg(item.groundTruth),
+            jsonArg(item.expectedTrajectory),
+            jsonArg(item.toolMocks),
+            jsonArg(item.requestContext),
             jsonArg(item.metadata),
+            jsonArg(item.source),
             transformToSqlValue(item.createdAt),
             transformToSqlValue(now),
           ],

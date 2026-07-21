@@ -7,7 +7,7 @@ export interface DataPanelContentProps {
 
 export function DataPanelContent({ children, ref }: DataPanelContentProps) {
   return (
-    <div ref={ref} className="flex-1 overflow-y-auto p-4">
+    <div ref={ref} className="min-h-0 flex-1 overflow-y-auto p-4">
       {children}
     </div>
   );

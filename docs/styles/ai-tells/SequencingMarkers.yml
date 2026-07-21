@@ -1,0 +1,41 @@
+---
+extends: existence
+message: "AI sequencing: '%s'. Use natural transitions or write an actual list."
+level: error
+tokens:
+  - Firstly
+  - Secondly
+  - Thirdly
+  - Fourthly
+  - Fifthly
+  - Lastly
+  - The first takeaway
+  - The second takeaway
+  - The third takeaway
+  - The fourth takeaway
+  - The first lesson
+  - The second lesson
+  - The third lesson
+  - The first key
+  - The second key
+  - The third key
+  - The first thing to note
+  - The second thing to note
+  - The first point
+  - The second point
+  - The third point
+  - The first reason
+  - The second reason
+  - The third reason
+  - The first challenge
+  - The second challenge
+  - The third challenge
+  - The first step is
+  - The second step is
+  - The third step is
+  - The first benefit
+  - The second benefit
+  - The third benefit
+  - The first advantage
+  - The second advantage
+  - The third advantage

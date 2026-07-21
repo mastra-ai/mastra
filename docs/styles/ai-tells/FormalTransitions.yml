@@ -1,0 +1,74 @@
+---
+extends: existence
+message: "AI transition: '%s'. Delete it, or use a simpler connector like 'and', 'but', or 'so'."
+level: error
+ignorecase: true
+tokens:
+  - Moreover
+  - Furthermore
+  - Additionally
+  - Consequently
+  - Subsequently
+  - Nevertheless
+  - Nonetheless
+  - Conversely
+  - Accordingly
+  - Hence
+  - Thus
+  - Therefore
+  - Thereby
+  - Henceforth
+  - Likewise
+  - Similarly
+  - In addition
+  - In contrast
+  - On the contrary
+  - By contrast
+  - As a result
+  - For instance
+  - For example
+  - In particular
+  - Specifically
+  - Notably
+  - Importantly
+  - Significantly
+  - Crucially
+  - Essentially
+  - Fundamentally
+  - With that in mind
+  - With this in mind
+  - To that end
+  - In turn
+  - Building on this
+  - Building on that
+  - That's why
+  - This is why
+  - Which is why
+  - That's because
+  - This is because
+  - What's more
+  - What is more
+  - Not to mention
+  - To that point
+  - On that note
+  - On a related note
+  - Case in point
+  - A case in point
+  - Of note
+  - Worth noting
+  - Along the same lines
+  - In the same vein
+  - By extension
+  - To top it off
+  - That's not all
+  - Better yet
+  - Even better
+  - Equally important
+  - Equally crucial
+  - Equally significant
+  - That is to say
+  - In light of this
+  - In light of that
+  - Given this
+  - Given that
+  - Given the above

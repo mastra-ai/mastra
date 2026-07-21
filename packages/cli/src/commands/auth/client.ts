@@ -49,9 +49,30 @@ export function throwApiError(message: string, status: number, detail?: string):
 export function extractApiErrorDetail(error: unknown): string | undefined {
   if (!error || typeof error !== 'object') return undefined;
   const o = error as Record<string, unknown>;
-  if (typeof o.detail === 'string' && o.detail.trim()) return o.detail;
-  if (typeof o.message === 'string' && o.message.trim()) return o.message;
-  return undefined;
+
+  let detail: string | undefined;
+  if (typeof o.detail === 'string' && o.detail.trim()) detail = o.detail;
+  else if (typeof o.message === 'string' && o.message.trim()) detail = o.message;
+  else if (typeof o.error === 'string' && o.error.trim()) detail = o.error;
+
+  // Validation errors (400) carry the useful part in errors[] — field name plus
+  // message (e.g. the valid-options enum for a bad --region). Without this the
+  // user only sees "The request body contains invalid fields".
+  const fieldErrors = Array.isArray(o.errors)
+    ? o.errors
+        .map(e => {
+          if (!e || typeof e !== 'object') return '';
+          const fe = e as Record<string, unknown>;
+          const field = typeof fe.field === 'string' ? fe.field : '';
+          const message = typeof fe.message === 'string' ? fe.message : '';
+          return [field, message].filter(Boolean).join(' — ');
+        })
+        .filter(Boolean)
+        .join('; ')
+    : '';
+
+  if (detail && fieldErrors) return `${detail}: ${fieldErrors}`;
+  return detail ?? (fieldErrors || undefined);
 }
 
 // Shared mutable token state — updated by refreshes so all callers see the latest.

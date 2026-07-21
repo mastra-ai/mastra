@@ -1265,11 +1265,11 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 const stepExecutionBodySchema = z.object({
   stepId: z.string(),
   executionPath: z.array(z.number().int().nonnegative()),
-  stepResults: z.record(z.string(), z.any()),
-  state: z.record(z.string(), z.any()),
-  requestContext: z.record(z.string(), z.any()),
-  input: z.any().optional(),
-  resumeData: z.any().optional(),
+  stepResults: z.record(z.string(), z.unknown()),
+  state: z.record(z.string(), z.unknown()),
+  requestContext: z.record(z.string(), z.unknown()),
+  input: z.unknown().optional(),
+  resumeData: z.unknown().optional(),
   retryCount: z.number().int().nonnegative().optional(),
   foreachIdx: z.number().int().nonnegative().optional(),
   format: z.enum(['legacy', 'vnext']).optional(),
@@ -1307,8 +1307,8 @@ async function getStepStrategy(mastra: Mastra): Promise<StepStrategy> {
 }
 
 // Step execution returns the worker's StepResult. Its shape is dynamic
-// (depends on the step's output schema), so we use a permissive z.any().
-const stepExecutionResponseSchema = z.any();
+// and depends on the step's output schema.
+const stepExecutionResponseSchema = z.unknown();
 
 export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
   method: 'POST',

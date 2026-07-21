@@ -21,6 +21,12 @@ const githubCopilotStorage = {
   getApiKey: vi.fn(),
 };
 
+const xaiStorage = {
+  reload: vi.fn(),
+  get: vi.fn(),
+  getApiKey: vi.fn(),
+};
+
 describe('gateway oauth fetch wrappers', () => {
   beforeEach(() => {
     fetchMock.mockReset();
@@ -33,6 +39,9 @@ describe('gateway oauth fetch wrappers', () => {
     githubCopilotStorage.reload.mockReset();
     githubCopilotStorage.get.mockReset();
     githubCopilotStorage.getApiKey.mockReset();
+    xaiStorage.reload.mockReset();
+    xaiStorage.get.mockReset();
+    xaiStorage.getApiKey.mockReset();
   });
 
   afterEach(() => {
@@ -201,6 +210,68 @@ describe('gateway oauth fetch wrappers', () => {
 
     await expect(fetchWithOAuth('https://api.openai.com/v1/chat/completions', { headers: {} })).rejects.toThrow(
       /Not logged in to GitHub Copilot/,
+    );
+  });
+
+  it('injects the refreshed xAI access token as a bearer and strips caller auth headers', async () => {
+    xaiStorage.get.mockReturnValue({ type: 'oauth', access: 'stale', expires: Date.now() + 60_000 });
+    xaiStorage.getApiKey.mockResolvedValue('xai-oauth-token');
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const { buildXAIOAuthFetch } = await import('../xai.js');
+    const fetchWithOAuth = buildXAIOAuthFetch({ authStorage: xaiStorage as any });
+
+    await fetchWithOAuth('https://api.x.ai/v1/chat/completions', {
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer caller-key', 'x-api-key': 'caller-key' },
+    });
+
+    expect(xaiStorage.reload).toHaveBeenCalled();
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get('Authorization')).toBe('Bearer xai-oauth-token');
+    expect(headers.get('x-api-key')).toBeNull();
+    expect(headers.get('Content-Type')).toBe('application/json');
+  });
+
+  it('preserves non-auth headers from an incoming Request', async () => {
+    xaiStorage.get.mockReturnValue({ type: 'oauth', access: 'stale', expires: Date.now() + 60_000 });
+    xaiStorage.getApiKey.mockResolvedValue('xai-oauth-token');
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const { buildXAIOAuthFetch } = await import('../xai.js');
+    const fetchWithOAuth = buildXAIOAuthFetch({ authStorage: xaiStorage as any });
+    const request = new Request('https://api.x.ai/v1/chat/completions', {
+      headers: { 'Content-Type': 'application/json', 'X-Request-ID': 'request-1', Authorization: 'Bearer caller-key' },
+    });
+
+    await fetchWithOAuth(request);
+
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get('Authorization')).toBe('Bearer xai-oauth-token');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(headers.get('X-Request-ID')).toBe('request-1');
+  });
+
+  it('annotates xAI fetch errors with the request URL', async () => {
+    xaiStorage.get.mockReturnValue({ type: 'oauth', access: 'token', expires: Date.now() + 60_000 });
+    xaiStorage.getApiKey.mockResolvedValue('xai-oauth-token');
+    fetchMock.mockRejectedValueOnce(new Error('fetch failed'));
+
+    const { buildXAIOAuthFetch } = await import('../xai.js');
+    const fetchWithOAuth = buildXAIOAuthFetch({ authStorage: xaiStorage as any });
+
+    await expect(fetchWithOAuth('https://api.x.ai/v1/chat/completions', { headers: {} })).rejects.toMatchObject({
+      requestUrl: 'https://api.x.ai/v1/chat/completions',
+    });
+  });
+
+  it('throws a friendly error when the user is not logged in to xAI', async () => {
+    xaiStorage.get.mockReturnValue(undefined);
+
+    const { buildXAIOAuthFetch } = await import('../xai.js');
+    const fetchWithOAuth = buildXAIOAuthFetch({ authStorage: xaiStorage as any });
+
+    await expect(fetchWithOAuth('https://api.x.ai/v1/chat/completions', { headers: {} })).rejects.toThrow(
+      /Not logged in to xAI/,
     );
   });
 });

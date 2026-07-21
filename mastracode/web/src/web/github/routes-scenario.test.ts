@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
 
 // ── Scenario tests (S1, S2) ──────────────────────────────────────────────
 // These exercise the *composition* of the real Phase 4 git route handlers
@@ -14,18 +15,77 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 interface Tables {
-  installations: Array<{
-    orgId?: string;
-    userId: string;
-    installationId: number;
-    accountLogin: string | null;
-    accountType: string | null;
-  }>;
-  projects: Array<Record<string, any>>;
+  installations: Array<Record<string, any>>;
+  repositories: Array<Record<string, any>>;
+  connections: Array<Record<string, any>>;
+  projectRepositories: Array<Record<string, any>>;
   sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
 }
-const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [] };
+const tables: Tables = {
+  installations: [],
+  repositories: [],
+  connections: [],
+  projectRepositories: [],
+  sandboxes: [],
+  worktrees: [],
+};
+const sourceControlStorage = new SourceControlStorageInMemory();
+
+function projectRepositoryRow(row: Record<string, any>) {
+  const installationId = `installation-${row.orgId}-${row.installationId}`;
+  const repositoryId = `repository-${row.repoId ?? row.repoFullName}`;
+  const connectionId = `connection-${row.id}`;
+  const now = new Date();
+
+  if (!tables.installations.some(candidate => candidate.id === installationId)) {
+    tables.installations.push({
+      id: installationId,
+      integrationId: 'github',
+      orgId: row.orgId,
+      connectedByUserId: row.userId,
+      externalId: String(row.installationId),
+      accountName: 'octo',
+      accountType: 'User',
+      providerMetadata: {},
+      createdAt: now,
+    });
+  }
+  if (!tables.repositories.some(candidate => candidate.id === repositoryId)) {
+    tables.repositories.push({
+      id: repositoryId,
+      installationId,
+      externalId: String(row.repoId ?? 99),
+      slug: row.repoFullName,
+      defaultBranch: row.defaultBranch ?? 'main',
+      providerMetadata: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  if (!tables.connections.some(candidate => candidate.id === connectionId)) {
+    tables.connections.push({
+      id: connectionId,
+      factoryProjectId: row.factoryProjectId ?? `factory-${row.id}`,
+      integrationId: 'github',
+      installationId,
+      createdByUserId: row.userId,
+      createdAt: now,
+    });
+  }
+
+  return {
+    id: row.id,
+    connectionId,
+    repositoryId,
+    branch: row.defaultBranch ?? null,
+    sandboxProvider: 'railway',
+    sandboxWorkdir: row.sandboxWorkdir,
+    setupCommand: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
 vi.mock('./db', () => {
   const makeDb = () => ({
@@ -59,7 +119,10 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
-vi.mock('./client', () => ({
+// Stub integration instance: routes consume the injected `github` instance —
+// real DI instead of module mocking (client.ts no longer exists).
+const githubStub = {
+  sourceControlStorage,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
@@ -90,13 +153,54 @@ vi.mock('./client', () => ({
   ),
   // A fresh token string per call so the scenario can prove per-op minting.
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
-}));
+  versionControl: {
+    createPullRequest: async (input: import('../capabilities/version-control').CreatePullRequestInput) => {
+      const result = await createPullRequest(input);
+      return {
+        id: '1',
+        title: input.title,
+        url: result.url,
+        author: 'octo',
+        body: input.body ?? null,
+        state: 'open' as const,
+        draft: false,
+        merged: false,
+        mergeable: null,
+        baseBranch: input.baseBranch,
+        headBranch: input.headBranch,
+        headSha: 'abc123',
+        createdAt: '2026-07-21T00:00:00Z',
+        updatedAt: '2026-07-21T00:00:00Z',
+      };
+    },
+  },
+};
+
+// Deterministic state signer stub (replaces the old signState/verifyState mocks).
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
 
 let mintCount = 0;
 
-const ensureProjectSandbox = vi.fn(async (_row: any) => ({ id: 'sb' }));
+const subscribeToPullRequest = vi.fn(async (_input: unknown) => ({ created: true }));
+vi.mock('./subscriptions', () => ({
+  subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
+}));
+
+const ensureProjectSandbox = vi.fn(async (row: any, storage: SourceControlStorageInMemory['sandboxes']) => {
+  await storage.setSandboxId(row.id, 'sb');
+  return { id: 'sb' };
+});
 const materializeRepo = vi.fn(async () => {});
-const reattachProjectSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -108,6 +212,21 @@ let pushImpl: (...args: any[]) => Promise<void> = async () => {};
 const pushBranch = vi.fn((...args: any[]) => pushImpl(...args));
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
+vi.mock('../sandbox/fleet', () => {
+  class SandboxBudgetError extends Error {
+    readonly code = 'sandbox-budget-exceeded';
+    constructor(readonly max: number) {
+      super(`Sandbox budget exceeded: ${max}`);
+    }
+  }
+  return {
+    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+    getSandboxProvider: () => 'railway',
+    isSandboxEnabled: () => sandboxEnabled,
+    reattachSandbox: (id: string) => reattachSandbox(id),
+    SandboxBudgetError,
+  };
+});
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -124,12 +243,9 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-    getSandboxProvider: () => 'railway',
-    isSandboxEnabled: () => sandboxEnabled,
-    ensureProjectSandbox: (row: any) => ensureProjectSandbox(row),
+    ensureProjectSandbox: (row: any, storage: SourceControlStorageInMemory['sandboxes']) =>
+      ensureProjectSandbox(row, storage),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
-    reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
@@ -144,13 +260,7 @@ vi.mock('./sandbox', () => {
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
+  getGithubFeatureDiagnostics: () => ({}),
 }));
 
 import { mountApiRoutes } from '../test-utils';
@@ -159,11 +269,16 @@ import { buildGithubRoutes } from './routes';
 // ── Fake table helpers (mirrors routes.test.ts) ─────────────────────────
 function tableKind(table: any): keyof Tables {
   if (table === installationsRef) return 'installations';
+  if (table === repositoriesRef) return 'repositories';
+  if (table === connectionsRef) return 'connections';
   if (table === worktreesRef) return 'worktrees';
   if (table === sandboxesRef) return 'sandboxes';
-  return 'projects';
+  return 'projectRepositories';
 }
 let installationsRef: any;
+let repositoriesRef: any;
+let connectionsRef: any;
+let projectRepositoriesRef: any;
 let worktreesRef: any;
 let sandboxesRef: any;
 
@@ -217,8 +332,16 @@ function updateRows(table: any, vals: any, cond?: any): void {
   }
 }
 
-import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
+const githubInstallations = {};
+const githubRepositories = {};
+const githubConnections = {};
+const githubProjectRepositories = {};
+const githubProjectSandboxes = {};
+const githubWorktrees = {};
 installationsRef = githubInstallations;
+repositoriesRef = githubRepositories;
+connectionsRef = githubConnections;
+projectRepositoriesRef = githubProjectRepositories;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
 
@@ -239,7 +362,10 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111' }));
+  mountApiRoutes(
+    app as any,
+    buildGithubRoutes({ baseUrl: 'http://localhost:4111', github: githubStub as any, stateSigner }),
+  );
   return app;
 }
 
@@ -253,9 +379,17 @@ function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown)
 
 beforeEach(() => {
   tables.installations = [];
-  tables.projects = [];
+  tables.repositories = [];
+  tables.connections = [];
+  tables.projectRepositories = [];
   tables.sandboxes = [];
   tables.worktrees = [];
+  sourceControlStorage.installationsRows = tables.installations as any;
+  sourceControlStorage.repositoriesRows = tables.repositories as any;
+  sourceControlStorage.connectionsRows = tables.connections as any;
+  sourceControlStorage.projectRepositoriesRows = tables.projectRepositories as any;
+  sourceControlStorage.sandboxesRows = tables.sandboxes as any;
+  sourceControlStorage.worktreesRows = tables.worktrees as any;
   featureEnabled = true;
   sandboxEnabled = true;
   // No Postgres in these scenario tests: keep the project lock in-process.
@@ -265,11 +399,12 @@ beforeEach(() => {
   pushImpl = async () => {};
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachProjectSandbox.mockClear();
+  reattachSandbox.mockClear();
   ensureWorktree.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
+  subscribeToPullRequest.mockClear();
 });
 
 afterEach(() => {
@@ -280,34 +415,27 @@ afterEach(() => {
 // ── S1: full write-back journey ──────────────────────────────────────────
 describe('S1: full write-back journey through the real route handlers', () => {
   it('drives create → ensure → worktree → commit → push → pr for one user', async () => {
-    const mintModule = (await import('./client')) as unknown as {
-      mintInstallationToken: ReturnType<typeof vi.fn>;
-    };
-    const mint = mintModule.mintInstallationToken;
-    tables.installations.push({
-      orgId: 'org1',
-      userId: 'u1',
-      installationId: 7,
-      accountLogin: 'octo',
-      accountType: 'User',
-    });
+    const mint = githubStub.mintInstallationToken;
+    const projectId = 'project-1';
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: projectId,
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        repoId: 99,
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    );
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
-    // 1. Create the project from an owned installation.
-    const createRes = await postJson(app, '/web/github/projects', {
-      repoFullName: 'octo/hello',
-      installationId: 7,
-    });
-    expect(createRes.status).toBe(200);
-    const projectId = (await createRes.json()).project.id as string;
-    expect(tables.projects).toHaveLength(1);
-    expect(projectId).toBeTruthy();
-
-    // The project must be materializable: seed the per-(project,user) sandbox
-    // binding the way `ensure` would persist it (provisioning itself is mocked).
+    // Seed the per-(project-repository,user) sandbox binding the way `ensure`
+    // would persist it (provisioning itself is mocked).
     tables.sandboxes.push({
       id: 'sbrow-1',
-      githubProjectId: projectId,
+      projectRepositoryId: projectId,
       userId: 'u1',
       sandboxId: 'sb-1',
       sandboxWorkdir: '/workspace/hello',
@@ -320,7 +448,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
     expect(materializeRepo).toHaveBeenCalledOnce();
 
-    // 3. Worktree → persists a github_worktrees row for feat/x.
+    // 3. Worktree → persists a source_control_worktrees row for feat/x.
     const wtRes = await postJson(app, `/web/github/projects/${projectId}/worktree`, { branch: 'feat/x' });
     expect(wtRes.status).toBe(200);
     const wtJson = await wtRes.json();
@@ -328,7 +456,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(wtJson.baseBranch).toBe('main');
     expect(tables.worktrees).toHaveLength(1);
     expect(tables.worktrees[0]).toMatchObject({
-      githubProjectId: projectId,
+      projectRepositoryId: projectId,
       branch: 'feat/x',
       baseBranch: 'main',
     });
@@ -362,40 +490,96 @@ describe('S1: full write-back journey through the real route handlers', () => {
     const pushToken = pushCall[3] as string;
     expect(pushToken).toMatch(/^install-token-/);
 
-    // 6. Open a PR → another fresh token is minted (per-op, not reused).
+    // 6. Open a PR through VersionControl; only the preceding git push needs a sandbox token.
     const mintBeforePr = mint.mock.calls.length;
     const prRes = await postJson(app, `/web/github/projects/${projectId}/pr`, {
       branch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
       worktreePath: persistedWorktreePath,
+      sessionId: 'session-1',
+      threadId: 'thread-1',
     });
     expect(prRes.status).toBe(200);
     expect(await prRes.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
-    expect(mint.mock.calls.length).toBe(mintBeforePr + 1);
-    const prToken = (createPullRequest.mock.calls[0] as unknown as any[])[2].token as string;
-    expect(prToken).toMatch(/^install-token-/);
-    // The push and PR tokens are distinct mints (never reused across ops).
-    expect(prToken).not.toBe(pushToken);
+    expect(mint.mock.calls.length).toBe(mintBeforePr);
+    expect(createPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'octo/hello',
+        baseBranch: 'main',
+        headBranch: 'feat/x',
+      }),
+    );
+    expect(subscribeToPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectRepositoryId: projectId,
+        changeRequestId: '1',
+        installationExternalId: '7',
+        repositoryExternalId: '99',
+        repositorySlug: 'octo/hello',
+        sessionId: 'session-1',
+        ownerId: 'u1',
+        resourceId: `factory-${projectId}`,
+        threadId: 'thread-1',
+        sessionScope: persistedWorktreePath,
+        source: 'factory-pr-create',
+      }),
+    );
+  });
+
+  it('keeps PR creation compatible when no originating session is supplied', async () => {
+    const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
+    const projectId = 'project-compat';
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: projectId,
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        repoId: 99,
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    );
+    tables.sandboxes.push({
+      id: 'sbrow-compat',
+      projectRepositoryId: projectId,
+      userId: 'u1',
+      sandboxId: 'sb-compat',
+      sandboxWorkdir: '/workspace/hello',
+      materializedAt: new Date(),
+    });
+
+    const response = await postJson(app, `/web/github/projects/${projectId}/pr`, {
+      branch: 'feat/x',
+      title: 'My PR',
+    });
+
+    expect(response.status).toBe(200);
+    expect(subscribeToPullRequest).not.toHaveBeenCalled();
   });
 });
 
 // ── S2: concurrent push serialisation (per-project mutex) ─────────────────
 describe('S2: per-project mutex serialises concurrent pushes', () => {
   function seed(id: string, userId = 'u1', orgId = 'org1') {
-    tables.projects.push({
-      id,
-      orgId,
-      userId,
-      installationId: 7,
-      repoFullName: 'octo/hello',
-      repoId: 99,
-      defaultBranch: 'main',
-      sandboxWorkdir: '/workspace/hello',
-    });
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id,
+        orgId,
+        userId,
+        installationId: 7,
+        repoFullName: `octo/${id}`,
+        repoId: id,
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    );
     tables.sandboxes.push({
       id: `sbrow-${id}`,
-      githubProjectId: id,
+      projectRepositoryId: id,
       userId,
       sandboxId: `sb-${id}`,
       sandboxWorkdir: '/workspace/hello',

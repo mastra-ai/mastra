@@ -38,18 +38,18 @@ const {
 }));
 
 vi.mock('@ai-sdk/anthropic-v6', () => ({ createAnthropic: createAnthropicMock }));
-vi.mock('@ai-sdk/cerebras-v5', () => ({ createCerebras: createCerebrasMock }));
-vi.mock('@ai-sdk/deepinfra-v5', () => ({ createDeepInfra: createDeepInfraMock }));
-vi.mock('@ai-sdk/deepseek-v5', () => ({ createDeepSeek: createDeepSeekMock }));
+vi.mock('@ai-sdk/cerebras-v6', () => ({ createCerebras: createCerebrasMock }));
+vi.mock('@ai-sdk/deepinfra-v6', () => ({ createDeepInfra: createDeepInfraMock }));
+vi.mock('@ai-sdk/deepseek-v6', () => ({ createDeepSeek: createDeepSeekMock }));
 vi.mock('@ai-sdk/google-v6', () => ({ createGoogleGenerativeAI: createGoogleGenerativeAIMock }));
 vi.mock('@ai-sdk/groq-v6', () => ({ createGroq: createGroqMock }));
 vi.mock('@ai-sdk/mistral-v6', () => ({ createMistral: createMistralMock }));
 vi.mock('@ai-sdk/openai-v6', () => ({ createOpenAI: createOpenAIMock }));
-vi.mock('@ai-sdk/perplexity-v5', () => ({ createPerplexity: createPerplexityMock }));
-vi.mock('@ai-sdk/togetherai-v5', () => ({ createTogetherAI: createTogetherAIMock }));
+vi.mock('@ai-sdk/perplexity-v6', () => ({ createPerplexity: createPerplexityMock }));
+vi.mock('@ai-sdk/togetherai-v6', () => ({ createTogetherAI: createTogetherAIMock }));
 vi.mock('@ai-sdk/xai-v6', () => ({ createXai: createXaiMock }));
 vi.mock('@internal/ai-v6', () => ({ createGateway: createGatewayMock }));
-vi.mock('@openrouter/ai-sdk-provider-v5', () => ({ createOpenRouter: createOpenRouterMock }));
+vi.mock('@openrouter/ai-sdk-provider-v6', () => ({ createOpenRouter: createOpenRouterMock }));
 
 // Mock fetch globally
 const mockFetch = vi.fn();

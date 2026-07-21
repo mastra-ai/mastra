@@ -1,8 +1,11 @@
 import type { Dirent } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
+import type { DatabaseKind } from './db/platform-api.js';
+import { DB_ENV_VAR_NAMES } from './db/platform-api.js';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -10,11 +13,28 @@ import pc from 'picocolors';
 
 export type PreflightIssueCode = 'MISSING_ENV_VAR' | 'LOCAL_STORAGE_PATH';
 
+/**
+ * Structured hint describing how deploy can offer to auto-fix an issue
+ * before it becomes a blocking error. Consumed by
+ * `deploy/auto-provision-database.ts` when running in an interactive TTY.
+ */
+export type PreflightAutofix = {
+  kind: 'create-managed-database';
+  provider: DatabaseKind;
+  envVarName: string;
+};
+
 export interface PreflightIssue {
   code: PreflightIssueCode;
   severity: 'error' | 'warning';
   message: string;
-  fix: string;
+  /**
+   * Remediation. A single string renders as one arrow line; an array renders
+   * as one arrow line per entry so multi-step fixes (run this command, OR set
+   * this env var) stay legible instead of collapsing into a wall of text.
+   */
+  fix: string | string[];
+  autofix?: PreflightAutofix;
 }
 
 /* ------------------------------------------------------------------ */
@@ -139,9 +159,20 @@ export async function preflightBuildOutput(
      *   severity falls back to `hasEnvFile`.
      */
     managedEnvVarNames?: string[] | null;
+    /**
+     * User-facing name of the environment being deployed to (`production`,
+     * `staging`, etc.) — threaded into remediation text so the printed
+     * `mastra env db create <env> --kind ...` reads like a command a human
+     * would type. NOT the slug: on some platforms the production env's slug
+     * is derived from the project name (e.g. `my-app-xyz-1234`), which the
+     * platform's env-resolver accepts but is jarring to see printed back.
+     * The env-resolver accepts id, name, or slug, so name is safe.
+     * Omit for lint / studio contexts.
+     */
+    environmentName?: string;
   } = {},
 ): Promise<PreflightIssue[]> {
-  const { hasEnvFile = true, managedEnvVarNames } = options;
+  const { hasEnvFile = true, managedEnvVarNames, environmentName } = options;
   const outputDir = join(targetDir, '.mastra', 'output');
   const entryPath = join(outputDir, 'index.mjs');
 
@@ -173,7 +204,9 @@ export async function preflightBuildOutput(
   // plugin `mastra-local-storage-detector` runs during bundling and only
   // reports paths from user modules (not node_modules) that survived
   // tree-shaking, so library examples are structurally excluded.
-  issues.push(...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile, managedEnvVarNames)));
+  issues.push(
+    ...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile, managedEnvVarNames, environmentName)),
+  );
 
   return issues;
 }
@@ -217,12 +250,17 @@ export async function printPreflightIssues(
   const errors = issues.filter(i => i.severity === 'error');
   const warnings = issues.filter(i => i.severity === 'warning');
 
+  const renderFix = (fix: string | string[]): string => {
+    const steps = Array.isArray(fix) ? fix : [fix];
+    return steps.map(step => `  ${pc.dim('→')} ${step}`).join('\n');
+  };
+
   for (const issue of warnings) {
-    p.log.warn(`${pc.yellow(`[${issue.code}]`)} ${issue.message}\n  ${pc.dim('→')} ${issue.fix}`);
+    p.log.warn(`${pc.yellow(`[${issue.code}]`)} ${issue.message}\n${renderFix(issue.fix)}`);
   }
 
   for (const issue of errors) {
-    p.log.error(`${pc.red(`[${issue.code}]`)} ${issue.message}\n  ${pc.dim('→')} ${issue.fix}`);
+    p.log.error(`${pc.red(`[${issue.code}]`)} ${issue.message}\n${renderFix(issue.fix)}`);
   }
 
   if (errors.length > 0) {
@@ -370,12 +408,53 @@ async function readPreflightMetadata(outputDir: string): Promise<PreflightMetada
  * are absent (e.g. older build, or the plugin wasn't active) the check is
  * silently skipped — no false positives.
  */
+/**
+ * The exact command that unblocks a missing database env var. Kind-specific
+ * when the guarded var maps to a known provider (issue 35-B: the remediation
+ * previously said "attach a managed database" without ever naming the command).
+ */
+export function dbCreateCommandFor(envVarName: string, environmentName?: string): string {
+  // env name goes BEFORE flags because it's a positional argument on
+  // `mastra env db create`, not a flag. Scoping to the target environment
+  // matters after 8816f47: `mastra env db create` with no arg errors in
+  // non-interactive shells when multiple environments exist, which is
+  // exactly where preflight failures land (CI).
+  //
+  // We use the environment NAME (`production`, `staging`), not the platform
+  // slug. On some platforms the production env's slug is derived from the
+  // project name (e.g. `my-app-xyz-1234`) — technically accepted by the
+  // env-resolver (which matches id | name | slug), but jarring to see
+  // printed back and awkward to type. The name is what the user thinks of
+  // as the environment identifier, so that's what we print.
+  const envArg = environmentName ? ` ${environmentName}` : '';
+  for (const [kind, names] of Object.entries(DB_ENV_VAR_NAMES)) {
+    if (names.includes(envVarName)) return `mastra env db create${envArg} --kind ${kind}`;
+  }
+  return `mastra env db create${envArg}`;
+}
+
+/**
+ * If `envVarName` is injected by a known managed database provider, return
+ * the structured autofix hint deploy uses to offer inline provisioning.
+ * Returns undefined for env vars that don't map to a provider — those still
+ * get a text-only fix.
+ */
+export function dbAutofixFor(envVarName: string): PreflightAutofix | undefined {
+  for (const [kind, names] of Object.entries(DB_ENV_VAR_NAMES) as [DatabaseKind, string[]][]) {
+    if (names.includes(envVarName)) {
+      return { kind: 'create-managed-database', provider: kind, envVarName };
+    }
+  }
+  return undefined;
+}
+
 async function checkLocalStoragePaths(
   outputDir: string,
   metadata: PreflightMetadata | null,
   envVars: Record<string, string>,
   hasEnvFile: boolean,
   managedEnvVarNames?: string[] | null,
+  environmentName?: string,
 ): Promise<PreflightIssue[]> {
   let detections: LocalStorageDetection[];
   if (metadata) {
@@ -437,19 +516,41 @@ async function checkLocalStoragePaths(
         // Full env picture: local env file + stored vars + managed names.
         // The guard var is genuinely absent, so the local fallback WILL be
         // used at runtime — trustworthy hard error.
+        const autofix = dbAutofixFor(d.guardedBy);
+        // Only recommend `mastra env db create` when we recognize the guard
+        // var as belonging to a managed provider we can actually provision.
+        // Suggesting the command for arbitrary vars (e.g. MY_CUSTOM_DB_URL)
+        // would tell users to spin up infra that can't inject their var.
+        const envVarFix = `Set ${d.guardedBy} in your env file or the environment's stored vars`;
         issues.push({
           code: 'LOCAL_STORAGE_PATH',
           severity: 'error',
           message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-          fix: `Set ${d.guardedBy} in your env file or the environment's stored vars, or attach a managed database that provides it.`,
+          fix: autofix
+            ? [
+                `Run \`${dbCreateCommandFor(d.guardedBy, environmentName)}\` to attach a managed database`,
+                `Or ${envVarFix.charAt(0).toLowerCase()}${envVarFix.slice(1)}`,
+              ]
+            : envVarFix,
+          autofix,
         });
       }
     } else if (hasEnvFile) {
+      const autofix = dbAutofixFor(d.guardedBy);
+      const envVarFix = `Set ${d.guardedBy} in your env file`;
+      const platformFix = `If the platform already injects it, re-run with --skip-preflight`;
       issues.push({
         code: 'LOCAL_STORAGE_PATH',
         severity: 'error',
         message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-        fix: `Set ${d.guardedBy} in your env file, or remove the local fallback. If the platform injects it (e.g. a managed database), re-run with --skip-preflight.`,
+        fix: autofix
+          ? [
+              `Run \`${dbCreateCommandFor(d.guardedBy, environmentName)}\` to attach a managed database`,
+              `Or ${envVarFix.charAt(0).toLowerCase()}${envVarFix.slice(1)}`,
+              platformFix,
+            ]
+          : [envVarFix, platformFix],
+        autofix,
       });
     } else {
       issues.push({

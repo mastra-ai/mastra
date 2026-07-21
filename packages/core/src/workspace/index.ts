@@ -83,9 +83,12 @@ export type {
 export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './filesystem';
 
 // Sandbox
-export { MountManager } from './sandbox';
+export { MountManager, supportsNetworking } from './sandbox';
 export type {
   WorkspaceSandbox,
+  SandboxNetworking,
+  SandboxFileInput,
+  SandboxCloneOptions,
   ExecutionResult,
   CommandOptions,
   CommandResult,

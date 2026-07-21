@@ -68,8 +68,8 @@ export type SkillInput = string | InlineSkill;
 /**
  * Context passed to a dynamic skills resolver.
  */
-export interface AgentSkillsContext {
-  requestContext: RequestContext;
+export interface AgentSkillsContext<TRequestContext extends Record<string, any> | unknown = unknown> {
+  requestContext: RequestContext<TRequestContext>;
 }
 
 /**
@@ -93,6 +93,7 @@ export interface AgentSkillsContext {
  * }
  * ```
  */
-export type AgentSkillsInput = SkillInput[] | ((context: AgentSkillsContext) => SkillInput[] | Promise<SkillInput[]>);
+export type AgentSkillsInput<TRequestContext extends Record<string, any> | unknown = unknown> =
+  SkillInput[] | ((context: AgentSkillsContext<TRequestContext>) => SkillInput[] | Promise<SkillInput[]>);
 
 export type { Skill, SkillMetadata, SkillFormat, WorkspaceSkills };

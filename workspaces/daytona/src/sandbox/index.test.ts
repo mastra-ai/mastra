@@ -42,8 +42,10 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFou
     },
     fs: {
       uploadFile: vi.fn().mockResolvedValue(undefined),
+      uploadFiles: vi.fn().mockResolvedValue(undefined),
       downloadFile: vi.fn().mockResolvedValue(Buffer.from('')),
     },
+    getPreviewLink: vi.fn().mockResolvedValue({ url: 'https://4111-mock-sandbox-id.proxy.daytona.work', token: 't' }),
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
@@ -73,6 +75,12 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFou
     );
     mockSandbox.process.getSessionCommand.mockResolvedValue({ id: 'cmd-123', command: '', exitCode: 0 });
     mockSandbox.process.deleteSession.mockResolvedValue(undefined);
+    mockSandbox.fs.uploadFiles.mockResolvedValue(undefined);
+    mockSandbox.getPreviewLink.mockResolvedValue({
+      url: 'https://4111-mock-sandbox-id.proxy.daytona.work',
+      token: 't',
+    });
+    mockSandbox.state = 'started';
     mockSandbox.start.mockResolvedValue(undefined);
     mockSandbox.stop.mockResolvedValue(undefined);
     mockSandbox.delete.mockResolvedValue(undefined);
@@ -1052,6 +1060,97 @@ describe('DaytonaSandbox', () => {
 
       expect(sandbox.status).toBe('destroyed');
     });
+
+    it('stop stops a detached running sandbox by identity without starting it', async () => {
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'started' });
+
+      const sandbox = new DaytonaSandbox({ id: 'my-preview' });
+      await sandbox.stop();
+
+      expect(mockDaytona.get).toHaveBeenCalledWith('my-preview');
+      expect(mockDaytona.stop).toHaveBeenCalled();
+      expect(mockDaytona.start).not.toHaveBeenCalled();
+      expect(mockSandbox.start).not.toHaveBeenCalled();
+    });
+
+    it('stop skips a detached sandbox that is already stopped', async () => {
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'stopped' });
+
+      const sandbox = new DaytonaSandbox({ id: 'my-preview' });
+      await sandbox.stop();
+
+      expect(mockDaytona.stop).not.toHaveBeenCalled();
+      expect(mockDaytona.start).not.toHaveBeenCalled();
+    });
+
+    it('destroy deletes a detached sandbox by identity without starting it', async () => {
+      const detached = { ...mockSandbox, state: 'stopped' };
+      mockDaytona.get.mockResolvedValue(detached);
+
+      const sandbox = new DaytonaSandbox({ id: 'my-preview' });
+      await sandbox.destroy();
+
+      expect(mockDaytona.delete).toHaveBeenCalledWith(detached);
+      expect(mockDaytona.start).not.toHaveBeenCalled();
+      expect(mockSandbox.start).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Networking & writeFiles', () => {
+    it('getPortUrl returns the preview URL when attached', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const url = await sandbox.networking.getPortUrl(4111);
+
+      expect(mockSandbox.getPreviewLink).toHaveBeenCalledWith(4111);
+      expect(url).toBe('https://4111-mock-sandbox-id.proxy.daytona.work');
+    });
+
+    it('getPortUrl resolves a detached sandbox by identity without starting it', async () => {
+      mockDaytona.get.mockResolvedValue(mockSandbox);
+
+      const sandbox = new DaytonaSandbox({ id: 'my-preview' });
+      const url = await sandbox.networking.getPortUrl(4111);
+
+      expect(mockDaytona.get).toHaveBeenCalledWith('my-preview');
+      expect(url).toBe('https://4111-mock-sandbox-id.proxy.daytona.work');
+      expect(mockDaytona.start).not.toHaveBeenCalled();
+      expect(mockSandbox.start).not.toHaveBeenCalled();
+    });
+
+    it('getPortUrl returns null when the sandbox does not exist', async () => {
+      const sandbox = new DaytonaSandbox({ id: 'missing' });
+
+      const url = await sandbox.networking.getPortUrl(4111);
+
+      expect(url).toBeNull();
+    });
+
+    it('getPortUrl returns null when the preview link fails', async () => {
+      mockSandbox.getPreviewLink.mockRejectedValueOnce(new Error('preview unavailable'));
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const url = await sandbox.networking.getPortUrl(4111);
+
+      expect(url).toBeNull();
+    });
+
+    it('writeFiles uploads files via fs.uploadFiles', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      await sandbox.writeFiles([
+        { path: '/home/daytona/app/a.txt', content: 'hello' },
+        { path: '/home/daytona/app/b.bin', content: Buffer.from([1, 2, 3]) },
+      ]);
+
+      expect(mockSandbox.fs.uploadFiles).toHaveBeenCalledWith([
+        { source: Buffer.from('hello'), destination: '/home/daytona/app/a.txt' },
+        { source: Buffer.from([1, 2, 3]), destination: '/home/daytona/app/b.bin' },
+      ]);
+    });
   });
 
   describe('getInfo()', () => {
@@ -1522,5 +1621,47 @@ describe('DaytonaSandbox', () => {
 
     createSandboxLifecycleTests(getContext);
     createMountOperationsTests(getContext);
+  });
+});
+
+describe('DaytonaSandbox.clone', () => {
+  it('constructs an unstarted sibling without any I/O', () => {
+    const template = new DaytonaSandbox({ apiKey: 'dt-key', snapshot: 'base-snap' });
+
+    const child = template.clone({ id: 'mc-project-1' });
+
+    expect(child).toBeInstanceOf(DaytonaSandbox);
+    expect(child).not.toBe(template);
+    expect(child.id).toBe('mc-project-1');
+    expect(child.status).toBe('pending');
+  });
+
+  it('inherits template config and applies env override', () => {
+    const template = new DaytonaSandbox({ apiKey: 'dt-key', snapshot: 'base-snap', env: { BASE: '1' } });
+
+    const child = template.clone({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      apiKey: 'dt-key',
+      snapshot: 'base-snap',
+      env: { GITHUB_TOKEN: 'ghs_abc' },
+    });
+  });
+
+  it('maps idleTimeoutMinutes to autoStopInterval in minutes', () => {
+    const template = new DaytonaSandbox({ apiKey: 'dt-key', autoStopInterval: 45 });
+
+    const child = template.clone({ idleTimeoutMinutes: 15 });
+
+    expect(child['_constructorOptions']).toMatchObject({ autoStopInterval: 15 });
+  });
+
+  it('inherits template defaults when no overrides are passed', () => {
+    const template = new DaytonaSandbox({ apiKey: 'dt-key', autoStopInterval: 45, env: { BASE: '1' } });
+
+    const child = template.clone();
+
+    expect(child.id).not.toBe(template.id);
+    expect(child['_constructorOptions']).toMatchObject({ apiKey: 'dt-key', autoStopInterval: 45, env: { BASE: '1' } });
   });
 });

@@ -109,6 +109,19 @@ The session is organized into sub-objects, each owning one domain of per-convers
 
 ## Methods
 
+### Workspace
+
+#### `getWorkspace()`
+
+Return the workspace resolved for this session. This preserves session-level overrides and workspaces selected from the session scope.
+
+```typescript
+const workspace = agentController.session.getWorkspace()
+const skill = await workspace.skills?.get('code-review')
+```
+
+Returns: `Workspace`
+
 ### Permissions
 
 Session-scoped grants auto-approve tools without prompting. Grants are ephemeral — they reset when the session restarts and are never persisted.
@@ -262,6 +275,8 @@ Retrieve messages for a specific thread.
 ```typescript
 const messages = await agentController.session.thread.listMessages({ threadId: 'thread-abc123' })
 ```
+
+The message-reading methods `listActiveMessages`, `listMessages`, and `firstUserMessage` return `MastraDBMessage` objects, while `firstUserMessages` returns a `Map<string, MastraDBMessage>` keyed by thread ID. Each message has a `role`, an `id`, a `createdAt`, and a `content` object with `content.format` and a `content.parts` array. Read text, reasoning, tool calls, and attachments from `content.parts`. Signals such as system reminders and notifications are returned as separate messages with `role: 'signal'`.
 
 ### `session.thread.firstUserMessage({ threadId })`
 

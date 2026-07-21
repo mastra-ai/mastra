@@ -1,0 +1,28 @@
+---
+extends: existence
+message: "AI growth metaphor: '%s'. Say what literally happens, or disable this rule for medical or nature writing."
+level: error
+nonword: true
+ignorecase: true
+# The startup-as-organism register: a product is conceived, incubated, born, and
+# raised to maturity. The biological-development words are flagged broadly and
+# disable-in-domain (medical, nature, agriculture, parenting) covers their
+# literal senses (an egg incubates, a fledgling is a young bird, a gestation
+# period). The finance and tech-overloaded words (viable, seed, organic) are
+# scoped to their startup phrases so the random seed, a viable option, and
+# organic produce stay clean. "Infancy" is scoped to the metaphor phrase so
+# literal babyhood does not fire.
+tokens:
+  # Biological-development words (broad)
+  - "\\bincubat(?:e|es|ed|ing|ion|or|ors)\\b"
+  - "\\bgestat(?:e|es|ed|ing|ion)\\b"
+  - "\\bnascent\\b"
+  - "\\bfledglings?\\b"
+  - "\\bembryonic\\b"
+  - "\\bcultivat(?:e|es|ed|ing)\\b"
+  - "\\bnurtur(?:e|es|ed|ing)\\b"
+  - "\\bin (?:its|their|the|early|relative|comparative|this) infancy\\b"
+  # Finance and tech-overloaded words, scoped to the startup phrase
+  - "\\bminimum viable\\b"
+  - "\\bseed (?:funding|rounds?|stage|capital|money|investment|financing|investors?|backers?)\\b"
+  - "\\borganic growth\\b"

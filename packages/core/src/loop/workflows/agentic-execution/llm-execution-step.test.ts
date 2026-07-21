@@ -6,6 +6,7 @@ import { z } from 'zod/v4';
 import { MODEL_TOKENS } from '../../../../../../docs/src/plugins/remark-model-tokens/models';
 import { MessageList } from '../../../agent/message-list';
 import { SpanType } from '../../../observability';
+import { StreamErrorRetryProcessor } from '../../../processors';
 import { ProviderHistoryCompat } from '../../../processors/provider-history-compat';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
@@ -1740,6 +1741,78 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
     expect(secondModelStream).toHaveBeenCalledTimes(2);
     expect(firstModelStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not signal a processor retry when aborted during the retry delay', async () => {
+    const abortController = new AbortController();
+    const onAbort = vi.fn();
+    const doStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'provider unavailable',
+        url: 'https://provider.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 503,
+        isRetryable: true,
+      });
+    });
+    const processor = new StreamErrorRetryProcessor({
+      maxRetries: 1,
+      delayMs: () => {
+        setTimeout(() => abortController.abort(), 0);
+        return 60_000;
+      },
+    });
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      maxProcessorRetries: 1,
+      errorProcessors: [processor],
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'test-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      options: {
+        abortSignal: abortController.signal,
+        onAbort,
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(doStream).toHaveBeenCalledTimes(1);
+    expect(onAbort).toHaveBeenCalledOnce();
+    expect(result.stepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
   });
 
   it('emits a processor_run span when an error processor handles an API error', async () => {

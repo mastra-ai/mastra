@@ -13,11 +13,11 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { StatusLine } from '../StatusLine';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -29,17 +29,42 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject() {
-  const project: Project = {
-    id: 'project-test',
-    name: 'MastraCode Test',
-    path: '/tmp/mastracode-test',
-    resourceId: RESOURCE_ID,
-    gitBranch: 'main',
-    createdAt: 1,
-  };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedFactory(source: 'local' | 'github' = 'local') {
+  const project: Factory =
+    source === 'github'
+      ? {
+          id: 'project-test',
+          name: 'octo/hello',
+          resourceId: RESOURCE_ID,
+          createdAt: 1,
+          binding: {
+            kind: 'factory',
+            factoryProjectId: 'fp-test',
+            repositories: [
+              {
+                projectRepositoryId: 'pr-test',
+                slug: 'octo/hello',
+                gitBranch: 'main',
+                sandboxWorkdir: '/tmp/mastracode-test',
+                selectedWorktreePath: '/tmp/mastracode-test-worktree',
+                worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
+              },
+            ],
+          },
+        }
+      : {
+          id: 'project-test',
+          name: 'MastraCode Test',
+          resourceId: RESOURCE_ID,
+          createdAt: 1,
+          binding: {
+            kind: 'local',
+            path: '/tmp/mastracode-test',
+            gitBranch: 'main',
+          },
+        };
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(modeId = 'build'): AgentControllerSessionState {
@@ -87,6 +112,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], delayed
         modes: [
           { id: 'build', name: 'Build' },
           { id: 'plan', name: 'Plan' },
+          { id: 'fast', name: 'Explore' },
         ],
       }),
     ),
@@ -129,11 +155,11 @@ function renderStatusLine() {
         <Route
           path="/threads/:threadId"
           element={
-            <ActiveProjectProvider>
+            <ActiveFactoryProvider>
               <ChatSessionProvider>
                 <StatusLine />
               </ChatSessionProvider>
-            </ActiveProjectProvider>
+            </ActiveFactoryProvider>
           }
         />
       </Routes>
@@ -144,7 +170,7 @@ function renderStatusLine() {
 describe('StatusLine', () => {
   describe('when the session exposes multiple modes', () => {
     it('marks the active mode as pressed inside the mode group', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderStatusLine();
 
@@ -154,10 +180,38 @@ describe('StatusLine', () => {
         expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'true'),
       );
       expect(screen.getByRole('button', { name: 'Plan' })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('button', { name: 'Explore' })).toHaveAttribute('aria-pressed', 'false');
+      for (const button of screen.getAllByRole('button', { name: /Build|Plan|Explore/ })) {
+        expect(button).toHaveAttribute('data-variant', 'outline');
+      }
+    });
+
+    it('colors only the active mode background', async () => {
+      seedFactory();
+      useAgentControllerHandlers();
+      renderStatusLine();
+
+      const buildButton = await screen.findByRole('button', { name: 'Build' });
+      await waitFor(() => expect(buildButton).toHaveStyle({ backgroundColor: '#16c858', color: '#111827' }));
+      expect(screen.getByRole('button', { name: 'Plan' })).not.toHaveAttribute('style');
+      expect(screen.getByRole('button', { name: 'Explore' })).not.toHaveAttribute('style');
+    });
+
+    it('colors Explore orange when its fast mode is active', async () => {
+      seedFactory();
+      useAgentControllerHandlers();
+      const user = userEvent.setup();
+      renderStatusLine();
+
+      const exploreButton = await screen.findByRole('button', { name: 'Explore' });
+      await user.click(exploreButton);
+
+      await waitFor(() => expect(exploreButton).toHaveAttribute('aria-pressed', 'true'));
+      expect(exploreButton).toHaveStyle({ backgroundColor: '#fdac53', color: '#111827' });
     });
 
     it('switches modes through the controller mode endpoint before updating the pressed state', async () => {
-      seedProject();
+      seedFactory();
       const { onMode } = useAgentControllerHandlers();
       const user = userEvent.setup();
       renderStatusLine();
@@ -167,13 +221,14 @@ describe('StatusLine', () => {
 
       await waitFor(() => expect(onMode).toHaveBeenCalledWith({ modeId: 'plan' }));
       await waitFor(() => expect(planButton).toHaveAttribute('aria-pressed', 'true'));
+      expect(planButton).toHaveStyle({ backgroundColor: '#7f45e0', color: '#ffffff' });
       expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'false');
     });
   });
 
   describe('when the session reports its model', () => {
     it('shows the active model id once the session syncs', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderStatusLine();
 
@@ -182,7 +237,7 @@ describe('StatusLine', () => {
     });
 
     it('shows the no-model fallback before the session syncs', () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderStatusLine();
 
@@ -190,9 +245,126 @@ describe('StatusLine', () => {
     });
   });
 
+  describe('when the active GitHub thread is subscribed to a pull request', () => {
+    it('shows a linked pull request at the right side of the status line', async () => {
+      seedFactory('github');
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, ({ request }) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get('resourceId')).toBe(RESOURCE_ID);
+          expect(url.searchParams.get('threadId')).toBe(THREAD_ID);
+          expect(url.searchParams.get('scope')).toBe('/tmp/mastracode-test-worktree');
+          return HttpResponse.json({
+            subscriptions: [
+              {
+                id: 'subscription-1',
+                repoFullName: 'octo/hello',
+                pullRequestNumber: 42,
+                status: 'open',
+                url: 'https://github.com/octo/hello/pull/42',
+              },
+            ],
+          });
+        }),
+      );
+      renderStatusLine();
+
+      const link = await screen.findByRole('link', { name: 'Open open octo/hello pull request 42' });
+      expect(link).toHaveTextContent('PR #42');
+      expect(link).toHaveAttribute('href', 'https://github.com/octo/hello/pull/42');
+    });
+
+    it('refreshes subscribed pull requests when an agent run completes', async () => {
+      seedFactory('github');
+      useAgentControllerHandlers([{ type: 'agent_start' }], [{ type: 'agent_end' }]);
+      let requests = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => {
+          requests += 1;
+          return HttpResponse.json({
+            subscriptions:
+              requests > 1
+                ? [
+                    {
+                      id: 'subscription-1',
+                      repoFullName: 'octo/hello',
+                      pullRequestNumber: 42,
+                      status: 'open',
+                      url: 'https://github.com/octo/hello/pull/42',
+                    },
+                  ]
+                : [],
+          });
+        }),
+      );
+      renderStatusLine();
+
+      await waitFor(() => expect(requests).toBeGreaterThan(1));
+      expect(await screen.findByRole('link', { name: 'Open open octo/hello pull request 42' })).toBeInTheDocument();
+    });
+
+    it('refreshes the pull request status when a notification arrives', async () => {
+      seedFactory('github');
+      useAgentControllerHandlers(
+        [],
+        [
+          {
+            type: 'message_update',
+            message: {
+              id: 'notification-message',
+              role: 'assistant',
+              createdAt: new Date(),
+              content: {
+                format: 2,
+                parts: [],
+                metadata: {
+                  harnessContent: [
+                    {
+                      type: 'notification',
+                      notificationId: 'notification-merged',
+                      message: 'octo/hello#42 was merged',
+                      source: 'github',
+                      kind: 'pull-request-merged',
+                      priority: 'urgent',
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      );
+      let requests = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => {
+          requests += 1;
+          return HttpResponse.json({
+            subscriptions: [
+              {
+                id: 'subscription-1',
+                repoFullName: 'octo/hello',
+                pullRequestNumber: 42,
+                status: requests > 1 ? 'merged' : 'open',
+                url: 'https://github.com/octo/hello/pull/42',
+              },
+            ],
+          });
+        }),
+      );
+      renderStatusLine();
+
+      await screen.findByRole('link', { name: 'Open open octo/hello pull request 42' });
+      await waitFor(() =>
+        expect(screen.getByRole('link', { name: 'Open merged octo/hello pull request 42' })).toBeInTheDocument(),
+      );
+      expect(requests).toBeGreaterThan(1);
+    });
+  });
+
   describe('when display state carries observational memory budgets', () => {
     it('shows the message budget with its projected removal', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'display_state_changed',
@@ -214,7 +386,7 @@ describe('StatusLine', () => {
     });
 
     it('shows the memory budget with its projected savings', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'display_state_changed',
@@ -236,7 +408,7 @@ describe('StatusLine', () => {
     });
 
     it('hides the memory budget until observations accumulate', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'display_state_changed',
@@ -258,8 +430,16 @@ describe('StatusLine', () => {
   });
 
   describe('when the agent is actively working', () => {
+    it('reports Working in the composer status line', async () => {
+      seedFactory();
+      useAgentControllerHandlers([{ type: 'agent_start' }]);
+      renderStatusLine();
+
+      expect(await screen.findByRole('status')).toHaveTextContent('Working…');
+    });
+
     it('shows the observational memory phase while observing', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([{ type: 'om_observation_start' }]);
       renderStatusLine();
 
@@ -267,13 +447,18 @@ describe('StatusLine', () => {
     });
 
     it('shows tokens-per-second throughput after a streamed step reports usage', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers(
         [
           { type: 'agent_start' },
           {
             type: 'message_update',
-            message: { id: 'assistant-1', role: 'assistant', content: [{ type: 'text', text: 'Working…' }] },
+            message: {
+              id: 'assistant-1',
+              role: 'assistant',
+              createdAt: new Date(),
+              content: { format: 2, parts: [{ type: 'text', text: 'Working…' }] },
+            },
           },
         ],
         [{ type: 'usage_update', usage: { completionTokens: 120 } }],
@@ -286,7 +471,7 @@ describe('StatusLine', () => {
 
   describe('when follow-ups are queued', () => {
     it('shows the queued follow-up count', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([{ type: 'follow_up_queued', count: 2 }]);
       renderStatusLine();
 
@@ -296,7 +481,7 @@ describe('StatusLine', () => {
 
   describe('when a goal is being pursued', () => {
     it('shows the pursuing label for an active goal', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'goal_evaluation',
@@ -309,7 +494,7 @@ describe('StatusLine', () => {
     });
 
     it('shows the paused label for a paused goal', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'goal_evaluation',
@@ -322,7 +507,7 @@ describe('StatusLine', () => {
     });
 
     it('hides the goal indicator once the goal is done', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'goal_evaluation',
@@ -339,7 +524,7 @@ describe('StatusLine', () => {
 
   describe('when the session is idle with no activity data', () => {
     it('omits budgets, activity, queue, and goal indicators', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderStatusLine();
 

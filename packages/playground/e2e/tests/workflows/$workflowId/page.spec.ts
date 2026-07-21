@@ -70,9 +70,12 @@ test.describe('Workflow graph detail page', () => {
     });
   });
 
-  test.describe('when the workflow is run via the form with a long-condition input', () => {
-    test('takes the long path and suspends for user input', async ({ page }) => {
-      await page.getByRole('textbox', { name: 'Text' }).fill('SuperLongTextToStartWith');
+  test.describe('when the workflow is run via the form with multiline input', () => {
+    test('preserves the newline and takes the long path', async ({ page }) => {
+      // FEATURE: Multiline schema-driven workflow inputs
+      // USER STORY: Long prompts entered on multiple lines reach the workflow unchanged.
+      // BEHAVIOR UNDER TEST: Ten visible characters plus a newline cross the fixture's 10-character branch threshold.
+      await page.getByRole('textbox', { name: 'Text' }).fill('1234567890\n');
       await getRunButton(page).click();
 
       await runWorkflow(page);

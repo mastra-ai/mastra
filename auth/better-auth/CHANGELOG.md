@@ -1,5 +1,25 @@
 # @mastra/auth-better-auth
 
+## 1.1.2-alpha.1
+
+### Patch Changes
+
+- Fixed Better Auth bearer token authentication and implemented user lookup in `@mastra/auth-better-auth` (fixes [#19110](https://github.com/mastra-ai/mastra/issues/19110)). ([#19629](https://github.com/mastra-ai/mastra/pull/19629))
+
+  **Bearer tokens now work after credentials sign-in**
+
+  `signIn`/`signUp` return Better Auth's raw session token, but Better Auth only accepts _signed_ session cookies. Sending that token as `Authorization: Bearer <token>` previously always failed authentication. The provider now signs unsigned tokens with the Better Auth secret before verifying the session — matching the semantics of Better Auth's bearer plugin. The session cookie name is also resolved from the Better Auth instance, so secure-cookie setups (`__Secure-` prefix) work too.
+
+  **`getUser()` and `getUsers()` are now implemented**
+
+  Previously `getUser()` was a stub that always returned `null`, breaking Studio user lookup and author enrichment. It now resolves users by ID through Better Auth's internal database adapter, and `getUsers()` supports batch lookups.
+
+## 1.1.2-alpha.0
+
+### Patch Changes
+
+- Updated the minimum better-auth version to 1.6.13 to pull in the fix for a stored cross-site scripting vulnerability in better-auth's OIDC provider and MCP plugins (GHSA-86j7-9j95-vpqj). ([#19584](https://github.com/mastra-ai/mastra/pull/19584))
+
 ## 1.1.1
 
 ### Patch Changes

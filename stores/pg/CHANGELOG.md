@@ -1,5 +1,98 @@
 # @mastra/pg
 
+## 1.17.0-alpha.1
+
+### Minor Changes
+
+- Added PgFactoryStorage for persisting Mastra agent state and lifecycle-managed application domains through one PostgreSQL pool. ([#19681](https://github.com/mastra-ai/mastra/pull/19681))
+
+  ```ts
+  import { PgFactoryStorage } from '@mastra/pg';
+
+  const storage = new PgFactoryStorage({ connectionString: process.env.DATABASE_URL! });
+  await storage.init();
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`6b1bf3b`](https://github.com/mastra-ai/mastra/commit/6b1bf3b9494bd51aa8f654c68c9355d6046fa2a1), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9)]:
+  - @mastra/core@1.52.0-alpha.8
+
+## 1.16.1-alpha.0
+
+### Patch Changes
+
+- Fixed an issue where the process could crash when Postgres drops an idle database connection (e.g., due to a backend restart, failover, or network failure). ([#19469](https://github.com/mastra-ai/mastra/pull/19469))
+
+  Previously, a dropped idle connection caused an uncaught exception that terminated the process. Now the connection drop is caught and logged as a warning, and the store automatically reconnects on the next database operation.
+
+  User-provided connection pools are unaffected and keep their existing error handling.
+
+- Added stable metrics and logs capability reporting for observability storage. The system packages response now includes `observabilityStorageCapabilities` with `metrics` and `logs` flags, enabling capability-based detection that is resilient to bundler-generated constructor name changes. ([#19305](https://github.com/mastra-ai/mastra/pull/19305))
+
+  ```typescript
+  const packages = await client.getSystemPackages();
+  console.log(packages.observabilityStorageCapabilities?.metrics); // true
+  console.log(packages.observabilityStorageCapabilities?.logs); // true
+  ```
+
+  Studio now uses the capability response instead of relying on constructor names, with a fallback for older servers.
+
+- Updated dependencies [[`1426af2`](https://github.com/mastra-ai/mastra/commit/1426af24975879c000d13ac75673f630fcc970c1), [`975295d`](https://github.com/mastra-ai/mastra/commit/975295d418552f0d46a59edfef4c3ee555f9930a), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`ef03c0c`](https://github.com/mastra-ai/mastra/commit/ef03c0cfc62367a458e4cc56462e2148b35681c5), [`4fb4d88`](https://github.com/mastra-ai/mastra/commit/4fb4d881bc107acee13890ad4d78661016c510ed), [`4eba27a`](https://github.com/mastra-ai/mastra/commit/4eba27adcf60f991df0e62f94b3e75b4e67f3b4b), [`c701be3`](https://github.com/mastra-ai/mastra/commit/c701be32d7d9aa94a66da8c6cc38dcac6856f464)]:
+  - @mastra/core@1.52.0-alpha.3
+
+## 1.16.0
+
+### Minor Changes
+
+- Added atomic caller-defined dataset IDs for idempotent dataset creation across built-in storage adapters. Supplying `id` to `mastra.datasets.create()` now creates the dataset once and resolves compatible retries to the persisted record; incompatible immutable identity fields throw `DATASET_ID_CONFLICT`. ([#19370](https://github.com/mastra-ai/mastra/pull/19370))
+
+- Added caller-defined dataset item identities for safe retries across all dataset storage adapters. ([#19384](https://github.com/mastra-ai/mastra/pull/19384))
+
+  Dataset items can now include an `externalId` when calling `addItem` or `addItems`:
+
+  ```ts
+  await dataset.addItem({
+    externalId: 'source-item-123',
+    input: { prompt: 'Hello' },
+  });
+  ```
+
+  Retrying with the same identity and payload returns the existing item. Reusing an identity with different content returns a typed conflict, including during concurrent writes. Updates and deletes preserve the identity, Spanner retries transactions without changing the outcome, and MySQL batch writes now preserve every supported dataset item field.
+
+### Patch Changes
+
+- Raised the `@mastra/core` peer dependency floor to `>=1.51.0-0` so the dataset item identity helpers used by the storage adapters are available at runtime. ([#19384](https://github.com/mastra-ai/mastra/pull/19384))
+
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`fe1bda0`](https://github.com/mastra-ai/mastra/commit/fe1bda06f6af92a694a51712db747cda1e7185f0), [`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`1ce5121`](https://github.com/mastra-ai/mastra/commit/1ce512155d122bb21f47d98383e82ffbf84b39e8), [`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`4adc391`](https://github.com/mastra-ai/mastra/commit/4adc3911075249c352bb4832d2471922826344de), [`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`3cfc47a`](https://github.com/mastra-ai/mastra/commit/3cfc47a6b89940aadd0f46fb01ae9624a73a865d), [`2bb7817`](https://github.com/mastra-ai/mastra/commit/2bb78176112fde628483de2830528f7eee911e56), [`51d9870`](https://github.com/mastra-ai/mastra/commit/51d987032c689c2855374d0f244f5d654da809d1), [`5cab274`](https://github.com/mastra-ai/mastra/commit/5cab2744250e22d12fefa7b32637dce224233cee), [`7fa27d3`](https://github.com/mastra-ai/mastra/commit/7fa27d3b6f5ed68cd34e454a4d3ad9c482a0cfbc), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`a58dcbb`](https://github.com/mastra-ai/mastra/commit/a58dcbb546d7e1d65ebdc1f39e55f0908fcd9391), [`aa38805`](https://github.com/mastra-ai/mastra/commit/aa38805b878b827403be785eb90688d7172f5a40), [`153bd3b`](https://github.com/mastra-ai/mastra/commit/153bd3b396bdfed6b74cf43de12db8fd2d83c04a), [`45a8e65`](https://github.com/mastra-ai/mastra/commit/45a8e65e1556d1362cb3f25187023c36de26661d), [`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`2d22570`](https://github.com/mastra-ai/mastra/commit/2d22570c7dfdd02123d0ecc529efb05ccba2d9fc), [`07bb863`](https://github.com/mastra-ai/mastra/commit/07bb8631919c6f7cf377dccd45b096e0f17fbed0), [`c8ed116`](https://github.com/mastra-ai/mastra/commit/c8ed11699f62bcac70102ab4ec84d80d20541da6), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`a99eae8`](https://github.com/mastra-ai/mastra/commit/a99eae8908e500c1b2d12f9d277be616b98617a5), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`edce8d2`](https://github.com/mastra-ai/mastra/commit/edce8d2769f19e27a05737c627af2d765472a4f8), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2), [`3927473`](https://github.com/mastra-ai/mastra/commit/392747323ddb10c643d12be7b9ae913159dfaeed), [`dce50dc`](https://github.com/mastra-ai/mastra/commit/dce50dc9a1c1fcd0f427bb5f6250ec74910cb04b), [`fd13f8e`](https://github.com/mastra-ai/mastra/commit/fd13f8e21990f9904c3eedba3a626bb4a929cdb8), [`634caff`](https://github.com/mastra-ai/mastra/commit/634caff29a9200ad058b67d53f96d9e5832fb8a2), [`f703f87`](https://github.com/mastra-ai/mastra/commit/f703f878de072d51fda557f9c50867d8252bef05), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`33f2b88`](https://github.com/mastra-ai/mastra/commit/33f2b88842c09a567f906fac4cb61cd5277ced59), [`177010f`](https://github.com/mastra-ai/mastra/commit/177010ff096d2e4b28d89803be5b1a4cad2a0d6b), [`0ad646f`](https://github.com/mastra-ai/mastra/commit/0ad646f71a530f2454664299e5e01bfd13fa12e5), [`b486abf`](https://github.com/mastra-ai/mastra/commit/b486abfa2a7528c6f527e4015c819ea9fa54aaad), [`54a51e0`](https://github.com/mastra-ai/mastra/commit/54a51e0a484fe1ebad3fb1f7ef5282a075709eb7), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b), [`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e), [`4378341`](https://github.com/mastra-ai/mastra/commit/43783412df5ea3dd35f5b1f6e4851e79c346fc89)]:
+  - @mastra/core@1.51.0
+
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added atomic caller-defined dataset IDs for idempotent dataset creation across built-in storage adapters. Supplying `id` to `mastra.datasets.create()` now creates the dataset once and resolves compatible retries to the persisted record; incompatible immutable identity fields throw `DATASET_ID_CONFLICT`. ([#19370](https://github.com/mastra-ai/mastra/pull/19370))
+
+- Added caller-defined dataset item identities for safe retries across all dataset storage adapters. ([#19384](https://github.com/mastra-ai/mastra/pull/19384))
+
+  Dataset items can now include an `externalId` when calling `addItem` or `addItems`:
+
+  ```ts
+  await dataset.addItem({
+    externalId: 'source-item-123',
+    input: { prompt: 'Hello' },
+  });
+  ```
+
+  Retrying with the same identity and payload returns the existing item. Reusing an identity with different content returns a typed conflict, including during concurrent writes. Updates and deletes preserve the identity, Spanner retries transactions without changing the outcome, and MySQL batch writes now preserve every supported dataset item field.
+
+### Patch Changes
+
+- Raised the `@mastra/core` peer dependency floor to `>=1.51.0-0` so the dataset item identity helpers used by the storage adapters are available at runtime. ([#19384](https://github.com/mastra-ai/mastra/pull/19384))
+
+- Updated dependencies [[`a99eae8`](https://github.com/mastra-ai/mastra/commit/a99eae8908e500c1b2d12f9d277be616b98617a5), [`fd13f8e`](https://github.com/mastra-ai/mastra/commit/fd13f8e21990f9904c3eedba3a626bb4a929cdb8), [`f703f87`](https://github.com/mastra-ai/mastra/commit/f703f878de072d51fda557f9c50867d8252bef05), [`0ad646f`](https://github.com/mastra-ai/mastra/commit/0ad646f71a530f2454664299e5e01bfd13fa12e5)]:
+  - @mastra/core@1.51.0-alpha.13
+
 ## 1.15.1
 
 ### Patch Changes
@@ -1005,9 +1098,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({
@@ -1035,9 +1126,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({

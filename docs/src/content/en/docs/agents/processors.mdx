@@ -862,10 +862,16 @@ const agent = new Agent({
 
 The retry mechanism:
 
-- Only works in `processOutputStep()` and `processInputStep()` methods
+- Works in `processOutputStep()` and `processInputStep()` methods
 - Replays the step with the abort reason added as context for the LLM
 - Tracks retry count via the `retryCount` parameter
-- Respects `maxProcessorRetries` limit on the agent
+- Requires an explicit `maxProcessorRetries` limit on the agent or call
+
+### Error processor retry limits
+
+`processAPIError()` has a separate default: when `errorProcessors` are configured and `maxProcessorRetries` is omitted, the runtime allows up to `10` retries. Set the limit explicitly when you need a bounded retry budget.
+
+For `StreamErrorRetryProcessor`, also set its `maxRetries` to the same value. Its own default is `1`, which can otherwise be lower than the agent cap. Keep model retries at `0` when the processor is the only retry mechanism for a request.
 
 ### Violation callbacks
 
@@ -920,7 +926,7 @@ For `agent.generate()`, the result exposes the same information as `result.tripw
 
 `abort` accepts a second options argument:
 
-- `retry: true` asks the agent to retry instead of ending. Retries require `maxProcessorRetries` to be set on the agent or call.
+- `retry: true` asks the agent to retry instead of ending. Input and output processor retries require `maxProcessorRetries` to be set on the agent or call.
 - `metadata` attaches structured data to the `tripwire` chunk so downstream consumers can branch on categories like `pii`, `quality`, or `moderation`.
 
 ## API error handling

@@ -596,9 +596,7 @@ const embedStep = createStep({
   inputSchema: z.object({ chunk: z.string() }),
   outputSchema: z.object({ embedding: z.array(z.number()) }),
   execute: async ({ inputData }) => ({
-    embedding: [
-      /* vector embedding */
-    ],
+    embedding: [/* vector embedding */],
   }),
 })
 

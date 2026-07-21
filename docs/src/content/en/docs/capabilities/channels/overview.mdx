@@ -67,6 +67,7 @@ import { yourAgent } from './agents/your-agent'
 export const mastra = new Mastra({
   agents: { yourAgent },
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: process.env.DATABASE_URL,
   }),
 })

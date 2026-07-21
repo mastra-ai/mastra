@@ -48,7 +48,7 @@ export const HorizontalLayout: StoryObj = {
       <FieldBlock.Column>
         <input
           id="input-email"
-          className="h-9 rounded-md border border-border1 bg-transparent px-3 text-ui-sm text-neutral6 w-full"
+          className="h-9 w-full rounded-md border border-border1 bg-transparent px-3 text-ui-sm text-neutral6"
           placeholder="john@example.com"
         />
         <FieldBlock.HelpText>We will never share your email.</FieldBlock.HelpText>

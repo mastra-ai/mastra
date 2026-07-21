@@ -738,6 +738,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/thinkingmachines',
+          label: 'Thinking Machines',
+        },
+        {
+          type: 'doc',
           id: 'providers/tinfoil',
           label: 'Tinfoil',
         },

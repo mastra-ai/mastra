@@ -5,6 +5,7 @@ import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
+import { modelSupportsStructuredOutput } from '../../../llm/model/provider-registry';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
@@ -12,6 +13,17 @@ import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import type { ModelSpecVersion } from './compat';
 import { AISDKV5InputStream } from './input';
+
+type JsonPromptInjection = StructuredOutputOptions<unknown>['jsonPromptInjection'];
+type ResolvedJsonPromptInjection = Exclude<JsonPromptInjection, 'auto'>;
+
+export function resolveJsonPromptInjection(
+  value: JsonPromptInjection,
+  capability: boolean | undefined,
+): ResolvedJsonPromptInjection {
+  if (value !== 'auto') return value;
+  return capability === true ? undefined : 'inline';
+}
 
 function buildJsonInstruction(schema: unknown) {
   return `Return your response as JSON matching this schema:\n\n${JSON.stringify(schema)}\n\nReturn only valid JSON. Do not include markdown or explanatory text.`;
@@ -135,7 +147,12 @@ export function execute<OUTPUT = undefined>({
 
   let prompt = inputMessages;
   const jsonPromptInjection = structuredOutput?.jsonPromptInjection;
-  const injectionMode = jsonPromptInjection === true ? 'system' : jsonPromptInjection;
+  const modelRoute = `${model.provider.split('.')[0]}/${model.modelId}`;
+  const resolvedJsonPromptInjection = resolveJsonPromptInjection(
+    jsonPromptInjection,
+    jsonPromptInjection === 'auto' ? modelSupportsStructuredOutput(modelRoute) : undefined,
+  );
+  const injectionMode = resolvedJsonPromptInjection === true ? 'system' : resolvedJsonPromptInjection;
 
   // For direct mode (no model provided for structuring agent), inject JSON schema instruction if opting out of native response format with jsonPromptInjection
   if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && injectionMode) {

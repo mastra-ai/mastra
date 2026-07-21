@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import Layout from '@theme/Layout'
 import { cn } from '@site/src/lib/utils'
 
-import ChatbotSidebar from '@site/src/theme/DocRoot/Layout/ChatbotSidebar'
 import { course } from '../course'
 import { LearnStorageProvider, useSharedLearnStorage } from '../hooks/LearnStorageContext'
 import { LearnSidebar } from './LearnSidebar'
@@ -31,7 +30,6 @@ function LearnLayoutInner({ children, title, description, className }: LearnLayo
             </div>
           </div>
         </main>
-        <ChatbotSidebar />
       </div>
     </Layout>
   )

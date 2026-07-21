@@ -56,7 +56,8 @@ function createWorkspaceRegistry() {
 }
 
 const baseState = {
-  githubProjectId: 'proj-1',
+  factoryProjectId: 'factory-project-1',
+  projectRepositoryId: 'project-repository-1',
   sandboxId: 'sbx-1',
   sandboxWorkdir: '/workspace/hello',
   sandboxAllowedPaths: [],
@@ -92,7 +93,7 @@ describe('S5 — worktree reattach round-trip through the workspace seam', () =>
       branch: 'feat/x',
     });
     expect(sandboxFsCalls.at(-1)?.workdir).toBe('/workspace/worktrees/feat-x');
-    expect(first.id).toBe('mastra-code-workspace-gh-proj-1-sbx-1-/workspace/worktrees/feat-x');
+    expect(first.id).toBe('mastra-code-workspace-repository-project-repository-1-sbx-1-/workspace/worktrees/feat-x');
     expect(reattachCalls).toHaveLength(1);
     const fsCallsAfterFirst = sandboxFsCalls.length;
 
@@ -116,7 +117,7 @@ describe('S5 — worktree reattach round-trip through the workspace seam', () =>
       branch: 'feat/y',
     });
     expect(third).not.toBe(first);
-    expect(third.id).toBe('mastra-code-workspace-gh-proj-1-sbx-1-/workspace/worktrees/feat-y');
+    expect(third.id).toBe('mastra-code-workspace-repository-project-repository-1-sbx-1-/workspace/worktrees/feat-y');
     expect(sandboxFsCalls.at(-1)?.workdir).toBe('/workspace/worktrees/feat-y');
     expect(reattachCalls).toHaveLength(2);
     expect(reg.size()).toBe(2);

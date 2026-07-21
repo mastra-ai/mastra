@@ -1,5 +1,14 @@
 # @mastra/browser-viewer
 
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#19785](https://github.com/mastra-ai/mastra/pull/19785))
+  - Updated dependency [`playwright-core@^1.61.1` ↗︎](https://www.npmjs.com/package/playwright-core/v/1.61.1) (from `^1.60.0`, in `dependencies`)
+- Updated dependencies [[`0a2c22c`](https://github.com/mastra-ai/mastra/commit/0a2c22c902604439ec490319e14c17f331e0c84c), [`3a8024c`](https://github.com/mastra-ai/mastra/commit/3a8024ce615f8aa89479c0d71fe61d10bb0040be)]:
+  - @mastra/core@1.52.0-alpha.9
+
 ## 0.2.0
 
 ### Minor Changes

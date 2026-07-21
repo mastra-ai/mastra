@@ -1,11 +1,9 @@
-import { jsonLanguage } from '@codemirror/lang-json';
 import type { MCPToolType } from '@mastra/core/mcp';
-import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { MainContentContent } from '@mastra/playground-ui/components/MainContent';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tabs, Tab, TabList } from '@mastra/playground-ui/components/Tabs';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import CodeMirror from '@uiw/react-codemirror';
 import { useState } from 'react';
 import type { ZodType } from 'zod';
 import {
@@ -14,7 +12,8 @@ import {
   useSchemaRequestContext,
 } from '@/domains/request-context';
 import { ToolInformation } from '@/domains/tools/components/ToolInformation';
-import { DynamicForm } from '@/lib/form';
+import { DynamicForm } from '@/lib/form/dynamic-form';
+import { isEmptyZodObject } from '@/lib/form/is-empty-zod-object';
 
 interface ToolExecutorProps {
   isExecutingTool: boolean;
@@ -40,44 +39,54 @@ const ToolExecutorContent = ({
   toolType,
   requestContextSchema,
 }: Omit<ToolExecutorProps, 'executionResult'> & { result: any }) => {
-  const theme = useCodemirrorTheme();
+  const hasResult = errorString !== undefined || result !== undefined;
   const code = JSON.stringify(result ?? {}, null, 2);
   const [selectedTab, setSelectedTab] = useState('input-data');
   const { schemaValues } = useSchemaRequestContext();
+  const hasInputFields = !isEmptyZodObject(zodInputSchema);
+  const hasConfiguration = hasInputFields || Boolean(requestContextSchema);
 
   return (
-    <MainContentContent hasLeftServiceColumn={true} className="relative">
-      <div className="bg-surface2 border-r border-border1 w-80 flex flex-col">
-        <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
-        <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
-          <Tabs defaultTab="input-data" value={selectedTab} onValueChange={setSelectedTab}>
-            <TabList>
-              <Tab value="input-data">Input Data</Tab>
-              {requestContextSchema && <Tab value="request-context">Request Context</Tab>}
-            </TabList>
-          </Tabs>
-          <div className={cn('p-5 overflow-y-auto', selectedTab !== 'input-data' && 'hidden')}>
+    <MainContentContent>
+      <div className="flex w-full flex-col items-center p-5 lg:flex-row lg:items-start lg:justify-center">
+        <div className="grid w-full min-w-0 max-w-3xl content-start gap-5">
+          <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
+          {hasConfiguration && (
+            <Tabs defaultTab="input-data" value={selectedTab} onValueChange={setSelectedTab}>
+              <TabList variant="pill">
+                <Tab value="input-data">Input Data</Tab>
+                {requestContextSchema && <Tab value="request-context">Request Context</Tab>}
+              </TabList>
+            </Tabs>
+          )}
+          <div className={cn(selectedTab !== 'input-data' && 'hidden')}>
             <DynamicForm
               isSubmitLoading={isExecutingTool}
               schema={zodInputSchema}
               onSubmit={data => {
                 handleExecuteTool(data, schemaValues);
               }}
-              className="h-auto pb-7"
-            />
+              className="space-y-4"
+            >
+              {!hasInputFields && <Notice variant="info">No input is required to run this tool.</Notice>}
+            </DynamicForm>
           </div>
           {requestContextSchema && (
-            <div className={cn('p-5 overflow-y-auto', selectedTab !== 'request-context' && 'hidden')}>
+            <div className={cn(selectedTab !== 'request-context' && 'hidden')}>
               <RequestContextSchemaForm requestContextSchema={requestContextSchema} />
             </div>
           )}
         </div>
-      </div>
-      <div className="absolute top-4 right-4 z-10">
-        <CopyButton content={code} tooltip="Copy JSON result to clipboard" />
-      </div>
-      <div className="p-5 h-full relative overflow-x-auto overflow-y-auto">
-        <CodeMirror value={errorString || code} editable={true} theme={theme} extensions={[jsonLanguage]} />
+        <div
+          className={cn(
+            'w-full min-w-0 overflow-hidden lg:transition-[max-width,opacity,margin-left] lg:duration-300 lg:ease-in-out',
+            hasResult
+              ? 'mt-5 max-w-3xl opacity-100 lg:ml-5 lg:mt-0'
+              : 'hidden lg:block lg:ml-0 lg:max-w-0 lg:opacity-0',
+          )}
+        >
+          <CodeEditor value={errorString || code} language="json" editable={false} />
+        </div>
       </div>
     </MainContentContent>
   );

@@ -1,0 +1,35 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Name the source or the comparison directly. Disable this rule for art or card-game prose."
+level: error
+nonword: true
+ignorecase: true
+# "Draws" is an AI fingerprint for sourcing and comparison: an argument
+# "draws on" prior work, a section "draws a distinction," a post "draws to a
+# close." Literal drawing is everywhere (a picture, a card, water, a weapon,
+# blood, a salary), so the complement after the verb is the discriminator,
+# in the FigurativeSits mold.
+tokens:
+  # --- Sourcing: the work borrows from a wellspring ("draws on," "draws
+  # upon," "draws from," "draws inspiration from," "draws heavily on").
+  - "\\bdraw(?:s|ing)? (?:heavily |largely |partly |loosely )?(?:on|upon) (?:the |its |a |an |our |their |years of |decades of |a rich |a long )?\\w+"
+  - "\\bdrew (?:heavily |largely |partly |loosely )?(?:on|upon)\\b"
+  - "\\bdraw(?:s|ing)? inspiration from\\b"
+  - "\\bdrew inspiration from\\b"
+
+  # --- Comparison and demarcation: the section sets terms side by side or
+  # marks a boundary ("draws a distinction," "draws a parallel," "draws a
+  # line," "draws comparisons," "draws an analogy").
+  - "\\bdraw(?:s|ing)? (?:a|an|the|clear|sharp) (?:distinction|parallel|comparison|analogy|contrast|line|connection)\\b"
+  - "\\bdrew (?:a|an|the|clear|sharp) (?:distinction|parallel|comparison|analogy|contrast|line|connection)\\b"
+  - "\\bdraw(?:s|ing)? comparisons\\b"
+
+  # --- Salience: the artifact tugs the eye or the mind ("draws attention
+  # to," "draws the eye," "draws scrutiny," "draws criticism").
+  - "\\bdraw(?:s|ing)? (?:attention|scrutiny|criticism|praise|fire|the eye|the reader'?s eye|focus) (?:to|toward|towards)?\\b"
+  - "\\bdrew (?:attention|scrutiny|criticism|praise|fire|the eye|focus)\\b"
+
+  # --- Closure: the piece winds down ("draws to a close," "draws to an
+  # end").
+  - "\\bdraw(?:s|ing)? to a (?:close|end)\\b"
+  - "\\bdrew to a (?:close|end)\\b"

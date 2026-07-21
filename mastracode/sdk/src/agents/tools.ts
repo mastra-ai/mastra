@@ -10,7 +10,7 @@ import type {
 } from '@mastra/core/notifications';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import type { ToolHooks } from '@mastra/core/tools';
+import type { ToolAfterHookContext, ToolHooks } from '@mastra/core/tools';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/index.js';
 import type { MastraCodeComposedState } from '../schema.js';
@@ -60,11 +60,14 @@ class LazyNotificationsStorage extends NotificationsStorage {
   }
 }
 
-export function createToolHooks(hookManager?: HookManager): ToolHooks | undefined {
-  if (!hookManager) return undefined;
+export type PostToolObserver = (context: ToolAfterHookContext) => void | Promise<void>;
+
+export function createToolHooks(hookManager?: HookManager, postToolObserver?: PostToolObserver): ToolHooks | undefined {
+  if (!hookManager && !postToolObserver) return undefined;
 
   return {
     beforeToolCall: async ({ toolName, input }) => {
+      if (!hookManager) return;
       const preResult = await hookManager.runPreToolUse(toolName, input);
       if (!preResult.allowed) {
         return {
@@ -75,15 +78,24 @@ export function createToolHooks(hookManager?: HookManager): ToolHooks | undefine
         };
       }
     },
-    afterToolCall: async ({ toolName, input, output, error }) => {
-      await hookManager
-        .runPostToolUse(
-          toolName,
-          input,
-          error ? { error: error instanceof Error ? error.message : String(error) } : output,
-          Boolean(error),
-        )
-        .catch(() => undefined);
+    afterToolCall: async context => {
+      const { toolName, input, output, error } = context;
+      if (hookManager) {
+        const failed = error !== undefined;
+        await hookManager
+          .runPostToolUse(
+            toolName,
+            input,
+            failed ? { error: error instanceof Error ? error.message : String(error) } : output,
+            failed,
+          )
+          .catch(() => undefined);
+      }
+      await Promise.resolve()
+        .then(() => postToolObserver?.(context))
+        .catch(error => {
+          console.warn(`[MastraCode] Post-tool observer failed for ${toolName}.`, error);
+        });
     },
   };
 }

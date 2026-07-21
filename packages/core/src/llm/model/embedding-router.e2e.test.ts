@@ -7,16 +7,16 @@ import { MASTRA_USER_AGENT } from './gateways/constants.js';
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai', 'google']);
 
-// Mock the @ai-sdk/openai-compatible-v5 module for custom URL tests
-vi.mock('@ai-sdk/openai-compatible-v5', async () => {
-  const actual = await vi.importActual('@ai-sdk/openai-compatible-v5');
+// Mock the @ai-sdk/openai-compatible-v6 module for custom URL tests
+vi.mock('@ai-sdk/openai-compatible-v6', async () => {
+  const actual = await vi.importActual('@ai-sdk/openai-compatible-v6');
   return {
     ...actual,
     createOpenAICompatible: vi.fn(),
   };
 });
 
-const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v5');
+const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v6');
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());
@@ -72,8 +72,8 @@ describe('ModelRouterEmbeddingModel Integration', () => {
       process.env.MASTRA_GATEWAY_API_KEY = 'test-gateway-key';
       process.env.MASTRA_GATEWAY_URL = 'https://gateway.example.com';
       vi.mocked(createOpenAICompatible).mockReturnValue({
-        textEmbeddingModel: vi.fn((_modelId: string) => ({
-          specificationVersion: 'v2',
+        embeddingModel: vi.fn((_modelId: string) => ({
+          specificationVersion: 'v3',
           modelId: _modelId,
           maxEmbeddingsPerCall: 2048,
           supportsParallelCalls: true,
@@ -105,7 +105,7 @@ describe('ModelRouterEmbeddingModel Integration', () => {
       });
 
       const mockInstance = vi.mocked(createOpenAICompatible).mock.results[0].value;
-      expect(mockInstance.textEmbeddingModel).toHaveBeenCalledWith(OPENAI_EMBEDDING_MODEL);
+      expect(mockInstance.embeddingModel).toHaveBeenCalledWith(OPENAI_EMBEDDING_MODEL);
 
       const result = await model.doEmbed({ values: ['hello gateway'] });
       expect(result.embeddings).toHaveLength(1);
@@ -224,10 +224,10 @@ describe('ModelRouterEmbeddingModel Integration', () => {
     beforeEach(() => {
       // Setup mock implementation to return a mock embedding model
       vi.mocked(createOpenAICompatible).mockReturnValue({
-        textEmbeddingModel: vi.fn((_modelId: string) => {
-          // Return a mock EmbeddingModelV2 instance
+        embeddingModel: vi.fn((_modelId: string) => {
+          // Return a mock EmbeddingModelV3 instance
           return {
-            specificationVersion: 'v2',
+            specificationVersion: 'v3',
             modelId: _modelId,
             maxEmbeddingsPerCall: 2048,
             supportsParallelCalls: true,
@@ -266,9 +266,9 @@ describe('ModelRouterEmbeddingModel Integration', () => {
         headers: undefined,
       });
 
-      // Verify textEmbeddingModel was called with the modelId
+      // Verify embeddingModel was called with the modelId
       const mockInstance = vi.mocked(createOpenAICompatible).mock.results[0].value;
-      expect(mockInstance.textEmbeddingModel).toHaveBeenCalledWith('my-embedding-model');
+      expect(mockInstance.embeddingModel).toHaveBeenCalledWith('my-embedding-model');
     });
 
     it('should work with custom URL in id format', async () => {

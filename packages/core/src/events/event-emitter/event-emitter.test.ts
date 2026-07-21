@@ -191,6 +191,22 @@ describe('EventEmitterPubSub', () => {
     });
   });
 
+  describe('clearTopic', () => {
+    it('resolves via the PubSub base no-op and leaves subscriptions intact', async () => {
+      // EventEmitterPubSub retains nothing per topic, so it relies on the
+      // base class's default clearTopic. Run lifecycles call it
+      // fire-and-forget on every transport; it must resolve cleanly and
+      // must not tear down live subscriptions.
+      const cb = vi.fn();
+      await pubsub.subscribe('tasks', cb);
+
+      await expect(pubsub.clearTopic('tasks')).resolves.toBeUndefined();
+
+      await pubsub.publish('tasks', makeEvent());
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('publish', () => {
     it('auto-generates id and createdAt', async () => {
       const cb = vi.fn();

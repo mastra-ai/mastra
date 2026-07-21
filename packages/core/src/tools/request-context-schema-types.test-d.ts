@@ -1,7 +1,7 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
-import { createTool } from './tool';
+import { createTool, Tool } from './tool';
 
 /**
  * Type tests to verify requestContextSchema properly types the execute function's context
@@ -16,21 +16,24 @@ describe('requestContextSchema type inference', () => {
         apiKey: z.string(),
       }),
       execute: async (input, context) => {
-        // Verify context.requestContext is typed
-        expectTypeOf(context.requestContext).toEqualTypeOf<
-          RequestContext<{ userId: string; apiKey: string }> | undefined
-        >();
+        // The runtime always provides requestContext (and validates it against
+        // the schema before execute runs), so it is non-optional here.
+        expectTypeOf(context.requestContext).toEqualTypeOf<RequestContext<{ userId: string; apiKey: string }>>();
 
-        // Verify get() returns the correct type
-        const userId = context.requestContext?.get('userId');
-        expectTypeOf(userId).toEqualTypeOf<string | undefined>();
+        // Verify get() returns the correct type without null-checking
+        const userId = context.requestContext.get('userId');
+        expectTypeOf(userId).toEqualTypeOf<string>();
 
-        const apiKey = context.requestContext?.get('apiKey');
-        expectTypeOf(apiKey).toEqualTypeOf<string | undefined>();
+        const apiKey = context.requestContext.get('apiKey');
+        expectTypeOf(apiKey).toEqualTypeOf<string>();
 
         // Verify .all returns the typed object
-        const all = context.requestContext?.all;
-        expectTypeOf(all).toEqualTypeOf<{ userId: string; apiKey: string } | undefined>();
+        const all = context.requestContext.all;
+        expectTypeOf(all).toEqualTypeOf<{ userId: string; apiKey: string }>();
+
+        // Verify unknown keys are rejected
+        // @ts-expect-error - key does not exist in the request context schema
+        context.requestContext.get('nonexistentKey');
 
         return { success: true };
       },
@@ -45,11 +48,12 @@ describe('requestContextSchema type inference', () => {
       id: 'untyped-tool',
       description: 'A tool without request context schema',
       execute: async (input, context) => {
-        // Without schema, requestContext should be RequestContext<unknown>
-        expectTypeOf(context.requestContext).toEqualTypeOf<RequestContext<unknown> | undefined>();
+        // Without schema, requestContext is still always provided at runtime,
+        // just untyped: RequestContext<unknown>
+        expectTypeOf(context.requestContext).toEqualTypeOf<RequestContext<unknown>>();
 
         // get() should return unknown
-        const value = context.requestContext?.get('anyKey');
+        const value = context.requestContext.get('anyKey');
         expectTypeOf(value).toEqualTypeOf<unknown>();
 
         return { success: true };
@@ -71,11 +75,62 @@ describe('requestContextSchema type inference', () => {
         }),
       }),
       execute: async (input, context) => {
-        const user = context.requestContext?.get('user');
-        expectTypeOf(user).toEqualTypeOf<{ id: string; name: string } | undefined>();
+        const user = context.requestContext.get('user');
+        expectTypeOf(user).toEqualTypeOf<{ id: string; name: string }>();
 
-        const settings = context.requestContext?.get('settings');
-        expectTypeOf(settings).toEqualTypeOf<{ theme: 'light' | 'dark' } | undefined>();
+        const settings = context.requestContext.get('settings');
+        expectTypeOf(settings).toEqualTypeOf<{ theme: 'light' | 'dark' }>();
+
+        return { success: true };
+      },
+    });
+  });
+
+  it('should preserve readonly properties from a readonly requestContextSchema', () => {
+    createTool({
+      id: 'document-tool',
+      description: 'A tool with document request metadata',
+      requestContextSchema: z
+        .object({
+          documentId: z.string(),
+          userId: z.string(),
+        })
+        .readonly(),
+      execute: async (input, context) => {
+        expectTypeOf(context.requestContext).toEqualTypeOf<
+          RequestContext<{ readonly documentId: string; readonly userId: string }>
+        >();
+
+        const documentId = context.requestContext.get('documentId');
+        expectTypeOf(documentId).toEqualTypeOf<string>();
+
+        const userId = context.requestContext.get('userId');
+        expectTypeOf(userId).toEqualTypeOf<string>();
+
+        return { success: true };
+      },
+    });
+  });
+
+  it('should type requestContext in execute when constructed via new Tool()', () => {
+    new Tool({
+      id: 'typed-class-tool',
+      description: 'A tool constructed directly with a typed request context',
+      requestContextSchema: z.object({
+        userId: z.string(),
+        apiKey: z.string(),
+      }),
+      execute: async (input, context) => {
+        expectTypeOf(context.requestContext).toEqualTypeOf<RequestContext<{ userId: string; apiKey: string }>>();
+
+        const userId = context.requestContext.get('userId');
+        expectTypeOf(userId).toEqualTypeOf<string>();
+
+        const all = context.requestContext.all;
+        expectTypeOf(all).toEqualTypeOf<{ userId: string; apiKey: string }>();
+
+        // @ts-expect-error - key does not exist in the request context schema
+        context.requestContext.get('nonexistentKey');
 
         return { success: true };
       },

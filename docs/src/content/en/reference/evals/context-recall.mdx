@@ -1,0 +1,258 @@
+---
+title: "Reference: Context recall scorer | Evals"
+description: Documentation for the Context Recall Scorer in Mastra. Evaluates how well retrieved context covers the claims in a ground-truth reference answer.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Context recall scorer
+
+The `createContextRecallScorer()` function creates a scorer that evaluates how well retrieved context covers the claims in a ground-truth reference answer. It measures retrieval completeness by checking what fraction of the ground truth's claims are attributable to the retrieved context.
+
+This scorer requires a ground-truth reference answer, making it suitable for labeled datasets in CI or test environments. When `groundTruth` is not provided in the run, the scorer returns a score of 0 rather than throwing an error.
+
+## RAG retrieval evaluation
+
+Ideal for evaluating retrieval completeness in RAG pipelines where:
+
+- You need to verify the retriever fetches all necessary information
+- You have labeled datasets with known-correct answers
+- You want to catch regressions in what the retriever returns
+
+## Dataset-driven testing
+
+Use when running evaluations against curated test sets:
+
+- CI pipelines with ground-truth labeled questions
+- A/B testing retrieval strategies
+- Benchmarking embedding models for coverage
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description: 'The language model to use for evaluating claim attribution',
+    required: true,
+  },
+  {
+    name: 'options',
+    type: 'ContextRecallMetricOptions',
+    description: 'Configuration options for the scorer',
+    required: true,
+    children: [
+      {
+        name: 'context',
+        type: 'string[]',
+        description: 'Array of retrieved context pieces to check claims against',
+        required: false,
+      },
+      {
+        name: 'contextExtractor',
+        type: '(input, output) => string[]',
+        description: 'Function to dynamically extract context from the run input and output',
+        required: false,
+      },
+      {
+        name: 'scale',
+        type: 'number',
+        description: 'Scale factor to multiply the final score (default: 1)',
+        required: false,
+      },
+    ],
+  },
+]}
+/>
+
+**Note**: Either `context` or `contextExtractor` must be provided. When both are provided, `contextExtractor` is used only if the run input and output are agent-shaped (`MastraDBMessage[]`); otherwise the scorer falls back to `context`.
+
+## `.run()` returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'score',
+    type: 'number',
+    description:
+      'Recall score between 0 and scale (default 0-1), representing the fraction of ground-truth claims covered by the context',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description: 'Human-readable explanation of which ground-truth claims were and were not found in the context',
+  },
+]}
+/>
+
+## Scoring details
+
+### Claim attribution
+
+Context Recall uses a two-step LLM evaluation followed by a deterministic score calculation:
+
+1. **Claim extraction**: The ground-truth answer is decomposed into atomic claims
+1. **Attribution check**: Each claim is checked against the retrieval context for support
+
+The score is then calculated as the ratio of attributed claims to total claims, multiplied by scale.
+
+### Scoring formula
+
+```
+Context Recall = attributed_claims / total_claims × scale
+
+Where:
+- attributed_claims = number of ground-truth claims supported by the context
+- total_claims = total number of claims extracted from the ground truth
+- Attribution is binary: a claim is either supported (yes) or not (no)
+```
+
+### Score interpretation
+
+These ranges assume the default `scale` of 1. When using a custom scale, multiply accordingly.
+
+- **0.9-1.0**: Excellent recall — context covers nearly all ground-truth claims
+- **0.7-0.8**: Good recall — most claims are covered, minor gaps
+- **0.4-0.6**: Moderate recall — significant information missing from context
+- **0.1-0.3**: Poor recall — most ground-truth claims not found in context
+- **0.0**: No recall — none of the ground-truth claims are in the context
+
+### Reason analysis
+
+The reason field explains:
+
+- Which ground-truth claims were found in the context
+- Which claims were missing and what information gaps exist
+- Specific context pieces that supported attributed claims
+
+### Optimization insights
+
+Use results to:
+
+- **Improve retrieval**: Identify what types of information the retriever misses
+- **Tune chunk size**: Ensure chunks contain enough detail to cover ground-truth claims
+- **Evaluate embeddings**: Test different embedding models for better information coverage
+- **Expand knowledge base**: Add documents that cover frequently missed claims
+
+### Example calculation
+
+Given ground truth: "Einstein was born in 1879. He developed relativity. He won the Nobel Prize."
+
+Claims extracted: 3
+
+- "Einstein was born in 1879" → attributed (context mentions birthdate)
+- "Einstein developed relativity" → attributed (context covers relativity)
+- "Einstein won the Nobel Prize" → not attributed (context doesn't mention Nobel Prize)
+
+Recall = 2/3 = 0.67
+
+## Scorer configuration
+
+### Dynamic context extraction
+
+```typescript
+const scorer = createContextRecallScorer({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  options: {
+    contextExtractor: (input, output) => {
+      const query = input?.inputMessages?.[0]?.content || ''
+      const searchResults = vectorDB.search(query, { limit: 10 })
+      return searchResults.map(result => result.content)
+    },
+    scale: 1,
+  },
+})
+```
+
+### Static context evaluation
+
+```typescript
+const scorer = createContextRecallScorer({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  options: {
+    context: [
+      'Document 1: Einstein was born on 14 March 1879 in Ulm, Germany.',
+      'Document 2: Einstein published the theory of special relativity in 1905.',
+      'Document 3: Einstein moved to the United States in 1933.',
+    ],
+  },
+})
+```
+
+## Example
+
+Evaluate RAG retrieval completeness against a labeled dataset:
+
+```typescript title="src/example-context-recall.ts"
+import { runEvals } from '@mastra/core/evals'
+import { createContextRecallScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
+
+const scorer = createContextRecallScorer({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  options: {
+    contextExtractor: (input, output) => {
+      // Extract context from tool invocation results in the agent output
+      return output
+        .filter(msg => msg?.role === 'assistant')
+        .flatMap(msg => msg?.content?.toolInvocations ?? [])
+        .filter((tool: any) => tool.state === 'result')
+        .map((tool: any) => JSON.stringify(tool.result))
+    },
+  },
+})
+
+const result = await runEvals({
+  data: [
+    {
+      input: 'What are the health benefits of green tea?',
+      groundTruth:
+        'Green tea contains antioxidants that reduce inflammation, L-theanine that improves focus, and catechins that boost metabolism.',
+    },
+    {
+      input: 'How does photosynthesis work?',
+      groundTruth:
+        'Photosynthesis converts sunlight into chemical energy using chlorophyll in chloroplasts, producing glucose and oxygen from carbon dioxide and water.',
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      reason: scorerResults[scorer.id].reason,
+    })
+  },
+})
+
+console.log(result.scores)
+```
+
+For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).
+
+To add this scorer to an agent, see the [Scorers overview](/docs/evals/overview#adding-scorers-to-agents) guide.
+
+## Comparison with context precision
+
+Choose the right scorer for your needs:
+
+| Use case | Context Recall | Context Precision |
+| - | - | - |
+| **What it measures** | Coverage of ground truth | Relevance of retrieved chunks |
+| **Direction** | Ground truth → context | Context → ground truth |
+| **Position sensitive** | No | Yes (rewards early placement) |
+| **Requires ground truth** | Yes | Yes |
+| **Failure mode caught** | Missing information | Irrelevant noise |
+
+Use both together for a complete picture of retrieval quality: precision catches junk in the context, recall catches gaps.
+
+## Related
+
+- [Context Precision Scorer](/reference/evals/context-precision): Evaluates if retrieved context is relevant and well-ranked
+- [Context Relevance Scorer](/reference/evals/context-relevance): Evaluates context usage and quality
+- [Faithfulness Scorer](/reference/evals/faithfulness): Measures answer groundedness in context
+- [Custom Scorers](/docs/evals/custom-scorers): Creating your own evaluation metrics

@@ -615,8 +615,7 @@ function buildWhereClause(
 
   // Timestamp range
   const ts = filters.timestamp as
-    | { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean }
-    | undefined;
+    { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } | undefined;
   if (ts?.start) bindScalar('timestamp', ts.start, ts.startExclusive ? '>' : '>=');
   if (ts?.end) bindScalar('timestamp', ts.end, ts.endExclusive ? '<' : '<=');
 

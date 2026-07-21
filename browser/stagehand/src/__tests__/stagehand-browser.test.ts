@@ -223,6 +223,23 @@ describe('StagehandBrowser', () => {
       );
     });
 
+    it('forwards local model execution options to Stagehand', async () => {
+      const customBrowser = new StagehandBrowser({
+        scope: 'shared',
+        experimental: true,
+        disableAPI: true,
+      });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          experimental: true,
+          disableAPI: true,
+        }),
+      );
+    });
+
     it('passes model configuration objects through to Stagehand', async () => {
       const model = {
         modelName: '__GATEWAY_OPENAI_MODEL__',

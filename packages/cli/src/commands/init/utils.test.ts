@@ -28,7 +28,7 @@ vi.mock('../auth/orgs.js', () => ({
   resolveCurrentOrg: vi.fn(),
 }));
 
-const { getAPIKey, promptForObservability, writeObservabilityEnv } = await import('./utils');
+const { getAPIKey, promptForObservability, writeObservabilityEnv, writeIndexFile } = await import('./utils');
 const prompts = await import('@clack/prompts');
 const { getToken, loadCredentials } = await import('../auth/credentials.js');
 const { resolveCurrentOrg } = await import('../auth/orgs.js');
@@ -173,6 +173,33 @@ describe('promptForObservability', () => {
     await expect(promptForObservability()).resolves.toEqual({});
 
     expect(selectMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('writeIndexFile', () => {
+  const dirPath = '/mock-project/src/mastra';
+
+  beforeEach(() => {
+    vol.reset();
+    fs.mkdirSync(dirPath, { recursive: true });
+  });
+
+  test('example scaffold guards the local storage path behind TURSO_DATABASE_URL', async () => {
+    await writeIndexFile({
+      dirPath,
+      addExample: true,
+      addWorkflow: true,
+      addAgent: true,
+      addScorers: true,
+    });
+
+    const contents = fs.readFileSync(`${dirPath}/index.ts`, 'utf-8') as string;
+    // Deploy preflight hard-blocks unguarded host-local storage URLs
+    // (LOCAL_STORAGE_PATH). The guarded form deploys clean once a hosted
+    // database provides TURSO_DATABASE_URL, and keeps the local file for dev.
+    expect(contents).toContain('url: process.env.TURSO_DATABASE_URL ?? "file:./mastra.db"');
+    expect(contents).toContain('authToken: process.env.TURSO_AUTH_TOKEN');
+    expect(contents).not.toContain('url: "file:./mastra.db"');
   });
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-google",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Mastra Google voice integration",
   "type": "module",
   "files": [
@@ -38,10 +38,10 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "tsx": "catalog:",
     "typescript": "catalog:",

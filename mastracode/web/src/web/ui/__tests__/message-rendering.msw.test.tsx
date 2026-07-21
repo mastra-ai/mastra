@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentControllerEvent, AgentControllerMessage, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -13,7 +14,7 @@ import { loginUrl, logoutUrl } from '../domains/auth';
 import Chat from '../domains/chat/Chat';
 import { NewPage } from '../domains/chat/NewPage';
 import { ThreadPage } from '../domains/chat/ThreadPage';
-import type { Project } from '../domains/workspaces';
+import type { Factory } from '../domains/workspaces';
 
 /**
  * Renders <Chat /> inside a memory router mirroring the app's pathless chat
@@ -44,6 +45,10 @@ const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 const PROJECT_PATH = '/tmp/mastracode-test';
 
+function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessagePart[]): MastraDBMessage {
+  return { id, role, createdAt: new Date(), content: { format: 2, parts } };
+}
+
 describe('web UI stylesheet entry', () => {
   it('imports the shared Playground UI stylesheet instead of the removed local stylesheet', () => {
     const mainSource = readFileSync(join(process.cwd(), 'src/web/ui/main.tsx'), 'utf8');
@@ -54,15 +59,15 @@ describe('web UI stylesheet entry', () => {
 });
 
 function seedProject() {
-  const project: Project = {
+  const project: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
-    path: PROJECT_PATH,
     resourceId: RESOURCE_ID,
+    binding: { kind: 'local', path: PROJECT_PATH },
     createdAt: 1,
   };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -91,29 +96,41 @@ function sse(events: AgentControllerEvent[] = []): Response {
 
 function delayedSse(event: AgentControllerEvent) {
   const encoder = new TextEncoder();
-  let emit: () => void = () => {};
+  const emitters = new Set<() => void>();
+  let pending = false;
   let markReady: () => void = () => {};
   const ready = new Promise<void>(resolve => {
     markReady = resolve;
   });
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        emit = () => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-        markReady();
-      },
-      cancel() {},
-    }),
-    { headers: { 'content-type': 'text/event-stream' } },
-  );
-  return { response, emit: () => ready.then(() => emit()) };
+  const response = () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          const emit = () => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          emitters.add(emit);
+          if (pending) emit();
+          markReady();
+        },
+        cancel() {},
+      }),
+      { headers: { 'content-type': 'text/event-stream' } },
+    );
+  return {
+    response,
+    ready,
+    emit: () =>
+      ready.then(() => {
+        pending = true;
+        emitters.forEach(emit => emit());
+      }),
+  };
 }
 
 function useAgentControllerHandlers({
   messages = [],
   events = [],
 }: {
-  messages?: AgentControllerMessage[];
+  messages?: MastraDBMessage[];
   events?: AgentControllerEvent[];
 } = {}) {
   const onState = vi.fn();
@@ -125,6 +142,9 @@ function useAgentControllerHandlers({
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: false, connected: false, installations: [] }),
+    ),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, async ({ request }) => {
       onState(await request.json());
@@ -203,8 +223,10 @@ describe('MastraCode sidebar auth actions', () => {
     renderSeededApp({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } });
 
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
-    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    });
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
   });
 
@@ -231,11 +253,13 @@ describe('MastraCode empty thread state', () => {
   it('given a project with no messages, when the app renders, then the Mastra Code wordmark hero appears', async () => {
     renderSeededApp();
 
-    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
-    const wordmark = screen.getByLabelText('Mastra Code');
-    expect(wordmark).toBeInTheDocument();
-    // The hero sits inside the transcript scroller, which centers empty content vertically.
-    expect(wordmark.closest('.place-items-center')).not.toBeNull();
+    await waitFor(() => {
+      expect(screen.getByText('Ready for new conversation')).toBeInTheDocument();
+      const wordmark = screen.getByLabelText('Mastra Code');
+      expect(wordmark).toBeInTheDocument();
+      // The hero sits inside the transcript scroller, which centers empty content vertically.
+      expect(wordmark.closest('.place-items-center')).not.toBeNull();
+    });
   });
 });
 
@@ -244,78 +268,298 @@ describe('MastraCode message rendering', () => {
     seedProject();
     useAgentControllerHandlers({
       messages: [
-        {
-          id: 'assistant-1',
-          role: 'assistant',
-          content: [
-            { type: 'text', text: '**Hello** from hydrate' },
-            { type: 'thinking', thinking: 'checking files' },
-            { type: 'tool_call', id: 'tool-1', name: 'view', args: { path: 'README.md' } },
-            { type: 'tool_result', id: 'tool-1', name: 'view', result: 'readme contents' },
-          ],
-        },
+        dbMessage('assistant-1', 'assistant', [
+          { type: 'text', text: '**Hello** from hydrate' },
+          { type: 'reasoning', reasoning: 'checking files', details: [{ type: 'text', text: 'checking files' }] },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'view',
+              args: { path: 'README.md' },
+              result: 'readme contents',
+            },
+          },
+        ]),
       ],
     });
 
     renderChat();
 
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument());
-    await waitFor(() => expect(document.body).toHaveTextContent('Hello from hydrate'));
-    expect(document.body).toHaveTextContent('from hydrate');
-    expect(screen.getByText('checking files')).toBeInTheDocument();
-    const card = await findToolCard('view');
-    expect(within(card).getByText('Done')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.body).toHaveTextContent('Hello from hydrate');
+      expect(document.body).toHaveTextContent('from hydrate');
+      expect(screen.getByText('checking files')).toBeInTheDocument();
+      const card = screen.getByRole('group', { name: 'Tool: view' });
+      expect(within(card).getByText('Done')).toBeInTheDocument();
+    });
+  });
+
+  it('given hidden task tools beside one visible tool, when history renders, then no empty bulk control appears', async () => {
+    seedProject();
+    useAgentControllerHandlers({
+      messages: [
+        dbMessage('assistant-task-tools', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'task-write',
+              toolName: 'task_write',
+              args: { tasks: [] },
+              result: 'Tasks updated',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'visible-tool',
+              toolName: 'view',
+              args: { path: 'README.md' },
+              result: 'readme contents',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'task-check',
+              toolName: 'task_check',
+              args: {},
+              result: 'All tasks completed',
+            },
+          },
+        ]),
+      ],
+    });
+
+    renderChat();
+
+    expect(await screen.findByRole('group', { name: 'Tool: view' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Tool: task_write' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Tool: task_check' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /expand all/i })).not.toBeInTheDocument();
   });
 
   it('composes consecutive tool cards into a single bordered container', async () => {
     seedProject();
     useAgentControllerHandlers({
       messages: [
-        {
-          id: 'assistant-tools',
-          role: 'assistant',
-          content: [
-            { type: 'tool_call', id: 'tool-a', name: 'view', args: { path: 'a.ts' } },
-            { type: 'tool_result', id: 'tool-a', name: 'view', result: 'a' },
-            { type: 'tool_call', id: 'tool-b', name: 'search', args: { pattern: 'x' } },
-            { type: 'tool_result', id: 'tool-b', name: 'search', result: 'b' },
-          ],
-        },
+        dbMessage('assistant-tools', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-a',
+              toolName: 'view',
+              args: { path: 'a.ts' },
+              result: 'a',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-b',
+              toolName: 'search',
+              args: { pattern: 'x' },
+              result: 'b',
+            },
+          },
+        ]),
       ],
     });
 
     renderChat();
 
-    const first = await findToolCard('view');
-    const last = await findToolCard('search');
+    await waitFor(() => {
+      const first = screen.getByRole('group', { name: 'Tool: view' });
+      const last = screen.getByRole('group', { name: 'Tool: search' });
 
-    // First card rounds only its top; last card rounds only its bottom, so the
-    // pair reads as one container. The shared inner edge becomes a divider
-    // (the last card's top border) rather than two abutting rounded borders.
-    expect(first.className).toContain('rounded-t-xl');
-    expect(first.className).not.toContain('rounded-b-xl');
-    expect(last.className).toContain('rounded-b-xl');
-    expect(last.className).not.toContain('rounded-t-xl');
-    // border-y gives the last card a top edge (the divider from the first card)
-    // plus the closing bottom border.
-    expect(last.className).toContain('border-y');
+      // First card rounds only its top; last card rounds only its bottom, so the
+      // pair reads as one container. The shared inner edge becomes a divider
+      // (the last card's top border) rather than two abutting rounded borders.
+      expect(first.className).toContain('rounded-t-xl');
+      expect(first.className).not.toContain('rounded-b-xl');
+      expect(last.className).toContain('rounded-b-xl');
+      expect(last.className).not.toContain('rounded-t-xl');
+      // border-y gives the last card a top edge (the divider from the first card)
+      // plus the closing bottom border.
+      expect(last.className).toContain('border-y');
+    });
+  });
+
+  it('separates assistant text persisted after a tool-only message', async () => {
+    seedProject();
+    useAgentControllerHandlers({
+      messages: [
+        dbMessage('assistant-tools', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-complete',
+              toolName: 'task_complete',
+              args: { id: 'quality-gate' },
+              result: 'completed',
+            },
+          },
+        ]),
+        dbMessage('completion-signal', 'signal', [{ type: 'text', text: 'Quality gate completed' }]),
+        dbMessage('assistant-summary', 'assistant', [{ type: 'text', text: '## Quality gate' }]),
+      ],
+    });
+
+    renderChat();
+
+    await waitFor(() => {
+      const summaryHeading = screen
+        .getAllByRole('heading', { name: 'Quality gate' })
+        .find(heading => heading.closest('.prose'));
+      expect(summaryHeading?.closest('.prose')).toHaveClass('mt-4');
+    });
   });
 
   it('renders assistant text when SSE message updates arrive after subscription', async () => {
     seedProject();
     const stream = delayedSse({
       type: 'message_update',
-      message: { id: 'assistant-stream', role: 'assistant', content: [{ type: 'text', text: 'Streaming now' }] },
+      message: dbMessage('assistant-stream', 'assistant', [{ type: 'text', text: 'Streaming now' }]),
     });
     useAgentControllerHandlers();
-    server.use(http.get(`${SESSION}/stream`, () => stream.response));
+    server.use(http.get(`${SESSION}/stream`, () => stream.response()));
 
     renderChat();
 
-    expect(await screen.findByText('Ready')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+    await new Promise(resolve => setTimeout(resolve, 100));
     await stream.emit();
 
-    expect(await screen.findByText('Streaming now')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Streaming now')).toBeInTheDocument());
+  });
+
+  it('keeps the running conversation and stream subscription alive while Settings is open', async () => {
+    const user = userEvent.setup();
+    seedProject();
+    const stream = delayedSse({
+      type: 'message_update',
+      message: dbMessage('assistant-settings-stream', 'assistant', [
+        { type: 'text', text: 'Streaming while settings are open' },
+      ]),
+    });
+    const streamRequests = vi.fn();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(SESSION, () => HttpResponse.json({ ...sessionState(), running: true })),
+      http.get(`${SESSION}/stream`, () => {
+        streamRequests();
+        return stream.response();
+      }),
+    );
+
+    renderChat();
+
+    expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
+
+    const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
+    await user.click(settingsTrigger);
+    expect(screen.getByRole('region', { name: 'Settings' })).toBeInTheDocument();
+
+    await stream.emit();
+    await user.keyboard('{Escape}');
+
+    expect(await screen.findByText('Streaming while settings are open')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(settingsTrigger).toHaveFocus());
+    expect(streamRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the running conversation mounted while Create Factory is open in the layout', async () => {
+    const user = userEvent.setup();
+    seedProject();
+    const stream = delayedSse({
+      type: 'message_update',
+      message: dbMessage('assistant-factory-stream', 'assistant', [
+        { type: 'text', text: 'Streaming while factory creation is open' },
+      ]),
+    });
+    const streamRequests = vi.fn();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(SESSION, () => HttpResponse.json({ ...sessionState(), running: true })),
+      http.get(`${SESSION}/stream`, () => {
+        streamRequests();
+        return stream.response();
+      }),
+    );
+
+    renderChat();
+
+    expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
+
+    const factorySwitcher = screen.getByRole('button', { name: 'Select factory' });
+    await user.click(factorySwitcher);
+    await user.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
+
+    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
+    expect(factorySurface.closest('main')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
+
+    await stream.emit();
+    await user.click(screen.getByRole('button', { name: 'Close factory creation' }));
+
+    expect(await screen.findByText('Streaming while factory creation is open')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(factorySwitcher).toHaveFocus());
+    expect(streamRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows required first-run Factory creation in the layout after empty backend hydration', async () => {
+    useAgentControllerHandlers();
+    server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
+
+    renderChat();
+
+    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
+    expect(factorySurface.closest('main')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close factory creation' })).not.toBeInTheDocument();
+  });
+
+  it('does not show first-run Factory creation after a remote Factory hydrates', async () => {
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              repositories: [
+                {
+                  id: 'github-project-1',
+                  branch: 'main',
+                  sandboxWorkdir: '/workspace/acme/mastra',
+                  repository: { slug: 'mastra', defaultBranch: 'main' },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderChat();
+
+    await waitFor(() => expect(localStorage.getItem('mastracode-factories')).toContain('github-project-1'));
+    expect(screen.queryByRole('region', { name: 'Create Factory' })).not.toBeInTheDocument();
   });
 
   it('renders tool lifecycle events inline before a later message update re-emits the tool part', async () => {
@@ -349,7 +593,14 @@ describe('MastraCode message rendering', () => {
         {
           id: 'assistant-status',
           role: 'assistant',
-          content: [{ type: 'om_thread_title_updated', text: 'Thread title updated: Better title' }],
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [],
+            metadata: {
+              harnessContent: [{ type: 'om_thread_title_updated', text: 'Thread title updated: Better title' }],
+            },
+          },
         },
       ],
     });
@@ -365,14 +616,18 @@ describe('MastraCode message rendering', () => {
       seedProject();
       useAgentControllerHandlers({
         messages: [
-          {
-            id: 'assistant-args',
-            role: 'assistant',
-            content: [
-              { type: 'tool_call', id: 'tool-args', name: 'view', args: { path: 'src/deep/config.ts' } },
-              { type: 'tool_result', id: 'tool-args', name: 'view', result: 'file contents' },
-            ],
-          },
+          dbMessage('assistant-args', 'assistant', [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-args',
+                toolName: 'view',
+                args: { path: 'src/deep/config.ts' },
+                result: 'file contents',
+              },
+            },
+          ]),
         ],
       });
 
@@ -471,6 +726,47 @@ describe('MastraCode message rendering', () => {
       expect(within(card).getByRole('button', { name: 'Postgres' })).toBeInTheDocument();
       expect(within(card).getByRole('button', { name: 'SQLite' })).toBeInTheDocument();
     });
+
+    it('does not render a provisional free-text input before the suspension payload arrives', async () => {
+      seedProject();
+      const stream = delayedSse({
+        type: 'tool_suspended',
+        toolCallId: 'ask-delayed',
+        toolName: 'ask_user',
+        args: {},
+        suspendPayload: { question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
+      });
+      useAgentControllerHandlers({
+        messages: [
+          dbMessage('assistant-ask-delayed', 'assistant', [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'ask-delayed',
+                toolName: 'ask_user',
+                args: { question: 'Which database?' },
+              },
+            },
+          ]),
+        ],
+      });
+      server.use(http.get(`${SESSION}/stream`, () => stream.response()));
+
+      renderChat();
+
+      await screen.findByRole('button', { name: 'Select factory' });
+      await stream.ready;
+      expect(screen.queryByPlaceholderText('Type your answer...')).not.toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Question from the agent' })).not.toBeInTheDocument();
+
+      await stream.emit();
+
+      const card = await screen.findByRole('group', { name: 'Question from the agent' });
+      expect(within(card).getByRole('radio', { name: 'Postgres' })).toBeInTheDocument();
+      expect(within(card).getByRole('radio', { name: 'SQLite' })).toBeInTheDocument();
+      expect(within(card).queryByRole('textbox')).not.toBeInTheDocument();
+    });
   });
 
   describe('when a subagent is delegated work', () => {
@@ -491,25 +787,6 @@ describe('MastraCode message rendering', () => {
       renderChat();
 
       expect(await screen.findByText('Run the migration')).toBeInTheDocument();
-    });
-  });
-
-  describe('when a goal evaluation arrives', () => {
-    it('renders the goal panel with its objective and controls', async () => {
-      seedProject();
-      useAgentControllerHandlers({
-        events: [
-          {
-            type: 'goal_evaluation',
-            payload: { objective: 'Migrate the UI', status: 'active', iteration: 1, maxRuns: 5, passed: false },
-          },
-        ],
-      });
-
-      renderChat();
-
-      expect(await screen.findByText('Migrate the UI')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
     });
   });
 
@@ -562,19 +839,18 @@ describe('MastraCode message rendering', () => {
     seedProject();
     useAgentControllerHandlers({
       messages: [
-        {
-          id: 'assistant-edit',
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool_call',
-              id: 'tool-edit',
-              name: 'string_replace',
+        dbMessage('assistant-edit', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-edit',
+              toolName: 'string_replace',
               args: { path: 'src/example.ts', old_string: 'const value = 1', new_string: 'const value = 2' },
+              result: 'updated',
             },
-            { type: 'tool_result', id: 'tool-edit', name: 'string_replace', result: 'updated' },
-          ],
-        },
+          },
+        ]),
       ],
     });
 
@@ -654,31 +930,26 @@ describe('App mode + theme controls', () => {
       expect(header).not.toBeNull();
 
       // The header must not contain any project switcher.
-      expect(within(header as HTMLElement).queryByRole('button', { name: /MastraCode Test/ })).not.toBeInTheDocument();
+      expect(within(header as HTMLElement).queryByRole('button', { name: 'Select project' })).not.toBeInTheDocument();
 
-      // The sidebar remains the single source of the project switcher: exactly
-      // one project-switcher button exists, it exposes the project name, and it
-      // lives outside the header.
-      const switchers = screen.getAllByRole('button', { name: /MastraCode Test/ });
-      expect(switchers).toHaveLength(1);
-      expect(header).not.toContainElement(switchers[0]);
+      // The sidebar remains the single source of the factory switcher.
+      const switcher = screen.getByRole('button', { name: 'Select factory' });
+      expect(switcher).toHaveTextContent('MastraCode Test');
+      expect(header).not.toContainElement(switcher);
     });
 
-    it('renders the ready status above settings in the sidebar', async () => {
+    it('keeps settings in the sidebar without connection status', async () => {
       seedMultiMode();
 
       renderChat();
 
       await screen.findByRole('button', { name: 'Build' });
 
-      const header = document.querySelector('header');
-      expect(header).not.toBeNull();
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Open settings' })).not.toBeInTheDocument();
-
-      const settings = screen.getByRole('button', { name: 'Open settings' });
-      const readyStatus = screen.getByRole('status', { name: '' });
-      await waitFor(() => expect(readyStatus).toHaveTextContent('Ready'));
-      expect(readyStatus.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const header = document.querySelector<HTMLElement>('header');
+      if (!header) throw new Error('Expected the chat header to be rendered');
+      expect(within(header).queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+      expect(screen.queryByText('Ready')).not.toBeInTheDocument();
     });
 
     it('does not duplicate the project name in the status line', async () => {

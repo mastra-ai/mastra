@@ -1,5 +1,11 @@
 # @mastra/auth-workos
 
+## 1.6.3
+
+### Patch Changes
+
+- Added `mapUserToResourceId` to `MastraAuthWorkosOptions` so it can be set directly in the `MastraAuthWorkos` constructor. This maps an authenticated user to a resource id that multi-tenant tool providers use to bucket connected accounts (for example, Composio's `caller-supplied` scope). Previously the option was consumed at runtime but missing from the typed constructor surface, forcing a post-construction property assignment. ([#19144](https://github.com/mastra-ai/mastra/pull/19144))
+
 ## 1.6.3-alpha.0
 
 ### Patch Changes
@@ -319,9 +325,7 @@
   ```typescript
   import { MastraRBACWorkos } from '@mastra/auth-workos';
 
-  const rbac = new MastraRBACWorkos({
-    /* config */
-  });
+  const rbac = new MastraRBACWorkos({/* config */});
 
   // List all available roles
   const roles = await rbac.getAvailableRoles();
@@ -347,9 +351,7 @@
   ```typescript
   import { MastraRBACWorkos } from '@mastra/auth-workos';
 
-  const rbac = new MastraRBACWorkos({
-    /* config */
-  });
+  const rbac = new MastraRBACWorkos({/* config */});
 
   // List all available roles
   const roles = await rbac.getAvailableRoles();

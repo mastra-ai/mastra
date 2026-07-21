@@ -334,40 +334,45 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
   })
 })
 
-// ─── Chatbot sidebar tests (desktop only — hidden below 62.25rem via CSS) ──
+// ─── AI chat sidebar tests (@mastra/docusaurus-plugin-kapa) ──
+// The Kapa theme is only registered when KAPA_INTEGRATION_ID and
+// KAPA_GROUP_ID are set at build time. Without them (e.g. CI) the chat UI is
+// absent entirely, so the test asserts the graceful fallback instead.
 
-test.describe('Chatbot sidebar', () => {
+test.describe('AI chat sidebar', () => {
   test('opens and closes on desktop', async ({ page, isMobile }) => {
-    test.skip(isMobile, 'Chatbot sidebar is not visible on mobile')
+    test.skip(isMobile, 'Chat panel opens as a modal on mobile')
 
     const getErrors = trackJsErrors(page)
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
-    // Chatbot sidebar starts in collapsed state
-    const expandTrigger = page.locator('[aria-label="Expand chatbot"]')
-    await expect(expandTrigger).toBeVisible({ timeout: 10_000 })
+    // Desktop toggle is the navbar "Ask AI" button (the floating action
+    // button is mobile-only). It renders null on Kapa-disabled builds.
+    const askAI = page.getByRole('button', { name: 'Ask AI' })
+    const panel = page.locator('#docs-chat-panel')
 
-    // The "Chat with Mastra docs" header should NOT be visible yet
-    await expect(page.getByText('Chat with Mastra docs')).not.toBeVisible()
+    if ((await askAI.count()) === 0) {
+      // Kapa disabled build: no chat panel and no floating action button
+      await expect(panel).toHaveCount(0)
+      await expect(page.locator('.doc-chat-fab')).toHaveCount(0)
+      expect(getErrors(), 'JS errors on Kapa-disabled build').toEqual([])
+      return
+    }
 
-    // Click to expand the chatbot
-    await expandTrigger.click()
+    // Chat panel starts hidden (desktop hides it via opacity, so assert ARIA state)
+    await expect(panel).toHaveAttribute('aria-hidden', 'true', { timeout: 10_000 })
 
-    // Verify chatbot opened: header and the chat textarea should be visible
-    await expect(page.getByText('Chat with Mastra docs')).toBeVisible({ timeout: 5000 })
-    await expect(page.locator('textarea[placeholder*="Ask questions about Mastra"]')).toBeVisible()
+    // Open the chat via the navbar Ask AI button
+    await askAI.click()
+    await expect(panel).toHaveAttribute('aria-hidden', 'false', { timeout: 5000 })
+    await expect(page.locator('textarea[placeholder*="Ask me a question about Mastra"]')).toBeVisible()
 
-    // Close the chatbot
-    const collapseButton = page.locator('[aria-label="Collapse chatbot"]')
-    await expect(collapseButton).toBeVisible()
-    await collapseButton.click()
+    // Close the chat again
+    await askAI.click()
+    await expect(panel).toHaveAttribute('aria-hidden', 'true', { timeout: 5000 })
 
-    // Verify chatbot closed
-    await expect(page.getByText('Chat with Mastra docs')).not.toBeVisible({ timeout: 5000 })
-    await expect(expandTrigger).toBeVisible()
-
-    expect(getErrors(), 'JS errors during chatbot interaction').toEqual([])
+    expect(getErrors(), 'JS errors during chat interaction').toEqual([])
   })
 })

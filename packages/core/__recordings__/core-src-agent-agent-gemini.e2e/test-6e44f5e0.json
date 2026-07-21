@@ -3,14 +3,13 @@
     "name": "test-6e44f5e0",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Tool suspension and resumption > should call findUserWorkflow with suspend and resume via generate when autoResumeSuspendedTools is true",
-    "createdAt": "2026-05-18T10:51:40.289Z",
-    "updatedAt": "2026-05-28T17:34:46.488Z"
+    "createdAt": "2026-07-14T17:16:49.995Z"
   },
   "recordings": [
     {
-      "hash": "014d796f47314402",
+      "hash": "4eb4bf160b9cc8e3",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -87,7 +86,7 @@
             }
           }
         },
-        "timestamp": 1779989683985
+        "timestamp": 1784049406415
       },
       "response": {
         "status": 200,
@@ -95,9 +94,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:34:44 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:47 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=632",
+          "server-timing": "gfet4t7; dur=946",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -117,43 +116,40 @@
                           "name": "Dero Israel"
                         }
                       }
-                    }
+                    },
+                    "thoughtSignature": "CtMCARFNMg9yAahftWgR79AXeIbfxSeR7XGs0lGT9YixMz3/+VNLaIGH1yhCvVrap7vHnYfLZXTmCYX5E022CLB7r2f5YTJaZpzhUcbF1DS4Wom2G7Svnf6d3abzwluxaKHYvBZzGjyjmBIeCus+ZoJp3xe6hLrBVruEO1QEXR8A5hG5qH3niU0JVkmS40CamwLiNvEv5aPWNREN9aWT/EwCUxZOR1xN6aSRKkdESDBasku/Ew5u7Zj9A7uKgAt6IwjL3mTjKZ756UsDvPNIpY2ZWqH9OsTJgH3n/Zw4bt3O2ppDlW2h7XJo2SZLOLKaNwGI7cIEUjIrQ2AtQA3s8cV8Eu8+sxi1e3d6Oj7y16muy4k+d/6dAZUvBfqagkmYvfbdt+th0uOzibZvYV1z4HqgjSyAcQazV5K4JA3WN2VfaMSdYkIPTGVmmRr5jjAZ4PJqa96w"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.005622488869862123
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 82,
-            "candidatesTokenCount": 11,
-            "totalTokenCount": 93,
+            "promptTokenCount": 186,
+            "candidatesTokenCount": 24,
+            "totalTokenCount": 286,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 82
+                "tokenCount": 186
               }
             ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 11
-              }
-            ],
+            "thoughtsTokenCount": 76,
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "tHwYaoSxEc2k_uMP2-aMsQ4"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "_m5Waof1HOCwkdUPvvadgQs"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "ac1f7ef8472d679f",
+      "hash": "8cffe434f78963d1",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -178,7 +174,7 @@
           "systemInstruction": {
             "parts": [
               {
-                "text": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"LOvbwNlRECF4hJeV\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"}},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000053\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+                "text": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"CxjjpoxTTjWidINh\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"}},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000058\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
               }
             ]
           },
@@ -238,7 +234,7 @@
             }
           }
         },
-        "timestamp": 1779989684739
+        "timestamp": 1784049407384
       },
       "response": {
         "status": 200,
@@ -246,9 +242,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:34:45 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:49 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=946",
+          "server-timing": "gfet4t7; dur=2069",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -270,45 +266,42 @@
                         "inputData": {
                           "name": "Dero Israel"
                         },
-                        "suspendedToolRunId": "00000000-0000-4000-8000-000000000053"
+                        "suspendedToolRunId": "00000000-0000-4000-8000-000000000058"
                       }
-                    }
+                    },
+                    "thoughtSignature": "Cs0HARFNMg+Y/hwLWJOTV7WPdfmLDenXTWsBPhPqL7fxdEEDEKKOWXfNT6t+tin6J7KCQou0v/8/9MAIf8v7HggWEu1OVesLYIZZUO9Xb4ru9NCbj36Escvh3dv2Bc/L9MI7j+5SA44OFBcGZZAPmRowUUIpSaakWat8WYVORsF+PEqqxoa7f+r09emdqXjjPcMnd2OHtr2kdH0Iv22PcScvYZswR27KipxYRPACH/M00Tgu2PTrmTxEl959cf7iwKZTK3XB8XiRSa5h+GHuIXVqfAk2xyKWjYawhMMj+0pqs8mHoC65wn4jF3XGvJ2vSjR0+ts3F67IpCDSalmaL0lncdLarI3RqnA2/BSiHpPMpwYvAYW9m8es6jM4CaiOGniw2xfgHY1ATPZJJuWGncGd2R/U47QIY8XjGTic05no4BSUTdLZ+7ew2ssyusaks+NYsIozQvsnRfMdchAwYAKEdjn9tYLut9tGZtirmWrMpdWy5XNj26RjgL0O2miGTYTwoz6MnHaPwsdudOx5nPpoOuZw4AgY/ecz0Wr1gTOmEOYi8ux9Dc+eyd2bcvzOpT2ZcZSbH4OBgC0xzfn3sndM8IqbMA/CpYgNHGEZPvPAwTNSdf98k7xWGmPW+kXKS6SXslI+U/AC7ETHKtdcY6ZKulrDUGmc90X378hBk30s5kA8y4xZhNCIx+6XI+XQrXEO0TcxreeG8jWA1ABezdqsf2aUtde3dXlx8R43oB79wf8UH4wBT4nJrPjZdnRaSjOI/prXeZJEKTc0pLBdQN03PALaV6+eVfzvB0/av+yjqujnJQU2H1gl+jcormRLJ4bvOU/Uk53nl2FAENS3Z+LmB6QzBftB/SCVkaHd9CEZ9rxDATIptCCzfGh4ZQiYLDQLpdFpNo0ze23hd8Murg3lJwWATXeIEU94f4jaWJZUGFt68sAXdgqm/baMgDDOraKlHC2eKeCDtAbAUcwmsFZm7XaVE5XA6uPKyRcdbHitYmnKZND1HikvbZu0S+WE6iJ3VESlleUEBvJpQzIt4awu101cY3dra6QFuxLUpCaNhetCG11SnRuarLTBkNkxQKOjhbHr0r+/AOXEJwramZnGOGtcxOSi28+lmQjWxXyvDCYVATJft6Ozep4GGcOKsLXDXvE0IW0DL3fWNeq7hidOfMcTcgoAXCKZpj91UZfxyLSMVush0mIed0PQHCTvnpWyRFVN2qM12GDaq/wcGAbuvdsGpjZzduYHV/DuXIB/4B/JnNBxgT+hfN0ETJWS6mjrqNbSLxk1CBKGHIkuwg=="
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.0018852954561060125
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 469,
-            "candidatesTokenCount": 55,
-            "totalTokenCount": 524,
+            "promptTokenCount": 572,
+            "candidatesTokenCount": 76,
+            "totalTokenCount": 977,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 469
+                "tokenCount": 572
               }
             ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 55
-              }
-            ],
+            "thoughtsTokenCount": 329,
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "tXwYaqyXAsyY_uMP0PrV6QI"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "_25WapWKG9C0nsEP7MzR-Q0"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "17d388fc2b74a22d",
+      "hash": "4db73dd00a92af34",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -334,6 +327,7 @@
               "parts": [
                 {
                   "functionCall": {
+                    "id": "QgBQXl7b4SXCAHRs",
                     "name": "workflow-findUserWorkflow",
                     "args": {
                       "resumeData": {
@@ -342,9 +336,10 @@
                       "inputData": {
                         "name": "Dero Israel"
                       },
-                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000053"
+                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000058"
                     }
-                  }
+                  },
+                  "thoughtSignature": "Cs0HARFNMg+Y/hwLWJOTV7WPdfmLDenXTWsBPhPqL7fxdEEDEKKOWXfNT6t+tin6J7KCQou0v/8/9MAIf8v7HggWEu1OVesLYIZZUO9Xb4ru9NCbj36Escvh3dv2Bc/L9MI7j+5SA44OFBcGZZAPmRowUUIpSaakWat8WYVORsF+PEqqxoa7f+r09emdqXjjPcMnd2OHtr2kdH0Iv22PcScvYZswR27KipxYRPACH/M00Tgu2PTrmTxEl959cf7iwKZTK3XB8XiRSa5h+GHuIXVqfAk2xyKWjYawhMMj+0pqs8mHoC65wn4jF3XGvJ2vSjR0+ts3F67IpCDSalmaL0lncdLarI3RqnA2/BSiHpPMpwYvAYW9m8es6jM4CaiOGniw2xfgHY1ATPZJJuWGncGd2R/U47QIY8XjGTic05no4BSUTdLZ+7ew2ssyusaks+NYsIozQvsnRfMdchAwYAKEdjn9tYLut9tGZtirmWrMpdWy5XNj26RjgL0O2miGTYTwoz6MnHaPwsdudOx5nPpoOuZw4AgY/ecz0Wr1gTOmEOYi8ux9Dc+eyd2bcvzOpT2ZcZSbH4OBgC0xzfn3sndM8IqbMA/CpYgNHGEZPvPAwTNSdf98k7xWGmPW+kXKS6SXslI+U/AC7ETHKtdcY6ZKulrDUGmc90X378hBk30s5kA8y4xZhNCIx+6XI+XQrXEO0TcxreeG8jWA1ABezdqsf2aUtde3dXlx8R43oB79wf8UH4wBT4nJrPjZdnRaSjOI/prXeZJEKTc0pLBdQN03PALaV6+eVfzvB0/av+yjqujnJQU2H1gl+jcormRLJ4bvOU/Uk53nl2FAENS3Z+LmB6QzBftB/SCVkaHd9CEZ9rxDATIptCCzfGh4ZQiYLDQLpdFpNo0ze23hd8Murg3lJwWATXeIEU94f4jaWJZUGFt68sAXdgqm/baMgDDOraKlHC2eKeCDtAbAUcwmsFZm7XaVE5XA6uPKyRcdbHitYmnKZND1HikvbZu0S+WE6iJ3VESlleUEBvJpQzIt4awu101cY3dra6QFuxLUpCaNhetCG11SnRuarLTBkNkxQKOjhbHr0r+/AOXEJwramZnGOGtcxOSi28+lmQjWxXyvDCYVATJft6Ozep4GGcOKsLXDXvE0IW0DL3fWNeq7hidOfMcTcgoAXCKZpj91UZfxyLSMVush0mIed0PQHCTvnpWyRFVN2qM12GDaq/wcGAbuvdsGpjZzduYHV/DuXIB/4B/JnNBxgT+hfN0ETJWS6mjrqNbSLxk1CBKGHIkuwg=="
                 }
               ]
             },
@@ -353,6 +348,7 @@
               "parts": [
                 {
                   "functionResponse": {
+                    "id": "QgBQXl7b4SXCAHRs",
                     "name": "workflow-findUserWorkflow",
                     "response": {
                       "name": "workflow-findUserWorkflow",
@@ -362,7 +358,7 @@
                           "email": "test@test.com",
                           "age": 25
                         },
-                        "runId": "00000000-0000-4000-8000-000000000053"
+                        "runId": "00000000-0000-4000-8000-000000000058"
                       }
                     }
                   }
@@ -433,7 +429,7 @@
             }
           }
         },
-        "timestamp": 1779989685816
+        "timestamp": 1784049409475
       },
       "response": {
         "status": 200,
@@ -441,9 +437,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:34:46 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:49 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=555",
+          "server-timing": "gfet4t7; dur=433",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -456,35 +452,29 @@
               "content": {
                 "parts": [
                   {
-                    "text": "The age of Dero Israel is 25."
+                    "text": "The name of the user is Dero Israel and the age is 25."
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.10460191423242743
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 207,
-            "candidatesTokenCount": 11,
-            "totalTokenCount": 218,
+            "promptTokenCount": 364,
+            "candidatesTokenCount": 17,
+            "totalTokenCount": 381,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 207
-              }
-            ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 11
+                "tokenCount": 364
               }
             ],
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "tnwYaoexBuqi_uMPn8fdoA8"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "AW9War_JIPPinsEPm5eG4Qg"
         },
         "isStreaming": false
       }

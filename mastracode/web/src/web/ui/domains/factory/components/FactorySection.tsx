@@ -1,23 +1,22 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GitPullRequest, Inbox } from 'lucide-react';
-import type { ComponentType } from 'react';
+import { ChartLine, LayoutDashboard, ScrollText, SquareKanban } from 'lucide-react';
+import type { ComponentType, ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
 import { useOverlays } from '../../../lib/overlays';
-import { useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
+import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
 
 /**
- * Sidebar navigation for the Factory pages. Factory data comes from GitHub, so
- * the section only renders for GitHub-backed projects (mirroring
- * WorkspacesSection) while the GitHub feature is enabled and connected.
+ * The Factory menu: Board navigation plus whatever the caller nests under it
+ * (the factory Sessions list). Renders for any server-backed Factory — a
+ * Factory with no linked repositories (or a disconnected GitHub integration)
+ * still has a Board; those states surface connect CTAs inside the pages
+ * instead of hiding the navigation.
  */
-export function FactorySection() {
-  const { activeProject } = useActiveProjectContext();
-  const isGithubProject = activeProject?.source === 'github';
-  const { data: status } = useGithubStatusQuery(isGithubProject);
+export function FactorySection({ children }: { children?: ReactNode }) {
+  const { activeFactory } = useActiveFactoryContext();
 
-  if (!isGithubProject) return null;
-  if (!status?.enabled || !status.connected) return null;
+  if (!activeFactory || !isServerFactory(activeFactory)) return null;
 
   return (
     <nav className="flex flex-col gap-2" aria-label="Factory">
@@ -27,9 +26,12 @@ export function FactorySection() {
         </Txt>
       </div>
       <div className="flex flex-col gap-1">
-        <FactoryLink to="/factory/intake" icon={Inbox} label="Intake" />
-        <FactoryLink to="/factory/review" icon={GitPullRequest} label="Review" />
+        <FactoryLink to="/factory/overview" icon={LayoutDashboard} label="Overview" />
+        <FactoryLink to="/factory/board" icon={SquareKanban} label="Board" />
+        <FactoryLink to="/factory/metrics" icon={ChartLine} label="Metrics" />
+        <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit" />
       </div>
+      {children}
     </nav>
   );
 }

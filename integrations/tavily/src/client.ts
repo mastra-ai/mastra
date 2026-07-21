@@ -10,6 +10,6 @@ export function getTavilyClient(config?: TavilyClientOptions): TavilyClient {
   if (!apiKey) {
     throw new Error('Tavily API key is required. Pass { apiKey } or set TAVILY_API_KEY env var.');
   }
-  // defaulting `clientSource` to `mastra` if not provided
-  return tavily({ ...config, apiKey, clientSource: config?.clientSource ?? 'mastra' });
+  // defaulting `clientName` to `mastra` if not provided
+  return tavily({ ...config, apiKey, clientName: config?.clientName ?? 'mastra' });
 }

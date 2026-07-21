@@ -21,5 +21,20 @@
     "qwen3.5-397b-a17b",
     "qwen3.5-9b",
     "qwen3.6-27b"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "deepseek-v4-pro-lightning",
+    "gemma-4-31b-it",
+    "glm-5.1",
+    "glm-5.2",
+    "kimi-k2.5",
+    "kimi-k2.5-lightning",
+    "kimi-k2.6",
+    "kimi-k2.7-code",
+    "qwen3.5-397b-a17b",
+    "qwen3.5-9b",
+    "qwen3.6-27b"
   ]
 }

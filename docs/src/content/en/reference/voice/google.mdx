@@ -17,12 +17,25 @@ import { GoogleVoice } from '@mastra/voice-google'
 // Initialize with default configuration (uses GOOGLE_API_KEY environment variable)
 const voice = new GoogleVoice()
 
-// Text-to-Speech
+// Text-to-Speech (plain text)
 const audioStream = await voice.speak('Hello, world!', {
   languageCode: 'en-US',
   audioConfig: {
     audioEncoding: 'LINEAR16',
   },
+})
+
+// Text-to-Speech with SSML
+const ssmlStream = await voice.speak('ignored', {
+  input: {
+    ssml: '<speak>Take <say-as interpret-as="unit">5 mg</say-as> daily.</speak>',
+  },
+})
+
+// Text-to-Speech with Gemini-TTS model
+const geminiStream = await voice.speak('Hello from Gemini TTS!', {
+  voice: { name: 'Kore', modelName: 'gemini-2.5-flash-preview-tts' },
+  input: { prompt: 'Warm, calm tone.' },
 })
 
 // Speech-to-Text
@@ -162,25 +175,39 @@ Converts text to speech using Google Cloud Text-to-Speech service.
     isOptional: true,
     properties: [
       {
-        type: 'object',
+        type: 'GoogleSpeakOptions',
         parameters: [
           {
             name: 'speaker',
             type: 'string',
-            description: 'Voice ID to use for this request',
+            description: 'Voice ID to use for this request.',
             isOptional: true,
           },
           {
             name: 'languageCode',
             type: 'string',
             description:
-              "Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
+              "Language code for the voice (e.g., 'en-US'). Defaults to the language code derived from the speaker ID, or 'en-US'.",
+            isOptional: true,
+          },
+          {
+            name: 'input',
+            type: "ISynthesizeSpeechRequest['input']",
+            description:
+              'Rich input object passed through to the Google Cloud TTS API. Supports `ssml`, `markup`, `prompt` (Gemini-TTS style steering), `customPronunciations`, and `multiSpeakerMarkup`. When provided without `text`, `ssml`, `markup`, or `multiSpeakerMarkup`, the positional `input` argument is used as the `text` field automatically.',
+            isOptional: true,
+          },
+          {
+            name: 'voice',
+            type: "ISynthesizeSpeechRequest['voice']",
+            description:
+              "Voice configuration merged on top of defaults (`name` and `languageCode`). Supports `modelName` (e.g., `'gemini-2.5-flash-preview-tts'`) and `multiSpeakerVoiceConfig`.",
             isOptional: true,
           },
           {
             name: 'audioConfig',
             type: "ISynthesizeSpeechRequest['audioConfig']",
-            description: 'Audio configuration options from Google Cloud Text-to-Speech API',
+            description: 'Audio configuration options from Google Cloud Text-to-Speech API.',
             isOptional: true,
             defaultValue: "{ audioEncoding: 'LINEAR16' }",
           },
@@ -195,7 +222,9 @@ Returns: `Promise<NodeJS.ReadableStream>`
 
 ### `listen()`
 
-Converts speech to text using Google Cloud Speech-to-Text service.
+Converts speech to text using Google Cloud Speech-to-Text service. Supports both v1 (default) and v2 APIs. The v2 API adds support for AAC-in-MP4 audio (iOS Safari) via auto-decoding.
+
+#### v1 (default)
 
 <PropertiesTable
   content={[
@@ -207,25 +236,76 @@ Converts speech to text using Google Cloud Speech-to-Text service.
   },
   {
     name: 'options',
-    type: 'object',
-    description: 'Recognition options',
+    type: 'GoogleListenOptionsV1',
+    description: 'v1 recognition options',
     isOptional: true,
     properties: [
       {
-        type: 'object',
+        type: 'GoogleListenOptionsV1',
         parameters: [
-          {
-            name: 'stream',
-            type: 'boolean',
-            description: 'Whether to use streaming recognition',
-            isOptional: true,
-          },
           {
             name: 'config',
             type: 'IRecognitionConfig',
-            description: 'Recognition configuration from Google Cloud Speech-to-Text API',
+            description: 'v1 recognition configuration from Google Cloud Speech-to-Text API',
             isOptional: true,
             defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+#### v2
+
+Pass `v2: true` to use the Cloud Speech-to-Text v2 API, which supports additional audio formats like AAC-in-MP4 (iOS Safari).
+
+```typescript
+const transcript = await voice.listen(iosSafariAacStream, {
+  v2: true,
+  config: {
+    autoDecodingConfig: {},
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'audioStream',
+    type: 'NodeJS.ReadableStream',
+    description: 'Audio stream to transcribe',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'GoogleListenOptionsV2',
+    description: 'v2 recognition options',
+    isOptional: false,
+    properties: [
+      {
+        type: 'GoogleListenOptionsV2',
+        parameters: [
+          {
+            name: 'v2',
+            type: 'true',
+            description: 'Enables the v2 API path',
+            isOptional: false,
+          },
+          {
+            name: 'config',
+            type: 'v2.IRecognitionConfig',
+            description:
+              "v2 recognition configuration. Defaults to auto-decoding with `languageCodes: ['en-US']` and `model: 'long'`. Set `autoDecodingConfig: {}` to auto-detect the audio format, or use `explicitDecodingConfig` to specify an encoding like `MP4_AAC`, `M4A_AAC`, or `MOV_AAC`.",
+            isOptional: true,
+          },
+          {
+            name: 'recognizer',
+            type: 'string',
+            description:
+              "v2 recognizer resource path. Defaults to `projects/{project}/locations/global/recognizers/_` where `{project}` is resolved from the constructor `project` option, `GOOGLE_CLOUD_PROJECT`, or the client's default project.",
+            isOptional: true,
           },
         ],
       },

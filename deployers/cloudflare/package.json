@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "1.2.7-alpha.1",
+  "version": "1.2.8-alpha.2",
   "description": "",
   "type": "module",
   "files": [
@@ -42,7 +42,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@babel/core": "^7.29.7",
+    "@babel/core": "^8.0.1",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "3.0.2",
     "cloudflare": "^5.2.0",
@@ -50,19 +50,18 @@
     "rollup-plugin-esbuild": "^6.2.1"
   },
   "devDependencies": {
-    "@babel/types": "^7.29.7",
+    "@babel/types": "^8.0.4",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/babel__core": "^7.20.5",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "^4.107.0",
+    "wrangler": "^4.110.0",
     "zod": "^3.25.76"
   },
   "homepage": "https://mastra.ai",

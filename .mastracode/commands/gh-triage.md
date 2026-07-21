@@ -20,10 +20,10 @@ Start with **Triage** only. In `--headless` mode, choose the next step, post the
   - PR review: `.pr-review/GH_TRIAGE_PR_<pr-number>.md`
   - Issue review: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
 - [ ] Triage must always end with one GitHub-visible output: either a Maintainer's Triage Note or an issue/PR comment.
-- [ ] After successfully posting/updating the Triage output, remove the `status: needs triage` label from the triaged issue or PR if present.
+- [ ] Issue Triage label policy is delegated to `triage-issue`; PR Triage label writes remain limited to removing `status: needs triage` after a successful Triage post unless critical-path rules require otherwise.
 - [ ] If posting/updating a Maintainer's Triage Note on a PR that has linked/closing issue(s), also post a short comment on each linked issue saying the issue has been triaged and routed to the PR, then remove `status: needs triage` from those linked issues if present.
-- [ ] Do not modify code, assignees, milestones, branches, reviews, PR/issue state, or merge/close anything, except the critical-path actions required by `.mastracode/resources/CRITICAL_PATHS.md`. The only label write allowed is removing `status: needs triage` after a successful Triage post.
-- [ ] The only GitHub writes are approved Maintainer's Triage Note updates, required linked-issue triage comments, approved issue/PR comments, critical-path reviewer/close actions required by `.mastracode/resources/CRITICAL_PATHS.md`, and the required `status: needs triage` label removal after posting.
+- [ ] Do not modify code, assignees, milestones, branches, reviews, PR/issue state, or merge/close anything, except issue lifecycle labels managed by `triage-issue` and the critical-path actions required by `.mastracode/resources/CRITICAL_PATHS.md`.
+- [ ] The only GitHub writes are approved Maintainer's Triage Note updates, required linked-issue triage comments, approved issue/PR comments, issue lifecycle labels managed by `triage-issue`, critical-path reviewer/close actions required by `.mastracode/resources/CRITICAL_PATHS.md`, and `status: needs triage` label removal after posting.
 - [ ] Stop on non-open issues, non-open PRs, or draft PRs unless the user explicitly asks for a note.
 - [ ] Do not invent evidence. Say what was not checked.
 - [ ] Keep interactive responses short and end with lettered options.
@@ -101,19 +101,27 @@ REPO=${OWNER_REPO#*/}
 gh api "repos/$OWNER/$REPO/issues/<number>" --jq '{number, state, isPr: has("pull_request")}'
 ```
 
-### 2. Gather triage context
+### 2. Delegate issue triage
+
+If the resolved input is an issue, activate `triage-issue` and pass through the original issue number/URL and `--headless` flag when present. The delegated skill owns issue context gathering, classification, posting/updating issue triage output, lifecycle labels, and `status: needs triage` removal.
+
+```text
+Activate skill: triage-issue
+Arguments: <issue number or URL> [--headless]
+```
+
+After `triage-issue` completes Triage, return here only if the selected next step explicitly enters Phase 2 Review.
+
+### 3. Gather PR triage context
 
 Fetch enough to classify and write the note. Do not do implementation review.
 
 ```bash
-gh issue view "$ISSUE" --comments --json number,title,state,author,authorAssociation,assignees,labels,createdAt,updatedAt,body,comments,url
 gh pr view "$PR" --comments --json number,title,state,isDraft,author,authorAssociation,assignees,labels,createdAt,updatedAt,body,comments,url,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
 ```
 
-- [ ] Stop if issue/PR is not open or PR is draft.
+- [ ] Stop if PR is not open or PR is draft.
 - [ ] Stop if the author is a core contributor (`authorAssociation` is `OWNER`, `MEMBER`, or `COLLABORATOR`) unless the user explicitly asks for triage.
-- [ ] For issues, find PRs that explicitly close/fix the issue.
-- [ ] Treat mention-only/cross-referenced PRs as context unless they clearly close/fix.
 - [ ] For PRs, fetch linked/closing issues and their current states; a PR linked only to already-closed/resolved issues is often duplicate or stale.
 - [ ] Record changed files, merge/conflict status, CI approval state, and existing Maintainer's Triage Note if present.
 - [ ] Ignore Vercel checks during Triage; do not cite them as blockers or failures.

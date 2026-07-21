@@ -1,5 +1,5 @@
 import { transformSync } from '@babel/core';
-import type { Plugin } from 'rollup';
+import type { Plugin, SourceMapInput } from 'rollup';
 import { postgresStoreInstanceChecker as postgresStoreInstanceCheckerBabel } from '../babel/postgres-store-instance-checker';
 
 export function postgresStoreInstanceChecker(): Plugin {
@@ -20,7 +20,7 @@ export function postgresStoreInstanceChecker(): Plugin {
 
       return {
         code: result.code,
-        map: result.map ?? null,
+        map: result.map ? (result.map as SourceMapInput) : null,
       };
     },
   };

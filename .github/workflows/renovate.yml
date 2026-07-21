@@ -84,12 +84,13 @@ jobs:
           ls -R $cache_dir
 
       - name: Self-hosted Renovate
-        uses: renovatebot/github-action@v46.1.18
+        uses: renovatebot/github-action@v46.1.19
         with:
           configurationFile: renovate.json
           docker-user: '${{ steps.id.outputs.user }}:${{ steps.id.outputs.group }}'
           token: ${{ secrets.RENOVATE_PAT  }}
         env:
+          NODE_OPTIONS: --max-old-space-size=8192
           LOG_LEVEL: ${{ github.event.inputs.logLevel }}
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           # This enables the cache -- if this is set, it's not necessary to add it to renovate.json.

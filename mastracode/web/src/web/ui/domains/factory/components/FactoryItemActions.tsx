@@ -3,6 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { ChevronDown, Play } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 
 export interface FactoryItemActionsProps {
@@ -16,8 +17,12 @@ export interface FactoryItemActionsProps {
   disabled: boolean;
   /** Run the default skill action (Investigate / Review). */
   onAction: () => void;
+  /** Additional menu-only actions for the item. */
+  extraActions?: Array<{ label: string; starting: boolean; onAction: () => void }>;
   /** Run a custom prompt typed by the user (already trimmed, non-empty). */
   onRunPrompt: (prompt: string) => void;
+  /** Extra menu items appended after the built-in ones (e.g. "Add to board"). */
+  menuExtras?: ReactNode;
 }
 
 /**
@@ -32,7 +37,9 @@ export function FactoryItemActions({
   starting,
   disabled,
   onAction,
+  extraActions,
   onRunPrompt,
+  menuExtras,
 }: FactoryItemActionsProps) {
   const [promptOpen, setPromptOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -45,7 +52,7 @@ export function FactoryItemActions({
 
   const runPrompt = () => {
     const trimmed = prompt.trim();
-    if (!trimmed) return;
+    if (!trimmed || starting) return;
     closePrompt();
     onRunPrompt(trimmed);
   };
@@ -56,7 +63,7 @@ export function FactoryItemActions({
         variant="ghost"
         size="sm"
         aria-label={`${actionLabel} ${itemLabel}`}
-        disabled={disabled}
+        disabled={disabled || starting}
         onClick={onAction}
       >
         <Play size={13} aria-hidden />
@@ -77,8 +84,18 @@ export function FactoryItemActions({
           }
         />
         <DropdownMenu.Content align="end" className="min-w-40">
-          <DropdownMenu.Item onClick={onAction}>{actionLabel}</DropdownMenu.Item>
-          <DropdownMenu.Item onClick={() => setPromptOpen(true)}>Custom prompt…</DropdownMenu.Item>
+          <DropdownMenu.Item disabled={starting} onClick={onAction}>
+            {starting ? 'Starting…' : actionLabel}
+          </DropdownMenu.Item>
+          {extraActions?.map(action => (
+            <DropdownMenu.Item key={action.label} disabled={action.starting} onClick={action.onAction}>
+              {action.starting ? 'Starting…' : action.label}
+            </DropdownMenu.Item>
+          ))}
+          <DropdownMenu.Item disabled={starting} onClick={() => setPromptOpen(true)}>
+            Custom prompt…
+          </DropdownMenu.Item>
+          {menuExtras}
         </DropdownMenu.Content>
       </DropdownMenu>
       <Popover open={promptOpen} onOpenChange={open => (open ? setPromptOpen(true) : closePrompt())}>
@@ -110,7 +127,7 @@ export function FactoryItemActions({
               <Button type="button" variant="ghost" size="xs" onClick={closePrompt}>
                 Cancel
               </Button>
-              <Button type="submit" size="xs" disabled={!prompt.trim()}>
+              <Button type="submit" size="xs" disabled={starting || !prompt.trim()}>
                 Run
               </Button>
             </div>

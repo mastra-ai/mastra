@@ -137,7 +137,7 @@ export interface SerializableStructuredOutput {
   /** JSON Schema representation of the output schema */
   schema?: JSONSchema7;
   /** Whether to use JSON prompt injection instead of native response format */
-  jsonPromptInjection?: boolean | 'system' | 'inline';
+  jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
   /** Whether to use the parent agent's model for structuring */
   useAgent?: boolean;
   /** Model config for a dedicated structuring model (if different from the main model) */
@@ -427,14 +427,7 @@ export interface DurableAgenticLoopOutput {
  * Event types emitted via pubsub for agent streaming
  */
 export type AgentStreamEventType =
-  | 'chunk'
-  | 'step-start'
-  | 'step-finish'
-  | 'finish'
-  | 'error'
-  | 'suspended'
-  | 'abort'
-  | 'iteration-complete';
+  'chunk' | 'step-start' | 'step-finish' | 'finish' | 'error' | 'suspended' | 'abort' | 'iteration-complete';
 
 /**
  * Event emitted via pubsub for agent streaming

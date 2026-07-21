@@ -22,6 +22,39 @@ const processorSchema = z.object({
 afterEach(() => cleanup());
 
 describe('WorkflowInputData', () => {
+  describe('when the form view renders a string field', () => {
+    it('uses a multiline text input', async () => {
+      render(
+        <WorkflowInputData
+          schema={z.object({ prompt: z.string() })}
+          defaultValues={{ prompt: 'First line\nSecond line' }}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={() => {}}
+        />,
+      );
+
+      const promptInput = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: /prompt/i });
+
+      expect(promptInput.tagName).toBe('TEXTAREA');
+    });
+
+    it('starts at one line', async () => {
+      render(
+        <WorkflowInputData
+          schema={z.object({ prompt: z.string() })}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={() => {}}
+        />,
+      );
+
+      const promptInput = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: /prompt/i });
+
+      expect(promptInput.rows).toBe(1);
+    });
+  });
+
   it('renders processor default values in the simple read-only input', async () => {
     render(
       <WorkflowInputData

@@ -36,7 +36,7 @@ const renderBadge = (
   return { ...utils, approveToolcall };
 };
 
-const badge = () => screen.getByTestId('ask-user-badge') as HTMLElement;
+const badge = () => screen.getByTestId<HTMLElement>('ask-user-badge');
 
 afterEach(() => cleanup());
 
@@ -85,7 +85,7 @@ describe('AskUserBadge', () => {
     it('keeps the submit button disabled until something is selected', () => {
       renderBadge({ toolCallId: 'call-2', suspendPayload, result: undefined });
 
-      expect((within(badge()).getByRole('button', { name: /submit/i }) as HTMLButtonElement).disabled).toBe(true);
+      expect(within(badge()).getByRole<HTMLButtonElement>('button', { name: /submit/i }).disabled).toBe(true);
     });
 
     it('submits the selected labels as an array', () => {
@@ -120,10 +120,7 @@ describe('AskUserBadge', () => {
       const input = within(badge()).getByPlaceholderText('Type your answer...');
       fireEvent.change(input, { target: { value: 'Grace' } });
 
-      const sendButton = within(badge())
-        .getAllByRole('button')
-        .find(button => button.getAttribute('disabled') === null);
-      fireEvent.click(sendButton!);
+      fireEvent.click(within(badge()).getByRole<HTMLButtonElement>('button', { name: 'Submit answer' }));
 
       expect(approveToolcall).toHaveBeenCalledWith('call-3', 'Grace');
     });
@@ -146,7 +143,7 @@ describe('AskUserBadge', () => {
       selectionMode: 'single_select',
     };
 
-    it('renders the answer content and hides the option inputs when a result is present', () => {
+    it('renders the answer content when a result is present', () => {
       renderBadge({
         toolCallId: 'call-4',
         suspendPayload,
@@ -154,46 +151,71 @@ describe('AskUserBadge', () => {
       });
 
       expect(within(badge()).getAllByText('User answered: Apple')).toHaveLength(1);
-      expect(badge().textContent).not.toContain('{"content"');
-      expect(within(badge()).queryByRole('button', { name: 'Apple' })).toBeNull();
     });
 
-    it('hides the inputs when the approval status is approved', () => {
+    it('does not render raw result JSON when a result is present', () => {
+      renderBadge({
+        toolCallId: 'call-4',
+        suspendPayload,
+        result: { content: 'User answered: Apple', isError: false },
+      });
+
+      expect(badge().textContent).not.toContain('{"content"');
+    });
+
+    it('hides the option input when a result is present', () => {
+      renderBadge({
+        toolCallId: 'call-4',
+        suspendPayload,
+        result: { content: 'User answered: Apple', isError: false },
+      });
+
+      expect(within(badge()).queryByRole('radio', { name: 'Apple' })).toBeNull();
+    });
+
+    it('hides the option input when the approval status is approved', () => {
       renderBadge(
         { toolCallId: 'call-4', suspendPayload, result: undefined },
         { toolCallApprovals: { 'call-4': { status: 'approved' } } },
       );
 
-      expect(within(badge()).queryByRole('button', { name: 'Apple' })).toBeNull();
+      expect(within(badge()).queryByRole('radio', { name: 'Apple' })).toBeNull();
     });
   });
 
-  describe('when a tool call is already running', () => {
-    it('disables the option buttons and does not submit on click', () => {
-      const suspendPayload: AskUserSuspendPayload = {
-        question: 'Pick a fruit',
-        options: [{ label: 'Apple' }],
-        selectionMode: 'single_select',
-      };
+  describe('when a tool call with options is already running', () => {
+    const suspendPayload: AskUserSuspendPayload = {
+      question: 'Pick a fruit',
+      options: [{ label: 'Apple' }],
+      selectionMode: 'single_select',
+    };
+
+    it('disables the option controls', () => {
+      renderBadge({ toolCallId: 'call-5', suspendPayload, result: undefined }, { isRunning: true });
+
+      expect(within(badge()).getByRole<HTMLInputElement>('radio', { name: 'Apple' }).disabled).toBe(true);
+    });
+
+    it('does not submit when a disabled option is clicked', () => {
       const { approveToolcall } = renderBadge(
         { toolCallId: 'call-5', suspendPayload, result: undefined },
         { isRunning: true },
       );
 
-      const optionButton = within(badge()).getByRole('button', { name: 'Apple' }) as HTMLButtonElement;
-      expect(optionButton.disabled).toBe(true);
+      fireEvent.click(within(badge()).getByRole<HTMLInputElement>('radio', { name: 'Apple' }));
 
-      fireEvent.click(optionButton);
       expect(approveToolcall).not.toHaveBeenCalled();
     });
+  });
 
+  describe('when a free-text tool call is already running', () => {
     it('disables the free-text input', () => {
       renderBadge(
         { toolCallId: 'call-6', suspendPayload: { question: 'Name?' }, result: undefined },
         { isRunning: true },
       );
 
-      expect((within(badge()).getByPlaceholderText('Type your answer...') as HTMLInputElement).disabled).toBe(true);
+      expect(within(badge()).getByRole<HTMLInputElement>('textbox', { name: 'Name?' }).disabled).toBe(true);
     });
   });
 

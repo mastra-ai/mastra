@@ -1,0 +1,94 @@
+---
+title: "Workspace | Mastra platform"
+description: Provision a managed workspace for each Mastra platform environment. The platform supplies a bucket for filesystem storage and a Railway-backed sandbox for command execution, and injects the credentials your deploy needs.
+---
+
+# Workspace
+
+A workspace gives an environment two things your agents can use at runtime:
+
+- A **bucket** for filesystem storage, exposed to your code as [`PlatformFilesystem`](/reference/workspace/platform-filesystem).
+- A **sandbox** for executing commands, exposed as [`PlatformSandbox`](/reference/workspace/platform-sandbox).
+
+Workspaces are provisioned per [environment](/docs/mastra-platform/environments), so `production` and `staging` each get their own bucket and sandbox. The platform manages provisioning, credentials, and lifecycle; your deploy code only needs to construct the providers.
+
+## When workspaces are provisioned
+
+New projects have workspaces enabled by default. When you create an environment, the platform provisions a bucket for it automatically. The sandbox base image is warmed in the background so the first `PlatformSandbox` call starts quickly.
+
+Existing projects that haven't opted in show an **Enable workspaces** action in the Workspaces tab. Enabling provisions a bucket for every environment on the project.
+
+If provisioning fails for an environment — for example while Railway is under load — the Workspaces tab shows the failure and offers a retry. The environment itself is still created; only the workspace is unavailable until you retry.
+
+## Use the workspace from your code
+
+Install the provider package:
+
+```bash npm2yarn
+npm install @mastra/platform-workspace
+```
+
+Compose the providers into a workspace and register it with Mastra:
+
+```typescript title="src/mastra/workspace.ts"
+import { Workspace } from '@mastra/core/workspace'
+import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace'
+
+export const workspace = new Workspace({
+  filesystem: new PlatformFilesystem(),
+  sandbox: new PlatformSandbox(),
+})
+```
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { workspace } from './workspace'
+
+export const mastra = new Mastra({
+  workspace,
+})
+```
+
+`PlatformFilesystem` and `PlatformSandbox` read their credentials from environment variables the platform injects at deploy time, so you don't pass any options on the platform.
+
+## Injected environment variables
+
+Every deploy that runs on a platform environment with a workspace receives these variables:
+
+| Variable | Contents |
+| - | - |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | Access token scoped to the deploy. Used by the workspace providers to authenticate. |
+| `MASTRA_PROJECT_ID` | Project the deploy belongs to. |
+| `MASTRA_ENVIRONMENT_ID` | Environment the deploy belongs to. Selects which sandbox pool the platform uses. |
+| `MASTRA_PLATFORM_BUCKET_NAME` | Bucket name attached to the environment. Selects which bucket `PlatformFilesystem` reads and writes. |
+
+These names are reserved. If your project sets any of them explicitly, the platform-managed values take precedence.
+
+## Local development
+
+Reuse the same providers locally by putting the four variables in your `.env` file. Get the values from your project's Workspaces tab:
+
+```bash title=".env"
+MASTRA_PLATFORM_ACCESS_TOKEN=your-access-token
+MASTRA_PROJECT_ID=your-project-id
+MASTRA_ENVIRONMENT_ID=your-environment-id
+MASTRA_PLATFORM_BUCKET_NAME=your-bucket-name
+```
+
+`PlatformFilesystem` and `PlatformSandbox` behave the same locally as on the platform — they connect to the same bucket and sandbox pool for that environment. Use a `staging` or `preview` environment's variables for local runs if you want to keep production data isolated.
+
+For a purely offline loop that never touches the platform, swap the providers for [`LocalFilesystem`](/reference/workspace/local-filesystem) and [`LocalSandbox`](/reference/workspace/local-sandbox) in a local build.
+
+## Inspect the workspace
+
+The Workspaces tab in your platform project shows, per environment:
+
+- Bucket status and its contents, with upload, download, and delete actions.
+- Recent sandbox sessions with their command, exit code, and duration.
+- Provisioning failures with a **Retry** action.
+
+## See also
+
+- [`PlatformFilesystem`](/reference/workspace/platform-filesystem) — reference for the filesystem provider.
+- [`PlatformSandbox`](/reference/workspace/platform-sandbox) — reference for the sandbox provider.
+- [Environments](/docs/mastra-platform/environments) — how environments scope workspaces, variables, and databases.

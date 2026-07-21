@@ -10,8 +10,7 @@ import { StorageDomain } from './base';
  * Either pick by status (draft/published/archived) or by a specific version ID — not both.
  */
 export type VersionResolutionOptions =
-  | { status?: 'draft' | 'published' | 'archived'; versionId?: never }
-  | { versionId: string; status?: never };
+  { status?: 'draft' | 'published' | 'archived'; versionId?: never } | { versionId: string; status?: never };
 
 // ============================================================================
 // Generic Version Types

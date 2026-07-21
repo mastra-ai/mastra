@@ -1,7 +1,8 @@
 ---
 name: understand-issue
 description: Collaboratively investigate a GitHub issue or bug — trace history, understand architecture, diagnose root cause
-goal: true
+metadata:
+  goal: true
 ---
 
 # Understand Issue
@@ -207,7 +208,7 @@ Only move to the write-up after the user confirms they genuinely understand the 
 
 ## Phase 7: Understanding File
 
-If a working file was provided, update that same file with the full investigation and any requested outputs from its handoff instructions, then return to the caller so it can handle the lifecycle output. Otherwise, write `.issue-review/UNDERSTANDING.md`.
+If a working file was provided, update that same file with the full investigation and any requested outputs from its handoff instructions, then return to the caller so it can handle the lifecycle output. Otherwise, write `.artifacts/understand-issue/UNDERSTANDING.md` in the workspace root.
 
 Capture:
 

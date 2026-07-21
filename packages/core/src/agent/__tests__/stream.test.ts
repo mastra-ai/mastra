@@ -1,12 +1,14 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
 
-function runStreamTest(version: 'v1' | 'v2' | 'v3') {
+function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
   const dummyResponseModel = getDummyResponseModel(version);
   const emptyResponseModel = getEmptyResponseModel(version);
   const errorResponseModel = getErrorResponseModel(version);
@@ -402,3 +404,74 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
 runStreamTest('v1');
 runStreamTest('v2');
 runStreamTest('v3');
+runStreamTest('v4');
+
+describe('stream text resolution without memory', () => {
+  it('resolves stream.text to the final step text when the model narrates between tool calls', async () => {
+    let callCount = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Let me check the data source.' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: JSON.stringify({}) },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-2' },
+            { type: 'text-delta', id: 'text-2', delta: 'The answer is 42.' },
+            { type: 'text-end', id: 'text-2' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 } },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'no-memory-agent',
+      name: 'No Memory Agent',
+      instructions: 'test',
+      model,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Looks up data.',
+          inputSchema: z.object({}),
+          execute: async () => ({ ok: true }),
+        }),
+      },
+    });
+
+    const stream = await agent.stream('What is the answer?', { maxSteps: 3 });
+    const streamedText: string[] = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'text-delta') {
+        streamedText.push(chunk.payload.text);
+      }
+    }
+
+    // Narration still streams to consumers in full
+    expect(streamedText.join('')).toBe('Let me check the data source.The answer is 42.');
+    // But the resolved text contains only the final step's answer
+    await expect(stream.text).resolves.toBe('The answer is 42.');
+  });
+});

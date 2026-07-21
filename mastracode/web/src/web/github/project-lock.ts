@@ -8,19 +8,20 @@
  *
  * There are two layers:
  *  1. An **in-process** promise-chain mutex keyed by the lock key, so repeated
- *     same-replica callers stay cheap and never touch Postgres for ordering.
- *  2. A **Postgres transaction-level advisory lock** (`pg_advisory_xact_lock`)
- *     so that *different replicas* operating on the same key also serialize.
- *     Transaction-scoped advisory locks release automatically when the
- *     transaction ends (commit, rollback, or connection loss), so a crashed
- *     replica can never hold the lock forever.
+ *     same-replica callers stay cheap and never touch the database for ordering.
+ *  2. The factory storage backend's **`withDistributedLock` capability** (pg:
+ *     transaction-scoped advisory locks) so that *different replicas*
+ *     operating on the same key also serialize. Backends without the
+ *     capability (libsql: local single-writer) fall back to the in-process
+ *     mutex alone — correct for single-replica deployments.
  *
- * Set `MASTRACODE_DISTRIBUTED_LOCK=0` to disable the Postgres layer (local dev,
- * single replica) and fall back to the pure in-process mutex.
+ * Set `MASTRACODE_DISTRIBUTED_LOCK=0` to force-disable the distributed layer
+ * (local dev, single replica) and fall back to the pure in-process mutex.
  */
 
 import { createHash } from 'node:crypto';
-import { getAppDbPool } from './db';
+
+import { getSeededStorage } from '../runtime-config';
 
 /** Minimal pg pool surface used by the distributed lock (for testability). */
 export interface LockPool {
@@ -33,9 +34,14 @@ export interface LockClient {
 
 const inProcessLocks = new Map<string, Promise<unknown>>();
 
-/** True when the Postgres advisory-lock layer should be used. */
+/**
+ * True when the cross-replica lock layer should be used: not force-disabled
+ * via env, and the seeded factory storage backend exposes the
+ * `withDistributedLock` capability.
+ */
 export function isDistributedLockEnabled(): boolean {
-  return process.env.MASTRACODE_DISTRIBUTED_LOCK !== '0';
+  if (process.env.MASTRACODE_DISTRIBUTED_LOCK === '0') return false;
+  return typeof getSeededStorage()?.withDistributedLock === 'function';
 }
 
 /**
@@ -81,18 +87,32 @@ export function withProjectLock<T>(key: string, fn: () => Promise<T>, poolOverri
 }
 
 /**
- * Acquire only the Postgres transaction-scoped advisory lock for `key` and run
- * `fn` inside that transaction. This is the cross-replica serialization layer;
- * `withProjectLock` wraps it with an in-process mutex for same-replica callers.
- * Exposed so the cross-replica behavior can be tested without the in-process
- * chain (each replica has its own in-process state but shares one Postgres).
+ * Acquire only the cross-replica lock for `key` and run `fn` under it. This is
+ * the distributed serialization layer; `withProjectLock` wraps it with an
+ * in-process mutex for same-replica callers. Delegates to the factory storage
+ * backend's `withDistributedLock` capability; backends without it (or a
+ * force-disabled env) run `fn` directly — the in-process mutex still holds.
+ *
+ * `poolOverride` keeps the pg advisory-lock path directly testable with a fake
+ * pool (each simulated replica has its own in-process state but shares one
+ * database).
  */
 export async function withDbAdvisoryLock<T>(key: string, fn: () => Promise<T>, poolOverride?: LockPool): Promise<T> {
-  if (!isDistributedLockEnabled()) {
+  if (process.env.MASTRACODE_DISTRIBUTED_LOCK === '0') {
     return fn();
   }
 
-  const pool: LockPool = poolOverride ?? (getAppDbPool() as unknown as LockPool);
+  if (poolOverride) return advisoryLockOver(poolOverride, key, fn);
+
+  const storage = getSeededStorage();
+  if (typeof storage?.withDistributedLock !== 'function') {
+    return fn();
+  }
+  return storage.withDistributedLock(key, fn);
+}
+
+/** The pg advisory-lock body, kept for the `poolOverride` test seam. */
+async function advisoryLockOver<T>(pool: LockPool, key: string, fn: () => Promise<T>): Promise<T> {
   const [k1, k2] = hashKey(key);
   const client = await pool.connect();
   try {

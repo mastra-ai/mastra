@@ -26,7 +26,7 @@ importers:
         version: link:../../deployers/vercel
       '@mastra/editor':
         specifier: 0.13.4
-        version: 0.13.4(@mastra/core@1.49.0(express@5.2.1)(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+        version: 0.13.4(@mastra/core@1.49.0(express@5.2.1)(zod@4.4.3))(ws@8.21.1)(zod@4.4.3)
       '@mastra/memory':
         specifier: 1.22.1
         version: 1.22.1(@mastra/core@1.49.0(express@5.2.1)(zod@4.4.3))
@@ -48,7 +48,7 @@ importers:
         version: link:../../packages/cli
       turbo:
         specifier: ^2.9.12
-        version: 2.10.4
+        version: 2.10.5
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -196,11 +196,11 @@ packages:
       '@cfworker/json-schema':
         optional: true
 
-  '@posthog/core@1.40.2':
-    resolution: {integrity: sha512-H12j7O9iHGvpK9t2ko8W4pvfbV1pBDxrsWC1LA6yp2RhzwvC4T3sWhu+AekDQJSRSrJEWlB0t/Ueq9QhPSq7FQ==}
+  '@posthog/core@1.43.1':
+    resolution: {integrity: sha512-hGM8f5sp3we6Em/RQHXbmyYm554hUx9+9jhf92ZQgDS4/xW72KHyZiO9wcFye+qAx2cJAOhOCDIznmO1FV8IbA==}
 
-  '@posthog/types@1.393.0':
-    resolution: {integrity: sha512-vzWeEJZ7ERQhFRoQYaP5jzN1JvIu46UJyHXsuv+dTGW2r3sMgREOhNxXLZjmFHwZ8/FOHQoyqqQmXTCXZSfMSg==}
+  '@posthog/types@1.397.0':
+    resolution: {integrity: sha512-Pa7FtsBo3V0XrhY4y8Xquwp8U07syuZ2IGQdlsRyxhz0yejQLceFjI58UssCXE5zDCDj3km5l7H3ufD6rHChCg==}
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
@@ -220,33 +220,33 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@turbo/darwin-64@2.10.4':
-    resolution: {integrity: sha512-m1MUEI4MJ69r5CwfMYxmHi0H0rrgiYCBOp0tgBZ9x/YVvOb5uu/lRIDyDwdtH054R2yWeQaIigUGu6aCX9f8cA==}
+  '@turbo/darwin-64@2.10.5':
+    resolution: {integrity: sha512-ENvPwy3x5yS7MwNYHeWjqOBXkwIMp39Pd+/zXC6PoiNzF8EIvvLZOZZ+ny6L9x4WgS5vxUii2LM5gM+zjPdnWw==}
     cpu: [x64]
     os: [darwin]
 
-  '@turbo/darwin-arm64@2.10.4':
-    resolution: {integrity: sha512-VQ1Yxs5zkPT+2z7t1P4mvn6JmcKLkOCAsPuK9XbOvuVj0DlTlETfIXNisX0771v/vTWHOQqiwoGi+TtAUq8efw==}
+  '@turbo/darwin-arm64@2.10.5':
+    resolution: {integrity: sha512-rqROo9zsF/P9RqsdtbLD1nFJicjSrYyvQ9kNJC38AbxA3pAs6VAlATvtvOFx7bqOv6vicf20SP9kF33avJjy2w==}
     cpu: [arm64]
     os: [darwin]
 
-  '@turbo/linux-64@2.10.4':
-    resolution: {integrity: sha512-IzV1QovmwX7mfGnVinmE++2IB8tbeo38weltiuH5zNqwCTBjLs/DytyRKx+bmnhHdXIq9SheR8p0Nip/LBUPHg==}
+  '@turbo/linux-64@2.10.5':
+    resolution: {integrity: sha512-RoSSiNFUxi27zLJuM9F6GyWWjHgLch9t6nwD6K0FkXRirZkTLlzIj6IhFnK8H9++nefLtdFqylE4vGjZAv6AAA==}
     cpu: [x64]
     os: [linux]
 
-  '@turbo/linux-arm64@2.10.4':
-    resolution: {integrity: sha512-rfujSQkP5aYiRn0PgTM7F00WkJCP/bKDVZbOx3WmrZwa/vHA0bplhCl328kpX7VI9HH2vI90ISGwuSVgJgoqTw==}
+  '@turbo/linux-arm64@2.10.5':
+    resolution: {integrity: sha512-4ZComcpzmHGmVynQqvvi+iZOSq/tBvY1SltXB8g4NZRsrA01W8E+yRL8RNM+PLoyWsrCnJa8xa+DkWkv+xg4iQ==}
     cpu: [arm64]
     os: [linux]
 
-  '@turbo/windows-64@2.10.4':
-    resolution: {integrity: sha512-NnspP7Wd5fa3Wwnqv9bKfhegqZzuHBgbPxdZU/idTLQcazx/vgKu95JlCx2YHY0hdvKCnPcARrDwM+KEUmaO7A==}
+  '@turbo/windows-64@2.10.5':
+    resolution: {integrity: sha512-eL2Iyj4DbMINq1Sr1w0iAi6nAiZOF16KSlRGwCJpVh+IWZeY33MAsLHVOBMj1xoFtncVJXclCVpTPL2nBoYkFg==}
     cpu: [x64]
     os: [win32]
 
-  '@turbo/windows-arm64@2.10.4':
-    resolution: {integrity: sha512-Iv02YgOpaEShc2OkG7mgCJ2pEw1RUKiKbs0h8W5wAf4jZ5vpmraTEjuGTgHRuOORQnC1GN3KHo5WB+hu1abRMA==}
+  '@turbo/windows-arm64@2.10.5':
+    resolution: {integrity: sha512-sog+wP+8YSJrdWZ/rUJg8xghVTrwoG+BrSlDQpnK5fzSgJHn1INRWXbVWRH0d3vX8dBI01E3yxXRre9Dn+OXQA==}
     cpu: [arm64]
     os: [win32]
 
@@ -328,11 +328,11 @@ packages:
   character-entities@2.0.2:
     resolution: {integrity: sha512-shx7oQ0Awen/BRIdkjkvz54PnEEI/EjwXDSIZp86/KKdbafHh1Df/RYGBhn4hbe2+uKC9FnT5UCEdyPz3ai9hQ==}
 
-  chat@4.33.0:
-    resolution: {integrity: sha512-qaQyr6Nm7gLEPkYpfjlZzCxKKjvDyRe3GoVA5++RrzW9po5fe3ddH4l9JkGaFsTvSiRGAzuz12WJj/BB5+A6Hw==}
+  chat@4.34.0:
+    resolution: {integrity: sha512-g3c9ANavtCX7BwHcB5c3lWKIUm+8Oo7qlbgQ7/ni1rmVLLeCQa7FiMfeIyEyTAd/4HlRQu5jcS4EPdb0VyhUDQ==}
     engines: {node: '>=20'}
     peerDependencies:
-      ai: ^6.0.182
+      ai: ^6.0.182 || ^7.0.0
       zod: ^3.0.0 || ^4.0.0
     peerDependenciesMeta:
       ai:
@@ -477,8 +477,8 @@ packages:
     resolution: {integrity: sha512-9Be3ZoN4LmYR90tUoVu2te2BsbzHfhJyfEiAVfz7N5/zv+jduIfLrV2xdQXOHbaD6KgpGdO9PRPM1Y4Q9QkPkA==}
     engines: {node: ^18.19.0 || >=20.5.0}
 
-  express-rate-limit@8.5.2:
-    resolution: {integrity: sha512-5Kb34ipNX694DH48vN9irak1Qx30nb0PLYHXfJgw4YEjiC3ZEmZJhwOp+VfiCYwFzvFTdB9QkArYS5kXa2cx2A==}
+  express-rate-limit@8.6.0:
+    resolution: {integrity: sha512-XKJXDsASUOo0LLtFwW5hCcQGH0N4WQc/Rn8/Pvoia+TJFOkkFPvrtW9lZOeeNcxQJspvOIERMwiRLsVFlhHEkA==}
     engines: {node: '>= 16'}
     peerDependencies:
       express: '>= 4.11'
@@ -836,8 +836,8 @@ packages:
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
 
-  openai@6.46.0:
-    resolution: {integrity: sha512-DFg6jEPT2RO+oAyXtddeUJU8zkGy1OQ1AjGzNIJUMQG03TTqvCpy9tBpQ+2VVVnvrl3E56F8GEin2JYtWpITtA==}
+  openai@6.48.0:
+    resolution: {integrity: sha512-KhVp+FyV50QrXNextvL9hIU5l6ox5HYuKQjGVk7lIqprgJol90+dQXWONV6S1lRWsKA1bXjrow8RsUT14M1hNA==}
     peerDependencies:
       '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
       '@smithy/hash-node': '>=4.3.0 <5'
@@ -891,8 +891,8 @@ packages:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
 
-  posthog-node@5.41.0:
-    resolution: {integrity: sha512-jOkX6THOr5WD+FGUEaTxekas8c7NOC3TqJ2Byfe2KMimQdL/F/osz17uSbkNzR4V9WFZoe8YaGP3Xp0EUpPKGg==}
+  posthog-node@5.45.2:
+    resolution: {integrity: sha512-QhHw/xL0ntMG/DzqA/qdiKu8JY8ChK5Obm8m1nMJor5sjJ7+pfVJSx1yAynC7iUAJfJ9V+OhBNhDCyi5IFWC0Q==}
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
       rxjs: ^7.0.0
@@ -1046,8 +1046,8 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
-  turbo@2.10.4:
-    resolution: {integrity: sha512-GQpduILaKjoaGljw097ScsSyKTtZSY7cZ3bJktzfTkPMyCf3ShKLuXK2IaOEN2Plziml+ArR7WJ1m+V4VbnaKQ==}
+  turbo@2.10.5:
+    resolution: {integrity: sha512-07Y/C7OUp23l4P92PJoYtFNbHjLhftrZH5Ce7dbczS4kX2Re+wtbXvZLoxn/pUtzgsQaRCBaRuZPJp4zmAn0WQ==}
     hasBin: true
 
   tweetnacl@1.0.3:
@@ -1110,8 +1110,8 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  ws@8.21.0:
-    resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
+  ws@8.21.1:
+    resolution: {integrity: sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -1132,8 +1132,8 @@ packages:
   zod-from-json-schema@0.0.5:
     resolution: {integrity: sha512-zYEoo86M1qpA1Pq6329oSyHLS785z/mTwfr9V1Xf/ZLhuuBGaMlDGu/pDVGVUe4H4oa1EFgWZT53DP0U3oT9CQ==}
 
-  zod-from-json-schema@0.5.4:
-    resolution: {integrity: sha512-l+XRdV8YZAolpJSXDk3kSEam1W0knpSj7vvbA0laOzJyGV7vhmKFqgfl815VePvp2vhPOhbgo4pMtuYKXqkv9w==}
+  zod-from-json-schema@0.5.6:
+    resolution: {integrity: sha512-U33AJ7ZWS6y9XNSzMWcdy8hRAvZmWhTtpYJu0SXPT5AArbc9nq2ur7Magzmn5RF9KBV4b3FP0nCpmqqlfXlR9w==}
 
   zod-to-json-schema@3.25.2:
     resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}
@@ -1213,13 +1213,13 @@ snapshots:
 
   '@composio/client@0.1.0-alpha.66': {}
 
-  '@composio/core@0.6.11(ws@8.21.0)(zod@4.4.3)':
+  '@composio/core@0.6.11(ws@8.21.1)(zod@4.4.3)':
     dependencies:
       '@composio/client': 0.1.0-alpha.66
       '@composio/json-schema-to-zod': 0.1.20(zod@4.4.3)
       '@types/json-schema': 7.0.15
       chalk: 4.1.2
-      openai: 6.46.0(ws@8.21.0)(zod@4.4.3)
+      openai: 6.48.0(ws@8.21.1)(zod@4.4.3)
       pusher-js: 8.5.0
       semver: 7.8.5
       zod: 4.4.3
@@ -1234,9 +1234,9 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  '@composio/mastra@0.6.11(@composio/core@0.6.11(ws@8.21.0)(zod@4.4.3))(@mastra/core@1.49.0(express@5.2.1)(zod@4.4.3))(zod@4.4.3)':
+  '@composio/mastra@0.6.11(@composio/core@0.6.11(ws@8.21.1)(zod@4.4.3))(@mastra/core@1.49.0(express@5.2.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      '@composio/core': 0.6.11(ws@8.21.0)(zod@4.4.3)
+      '@composio/core': 0.6.11(ws@8.21.1)(zod@4.4.3)
       '@mastra/core': 1.49.0(express@5.2.1)(zod@4.4.3)
       '@mastra/schema-compat': 1.3.3(zod@4.4.3)
       zod: 4.4.3
@@ -1270,7 +1270,7 @@ snapshots:
       '@sindresorhus/slugify': 2.2.1
       '@standard-schema/spec': 1.1.0
       ajv: 8.20.0
-      chat: 4.33.0(zod@4.4.3)
+      chat: 4.34.0(zod@4.4.3)
       croner: 10.0.1
       dotenv: 17.4.2
       execa: 9.6.1
@@ -1283,9 +1283,9 @@ snapshots:
       p-map: 7.0.5
       p-retry: 7.1.1
       picomatch: 4.0.5
-      posthog-node: 5.41.0
+      posthog-node: 5.45.2
       tokenx: 1.3.0
-      ws: 8.21.0
+      ws: 8.21.1
       xxhash-wasm: 1.1.0
       zod: 4.4.3
     transitivePeerDependencies:
@@ -1299,11 +1299,11 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@mastra/editor@0.13.4(@mastra/core@1.49.0(express@5.2.1)(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@mastra/editor@0.13.4(@mastra/core@1.49.0(express@5.2.1)(zod@4.4.3))(ws@8.21.1)(zod@4.4.3)':
     dependencies:
       '@arcadeai/arcadejs': 2.4.1
-      '@composio/core': 0.6.11(ws@8.21.0)(zod@4.4.3)
-      '@composio/mastra': 0.6.11(@composio/core@0.6.11(ws@8.21.0)(zod@4.4.3))(@mastra/core@1.49.0(express@5.2.1)(zod@4.4.3))(zod@4.4.3)
+      '@composio/core': 0.6.11(ws@8.21.1)(zod@4.4.3)
+      '@composio/mastra': 0.6.11(@composio/core@0.6.11(ws@8.21.1)(zod@4.4.3))(@mastra/core@1.49.0(express@5.2.1)(zod@4.4.3))(zod@4.4.3)
       '@mastra/core': 1.49.0(express@5.2.1)(zod@4.4.3)
       '@mastra/memory': 1.22.1(@mastra/core@1.49.0(express@5.2.1)(zod@4.4.3))
       '@mastra/schema-compat': 1.3.3(zod@4.4.3)
@@ -1335,7 +1335,7 @@ snapshots:
     dependencies:
       json-schema-to-zod: 2.8.1
       zod: 4.4.3
-      zod-from-json-schema: 0.5.4
+      zod-from-json-schema: 0.5.6
       zod-from-json-schema-v3: zod-from-json-schema@0.0.5
       zod-to-json-schema: 3.25.2(zod@4.4.3)
 
@@ -1350,7 +1350,7 @@ snapshots:
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
       express: 5.2.1
-      express-rate-limit: 8.5.2(express@5.2.1)
+      express-rate-limit: 8.6.0(express@5.2.1)
       hono: 4.12.30
       jose: 6.2.3
       json-schema-typed: 8.0.2
@@ -1361,11 +1361,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@posthog/core@1.40.2':
+  '@posthog/core@1.43.1':
     dependencies:
-      '@posthog/types': 1.393.0
+      '@posthog/types': 1.397.0
 
-  '@posthog/types@1.393.0': {}
+  '@posthog/types@1.397.0': {}
 
   '@sec-ant/readable-stream@0.4.1': {}
 
@@ -1382,22 +1382,22 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@turbo/darwin-64@2.10.4':
+  '@turbo/darwin-64@2.10.5':
     optional: true
 
-  '@turbo/darwin-arm64@2.10.4':
+  '@turbo/darwin-arm64@2.10.5':
     optional: true
 
-  '@turbo/linux-64@2.10.4':
+  '@turbo/linux-64@2.10.5':
     optional: true
 
-  '@turbo/linux-arm64@2.10.4':
+  '@turbo/linux-arm64@2.10.5':
     optional: true
 
-  '@turbo/windows-64@2.10.4':
+  '@turbo/windows-64@2.10.5':
     optional: true
 
-  '@turbo/windows-arm64@2.10.4':
+  '@turbo/windows-arm64@2.10.5':
     optional: true
 
   '@types/debug@4.1.13':
@@ -1487,7 +1487,7 @@ snapshots:
 
   character-entities@2.0.2: {}
 
-  chat@4.33.0(zod@4.4.3):
+  chat@4.34.0(zod@4.4.3):
     dependencies:
       '@workflow/serde': 4.1.0-beta.2
       mdast-util-to-string: 4.0.0
@@ -1605,10 +1605,13 @@ snapshots:
       strip-final-newline: 4.0.0
       yoctocolors: 2.1.2
 
-  express-rate-limit@8.5.2(express@5.2.1):
+  express-rate-limit@8.6.0(express@5.2.1):
     dependencies:
+      debug: 4.4.3
       express: 5.2.1
       ip-address: 10.2.0
+    transitivePeerDependencies:
+      - supports-color
 
   express@5.2.1:
     dependencies:
@@ -2129,9 +2132,9 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  openai@6.46.0(ws@8.21.0)(zod@4.4.3):
+  openai@6.48.0(ws@8.21.1)(zod@4.4.3):
     optionalDependencies:
-      ws: 8.21.0
+      ws: 8.21.1
       zod: 4.4.3
 
   p-map@7.0.5: {}
@@ -2154,9 +2157,9 @@ snapshots:
 
   pkce-challenge@5.0.1: {}
 
-  posthog-node@5.41.0:
+  posthog-node@5.45.2:
     dependencies:
-      '@posthog/core': 1.40.2
+      '@posthog/core': 1.43.1
 
   pretty-ms@9.3.0:
     dependencies:
@@ -2341,14 +2344,14 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  turbo@2.10.4:
+  turbo@2.10.5:
     optionalDependencies:
-      '@turbo/darwin-64': 2.10.4
-      '@turbo/darwin-arm64': 2.10.4
-      '@turbo/linux-64': 2.10.4
-      '@turbo/linux-arm64': 2.10.4
-      '@turbo/windows-64': 2.10.4
-      '@turbo/windows-arm64': 2.10.4
+      '@turbo/darwin-64': 2.10.5
+      '@turbo/darwin-arm64': 2.10.5
+      '@turbo/linux-64': 2.10.5
+      '@turbo/linux-arm64': 2.10.5
+      '@turbo/windows-64': 2.10.5
+      '@turbo/windows-arm64': 2.10.5
 
   tweetnacl@1.0.3: {}
 
@@ -2415,7 +2418,7 @@ snapshots:
 
   wrappy@1.0.2: {}
 
-  ws@8.21.0: {}
+  ws@8.21.1: {}
 
   xxhash-wasm@1.1.0: {}
 
@@ -2425,7 +2428,7 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  zod-from-json-schema@0.5.4:
+  zod-from-json-schema@0.5.6:
     dependencies:
       zod: 4.4.3
 

@@ -9,8 +9,8 @@
     "octokit": "^5.0.5"
   },
   "devDependencies": {
-    "@types/node": "22.19.21",
-    "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "@types/node": "22.20.1",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
   }
 }

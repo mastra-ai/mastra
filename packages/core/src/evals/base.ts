@@ -4,7 +4,7 @@ import { Agent, isSupportedLanguageModel } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
 import type { AgentMemoryOption, ToolsInput } from '../agent/types';
 import { tryStreamWithJsonFallback } from '../agent/utils';
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
@@ -76,7 +76,11 @@ type ScorerTypeShortcuts = {
 export interface ScorerJudgeConfig {
   model: MastraModelConfig;
   instructions: string;
-  jsonPromptInjection?: boolean;
+  /**
+   * Controls how the judge's structured output schema reaches the model.
+   * Defaults to automatic capability-based routing.
+   */
+  jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
   /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
   tools?: ToolsInput;
   /** Optional memory instance for the internal judge agent. */
@@ -98,14 +102,16 @@ export interface ScorerJudgeConfig {
    */
   outputProcessors?: OutputProcessorOrWorkflow[];
   /**
-   * Optional error processors for the internal judge agent. These implement
+   * Optional error processors for the internal V2+ judge agent. These implement
    * `processAPIError` and can inspect LLM API rejections and signal a retry,
-   * e.g. `StreamErrorRetryProcessor`.
+   * e.g. `StreamErrorRetryProcessor`. V1 judges use `generateLegacy()` and do
+   * not run error processors.
    */
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /**
-   * Maximum number of times processors can trigger a retry per judge generation.
-   * Required for retry-based error processors (e.g. `StreamErrorRetryProcessor`) to take effect.
+   * Maximum number of times error processors can retry one V2+ judge generation.
+   * When errorProcessors are configured and this is omitted, the runtime cap is
+   * 10. Set this explicitly to bound the coordinated retry budget.
    */
   maxProcessorRetries?: number;
   /**
@@ -117,6 +123,10 @@ export interface ScorerJudgeConfig {
   requestContext?: RequestContext<any>;
 }
 
+/**
+ * Step-level fields override scorer-level judge fields. Processor arrays replace
+ * the scorer-level arrays; omit maxProcessorRetries to inherit its numeric cap.
+ */
 export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
   /** Per-step memory options merged onto scorer-level `judge.defaultMemoryOptions`. */
   memory?: AgentMemoryOption;
@@ -638,23 +648,22 @@ class MastraScorer<
     }
 
     if (workflowResult.status === 'failed') {
-      const workflowFailure =
-        workflowResult.error instanceof Error
-          ? workflowResult.error
-          : new Error(typeof workflowResult.error === 'string' ? workflowResult.error : 'Scorer workflow failed');
+      const workflowFailure = getErrorFromUnknown(workflowResult.error, {
+        fallbackMessage: 'Scorer workflow failed',
+      });
       evalSpan?.error({ error: workflowFailure, endSpan: true });
       throw new MastraError(
         {
           id: 'MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED',
           domain: ErrorDomain.SCORER,
           category: ErrorCategory.USER,
-          text: `Scorer Run Failed: ${typeof workflowResult.error === 'string' ? workflowResult.error : workflowResult.error.message}`,
+          text: `Scorer Run Failed: ${workflowFailure.message}`,
           details: {
             scorerId: this.config.id ?? this.config.name,
             steps: this.steps.map(s => s.name).join(', '),
           },
         },
-        workflowResult.error instanceof Error ? workflowResult.error : undefined,
+        workflowFailure,
       );
     }
 
@@ -903,7 +912,8 @@ class MastraScorer<
     const prompt = await originalStep.createPrompt(context);
     const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
-    const jsonPromptInjection = originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection;
+    const jsonPromptInjection =
+      originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection ?? 'auto';
     // Step-level tools override scorer-level tools. When present, the judge agent
     // can call them (in its own tool-call loop) before producing the step output.
     const tools = originalStep.judge?.tools ?? this.config.judge?.tools;

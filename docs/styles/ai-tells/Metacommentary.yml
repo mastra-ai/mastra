@@ -1,0 +1,113 @@
+---
+extends: existence
+message: "AI metacommentary: '%s'. Delete it or replace it with substantive content."
+level: error
+nonword: true
+scope: raw
+tokens:
+  # "This [short noun] matters." - filler bridge sentences
+  - "This \\w+ matters\\."
+  - "This \\w+ \\w+ matters\\."
+  - "This \\w+ \\w+ \\w+ matters\\."
+
+  # "This matters because" variants
+  - 'This matters because'
+  - 'This is important because'
+  - 'This distinction matters'
+  - 'This difference matters'
+  - 'This framing matters'
+  - 'This choice matters'
+  - 'This detail matters'
+  - 'This nuance matters'
+  - 'This subtlety matters'
+
+  # "Let me explain" / "Let's explore" throat-clearing
+  - 'Let me explain'
+  - "Let's explore"
+  - "Let's examine"
+  - "Let's consider"
+  - "Let's look at"
+  - "Let's break down"
+  - "Let's unpack"
+  - "Let's dive into"
+
+  # "The key here is" / "The point is" filler
+  - 'The key here is'
+  - 'The point here is'
+  - 'The idea here is'
+  - 'The insight here is'
+  - 'The takeaway here is'
+  - 'The important thing here is'
+
+  # "It's worth [verb]ing" hedged assertions
+  - "It'?s worth noting"
+  - "It'?s worth mentioning"
+  - "It'?s worth pointing out"
+  - "It'?s worth emphasizing"
+  - "It'?s worth highlighting"
+  - "It'?s worth remembering"
+
+  # Bold callout phrases (in markdown)
+  - "\\*\\*Key insight:?\\*\\*"
+  - "\\*\\*Key takeaway:?\\*\\*"
+  - "\\*\\*Key point:?\\*\\*"
+  - "\\*\\*Important:?\\*\\*"
+  - "\\*\\*Note:?\\*\\*"
+  - "\\*\\*Bottom line:?\\*\\*"
+  - "\\*\\*The point:?\\*\\*"
+
+  # "This is the insight/key/point" framing
+  - 'This is the insight'
+  - 'This is the key'
+  - 'This is the point'
+  - 'This is the takeaway'
+  - 'This is the crucial'
+  - 'This is the critical'
+  - 'This is the important'
+
+  # "This enables/ensures/allows" consequence statements
+  # Includes "This [noun] enables" and "This [noun] [noun] enables" variants
+  - "This enables [^.]+\\."
+  - "This \\w+ enables [^.]+\\."
+  - "This \\w+ \\w+ enables [^.]+\\."
+  - "This ensures [^.]+\\."
+  - "This \\w+ ensures [^.]+\\."
+  - "This allows [^.]+\\."
+  - "This \\w+ allows [^.]+\\."
+  - "This provides [^.]+\\."
+  - "This \\w+ provides [^.]+\\."
+  - "This gives you [^.]+\\."
+  - "This \\w+ gives you [^.]+\\."
+  - "This means [^.]+\\."
+  - "This \\w+ means [^.]+\\."
+
+  # "Understanding X enables/helps you" opener
+  - "Understanding [^.]+enables you to [^.]+\\."
+  - "Understanding [^.]+helps you [^.]+\\."
+  - "Understanding [^.]+allows you to [^.]+\\."
+
+  # "Real-world" filler
+  - 'Real-world [a-z]+'
+  - 'In the real world'
+
+  # "At its core/heart" framing
+  - 'At its core'
+  - 'At its heart'
+  - 'At its most basic'
+  - 'At its most basic level'
+  - 'At its most fundamental'
+  - 'At its most fundamental level'
+  - 'At its simplest'
+  - 'At their core'
+  - 'At their heart'
+
+  # "Think of X as" explanatory framing
+  - 'Think of it as'
+  - 'Think of this as'
+  - "Think of [^.]+as [^.]+\\."
+
+  # "This is where" pivot phrases
+  - 'This is where it gets interesting'
+  - 'This is where things get interesting'
+  - 'This is where [^.]+ comes in'
+  - "That'?s where [^.]+ comes in"

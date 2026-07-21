@@ -6,6 +6,7 @@ import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/a
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
+import { getMessageText } from './db-message-parts.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -40,8 +41,11 @@ import {
   handleToolInputDelta,
   handleToolInputEnd,
   handleToolEnd,
+  clearPendingShellOutputs,
+  clearToolInputParsers,
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
 
@@ -63,6 +67,8 @@ export async function dispatchEvent(
 ): Promise<void> {
   switch (event.type) {
     case 'agent_start':
+      clearToolInputParsers();
+      clearPendingShellOutputs();
       // Reset tokens/sec at the start of a new turn (not at the end) so the
       // last turn's reading stays visible while idle — short single-step turns
       // would otherwise zero it before it could be read.
@@ -91,8 +97,10 @@ export async function dispatchEvent(
       state.decodeStartedAt = 0;
       ectx.updateStatusLine();
       if (event.reason === 'aborted') {
+        clearPendingShellOutputs();
         handleAgentAborted(ectx);
       } else if (event.reason === 'error') {
+        clearPendingShellOutputs();
         handleAgentError(ectx);
       } else {
         handleAgentEnd(ectx);
@@ -107,9 +115,7 @@ export async function dispatchEvent(
       // Only open the decode window when an assistant message carries actual
       // streamed text — tool-result-only updates (e.g. plan approval resume) and
       // user/system message updates must not count toward tokens/sec.
-      const hasAssistantText =
-        event.message.role === 'assistant' &&
-        event.message.content.some(part => part.type === 'text' && 'text' in part && part.text.trim().length > 0);
+      const hasAssistantText = event.message.role === 'assistant' && getMessageText(event.message).trim().length > 0;
       if (hasAssistantText) {
         state.agentRunLastStreamPartAt = Date.now();
         if (state.decodeStartedAt === 0) {
@@ -161,7 +167,10 @@ export async function dispatchEvent(
       break;
 
     case 'tool_input_delta':
-      handleToolInputDelta(ectx, event.toolCallId, event.argsTextDelta);
+      // Display processors may transform argsTextDelta to a non-string payload.
+      if (typeof event.argsTextDelta === 'string') {
+        handleToolInputDelta(ectx, event.toolCallId, event.argsTextDelta);
+      }
       break;
 
     case 'tool_input_end':
@@ -197,7 +206,7 @@ export async function dispatchEvent(
       state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
-        state.ui.requestRender();
+        flushRender(state);
       }
       state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages();

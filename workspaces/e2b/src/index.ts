@@ -8,3 +8,4 @@ export {
   type E2BMountConfig,
 } from './sandbox/mounts';
 export { e2bSandboxProvider } from './provider';
+export { E2BCodeModeTransport } from './code-mode/transport';

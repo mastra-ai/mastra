@@ -31,7 +31,7 @@
 
 @import 'tailwindcss' source('./src/');
 @import 'tw-animate-css';
-
+@import '@mastra/docusaurus-plugin-kapa';
 /* Scan the Algolia search plugin's compiled output so its Tailwind utility classes are generated.
    The plugin's index.css contains `@source "./dist/"` resolved relative to the package. */
 @import '@mastra/docusaurus-plugin-algolia';
@@ -409,6 +409,85 @@
     --mastra-radius-lg: 3.875rem;
     --mastra-radius-elevation: 1.3125rem;
   }
+}
+
+/*
+ * The Kapa plugin's DocRoot/Layout/Main renames the classic theme's hashed
+ * layout classes (`.docMainContainer_*`, `.docItemWrapper_*`) to stable names
+ * (`.doc-main-container`, `.doc-item-wrapper`) and drops the classic theme's
+ * `container padding-top--md padding-bottom--lg` utilities from the wrapper.
+ * The classic flex-grow rules no longer match, so the doc column collapses to
+ * 0 width, and without the padding the content sits flush against the navbar.
+ * Restore both the grow behaviour and the container width/padding using the
+ * classic theme's own Infima variables.
+ */
+.doc-main-container,
+.doc-chat-layout .doc-item-wrapper {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.doc-chat-layout .doc-item-wrapper {
+  width: 100%;
+  max-width: var(--ifm-container-width);
+  margin: 0 auto;
+  /* Mirrors the classic theme's `padding-top--md` (1rem) / `padding-bottom--lg`
+   * (2rem) plus `container` horizontal padding. */
+  padding: 1rem var(--ifm-spacing-horizontal) 2rem;
+}
+
+.doc-chat-interface__send {
+  background: #fff !important;
+}
+
+.doc-chat-interface__send:hover {
+  background: #c4c4c4 !important;
+}
+
+.doc-chat-interface__send svg {
+  color: #000 !important;
+}
+
+.doc-chat-scroll-to-bottom svg {
+  color: #fff !important;
+}
+
+[data-theme='dark'] .doc-chat-scroll-to-bottom svg {
+  color: #000 !important;
+}
+
+[data-theme='dark'] .doc-chat-interface__send {
+  background: #000 !important;
+}
+
+[data-theme='dark'] .doc-chat-interface__send:hover {
+  background: #3c3c3c !important;
+}
+
+[data-theme='dark'] .doc-chat-interface__send svg {
+  color: #fff !important;
+}
+
+[data-streamdown='table'] {
+  margin-bottom: 0;
+}
+
+[data-streamdown='code-block-body'] pre {
+  margin-bottom: 0;
+  padding: var(--ifm-pre-padding) !important;
+}
+
+[data-streamdown='code-block-body'] pre > code > span {
+  display: block;
+}
+
+.theme-back-to-top-button {
+  display: none;
+}
+
+.doc-chat-fab {
+  background: var(--mastra-color-surface-elevation-sm) !important;
+  border: var(--ifm-button-border-width) solid var(--mastra-color-surface-hover) !important;
 }
 
 /* Themed aliases + plugin overrides for dark mode */
@@ -834,8 +913,7 @@ video {
   background: none;
 }
 
-pre,
-.copilotKitCodeBlock div {
+pre {
   --prism-background-color: var(--mastra-surface-2);
   background: var(--mastra-surface-2);
   border: 0.5px solid var(--border) !important;
@@ -909,11 +987,6 @@ pre,
 div[class*='codeBlockTitle'] + div[class*='codeBlockContent'] pre {
   border-top-left-radius: 0 !important;
   border-top-right-radius: 0 !important;
-}
-
-.copilotKitCodeBlock div * {
-  font-family: var(--ifm-font-family-monospace) !important;
-  font-size: 13px;
 }
 
 pre * {
@@ -1425,103 +1498,6 @@ article p {
     appearance: none;
   }
 
-  .copilotKitMarkdown p {
-    font-size: 14px !important;
-    margin-bottom: 8px;
-  }
-
-  .copilotKitMarkdown pre {
-    padding: 0px;
-  }
-
-  .copilotKitMarkdown hr {
-    margin-block: 12px !important;
-    color: var(--borders-subtle) !important;
-  }
-
-  .copilotKitMarkdown h3 {
-    font-size: calc((16 / 16) * 1rem) !important;
-    font-weight: 500;
-    word-spacing: -1px;
-    margin-bottom: 8px;
-    margin-top: 20px;
-  }
-
-  .copilotKitMarkdown h2 {
-    font-size: calc((18 / 16) * 1rem) !important;
-    font-weight: 500;
-    word-spacing: -1px;
-    margin-bottom: 8px;
-    margin-top: 20px;
-    text-decoration: underline;
-  }
-
-  .copilotKitMarkdown a {
-    color: var(--mastra-green-accent-2) !important;
-    padding-left: 2px !important;
-    font-weight: 500;
-
-    &:where(.dark, .dark *) {
-      color: var(--mastra-green-accent) !important;
-    }
-  }
-
-  .copilotKitCodeBlockToolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px;
-  }
-
-  .copilotKitMarkdown ul {
-    :where(& > :not(:last-child)) {
-      --tw-space-y-reverse: 0;
-      /* --spacing: 0.25rem; */
-      margin-block-start: calc(calc(var(--spacing) * 2) /* 0.25rem = 4px */ * var(--tw-space-y-reverse));
-      margin-block-end: calc(calc(var(--spacing) * 2) /* 0.25rem = 4px */ * calc(1 - var(--tw-space-y-reverse)));
-    }
-  }
-
-  button.copilotKitCodeBlockToolbarButton {
-    cursor: pointer !important;
-  }
-
-  .copilotKitCodeBlockToolbarButtons {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .copilotKitCodeBlock > div {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  #custom-chat-input {
-    /* hide scroll bar */
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  #custom-chat-input::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* Hide TOC when chatbot sidebar is open using CSS variable */
-  /* Note: Container style queries (@container style()) only work on properties
-   set directly on the container element itself, not on root/ancestor elements.
-   Since --chatbot-sidebar-open is set on document.documentElement (:root),
-   we use attribute selectors instead to check for the inline style. */
-
-  /*html[style*="--chatbot-sidebar-open: 1"] #toc-column {
-    display: none;
-  }*/
-
   #doc-item-container {
     container-name: doc;
   }
@@ -1691,10 +1667,6 @@ article p {
       right: 24.6%;
     }
   }
-}
-
-.copilotKitCodeBlockToolbar {
-  display: none !important;
 }
 
 /* ==================== LEARN SECTION ==================== */

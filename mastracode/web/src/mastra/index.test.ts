@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /**
  * Smoke test for the platform-deployable entry (`src/mastra/index.ts`).
@@ -29,5 +29,54 @@ describe('platform entry (src/mastra/index.ts)', () => {
     const apiRoutes = server?.apiRoutes ?? [];
     const paths = apiRoutes.map(r => r.path);
     expect(paths.some(p => p.startsWith('/web/'))).toBe(true);
+  });
+
+  // Integration env groups are all-or-nothing: setting ANY var of a group
+  // means you intend to enable the integration, so a partial set must fail
+  // the boot loudly (listing what's missing) instead of silently disabling.
+  describe('integration env groups', () => {
+    beforeEach(() => {
+      for (const name of [
+        'GITHUB_APP_ID',
+        'GITHUB_APP_PRIVATE_KEY',
+        'GITHUB_APP_CLIENT_ID',
+        'GITHUB_APP_CLIENT_SECRET',
+        'GITHUB_APP_SLUG',
+        'GITHUB_APP_WEBHOOK_SECRET',
+        'LINEAR_CLIENT_ID',
+        'LINEAR_CLIENT_SECRET',
+      ]) {
+        vi.stubEnv(name, '');
+      }
+      vi.resetModules();
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    });
+
+    it('rejects boot when the GitHub group is partially configured', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      // The test env may carry a full GitHub config — blank everything but the
+      // app id to force the partial state.
+      vi.stubEnv('GITHUB_APP_ID', '12345');
+      vi.stubEnv('GITHUB_APP_PRIVATE_KEY', '');
+      vi.stubEnv('GITHUB_APP_CLIENT_ID', '');
+      vi.stubEnv('GITHUB_APP_CLIENT_SECRET', '');
+      vi.stubEnv('GITHUB_APP_SLUG', '');
+      await expect(import('./index.js')).rejects.toThrow(
+        /GitHub integration is partially configured — missing GITHUB_APP_PRIVATE_KEY/,
+      );
+    });
+
+    it('rejects boot when the Linear group is partially configured', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('LINEAR_CLIENT_ID', 'lin_client');
+      vi.stubEnv('LINEAR_CLIENT_SECRET', '');
+      await expect(import('./index.js')).rejects.toThrow(
+        /Linear integration is partially configured — missing LINEAR_CLIENT_SECRET/,
+      );
+    });
   });
 });

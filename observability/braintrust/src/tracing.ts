@@ -12,17 +12,62 @@ import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import { initLogger, currentSpan } from 'braintrust';
-import type { Span, Logger } from 'braintrust';
-import { removeNullish, convertAISDKMessage } from './formatter';
+import { removeNullish, convertAISDKMessage, serializeToolResult } from './formatter';
+import type { OpenAIMessage } from './formatter';
 import { formatUsageMetrics } from './metrics';
 import { reconstructThreadOutput } from './thread-reconstruction';
 import type { ThreadData, ThreadStepData, PendingToolResult } from './thread-reconstruction';
+
+type BraintrustSpanType = 'llm' | 'score' | 'function' | 'eval' | 'task' | 'tool';
+
+/**
+ * The subset of a Braintrust span used by the exporter.
+ *
+ * This structural interface lets applications provide spans from a different
+ * compatible Braintrust SDK instance without coupling Mastra's public types to
+ * a specific SDK version.
+ */
+export interface BraintrustSpan {
+  id: string;
+  startSpan(args: {
+    spanId: string;
+    name: string;
+    type: BraintrustSpanType;
+    startTime: number;
+    event: Record<string, any>;
+  }): BraintrustSpan;
+  log(event: Record<string, any>): void;
+  end(args?: { endTime?: number }): number;
+}
+
+/**
+ * The subset of a Braintrust logger used by the exporter.
+ *
+ * Logger instances from compatible Braintrust SDK versions satisfy this
+ * interface without sharing the same nominal SDK types as the exporter.
+ */
+export interface BraintrustLogger {
+  startSpan(args: {
+    spanId: string;
+    name: string;
+    type: BraintrustSpanType;
+    startTime: number;
+    event: Record<string, any>;
+  }): BraintrustSpan;
+  logFeedback(event: {
+    id: string;
+    scores: Record<string, number>;
+    comment?: string;
+    metadata?: Record<string, any>;
+    source: 'external';
+  }): void;
+}
 
 /**
  * Extended Braintrust span data that includes span type and thread reconstruction data
  */
 interface BraintrustSpanData {
-  span: Span;
+  span: BraintrustSpan;
   spanType: SpanType;
   threadData?: ThreadData; // only populated for MODEL_GENERATION spans
   // Tool results stored when TOOL_CALL ends (may arrive before MODEL_STEP ends)
@@ -37,7 +82,7 @@ export interface BraintrustExporterConfig extends TrackingExporterConfig {
    * - logger.traced(): Agent traces nest inside traced spans
    * - Parent spans: Auto-detects and attaches to external Braintrust spans
    */
-  braintrustLogger?: Logger<true>;
+  braintrustLogger?: BraintrustLogger;
 
   /**
    * Optional resolver for the active Braintrust span.
@@ -46,7 +91,7 @@ export interface BraintrustExporterConfig extends TrackingExporterConfig {
    * `Eval()` or `logger.traced()` spans when your app and Mastra may resolve
    * different copies of the `braintrust` package.
    */
-  currentSpan?: () => Span | undefined;
+  currentSpan?: () => BraintrustSpan | undefined;
 
   /** Braintrust API key. Required if logger is not provided. */
   apiKey?: string;
@@ -58,11 +103,11 @@ export interface BraintrustExporterConfig extends TrackingExporterConfig {
   tuningParameters?: Record<string, any>;
 }
 
-type BraintrustRoot = Logger<true> | Span;
-type BraintrustSpan = BraintrustSpanData;
-type BraintrustEvent = Span;
+type BraintrustRoot = BraintrustLogger | BraintrustSpan;
+type BraintrustTrackedSpan = BraintrustSpanData;
+type BraintrustEvent = BraintrustSpan;
 type BraintrustMetadata = unknown;
-type BraintrustTraceData = TraceData<BraintrustRoot, BraintrustSpan, BraintrustEvent, BraintrustMetadata>;
+type BraintrustTraceData = TraceData<BraintrustRoot, BraintrustTrackedSpan, BraintrustEvent, BraintrustMetadata>;
 
 // Default span type for all spans
 const DEFAULT_SPAN_TYPE = 'task';
@@ -84,7 +129,7 @@ function mapSpanType(spanType: SpanType): 'llm' | 'score' | 'function' | 'eval' 
 
 export class BraintrustExporter extends TrackingExporter<
   BraintrustRoot,
-  BraintrustSpan,
+  BraintrustTrackedSpan,
   BraintrustEvent,
   BraintrustMetadata,
   BraintrustExporterConfig
@@ -93,8 +138,8 @@ export class BraintrustExporter extends TrackingExporter<
 
   // Flags and logger for context-aware mode
   #useProvidedLogger: boolean;
-  #providedLogger?: Logger<true>;
-  #localLogger?: Logger<true>;
+  #providedLogger?: BraintrustLogger;
+  #localLogger?: BraintrustLogger;
 
   constructor(config: BraintrustExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
@@ -125,7 +170,7 @@ export class BraintrustExporter extends TrackingExporter<
     }
   }
 
-  private async getLocalLogger(): Promise<Logger<true> | undefined> {
+  private async getLocalLogger(): Promise<BraintrustLogger | undefined> {
     if (this.#localLogger) {
       return this.#localLogger;
     }
@@ -183,7 +228,7 @@ export class BraintrustExporter extends TrackingExporter<
     }
   }
 
-  private startSpan(args: { parent: Span | Logger<true>; span: AnyExportedSpan }): BraintrustSpanData {
+  private startSpan(args: { parent: BraintrustSpan | BraintrustLogger; span: AnyExportedSpan }): BraintrustSpanData {
     const { parent, span } = args;
     const payload = this.buildSpanPayload(span);
 
@@ -220,7 +265,7 @@ export class BraintrustExporter extends TrackingExporter<
       // Try to find a Braintrust span to attach to:
       // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
       // 2. Fall back to the configured logger
-      let externalSpan: Span | undefined;
+      let externalSpan: BraintrustSpan | undefined;
       try {
         externalSpan = this.config.currentSpan?.();
       } catch (err) {
@@ -266,7 +311,7 @@ export class BraintrustExporter extends TrackingExporter<
   protected override async _buildEvent(args: {
     span: AnyExportedSpan;
     traceData: BraintrustTraceData;
-  }): Promise<Span | undefined> {
+  }): Promise<BraintrustEvent | undefined> {
     const spanData = await this._buildSpan(args);
 
     if (!spanData) {
@@ -318,7 +363,7 @@ export class BraintrustExporter extends TrackingExporter<
     }
   }
 
-  protected override async _abortSpan(args: { span: BraintrustSpan; reason: SpanErrorInfo }): Promise<void> {
+  protected override async _abortSpan(args: { span: BraintrustTrackedSpan; reason: SpanErrorInfo }): Promise<void> {
     const { span: spanData, reason } = args;
     spanData.span.log({
       error: reason.message,
@@ -364,8 +409,7 @@ export class BraintrustExporter extends TrackingExporter<
 
     // Extract step data from MODEL_STEP output and attributes
     const output = span.output as
-      | { text?: string; toolCalls?: Array<{ toolCallId: string; toolName: string; args: unknown }> }
-      | undefined;
+      { text?: string; toolCalls?: Array<{ toolCallId: string; toolName: string; args: unknown }> } | undefined;
     const attributes = span.attributes as { stepIndex?: number } | undefined;
 
     const stepData: ThreadStepData = {
@@ -490,15 +534,76 @@ export class BraintrustExporter extends TrackingExporter<
     return output;
   }
 
+  private isToolSpan(span: AnyExportedSpan): boolean {
+    return (
+      span.type === SpanType.TOOL_CALL ||
+      span.type === SpanType.MCP_TOOL_CALL ||
+      span.type === SpanType.PROVIDER_TOOL_CALL
+    );
+  }
+
+  private getToolName(span: AnyExportedSpan): string {
+    if (span.entityName) {
+      return span.entityName;
+    }
+    const match = /'([^']+)'/.exec(span.name);
+    return match?.[1] ?? span.name;
+  }
+
+  private getToolCallId(span: AnyExportedSpan): string {
+    const attrs = span.attributes as { toolCallId?: string } | undefined;
+    return attrs?.toolCallId ?? (span.input as { toolCallId?: string } | undefined)?.toolCallId ?? span.id;
+  }
+
+  private toToolCallInput(span: AnyExportedSpan): OpenAIMessage[] {
+    const args = span.input;
+    let argsString: string;
+    if (typeof args === 'string') {
+      argsString = args;
+    } else {
+      try {
+        argsString = JSON.stringify(args ?? {});
+      } catch {
+        argsString = '[unserializable result]';
+      }
+    }
+    return [
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: this.getToolCallId(span),
+            type: 'function',
+            function: {
+              name: this.getToolName(span),
+              arguments: argsString,
+            },
+          },
+        ],
+      },
+    ];
+  }
+
+  private toToolCallOutput(span: AnyExportedSpan): OpenAIMessage {
+    return {
+      role: 'tool',
+      content: serializeToolResult(span.output),
+      tool_call_id: this.getToolCallId(span),
+    };
+  }
+
   private buildSpanPayload(span: AnyExportedSpan, isCreate = true): Record<string, any> {
     const payload: Record<string, any> = {};
 
+    const isToolType = this.isToolSpan(span);
+
     if (span.input !== undefined) {
-      payload.input = this.transformInput(span.input, span.type);
+      payload.input = isToolType ? this.toToolCallInput(span) : this.transformInput(span.input, span.type);
     }
 
     if (span.output !== undefined) {
-      payload.output = this.transformOutput(span.output, span.type);
+      payload.output = isToolType ? this.toToolCallOutput(span) : this.transformOutput(span.output, span.type);
     }
 
     if (isCreate && span.isRootSpan && span.tags?.length) {

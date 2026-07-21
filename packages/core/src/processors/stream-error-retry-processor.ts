@@ -36,9 +36,16 @@ export type StreamErrorRetryProcessorOptions = {
    * existing behavior for consumers that do not configure a delay.
    */
   delayMs?: StreamErrorRetryDelayMs;
+  /**
+   * Maximum provider-controlled Retry-After delay in milliseconds. Invalid values
+   * are clamped to 0. Defaults to 30 seconds. This does not cap an explicitly
+   * configured delayMs value.
+   */
+  maxRetryAfterMs?: number;
 };
 
 const DEFAULT_MAX_RETRIES = 1;
+const DEFAULT_MAX_RETRY_AFTER_MS = 30_000;
 const RETRYABLE_OPENAI_ERROR_CODES = [
   'rate_limit',
   'server_error',
@@ -77,6 +84,53 @@ function getObjectCause(error: unknown): unknown {
   }
 
   return error.cause;
+}
+
+function getRetryAfterHeader(error: unknown): string | undefined {
+  if (!isRecord(error) || !isRecord(error.responseHeaders)) {
+    return undefined;
+  }
+
+  for (const [key, value] of Object.entries(error.responseHeaders)) {
+    if (key.toLowerCase() === 'retry-after' && typeof value === 'string') {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function parseRetryAfterMs(value: string, now: number): number | undefined {
+  const normalizedValue = value.trim();
+  if (/^\d+$/.test(normalizedValue)) {
+    const seconds = Number(normalizedValue);
+    return Number.isFinite(seconds) ? seconds * 1_000 : undefined;
+  }
+
+  const retryAt = Date.parse(normalizedValue);
+  return Number.isFinite(retryAt) && retryAt > now ? retryAt - now : undefined;
+}
+
+function getRetryAfterMs(error: unknown, now = Date.now()): number | undefined {
+  const visited = new WeakSet<object>();
+  let candidate = error;
+
+  while (candidate !== undefined) {
+    if (isRecord(candidate)) {
+      if (visited.has(candidate)) return undefined;
+      visited.add(candidate);
+
+      const retryAfterHeader = getRetryAfterHeader(candidate);
+      if (retryAfterHeader !== undefined) {
+        const retryAfterMs = parseRetryAfterMs(retryAfterHeader, now);
+        if (retryAfterMs !== undefined) return retryAfterMs;
+      }
+    }
+
+    candidate = getObjectCause(candidate);
+  }
+
+  return undefined;
 }
 
 function getOpenAIErrorPayload(error: unknown): Record<string, unknown> | undefined {
@@ -219,6 +273,7 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
   readonly #entries: StreamErrorRetryMatcherConfig[];
   readonly #retryUnknownErrors: boolean;
   readonly #delayMs: StreamErrorRetryDelayMs | undefined;
+  readonly #maxRetryAfterMs: number;
 
   constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
@@ -226,6 +281,7 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
     this.#entries = [...defaultEntries, ...(options.matchers ?? []).map(normalizeEntry)];
     this.#retryUnknownErrors = options.retryUnknownErrors ?? false;
     this.#delayMs = options.delayMs;
+    this.#maxRetryAfterMs = clampDelayMs(options.maxRetryAfterMs ?? DEFAULT_MAX_RETRY_AFTER_MS);
   }
 
   async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
@@ -240,9 +296,10 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
     if (retryCount >= effectiveMaxRetries) return;
 
     const effectiveDelay = policy.delayMs ?? this.#delayMs;
-    if (effectiveDelay !== undefined) {
-      await waitDelay(effectiveDelay, args, abortSignal);
-    }
+    const configuredDelayMs = effectiveDelay === undefined ? 0 : await resolveDelayMs(effectiveDelay, args);
+    const retryAfterMs = getRetryAfterMs(error);
+    const providerDelayMs = retryAfterMs === undefined ? 0 : Math.min(retryAfterMs, this.#maxRetryAfterMs);
+    await waitDelay(Math.max(configuredDelayMs, providerDelayMs), abortSignal);
 
     return { retry: true };
   }
@@ -252,13 +309,13 @@ function clampDelayMs(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-async function waitDelay(
-  delayMs: StreamErrorRetryDelayMs,
-  args: ProcessAPIErrorArgs,
-  abortSignal?: AbortSignal,
-): Promise<void> {
+async function resolveDelayMs(delayMs: StreamErrorRetryDelayMs, args: ProcessAPIErrorArgs): Promise<number> {
   const delay = typeof delayMs === 'function' ? await delayMs(args) : delayMs;
-  const ms = clampDelayMs(delay);
+  return clampDelayMs(delay);
+}
+
+async function waitDelay(delayMs: number, abortSignal?: AbortSignal): Promise<void> {
+  const ms = clampDelayMs(delayMs);
   if (ms <= 0) return;
 
   if (!abortSignal) {

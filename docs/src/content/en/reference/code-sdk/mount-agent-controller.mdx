@@ -36,9 +36,7 @@ Pass an existing `mastra` to mount the controller onto a Mastra instance that al
 import { Mastra } from '@mastra/core/mastra'
 import { mountAgentControllerOnMastra } from '@mastra/code-sdk'
 
-const mastra = new Mastra({
-  /* ... */
-})
+const mastra = new Mastra({/* ... */})
 
 const { controller } = await mountAgentControllerOnMastra({ mastra })
 ```
@@ -85,6 +83,13 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     name: 'extraTools',
     type: 'Record<string, ToolAction> | (ctx) => Record<string, ToolAction>',
     description: 'Extra tools merged into the dynamic tool set.',
+    isOptional: true,
+  },
+  {
+    name: 'postToolObserver',
+    type: '(context: ToolAfterHookContext) => void | Promise<void>',
+    description:
+      'Observes completed tool calls without replacing the tool or changing hook-manager behavior. Observer errors are logged and do not fail successful tool calls.',
     isOptional: true,
   },
   {

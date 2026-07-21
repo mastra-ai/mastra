@@ -1,0 +1,70 @@
+---
+extends: existence
+message: "AI urgency: '%s'. Delete it or show the stakes concretely."
+level: error
+ignorecase: true
+tokens:
+  # "Cannot be overstated" variants
+  - cannot be overstated
+  - can't be overstated
+  - cannot be understated
+  - can't be understated
+  - cannot be emphasized enough
+  - can't be emphasized enough
+
+  # "More important/critical/relevant than ever" variants
+  - more important than ever
+  - more critical than ever
+  - more relevant than ever
+  - more urgent than ever
+  - more necessary than ever
+  - more essential than ever
+  - more vital than ever
+  - more pressing than ever
+  - more significant than ever
+
+  # "Has never been more X" variants
+  - has never been more important
+  - has never been more critical
+  - has never been more urgent
+  - has never been more relevant
+  - has never been more necessary
+  - has never been more essential
+  - has never been more vital
+  - has never been more pressing
+  - has never been more significant
+  - have never been more important
+  - have never been more critical
+  - have never been more urgent
+  - have never been more relevant
+
+  # "The stakes have never been higher" variants
+  - the stakes have never been higher
+  - the stakes are higher than ever
+  - the stakes couldn't be higher
+  - the stakes are enormous
+  - the stakes are immense
+
+  # "At a crossroads" variants
+  - at a crossroads
+  - at an inflection point
+  - at a pivotal moment
+  - at a critical juncture
+  - at a defining moment
+  - at a turning point in history
+  - at a critical moment in history
+  - at a pivotal moment in history
+
+  # "Increasingly [adjective] world" variants
+  - in an increasingly complex world
+  - in an increasingly digital world
+  - in an increasingly connected world
+  - in an increasingly competitive world
+  - in an increasingly polarized world
+  - in an increasingly uncertain world
+  - in an increasingly fast-paced world
+  - in an increasingly globalized world
+  - in an increasingly data-driven world
+  - in an increasingly automated world
+  - in an ever more complex world
+  - in an ever more connected world

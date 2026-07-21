@@ -108,7 +108,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
         <div className="px-3 py-2 bg-surface3 border-b border-border1 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-neutral6 text-xs shrink-0">$</span>
-            <code className="text-xs text-neutral-300 font-mono truncate">{command}</code>
+            <code className="text-xs text-neutral5 font-mono truncate">{command}</code>
           </div>
           {onCopy && (
             <Button variant="default" size="icon-sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">

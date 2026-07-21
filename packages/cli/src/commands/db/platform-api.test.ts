@@ -99,14 +99,39 @@ describe('attachDatabase', () => {
       'TURSO_DATABASE_URL is already set on this project',
     );
   });
+
+  it('surfaces field-level validation errors on 400 (e.g. bad --region)', async () => {
+    mockPlatformFetch.mockResolvedValue(
+      jsonResponse(400, {
+        detail: 'The request body contains invalid fields',
+        errors: [{ field: 'regionId', message: 'Invalid option: expected one of "ams"|"arn"|"fra"' }],
+      }),
+    );
+
+    const { attachDatabase } = await import('./platform-api.js');
+    await expect(
+      attachDatabase('tok', 'org-1', 'proj-1', { kind: 'turso', name: 'db', regionId: 'eu' }),
+    ).rejects.toThrow(
+      'The request body contains invalid fields: regionId — Invalid option: expected one of "ams"|"arn"|"fra"',
+    );
+  });
+
+  it('leaves plain-detail 400s unchanged', async () => {
+    mockPlatformFetch.mockResolvedValue(jsonResponse(400, { detail: 'Provider is unavailable' }));
+
+    const { attachDatabase } = await import('./platform-api.js');
+    await expect(attachDatabase('tok', 'org-1', 'proj-1', { kind: 'turso', name: 'db' })).rejects.toThrow(
+      /^Provider is unavailable$/,
+    );
+  });
 });
 
-describe('detachDatabase', () => {
+describe('deleteDatabase', () => {
   it('resolves on 204', async () => {
     mockPlatformFetch.mockResolvedValue({ ok: true, status: 204 } as unknown as Response);
 
-    const { detachDatabase } = await import('./platform-api.js');
-    await expect(detachDatabase('tok', 'org-1', 'proj-1', 'db-1')).resolves.toBeUndefined();
+    const { deleteDatabase } = await import('./platform-api.js');
+    await expect(deleteDatabase('tok', 'org-1', 'proj-1', 'db-1')).resolves.toBeUndefined();
 
     const [url, init] = mockPlatformFetch.mock.calls[0]!;
     expect(url).toBe('http://localhost:9999/v1/server/projects/proj-1/databases/db-1');
@@ -116,8 +141,8 @@ describe('detachDatabase', () => {
   it('throws a clear admin-role message on 403', async () => {
     mockPlatformFetch.mockResolvedValue(jsonResponse(403, { detail: 'Forbidden' }));
 
-    const { detachDatabase } = await import('./platform-api.js');
-    await expect(detachDatabase('tok', 'org-1', 'proj-1', 'db-1')).rejects.toThrow(
+    const { deleteDatabase } = await import('./platform-api.js');
+    await expect(deleteDatabase('tok', 'org-1', 'proj-1', 'db-1')).rejects.toThrow(
       'You need the admin role in this organization to manage databases.',
     );
   });

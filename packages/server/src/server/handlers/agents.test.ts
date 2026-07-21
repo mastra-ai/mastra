@@ -1,4 +1,6 @@
 import { Agent } from '@mastra/core/agent';
+import { createDurableAgent } from '@mastra/core/agent/durable';
+import type { DurableAgent } from '@mastra/core/agent/durable';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -14,6 +16,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
+  agentExecutionBodySchema,
   approveToolCallBodySchema,
   declineToolCallBodySchema,
   queueAgentMessageBodySchema,
@@ -30,6 +33,10 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  APPROVE_TOOL_CALL_ROUTE,
+  DECLINE_TOOL_CALL_ROUTE,
+  APPROVE_TOOL_CALL_GENERATE_ROUTE,
+  DECLINE_TOOL_CALL_GENERATE_ROUTE,
   RECOVER_ROUTE,
   SEND_TOOL_APPROVAL_ROUTE,
   LIST_SUSPENDED_RUNS_ROUTE,
@@ -574,6 +581,7 @@ describe('Agent Routes Authorization', () => {
   let storage: InMemoryStore;
   let mockMemory: MockMemory;
   let mockAgent: Agent;
+  let mockDurableAgent: DurableAgent;
   let mastra: Mastra;
 
   beforeEach(() => {
@@ -693,6 +701,30 @@ describe('Agent Routes Authorization', () => {
       ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
     });
 
+    it('strips a client-supplied actor before forwarding to agent.generate', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        capturedOptions = options;
+        return { text: 'ok' } as any;
+      });
+
+      await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        // A client attempting to forge a privileged system actor over HTTP.
+        actor: { actorKind: 'system', agentId: 'privileged-agent', permissions: ['*'] },
+      } as any);
+
+      // The forged actor must be stripped and never reach agent.generate.
+      expect(capturedOptions).toBeDefined();
+      expect(capturedOptions).not.toHaveProperty('actor');
+    });
+
     it('should override client-provided resource with context value', async () => {
       // Create a thread owned by user-a
       await mockMemory.createThread({
@@ -754,6 +786,49 @@ describe('Agent Routes Authorization', () => {
         } as any),
       ).resolves.toBeDefined();
     });
+
+    it('should accept memory without resource when context provides one (mapUserToResourceId)', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      let capturedMemoryOption: any;
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        capturedMemoryOption = options?.memory;
+        return { text: 'mocked response' } as any;
+      });
+
+      await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        memory: {
+          thread: 'new-thread',
+          // no resource — server derives it from the request context
+        },
+      } as any);
+
+      expect(capturedMemoryOption.resource).toBe('user-a');
+    });
+
+    it('should return 400 when memory is provided but no resource can be resolved', async () => {
+      await expect(
+        GENERATE_AGENT_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          memory: {
+            thread: 'new-thread',
+          },
+        } as any),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          status: 400,
+        }),
+      );
+    });
   });
 
   describe('STREAM_GENERATE_ROUTE', () => {
@@ -814,6 +889,78 @@ describe('Agent Routes Authorization', () => {
 
       // The resource should be overridden to user-a (from context)
       expect(capturedMemoryOption.resource).toBe('user-a');
+    });
+
+    it('should accept memory without resource when context provides one (mapUserToResourceId)', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      let capturedMemoryOption: any;
+      vi.spyOn(mockAgent, 'stream').mockImplementation(async (_messages, options) => {
+        capturedMemoryOption = options?.memory;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await STREAM_GENERATE_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        memory: {
+          thread: 'new-stream-thread',
+          // no resource — server derives it from the request context
+        },
+      } as any);
+
+      expect(capturedMemoryOption.resource).toBe('user-a');
+    });
+
+    it('should return 400 when memory is provided but no resource can be resolved', async () => {
+      await expect(
+        STREAM_GENERATE_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          memory: {
+            thread: 'new-stream-thread',
+          },
+        } as any),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          status: 400,
+        }),
+      );
+    });
+  });
+
+  describe('agentExecutionBodySchema memory option', () => {
+    it('accepts a memory option without resource', () => {
+      const result = agentExecutionBodySchema.safeParse({
+        messages: ['what was my last message?'],
+        memory: { thread: 'test-thread' },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('still accepts a memory option with resource', () => {
+      const result = agentExecutionBodySchema.safeParse({
+        messages: ['hi'],
+        memory: { thread: 'test-thread', resource: 'user-1' },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('still requires thread when memory is provided', () => {
+      const result = agentExecutionBodySchema.safeParse({
+        messages: ['hi'],
+        memory: { resource: 'user-1' },
+      });
+
+      expect(result.success).toBe(false);
     });
   });
 
@@ -1161,7 +1308,127 @@ describe('Agent Routes Authorization', () => {
     });
   });
 
+  describe('durable tool approval authorization', () => {
+    const approvalRoutes = [
+      { name: 'approve stream', route: APPROVE_TOOL_CALL_ROUTE, method: 'approveToolCall' },
+      { name: 'decline stream', route: DECLINE_TOOL_CALL_ROUTE, method: 'declineToolCall' },
+      { name: 'approve generate', route: APPROVE_TOOL_CALL_GENERATE_ROUTE, method: 'approveToolCallGenerate' },
+      { name: 'decline generate', route: DECLINE_TOOL_CALL_GENERATE_ROUTE, method: 'declineToolCallGenerate' },
+    ] as const;
+
+    beforeEach(() => {
+      Object.defineProperty(mockAgent, 'agent', { value: mockAgent, configurable: true });
+    });
+
+    async function persistSuspendedDurableRun({
+      resourceId,
+      toolCallId = 'tool-call-1',
+    }: {
+      resourceId: string;
+      toolCallId?: string;
+    }) {
+      const workflowsStore = await storage.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: 'durable-agentic-loop',
+        runId: 'durable-run-1',
+        snapshot: {
+          runId: 'durable-run-1',
+          status: 'suspended',
+          value: {},
+          context: {
+            input: {
+              agentId: 'test-agent',
+              state: { resourceId },
+              requestContextEntries: { [MASTRA_RESOURCE_ID_KEY]: resourceId },
+            },
+            'tool-step': {
+              status: 'suspended',
+              suspendPayload: { requireToolApproval: { toolCallId } },
+            },
+          },
+          activePaths: [],
+          activeStepsPath: {},
+          serializedStepGraph: [],
+          suspendedPaths: {},
+          resumeLabels: { [toolCallId]: { stepId: 'tool-step' } },
+          waitingPaths: {},
+          timestamp: Date.now(),
+        } as any,
+      });
+    }
+
+    it.each(approvalRoutes)('$name rejects a durable run owned by another resource', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-b' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+
+      await expect(
+        (route.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        }),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(approvalRoutes)('$name rejects a tool call not suspended on the durable run', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+
+      await expect(
+        (route.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'different-tool-call',
+        }),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+  });
+
   describe('RECOVER_ROUTE', () => {
+    beforeEach(() => {
+      mockAgent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test-instructions',
+        // Use a shape that satisfies `isSupportedLanguageModel` so background
+        // durable-workflow initialization does not trigger an unhandled
+        // `AGENT_GET_MODEL_MISSING_MODEL_INSTANCE` rejection from
+        // `resolveModelConfig`.
+        model: { specificationVersion: 'v2' } as any,
+        memory: mockMemory,
+      });
+      mockDurableAgent = createDurableAgent({
+        agent: mockAgent,
+        id: 'test-durable-agent',
+        name: 'test-durable-agent',
+      });
+
+      mastra = new Mastra({
+        agents: {
+          'test-agent': mockAgent,
+          'test-durable-agent': mockDurableAgent,
+        },
+        storage,
+        logger: false,
+      });
+    });
+
     async function persistDurableAgenticLoopRun({
       runId,
       resourceId,
@@ -1180,7 +1447,12 @@ describe('Agent Routes Authorization', () => {
           runId,
           status,
           value: {},
-          context: {},
+          context: {
+            input: {
+              agentId: 'test-durable-agent',
+              __workflowKind: 'durable-agent',
+            },
+          } as any,
           activePaths: [],
           activeStepsPath: {},
           serializedStepGraph: [],
@@ -1234,7 +1506,7 @@ describe('Agent Routes Authorization', () => {
       await expect(
         RECOVER_ROUTE.handler({
           mastra,
-          agentId: 'test-agent',
+          agentId: 'test-durable-agent',
           requestContext,
           abortSignal: new AbortController().signal,
           runId: 'recover-run-owned-by-b',
@@ -1249,7 +1521,7 @@ describe('Agent Routes Authorization', () => {
     it('should call agent.recover(runId, { abortSignal }) and return fullStream', async () => {
       const expectedStream = new ReadableStream();
       const recoverMock = vi.fn().mockResolvedValue({ fullStream: expectedStream });
-      (mockAgent as any).recover = recoverMock;
+      (mockDurableAgent as any).recover = recoverMock;
 
       await persistDurableAgenticLoopRun({ runId: 'recover-run-1' });
 
@@ -1258,7 +1530,7 @@ describe('Agent Routes Authorization', () => {
 
       const result = await RECOVER_ROUTE.handler({
         mastra,
-        agentId: 'test-agent',
+        agentId: 'test-durable-agent',
         requestContext,
         abortSignal: abortController.signal,
         runId: 'recover-run-1',
@@ -1280,7 +1552,7 @@ describe('Agent Routes Authorization', () => {
 
       await RECOVER_ROUTE.handler({
         mastra,
-        agentId: 'test-agent',
+        agentId: 'test-durable-agent',
         requestContext,
         abortSignal: new AbortController().signal,
         runId: 'recover-run-versions',
@@ -1573,6 +1845,10 @@ describe('Agent Routes Authorization', () => {
         threadId: 'thread-123',
         toolCallId: 'tool-call-123',
         approved: true,
+        streamOptions: {
+          actor: { actorKind: 'system', agentId: 'forged-agent' },
+          requestContext: { organizationId: 'forged-org' },
+        },
       } as any);
 
       expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
@@ -1584,6 +1860,9 @@ describe('Agent Routes Authorization', () => {
           approved: true,
         }),
       );
+      const forwardedOptions = (mockAgent as any).sendToolApproval.mock.calls[0][0].streamOptions;
+      expect(forwardedOptions).not.toHaveProperty('actor');
+      expect(forwardedOptions.requestContext.get('organizationId')).toBeUndefined();
     });
 
     it('should decline a tool call for thread subscriptions with a JSON ack', async () => {
@@ -1899,7 +2178,10 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
-    it('should queue a message with merged idle stream request context', async () => {
+    it.each([
+      { route: SEND_AGENT_MESSAGE_ROUTE, method: 'sendMessage' },
+      { route: QUEUE_AGENT_MESSAGE_ROUTE, method: 'queueMessage' },
+    ] as const)('should normalize idle stream options for $method', async ({ route, method }) => {
       await mockMemory.createThread({
         threadId: 'queue-message-thread-with-context',
         resourceId: 'user-a',
@@ -1908,14 +2190,14 @@ describe('Agent Routes Authorization', () => {
       const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
       let capturedTarget: any;
 
-      (mockAgent as any).queueMessage = vi.fn((_message, target) => {
+      (mockAgent as any)[method] = vi.fn((_message: unknown, target: unknown) => {
         capturedTarget = target;
         return {
           accepted: Promise.resolve({ action: 'deliver', runId: 'queued-message-run-id' }),
         };
       });
 
-      const result = await QUEUE_AGENT_MESSAGE_ROUTE.handler({
+      const result = await (route.handler as any)({
         mastra,
         agentId: 'test-agent',
         requestContext,
@@ -1926,9 +2208,11 @@ describe('Agent Routes Authorization', () => {
           attributes: { delivery: 'queued' },
           streamOptions: {
             instructions: 'Use the fixture.',
+            actor: { actorKind: 'system', agentId: 'forged-agent' },
             requestContext: {
               fixture: 'text-stream',
               [MASTRA_RESOURCE_ID_KEY]: 'user-b',
+              organizationId: 'forged-org',
             },
             versions: {
               agents: {
@@ -1942,9 +2226,11 @@ describe('Agent Routes Authorization', () => {
       expect(result).toEqual({ accepted: true, runId: 'queued-message-run-id' });
       expect(capturedTarget.ifIdle.attributes).toEqual({ delivery: 'queued' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions).not.toHaveProperty('actor');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+      expect(capturedTarget.ifIdle.streamOptions.requestContext.get('organizationId')).toBeUndefined();
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
         agents: {
           'sub-agent': { versionId: 'version-1' },
@@ -1979,9 +2265,11 @@ describe('Agent Routes Authorization', () => {
         ifIdle: {
           streamOptions: {
             instructions: 'Use the fixture.',
+            actor: { actorKind: 'system', agentId: 'forged-agent' },
             requestContext: {
               fixture: 'text-stream',
               [MASTRA_RESOURCE_ID_KEY]: 'user-b',
+              organizationId: 'forged-org',
             },
           },
         },
@@ -1989,9 +2277,11 @@ describe('Agent Routes Authorization', () => {
 
       expect(result).toMatchObject({ accepted: true, runId: 'signal-run-with-context' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions).not.toHaveProperty('actor');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+      expect(capturedTarget.ifIdle.streamOptions.requestContext.get('organizationId')).toBeUndefined();
     });
 
     it('maps a rejected accepted promise (USER MastraError) to a 400', async () => {

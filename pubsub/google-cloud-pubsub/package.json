@@ -1,6 +1,6 @@
 {
   "name": "@mastra/google-cloud-pubsub",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Mastra Google Cloud PubSub integration",
   "type": "module",
   "main": "dist/index.js",
@@ -29,14 +29,14 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@google-cloud/pubsub": "^5.3.0",
+    "@google-cloud/pubsub": "^5.3.1",
     "@inngest/realtime": "^0.4.6",
     "@opentelemetry/api": "^1.9.1",
     "inngest": "^3.54.2",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.110",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.114",
     "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
@@ -44,11 +44,11 @@
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

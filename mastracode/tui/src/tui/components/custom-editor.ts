@@ -126,6 +126,7 @@ export class CustomEditor extends Editor {
   public onImagePaste?: (image: ClipboardImage) => void;
   public getModeColor?: () => string | undefined;
   public getPromptAnimator?: () => GradientAnimator | undefined;
+  public requestRender?: () => void;
   private pendingBracketedPaste: string | null = null;
 
   /**
@@ -165,6 +166,14 @@ export class CustomEditor extends Editor {
   private _cachedColorFn?: (s: string) => string;
   private promptIcon = DEFAULT_PROMPT_ICON;
   private lastPromptWasInvisible = false;
+
+  private requestEditorRender(): void {
+    if (this.requestRender) {
+      this.requestRender();
+      return;
+    }
+    this.tui.requestRender();
+  }
 
   constructor(tui: TUI, theme: EditorTheme) {
     super(tui, theme);
@@ -703,7 +712,7 @@ export class CustomEditor extends Editor {
     this.setCursorOffset(this.voicePrefix.length + payload.length);
     // Programmatic insertion mutates editor state but does not repaint on its
     // own, so force a render to show the transcript immediately.
-    this.tui.requestRender();
+    this.requestEditorRender();
   }
 
   /**
@@ -799,13 +808,13 @@ export class CustomEditor extends Editor {
       this.voiceListenPhase = 0;
       this.voiceListenTimer ??= setInterval(() => {
         this.voiceListenPhase += 1;
-        this.tui.requestRender();
+        this.requestEditorRender();
       }, 120);
     } else if (this.voiceListenTimer) {
       clearInterval(this.voiceListenTimer);
       this.voiceListenTimer = null;
     }
-    this.tui.requestRender();
+    this.requestEditorRender();
   }
 
   /**

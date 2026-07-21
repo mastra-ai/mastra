@@ -12,6 +12,11 @@ export const observabilityRuntimeStrategySchema = z.enum([
   'event-sourced',
 ]);
 
+export const observabilityStorageCapabilitiesSchema = z.object({
+  metrics: z.boolean(),
+  logs: z.boolean(),
+});
+
 export const editorSourceSchema = z.enum(['code', 'db']);
 
 export const editorSourceCapabilitiesSchema = z.object({
@@ -42,6 +47,7 @@ export const systemPackagesResponseSchema = z.object({
   observabilityEnabled: z.boolean(),
   storageType: z.string().optional(),
   observabilityStorageType: z.string().optional(),
+  observabilityStorageCapabilities: observabilityStorageCapabilitiesSchema.optional(),
   observabilityRuntimeStrategy: observabilityRuntimeStrategySchema.optional(),
 });
 
