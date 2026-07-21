@@ -6,6 +6,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 
 import { detectProject, getResourceIdOverride } from '@mastra/code-sdk/utils/project';
+import { isPlanFilePath, readPlanFile, resolvePlanPath } from '@mastra/code-sdk/utils/plans';
 
 /**
  * Server-side directory browser for the web project picker.
@@ -67,6 +68,17 @@ export interface WorkspaceFile {
   contentType: 'text' | 'unsupported';
   content?: string;
   truncated?: boolean;
+}
+
+export interface WorkspacePlan {
+  /** The confined workspace/project root. */
+  workspacePath: string;
+  /** Workspace-relative plan file path (as submitted by the agent). */
+  path: string;
+  /** Leading `# <title>` heading parsed from the file, or `''` when absent. */
+  title: string;
+  /** Plan markdown body (heading stripped). */
+  plan: string;
 }
 
 export type ArtifactEntry = WorkspaceRenderedEntry;
@@ -311,6 +323,34 @@ export async function readWorkspaceFile(root: string, workspacePath: string, pat
   }
 }
 
+/**
+ * Read the plan markdown file a `submit_plan` call points at, so the web plan
+ * approval card can render the plan body instead of just its filename.
+ *
+ * `planPath` is the path from the tool's args (workspace-relative like
+ * `.mastracode/plans/add-readme.md`, or absolute). Access is confined to the
+ * workspace's `.mastracode/plans/` directory: the path must be a `.md` file
+ * directly inside it (the same guard the plan-mode write tool enforces), and
+ * the resolved real path must stay within the workspace.
+ */
+export async function readWorkspacePlan(root: string, workspacePath: string, planPath: string): Promise<WorkspacePlan> {
+  const trimmed = planPath.trim();
+  if (!trimmed) throw new Error('Missing required query param: path');
+
+  const { workspace } = await confinedWorkspacePath(root, workspacePath);
+  if (!isPlanFilePath(workspace, trimmed)) throw new Error('Path is not a plan file');
+
+  const candidate = resolvePlanPath(workspace, trimmed);
+  if (!candidate) throw new Error('Path is not a plan file');
+  const confinedPath = await realPathWithinRoot(candidate, workspace);
+  if (!confinedPath) throw new Error('Plan file not found');
+
+  const parsed = await readPlanFile(confinedPath);
+  if (!parsed) throw new Error('Plan file not found');
+
+  return { workspacePath: workspace, path: trimmed, title: parsed.title, plan: parsed.plan };
+}
+
 export async function listArtifacts(root: string, workspacePath: string): Promise<ArtifactListing> {
   const listing = await listWorkspaceRenderedPath(root, workspacePath, '.artifacts');
   return {
@@ -433,6 +473,28 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
               ? 403
               : message.includes('directory')
                 ? 400
+                : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/plan', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        const path = c.req.query('path');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        try {
+          return c.json(await readWorkspacePlan(root, workspacePath, path));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status =
+            message.includes('outside') || message.includes('not a plan') || message.includes('escapes')
+              ? 403
+              : message.includes('not found')
+                ? 404
                 : 500;
           return c.json({ error: message }, status);
         }
