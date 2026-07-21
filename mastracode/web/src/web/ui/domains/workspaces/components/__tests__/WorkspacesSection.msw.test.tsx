@@ -116,7 +116,6 @@ const relatedWorkItems: WorkItem[] = [
       },
     },
     metadata: { number: 24 },
-    revision: 1,
     createdAt: '2026-07-17T00:00:00Z',
     updatedAt: '2026-07-17T00:00:00Z',
   },
@@ -142,7 +141,6 @@ const relatedWorkItems: WorkItem[] = [
       },
     },
     metadata: { number: 25 },
-    revision: 1,
     createdAt: '2026-07-17T00:00:00Z',
     updatedAt: '2026-07-17T00:00:00Z',
   },
@@ -325,7 +323,6 @@ describe('WorkspacesSection', () => {
           },
         },
         metadata: {},
-        revision: 1,
         createdAt: `2026-07-17T00:00:${String(index).padStart(2, '0')}Z`,
         updatedAt: `2026-07-17T00:00:${String(index).padStart(2, '0')}Z`,
       };
