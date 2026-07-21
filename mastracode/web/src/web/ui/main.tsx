@@ -8,7 +8,6 @@ import { RouterProvider } from 'react-router/dom';
 import { ApiConfigProvider } from '../../shared/api/config';
 import { createQueryClient } from '../../shared/query-client';
 import { createAppRouter } from './router';
-import '@fontsource-variable/mona-sans';
 import '@mastra/playground-ui/style.css';
 import './tailwind.css';
 import { ToastProvider } from './ui';

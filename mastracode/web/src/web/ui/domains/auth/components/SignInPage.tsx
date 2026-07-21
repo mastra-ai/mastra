@@ -155,13 +155,13 @@ export function SignInPage() {
         <section className="flex w-full max-w-4xl flex-col items-start">
           <div className="mb-12 flex items-center gap-3" aria-label="Mastra Factory">
             <LogoWithoutText className="w-9 text-accent1" aria-hidden="true" />
-            <span className="font-mona-sans text-lg font-semibold tracking-tight">Mastra Factory</span>
+            <span className="text-lg font-semibold tracking-tight">Mastra Factory</span>
           </div>
 
           <Txt as="p" variant="ui-md" className="mb-5 font-medium tracking-wide text-accent1 uppercase">
             From backlog to production
           </Txt>
-          <h1 className="max-w-3xl font-mona-sans text-4xl leading-[1.02] font-semibold tracking-[-0.04em] text-balance sm:text-5xl lg:text-6xl">
+          <h1 className="max-w-3xl text-4xl leading-[1.02] font-semibold tracking-[-0.04em] text-balance sm:text-5xl lg:text-6xl">
             Turn issues into production-ready code.
           </h1>
           <Txt as="p" variant="ui-lg" className="mt-7 max-w-2xl leading-7 text-neutral3 sm:text-lg">
