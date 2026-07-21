@@ -20,7 +20,7 @@ import type {
   DurableToolCallInput,
 } from '@mastra/core/agent/durable';
 import type { PubSub } from '@mastra/core/events';
-import { SpanType, EntityType, InternalSpans } from '@mastra/core/observability';
+import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type { ExportedSpan } from '@mastra/core/observability';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Inngest } from 'inngest';
@@ -161,11 +161,17 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
     )
     // Step 1: Execute LLM
     .then(llmExecutionStep)
-    // Step 2: Extract tool calls as array for foreach
+    // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting).
+    // Without stepSpanData each tool executes with NO tracing context, so spans created
+    // INSIDE tool execution (workspace WORKSPACE_ACTION spans, client-tool spans) are
+    // silently skipped. Mirrors core's createDurableAgenticWorkflow.
     .map(
       async ({ inputData }) => {
         const llmOutput = inputData as DurableLLMStepOutput;
-        return (llmOutput.toolCalls ?? []) as DurableToolCallInput[];
+        return (llmOutput.toolCalls ?? []).map(toolCall => ({
+          ...toolCall,
+          stepSpanData: llmOutput.stepSpanData,
+        })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
     )
@@ -193,37 +199,19 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const llmOutput = getStepResult(llmExecutionStep.id) as DurableLLMStepOutput;
         const initData = getInitData() as IterationState;
 
-        // Create observability spans retroactively for each tool result
-        // In the foreach pattern, individual tool calls don't have access to
-        // the observability context, so we create spans here in the collection step
+        // TOOL_CALL spans are NOT created here: the tool-call step forwards the
+        // model_step span as each tool's tracing context (see extract-tool-calls),
+        // so the tool builder creates the live TOOL_CALL span itself — with
+        // execution-time children (workspace WORKSPACE_ACTION spans, client-tool
+        // spans) correctly nested, exactly like the non-durable agent. Creating a
+        // second, retroactive span here produced childless duplicates.
         const observability = mastra?.observability?.getSelectedInstance({});
-
-        const modelSpanData = (llmOutput as any)?.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
         const stepSpanData = (llmOutput as any)?.stepSpanData as ExportedSpan<SpanType.MODEL_STEP> | undefined;
-
-        const modelSpan = modelSpanData ? observability?.rebuildSpan(modelSpanData) : undefined;
         const stepSpan = stepSpanData ? observability?.rebuildSpan(stepSpanData) : undefined;
-        const agentSpan = initData.agentSpanData ? observability?.rebuildSpan(initData.agentSpanData) : undefined;
-        const toolParentSpan = stepSpan ?? modelSpan ?? agentSpan;
 
-        // Create tool call + tool result spans for each tool result
+        // Create tool-result chunk spans as children of model_step (parity with the
+        // non-durable model-span tracker's chunk events).
         for (const tr of toolResults) {
-          const toolSpan = toolParentSpan?.createChildSpan({
-            type: SpanType.TOOL_CALL,
-            name: `tool: '${tr.toolName}'`,
-            entityType: EntityType.TOOL,
-            entityId: tr.toolName,
-            entityName: tr.toolName,
-            input: tr.args,
-          });
-
-          if (tr.error) {
-            toolSpan?.error({ error: new Error(tr.error.message) });
-          } else {
-            toolSpan?.end({ output: tr.result });
-          }
-
-          // Create tool-result chunk span as child of model_step
           if (!tr.error) {
             stepSpan?.createEventSpan({
               type: SpanType.MODEL_CHUNK,
