@@ -24,6 +24,7 @@ import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
+import { PlatformSandbox } from '@mastra/platform-workspace';
 import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { WorkOS } from '@workos-inc/node';
@@ -34,6 +35,8 @@ import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '@mastra/factory/integrations/base';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
+import { PlatformGithubIntegration } from '../web/platform/github/integration.js';
+import { PlatformLinearIntegration } from '../web/platform/linear/integration.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -115,27 +118,59 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
+const PLATFORM_SANDBOX_ENV_KEYS = [
+  'MASTRA_PLATFORM_ACCESS_TOKEN',
+  'MASTRA_PROJECT_ID',
+  'MASTRA_ENVIRONMENT_ID',
+] as const;
+
+function hasPlatformSandboxEnv(): boolean {
+  return PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
+}
+
+function missingPlatformSandboxEnv(): string[] {
+  return PLATFORM_SANDBOX_ENV_KEYS.filter(key => !process.env[key]?.trim());
+}
+
+function hasPlatformAccessToken(): boolean {
+  return Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim());
+}
+
 // Sandbox machine, by env precedence (any `WorkspaceSandbox` implementing
 // `clone()` works here too — the factory clones one sandbox per GitHub
 // project from it):
-//   1. MASTRACODE_SANDBOX_PROVIDER=railway|local — explicit selection. Railway
-//      selected without a token is a hard misconfiguration error.
-//   2. RAILWAY_API_TOKEN set → RailwaySandbox (isolated cloud VMs,
+//   1. MASTRACODE_SANDBOX_PROVIDER=platform|railway|local — explicit selection.
+//      Platform/Railway selected without their required env is a hard
+//      misconfiguration error.
+//   2. PlatformSandbox when MASTRA_PLATFORM_ACCESS_TOKEN, MASTRA_PROJECT_ID,
+//      and MASTRA_ENVIRONMENT_ID are all set.
+//   3. RAILWAY_API_TOKEN set → RailwaySandbox (isolated cloud VMs,
 //      multi-tenant safe).
-//   3. Neither → LocalSandbox, so repos can always be opened with no extra
+//   4. Neither → LocalSandbox, so repos can always be opened with no extra
 //      wiring. WARNING: the local host-process sandbox has NO tenant
 //      isolation — repo checkouts and agent commands run as the server
-//      process. Single-user local dev only; set a Railway token for shared
+//      process. Single-user local dev only; set a cloud sandbox for shared
 //      deployments.
 // Budget/GC knobs: MASTRACODE_SANDBOX_IDLE_MINUTES (default 30, baked into the
 // Railway template), MASTRACODE_MAX_SANDBOXES (default unlimited),
 // MASTRACODE_SANDBOX_WORKDIR (cloud checkout base, default /workspace),
 // MASTRACODE_LOCAL_SANDBOX_ROOT (local checkout root, default
 // ~/.mastracode/web/sandboxes).
-const sandboxKind = process.env.MASTRACODE_SANDBOX_PROVIDER ?? (process.env.RAILWAY_API_TOKEN ? 'railway' : 'local');
+const sandboxKind =
+  process.env.MASTRACODE_SANDBOX_PROVIDER ??
+  (hasPlatformSandboxEnv() ? 'platform' : process.env.RAILWAY_API_TOKEN ? 'railway' : 'local');
 const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES);
 let sandbox: WorkspaceSandbox;
-if (sandboxKind === 'railway') {
+if (sandboxKind === 'platform') {
+  const missing = missingPlatformSandboxEnv();
+  if (missing.length > 0) {
+    throw new Error(
+      `MASTRACODE_SANDBOX_PROVIDER=platform requires ${missing.join(', ')} — set the missing variable(s), ` +
+        'or unset the provider to fall back to the local sandbox (single-user dev only).',
+    );
+  }
+  sandbox = new PlatformSandbox();
+} else if (sandboxKind === 'railway') {
   const railwayToken = process.env.RAILWAY_API_TOKEN;
   if (!railwayToken) {
     throw new Error(
@@ -155,7 +190,7 @@ if (sandboxKind === 'railway') {
   });
 } else {
   throw new Error(
-    `Unknown MASTRACODE_SANDBOX_PROVIDER "${sandboxKind}" — expected "railway" or "local" ` +
+    `Unknown MASTRACODE_SANDBOX_PROVIDER "${sandboxKind}" — expected "platform", "railway", or "local" ` +
       '(or pass any WorkspaceSandbox implementing clone() to MastraFactory).',
   );
 }
@@ -204,7 +239,9 @@ const github = githubEnv
       slug: githubEnv.GITHUB_APP_SLUG,
       webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET,
     })
-  : undefined;
+  : hasPlatformAccessToken()
+    ? new PlatformGithubIntegration()
+    : undefined;
 
 // Linear OAuth app: per-org workspace connections + issue intake.
 const linearEnv = envGroup(
@@ -216,7 +253,9 @@ const linearEnv = envGroup(
 );
 const linear = linearEnv
   ? new LinearIntegration({ clientId: linearEnv.LINEAR_CLIENT_ID, clientSecret: linearEnv.LINEAR_CLIENT_SECRET })
-  : undefined;
+  : hasPlatformAccessToken()
+    ? new PlatformLinearIntegration()
+    : undefined;
 
 const integrations: FactoryIntegration[] = [github, linear, workosAudit].filter(i => i !== undefined);
 
