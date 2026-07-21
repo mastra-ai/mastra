@@ -26,7 +26,13 @@ export function NewPage() {
   const { activeFactory } = useActiveFactoryContext();
 
   if (!activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+    return (
+      <ChatLayout
+        sidebar={<Sidebar />}
+        header={<ChatHeader />}
+        main={<EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />}
+      />
+    );
   }
 
   return (

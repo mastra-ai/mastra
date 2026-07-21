@@ -39,7 +39,13 @@ export function ThreadPage() {
     : undefined;
 
   if (!activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+    return (
+      <ChatLayout
+        sidebar={<Sidebar />}
+        header={<ChatHeader />}
+        main={<EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />}
+      />
+    );
   }
 
   return (

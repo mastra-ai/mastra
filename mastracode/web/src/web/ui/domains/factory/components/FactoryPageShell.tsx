@@ -36,7 +36,11 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
 
   if (!activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+    return (
+      <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
+        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+      </PageLayout>
+    );
   }
 
   return (

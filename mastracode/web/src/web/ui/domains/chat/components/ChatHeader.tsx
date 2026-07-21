@@ -1,10 +1,24 @@
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 
-/** Mobile-only chat header: exposes the design-system sidebar trigger. */
+import { PageLayoutMobileHeader } from '../../../ui/PageLayout';
+
 export function ChatHeader() {
+  const { desktopState, isMobile } = useMainSidebar();
+
+  if (isMobile) {
+    return (
+      <header className="flex items-center gap-2 px-3 py-2">
+        <MainSidebar.MobileTrigger id="mobile-navigation-trigger" />
+        <PageLayoutMobileHeader />
+      </header>
+    );
+  }
+
+  if (desktopState !== 'collapsed') return null;
+
   return (
-    <header className="flex items-center gap-2 px-3 py-2 md:hidden">
-      <MainSidebar.MobileTrigger id="mobile-navigation-trigger" />
+    <header className="flex shrink-0 items-center px-3 py-2">
+      <MainSidebar.Trigger className="mx-0" />
     </header>
   );
 }

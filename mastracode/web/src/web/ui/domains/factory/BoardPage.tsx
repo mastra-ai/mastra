@@ -1,8 +1,9 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDot, EllipsisVertical, ExternalLink, GitCompareArrows, Link2, Plus } from 'lucide-react';
+import { ArrowUpRight, CircleDot, EllipsisVertical, ExternalLink, GitCompareArrows, Link2, Plus } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -481,7 +482,7 @@ function Board({ factory, kind }: { factory: ServerFactory; kind: BoardKind }) {
 
   if (!repository) {
     return (
-      <div className="flex max-w-xl flex-col gap-3">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
         <Notice variant="info">Connect a repository to start intake. Issues and pull requests will appear here.</Notice>
         <ConnectRepositoriesPanel factory={factory} />
       </div>
@@ -656,9 +657,11 @@ function BoardContent({
           {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
         </Notice>
       )}
-      <div
-        ref={boardContainerRef}
-        className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2"
+      <ScrollArea
+        viewportRef={boardContainerRef}
+        orientation="horizontal"
+        className="min-h-0 flex-1"
+        viewPortClassName="pb-2 *:h-full"
         aria-label="Board columns"
         onPointerDown={() => {
           userPositionedBoardRef.current = boardPositionKey;
@@ -667,178 +670,182 @@ function BoardContent({
           userPositionedBoardRef.current = boardPositionKey;
         }}
       >
-        {stages.map(stage => (
-          <BoardColumn
-            key={stage.id}
-            stage={stage.id}
-            label={stage.label}
-            laneRef={element => {
-              if (element) laneRefs.current.set(stage.id, element);
-              else laneRefs.current.delete(stage.id);
-            }}
-            onDrop={handleDrop}
-            headerAction={
-              stage.id === 'intake' && newIssueUrl ? (
-                <a
-                  href={newIssueUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Create GitHub issue"
-                  title="Create GitHub issue"
-                  className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
-                >
-                  <Plus size={13} aria-hidden />
-                </a>
-              ) : undefined
-            }
-            headerExtras={
-              stage.id === 'intake' && showIntakeSourceSwitch ? (
-                <div role="group" aria-label="Intake source" className="flex items-center gap-1 pb-1">
-                  {INTAKE_SOURCES.filter(source => availableIntakeSources.includes(source.id)).map(source => (
-                    <button
-                      key={source.id}
-                      type="button"
-                      aria-pressed={activeIntakeSource === source.id}
-                      onClick={() => setIntakeSource(source.id)}
-                      className={`rounded-full border px-2.5 py-0.5 text-ui-xs transition ${
-                        activeIntakeSource === source.id
-                          ? 'border-accent1 bg-surface4 text-icon6'
-                          : 'border-border1 bg-transparent text-icon3 hover:text-icon5'
-                      }`}
-                    >
-                      {source.label}
-                    </button>
-                  ))}
-                </div>
-              ) : undefined
-            }
-          >
-            {workItems
-              .filter(item => itemAppearsInStage(item, stage.id, stages))
-              .map(item => (
-                <WorkItemCard
-                  key={`${item.id}:${stage.id}`}
-                  item={item}
-                  columnStage={stage.id}
-                  allItems={allWorkItems}
-                  liveWorktreePaths={liveWorktreePaths}
-                  // Until the worktree listing settles, liveness is unknown and
-                  // every session ref looks stale — the title would render as a
-                  // create button and a click would mint a replacement session
-                  // for a perfectly live thread. Hold run/create actions until
-                  // liveness is known.
-                  runDisabled={!runEnabled || !workspaces.isSuccess}
-                  pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
-                  onOpenThread={session => void openThread(session)}
-                  onCreateSession={spec =>
-                    start.mutate({
-                      branch: spec.branch,
-                      threadTitle: spec.threadTitle,
-                      workItem: {
-                        id: item.id,
-                        // File only the neutral chat role. The title is a
-                        // create button only when every existing role ref is
-                        // stale (worktree gone); repointing those roles here
-                        // would make them look live again and hide the card's
-                        // run actions even though no run happened.
-                        role: 'chat',
-                        stages: item.stages,
-                        source: item.source,
-                        sourceKey: item.sourceKey,
-                        title: item.title,
-                      },
-                    })
-                  }
-                  onStartRun={(spec, action) =>
-                    start.mutate({
-                      branch: spec.branch,
-                      threadTitle: spec.threadTitle,
-                      threadTags: action.threadTags,
-                      invocation: action.invocation,
-                      workItem: {
-                        id: item.id,
-                        role: action.role,
-                        existingRoles: Object.keys(item.sessions),
-                        stages: stagesAfterRunStart(item.stages, action.stage),
-                        source: item.source,
-                        sourceKey: item.sourceKey,
-                        title: item.title,
-                      },
-                    })
-                  }
-                  onMove={toStage => moveItem(item.id, stage.id, toStage)}
-                  onRemove={() => remove.mutate(item.id)}
+        <div className="flex h-full min-h-0 gap-3">
+          {stages.map(stage => (
+            <BoardColumn
+              key={stage.id}
+              stage={stage.id}
+              label={stage.label}
+              laneRef={element => {
+                if (element) laneRefs.current.set(stage.id, element);
+                else laneRefs.current.delete(stage.id);
+              }}
+              onDrop={handleDrop}
+              headerAction={
+                stage.id === 'intake' && newIssueUrl ? (
+                  <a
+                    href={newIssueUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Create GitHub issue"
+                    title="Create GitHub issue"
+                    className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+                  >
+                    <Plus size={13} aria-hidden />
+                  </a>
+                ) : undefined
+              }
+              headerExtras={
+                stage.id === 'intake' && showIntakeSourceSwitch ? (
+                  <div role="group" aria-label="Intake source" className="flex items-center gap-1 pb-1">
+                    {INTAKE_SOURCES.filter(source => availableIntakeSources.includes(source.id)).map(source => (
+                      <button
+                        key={source.id}
+                        type="button"
+                        aria-pressed={activeIntakeSource === source.id}
+                        onClick={() => setIntakeSource(source.id)}
+                        className={`rounded-full border px-2.5 py-0.5 text-ui-xs transition ${
+                          activeIntakeSource === source.id
+                            ? 'border-accent1 bg-surface4 text-icon6'
+                            : 'border-border1 bg-transparent text-icon3 hover:text-icon5'
+                        }`}
+                      >
+                        {source.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : undefined
+              }
+            >
+              {workItems
+                .filter(item => itemAppearsInStage(item, stage.id, stages))
+                .map(item => (
+                  <WorkItemCard
+                    key={`${item.id}:${stage.id}`}
+                    item={item}
+                    columnStage={stage.id}
+                    allItems={allWorkItems}
+                    liveWorktreePaths={liveWorktreePaths}
+                    // Until the worktree listing settles, liveness is unknown and
+                    // every session ref looks stale — the title would render as a
+                    // create button and a click would mint a replacement session
+                    // for a perfectly live thread. Hold run/create actions until
+                    // liveness is known.
+                    runDisabled={!runEnabled || !workspaces.isSuccess}
+                    pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
+                    onOpenThread={session => void openThread(session)}
+                    onCreateSession={spec =>
+                      start.mutate({
+                        branch: spec.branch,
+                        threadTitle: spec.threadTitle,
+                        workItem: {
+                          id: item.id,
+                          // File only the neutral chat role. The title is a
+                          // create button only when every existing role ref is
+                          // stale (worktree gone); repointing those roles here
+                          // would make them look live again and hide the card's
+                          // run actions even though no run happened.
+                          role: 'chat',
+                          stages: item.stages,
+                          source: item.source,
+                          sourceKey: item.sourceKey,
+                          title: item.title,
+                        },
+                      })
+                    }
+                    onStartRun={(spec, action) =>
+                      start.mutate({
+                        branch: spec.branch,
+                        threadTitle: spec.threadTitle,
+                        threadTags: action.threadTags,
+                        invocation: action.invocation,
+                        workItem: {
+                          id: item.id,
+                          role: action.role,
+                          existingRoles: Object.keys(item.sessions),
+                          stages: stagesAfterRunStart(item.stages, action.stage),
+                          source: item.source,
+                          sourceKey: item.sourceKey,
+                          title: item.title,
+                        },
+                      })
+                    }
+                    onMove={toStage => moveItem(item.id, stage.id, toStage)}
+                    onRemove={() => remove.mutate(item.id)}
+                  />
+                ))}
+              {candidates
+                .filter(candidate => candidate.column === stage.id)
+                .map(candidate => (
+                  <CandidateCard
+                    key={candidate.sourceKey}
+                    candidate={candidate}
+                    pendingRunRoles={
+                      new Set(pendingRuns.filter(run => run.sourceKey === candidate.sourceKey).map(run => run.role))
+                    }
+                    triageStarting={
+                      candidate.issue !== undefined && pendingIssueNumbers.includes(candidate.issue.number)
+                    }
+                    disabled={!runEnabled}
+                    onRun={(action, prompt) =>
+                      start.mutate({
+                        branch: candidate.branch,
+                        threadTitle: candidate.threadTitle,
+                        threadTags: action.threadTags,
+                        invocation:
+                          prompt === undefined
+                            ? action.invocation
+                            : { type: 'prompt', prompt: candidate.customPrompt(prompt) },
+                        workItem: {
+                          role: action.role,
+                          stages: [action.stage],
+                          source: candidate.source,
+                          sourceKey: candidate.sourceKey,
+                          parentWorkItemId:
+                            candidate.source === 'github-pr'
+                              ? inferredParentWorkItemId(candidate.metadata, allWorkItems)
+                              : undefined,
+                          title: candidate.title,
+                          url: candidate.url,
+                          metadata: candidate.metadata,
+                        },
+                      })
+                    }
+                    onOpenSession={() =>
+                      start.mutate({
+                        branch: candidate.branch,
+                        threadTitle: candidate.threadTitle,
+                        workItem: {
+                          role: 'chat',
+                          stages: [candidate.column],
+                          source: candidate.source,
+                          sourceKey: candidate.sourceKey,
+                          parentWorkItemId:
+                            candidate.source === 'github-pr'
+                              ? inferredParentWorkItemId(candidate.metadata, allWorkItems)
+                              : undefined,
+                          title: candidate.title,
+                          url: candidate.url,
+                          metadata: candidate.metadata,
+                        },
+                      })
+                    }
+                    onFile={() => handleDrop({ kind: 'candidate', candidate }, candidate.column)}
+                    onTriage={candidate.issue ? () => triage.mutate(candidate.issue!) : undefined}
+                  />
+                ))}
+              {stage.id === 'intake' && (
+                <IntakeColumnExtras
+                  source={activeIntakeSource}
+                  issues={issues}
+                  pulls={pulls}
+                  linearIssues={linearIssues}
                 />
-              ))}
-            {candidates
-              .filter(candidate => candidate.column === stage.id)
-              .map(candidate => (
-                <CandidateCard
-                  key={candidate.sourceKey}
-                  candidate={candidate}
-                  pendingRunRoles={
-                    new Set(pendingRuns.filter(run => run.sourceKey === candidate.sourceKey).map(run => run.role))
-                  }
-                  triageStarting={candidate.issue !== undefined && pendingIssueNumbers.includes(candidate.issue.number)}
-                  disabled={!runEnabled}
-                  onRun={(action, prompt) =>
-                    start.mutate({
-                      branch: candidate.branch,
-                      threadTitle: candidate.threadTitle,
-                      threadTags: action.threadTags,
-                      invocation:
-                        prompt === undefined
-                          ? action.invocation
-                          : { type: 'prompt', prompt: candidate.customPrompt(prompt) },
-                      workItem: {
-                        role: action.role,
-                        stages: [action.stage],
-                        source: candidate.source,
-                        sourceKey: candidate.sourceKey,
-                        parentWorkItemId:
-                          candidate.source === 'github-pr'
-                            ? inferredParentWorkItemId(candidate.metadata, allWorkItems)
-                            : undefined,
-                        title: candidate.title,
-                        url: candidate.url,
-                        metadata: candidate.metadata,
-                      },
-                    })
-                  }
-                  onOpenSession={() =>
-                    start.mutate({
-                      branch: candidate.branch,
-                      threadTitle: candidate.threadTitle,
-                      workItem: {
-                        role: 'chat',
-                        stages: [candidate.column],
-                        source: candidate.source,
-                        sourceKey: candidate.sourceKey,
-                        parentWorkItemId:
-                          candidate.source === 'github-pr'
-                            ? inferredParentWorkItemId(candidate.metadata, allWorkItems)
-                            : undefined,
-                        title: candidate.title,
-                        url: candidate.url,
-                        metadata: candidate.metadata,
-                      },
-                    })
-                  }
-                  onFile={() => handleDrop({ kind: 'candidate', candidate }, candidate.column)}
-                  onTriage={candidate.issue ? () => triage.mutate(candidate.issue!) : undefined}
-                />
-              ))}
-            {stage.id === 'intake' && (
-              <IntakeColumnExtras
-                source={activeIntakeSource}
-                issues={issues}
-                pulls={pulls}
-                linearIssues={linearIssues}
-              />
-            )}
-          </BoardColumn>
-        ))}
-      </div>
+              )}
+            </BoardColumn>
+          ))}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
@@ -895,7 +902,9 @@ function BoardColumn({
       </div>
       {headerExtras}
       {/* Cards scroll inside the swimlane; the page stays fixed. */}
-      <div className="flex min-h-16 flex-1 flex-col gap-1.5 overflow-y-auto">{children}</div>
+      <ScrollArea className="min-h-16 flex-1">
+        <div className="flex flex-col gap-1.5">{children}</div>
+      </ScrollArea>
     </section>
   );
 }
@@ -1121,7 +1130,7 @@ function CandidateCard({
           },
         })
       }
-      className="flex cursor-grab flex-col gap-1 rounded-md border border-border1 border-dashed bg-surface3 p-2 active:cursor-grabbing"
+      className="group flex cursor-grab flex-col gap-1 rounded-md border border-border1 border-dashed bg-surface3 p-2 active:cursor-grabbing"
     >
       <div className="flex items-start gap-2">
         <Icon size={14} className={`mt-0.5 shrink-0 ${candidate.iconClassName}`} aria-hidden />
@@ -1142,9 +1151,9 @@ function CandidateCard({
           target="_blank"
           rel="noreferrer"
           aria-label={externalLinkLabel(candidate.source)}
-          className="mt-0.5 shrink-0 text-icon3 hover:text-icon5"
+          className="mt-0.5 shrink-0 -translate-x-1 translate-y-1 text-icon3 opacity-0 transition-[opacity,translate] group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 hover:text-icon5 focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 motion-reduce:transition-none"
         >
-          <ExternalLink size={12} aria-hidden />
+          <ArrowUpRight size={12} aria-hidden />
         </a>
       </div>
       <FactoryItemActions

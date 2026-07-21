@@ -11,7 +11,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from 'react';
+import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent, MouseEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { queryKeys } from '../../../../../shared/api/keys';
@@ -28,7 +28,7 @@ import {
 import { useCreateAgentControllerThreadMutation } from '../../../../../shared/hooks/useAgentControllerThreadMutations';
 import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { getModeBorderColorClass } from './mode-colors';
+import { getModeSpotlightColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
 
 type ComposerVariant = 'inline' | 'textarea';
@@ -42,6 +42,26 @@ const composerVariantMaxHeight: Record<ComposerVariant, string> = {
   inline: '13rem',
   textarea: '16rem',
 };
+
+const COMPOSER_SPOTLIGHT_CLASS = [
+  'isolate border-0 ring-1 ring-inset ring-border2/40 focus-within:ring-border2 [--composer-spotlight:var(--accent1)] [--composer-spotlight-opacity:0] [--composer-spotlight-x:50%] [--composer-spotlight-y:50%]',
+  'before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:bg-[radial-gradient(200px_circle_at_var(--composer-spotlight-x)_var(--composer-spotlight-y),color-mix(in_srgb,var(--composer-spotlight)_80%,transparent),transparent_75%)] before:blur-md before:opacity-(--composer-spotlight-opacity) before:transition-opacity before:duration-200',
+  'motion-reduce:before:transition-none',
+].join(' ');
+
+const COMPOSER_SPOTLIGHT_SURFACE_CLASS =
+  'pointer-events-none absolute inset-px -z-10 overflow-hidden rounded-[21px] bg-surface3 before:absolute before:inset-0 before:bg-[radial-gradient(200px_circle_at_var(--composer-spotlight-x)_var(--composer-spotlight-y),color-mix(in_srgb,var(--composer-spotlight)_5%,transparent),transparent_75%)] before:blur-md before:opacity-(--composer-spotlight-opacity) before:transition-opacity before:duration-200 motion-reduce:before:transition-none';
+
+function updateComposerSpotlight(event: MouseEvent<HTMLDivElement>) {
+  const bounds = event.currentTarget.getBoundingClientRect();
+  event.currentTarget.style.setProperty('--composer-spotlight-x', `${event.clientX - bounds.left}px`);
+  event.currentTarget.style.setProperty('--composer-spotlight-y', `${event.clientY - bounds.top}px`);
+  event.currentTarget.style.setProperty('--composer-spotlight-opacity', '1');
+}
+
+function hideComposerSpotlight(event: MouseEvent<HTMLDivElement>) {
+  event.currentTarget.style.setProperty('--composer-spotlight-opacity', '0');
+}
 
 type ComposerProps = {
   variant?: ComposerVariant;
@@ -83,7 +103,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { busy, localUser, reset } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
   const { composerCommandName, clearComposerCommand, runComposerCommand } = useChatCommands();
-  const modeBorderColorClass = getModeBorderColorClass(activeModeId ?? modes[0]?.id);
+  const modeSpotlightColorClass = getModeSpotlightColorClass(activeModeId ?? modes[0]?.id);
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -314,7 +334,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerBox className={modeBorderColorClass}>
+      <ComposerBox
+        className={`${COMPOSER_SPOTLIGHT_CLASS} ${modeSpotlightColorClass ?? ''}`}
+        onMouseMove={updateComposerSpotlight}
+        onMouseLeave={hideComposerSpotlight}
+      >
+        <div aria-hidden="true" className={COMPOSER_SPOTLIGHT_SURFACE_CLASS} />
         {images.length > 0 && (
           <ComposerAttachments className="mx-3 mt-3 flex max-w-none justify-start gap-2 pb-0">
             {images.map(img => (

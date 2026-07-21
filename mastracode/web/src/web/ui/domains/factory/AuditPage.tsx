@@ -1,7 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ScrollText } from 'lucide-react';
 import { useState } from 'react';
 
 import { useAuditEvents, useAuditPortalLink } from '../../../../shared/hooks/useAuditEvents';
@@ -102,7 +104,12 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
       </div>
 
       {!eventsQuery.data ? null : events.length === 0 ? (
-        <Notice variant="info">No audit events yet. Board changes, runs, and git actions will appear here.</Notice>
+        <EmptyState
+          className="flex-1"
+          iconSlot={<ScrollText className="size-5 text-icon3" aria-hidden />}
+          titleSlot="No audit events yet"
+          descriptionSlot="Board changes, runs, and git actions will appear here."
+        />
       ) : (
         <>
           <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Audit events">

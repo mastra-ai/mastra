@@ -12,7 +12,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check } from 'lucide-react';
+import { Check, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
@@ -49,7 +49,7 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
     playDoneSound(next);
   };
   return (
-    <>
+    <FieldRowGroup>
       <FieldRow label="Theme" hint="Color scheme for the interface">
         <Segmented
           ariaLabel="Theme"
@@ -70,7 +70,7 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
           onChange={changeDoneSound}
         />
       </FieldRow>
-    </>
+    </FieldRowGroup>
   );
 }
 
@@ -82,7 +82,7 @@ interface ModelSettingsProps {
 
 export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <>
+    <FieldRowGroup>
       <FieldRow label="Thinking level" hint="Extended-reasoning budget for the agent">
         <Segmented
           ariaLabel="Thinking level"
@@ -92,7 +92,7 @@ export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSet
           onChange={v => onBehaviorChange({ thinkingLevel: v })}
         />
       </FieldRow>
-    </>
+    </FieldRowGroup>
   );
 }
 
@@ -113,33 +113,51 @@ export function BehaviorSettings({
   pendingPermissionCategory,
   setPermissionForCategory,
 }: BehaviorSettingsProps) {
+  const notificationMode = settings?.notifications ?? 'off';
+  const canPreviewNotification = notificationMode === 'bell' || notificationMode === 'both';
   return (
     <>
-      <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
-        <Toggle
-          ariaLabel="Auto-approve tools"
-          checked={!!settings?.yolo}
-          disabled={!settings || updating}
-          onChange={v => onBehaviorChange({ yolo: v })}
-        />
-      </FieldRow>
-      <FieldRow label="Smart editing" hint="Use AST-aware edits when available">
-        <Toggle
-          ariaLabel="Smart editing"
-          checked={!!settings?.smartEditing}
-          disabled={!settings || updating}
-          onChange={v => onBehaviorChange({ smartEditing: v })}
-        />
-      </FieldRow>
-      <FieldRow label="Notifications" hint="How completion alerts are delivered">
-        <Segmented
-          ariaLabel="Notifications"
-          value={settings?.notifications ?? 'off'}
-          disabled={!settings || updating}
-          options={NOTIFICATION_MODES}
-          onChange={v => onBehaviorChange({ notifications: v })}
-        />
-      </FieldRow>
+      <FieldRowGroup>
+        <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
+          <Toggle
+            ariaLabel="Auto-approve tools"
+            checked={!!settings?.yolo}
+            disabled={!settings || updating}
+            onChange={v => onBehaviorChange({ yolo: v })}
+          />
+        </FieldRow>
+        <FieldRow label="Smart editing" hint="Use AST-aware edits when available">
+          <Toggle
+            ariaLabel="Smart editing"
+            checked={!!settings?.smartEditing}
+            disabled={!settings || updating}
+            onChange={v => onBehaviorChange({ smartEditing: v })}
+          />
+        </FieldRow>
+        <FieldRow label="Notifications" hint="How completion alerts are delivered">
+          <div className="flex items-center gap-2">
+            <Segmented
+              ariaLabel="Notifications"
+              value={notificationMode}
+              disabled={!settings || updating}
+              options={NOTIFICATION_MODES}
+              onChange={v => onBehaviorChange({ notifications: v })}
+            />
+            {canPreviewNotification && (
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label="Preview notification sound"
+                disabled={!settings || updating}
+                onClick={() => playDoneSound(loadDoneSound())}
+              >
+                <Volume2 size={13} aria-hidden="true" />
+                Preview
+              </Button>
+            )}
+          </div>
+        </FieldRow>
+      </FieldRowGroup>
       <PermissionsSection
         permissions={permissions}
         pendingPermissionCategory={pendingPermissionCategory}
@@ -172,7 +190,7 @@ function PermissionsSection({
   };
 
   return (
-    <div className="mt-6 pt-4 border-t border-border1/40">
+    <div className="mt-6 pt-4">
       <Txt variant="ui-lg" className="text-icon6 font-medium">
         Tool permissions
       </Txt>
@@ -180,17 +198,19 @@ function PermissionsSection({
         Choose how each tool category is approved. “Allow” runs without asking, “Ask” prompts you, “Deny” blocks it.
         Turning on “Auto-approve tools” above sets every category to Allow.
       </Txt>
-      {TOOL_CATEGORIES.map(({ value, label, hint }) => (
-        <FieldRow key={value} label={label} hint={hint}>
-          <Segmented
-            ariaLabel={`${label} permission`}
-            value={permissions?.categories?.[value] ?? 'ask'}
-            disabled={!permissions || pendingPermissionCategory === value}
-            options={PERMISSION_POLICIES}
-            onChange={policy => void update(value, policy)}
-          />
-        </FieldRow>
-      ))}
+      <FieldRowGroup>
+        {TOOL_CATEGORIES.map(({ value, label, hint }) => (
+          <FieldRow key={value} label={label} hint={hint}>
+            <Segmented
+              ariaLabel={`${label} permission`}
+              value={permissions?.categories?.[value] ?? 'ask'}
+              disabled={!permissions || pendingPermissionCategory === value}
+              options={PERMISSION_POLICIES}
+              onChange={policy => void update(value, policy)}
+            />
+          </FieldRow>
+        ))}
+      </FieldRowGroup>
     </div>
   );
 }
@@ -353,9 +373,13 @@ function ModelPicker({
   );
 }
 
+function FieldRowGroup({ children }: { children: React.ReactNode }) {
+  return <div className="divide-y divide-border1/40">{children}</div>;
+}
+
 function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b border-border1/40">
+    <div className="flex items-center justify-between gap-4 py-3">
       <div className="flex flex-col gap-0.5">
         <Txt variant="ui-md" className="text-icon5">
           {label}

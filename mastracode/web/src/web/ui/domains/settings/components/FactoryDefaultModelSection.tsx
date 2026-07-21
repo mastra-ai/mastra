@@ -29,7 +29,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   const error = setDefaultModel.error ?? projectQuery.error;
 
   return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b border-border1/40">
+    <div className="flex items-center justify-between gap-4 py-3 not-last:border-b not-last:border-border1/40">
       <div className="flex flex-col">
         <Txt as="span" variant="ui-md">
           Factory default model

@@ -236,11 +236,12 @@ describe('SettingsPanel', () => {
       renderSettingsPanel();
 
       const settings = screen.getByRole('region', { name: 'Settings' });
-      const heading = within(settings).getByRole('heading', { name: 'Settings' });
+      const heading = within(settings).getByRole('heading', { name: 'General' });
 
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(within(settings).queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
       expect(heading).toHaveFocus();
+      expect(heading.closest('header')).toBeNull();
     });
   });
 
@@ -363,6 +364,24 @@ describe('SettingsPanel', () => {
 
       await waitFor(() => expect(captured.stateUpdates).toContainEqual({ notifications: 'system' }));
       await waitFor(() => expect(captured.permissions).toContainEqual({ category: 'read', policy: 'allow' }));
+    });
+
+    it('previews the selected notification bell sound', async () => {
+      const user = userEvent.setup();
+      vi.mocked(playDoneSound).mockClear();
+      renderSettingsPanel();
+
+      await user.click(screen.getByRole('button', { name: 'Show behavior settings' }));
+      const notifications = await screen.findByRole('group', { name: 'Notifications' });
+      const preview = screen.getByRole('button', { name: 'Preview notification sound' });
+
+      await user.click(preview);
+      expect(playDoneSound).toHaveBeenCalledWith('chime');
+
+      await user.click(within(notifications).getByRole('button', { name: 'System' }));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: 'Preview notification sound' })).not.toBeInTheDocument(),
+      );
     });
   });
 });
