@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -136,6 +136,23 @@ describe('DirectoryBrowser', () => {
 
       expect(await screen.findByText('src')).toBeInTheDocument();
       expect(screen.getByRole('navigation', { name: 'Path' })).toBe(breadcrumb);
+    });
+  });
+
+  describe('when folders are searched', () => {
+    it('shows only folders whose names match the query', async () => {
+      server.use(
+        http.get(FS_URL, ({ request }) => HttpResponse.json(listingFor(new URL(request.url).searchParams.get('path')))),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+
+      await screen.findByText('alpha');
+      await user.type(screen.getByRole('textbox', { name: 'Search folders' }), 'ALP');
+
+      await waitFor(() => expect(screen.queryByText('beta')).not.toBeInTheDocument());
+      expect(screen.getByText('alpha')).toBeInTheDocument();
     });
   });
 
