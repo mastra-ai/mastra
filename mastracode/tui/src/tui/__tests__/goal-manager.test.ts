@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   loadSettings: vi.fn(() => ({ models: { goalJudgeModel: '__GATEWAY_OPENAI_MODEL__', goalMaxTurns: 50 } })),
@@ -24,6 +24,7 @@ function makeRecord(overrides: Record<string, unknown> = {}) {
     objective: 'finish the task',
     status: 'active',
     runsUsed: 0,
+    activeDurationMs: 0,
     maxRuns: 50,
     judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     startedAt: now,
@@ -60,6 +61,10 @@ describe('GoalManager adapter', () => {
     mocks.loadSettings.mockReturnValue({ models: { goalJudgeModel: '__GATEWAY_OPENAI_MODEL__', goalMaxTurns: 50 } });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('sets an objective via the agent and exposes a GoalState view', async () => {
     const agent = createAgent();
     const state = createState(agent);
@@ -76,6 +81,7 @@ describe('GoalManager adapter', () => {
         maxRuns: 25,
       }),
     );
+    expect(agent.setObjective.mock.calls[0]?.[1]).not.toHaveProperty('activeDurationMs');
     expect(goal).toMatchObject({ objective: 'finish the task', status: 'active', turnsUsed: 0, maxTurns: 25 });
     expect(manager.isActive()).toBe(true);
   });
@@ -89,24 +95,18 @@ describe('GoalManager adapter', () => {
     expect(goal).toMatchObject({ objective: 'offline goal', status: 'active', maxTurns: DEFAULT_MAX_TURNS });
   });
 
-  it('pauses and resumes without losing turn count or active duration', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
+  it('pauses and resumes without mutating core-owned active duration', async () => {
+    const agent = createAgent();
+    agent.setObjective.mockResolvedValue(makeRecord({ activeDurationMs: 7 * 60_000 }));
     const manager = new GoalManager();
-    await manager.setGoal(createState(createAgent()), 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    await manager.setGoal(createState(agent), 'finish the task', '__GATEWAY_OPENAI_MODEL__');
     manager.applyEvaluation({ runsUsed: 3, status: 'active' });
 
-    vi.setSystemTime(new Date('2026-05-15T10:05:00.000Z'));
     manager.pause();
-    expect(manager.getGoal()).toMatchObject({ status: 'paused', turnsUsed: 3 });
+    expect(manager.getGoal()).toMatchObject({ status: 'paused', turnsUsed: 3, activeDurationMs: 7 * 60_000 });
 
-    vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
     manager.resume();
-    vi.setSystemTime(new Date('2026-05-15T12:02:00.000Z'));
-    manager.stopActiveTimer();
-
     expect(manager.getGoal()).toMatchObject({ status: 'active', turnsUsed: 3, activeDurationMs: 7 * 60_000 });
-    vi.useRealTimers();
   });
 
   it('updates judge defaults on the active goal, persisting via the agent', async () => {
@@ -146,17 +146,55 @@ describe('GoalManager adapter', () => {
     expect(manager.isActive()).toBe(false);
   });
 
-  it('loads an objective from ThreadState via the agent', async () => {
+  it('loads accumulated duration from ThreadState without restoring a live timer', async () => {
     const agent = createAgent();
-    agent.getObjective.mockResolvedValue(makeRecord({ objective: 'persisted goal', runsUsed: 4, status: 'paused' }));
+    agent.getObjective.mockResolvedValue(
+      makeRecord({ objective: 'persisted goal', runsUsed: 4, status: 'paused', activeDurationMs: 60_000 }),
+    );
     const state = createState(agent);
     const manager = new GoalManager();
 
     await manager.loadFromThread(state);
 
     expect(agent.getObjective).toHaveBeenCalledWith({ threadId: 'parent-thread' });
-    expect(manager.getGoal()).toMatchObject({ objective: 'persisted goal', turnsUsed: 4, status: 'paused' });
+    expect(manager.getGoal()).toMatchObject({
+      objective: 'persisted goal',
+      turnsUsed: 4,
+      status: 'paused',
+      activeDurationMs: 60_000,
+    });
+    expect(agent.setObjective).not.toHaveBeenCalled();
+    expect(agent.updateObjectiveOptions).not.toHaveBeenCalled();
   });
+
+  it('loads an old record without active duration as zero without writing', async () => {
+    const agent = createAgent();
+    const oldRecord = makeRecord();
+    Reflect.deleteProperty(oldRecord, 'activeDurationMs');
+    agent.getObjective.mockResolvedValue(oldRecord);
+    const manager = new GoalManager();
+
+    await manager.loadFromThread(createState(agent));
+
+    expect(manager.getGoal()).toMatchObject({ activeDurationMs: 0 });
+    expect(agent.setObjective).not.toHaveBeenCalled();
+    expect(agent.updateObjectiveOptions).not.toHaveBeenCalled();
+  });
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'loads malformed active duration %s as zero without writing',
+    async activeDurationMs => {
+      const agent = createAgent();
+      agent.getObjective.mockResolvedValue(makeRecord({ activeDurationMs }));
+      const manager = new GoalManager();
+
+      await manager.loadFromThread(createState(agent));
+
+      expect(manager.getGoal()).toMatchObject({ activeDurationMs: 0 });
+      expect(agent.setObjective).not.toHaveBeenCalled();
+      expect(agent.updateObjectiveOptions).not.toHaveBeenCalled();
+    },
+  );
 
   it('clears the in-memory goal when ThreadState has no objective', async () => {
     const agent = createAgent();
@@ -192,10 +230,26 @@ describe('GoalManager adapter', () => {
       turnsUsed: 1,
       maxTurns: 20,
       activeDurationMs: 10 * 60_000,
-      activeStartedAt: undefined,
     });
     vi.useRealTimers();
   });
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'normalizes malformed legacy active duration %s to zero',
+    activeDurationMs => {
+      const manager = new GoalManager();
+
+      manager.loadFromThreadMetadata({
+        goal: {
+          objective: 'finish the task',
+          status: 'active',
+          activeDurationMs,
+        },
+      });
+
+      expect(manager.getGoal()).toMatchObject({ activeDurationMs: 0 });
+    },
+  );
 
   it('fills judge model and max runs from settings when the record omits them', async () => {
     mocks.loadSettings.mockReturnValue({ models: { goalJudgeModel: 'anthropic/claude-sonnet-4-5', goalMaxTurns: 33 } });
@@ -216,7 +270,7 @@ describe('GoalManager adapter', () => {
     expect(manager.consumePersistOnNextThreadCreate()).toBe(false);
   });
 
-  it('saveToThread updates the record and clears legacy metadata', async () => {
+  it('saveToThread preserves core-owned duration when updating status', async () => {
     const agent = createAgent();
     const state = createState(agent);
     const manager = new GoalManager();
@@ -225,13 +279,33 @@ describe('GoalManager adapter', () => {
 
     await manager.saveToThread(state);
 
-    expect(agent.updateObjectiveOptions).toHaveBeenCalledWith(
+    expect(agent.updateObjectiveOptions).toHaveBeenCalledWith({
+      threadId: 'parent-thread',
+      status: 'paused',
+      pausedReason: 'Judge evaluation was interrupted.',
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+      maxRuns: 50,
+    });
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+  });
+
+  it('saveToThread carries the record duration through the create fallback', async () => {
+    const agent = createAgent();
+    agent.setObjective.mockResolvedValue(makeRecord({ activeDurationMs: 2 * 60_000 }));
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    agent.setObjective.mockClear();
+    agent.updateObjectiveOptions.mockResolvedValueOnce(undefined);
+
+    await manager.saveToThread(state);
+
+    expect(agent.setObjective).toHaveBeenCalledWith(
+      'finish the task',
       expect.objectContaining({
         threadId: 'parent-thread',
-        status: 'paused',
-        pausedReason: 'Judge evaluation was interrupted.',
+        activeDurationMs: 2 * 60_000,
       }),
     );
-    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
   });
 });
