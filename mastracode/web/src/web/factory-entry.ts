@@ -194,18 +194,25 @@ function buildDefaultStudioAuth(publicUrl: string): IMastraAuthProvider {
  * label — the same shape platform-API's env injection uses (see
  * `platform/servers/api/src/lib/studio-env-vars.ts`: `.${routingDomain.replace(/^[^.]+\./, '')}`).
  *
- * Returns `undefined` (host-only cookie) when there's nothing sensible to
- * strip:
- *   - unparseable URL;
- *   - `localhost` or literal IPv4/IPv6 (host-only is what we want on loopback);
- *   - fewer than three labels (no subdomain to peel).
- *
- * The three-label minimum is deliberately conservative: it also dodges the
- * public-suffix trap where a naive last-two-labels heuristic would emit
- * cookies scoped to a public suffix like `.co.uk`. The intended shape is
- * `sub.example.com` → `.example.com`. Callers that need a different scope
+ * Rather than a generic `strip-left-label` heuristic — which either emits
+ * cookies scoped to a public suffix (`sub.example.co.uk` → `.example.co.uk`
+ * requires PSL data to be safe) or misclassifies numeric hostnames like
+ * `3scale.example.com` as IPv4 — we only derive a parent domain when the
+ * host sits under one of the platform's known registrable domains. Anything
+ * else (custom domains, arbitrary tenant hostnames, IPs, `localhost`)
+ * falls through to host-only cookies. Callers that need a different scope
  * pass `MASTRA_COOKIE_DOMAIN` explicitly (Studio honors that first).
  */
+const KNOWN_PLATFORM_COOKIE_PARENTS = ['mastra.cloud', 'mastra.ai'] as const;
+
+function isIpLiteral(hostname: string): boolean {
+  // IPv6 addresses in URLs are bracketed; `URL.hostname` strips the brackets
+  // but the address itself still contains `:`. IPv4 is four dot-separated
+  // numeric octets — trust the parser to have already validated shape.
+  if (hostname.includes(':')) return true;
+  return /^\d+(?:\.\d+){3}$/.test(hostname);
+}
+
 function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
   let hostname: string;
   try {
@@ -213,12 +220,14 @@ function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
   } catch {
     return undefined;
   }
-  if (hostname === 'localhost') return undefined;
-  // Literal IPv4 (starts with digit) or IPv6 (contains ':') — host-only.
-  if (/^\d/.test(hostname) || hostname.includes(':')) return undefined;
-  const labels = hostname.split('.').filter(Boolean);
-  if (labels.length < 3) return undefined;
-  return `.${labels.slice(1).join('.')}`;
+  if (hostname === 'localhost' || isIpLiteral(hostname)) return undefined;
+  for (const parent of KNOWN_PLATFORM_COOKIE_PARENTS) {
+    // Exact match → we're already on the parent, host-only is correct.
+    // Subdomain match → mint the parent-scoped cookie.
+    if (hostname === parent) return undefined;
+    if (hostname.endsWith(`.${parent}`)) return `.${parent}`;
+  }
+  return undefined;
 }
 
 export class MastraFactory {

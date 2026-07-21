@@ -286,45 +286,88 @@ describe('MastraFactory.prepare', () => {
     expect(paths).toContain('/auth/me');
   });
 
+  // Both `MASTRA_COOKIE_DOMAIN` and `MASTRA_SHARED_API_URL` feed Studio's
+  // cookie-domain precedence (explicit > shared-API hostname > publicUrl
+  // fallback), so a runner with either set would silently flip the derived
+  // domain. Clear both around each derivation test and restore after.
+  async function withCleanCookieEnv<T>(fn: () => Promise<T>): Promise<T> {
+    const prevCookie = process.env.MASTRA_COOKIE_DOMAIN;
+    const prevShared = process.env.MASTRA_SHARED_API_URL;
+    delete process.env.MASTRA_COOKIE_DOMAIN;
+    delete process.env.MASTRA_SHARED_API_URL;
+    try {
+      return await fn();
+    } finally {
+      if (prevCookie === undefined) delete process.env.MASTRA_COOKIE_DOMAIN;
+      else process.env.MASTRA_COOKIE_DOMAIN = prevCookie;
+      if (prevShared === undefined) delete process.env.MASTRA_SHARED_API_URL;
+      else process.env.MASTRA_SHARED_API_URL = prevShared;
+    }
+  }
+
+  function seededSetCookie(): string | undefined {
+    const seeded = getSeededAuthProvider() as {
+      getSessionHeaders?: (s: { id: string; userId: string }) => Record<string, string>;
+    };
+    return seeded?.getSessionHeaders?.({ id: 'test-token', userId: 'u_1' })?.['Set-Cookie'];
+  }
+
   it('derives the default Studio cookie domain from publicUrl for subdomain deploys', async () => {
     // A `<sub>.mastra.cloud` deploy should mint cookies with
     // `Domain=.mastra.cloud` so the browser sends them back to sibling
     // subdomains — no `MASTRA_COOKIE_DOMAIN` env wiring required.
-    const prevEnv = process.env.MASTRA_COOKIE_DOMAIN;
-    delete process.env.MASTRA_COOKIE_DOMAIN;
-    try {
+    await withCleanCookieEnv(async () => {
       await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://studio-abc.mastra.cloud' });
-      const seeded = getSeededAuthProvider() as {
-        getSessionHeaders?: (s: { id: string; userId: string }) => Record<string, string>;
-      };
-      const headers = seeded?.getSessionHeaders?.({ id: 'test-token', userId: 'u_1' });
-      const setCookie = headers?.['Set-Cookie'];
+      const setCookie = seededSetCookie();
       expect(setCookie).toBeDefined();
       expect(setCookie).toContain('Domain=.mastra.cloud');
-    } finally {
-      if (prevEnv === undefined) delete process.env.MASTRA_COOKIE_DOMAIN;
-      else process.env.MASTRA_COOKIE_DOMAIN = prevEnv;
-    }
+    });
   });
 
   it('leaves the default Studio cookie host-only on localhost', async () => {
     // `publicUrl` on localhost has no parent to peel — the cookie must stay
     // host-only or the browser will silently reject it.
-    const prevEnv = process.env.MASTRA_COOKIE_DOMAIN;
-    delete process.env.MASTRA_COOKIE_DOMAIN;
-    try {
+    await withCleanCookieEnv(async () => {
       await prepareFactory({ storage: fakeStorage(), publicUrl: 'http://localhost:4111' });
-      const seeded = getSeededAuthProvider() as {
-        getSessionHeaders?: (s: { id: string; userId: string }) => Record<string, string>;
-      };
-      const headers = seeded?.getSessionHeaders?.({ id: 'test-token', userId: 'u_1' });
-      const setCookie = headers?.['Set-Cookie'];
+      const setCookie = seededSetCookie();
       expect(setCookie).toBeDefined();
       expect(setCookie).not.toContain('Domain=');
-    } finally {
-      if (prevEnv === undefined) delete process.env.MASTRA_COOKIE_DOMAIN;
-      else process.env.MASTRA_COOKIE_DOMAIN = prevEnv;
-    }
+    });
+  });
+
+  it('leaves the default Studio cookie host-only for hosts outside the platform allowlist', async () => {
+    // Public-suffix trap: a naive last-two-labels heuristic would emit
+    // `Domain=.co.uk` for `foo.example.co.uk`, which every major browser
+    // rejects. Custom-domain deploys must fall through to host-only cookies.
+    await withCleanCookieEnv(async () => {
+      await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://studio.example.co.uk' });
+      const setCookie = seededSetCookie();
+      expect(setCookie).toBeDefined();
+      expect(setCookie).not.toContain('Domain=');
+    });
+  });
+
+  it('leaves the default Studio cookie host-only for numeric-labelled hostnames', async () => {
+    // A leading-digit label (e.g. `3scale.example.com`) is still a valid DNS
+    // host, not an IP. The derivation must not misclassify it as IPv4.
+    await withCleanCookieEnv(async () => {
+      await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://3scale.example.com' });
+      const setCookie = seededSetCookie();
+      expect(setCookie).toBeDefined();
+      // Not on the platform allowlist → host-only.
+      expect(setCookie).not.toContain('Domain=');
+    });
+  });
+
+  it('leaves the default Studio cookie host-only for literal IPv4 hosts', async () => {
+    // IP-literal deploys can't share cookies across an arbitrary parent, and
+    // browsers reject Domain= attributes on IP hosts entirely.
+    await withCleanCookieEnv(async () => {
+      await prepareFactory({ storage: fakeStorage(), publicUrl: 'http://10.0.0.1:4111' });
+      const setCookie = seededSetCookie();
+      expect(setCookie).toBeDefined();
+      expect(setCookie).not.toContain('Domain=');
+    });
   });
 
   it('boots with auth off when auth is explicitly disabled (auth: null)', async () => {

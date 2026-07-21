@@ -87,6 +87,15 @@ export class MastraAuthStudio
   private userSessionCookies = new Map<string, string>();
   private readonly maxCachedSessions = 1000;
 
+  /**
+   * In-flight `ensureOrganization` promises keyed by userId. Concurrent calls
+   * for the same brand-new user (multiple tabs, parallel requests) would
+   * otherwise all see "no org" from `GET /auth/me` and each fire
+   * `POST /auth/orgs`, creating duplicate personal organizations. The first
+   * caller's promise is reused by every follower until it settles.
+   */
+  private organizationBootstrapInFlight = new Map<string, Promise<string | undefined>>();
+
   constructor(options?: MastraAuthStudioOptions) {
     super({ name: 'mastra-studio', ...options });
     this.sharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL || 'http://localhost:3010/v1';
@@ -424,6 +433,20 @@ export class MastraAuthStudio
    * throwing, mirroring `MastraAuthWorkos.ensureOrganization`.
    */
   async ensureOrganization(userId: string): Promise<string | undefined> {
+    // Dedupe concurrent bootstraps for the same user — otherwise parallel tabs
+    // for a brand-new user each POST /auth/orgs and create duplicate personal
+    // organizations.
+    const inFlight = this.organizationBootstrapInFlight.get(userId);
+    if (inFlight) return inFlight;
+
+    const bootstrap = this.doEnsureOrganization(userId).finally(() => {
+      this.organizationBootstrapInFlight.delete(userId);
+    });
+    this.organizationBootstrapInFlight.set(userId, bootstrap);
+    return bootstrap;
+  }
+
+  private async doEnsureOrganization(userId: string): Promise<string | undefined> {
     const sessionCookie = this.userSessionCookies.get(userId);
     if (!sessionCookie) {
       this.logger.debug('ensureOrganization: no cached session cookie for user; skipping bootstrap', { userId });

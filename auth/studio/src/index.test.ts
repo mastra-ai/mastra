@@ -933,6 +933,63 @@ describe('MastraAuthStudio IOrganizationsProvider', () => {
       const orgId = await auth.ensureOrganization('user-1');
       expect(orgId).toBeUndefined();
     });
+
+    it('dedupes concurrent bootstraps for the same user so only one POST /auth/orgs fires', async () => {
+      await seedSessionCookie('sealed-dedupe');
+
+      // First (and only) /auth/me + POST /auth/orgs pair. If dedupe fails we
+      // would see 4 fetch calls (2 per parallel caller).
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: { id: 'user-1', email: 'alice@example.com' },
+            organizationId: undefined,
+            memberOrgIds: [],
+          }),
+          { status: 200 },
+        ),
+      );
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ organization: { id: 'org-new', name: "alice@example.com's org" } }), {
+          status: 201,
+        }),
+      );
+
+      const [a, b, c] = await Promise.all([
+        auth.ensureOrganization('user-1'),
+        auth.ensureOrganization('user-1'),
+        auth.ensureOrganization('user-1'),
+      ]);
+
+      expect(a).toBe('org-new');
+      expect(b).toBe('org-new');
+      expect(c).toBe('org-new');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('releases the in-flight slot after settling so later calls re-run', async () => {
+      await seedSessionCookie('sealed-release');
+
+      // First bootstrap: no org → POST creates one.
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ user: { id: 'user-1', email: 'a@e.com' }, memberOrgIds: [] }), { status: 200 }),
+      );
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({ organization: { id: 'org-a' } }), { status: 201 }));
+
+      const first = await auth.ensureOrganization('user-1');
+      expect(first).toBe('org-a');
+
+      // Second bootstrap: now /auth/me reports an org, so no POST fires.
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ user: { id: 'user-1', email: 'a@e.com' }, organizationId: 'org-a' }), {
+          status: 200,
+        }),
+      );
+      const second = await auth.ensureOrganization('user-1');
+      expect(second).toBe('org-a');
+      // 2 from first call, 1 from second = 3 total (would be 2 if the slot stuck).
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe('isOrganizationAdmin', () => {
