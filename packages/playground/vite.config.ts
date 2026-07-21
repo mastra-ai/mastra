@@ -7,17 +7,6 @@ import ts from 'typescript';
 import type { Plugin, PluginOption, UserConfig } from 'vite';
 import { defineConfig } from 'vite';
 
-const escapeStudioHtmlValue = (value: string) =>
-  value
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r')
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
-
 const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginOption => ({
   name: 'studio-standalone-plugin',
   transformIndexHtml(html: string) {
@@ -36,12 +25,7 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
       .replace(/%%MASTRA_SIGNALS_UI%%/g, process.env.MASTRA_SIGNALS_UI || 'false')
       .replace(/%%MASTRA_ORGANIZATION_ID%%/g, process.env.MASTRA_ORGANIZATION_ID || '')
       .replace(/%%MASTRA_PLATFORM_PROJECT_ID%%/g, process.env.MASTRA_PLATFORM_PROJECT_ID || '')
-      .replace(/%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%/g, () =>
-        escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || ''),
-      )
-      .replace(/%%MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT%%/g, () =>
-        escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT || ''),
-      );
+      .replace(/%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%/g, process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '');
   },
 });
 
@@ -261,6 +245,7 @@ export default defineConfig(({ mode }) => {
     // Use environment variable for the target port, fallback to 4111
     const targetPort = process.env.PORT || '4111';
     const targetHost = process.env.HOST || 'localhost';
+    const agentLearningTarget = process.env.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT;
 
     if (commonConfig.plugins) {
       commonConfig.plugins.push(studioStandalonePlugin(targetPort, targetHost));
@@ -271,6 +256,18 @@ export default defineConfig(({ mode }) => {
       server: {
         ...commonConfig.server,
         proxy: {
+          ...(agentLearningTarget
+            ? {
+                '/api/learning': {
+                  target: agentLearningTarget,
+                  changeOrigin: true,
+                  headers: {
+                    'X-Mastra-Organization-Id': process.env.MASTRA_ORGANIZATION_ID || '',
+                    'X-Mastra-Project-Id': process.env.MASTRA_PLATFORM_PROJECT_ID || '',
+                  },
+                },
+              }
+            : {}),
           '/api': {
             target: `http://${targetHost}:${targetPort}`,
             changeOrigin: true,

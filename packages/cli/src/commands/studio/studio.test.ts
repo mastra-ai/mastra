@@ -28,7 +28,6 @@ function createStudioFixture() {
       window.MASTRA_ORGANIZATION_ID = '%%MASTRA_ORGANIZATION_ID%%';
       window.MASTRA_PLATFORM_PROJECT_ID = '%%MASTRA_PLATFORM_PROJECT_ID%%';
       window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%';
-      window.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT = '%%MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT%%';
     </script>
   </head>
   <body>studio</body>
@@ -64,7 +63,6 @@ afterEach(() => {
   delete process.env.MASTRA_ORGANIZATION_ID;
   delete process.env.MASTRA_PLATFORM_PROJECT_ID;
   delete process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT;
-  delete process.env.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT;
 
   for (const dir of createdDirs.splice(0, createdDirs.length)) {
     rmSync(dir, { recursive: true, force: true });
@@ -187,7 +185,7 @@ describe('studio base path support', () => {
     }
   });
 
-  it('injects empty platform endpoints by default and the configured values when set', async () => {
+  it('injects empty platform observability config by default and the configured values when set', async () => {
     process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
     const studioDir = createStudioFixture();
     const defaultServer = createServer(studioDir, {}, '');
@@ -201,7 +199,6 @@ describe('studio base path support', () => {
 
       expect(htmlResponse.status).toBe(200);
       expect(htmlResponse.body).toContain("window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = ''");
-      expect(htmlResponse.body).toContain("window.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT = ''");
       expect(htmlResponse.body).toContain("window.MASTRA_ORGANIZATION_ID = ''");
       expect(htmlResponse.body).toContain("window.MASTRA_PLATFORM_PROJECT_ID = ''");
     } finally {
@@ -209,7 +206,6 @@ describe('studio base path support', () => {
     }
 
     process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = 'https://observability.example.com';
-    process.env.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT = 'https://learning.example.com';
     process.env.MASTRA_ORGANIZATION_ID = 'org-123';
     process.env.MASTRA_PLATFORM_PROJECT_ID = 'proj-456';
     const optInServer = createServer(studioDir, {}, '');
@@ -224,9 +220,6 @@ describe('studio base path support', () => {
       expect(htmlResponse.status).toBe(200);
       expect(htmlResponse.body).toContain(
         "window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = 'https://observability.example.com'",
-      );
-      expect(htmlResponse.body).toContain(
-        "window.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT = 'https://learning.example.com'",
       );
       expect(htmlResponse.body).toContain("window.MASTRA_ORGANIZATION_ID = 'org-123'");
       expect(htmlResponse.body).toContain("window.MASTRA_PLATFORM_PROJECT_ID = 'proj-456'");

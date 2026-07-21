@@ -115,7 +115,6 @@ export const HEAD = handle(app);
       organizationId: `'${escapeStudioHtmlValue(process.env.MASTRA_ORGANIZATION_ID || '')}'`,
       platformProjectId: `'${escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_PROJECT_ID || '')}'`,
       platformObservabilityEndpoint: `'${escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '')}'`,
-      platformAgentLearningEndpoint: `'${escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT || '')}'`,
     });
 
     writeFileSync(indexPath, html);

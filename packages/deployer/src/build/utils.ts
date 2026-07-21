@@ -277,7 +277,6 @@ export interface StudioInjectionConfig {
   organizationId: string;
   platformProjectId: string;
   platformObservabilityEndpoint: string;
-  platformAgentLearningEndpoint?: string;
   autoDetectUrl?: string;
 }
 
@@ -315,7 +314,6 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
   replace(`'%%MASTRA_ORGANIZATION_ID%%'`, config.organizationId);
   replace(`'%%MASTRA_PLATFORM_PROJECT_ID%%'`, config.platformProjectId);
   replace(`'%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%'`, config.platformObservabilityEndpoint);
-  replace(`'%%MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT%%'`, config.platformAgentLearningEndpoint ?? `''`);
   if (config.autoDetectUrl) {
     replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
   }
