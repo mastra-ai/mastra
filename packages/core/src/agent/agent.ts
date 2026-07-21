@@ -7192,39 +7192,41 @@ export class Agent<
         );
 
         const uiMessages = messageList.get.all.ui();
-        const messages = messageList.get.all.core();
         const requiredMessages = minMessages ?? 1;
 
-        if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
+        if (shouldGenerate && !thread.title) {
           const threadUiMessages = this.filterUiMessagesByThread(messageList, thread.id, uiMessages);
-          const userMessage = this.getMostRecentUserMessage(threadUiMessages);
 
-          if (userMessage) {
-            void this.genTitle(
-              userMessage,
-              requestContext,
-              observabilityContext,
-              titleModel,
-              titleInstructions,
-              threadUiMessages,
-            )
-              .then(async title => {
-                if (title) {
-                  await memory.createThread({
-                    threadId: thread.id,
-                    resourceId,
-                    memoryConfig,
-                    title,
-                    metadata: thread.metadata,
-                  });
-                  if (typeof onTitleGenerated === 'function') {
-                    await onTitleGenerated(title);
+          if (threadUiMessages.length >= requiredMessages) {
+            const userMessage = this.getMostRecentUserMessage(threadUiMessages);
+
+            if (userMessage) {
+              void this.genTitle(
+                userMessage,
+                requestContext,
+                observabilityContext,
+                titleModel,
+                titleInstructions,
+                threadUiMessages,
+              )
+                .then(async title => {
+                  if (title) {
+                    await memory.createThread({
+                      threadId: thread.id,
+                      resourceId,
+                      memoryConfig,
+                      title,
+                      metadata: thread.metadata,
+                    });
+                    if (typeof onTitleGenerated === 'function') {
+                      await onTitleGenerated(title);
+                    }
                   }
-                }
-              })
-              .catch(error => {
-                this.logger.error('Error persisting generated title:', error);
-              });
+                })
+                .catch(error => {
+                  this.logger.error('Error persisting generated title:', error);
+                });
+            }
           }
         }
       } catch (e) {
