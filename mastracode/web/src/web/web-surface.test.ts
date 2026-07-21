@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // import so `resolveLinearReady` can be exercised without external services.
 vi.mock('./sandbox-reattach-registration', () => ({ registerSandboxReattach: () => {} }));
 
-import type { WebAuthAdapter } from './auth-adapter';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config';
 import { seedFactoryStorageForTests } from './storage/test-utils';
 import { createStateSigner } from './state-signing';
@@ -23,7 +23,7 @@ async function enableLinearFeature(options?: { stableStateSigner?: boolean }): P
   const seed = await seedFactoryStorageForTests();
   seedRuntimeConfig({
     storage: seed.storage,
-    authAdapter: { kind: 'workos' } as WebAuthAdapter,
+    authProvider: { name: 'workos' } as IMastraAuthProvider,
     integrations: [linearStub],
     // No explicit secret ⇒ per-process random signer (stable: false).
     stateSigner: createStateSigner(options?.stableStateSigner ? 'explicit-secret' : undefined),

@@ -57,6 +57,7 @@ function runtimeConfigPlugin(mode: string): Plugin {
  */
 export default defineConfig(({ mode }) => ({
   root: resolve(here, 'ui'),
+  envDir: resolve(here, '../..'),
   plugins: [react(), tailwindcss(), runtimeConfigPlugin(mode)],
   resolve: {
     // Monorepo packages arrive via `link:` and would otherwise resolve their
