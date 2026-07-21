@@ -5,9 +5,10 @@ import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
 import {
   buildFixedSankeyGeometry,
   getSankeyChartCurveSelection,
+  getSankeyChartNodeSelection,
   getSankeyChartNodeWeights,
 } from './sankey-chart-utils';
-import type { SankeyChartCurveSelection } from './sankey-chart-utils';
+import type { SankeyChartCurveSelection, SankeyChartNodeSelection } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { Colors } from '@/ds/tokens';
@@ -18,6 +19,8 @@ export type SankeyChartProps = {
   className?: string;
   margin?: ComponentProps<typeof RechartsSankey>['margin'];
   onCurveClick?: (selection: SankeyChartCurveSelection) => void;
+  onNodeClick?: (selection: SankeyChartNodeSelection) => void;
+  isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
 };
 
 export function SankeyChart({
@@ -25,6 +28,8 @@ export function SankeyChart({
   className,
   margin = { top: 64, right: 160, bottom: 12, left: 160 },
   onCurveClick,
+  onNodeClick,
+  isNodeClickable,
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -95,6 +100,10 @@ export function SankeyChart({
                   ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
                   : false;
                 const nodeGeometry = node ? fixedGeometry?.nodes.get(node.id) : undefined;
+                const selection = node ? getSankeyChartNodeSelection(node) : undefined;
+                const clickable = Boolean(
+                  onNodeClick && selection && (isNodeClickable === undefined || isNodeClickable(selection)),
+                );
                 return (
                   <SankeyNode
                     {...props}
@@ -112,6 +121,10 @@ export function SankeyChart({
                     isLastColumn={node?.column.id === lastColumnId}
                     onFocusChange={setFocusedSourceName}
                     onHoverChange={setHoveredSourceName}
+                    clickable={clickable}
+                    onSelect={() => {
+                      if (selection && clickable) onNodeClick?.(selection);
+                    }}
                   />
                 );
               }}
@@ -176,8 +189,10 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
   showColumnLabel: boolean;
   isFirstColumn: boolean;
   isLastColumn: boolean;
+  clickable: boolean;
   onFocusChange: (sourceName: string | undefined) => void;
   onHoverChange: (sourceName: string | undefined) => void;
+  onSelect: () => void;
 };
 
 function SankeyNode({
@@ -195,8 +210,10 @@ function SankeyNode({
   showColumnLabel,
   isFirstColumn,
   isLastColumn,
+  clickable,
   onFocusChange,
   onHoverChange,
+  onSelect,
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
   const displayLabel = label ?? name;
@@ -232,13 +249,21 @@ function SankeyNode({
       placement,
     });
   };
+  const handleKeyDown = (event: KeyboardEvent<SVGGElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onSelect();
+  };
 
   return (
     <>
       <g
         aria-describedby={description ? tooltipId : undefined}
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
-        className="outline-none focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
+        className="outline-hidden focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
+        onClick={clickable ? onSelect : undefined}
+        onKeyDown={clickable ? handleKeyDown : undefined}
+        role={clickable ? 'button' : undefined}
         onFocus={event => {
           onFocusChange(name);
           setIsFocused(true);
@@ -257,6 +282,7 @@ function SankeyNode({
           onHoverChange(undefined);
           setIsHovered(false);
         }}
+        style={{ cursor: clickable ? 'pointer' : undefined }}
         tabIndex={0}
       >
         <title>{displayLabel}</title>

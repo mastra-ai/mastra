@@ -49,6 +49,7 @@ function TestControls() {
 
 function Example({
   onCurveClick,
+  onNodeClick,
   columnOrder,
   onColumnOrderChange,
   visibleColumnIds,
@@ -56,6 +57,7 @@ function Example({
   getColumnHue,
 }: {
   onCurveClick?: (selection: unknown) => void;
+  onNodeClick?: (selection: unknown) => void;
   columnOrder?: Array<string>;
   onColumnOrderChange?: (columnOrder: Array<string>) => void;
   visibleColumnIds?: Array<string>;
@@ -73,7 +75,7 @@ function Example({
       getColumnHue={getColumnHue}
     >
       <TestControls />
-      <SankeyChart onCurveClick={onCurveClick} />
+      <SankeyChart onCurveClick={onCurveClick} onNodeClick={onNodeClick} />
     </Sankey>
   );
 }
@@ -458,6 +460,34 @@ describe('SankeyChart', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hide Region' }));
 
     expect(onVisibleColumnIdsChange).toHaveBeenCalledWith(['channel', 'outcome']);
+  });
+
+  describe('when node activation is configured', () => {
+    it('lifts node identity by mouse and keyboard', async () => {
+      const onNodeClick = vi.fn();
+      render(<Example onNodeClick={onNodeClick} />);
+      const searchNode = await screen.findByRole('button', { name: 'Search: 3 traces (75%)' });
+
+      fireEvent.click(searchNode);
+      fireEvent.keyDown(searchNode, { key: 'Enter' });
+      fireEvent.keyDown(searchNode, { key: ' ' });
+
+      expect(onNodeClick).toHaveBeenCalledTimes(3);
+      expect(onNodeClick).toHaveBeenLastCalledWith({
+        column: { id: 'channel', label: 'Channel' },
+        value: 'Search',
+      });
+    });
+  });
+
+  describe('when node activation is not configured', () => {
+    it('does not expose nodes as buttons', async () => {
+      render(<Example />);
+
+      await screen.findByLabelText('Search: 3 traces (75%)');
+
+      expect(screen.queryByRole('button', { name: 'Search: 3 traces (75%)' })).toBeNull();
+    });
   });
 
   it('lifts the selected link metadata and contributing records by mouse and keyboard', async () => {

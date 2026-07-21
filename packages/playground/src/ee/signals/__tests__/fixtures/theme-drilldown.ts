@@ -4,6 +4,7 @@ import type {
   ThemeFlowResponse,
   ThemeHistoryResponse,
   ThemePathsResponse,
+  ThemeSnapshotsResponse,
 } from '@mastra/client-js';
 
 const snapshot = {
@@ -12,15 +13,37 @@ const snapshot = {
   total: 4,
   startedAt: '2026-07-15T00:00:00.000Z',
   endedAt: '2026-07-22T00:00:00.000Z',
-  traceCount: 2,
-};
+  traceCount: 3,
+  availableSignals: ['goal', 'outcome', 'behavior'],
+} satisfies ThemeSnapshotsResponse['snapshots'][number];
+
+export const drilldownThemeSnapshotsResponse = {
+  snapshots: [snapshot],
+} satisfies ThemeSnapshotsResponse;
+
+export const singleDrilldownThemeSnapshotsResponse = {
+  snapshots: [{ ...snapshot, ordinal: 1, total: 1 }],
+} satisfies ThemeSnapshotsResponse;
+
+export const twoDrilldownThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      ...snapshot,
+      snapshotId: 'older-opaque-snapshot-cursor',
+      ordinal: 3,
+      startedAt: '2026-07-08T00:00:00.000Z',
+      endedAt: '2026-07-15T00:00:00.000Z',
+    },
+    snapshot,
+  ],
+} satisfies ThemeSnapshotsResponse;
 
 export const drilldownThemeFlowResponse = {
   snapshot,
   stages: [
     {
       signalName: 'goal',
-      traceCount: 2,
+      traceCount: 3,
       nodes: [
         {
           nodeId: 'flow-goal-101',
@@ -29,13 +52,20 @@ export const drilldownThemeFlowResponse = {
           label: 'Add transcript',
           description: 'Users want to add a transcript to their workspace.',
           traceCount: 2,
-          stageShare: 1,
+          stageShare: 2 / 3,
+        },
+        {
+          nodeId: 'flow-goal-other',
+          kind: 'other',
+          label: 'Other',
+          traceCount: 1,
+          stageShare: 1 / 3,
         },
       ],
     },
     {
       signalName: 'outcome',
-      traceCount: 2,
+      traceCount: 3,
       nodes: [
         {
           nodeId: 'flow-outcome-201',
@@ -43,13 +73,20 @@ export const drilldownThemeFlowResponse = {
           themeId: '201',
           label: 'Transcript added',
           traceCount: 2,
-          stageShare: 1,
+          stageShare: 2 / 3,
+        },
+        {
+          nodeId: 'flow-outcome-other',
+          kind: 'other',
+          label: 'Other',
+          traceCount: 1,
+          stageShare: 1 / 3,
         },
       ],
     },
     {
       signalName: 'behavior',
-      traceCount: 2,
+      traceCount: 3,
       nodes: [
         {
           nodeId: 'flow-behavior-301',
@@ -57,14 +94,14 @@ export const drilldownThemeFlowResponse = {
           themeId: '301',
           label: 'Opened workspace',
           traceCount: 1,
-          stageShare: 0.5,
+          stageShare: 1 / 3,
         },
         {
           nodeId: 'flow-behavior-noise',
           kind: 'noise',
           label: 'Noise',
-          traceCount: 1,
-          stageShare: 0.5,
+          traceCount: 2,
+          stageShare: 2 / 3,
         },
       ],
     },
@@ -74,6 +111,13 @@ export const drilldownThemeFlowResponse = {
       sourceNodeId: 'flow-goal-101',
       targetNodeId: 'flow-outcome-201',
       traceCount: 2,
+      sourceShare: 1,
+      targetShare: 1,
+    },
+    {
+      sourceNodeId: 'flow-goal-other',
+      targetNodeId: 'flow-outcome-other',
+      traceCount: 1,
       sourceShare: 1,
       targetShare: 1,
     },
@@ -89,8 +133,45 @@ export const drilldownThemeFlowResponse = {
       targetNodeId: 'flow-behavior-noise',
       traceCount: 1,
       sourceShare: 0.5,
-      targetShare: 1,
+      targetShare: 0.5,
     },
+    {
+      sourceNodeId: 'flow-outcome-other',
+      targetNodeId: 'flow-behavior-noise',
+      traceCount: 1,
+      sourceShare: 1,
+      targetShare: 0.5,
+    },
+  ],
+} satisfies ThemeFlowResponse;
+
+export const olderDrilldownThemeFlowResponse = {
+  ...drilldownThemeFlowResponse,
+  snapshot: twoDrilldownThemeSnapshotsResponse.snapshots[0],
+} satisfies ThemeFlowResponse;
+
+export const largeThemeFlowResponse = {
+  ...drilldownThemeFlowResponse,
+  snapshot: { ...drilldownThemeFlowResponse.snapshot, traceCount: 2001 },
+} satisfies ThemeFlowResponse;
+
+export const nonNumericThemeFlowResponse = {
+  ...drilldownThemeFlowResponse,
+  stages: [
+    {
+      ...drilldownThemeFlowResponse.stages[0],
+      nodes: [
+        drilldownThemeFlowResponse.stages[0].nodes[0],
+        {
+          ...drilldownThemeFlowResponse.stages[0].nodes[1],
+          kind: 'theme',
+          themeId: 'legacy-theme-id',
+          label: 'Legacy theme',
+        },
+      ],
+    },
+    drilldownThemeFlowResponse.stages[1],
+    drilldownThemeFlowResponse.stages[2],
   ],
 } satisfies ThemeFlowResponse;
 
@@ -103,7 +184,7 @@ export const themeDetailResponse = {
     description: 'Users want to add a transcript to their workspace.',
     state: 'continue',
     traceCount: 2,
-    coverage: 1,
+    coverage: 2 / 3,
   },
 } satisfies ThemeDetailResponse;
 
@@ -155,7 +236,7 @@ export const themeHistoryResponse = {
       endedAt: '2026-07-22T00:00:00.000Z',
       state: 'continue',
       traceCount: 2,
-      coverage: 1,
+      coverage: 2 / 3,
     },
   ],
   relationships: [],
@@ -180,6 +261,16 @@ export const firstThemePathsResponse = {
       signalName: 'behavior',
       themeId: '301',
       label: 'Opened workspace',
+    },
+    'opaque-goal-other-key': {
+      signalName: 'goal',
+      themeId: '102',
+      label: 'Search transcripts',
+    },
+    'opaque-outcome-other-key': {
+      signalName: 'outcome',
+      themeId: '202',
+      label: 'Transcript located',
     },
   },
   paths: [
@@ -208,5 +299,27 @@ export const secondThemePathsResponse = {
         behavior: 'noise-marker-from-api',
       },
     },
+    {
+      traceId: 'trace-3',
+      assignments: {
+        goal: 'opaque-goal-other-key',
+        outcome: 'opaque-outcome-other-key',
+        behavior: 'another-noise-marker-from-api',
+      },
+    },
   ],
+} satisfies ThemePathsResponse;
+
+export const allThemePathsResponse = {
+  ...firstThemePathsResponse,
+  paths: [...firstThemePathsResponse.paths, ...secondThemePathsResponse.paths],
+  nextOffset: undefined,
+} satisfies ThemePathsResponse;
+
+export const missingSelectedThemePathsResponse = {
+  ...firstThemePathsResponse,
+  snapshot: twoDrilldownThemeSnapshotsResponse.snapshots[0],
+  themes: {},
+  paths: [],
+  nextOffset: undefined,
 } satisfies ThemePathsResponse;
