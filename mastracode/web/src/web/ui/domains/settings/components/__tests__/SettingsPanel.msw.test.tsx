@@ -1,4 +1,5 @@
 import type { AgentControllerSessionState, PermissionRules } from '@mastra/client-js';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -163,17 +164,19 @@ function SettingsSectionControls() {
 
 function Harness({ children }: { children: ReactNode }) {
   return (
-    <ActiveFactoryProvider>
-      <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
-        <OverlaysProvider>
-          <SettingsNavigationProvider>
-            <ThemeProbe />
-            <SettingsSectionControls />
-            {children}
-          </SettingsNavigationProvider>
-        </OverlaysProvider>
-      </ChatSessionProvider>
-    </ActiveFactoryProvider>
+    <MainSidebarProvider storageKey="settings-panel-test" mobileBreakpoint={768}>
+      <ActiveFactoryProvider>
+        <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
+          <OverlaysProvider>
+            <SettingsNavigationProvider>
+              <ThemeProbe />
+              <SettingsSectionControls />
+              {children}
+            </SettingsNavigationProvider>
+          </OverlaysProvider>
+        </ChatSessionProvider>
+      </ActiveFactoryProvider>
+    </MainSidebarProvider>
   );
 }
 
@@ -290,30 +293,6 @@ describe('SettingsPanel', () => {
       // A local factory has no server-side project, so no default-model picker.
       expect(screen.queryByLabelText('Factory default model')).not.toBeInTheDocument();
     });
-
-    it('explains why model settings are disabled when loading fails', async () => {
-      const user = userEvent.setup();
-      seedFactory();
-      useAgentControllerHandlers();
-      server.use(
-        http.get(SESSION, () => HttpResponse.json({ error: 'Session settings unavailable' }, { status: 503 })),
-      );
-      renderWithProviders(
-        <Harness>
-          <SettingsPanel />
-        </Harness>,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
-      const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
-      const lowButton = within(thinkingLevel).getByRole('button', { name: 'Low' });
-
-      expect(lowButton).toBeDisabled();
-      await user.hover(lowButton);
-      await waitFor(() =>
-        expect(screen.getByRole('tooltip')).toHaveTextContent('Unable to load settings: Session settings unavailable'),
-      );
-    });
   });
 
   describe('when changing behavior preferences', () => {
@@ -329,34 +308,6 @@ describe('SettingsPanel', () => {
 
       await waitFor(() => expect(captured.stateUpdates).toContainEqual({ notifications: 'system' }));
       await waitFor(() => expect(captured.permissions).toContainEqual({ category: 'read', policy: 'allow' }));
-    });
-
-    it('explains why permission controls are unavailable when loading fails', async () => {
-      const user = userEvent.setup();
-      seedFactory();
-      useAgentControllerHandlers();
-      server.use(
-        http.get(`${SESSION}/permissions`, () =>
-          HttpResponse.json({ error: 'Permission service unavailable' }, { status: 503 }),
-        ),
-      );
-      renderWithProviders(
-        <Harness>
-          <SettingsPanel />
-        </Harness>,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Show behavior settings' }));
-      const readPermission = await screen.findByRole('group', { name: 'Read permission' });
-      const allowButton = within(readPermission).getByRole('button', { name: 'Allow' });
-
-      expect(allowButton).toBeDisabled();
-      await user.hover(allowButton);
-      await waitFor(() =>
-        expect(screen.getByRole('tooltip')).toHaveTextContent(
-          'Unable to load tool permissions: Permission service unavailable',
-        ),
-      );
     });
   });
 });

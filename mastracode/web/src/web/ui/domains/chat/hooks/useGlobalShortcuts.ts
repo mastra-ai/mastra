@@ -1,6 +1,6 @@
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
-import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import { useActiveFactoryContext } from '../../workspaces';
 import { useCloseSettings } from '../../settings/hooks/useCloseSettings';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';

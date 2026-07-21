@@ -3,19 +3,20 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';
 
 import { useApiConfig } from '../../shared/api/config';
-import { useWebAuth } from '../../shared/hooks/useWebAuth';
-import { redirectToLogout } from './domains/auth/services/auth';
-import { ThreadList } from './domains/chat/components/ThreadList';
-import { FactorySection } from './domains/factory/components/FactorySection';
+import { redirectToLogout, useWebAuth } from './domains/auth';
+import { ThreadList } from './domains/chat';
+import { FactorySection } from './domains/factory';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useSetSettingsSection } from './domains/settings/context/SettingsNavigationProvider';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
-import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
-import { UserSessionsSection } from './domains/workspaces/components/UserSessionsSection';
-import { WorkspacesSection } from './domains/workspaces/components/WorkspacesSection';
-import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
-import { isServerFactory } from './domains/workspaces/services/factories';
-import { useOverlays } from './lib/overlays/overlays';
+import {
+  isServerFactory,
+  FactorySwitcher,
+  useActiveFactoryContext,
+  UserSessionsSection,
+  WorkspacesSection,
+} from './domains/workspaces';
+import { useOverlays } from './lib/overlays';
 
 /**
  * Composition shell: each section owns its data through the domain contexts

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router';
 
 import { PageLayoutMainViewProvider } from '../../ui/PageLayout';
-import { OverlaysProvider, useOverlays } from '../../lib/overlays/overlays';
+import { OverlaysProvider, useOverlays } from '../../lib/overlays';
 import { SettingsPanel } from '../settings/components/SettingsPanel';
 import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
 import { ActiveFactoryProvider } from '../workspaces/context/ActiveFactoryProvider';

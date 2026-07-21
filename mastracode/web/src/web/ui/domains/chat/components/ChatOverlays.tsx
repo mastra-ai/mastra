@@ -1,6 +1,5 @@
-import { useOverlays } from '../../../lib/overlays/overlays';
-import { FactoriesModal } from '../../workspaces/components/FactoriesModal';
-import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import { useOverlays } from '../../../lib/overlays';
+import { FactoriesModal, useActiveFactoryContext } from '../../workspaces';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 
 /** Mounts the active chat overlays. Each overlay owns its provider-backed behavior. */

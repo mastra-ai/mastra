@@ -1,4 +1,3 @@
-import { MastraClientError } from '@mastra/client-js';
 import type {
   AgentControllerAvailableModel,
   AgentControllerSessionSettings,
@@ -76,22 +75,18 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
 }
 
 interface ModelSettingsProps {
-  settings: AgentControllerSessionSettings | undefined;
-  settingsLoading: boolean;
-  settingsError: Error | undefined;
+  settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
 }
 
-export function ModelSettings({ settings, settingsLoading, settingsError, onBehaviorChange }: ModelSettingsProps) {
-  const disabledReason = getUnavailableSettingsReason(settings, settingsLoading, settingsError);
+export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps) {
   return (
     <>
       <FieldRow label="Thinking level" hint="Extended-reasoning budget for the agent">
         <Segmented
           ariaLabel="Thinking level"
           value={settings?.thinkingLevel ?? 'off'}
-          disabled={disabledReason !== undefined}
-          disabledTooltip={disabledReason}
+          disabled={!settings}
           options={THINKING_LEVELS}
           onChange={v => onBehaviorChange({ thinkingLevel: v })}
         />
@@ -101,30 +96,20 @@ export function ModelSettings({ settings, settingsLoading, settingsError, onBeha
 }
 
 interface BehaviorSettingsProps {
-  settings: AgentControllerSessionSettings | undefined;
-  settingsLoading: boolean;
-  settingsError: Error | undefined;
+  settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
-  permissions: PermissionRules | undefined;
-  permissionsLoading: boolean;
-  permissionsError: Error | undefined;
-  pendingPermissionCategory: ToolCategory | undefined;
+  permissions: PermissionRules | null;
+  pendingPermissionCategory: ToolCategory | null;
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
 }
 
 export function BehaviorSettings({
   settings,
-  settingsLoading,
-  settingsError,
   onBehaviorChange,
   permissions,
-  permissionsLoading,
-  permissionsError,
   pendingPermissionCategory,
   setPermissionForCategory,
 }: BehaviorSettingsProps) {
-  const settingsUnavailableReason = getUnavailableSettingsReason(settings, settingsLoading, settingsError);
-
   return (
     <>
       <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
@@ -147,16 +132,13 @@ export function BehaviorSettings({
         <Segmented
           ariaLabel="Notifications"
           value={settings?.notifications ?? 'off'}
-          disabled={settingsUnavailableReason !== undefined}
-          disabledTooltip={settingsUnavailableReason}
+          disabled={!settings}
           options={NOTIFICATION_MODES}
           onChange={v => onBehaviorChange({ notifications: v })}
         />
       </FieldRow>
       <PermissionsSection
         permissions={permissions}
-        permissionsLoading={permissionsLoading}
-        permissionsError={permissionsError}
         pendingPermissionCategory={pendingPermissionCategory}
         setPermissionForCategory={setPermissionForCategory}
       />
@@ -177,66 +159,11 @@ const PERMISSION_POLICIES: { value: PermissionPolicy; label: string }[] = [
   { value: 'deny', label: 'Deny' },
 ];
 
-function getClientErrorMessage(error: Error): string {
-  if (error instanceof MastraClientError && error.body && typeof error.body === 'object') {
-    if ('message' in error.body && typeof error.body.message === 'string' && error.body.message.trim().length > 0) {
-      return error.body.message;
-    }
-
-    if ('error' in error.body) {
-      const bodyError = error.body.error;
-      if (typeof bodyError === 'string' && bodyError.trim().length > 0) {
-        return bodyError;
-      }
-
-      if (
-        bodyError &&
-        typeof bodyError === 'object' &&
-        'message' in bodyError &&
-        typeof bodyError.message === 'string' &&
-        bodyError.message.trim().length > 0
-      ) {
-        return bodyError.message;
-      }
-    }
-  }
-
-  return error.message;
-}
-
-function getUnavailablePermissionReason(
-  permissions: PermissionRules | undefined,
-  permissionsLoading: boolean,
-  permissionsError: Error | undefined,
-): string | undefined {
-  if (permissions) return undefined;
-  if (permissionsError) return `Unable to load tool permissions: ${getClientErrorMessage(permissionsError)}`;
-  if (permissionsLoading) return 'Loading tool permissions…';
-  return 'Tool permissions are unavailable until the session is ready.';
-}
-
-function getUnavailableSettingsReason(
-  settings: AgentControllerSessionSettings | undefined,
-  settingsLoading: boolean,
-  settingsError: Error | undefined,
-): string | undefined {
-  if (settings) return undefined;
-  if (settingsError) return `Unable to load settings: ${getClientErrorMessage(settingsError)}`;
-  if (settingsLoading) return 'Loading settings…';
-  return 'Settings are unavailable until the session is ready.';
-}
-
 function PermissionsSection({
   permissions,
-  permissionsLoading,
-  permissionsError,
   pendingPermissionCategory,
   setPermissionForCategory,
-}: Pick<
-  BehaviorSettingsProps,
-  'permissions' | 'permissionsLoading' | 'permissionsError' | 'pendingPermissionCategory' | 'setPermissionForCategory'
->) {
-  const unavailableReason = getUnavailablePermissionReason(permissions, permissionsLoading, permissionsError);
+}: Pick<BehaviorSettingsProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
   const update = async (category: ToolCategory, policy: PermissionPolicy) => {
     await setPermissionForCategory(category, policy);
   };
@@ -250,21 +177,17 @@ function PermissionsSection({
         Choose how each tool category is approved. “Allow” runs without asking, “Ask” prompts you, “Deny” blocks it.
         Turning on “Auto-approve tools” above sets every category to Allow.
       </Txt>
-      {TOOL_CATEGORIES.map(({ value, label, hint }) => {
-        const disabledReason = pendingPermissionCategory === value ? 'Saving this permission…' : unavailableReason;
-        return (
-          <FieldRow key={value} label={label} hint={hint}>
-            <Segmented
-              ariaLabel={`${label} permission`}
-              value={permissions?.categories?.[value] ?? 'ask'}
-              disabled={disabledReason !== undefined}
-              disabledTooltip={disabledReason}
-              options={PERMISSION_POLICIES}
-              onChange={policy => void update(value, policy)}
-            />
-          </FieldRow>
-        );
-      })}
+      {TOOL_CATEGORIES.map(({ value, label, hint }) => (
+        <FieldRow key={value} label={label} hint={hint}>
+          <Segmented
+            ariaLabel={`${label} permission`}
+            value={permissions?.categories?.[value] ?? 'ask'}
+            disabled={!permissions || pendingPermissionCategory === value}
+            options={PERMISSION_POLICIES}
+            onChange={policy => void update(value, policy)}
+          />
+        </FieldRow>
+      ))}
     </div>
   );
 }
@@ -450,14 +373,12 @@ function Segmented<T extends string>({
   options,
   ariaLabel,
   disabled,
-  disabledTooltip,
   onChange,
 }: {
   value: T;
   options: { value: T; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
-  disabledTooltip?: React.ReactNode;
   onChange: (value: T) => void;
 }) {
   return (
@@ -469,7 +390,6 @@ function Segmented<T extends string>({
           size="sm"
           aria-pressed={value === o.value}
           disabled={disabled}
-          tooltip={disabled ? disabledTooltip : undefined}
           onClick={() => onChange(o.value)}
         >
           {o.label}

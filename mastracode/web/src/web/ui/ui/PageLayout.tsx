@@ -27,7 +27,7 @@ export function PageLayout({ sidebar, header, title, description, actions, child
   const view = useContext(PageLayoutMainViewContext);
 
   return (
-    <div className="relative z-1 flex h-dvh overflow-hidden bg-surface1">
+    <div className="relative z-1 flex h-screen overflow-hidden bg-surface1">
       <aside className="h-full min-h-0 shrink-0 overflow-hidden py-5">{sidebar}</aside>
       <div className="relative z-1 flex min-w-0 flex-1 flex-col overflow-hidden border-l border-border1 bg-surface2">
         {header}

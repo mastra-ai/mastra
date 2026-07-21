@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { useOverlays } from '../../../../lib/overlays/overlays';
-import type { Factory } from '../../../workspaces/services/factories';
+import { useOverlays } from '../../../../lib/overlays';
+import type { Factory } from '../../../workspaces';
 import { ChatOverlays } from '../ChatOverlays';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 const project: Factory = {

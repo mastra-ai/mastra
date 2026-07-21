@@ -36,8 +36,7 @@ export function SettingsPanel() {
   const titleRef = useRef<HTMLElement>(null);
   const { theme, setTheme } = useTheme();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { permissions, permissionsLoading, permissionsError, pendingPermissionCategory, setPermissionForCategory } =
-    useChatPermissions();
+  const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
   const { toast } = useToast();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -52,7 +51,7 @@ export function SettingsPanel() {
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
   const models = modelsQuery.data ?? [];
-  const settings = settingsQuery.data ?? undefined;
+  const settings = settingsQuery.data ?? null;
   const sessionResourceId = sessionEnabled ? resourceId : undefined;
   // Web chat sessions register under (resourceId, scope=projectPath); the
   // session-scoped config routes need the same pair to find the session.
@@ -91,12 +90,7 @@ export function SettingsPanel() {
           {section === 'source-control' && <SourceControlSection />}
           {section === 'model' && (
             <>
-              <ModelSettings
-                settings={settings}
-                settingsLoading={settingsQuery.isLoading}
-                settingsError={settingsQuery.error ?? undefined}
-                onBehaviorChange={onBehaviorChange}
-              />
+              <ModelSettings settings={settings} onBehaviorChange={onBehaviorChange} />
               <FactoryDefaultModelSection models={models} />
               <div className="mt-6 flex flex-col gap-2">
                 <Txt variant="ui-lg" className="font-medium">
@@ -110,12 +104,8 @@ export function SettingsPanel() {
           {section === 'behavior' && (
             <BehaviorSettings
               settings={settings}
-              settingsLoading={settingsQuery.isLoading}
-              settingsError={settingsQuery.error ?? undefined}
               onBehaviorChange={onBehaviorChange}
-              permissions={permissions}
-              permissionsLoading={permissionsLoading}
-              permissionsError={permissionsError}
+              permissions={permissions ?? null}
               pendingPermissionCategory={pendingPermissionCategory}
               setPermissionForCategory={setPermissionForCategory}
             />
