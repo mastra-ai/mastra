@@ -30,6 +30,7 @@ export interface WorkItem {
   githubProjectId: string;
   source: WorkItemSource;
   sourceKey: string | null;
+  parentWorkItemId: string | null;
   title: string;
   url: string | null;
   stages: string[];
@@ -50,6 +51,7 @@ export interface WorkItemSessionInput {
 export interface CreateWorkItemInput {
   source: WorkItemSource;
   sourceKey: string | null;
+  parentWorkItemId?: string | null;
   title: string;
   url?: string | null;
   stages: string[];
@@ -58,6 +60,7 @@ export interface CreateWorkItemInput {
 }
 
 export interface UpdateWorkItemInput {
+  parentWorkItemId?: string | null;
   title?: string;
   url?: string | null;
   stages?: string[];

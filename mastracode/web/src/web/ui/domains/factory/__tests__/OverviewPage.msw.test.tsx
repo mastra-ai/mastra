@@ -80,6 +80,7 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
     orgId: 'org-1',
     createdBy: 'user-1',
     githubProjectId: FACTORY_PROJECT_ID,
+    parentWorkItemId: null,
     source: 'manual',
     sourceKey: null,
     url: null,

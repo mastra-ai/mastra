@@ -2333,6 +2333,26 @@
       "docUrl": "https://unorouter.com/models",
       "gateway": "models.dev"
     },
+    "cline-pass": {
+      "url": "https://api.cline.bot/api/v1",
+      "apiKeyEnvVar": "CLINE_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "ClinePass",
+      "models": [
+        "cline-pass/deepseek-v4-flash",
+        "cline-pass/deepseek-v4-pro",
+        "cline-pass/glm-5.2",
+        "cline-pass/kimi-k2.6",
+        "cline-pass/kimi-k2.7-code",
+        "cline-pass/mimo-v2.5",
+        "cline-pass/mimo-v2.5-pro",
+        "cline-pass/minimax-m3",
+        "cline-pass/qwen3.7-max",
+        "cline-pass/qwen3.7-plus"
+      ],
+      "docUrl": "https://docs.cline.bot/getting-started/clinepass",
+      "gateway": "models.dev"
+    },
     "cerebras": {
       "apiKeyEnvVar": "CEREBRAS_API_KEY",
       "name": "Cerebras",
@@ -2664,6 +2684,8 @@
         "gemini-3-flash",
         "gemini-3.1-pro",
         "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.6-flash",
         "glm-5",
         "glm-5.1",
         "glm-5.2",
@@ -2692,6 +2714,7 @@
         "kimi-k2.5",
         "kimi-k2.6",
         "kimi-k2.7-code",
+        "laguna-s-2.1-free",
         "mimo-v2.5-free",
         "minimax-m2.5",
         "minimax-m2.7",
@@ -2743,6 +2766,9 @@
         "gpt-5.6-terra": {
           "npm": "@ai-sdk/openai"
         },
+        "gemini-3.6-flash": {
+          "npm": "@ai-sdk/google"
+        },
         "gpt-5.3-codex": {
           "npm": "@ai-sdk/openai"
         },
@@ -2763,6 +2789,9 @@
         },
         "gpt-5.2-codex": {
           "npm": "@ai-sdk/openai"
+        },
+        "gemini-3.5-flash-lite": {
+          "npm": "@ai-sdk/google"
         },
         "qwen3.5-plus": {
           "npm": "@ai-sdk/anthropic"
@@ -4467,6 +4496,8 @@
         "google/gemini-3.1-pro-preview",
         "google/gemini-3.1-pro-preview-customtools",
         "google/gemini-3.5-flash",
+        "google/gemini-3.5-flash-lite",
+        "google/gemini-3.6-flash",
         "google/gemma-2-27b-it",
         "google/gemma-3-12b-it",
         "google/gemma-3-27b-it",
@@ -4696,7 +4727,6 @@
         "tencent/hunyuan-a13b-instruct",
         "tencent/hy3",
         "tencent/hy3-preview",
-        "tencent/hy3:free",
         "thedrummer/cydonia-24b-v4.1",
         "thedrummer/rocinante-12b",
         "thedrummer/skyfall-36b-v2",
@@ -5453,6 +5483,8 @@
         "google/gemini-3.1-flash-lite-preview",
         "google/gemini-3.1-pro-preview",
         "google/gemini-3.5-flash",
+        "google/gemini-3.5-flash-lite",
+        "google/gemini-3.6-flash",
         "google/gemini-embedding-001",
         "google/gemini-embedding-2",
         "google/gemini-omni-flash-preview",
@@ -6038,6 +6070,8 @@
         "gemini-3.1-pro-preview",
         "gemini-3.1-pro-preview-customtools",
         "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.6-flash",
         "gemini-embedding-001",
         "gemini-flash-latest",
         "gemini-flash-lite-latest",
@@ -6627,6 +6661,8 @@
         "gemini/gemini-3.1-pro-preview",
         "gemini/gemini-3.1-pro-preview-customtools",
         "gemini/gemini-3.5-flash",
+        "gemini/gemini-3.5-flash-lite",
+        "gemini/gemini-3.6-flash",
         "gemini/gemini-flash-latest",
         "gemini/gemini-flash-lite-latest",
         "openai/chat-latest",
@@ -8473,6 +8509,18 @@
       "qwen3.5-397b-a17b:free",
       "step-3.7-flash:free"
     ],
+    "cline-pass": [
+      "cline-pass/deepseek-v4-flash",
+      "cline-pass/deepseek-v4-pro",
+      "cline-pass/glm-5.2",
+      "cline-pass/kimi-k2.6",
+      "cline-pass/kimi-k2.7-code",
+      "cline-pass/mimo-v2.5",
+      "cline-pass/mimo-v2.5-pro",
+      "cline-pass/minimax-m3",
+      "cline-pass/qwen3.7-max",
+      "cline-pass/qwen3.7-plus"
+    ],
     "cerebras": ["gemma-4-31b", "gpt-oss-120b", "zai-glm-4.7"],
     "kenari": [
       "claude-opus-4-7",
@@ -8694,6 +8742,8 @@
       "gemini-3-flash",
       "gemini-3.1-pro",
       "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.6-flash",
       "glm-5",
       "glm-5.1",
       "glm-5.2",
@@ -8722,6 +8772,7 @@
       "kimi-k2.5",
       "kimi-k2.6",
       "kimi-k2.7-code",
+      "laguna-s-2.1-free",
       "mimo-v2.5-free",
       "minimax-m2.5",
       "minimax-m2.7",
@@ -9923,6 +9974,8 @@
       "google/gemini-3.1-pro-preview",
       "google/gemini-3.1-pro-preview-customtools",
       "google/gemini-3.5-flash",
+      "google/gemini-3.5-flash-lite",
+      "google/gemini-3.6-flash",
       "google/gemma-2-27b-it",
       "google/gemma-3-12b-it",
       "google/gemma-3-27b-it",
@@ -10152,7 +10205,6 @@
       "tencent/hunyuan-a13b-instruct",
       "tencent/hy3",
       "tencent/hy3-preview",
-      "tencent/hy3:free",
       "thedrummer/cydonia-24b-v4.1",
       "thedrummer/rocinante-12b",
       "thedrummer/skyfall-36b-v2",
@@ -10757,6 +10809,8 @@
       "google/gemini-3.1-flash-lite-preview",
       "google/gemini-3.1-pro-preview",
       "google/gemini-3.5-flash",
+      "google/gemini-3.5-flash-lite",
+      "google/gemini-3.6-flash",
       "google/gemini-embedding-001",
       "google/gemini-embedding-2",
       "google/gemini-omni-flash-preview",
@@ -11265,6 +11319,8 @@
       "gemini-3.1-pro-preview",
       "gemini-3.1-pro-preview-customtools",
       "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.6-flash",
       "gemini-embedding-001",
       "gemini-flash-latest",
       "gemini-flash-lite-latest",
@@ -11616,6 +11672,8 @@
       "gemini/gemini-3.1-pro-preview",
       "gemini/gemini-3.1-pro-preview-customtools",
       "gemini/gemini-3.5-flash",
+      "gemini/gemini-3.5-flash-lite",
+      "gemini/gemini-3.6-flash",
       "gemini/gemini-flash-latest",
       "gemini/gemini-flash-lite-latest",
       "openai/chat-latest",

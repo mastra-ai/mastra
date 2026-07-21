@@ -10,6 +10,7 @@ import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
+import { FactorySessionHeader } from '../factory/components/RelatedFactorySessions';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TaskPanel } from './components/TaskPanel';
@@ -37,6 +38,10 @@ export function ThreadPage() {
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
 
+  if (!activeFactory) {
+    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+  }
+
   return (
     <ChatLayout
       sidebar={<Sidebar />}
@@ -58,11 +63,7 @@ export function ThreadPage() {
       }
       main={
         <ChatSessionBoundary threadId={threadId}>
-          {activeFactory ? (
-            <ThreadPageMain />
-          ) : (
-            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-          )}
+          <ThreadPageMain />
         </ChatSessionBoundary>
       }
     />
@@ -97,5 +98,12 @@ function ThreadPageContent() {
   useRouteThreadSync();
   useThreadPageKickoffs();
 
-  return <ChatMessageList />;
+  return (
+    <div className="flex min-h-0 flex-col">
+      <FactorySessionHeader />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <ChatMessageList />
+      </div>
+    </div>
+  );
 }
