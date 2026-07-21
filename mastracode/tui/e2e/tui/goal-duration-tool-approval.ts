@@ -55,7 +55,11 @@ export const goalDurationToolApprovalScenario: McE2eScenario = {
     const beforeFirst = readGoal(dbPath);
     await runtime.sleep(1_100);
     const afterFirstWait = readGoal(dbPath);
-    if (beforeFirst.status !== 'active' || afterFirstWait.activeDurationMs !== beforeFirst.activeDurationMs) {
+    if (
+      beforeFirst.status !== 'active' ||
+      afterFirstWait.status !== 'active' ||
+      afterFirstWait.activeDurationMs !== beforeFirst.activeDurationMs
+    ) {
       throw new Error(
         `First approval wait changed goal state: before=${JSON.stringify(beforeFirst)} after=${JSON.stringify(afterFirstWait)}`,
       );
@@ -74,7 +78,11 @@ export const goalDurationToolApprovalScenario: McE2eScenario = {
     }
     await runtime.sleep(1_100);
     const afterSecondWait = readGoal(dbPath);
-    if (beforeSecond.status !== 'active' || afterSecondWait.activeDurationMs !== beforeSecond.activeDurationMs) {
+    if (
+      beforeSecond.status !== 'active' ||
+      afterSecondWait.status !== 'active' ||
+      afterSecondWait.activeDurationMs !== beforeSecond.activeDurationMs
+    ) {
       throw new Error(
         `Second approval wait changed goal state: before=${JSON.stringify(beforeSecond)} after=${JSON.stringify(afterSecondWait)}`,
       );

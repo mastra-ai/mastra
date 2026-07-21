@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Moved goal-duration lifecycle accounting into core so Mastra Code renders persisted active time without owning timer transitions.
+Preserved Mastra Code's displayed active goal time across pauses, approval waits, and thread reloads.

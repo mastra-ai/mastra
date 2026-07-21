@@ -629,6 +629,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
+              await stopGoalActivity({
+                agentId,
+                runId,
+                now: readScoped(scopeCtx, NOW_KEY, 'now'),
+              });
               const approvalChunk = await transformChunk(
                 {
                   type: 'tool-call-approval',
