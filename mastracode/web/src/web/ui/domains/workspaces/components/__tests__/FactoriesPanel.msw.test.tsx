@@ -10,7 +10,7 @@ import {
   useOverlayControllerHandlers,
 } from '../../../chat/components/__tests__/overlay-test-utils';
 import type { DirectoryListing } from '../../../../../../shared/api/types';
-import { FactoriesModal } from '../../index';
+import { FactoriesPanel } from '../../index';
 import { loadFactories } from '../../services/factories';
 
 const FS_URL = `${TEST_BASE_URL}/web/fs/list`;
@@ -25,7 +25,7 @@ const rootListing: DirectoryListing = {
 function renderProjects(onOpenGithub?: () => void) {
   return renderWithProviders(
     <OverlayTestProviders>
-      <FactoriesModal onOpenGithub={onOpenGithub} />
+      <FactoriesPanel onOpenGithub={onOpenGithub} />
     </OverlayTestProviders>,
   );
 }
@@ -48,11 +48,13 @@ beforeEach(() => {
 
 afterEach(() => localStorage.clear());
 
-describe('FactoriesModal', () => {
+describe('FactoriesPanel', () => {
   it('offers GitHub alongside local directory browsing', async () => {
     const onOpenGithub = vi.fn();
     const user = userEvent.setup();
     renderProjects(onOpenGithub);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Create/connect factory from GitHub' }));
 
