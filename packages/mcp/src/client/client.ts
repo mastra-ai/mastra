@@ -229,6 +229,8 @@ export class InternalMastraMCPClient extends MastraBase {
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
   private pendingAuthTransport?: StreamableHTTPClientTransport | SSEClientTransport;
+  private clientBaseOnClose?: () => void;
+  private clientConnectionOnClose?: () => void;
   private _authState?: MCPServerAuthState;
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
@@ -686,8 +688,10 @@ export class InternalMastraMCPClient extends MastraBase {
         // reconnects cannot clear the state of a replacement connection.
         const connectedTransport = this.transport;
         const connectionPromise = this.isConnected;
-        const originalOnClose = this.client.onclose;
-        this.client.onclose = () => {
+        if (this.client.onclose !== this.clientConnectionOnClose) {
+          this.clientBaseOnClose = this.client.onclose;
+        }
+        const connectionOnClose = () => {
           if (this.transport === connectedTransport) {
             this.log('debug', `MCP server connection closed`);
             // Close the stale transport before any reconnect so its EventSource/session
@@ -706,10 +710,10 @@ export class InternalMastraMCPClient extends MastraBase {
               void staleTransport.close().catch(() => {});
             }
           }
-          if (typeof originalOnClose === 'function') {
-            originalOnClose();
-          }
+          this.clientBaseOnClose?.();
         };
+        this.clientConnectionOnClose = connectionOnClose;
+        this.client.onclose = connectionOnClose;
       } catch (e) {
         this.isConnected = null;
         reject(e);

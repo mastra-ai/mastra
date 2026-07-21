@@ -3704,23 +3704,31 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
       name: 'wedge-stale-onclose',
       server: { url: baseUrl },
     });
+    const baseOnClose = vi.fn();
+    (client as any).client.onclose = baseOnClose;
     await client.connect();
 
     const staleTransport = (client as any).transport;
     const staleConnectionOnClose = (client as any).client.onclose;
 
     await client.forceReconnect();
+    await client.forceReconnect();
 
     const replacementTransport = (client as any).transport;
     const replacementConnection = (client as any).isConnected;
+    expect((client as any).clientBaseOnClose).toBe(baseOnClose);
+    expect((client as any).client.onclose).not.toBe(staleConnectionOnClose);
     expect(replacementTransport).not.toBe(staleTransport);
     expect(staleTransport.onclose).toBeUndefined();
     expect(staleTransport.onerror).toBeUndefined();
     expect(staleTransport.onmessage).toBeUndefined();
 
     // A previously installed Mastra close wrapper may still be referenced by
-    // caller code. It must not reset state belonging to the replacement.
+    // caller code. It must not reset state belonging to the replacement or
+    // delegate through wrappers from every prior connection.
+    baseOnClose.mockClear();
     staleConnectionOnClose();
+    expect(baseOnClose).toHaveBeenCalledOnce();
     expect((client as any).transport).toBe(replacementTransport);
     expect((client as any).isConnected).toBe(replacementConnection);
   });
