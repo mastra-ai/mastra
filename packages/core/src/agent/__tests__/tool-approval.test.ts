@@ -36,6 +36,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           }),
           requireApproval: true,
           execute: async input => {
+            await new Promise(resolve => setTimeout(resolve, 20));
             return mockFindUser(input) as Promise<Record<string, any>>;
           },
         });
@@ -118,6 +119,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           model: mockModel,
           tools: { findUserTool },
           memory: new MockMemory(),
+          goal: {},
           defaultOptions: {
             autoResumeSuspendedTools: true,
           },
@@ -138,6 +140,10 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             thread: randomUUID(),
             resource: randomUUID(),
           };
+          await agentOne.setObjective('Find the user', {
+            threadId: memory.thread,
+            resourceId: memory.resource,
+          });
 
           const stream = await agentOne.stream('Find the user with name - Dero Israel', { memory });
           let toolName = '';
@@ -146,6 +152,11 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
               toolName = _chunk.payload.toolName;
             }
           }
+          const durationAtApproval = (await agentOne.getObjective({ threadId: memory.thread }))?.activeDurationMs ?? 0;
+          expect(durationAtApproval).toBeGreaterThan(0);
+          await new Promise(resolve => setTimeout(resolve, 30));
+          expect((await agentOne.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBe(durationAtApproval);
+
           if (toolName) {
             const resumeStream = await agentOne.stream('Approve', {
               memory,
@@ -162,6 +173,9 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             expect(mockFindUser).toHaveBeenCalled();
             expect(name).toBe('Dero Israel');
             expect(toolName).toBe('findUserTool');
+            expect((await agentOne.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBeGreaterThan(
+              durationAtApproval,
+            );
           }
         } finally {
           await mastra.stopWorkers();
@@ -354,5 +368,62 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
     });
   });
 }
+
+describe('goal activity at tool approval', () => {
+  it('checkpoints active duration before a raw Agent exposes the approval wait', async () => {
+    const storage = new InMemoryStore();
+    const tool = createTool({
+      id: 'approvalTool',
+      description: 'A tool that requires approval',
+      inputSchema: z.object({ value: z.string() }),
+      requireApproval: true,
+      execute: async input => input,
+    });
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'approvalTool',
+              input: '{"value":"test"}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+    const rawAgent = new Agent({
+      id: 'goal-approval-agent',
+      name: 'Goal Approval Agent',
+      instructions: 'Use the tool.',
+      model,
+      tools: { approvalTool: tool },
+      goal: {},
+    });
+    const mastra = new Mastra({ agents: { rawAgent }, storage, logger: false });
+    const agent = mastra.getAgent('rawAgent');
+    const memory = { thread: randomUUID(), resource: randomUUID() };
+    await agent.setObjective('Finish after approval', { threadId: memory.thread, resourceId: memory.resource });
+
+    const result = await agent.stream('Use the approval tool', { memory });
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') break;
+    }
+
+    expect((await agent.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBeGreaterThan(0);
+  });
+});
 
 toolApprovalAndSuspensionTests('v2');

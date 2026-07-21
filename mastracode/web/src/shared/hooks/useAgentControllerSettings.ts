@@ -6,7 +6,7 @@ import { createAgentControllerClient } from '../../web/ui/domains/chat/services/
 interface UseAgentControllerSettingsArgs {
   agentControllerId: string;
   resourceId: string;
-  projectPath?: string;
+  scope?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -14,20 +14,20 @@ interface UseAgentControllerSettingsArgs {
 export function useAgentControllerSettings({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerSettingsArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope: projectPath,
+    scope,
     baseUrl,
     enabled,
   });
 
   return useQuery({
-    queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, projectPath),
+    queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, scope),
     queryFn: async () => {
       const state = await session!.state();
       return state.settings ?? null;

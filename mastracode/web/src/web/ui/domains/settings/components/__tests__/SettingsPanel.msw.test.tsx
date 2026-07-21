@@ -1,4 +1,5 @@
 import type { AgentControllerSessionState, PermissionRules } from '@mastra/client-js';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -11,8 +12,10 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
 import { ActiveFactoryProvider } from '../../../workspaces';
+import { OverlaysProvider } from '../../../../lib/overlays';
 import { SettingsPanel } from '../../index';
 import { loadDoneSound, playDoneSound } from '../../services/doneSound';
+import { SettingsNavigationProvider, useSetSettingsSection } from '../../context/SettingsNavigationProvider';
 
 // The completion sound synthesizes audio via AudioContext, which jsdom
 // doesn't provide; mock playback (persistence stays real) so specs can
@@ -125,6 +128,8 @@ function useAgentControllerHandlers(): CapturedRequests {
     }),
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/stream`, () => sse()),
+    // The Model tab hosts the packs section now, so opening it loads the catalog.
+    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json({ packs: [], activePackId: null })),
   );
 
   return captured;
@@ -140,14 +145,38 @@ function ThemeProbe() {
   return <span data-testid="theme-value">{theme}</span>;
 }
 
+function SettingsSectionControls() {
+  const setSection = useSetSettingsSection();
+  return (
+    <div aria-label="Settings test controls">
+      <button type="button" onClick={() => setSection('source-control')}>
+        Show source control settings
+      </button>
+      <button type="button" onClick={() => setSection('model')}>
+        Show model settings
+      </button>
+      <button type="button" onClick={() => setSection('behavior')}>
+        Show behavior settings
+      </button>
+    </div>
+  );
+}
+
 function Harness({ children }: { children: ReactNode }) {
   return (
-    <ActiveFactoryProvider>
-      <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
-        <ThemeProbe />
-        {children}
-      </ChatSessionProvider>
-    </ActiveFactoryProvider>
+    <MainSidebarProvider storageKey="settings-panel-test" mobileBreakpoint={768}>
+      <ActiveFactoryProvider>
+        <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
+          <OverlaysProvider>
+            <SettingsNavigationProvider>
+              <ThemeProbe />
+              <SettingsSectionControls />
+              {children}
+            </SettingsNavigationProvider>
+          </OverlaysProvider>
+        </ChatSessionProvider>
+      </ActiveFactoryProvider>
+    </MainSidebarProvider>
   );
 }
 
@@ -156,7 +185,7 @@ function renderSettingsPanel() {
   const captured = useAgentControllerHandlers();
   renderWithProviders(
     <Harness>
-      <SettingsPanel onClose={() => {}} />
+      <SettingsPanel />
     </Harness>,
   );
   return captured;
@@ -167,6 +196,19 @@ afterEach(() => {
 });
 
 describe('SettingsPanel', () => {
+  describe('when rendered', () => {
+    it('exposes a focused, labelled in-layout section without dialog semantics', () => {
+      renderSettingsPanel();
+
+      const settings = screen.getByRole('region', { name: 'Settings' });
+      const heading = within(settings).getByRole('heading', { name: 'Settings' });
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(within(settings).queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
+      expect(heading).toHaveFocus();
+    });
+  });
+
   describe('when changing general preferences', () => {
     it('updates the theme from the real theme provider and omits density controls', async () => {
       const user = userEvent.setup();
@@ -195,26 +237,26 @@ describe('SettingsPanel', () => {
     });
   });
 
-  describe('when managing factories', () => {
+  describe('when managing source control', () => {
     it('removes the active factory and reconciles the factory selection', async () => {
       const user = userEvent.setup();
       renderSettingsPanel();
 
-      await user.click(screen.getByRole('tab', { name: 'Factories' }));
+      await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
       expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
       await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBeNull());
-      await user.click(screen.getByRole('tab', { name: 'Factories' }));
-      await screen.findByText('No configured factories.');
+      await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
+      await screen.findByText('Select a factory to manage its source control.');
       expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]);
     });
 
     it('keeps the factory visible and reports storage failures', async () => {
       const user = userEvent.setup();
       renderSettingsPanel();
-      await user.click(screen.getByRole('tab', { name: 'Factories' }));
+      await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
       const storageError = new Error('Factory storage is unavailable');
       const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
         throw storageError;
@@ -223,7 +265,7 @@ describe('SettingsPanel', () => {
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
       expect(await screen.findByText(storageError.message)).toBeInTheDocument();
-      expect(screen.getByText('Settings Panel Project')).toBeInTheDocument();
+      expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
       setItem.mockRestore();
     });
   });
@@ -233,10 +275,23 @@ describe('SettingsPanel', () => {
       const user = userEvent.setup();
       const captured = renderSettingsPanel();
 
-      await user.click(screen.getByRole('tab', { name: /model/i }));
+      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
       await user.click(await screen.findByRole('button', { name: 'High' }));
 
       await waitFor(() => expect(captured.stateUpdates).toContainEqual({ thinkingLevel: 'high' }));
+    });
+
+    it('hosts model packs inside the Model settings section', async () => {
+      const user = userEvent.setup();
+      renderSettingsPanel();
+
+      expect(screen.queryByText('Model packs')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
+
+      expect(await screen.findByText('Model packs')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /New pack/ })).toBeInTheDocument();
+      // A local factory has no server-side project, so no default-model picker.
+      expect(screen.queryByLabelText('Factory default model')).not.toBeInTheDocument();
     });
   });
 
@@ -245,8 +300,9 @@ describe('SettingsPanel', () => {
       const user = userEvent.setup();
       const captured = renderSettingsPanel();
 
-      await user.click(screen.getByRole('tab', { name: /behavior/i }));
-      await user.click(screen.getByRole('button', { name: 'System' }));
+      await user.click(screen.getByRole('button', { name: 'Show behavior settings' }));
+      const notifications = await screen.findByRole('group', { name: 'Notifications' });
+      await user.click(within(notifications).getByRole('button', { name: 'System' }));
       const readPermission = await screen.findByRole('group', { name: 'Read permission' });
       await user.click(within(readPermission).getByRole('button', { name: 'Allow' }));
 

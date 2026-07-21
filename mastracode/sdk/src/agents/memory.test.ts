@@ -131,8 +131,8 @@ describe('getDynamicMemory', () => {
     expect(om.observation.instruction).toContain('Do NOT observe or extract information from these messages');
     expect(om.reflection.instruction).toBeUndefined();
 
-    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'google/gemini-2.5-flash' });
-    expect(resolveModelMock).toHaveBeenLastCalledWith('google/gemini-2.5-flash', {
+    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'google/gemini-3.5-flash' });
+    expect(resolveModelMock).toHaveBeenLastCalledWith('google/gemini-3.5-flash', {
       remapForCodexOAuth: true,
       requestContext,
     });

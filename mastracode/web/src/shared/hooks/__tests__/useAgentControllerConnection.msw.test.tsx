@@ -86,7 +86,7 @@ describe('useAgentControllerConnection', () => {
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
-  it('given a GitHub project session, when the connection initializes, then its project identity is persisted to controller state', async () => {
+  it('given a repository session, when the connection initializes, then its project identity is persisted to controller state', async () => {
     let receivedState: unknown;
     const onEvent = vi.fn();
 
@@ -117,22 +117,23 @@ describe('useAgentControllerConnection', () => {
       ),
     );
 
-    const projectState = {
-      githubProjectId: 'github-project-1',
+    const factorySessionState = {
+      factoryProjectId: 'factory-project-1',
+      projectRepositoryId: 'project-repository-1',
       sandboxId: 'sandbox-1',
       sandboxWorkdir: '/sandbox/repo',
     };
     const { result } = renderHookWithProviders(() =>
       useAgentControllerConnection({
         ...hookArgs,
-        projectPath: '/sandbox/repo',
-        projectState,
+        scope: '/sandbox/repo',
+        factorySessionState,
         onEvent,
       }),
     );
 
     await waitFor(() => expect(result.current.status).toBe('ready'));
-    expect(receivedState).toEqual({ state: { projectPath: '/sandbox/repo', ...projectState } });
+    expect(receivedState).toEqual({ state: { projectPath: '/sandbox/repo', ...factorySessionState } });
   });
 
   it('given the event callback changes after connection, then the active stream is not resubscribed', async () => {

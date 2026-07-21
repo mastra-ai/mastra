@@ -6,7 +6,7 @@ import { createAgentControllerClient } from '../../web/ui/domains/chat/services/
 interface UseAgentControllerThreadMessagesArgs {
   agentControllerId: string;
   resourceId: string;
-  projectPath?: string;
+  scope?: string;
   threadId?: string;
   baseUrl?: string;
   enabled?: boolean;
@@ -15,7 +15,7 @@ interface UseAgentControllerThreadMessagesArgs {
 export function useAgentControllerThreadMessages({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
   threadId,
   baseUrl = '',
   enabled = true,
@@ -23,7 +23,7 @@ export function useAgentControllerThreadMessages({
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope: projectPath,
+    scope,
     baseUrl,
     enabled,
   });
