@@ -361,6 +361,29 @@ describe('SankeySignals', () => {
       expect(screen.getByRole('button', { name: 'Pause snapshots' })).not.toBeNull();
     });
 
+    it('stops scheduling snapshots after a playback request fails', async () => {
+      const flowRequests: Array<string> = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          if (!snapshotId) return HttpResponse.json({ error: 'Missing snapshot' }, { status: 400 });
+          flowRequests.push(snapshotId);
+          if (snapshotId === 'snapshot-3') return HttpResponse.json({ error: 'Flow failed' }, { status: 500 });
+          const snapshot = multiThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot });
+        }),
+      );
+      renderSankeySignals();
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
+      await screen.findByRole('button', { name: 'Retry' }, { timeout: 2000 });
+      await new Promise(resolve => window.setTimeout(resolve, 1100));
+
+      expect(flowRequests).toEqual(['snapshot-1', 'snapshot-3']);
+    });
+
     it('keeps the pause control available while the next flow is loading', async () => {
       let releasePendingFlow: (() => void) | undefined;
       const pendingFlow = new Promise<void>(resolve => {

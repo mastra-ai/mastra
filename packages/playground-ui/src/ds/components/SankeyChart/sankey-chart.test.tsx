@@ -127,11 +127,20 @@ describe('SankeyChart', () => {
   });
 
   describe('when a node label includes a description', () => {
-    it('keeps the visible label concise and exposes the description on hover and focus', async () => {
-      const fullLabel = 'Search\nLooks up relevant knowledge before responding.';
-      const { container } = render(
+    const nodeLabel = 'Search. Looks up relevant knowledge before responding.: 1 trace (100%)';
+    const tooltipLabel = 'Search: Looks up relevant knowledge before responding.';
+
+    function renderDescribedNode() {
+      return render(
         <Sankey
-          data={[{ channel: 'channel-one', channelLabel: fullLabel, region: 'eu', regionLabel: 'Europe' }]}
+          data={[
+            {
+              channel: 'channel-one',
+              channelLabel: 'Search\nLooks up relevant knowledge before responding.',
+              region: 'eu',
+              regionLabel: 'Europe',
+            },
+          ]}
           columns={columns.slice(0, 2)}
           getRecordNodeId={(record, column) => String(record[column.id])}
           getRecordNodeLabel={(record, column) => String(record[`${column.id}Label`])}
@@ -139,12 +148,24 @@ describe('SankeyChart', () => {
           <SankeyChart />
         </Sankey>,
       );
+    }
 
-      await screen.findByText('Search', { selector: 'text' });
-      expect(
-        screen.getByLabelText('Search. Looks up relevant knowledge before responding.: 1 trace (100%)'),
-      ).not.toBeNull();
-      expect([...container.querySelectorAll('svg title')].map(title => title.textContent)).toContain(fullLabel);
+    it('shows the description when the node receives focus', async () => {
+      renderDescribedNode();
+      const node = await screen.findByLabelText(nodeLabel);
+
+      fireEvent.focus(node);
+
+      expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
+    });
+
+    it('shows the description when the node is hovered', async () => {
+      renderDescribedNode();
+      const node = await screen.findByLabelText(nodeLabel);
+
+      fireEvent.mouseEnter(node);
+
+      expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
     });
   });
 

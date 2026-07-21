@@ -142,9 +142,12 @@ function SankeyNode({
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
   const displayLabel = label ?? name;
-  const visibleDisplayLabel = displayLabel.split('\n', 1)[0] ?? displayLabel;
+  const descriptionIndex = displayLabel.indexOf('\n');
+  const visibleDisplayLabel = descriptionIndex >= 0 ? displayLabel.slice(0, descriptionIndex) : displayLabel;
+  const description = descriptionIndex >= 0 ? displayLabel.slice(descriptionIndex + 1) : undefined;
   const accessibleLabel = displayLabel.replaceAll('\n', '. ');
   const visibleLabel = truncateNodeLabel(visibleDisplayLabel);
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
   const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
@@ -153,15 +156,30 @@ function SankeyNode({
   const labelX = isTruncated && isFirstColumn ? x : isTruncated && isLastColumn ? x + width : x + width / 2;
   const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
+  const tooltipWidth = 240;
+  const tooltipX = isFirstColumn ? x : isLastColumn ? x + width - tooltipWidth : x + width / 2 - tooltipWidth / 2;
+  const tooltipY = y > 84 ? y - 76 : y + height + 8;
 
   return (
     <g
       aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
       className="outline-none focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
-      onFocus={() => onHoverChange(name)}
-      onBlur={() => onHoverChange(undefined)}
-      onMouseEnter={() => onHoverChange(name)}
-      onMouseLeave={() => onHoverChange(undefined)}
+      onFocus={() => {
+        onHoverChange(name);
+        setIsTooltipVisible(true);
+      }}
+      onBlur={() => {
+        onHoverChange(undefined);
+        setIsTooltipVisible(false);
+      }}
+      onMouseEnter={() => {
+        onHoverChange(name);
+        setIsTooltipVisible(true);
+      }}
+      onMouseLeave={() => {
+        onHoverChange(undefined);
+        setIsTooltipVisible(false);
+      }}
       tabIndex={0}
     >
       <title>{displayLabel}</title>
@@ -184,6 +202,22 @@ function SankeyNode({
       <text x={labelX} y={y - 8} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={9.5}>
         {value} ({percentage}%)
       </text>
+      {description && isTooltipVisible ? (
+        <foreignObject
+          aria-label={`${visibleDisplayLabel}: ${description}`}
+          height={68}
+          pointerEvents="none"
+          role="tooltip"
+          width={tooltipWidth}
+          x={tooltipX}
+          y={tooltipY}
+        >
+          <div className="rounded-md border border-border1 bg-surface5 p-2 text-xs leading-4 text-neutral6 shadow-elevated">
+            <div className="font-medium">{visibleDisplayLabel}</div>
+            <div className="text-neutral4">{description}</div>
+          </div>
+        </foreignObject>
+      ) : null}
     </g>
   );
 }

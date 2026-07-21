@@ -2,11 +2,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter } from 'react-router';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import SignalsOverviewPage from '..';
-import { mainNav } from '../../../lib/nav/nav-items';
+import { navHandle } from '../../../lib/nav';
+import { RouteHeader } from '../../../lib/route-header/route-header';
 import {
   billingThemeSnapshotsResponse,
   emptyThemeEntitiesResponse,
@@ -30,6 +31,26 @@ function renderSignalsPage() {
       </QueryClientProvider>
     </MemoryRouter>,
   );
+}
+
+function renderSignalsPageWithShell() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/signals',
+        handle: navHandle('/signals'),
+        element: (
+          <QueryClientProvider client={queryClient}>
+            <RouteHeader />
+            <SignalsOverviewPage />
+          </QueryClientProvider>
+        ),
+      },
+    ],
+    { initialEntries: ['/signals'] },
+  );
+  return render(<RouterProvider router={router} />);
 }
 
 afterEach(() => {
@@ -132,15 +153,10 @@ describe('Signals page', () => {
     });
 
     it('keeps exactly one Signals documentation action across the shell and page', async () => {
-      renderSignalsPage();
+      renderSignalsPageWithShell();
       await screen.findByRole('region', { name: 'Signal theme flow' });
-      const shellDocumentationLinks = mainNav
-        .flatMap(section => section.items)
-        .filter(item => item.url === '/signals' && item.docs?.label === 'Signals documentation');
 
-      expect(
-        shellDocumentationLinks.length + screen.queryAllByRole('link', { name: 'Signals documentation' }).length,
-      ).toBe(1);
+      expect(screen.getAllByRole('link', { name: 'Signals documentation' })).toHaveLength(1);
     });
 
     it('keeps the single agent visible in the selector', async () => {

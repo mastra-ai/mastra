@@ -266,10 +266,10 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   const flowQuery = useThemeFlow(entityId, entityType, signalNames, snapshot?.snapshotId);
 
   useEffect(() => {
-    if (!isPlaying || snapshots.length < 2 || flowQuery.isFetching) return;
+    if (!isPlaying || snapshots.length < 2 || flowQuery.isFetching || flowQuery.isError) return;
     const timer = window.setTimeout(() => setSelectedSnapshotId(nextSnapshotId), 900);
     return () => window.clearTimeout(timer);
-  }, [flowQuery.isFetching, isPlaying, nextSnapshotId, snapshots.length]);
+  }, [flowQuery.isError, flowQuery.isFetching, isPlaying, nextSnapshotId, snapshots.length]);
 
   if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
 
@@ -277,7 +277,10 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
     return (
       <SignalsErrorState
         message="Unable to load signal flow."
-        onRetry={() => void Promise.all([snapshotsQuery.refetch(), flowQuery.refetch()])}
+        onRetry={() => {
+          setIsPlaying(false);
+          void Promise.all([snapshotsQuery.refetch(), flowQuery.refetch()]);
+        }}
       />
     );
   }
