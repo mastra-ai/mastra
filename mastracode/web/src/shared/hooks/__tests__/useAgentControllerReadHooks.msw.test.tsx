@@ -120,7 +120,7 @@ describe('agent-controller read hooks', () => {
     expect(seenLimits).toEqual([2, 4]);
   });
 
-  it('does not carry a previous thread\'s messages when switching threads', async () => {
+  it("does not carry a previous thread's messages when switching threads", async () => {
     server.use(
       http.get(`${sessionUrl}/threads/:threadId/messages`, ({ params }) => {
         const id = params.threadId as string;

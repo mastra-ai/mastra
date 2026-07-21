@@ -395,12 +395,7 @@ describe('transcript reducer prependOlder', () => {
 
     const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: grown });
 
-    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual([
-      'msg-1',
-      'msg-2',
-      'msg-3',
-      'msg-4',
-    ]);
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3', 'msg-4']);
   });
 
   it('does not duplicate the overlapping/anchor message', () => {
