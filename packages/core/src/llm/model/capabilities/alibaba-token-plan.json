@@ -1,5 +1,5 @@
 {
-  "attachment": ["kimi-k2.5", "kimi-k2.6", "kimi-k2.7-code", "qwen3.6-flash"],
+  "attachment": ["kimi-k2.5", "kimi-k2.6", "kimi-k2.7-code", "qwen3.6-flash", "qwen3.8-max-preview"],
   "temperature": [
     "MiniMax-M2.5",
     "deepseek-v3.2",
@@ -16,6 +16,7 @@
     "qwen3.6-plus",
     "qwen3.7-max",
     "qwen3.7-plus",
+    "qwen3.8-max-preview",
     "wan2.7-image",
     "wan2.7-image-pro"
   ],

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { __resetRuntimeConfigForTests } from '../runtime-config';
-import { seedInMemoryFactoryStoreForTests } from '../storage/test-utils';
-import type { InMemoryFactoryStoreSeed } from '../storage/test-utils';
+import { seedFactoryStorageForTests } from '../storage/test-utils';
+import type { FactoryStorageTestSeed } from '../storage/test-utils';
 import { listAuditEvents, recordAuditEvent } from './store';
 
 const ORG = 'org_123';
@@ -20,10 +20,10 @@ function baseEvent(overrides: Record<string, any> = {}) {
   };
 }
 
-let seed: InMemoryFactoryStoreSeed;
+let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
-  seed = await seedInMemoryFactoryStoreForTests();
+  seed = await seedFactoryStorageForTests();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 

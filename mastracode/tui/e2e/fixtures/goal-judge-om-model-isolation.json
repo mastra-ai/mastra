@@ -1,0 +1,89 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "## New Message History to Observe"
+      },
+      "response": {
+        "content": "<observations>\nDate: Jul 18, 2026\n* Long goal run checkpoint observed.\n</observations>\n<current-task>\nWait for explicit user approval.\n</current-task>\n<suggested-response>\nAcknowledge the approval.\n</suggested-response>\n<thread-title>\nGoal judge OM isolation\n</thread-title>"
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Prepare the goal judge OM isolation result",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "Initial goal work is ready for the first judge pass."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.5",
+        "userMessage": "Goal: Prepare the goal judge OM isolation result",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": {
+          "decision": "continue",
+          "reason": "Continue once more before requesting explicit user approval."
+        }
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Prepare the goal judge OM isolation result",
+        "sequenceIndex": 1
+      },
+      "response": {
+        "content": "The goal judge OM isolation result is ready. Waiting for explicit user approval."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.5",
+        "userMessage": "Goal: Prepare the goal judge OM isolation result",
+        "sequenceIndex": 1
+      },
+      "response": {
+        "content": {
+          "decision": "waiting",
+          "reason": "Waiting for explicit user approval before completing the objective."
+        }
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Prepare the goal judge OM isolation result",
+        "sequenceIndex": 2
+      },
+      "response": {
+        "content": "Follow-up main response received; the approved goal is complete."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.5",
+        "userMessage": "Goal: Prepare the goal judge OM isolation result",
+        "sequenceIndex": 2
+      },
+      "response": {
+        "content": {
+          "decision": "done",
+          "reason": "The user approved the result and the objective is complete."
+        }
+      }
+    }
+  ]
+}

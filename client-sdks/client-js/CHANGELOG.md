@@ -1,5 +1,19 @@
 # @mastra/client-js
 
+## 1.33.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`0a2c22c`](https://github.com/mastra-ai/mastra/commit/0a2c22c902604439ec490319e14c17f331e0c84c), [`3a8024c`](https://github.com/mastra-ai/mastra/commit/3a8024ce615f8aa89479c0d71fe61d10bb0040be)]:
+  - @mastra/core@1.52.0-alpha.9
+
+## 1.33.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`6b1bf3b`](https://github.com/mastra-ai/mastra/commit/6b1bf3b9494bd51aa8f654c68c9355d6046fa2a1), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9)]:
+  - @mastra/core@1.52.0-alpha.8
+
 ## 1.33.0-alpha.7
 
 ### Patch Changes
@@ -2454,9 +2468,7 @@
   await client.storedAgents.unfavorite(agent.id);
 
   // Versioning + publish
-  const draft = await client.storedSkills.create({
-    /* ... */
-  });
+  const draft = await client.storedSkills.create({/* ... */});
   const published = await client.storedSkills.publish(draft.id);
   await client.storedSkills.restore(draft.id, { version: 1 });
   ```
@@ -2628,9 +2640,7 @@
   await client.storedAgents.unfavorite(agent.id);
 
   // Versioning + publish
-  const draft = await client.storedSkills.create({
-    /* ... */
-  });
+  const draft = await client.storedSkills.create({/* ... */});
   const published = await client.storedSkills.publish(draft.id);
   await client.storedSkills.restore(draft.id, { version: 1 });
   ```

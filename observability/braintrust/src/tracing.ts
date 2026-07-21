@@ -409,8 +409,7 @@ export class BraintrustExporter extends TrackingExporter<
 
     // Extract step data from MODEL_STEP output and attributes
     const output = span.output as
-      | { text?: string; toolCalls?: Array<{ toolCallId: string; toolName: string; args: unknown }> }
-      | undefined;
+      { text?: string; toolCalls?: Array<{ toolCallId: string; toolName: string; args: unknown }> } | undefined;
     const attributes = span.attributes as { stepIndex?: number } | undefined;
 
     const stepData: ThreadStepData = {

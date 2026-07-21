@@ -1,5 +1,28 @@
 # @mastra/temporal
 
+## 0.2.8-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`0a2c22c`](https://github.com/mastra-ai/mastra/commit/0a2c22c902604439ec490319e14c17f331e0c84c), [`3a8024c`](https://github.com/mastra-ai/mastra/commit/3a8024ce615f8aa89479c0d71fe61d10bb0040be)]:
+  - @mastra/core@1.52.0-alpha.9
+  - @mastra/deployer@1.52.0-alpha.9
+
+## 0.2.8-alpha.8
+
+### Patch Changes
+
+- dependencies updates: ([#19393](https://github.com/mastra-ai/mastra/pull/19393))
+  - Updated dependency [`@babel/generator@^8.0.0` ↗︎](https://www.npmjs.com/package/@babel/generator/v/8.0.0) (from `^7.29.7`, in `dependencies`)
+  - Updated dependency [`@babel/parser@^8.0.4` ↗︎](https://www.npmjs.com/package/@babel/parser/v/8.0.4) (from `^7.29.7`, in `dependencies`)
+  - Updated dependency [`@babel/types@^8.0.4` ↗︎](https://www.npmjs.com/package/@babel/types/v/8.0.4) (from `^7.29.7`, in `dependencies`)
+
+- Fixed Babel 8 compatibility for build-time transforms. ([#19393](https://github.com/mastra-ai/mastra/pull/19393))
+
+- Updated dependencies [[`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`6b1bf3b`](https://github.com/mastra-ai/mastra/commit/6b1bf3b9494bd51aa8f654c68c9355d6046fa2a1), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9)]:
+  - @mastra/deployer@1.52.0-alpha.8
+  - @mastra/core@1.52.0-alpha.8
+
 ## 0.2.8-alpha.7
 
 ### Patch Changes
