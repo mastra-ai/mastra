@@ -11,6 +11,7 @@ import type {
   MastraOnStepFinishCallback,
   LanguageModelUsage,
 } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
@@ -219,9 +220,24 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         }
 
         case AgentStreamEventTypes.STEP_START: {
-          // Step start - enqueue if it's a chunk type
-          const chunk = streamEvent.data as ChunkType<OUTPUT>;
-          if (chunk && 'type' in chunk) {
+          // Step start - enqueue as a canonical ChunkType.
+          // Older publishers flattened fields onto the root; normalize so
+          // consumers always see `payload` (see #19574).
+          const raw = streamEvent.data as any;
+          if (raw && typeof raw === 'object' && 'type' in raw) {
+            const chunk =
+              raw.payload !== undefined
+                ? (raw as ChunkType<OUTPUT>)
+                : ({
+                    runId: raw.runId ?? streamEvent.runId,
+                    from: raw.from ?? ChunkFrom.AGENT,
+                    type: 'step-start' as const,
+                    payload: {
+                      request: raw.request ?? {},
+                      warnings: raw.warnings ?? [],
+                      ...(raw.messageId !== undefined ? { messageId: raw.messageId } : {}),
+                    },
+                  } as ChunkType<OUTPUT>);
             safeEnqueue(controller, chunk);
           }
           break;
@@ -496,18 +512,31 @@ export async function emitChunkEvent<OUTPUT = undefined>(
 
 /**
  * Helper to emit a step start event to pubsub.
- * The `data` payload must include `type: 'step-start'` so the stream-adapter
- * consumer recognises it as a `ChunkType` and enqueues it onto the client stream.
+ *
+ * Emits the canonical `ChunkType` shape (`type` + `payload` + `runId`/`from`) so
+ * consumers such as `@mastra/ai-sdk` can read `chunk.payload` safely. The durable
+ * path previously flattened fields onto the chunk root, which crashed converters
+ * that destructure `payload` (see #19574).
  */
 export async function emitStepStartEvent(
   pubsub: PubSub,
   runId: string,
-  data: { stepId?: string; request?: unknown; warnings?: unknown[] },
+  data: { stepId?: string; request?: unknown; warnings?: unknown[]; messageId?: string },
 ): Promise<void> {
+  const { stepId: _stepId, request, warnings, messageId } = data;
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
-    data: { type: 'step-start', ...data },
+    data: {
+      runId,
+      from: ChunkFrom.AGENT,
+      type: 'step-start',
+      payload: {
+        request: request ?? {},
+        warnings: warnings ?? [],
+        ...(messageId !== undefined ? { messageId } : {}),
+      },
+    },
   });
 }
 
