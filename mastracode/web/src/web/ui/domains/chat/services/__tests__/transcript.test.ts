@@ -313,7 +313,7 @@ describe('transcript reducer message entries', () => {
     });
     const afterResume = transcriptReducer(beforeResume, {
       type: 'event',
-      event: { type: 'message_end', message: resumedMessage },
+      event: { type: 'message_update', message: resumedMessage },
     });
 
     const matchingParts = afterResume.entries.flatMap(entry =>
@@ -372,6 +372,7 @@ describe('transcript reducer message entries', () => {
         },
       },
     ]);
+
   });
 });
 
