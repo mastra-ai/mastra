@@ -326,7 +326,14 @@ export const factory = new MastraFactory({
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
 // `server` config (middleware + apiRoutes + cors).
-export const mastra = new Mastra(await factory.prepare());
+const prepared = await factory.prepare();
+export const mastra = new Mastra({
+  ...prepared,
+  bundler: {
+    externals: ['@anush008/tokenizers', '@duckdb/node-bindings', '@node-rs/xxhash', 'supports-color'],
+    transpilePackages: ['@mastra/factory'],
+  },
+});
 
 // Post-construct boot: initialize the controller (which now inherits this
 // instance's storage) and start its workers. Runs at module load via top-level
