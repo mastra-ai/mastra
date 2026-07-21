@@ -33,7 +33,7 @@ import { streamSSE } from 'hono/streaming';
 import type { AuditEmitter } from '@mastra/factory/storage/domains/audit/domain';
 import { ensureWebAuthUser, getWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
-import type { StateSigner } from '../state-signing';
+import type { StateSigner } from '@mastra/factory/state-signing';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config';
 import type { GithubIntegration } from './integration';
 import { withProjectLock } from './project-lock';

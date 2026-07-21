@@ -31,7 +31,7 @@ import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { WorkOSAuditIntegration } from '../web/audit/workos-integration.js';
 import { MastraFactory } from '../web/factory-entry.js';
-import type { FactoryIntegration } from '../web/factory-integration.js';
+import type { FactoryIntegration } from '@mastra/factory/integrations/base';
 import { GithubIntegration } from '../web/github/integration.js';
 import { LinearIntegration } from '../web/linear/integration.js';
 

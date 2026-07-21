@@ -31,7 +31,7 @@ import type {
   IntakeIssueDetail,
   ListIntakeIssuesInput,
 } from '@mastra/factory/capabilities/intake';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
 import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
 import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
 import { buildLinearAgentTools } from './agent-tools.js';

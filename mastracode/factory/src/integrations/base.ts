@@ -22,15 +22,15 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
-import type { AuditEmitter } from '@mastra/factory/storage/domains/audit/domain';
-import type { AuditEventRow } from '@mastra/factory/storage/domains/audit/base';
-import type { StateSigner } from './state-signing.js';
-import type { Intake } from '@mastra/factory/capabilities/intake';
-import type { VersionControl } from '@mastra/factory/capabilities/version-control';
-import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
-import type { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
-import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
-import type { SourceControlStorageHandle } from '@mastra/factory/storage/domains/source-control/base';
+import type { Intake } from '../capabilities/intake';
+import type { VersionControl } from '../capabilities/version-control';
+import type { StateSigner } from '../state-signing.js';
+import type { AuditEventRow } from '../storage/domains/audit/base';
+import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { IntakeStorage } from '../storage/domains/intake/base';
+import type { IntegrationStorageHandle } from '../storage/domains/integrations/base';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
 
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {

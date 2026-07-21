@@ -17,7 +17,7 @@ import type { Context } from 'hono';
 
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
-import type { StateSigner } from '../state-signing';
+import type { StateSigner } from '@mastra/factory/state-signing';
 import type { LinearIntegration } from './integration';
 import { invalidateLinearConnectionCache } from './agent-tools';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './config';

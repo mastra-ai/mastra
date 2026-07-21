@@ -15,10 +15,10 @@ import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import type { FactoryIntegration } from './factory-integration.js';
+import type { FactoryIntegration } from '@mastra/factory/integrations/base';
 import type { GithubIntegration } from './github/integration.js';
 import type { LinearIntegration } from './linear/integration.js';
-import type { StateSigner } from './state-signing.js';
+import type { StateSigner } from '@mastra/factory/state-signing';
 
 /**
  * Factory-resolved sandbox runtime: the machine GitHub projects clone their

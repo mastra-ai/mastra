@@ -7,7 +7,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import type { AuditEmitter } from '@mastra/factory/storage/domains/audit/domain';
 import { factoryRouteAuth } from './auth.js';
-import type { FactoryIntegration, IntegrationContext } from './factory-integration.js';
+import type { FactoryIntegration, IntegrationContext } from '@mastra/factory/integrations/base';
 import { getGithubFeatureDiagnostics } from './github/config.js';
 import { getLinearFeatureDiagnostics } from './linear/config.js';
 import { WorkItemRoutes } from '@mastra/factory/routes/work-items';
@@ -16,7 +16,7 @@ import { IntakeRoutes } from '@mastra/factory/routes/intake';
 import { OAuthRoutes } from '@mastra/factory/routes/oauth';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
-import type { StateSigner } from './state-signing.js';
+import type { StateSigner } from '@mastra/factory/state-signing';
 import { invalidateTenantCredentialSnapshots } from '@mastra/factory/routes/tenant-credentials';
 import { ConfigRoutes } from '@mastra/factory/routes/config';
 import type { IntegrationStorage } from '@mastra/factory/storage/domains/integrations/base';

@@ -9,7 +9,7 @@ import { PgVector } from '@mastra/pg';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import { MastraFactory } from './factory-entry.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
-import type { FactoryIntegration, IntegrationContext } from './factory-integration.js';
+import type { FactoryIntegration, IntegrationContext } from '@mastra/factory/integrations/base';
 import {
   __resetRuntimeConfigForTests,
   getFactoryStorage,

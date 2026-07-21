@@ -31,7 +31,11 @@ import { observeAgentGitAction } from '@mastra/factory/storage/domains/audit/age
 import { AuditDomain } from '@mastra/factory/storage/domains/audit/domain';
 import type { WebAuthUser } from './auth.js';
 import { buildAuthRoutes, createFactoryAuthGate, factoryRouteAuth, getWebAuthOrgId, getWebAuthUserId } from './auth.js';
-import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './factory-integration.js';
+import type {
+  FactoryIntegration,
+  IntegrationPostToolContext,
+  IntegrationTools,
+} from '@mastra/factory/integrations/base';
 import { getFactoryWorkspace } from './factory/workspace.js';
 import { ProjectRoutes } from '@mastra/factory/routes/projects';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
@@ -50,7 +54,7 @@ import { QueueHealthStorage } from '@mastra/factory/storage/domains/queue-health
 import { SourceControlStorage } from '@mastra/factory/storage/domains/source-control/base';
 import { WorkItemsStorage } from '@mastra/factory/storage/domains/work-items/base';
 import { handleServerError } from './server-error.js';
-import { createStateSigner } from './state-signing.js';
+import { createStateSigner } from '@mastra/factory/state-signing';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { assembleWebApiRoutes, buildIntegrationContext } from './web-surface.js';
 import type { WebApiRoutesDeps } from './web-surface.js';

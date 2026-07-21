@@ -2,7 +2,7 @@ import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { __resetRuntimeConfigForTests } from '../runtime-config.js';
-import { createStateSigner } from '../state-signing.js';
+import { createStateSigner } from '@mastra/factory/state-signing';
 import { seedFactoryStorageForTests } from '../storage/test-utils.js';
 import { GithubIntegration, normalizePrivateKey } from './integration.js';
 

@@ -87,7 +87,7 @@ const linearStub = {
 } as unknown as import('./integration').LinearIntegration;
 
 // Deterministic state signer injected the same way the factory does it.
-const stateSigner: import('../state-signing').StateSigner = {
+const stateSigner: import('@mastra/factory/state-signing').StateSigner = {
   stable: true,
   sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
   verify: (state: string | undefined) => {
@@ -133,7 +133,7 @@ function linearStorage(): LinearStorageHandle {
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: { workosId: string; organizationId?: string | null } | null,
-  signer: import('../state-signing').StateSigner | null = stateSigner,
+  signer: import('@mastra/factory/state-signing').StateSigner | null = stateSigner,
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {

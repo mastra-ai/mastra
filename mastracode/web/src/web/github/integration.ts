@@ -44,7 +44,7 @@ import type {
   ReviewComment,
   VersionControl,
 } from '@mastra/factory/capabilities/version-control';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
 import { runGithubIssueTriage } from './issue-triage.js';
 import { buildGithubRoutes } from './routes.js';
 import {
