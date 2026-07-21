@@ -54,7 +54,7 @@ const linearStub = {
   fetchWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
   listProjects: (...args: any[]) => listLinearProjects(...(args as [])),
   intake: {
-    listIssues: async (input: import('../factory-integration').ListIntakeIssuesInput) => {
+    listIssues: async (input: import('../capabilities/intake').ListIntakeIssuesInput) => {
       if (input.connection.type !== 'oauth') throw new Error('expected OAuth connection');
       const result = await listActiveLinearIssues(input.connection.accessToken, input.cursor, input.sourceIds);
       return {

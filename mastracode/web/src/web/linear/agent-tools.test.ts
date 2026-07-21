@@ -39,11 +39,11 @@ const githubStub = {
 const linearStub = {
   id: 'linear',
   intake: {
-    getIssue: (input: import('../factory-integration').GetIntakeIssueInput) => {
+    getIssue: (input: import('../capabilities/intake').GetIntakeIssueInput) => {
       if (input.connection.type !== 'oauth') throw new Error('expected OAuth connection');
       return fetchLinearIssueDetail(input.connection.accessToken, input.issueId);
     },
-    createComment: (input: import('../factory-integration').CreateIntakeCommentInput) => {
+    createComment: (input: import('../capabilities/intake').CreateIntakeCommentInput) => {
       if (input.connection.type !== 'oauth') throw new Error('expected OAuth connection');
       return createLinearIssueComment(input.connection.accessToken, input.issueId, input.body);
     },

@@ -28,23 +28,23 @@ import { Octokit } from '@octokit/rest';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
+import type { IntegrationConnection } from '../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
-  FactoryIntegration,
   GetIntakeIssueInput,
   Intake,
   IntakeIssue,
   IntakeIssueDetail,
-  IntegrationConnection,
-  IntegrationContext,
-  IntegrationTools,
   ListIntakeIssuesInput,
-  VersionControl,
-  PullRequestComment,
+} from '../capabilities/intake.js';
+import type {
   PullRequest,
+  PullRequestComment,
   Review,
   ReviewComment,
-} from '../factory-integration.js';
+  VersionControl,
+} from '../capabilities/version-control.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
 import { buildGithubRoutes } from './routes.js';
 import { createGithubSubscriptionTools } from './session-subscriptions.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';

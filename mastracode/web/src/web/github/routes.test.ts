@@ -262,7 +262,7 @@ const githubStub = {
   listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
     listRepoOpenIssues(installationId, repoFullName, page, options),
   intake: {
-    listIssues: async (input: import('../factory-integration').ListIntakeIssuesInput) => {
+    listIssues: async (input: import('../capabilities/intake').ListIntakeIssuesInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenIssues(
         input.connection.installationId,
@@ -292,7 +292,7 @@ const githubStub = {
     },
   },
   versionControl: {
-    listPullRequests: async (input: import('../factory-integration').ListPullRequestsInput) => {
+    listPullRequests: async (input: import('../capabilities/version-control').ListPullRequestsInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenPullRequests(
         input.connection.installationId,
@@ -304,7 +304,7 @@ const githubStub = {
         nextCursor: result.nextPage === null ? null : String(result.nextPage),
       };
     },
-    createPullRequest: async (input: import('../factory-integration').CreatePullRequestInput) => {
+    createPullRequest: async (input: import('../capabilities/version-control').CreatePullRequestInput) => {
       const result = await createPullRequest(input);
       return {
         id: '1',

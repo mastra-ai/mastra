@@ -22,18 +22,16 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
+import type { IntegrationConnection } from '../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
-  FactoryIntegration,
   GetIntakeIssueInput,
   Intake,
   IntakeIssue,
   IntakeIssueDetail,
-  IntegrationConnection,
-  IntegrationContext,
-  IntegrationTools,
   ListIntakeIssuesInput,
-} from '../factory-integration.js';
+} from '../capabilities/intake.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import { buildLinearRoutes } from './routes.js';
 
