@@ -14,8 +14,9 @@
  * monorepo's other templates (templates/* float via `latest`/caret). By
  * default the range is anchored on the LOCAL monorepo version of each
  * package (verified to exist on npm); `--tag latest` anchors on the `latest`
- * dist-tags instead — that's what the automated sync uses. Because anchors
- * may be prereleases in the default mode, the template ships an `.npmrc`
+ * dist-tags instead. Automated sync uses the default mode so the generated
+ * template matches the coherent local package set. Because those anchors
+ * may be prereleases, the template ships an `.npmrc`
  * with `legacy-peer-deps=true` — npm's strict resolver rejects prereleases
  * like `1.51.1-alpha.1` against peer ranges like `>=1.50.0-0`.
  *
@@ -24,9 +25,9 @@
  *
  * Output defaults to `template-out/` next to this package (gitignored).
  * Publish flow: automated — the sync-softwarefactory-template workflow runs
- * this with `--tag latest` on pushes to main touching `mastracode/web` and
- * force-syncs github.com/mastra-ai/softwarefactory-template, mirroring the
- * templates/* sync process (one-way overwrite; the monorepo is the source of
+ * this against published local monorepo versions on pushes to main touching
+ * `mastracode/web`, then force-syncs the softwarefactory-template repository,
+ * mirroring the templates/* sync process (one-way overwrite; the monorepo is
  * truth).
  */
 import { execFileSync } from 'node:child_process';
@@ -44,7 +45,8 @@ function argValue(flag) {
   const i = args.indexOf(flag);
   return i === -1 ? undefined : args[i + 1];
 }
-const outDir = path.resolve(argValue('--out') ?? path.join(pkgRoot, 'template-out'));
+const defaultOutDir = path.join(pkgRoot, 'template-out');
+const outDir = path.resolve(argValue('--out') ?? defaultOutDir);
 const pinTag = argValue('--tag'); // undefined = local monorepo versions
 
 /** True when `candidate` is `parent` or nested inside it. */
@@ -53,11 +55,13 @@ function containsPath(parent, candidate) {
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 }
 
-// The output tree gets cleared before copying — refuse destinations that
-// would wipe the source web project or (unless it's the default
-// template-out) this package / the monorepo.
-if (containsPath(outDir, webRoot) || containsPath(webRoot, outDir) || containsPath(outDir, pkgRoot)) {
-  console.error(`sync-template: unsafe output directory ${outDir} (overlaps the source tree)`);
+// The output tree gets recursively deleted before generation. Allow the fixed,
+// gitignored default inside this package; require every custom destination to
+// be completely outside the monorepo so a typo cannot delete source files.
+const customOutOverlapsMonorepo =
+  outDir !== defaultOutDir && (containsPath(monorepoRoot, outDir) || containsPath(outDir, monorepoRoot));
+if (customOutOverlapsMonorepo) {
+  console.error(`sync-template: unsafe output directory ${outDir} (overlaps the monorepo)`);
   process.exit(1);
 }
 

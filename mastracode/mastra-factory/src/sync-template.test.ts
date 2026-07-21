@@ -54,11 +54,16 @@ afterAll(() => {
 });
 
 describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
-  it('rejects an output directory overlapping the source tree', () => {
-    const unsafe = runSync(['--out', path.join(webRoot, 'template-out')]);
+  it.each([
+    ['source project', path.join(webRoot, 'template-out')],
+    ['CLI package', path.join(pkgRoot, 'src', 'template-out')],
+    ['monorepo parent', path.dirname(path.resolve(pkgRoot, '../..'))],
+  ])('rejects an output directory overlapping the %s', (_label, unsafeOutDir) => {
+    const existedBefore = fs.existsSync(unsafeOutDir);
+    const unsafe = runSync(['--out', unsafeOutDir]);
     expect(unsafe.status).not.toBe(0);
     expect(unsafe.stderr).toContain('unsafe output directory');
-    expect(fs.existsSync(path.join(webRoot, 'template-out'))).toBe(false);
+    expect(fs.existsSync(unsafeOutDir)).toBe(existedBefore);
   });
 
   it('generates a standalone template without env files or link: specs', () => {
