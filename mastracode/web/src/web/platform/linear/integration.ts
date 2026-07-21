@@ -1,6 +1,8 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
+import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '@mastra/factory/capabilities/connection';
 import type { Intake, IntakeIssue, IntakeIssueDetail } from '@mastra/factory/capabilities/intake';
@@ -71,6 +73,10 @@ const API_PREFIX = '/v1/server/linear';
 const PAGE_SIZE = 30;
 const MAX_REFERENCE_PAGES = 20;
 const MAX_COMMENT_PAGES = 20;
+
+function loose(c: unknown): Context {
+  return c as Context;
+}
 
 export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
@@ -239,17 +245,40 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   async checkConnection(orgId: string): Promise<LinearConnectionCheck> {
     const connection = await this.loadConnection(orgId);
-    return { connected: connection !== null, canComment: connection !== null && this.canPostComments(connection), checkedAt: Date.now() };
+    return {
+      connected: connection !== null,
+      canComment: connection !== null && this.canPostComments(connection),
+      checkedAt: Date.now(),
+    };
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
-    return buildLinearRoutes({
-      auth: ctx.auth,
-      linear: this as unknown as LinearIntegration,
-      stateSigner: ctx.stateSigner,
-      baseUrl: ctx.baseUrl,
-      intake: ctx.storage.intake,
-    }).filter(route => !route.path.startsWith('/auth/linear/'));
+    return [
+      this.#connectRoute(ctx),
+      ...buildLinearRoutes({
+        auth: ctx.auth,
+        linear: this as unknown as LinearIntegration,
+        stateSigner: ctx.stateSigner,
+        baseUrl: ctx.baseUrl,
+        intake: ctx.storage.intake,
+      }).filter(route => !route.path.startsWith('/auth/linear/')),
+    ];
+  }
+
+  #connectRoute(ctx: IntegrationContext): ApiRoute {
+    return registerApiRoute('/auth/linear/connect', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        await ctx.auth.ensureUser(loose(c));
+        const tenant = ctx.auth.tenant(loose(c));
+        if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
+
+        const query = new URLSearchParams({ return_to: c.req.query('return_to') || '/' });
+        const location = await this.#client.requestRedirect('GET', `${API_PREFIX}/authorize?${query}`);
+        return c.redirect(location);
+      },
+    });
   }
 
   async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
