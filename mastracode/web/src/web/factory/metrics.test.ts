@@ -19,11 +19,9 @@ function makeItem(overrides: Partial<WorkItemRow>): WorkItemRow {
     id: '00000000-0000-4000-8000-000000000001',
     orgId: 'org_1',
     createdBy: 'user_1',
-    githubProjectId: '00000000-0000-4000-8000-0000000000aa',
-    source: 'manual',
-    sourceKey: null,
+    factoryProjectId: '00000000-0000-4000-8000-0000000000aa',
+    externalSource: null,
     title: 'Item',
-    url: null,
     stages: ['intake'],
     stageHistory: [{ stage: 'intake', enteredAt: hoursAgo(1), by: 'user_1' }],
     sessions: {},
@@ -150,7 +148,12 @@ describe('computeFactoryMetrics', () => {
         id: '00000000-0000-4000-8000-000000000001',
         title: 'Old review',
         stages: ['review'],
-        url: 'https://github.com/o/r/pull/1',
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'o/r#1',
+          url: 'https://github.com/o/r/pull/1',
+        },
         stageHistory: [{ stage: 'review', enteredAt: hoursAgo(70), by: 'user_1' }],
       }),
       makeItem({
@@ -190,13 +193,18 @@ describe('computeFactoryMetrics', () => {
   });
 
   it('given items created inside and outside the window, then source mix only counts the window', () => {
+    const githubIssue = (externalId: string) => ({
+      integrationId: 'github',
+      type: 'issue',
+      externalId,
+    });
     const items = [
-      makeItem({ id: '00000000-0000-4000-8000-000000000001', source: 'github-issue' }),
-      makeItem({ id: '00000000-0000-4000-8000-000000000002', source: 'github-issue' }),
-      makeItem({ id: '00000000-0000-4000-8000-000000000003', source: 'manual' }),
+      makeItem({ id: '00000000-0000-4000-8000-000000000001', externalSource: githubIssue('1') }),
+      makeItem({ id: '00000000-0000-4000-8000-000000000002', externalSource: githubIssue('2') }),
+      makeItem({ id: '00000000-0000-4000-8000-000000000003' }),
       makeItem({
         id: '00000000-0000-4000-8000-000000000004',
-        source: 'linear-issue',
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-1' },
         createdAt: new Date(NOW.getTime() - 40 * DAY),
       }),
     ];
@@ -204,7 +212,7 @@ describe('computeFactoryMetrics', () => {
     const metrics = computeFactoryMetrics(items, { days: 30, now: NOW });
 
     expect(metrics.sourceMix).toEqual([
-      { source: 'github-issue', count: 2 },
+      { source: 'github:issue', count: 2 },
       { source: 'manual', count: 1 },
     ]);
   });

@@ -9,7 +9,7 @@
  * unavailable.
  *
  * Tenancy is **org-first**, like `work_items`: events are scoped by `org_id`
- * and (usually) `github_project_id`; `actor_id` records who acted but never
+ * and (usually) `factory_project_id`; `actor_id` records who acted but never
  * scopes reads.
  *
  * v1 action taxonomy (register these in the WorkOS dashboard under
@@ -76,8 +76,10 @@ export interface AuditEventRow {
   targets: AuditTarget[];
   /** Bounded event summary — never full payloads, never secrets. */
   metadata: Record<string, unknown>;
-  /** Project the event is scoped to; null for org-level events. */
-  githubProjectId: string | null;
+  /** Factory project the event is scoped to; null for org-level events. */
+  factoryProjectId: string | null;
+  /** Project-repository link affected by a repository-specific action. */
+  projectRepositoryId: string | null;
   /** Request context (`x-forwarded-for` / `user-agent`). */
   context: AuditContext;
   occurredAt: Date;
@@ -92,7 +94,8 @@ export interface RecordAuditEventInput {
   action: string;
   targets: AuditTarget[];
   metadata?: Record<string, unknown>;
-  githubProjectId?: string;
+  factoryProjectId?: string;
+  projectRepositoryId?: string;
   context?: AuditContext;
   occurredAt?: Date;
 }
@@ -102,7 +105,7 @@ export type AuditEventInsert = Omit<AuditEventRow, 'id'>;
 
 export interface ListAuditEventsInput {
   orgId: string;
-  githubProjectId?: string;
+  factoryProjectId?: string;
   /** Restrict to these actions (exact match). */
   actions?: string[];
   actorId?: string;
@@ -165,13 +168,14 @@ export const AUDIT_EVENTS_SCHEMA: CollectionSchema = {
     action: { type: 'text' },
     targets: { type: 'json' },
     metadata: { type: 'json' },
-    github_project_id: { type: 'text', nullable: true },
+    factory_project_id: { type: 'text', nullable: true },
+    project_repository_id: { type: 'text', nullable: true },
     context: { type: 'json' },
     occurred_at: { type: 'timestamp' },
   },
   indexes: [
     { name: 'audit_events_org_occurred_idx', columns: ['org_id', 'occurred_at'] },
-    { name: 'audit_events_org_project_occurred_idx', columns: ['org_id', 'github_project_id', 'occurred_at'] },
+    { name: 'audit_events_org_project_occurred_idx', columns: ['org_id', 'factory_project_id', 'occurred_at'] },
   ],
 };
 
@@ -184,7 +188,8 @@ interface AuditEventDbRow extends Record<string, unknown> {
   action: string;
   targets: AuditTarget[];
   metadata: Record<string, unknown>;
-  github_project_id: string | null;
+  factory_project_id: string | null;
+  project_repository_id: string | null;
   context: AuditContext;
   occurred_at: Date;
 }
@@ -198,7 +203,8 @@ function toRow(db: AuditEventDbRow): AuditEventRow {
     action: db.action,
     targets: db.targets,
     metadata: db.metadata,
-    githubProjectId: db.github_project_id,
+    factoryProjectId: db.factory_project_id,
+    projectRepositoryId: db.project_repository_id,
     context: db.context,
     occurredAt: db.occurred_at,
   };
@@ -235,7 +241,8 @@ export class AuditStorage extends FactoryStorageDomain {
       action: input.action,
       targets: input.targets,
       metadata: boundAuditMetadata(input.metadata),
-      github_project_id: input.githubProjectId ?? null,
+      factory_project_id: input.factoryProjectId ?? null,
+      project_repository_id: input.projectRepositoryId ?? null,
       context: input.context ?? {},
       occurred_at: input.occurredAt ?? new Date(),
     });
@@ -247,7 +254,7 @@ export class AuditStorage extends FactoryStorageDomain {
     const limit = clampAuditLimit(input.limit);
 
     const where: CollectionWhere = { org_id: input.orgId };
-    if (input.githubProjectId) where.github_project_id = input.githubProjectId;
+    if (input.factoryProjectId) where.factory_project_id = input.factoryProjectId;
     if (input.actions && input.actions.length > 0) where.action = { in: input.actions };
     if (input.actorId) where.actor_id = input.actorId;
 

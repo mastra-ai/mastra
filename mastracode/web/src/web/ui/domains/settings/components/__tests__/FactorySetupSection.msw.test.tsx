@@ -16,7 +16,7 @@ import { ToastProvider } from '../../../../ui';
 import type { RepositorySettings } from '../../../workspaces/services/github';
 import { FactorySetupSection } from '../FactorySetupSection';
 
-const SETTINGS_URL = `${TEST_BASE_URL}/web/github/repositories/ghp-1/settings`;
+const SETTINGS_URL = `${TEST_BASE_URL}/web/github/projects/ghp-1/settings`;
 const FIELD = 'Setup command for mastra';
 
 function seedGithubProject() {
@@ -29,9 +29,9 @@ function seedGithubProject() {
         resourceId: 'resource-gh',
         createdAt: 1,
         binding: {
-          kind: 'github',
-          githubProjectId: 'ghp-1',
-          worktrees: [],
+          kind: 'factory',
+          factoryProjectId: 'fp-1',
+          repositories: [{ projectRepositoryId: 'ghp-1', slug: 'mastra', worktrees: [] }],
         },
       },
     ]),

@@ -49,6 +49,7 @@ export type ScenarioName =
   | 'github-signals-polling-inbox'
   | 'github-signals-unsubscribe-reload'
   | 'goal-api-error-stops-loop'
+  | 'goal-duration-tool-approval'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
   | 'controller-api-config'
@@ -87,6 +88,8 @@ export type ScenarioName =
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
   | 'mcp-reload-config'
+  | 'mcp-oauth-authenticate'
+  | 'mcp-oauth-cancel'
   | 'mcp-selector-reconnect'
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
@@ -217,7 +220,7 @@ export type McE2eScenario = {
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
   aimockFixture?: string;
-  env?: (context: McE2ePrepareContext) => Record<string, string>;
+  env?: (context: McE2ePrepareContext) => Record<string, string | null>;
   entrypoint?: (context: McE2ePrepareContext) => string;
   inProcessApp?: (context: McE2eInProcessAppContext) => Promise<McE2eInProcessApp> | McE2eInProcessApp;
   terminalBackend?: 'subprocess';

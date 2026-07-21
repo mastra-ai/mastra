@@ -296,6 +296,77 @@ export interface ICredentialsProvider<TUser extends User = User> {
   isSignUpEnabled?(): boolean;
 }
 
+/**
+ * Provider interface for organization membership management.
+ *
+ * Implement this interface to enable multi-tenant hosts (e.g. the Mastra Code
+ * web factory) to bootstrap a personal organization for new users and to
+ * authorize organization-level administrative mutations.
+ */
+export interface IOrganizationsProvider {
+  /**
+   * Ensure the user belongs to an organization, bootstrapping a personal org
+   * on first use when they have none. Must be idempotent under
+   * concurrent/retried first logins.
+   *
+   * @param userId - Stable provider user id
+   * @returns The organization id, or `undefined` when the user genuinely
+   * stays no-org (bootstrap is best-effort)
+   */
+  ensureOrganization(userId: string): Promise<string | undefined>;
+
+  /**
+   * Whether the user holds an admin-equivalent role in the organization.
+   * Provider errors should resolve to `false` rather than throw.
+   *
+   * @param organizationId - Organization id
+   * @param userId - Stable provider user id
+   */
+  isOrganizationAdmin(organizationId: string, userId: string): Promise<boolean>;
+}
+
+/**
+ * Host-level context handed to {@link IAuthInit.init} once during server
+ * preparation. Storage-agnostic: hosts pass whatever database handle their
+ * storage backend exposes.
+ */
+export interface AuthInitContext {
+  /**
+   * Database handle for providers that persist their own auth tables
+   * (e.g. better-auth). Shape is provider-defined; hosts pass their storage
+   * backend's auth database as-is.
+   */
+  database?: unknown;
+  /** Browser-facing origin (no trailing slash), e.g. `https://factory.acme.com`. */
+  publicUrl?: string;
+  /**
+   * Extra browser origins allowed to talk to the API (cross-origin SPA
+   * deploys). Providers that enforce their own origin allow-list (e.g.
+   * better-auth `trustedOrigins`) must honor these.
+   */
+  allowedOrigins?: string[];
+}
+
+/**
+ * Optional one-time initialization hook for auth providers. Hosts call
+ * `init()` once during preparation with host-level context (database, public
+ * origin) so providers can consume it without the deploy entry passing it
+ * twice. Providers should fail fast here for requirements only satisfiable at
+ * prepare time.
+ */
+export interface IAuthInit {
+  init(ctx: AuthInitContext): Promise<void>;
+}
+
+/**
+ * Provider interface for handling raw auth HTTP requests. Providers that ship
+ * their own HTTP API surface (e.g. better-auth's `/api/auth/*` handler)
+ * implement this so hosts can mount it (typically under `/auth/api/*`).
+ */
+export interface IAuthHttpHandler {
+  handleAuthRequest(request: Request): Promise<Response>;
+}
+
 export * from './session';
 export * from './provider';
 export * from './types';

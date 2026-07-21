@@ -7,6 +7,7 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import {
@@ -37,6 +38,7 @@ import {
 } from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 
 function ToolIcon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {
   const n = name.toLowerCase();
@@ -300,12 +302,25 @@ function ToolCard({
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className={`min-w-0 max-w-full overflow-hidden bg-surface3 ${toolGroupClasses(groupPosition)}`}
+      className={cn('min-w-0 max-w-full overflow-hidden bg-surface3', toolGroupClasses(groupPosition))}
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
     >
+      {/*
+        Wrap the trigger content in a span so no icon is a *direct* child of
+        CollapsibleTrigger. The DS trigger rotates every direct-child <svg> via
+        `[&>svg]:rotate-90` on open — which would spin the tool icon (e.g. the
+        eye). Nesting keeps only the chevron animating, controlled here.
+      */}
       <CollapsibleTrigger className="w-full text-left">
         <span className="flex w-full items-center gap-2 px-2 py-1.5">
+          <ChevronDown
+            size={13}
+            className={cn(
+              'shrink-0 text-icon3 transition-transform duration-150',
+              expanded ? 'rotate-0' : '-rotate-90',
+            )}
+          />
           <ToolIcon name={tool.toolName} className="shrink-0 text-icon3" />
           <Txt as="span" variant="ui-sm" font="mono" className="text-icon5">
             {tool.toolName}
@@ -320,11 +335,9 @@ function ToolCard({
               {truncate(argsPreview, 72)}
             </Txt>
           )}
-          {tool.status !== 'done' && (
-            <Badge variant={STATUS_VARIANT[tool.status]} size="xs" className="ml-auto">
-              {STATUS_LABEL[tool.status]}
-            </Badge>
-          )}
+          <Badge variant={STATUS_VARIANT[tool.status]} size="xs" className="ml-auto">
+            {STATUS_LABEL[tool.status]}
+          </Badge>
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent className="flex min-w-0 max-w-full flex-col gap-2 px-2 pb-2">
@@ -368,9 +381,11 @@ function ToolCard({
 
 function ApprovalCard({
   prompt,
+  isSubmitting,
   onApprove,
 }: {
   prompt: ApprovalPrompt;
+  isSubmitting: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
 }) {
   return (
@@ -385,6 +400,7 @@ function ApprovalCard({
           size="sm"
           aria-label={`Approve ${prompt.toolName}`}
           autoFocus
+          disabled={isSubmitting}
           onClick={() => onApprove(prompt.toolCallId, true, prompt.id)}
         >
           Approve
@@ -392,6 +408,7 @@ function ApprovalCard({
         <Button
           size="sm"
           aria-label={`Decline ${prompt.toolName}`}
+          disabled={isSubmitting}
           onClick={() => onApprove(prompt.toolCallId, false, prompt.id)}
         >
           Decline
@@ -446,9 +463,11 @@ function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
 
 function SuspensionCard({
   prompt,
+  isSubmitting,
   onRespond,
 }: {
   prompt: SuspensionPrompt;
+  isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const payload = suspensionPayloadShape(prompt.suspendPayload);
@@ -468,6 +487,7 @@ function SuspensionCard({
             size="sm"
             aria-label="Approve the plan and switch to build"
             autoFocus
+            disabled={isSubmitting}
             onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
           >
             Approve &amp; build
@@ -475,6 +495,7 @@ function SuspensionCard({
           <Button
             size="sm"
             aria-label="Reject the plan"
+            disabled={isSubmitting}
             onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
           >
             Reject
@@ -495,6 +516,7 @@ function SuspensionCard({
             size="sm"
             aria-label={`Allow access to ${payload.requestedPath ?? 'the requested path'}`}
             autoFocus
+            disabled={isSubmitting}
             onClick={() => onRespond(prompt.toolCallId, 'Yes', prompt.id)}
           >
             Allow
@@ -502,6 +524,7 @@ function SuspensionCard({
           <Button
             size="sm"
             aria-label={`Deny access to ${payload.requestedPath ?? 'the requested path'}`}
+            disabled={isSubmitting}
             onClick={() => onRespond(prompt.toolCallId, 'No', prompt.id)}
           >
             Deny
@@ -511,16 +534,18 @@ function SuspensionCard({
     );
   }
 
-  return <AskUserCard prompt={prompt} payload={payload} onRespond={onRespond} />;
+  return <AskUserCard prompt={prompt} payload={payload} isSubmitting={isSubmitting} onRespond={onRespond} />;
 }
 
 function AskUserCard({
   prompt,
   payload,
+  isSubmitting,
   onRespond,
 }: {
   prompt: SuspensionPrompt;
   payload: SuspendPayloadShape;
+  isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[], promptId: string) => void;
 }) {
   const [draft, setDraft] = useState('');
@@ -538,6 +563,7 @@ function AskUserCard({
               size="sm"
               className="justify-start"
               aria-label={opt.description ? `${opt.label}: ${opt.description}` : opt.label}
+              disabled={isSubmitting}
               onClick={() => onRespond(prompt.toolCallId, opt.label, prompt.id)}
             >
               <strong>{opt.label}</strong>
@@ -558,9 +584,10 @@ function AskUserCard({
             onChange={e => setDraft(e.target.value)}
             placeholder="Your answer…"
             aria-label={question}
+            disabled={isSubmitting}
             autoFocus
           />
-          <Button variant="primary" size="sm" type="submit">
+          <Button variant="primary" size="sm" type="submit" disabled={isSubmitting}>
             Reply
           </Button>
         </form>
@@ -675,7 +702,7 @@ export function Transcript() {
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -691,7 +718,14 @@ export function Transcript() {
     resolvePrompt(promptId);
   };
 
-  return <TranscriptEntries entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />;
+  return (
+    <TranscriptEntries
+      entries={transcript.entries}
+      isSubmitting={approveMutation.isPending || respondMutation.isPending}
+      onApprove={onApprove}
+      onRespond={onRespond}
+    />
+  );
 }
 
 function followsToolEntry(entries: TimelineEntry[], index: number): boolean {
@@ -714,29 +748,55 @@ function followsToolEntry(entries: TimelineEntry[], index: number): boolean {
 
 export function TranscriptEntries({
   entries,
+  isSubmitting = false,
   onApprove,
   onRespond,
 }: {
   entries: TimelineEntry[];
+  isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
+  const suspensions = new Map(
+    entries.flatMap(entry => (entry.kind === 'suspension' ? [[entry.toolCallId, entry] as const] : [])),
+  );
+  const canonicalToolCallIds = new Set(
+    entries.flatMap(entry =>
+      entry.kind === 'message'
+        ? entry.message.content.parts.flatMap(part =>
+            part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
+          )
+        : [],
+    ),
+  );
+
   return (
     <>
       {entries.map((entry, index) => {
         switch (entry.kind) {
           case 'message':
-            return <MessageBubble key={entry.id} entry={entry} followsToolEntry={followsToolEntry(entries, index)} />;
+            return (
+              <MessageBubble
+                key={entry.id}
+                entry={entry}
+                followsToolEntry={followsToolEntry(entries, index)}
+                suspensions={suspensions}
+                isSubmitting={isSubmitting}
+                onRespond={onRespond}
+              />
+            );
           case 'notice':
             return <NoticeCard key={entry.id} entry={entry} />;
           case 'approval':
-            return <ApprovalCard key={entry.id} prompt={entry} onApprove={onApprove} />;
+            return <ApprovalCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
           case 'notification':
             return <NotificationCard key={entry.id} entry={entry} />;
           case 'notification_summary':
             return <NotificationSummaryCard key={entry.id} entry={entry} />;
           case 'suspension':
-            return <SuspensionCard key={entry.id} prompt={entry} onRespond={onRespond} />;
+            return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
+              <SuspensionCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
+            ) : null;
           case 'subagent':
             return <SubagentCard key={entry.id} entry={entry} />;
           default:
@@ -747,10 +807,29 @@ export function TranscriptEntries({
   );
 }
 
-function MessageBubble({ entry, followsToolEntry }: { entry: MessageEntry; followsToolEntry: boolean }) {
+function MessageBubble({
+  entry,
+  followsToolEntry,
+  suspensions,
+  isSubmitting,
+  onRespond,
+}: {
+  entry: MessageEntry;
+  followsToolEntry: boolean;
+  suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  isSubmitting: boolean;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+}) {
   // null = no group override; true/false = expand/collapse all in this bubble.
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
-  const parts = entry.message.content.parts ?? [];
+  const messageParts = entry.message.content.parts ?? [];
+  const parts = messageParts.filter(
+    part => part.type !== 'tool-invocation' || isTranscriptToolVisible(part.toolInvocation.toolName),
+  );
+  const message =
+    parts.length === messageParts.length
+      ? entry.message
+      : { ...entry.message, content: { ...entry.message.content, parts } };
   const toolCount = parts.reduce((n, part) => (part.type === 'tool-invocation' ? n + 1 : n), 0);
   const hasRenderablePart = parts.some(
     part =>
@@ -830,7 +909,7 @@ function MessageBubble({ entry, followsToolEntry }: { entry: MessageEntry; follo
       }
 
       return (
-        <div className={`prose ${followsToolEntry ? 'mt-4' : followsTool ? 'mt-3' : ''}`}>
+        <div className={cn('prose', followsToolEntry ? 'mt-4' : followsTool ? 'mt-3' : undefined)}>
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
@@ -846,8 +925,21 @@ function MessageBubble({ entry, followsToolEntry }: { entry: MessageEntry; follo
     ToolInvocation: (part: ToolInvocationPart) => {
       const runtime = entry.runtimeTools?.[part.toolInvocation.toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
-      const groupPosition = toolGroupPositions.get(part.toolInvocation.toolCallId);
-      return <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />;
+      const suspension = suspensions.get(tool.toolCallId);
+      if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
+      const groupPosition = toolGroupPositions.get(tool.toolCallId);
+      return (
+        <ToolFactory
+          toolName={tool.toolName}
+          toolCallId={tool.toolCallId}
+          input={suspension?.suspendPayload ?? tool.args}
+          output={tool.result}
+          status={suspension ? 'running' : tool.status}
+          isSubmitting={isSubmitting}
+          onRespond={suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined}
+          fallback={() => <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />}
+        />
+      );
     },
     File: (part: FilePart) => <FileAttachment part={part} />,
   };
@@ -864,7 +956,7 @@ function MessageBubble({ entry, followsToolEntry }: { entry: MessageEntry; follo
           ),
         )}
         {hasRenderablePart && entry.message.role !== 'signal' && (
-          <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />
+          <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />
         )}
       </div>
     );
@@ -876,7 +968,7 @@ function MessageBubble({ entry, followsToolEntry }: { entry: MessageEntry; follo
   if (status?.text.trim()) return <StatusMetadataCard status={status} />;
   if (!hasRenderablePart) return null;
 
-  return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
+  return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
 }
 
 function FileAttachment({ part }: { part: FilePart }) {

@@ -10,14 +10,14 @@
 import type { QueueHealthConfig } from '../../../../storage/domains/queue-health/base';
 
 /** Fetch the org's age-threshold config for a project (defaults when unset). */
-export async function fetchQueueHealthThresholds(baseUrl: string, githubProjectId: string): Promise<QueueHealthConfig> {
-  const res = await fetch(
-    `${baseUrl}/web/factory/repositories/${encodeURIComponent(githubProjectId)}/health/thresholds`,
-    {
-      headers: { Accept: 'application/json' },
-      credentials: 'include',
-    },
-  );
+export async function fetchQueueHealthThresholds(
+  baseUrl: string,
+  factoryProjectId: string,
+): Promise<QueueHealthConfig> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/health/thresholds`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {

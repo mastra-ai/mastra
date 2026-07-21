@@ -15,12 +15,15 @@ import type {
 } from '../../web/ui/domains/factory/services/workItems';
 
 /** The org's persisted work items (kanban cards) for a project. */
-export function useWorkItemsQuery(githubProjectId: string | undefined) {
+export function useWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.workItems(githubProjectId),
-    queryFn: () => listWorkItems(baseUrl, githubProjectId!),
-    enabled: Boolean(githubProjectId),
+    queryKey: queryKeys.workItems(factoryProjectId),
+    queryFn: () => listWorkItems(baseUrl, factoryProjectId!),
+    enabled: Boolean(factoryProjectId),
+    // Relationships can be created by GitHub ingestion or another open tab.
+    // Keep thread-page counterpart links current without requiring a reload.
+    refetchInterval: 5_000,
   });
 }
 
@@ -28,13 +31,13 @@ export function useWorkItemsQuery(githubProjectId: string | undefined) {
  * Materialize a work item (the server upserts on `sourceKey`, so acting twice
  * on the same issue reuses the card). The list cache is patched in place.
  */
-export function useUpsertWorkItemMutation(githubProjectId: string | undefined) {
+export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateWorkItemInput) => createWorkItem(baseUrl, githubProjectId!, input),
+    mutationFn: (input: CreateWorkItemInput) => createWorkItem(baseUrl, factoryProjectId!, input),
     onSuccess: item => {
-      queryClient.setQueryData<WorkItem[]>(queryKeys.workItems(githubProjectId), existing => {
+      queryClient.setQueryData<WorkItem[]>(queryKeys.workItems(factoryProjectId), existing => {
         const rest = (existing ?? []).filter(i => i.id !== item.id);
         return [item, ...rest];
       });
@@ -47,19 +50,27 @@ export function useUpsertWorkItemMutation(githubProjectId: string | undefined) {
  * optimistically — the card jumps columns immediately and rolls back if the
  * server rejects the patch.
  */
-export function useUpdateWorkItemMutation(githubProjectId: string | undefined) {
+export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const listKey = queryKeys.workItems(githubProjectId);
+  const listKey = queryKeys.workItems(factoryProjectId);
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: UpdateWorkItemInput }) => updateWorkItem(baseUrl, id, patch),
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueryData<WorkItem[]>(listKey);
-      if (previous && patch.stages) {
+      if (previous && (patch.stages || patch.parentWorkItemId !== undefined)) {
         queryClient.setQueryData<WorkItem[]>(
           listKey,
-          previous.map(item => (item.id === id ? { ...item, stages: patch.stages! } : item)),
+          previous.map(item =>
+            item.id === id
+              ? {
+                  ...item,
+                  ...(patch.stages ? { stages: patch.stages } : {}),
+                  ...(patch.parentWorkItemId !== undefined ? { parentWorkItemId: patch.parentWorkItemId } : {}),
+                }
+              : item,
+          ),
         );
       }
       return { previous };
@@ -76,10 +87,10 @@ export function useUpdateWorkItemMutation(githubProjectId: string | undefined) {
 }
 
 /** Remove a work item from the board, dropping it from the cache optimistically. */
-export function useDeleteWorkItemMutation(githubProjectId: string | undefined) {
+export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const listKey = queryKeys.workItems(githubProjectId);
+  const listKey = queryKeys.workItems(factoryProjectId);
   return useMutation({
     mutationFn: (id: string) => deleteWorkItem(baseUrl, id),
     onMutate: async id => {

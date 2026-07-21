@@ -5,12 +5,12 @@ import { queryKeys } from '../api/keys';
 import { fetchFactoryMetrics } from '../../web/ui/domains/factory/services/metrics';
 
 /** Aggregated flow metrics for the project's Factory board. */
-export function useFactoryMetrics(githubProjectId: string | undefined, days: number) {
+export function useFactoryMetrics(factoryProjectId: string | undefined, days: number) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.factoryMetrics(githubProjectId, days),
-    queryFn: () => fetchFactoryMetrics(baseUrl, githubProjectId!, days),
-    enabled: Boolean(githubProjectId),
+    queryKey: queryKeys.factoryMetrics(factoryProjectId, days),
+    queryFn: () => fetchFactoryMetrics(baseUrl, factoryProjectId!, days),
+    enabled: Boolean(factoryProjectId),
     staleTime: 30_000,
   });
 }

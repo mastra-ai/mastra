@@ -523,6 +523,23 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runId: runId,
         });
 
+        const nestedResumeSteps = resume.steps.slice(1);
+        if (nestedResumeSteps.length === 0) {
+          const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+          if (suspendedStepIds.length === 0) {
+            throw new Error(`No suspended steps found in nested workflow: ${step.id}`);
+          }
+          if (suspendedStepIds.length > 1) {
+            const pathStrings = suspendedStepIds.map(stepId => `[${stepId}]`);
+            throw new Error(
+              `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
+                'Please specify which step to resume using the "step" parameter.',
+            );
+          }
+          nestedResumeSteps.push(suspendedStepIds[0]!);
+        }
+        const nestedResumeStepId = nestedResumeSteps[0];
+
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
@@ -532,10 +549,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: runId,
             resume: {
               runId: runId,
-              steps: resume.steps.slice(1),
+              steps: nestedResumeSteps,
               stepResults: snapshot?.context as any,
               resumePayload: resume.resumePayload,
-              resumePath: resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined,
+              resumePath: nestedResumeStepId ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any) : undefined,
             },
             outputOptions: { includeState: true },
             perStep,

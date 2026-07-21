@@ -15,6 +15,37 @@
 import type { MastraFGAPermissionInput } from './permissions.generated';
 
 /**
+ * Signals that a call is made by a trusted non-user actor rather than an
+ * authenticated end user.
+ *
+ * - `true` is the anonymous system shorthand.
+ * - The object form additionally names the acting agent (`agentId`) and carries
+ *   the permission grants / scope a provider can enforce for least privilege.
+ */
+export type ActorSignal =
+  | true
+  | {
+      actorKind: 'system';
+      sourceWorkflow?: string;
+      /**
+       * Identity of the acting system agent. Unlike the check `resource` (the
+       * target), this names the actor itself so a provider can enforce
+       * per-agent least privilege.
+       */
+      agentId?: string;
+      /**
+       * Permission grants *claimed* for this actor — the actor analog of a
+       * user's resolved permissions. This is an untrusted, self-asserted hint:
+       * a provider enforcing real least privilege should resolve the actor's
+       * authoritative grants from a trusted source (e.g. a manifest or FGA,
+       * keyed by `agentId`) rather than trusting these values directly.
+       */
+      permissions?: MastraFGAPermissionInput[];
+      /** Additional provider-specific scope for the actor (e.g. tenant, environment). */
+      scope?: Record<string, string>;
+    };
+
+/**
  * Optional context for an authorization check.
  */
 export interface FGACheckContext {
@@ -330,6 +361,26 @@ export interface IFGAProvider<TUser = unknown> {
     resourceType: string,
     permission: MastraFGAPermissionInput,
   ): Promise<T[]>;
+
+  /**
+   * Authorize a non-user (system / autonomous agent) actor.
+   *
+   * System actors bypass the user-centric `require()` path. Implement this
+   * method to opt in to provider-driven least privilege for those actors:
+   * decide whether the actor (identified by `actor.agentId` and constrained by
+   * `actor.permissions` / `actor.scope`) may perform `permission` on
+   * `resource`, and throw {@link FGADeniedError} to deny.
+   *
+   * When this method is not implemented, Mastra preserves the legacy
+   * trusted-actor bypass (allow after the tenant-scope check). Adding it is
+   * therefore fully backward compatible.
+   *
+   * @param actor - The system actor signal (`true` shorthand, or an object with
+   *   `agentId`, `permissions`, `scope`).
+   * @param params - The resource and permission being attempted.
+   * @throws FGADeniedError if the actor may not perform the action.
+   */
+  requireActor?(actor: ActorSignal, params: FGACheckParams): Promise<void>;
 }
 
 // ──────────────────────────────────────────────────────────────

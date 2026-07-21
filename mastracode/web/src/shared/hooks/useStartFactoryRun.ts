@@ -18,7 +18,7 @@ import {
 import { useActiveFactoryContext } from '../../web/ui/domains/workspaces/context/ActiveFactoryProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
 import type { Factory } from '../../web/ui/domains/workspaces/services/factories';
-import { isGithubFactory } from '../../web/ui/domains/workspaces/services/factories';
+import { isServerFactory } from '../../web/ui/domains/workspaces/services/factories';
 import { createWorkItem, updateWorkItem } from '../../web/ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../../web/ui/domains/factory/services/workItems';
 
@@ -42,6 +42,7 @@ export interface StartFactoryRunWorkItem {
   stages: string[];
   source: WorkItemSource;
   sourceKey: string | null;
+  parentWorkItemId?: string;
   title: string;
   url?: string | null;
   metadata?: Record<string, unknown>;
@@ -186,9 +187,9 @@ export function useStartFactoryRun() {
       // (worktree + session + thread + prompt) already succeeded, so a filing
       // failure must not reject the mutation and strand the user off the
       // thread that is actively running.
-      const githubProjectId =
-        activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined;
-      if (workItem && githubProjectId) {
+      const factoryProjectId =
+        activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
+      if (workItem && factoryProjectId) {
         try {
           // One thread per item: stamp the run's ref onto every role the card
           // tracks so all refs share this threadId.
@@ -198,9 +199,10 @@ export function useStartFactoryRun() {
           if (workItem.id) {
             await updateWorkItem(baseUrl, workItem.id, { stages: workItem.stages, sessions });
           } else {
-            await createWorkItem(baseUrl, githubProjectId, {
+            await createWorkItem(baseUrl, factoryProjectId, {
               source: workItem.source,
               sourceKey: workItem.sourceKey,
+              parentWorkItemId: workItem.parentWorkItemId,
               title: workItem.title,
               url: workItem.url ?? null,
               stages: workItem.stages,
@@ -208,7 +210,7 @@ export function useStartFactoryRun() {
               metadata: workItem.metadata,
             });
           }
-          void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
         } catch (err) {
           console.error('Failed to file the board card for this run', err);
         }

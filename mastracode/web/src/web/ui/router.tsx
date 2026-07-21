@@ -19,9 +19,9 @@ import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
 import { useActiveFactory } from '../../shared/hooks/useActiveFactory';
 import { useWorkItemsQuery } from '../../shared/hooks/useWorkItems';
-import { isGithubFactory } from './domains/workspaces/services/factories';
+import { isServerFactory } from './domains/workspaces/services/factories';
 import { AuditPage } from './domains/factory/AuditPage';
-import { BoardPage } from './domains/factory/BoardPage';
+import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
 import { OverviewPage } from './domains/factory/OverviewPage';
 
@@ -72,12 +72,12 @@ function SignInGate() {
 
 function RootLanding() {
   const { activeFactory } = useActiveFactory();
-  const githubProjectId =
-    activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined;
-  const workItems = useWorkItemsQuery(githubProjectId);
+  const factoryProjectId =
+    activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
+  const workItems = useWorkItemsQuery(factoryProjectId);
 
-  if (githubProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;
-  if (githubProjectId && workItems.isError) {
+  if (factoryProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;
+  if (factoryProjectId && workItems.isError) {
     return (
       <div className="flex h-dvh w-full items-center justify-center bg-surface1 p-4">
         <Notice variant="destructive">
@@ -86,7 +86,7 @@ function RootLanding() {
       </div>
     );
   }
-  return <Navigate to={githubProjectId && (workItems.data?.length ?? 0) > 0 ? '/factory/board' : '/new'} replace />;
+  return <Navigate to={factoryProjectId && (workItems.data?.length ?? 0) > 0 ? '/factory/board' : '/new'} replace />;
 }
 
 function RedirectToDraftThread() {
@@ -114,13 +114,14 @@ export function createAppRoutes(): RouteObject[] {
             // Personal (non-factory) sessions: same thread page, but the
             // session provider binds to the user's own resourceId + worktree.
             { path: 'user/threads/:threadId', element: <ThreadPage /> },
-            { path: 'factory/board', element: <BoardPage /> },
             { path: 'factory/overview', element: <OverviewPage /> },
+            { path: 'factory/work', element: <WorkBoardPage /> },
+            { path: 'factory/review', element: <ReviewBoardPage /> },
             { path: 'factory/metrics', element: <MetricsPage /> },
             { path: 'factory/audit', element: <AuditPage /> },
-            // Legacy Factory pages, folded into the Board.
-            { path: 'factory/intake', element: <Navigate to="/factory/board" replace /> },
-            { path: 'factory/review', element: <Navigate to="/factory/board" replace /> },
+            // Compatibility routes from the former combined Board.
+            { path: 'factory/board', element: <Navigate to="/factory/work" replace /> },
+            { path: 'factory/intake', element: <Navigate to="/factory/work" replace /> },
           ],
         },
         // Legacy deep links (the app used to serve everything at any path).
