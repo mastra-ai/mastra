@@ -45,32 +45,7 @@ export class PlatformApiClient {
   }
 
   async request<T>(method: string, path: string, body?: unknown, options?: { signal?: AbortSignal }): Promise<T> {
-    const headers: Record<string, string> = {
-      accept: 'application/json',
-      authorization: `Bearer ${this.#accessToken}`,
-    };
-    const timeoutSignal = AbortSignal.timeout(15_000);
-    const init: RequestInit = {
-      method,
-      headers,
-      signal: options?.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal,
-    };
-    if (body !== undefined) {
-      headers['content-type'] = 'application/json';
-      init.body = JSON.stringify(body);
-    }
-
-    let response: Response;
-    try {
-      response = await this.#fetch(`${this.#baseUrl}${path}`, init);
-    } catch (error) {
-      if (error instanceof Error && error.message.includes(this.#accessToken)) {
-        const redacted = new Error(redact(error.message, this.#accessToken));
-        redacted.name = error.name;
-        throw redacted;
-      }
-      throw error;
-    }
+    const response = await this.#send(method, path, body, options);
     if (!response.ok) {
       throw new PlatformApiError(
         redact(await extractError(response), this.#accessToken),
@@ -80,6 +55,57 @@ export class PlatformApiClient {
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
+  }
+
+  async requestRedirect(method: string, path: string, options?: { signal?: AbortSignal }): Promise<string> {
+    const response = await this.#send(method, path, undefined, options, 'manual');
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (location) return location;
+    }
+    if (!response.ok) {
+      throw new PlatformApiError(
+        redact(await extractError(response), this.#accessToken),
+        response.status,
+        parseRetryAfter(response.headers.get('retry-after')),
+      );
+    }
+    throw new PlatformApiError('Platform API request did not return a redirect.', response.status);
+  }
+
+  async #send(
+    method: string,
+    path: string,
+    body?: unknown,
+    options?: { signal?: AbortSignal },
+    redirect?: RequestInit['redirect'],
+  ): Promise<Response> {
+    const headers: Record<string, string> = {
+      accept: 'application/json',
+      authorization: `Bearer ${this.#accessToken}`,
+    };
+    const timeoutSignal = AbortSignal.timeout(15_000);
+    const init: RequestInit = {
+      method,
+      headers,
+      redirect,
+      signal: options?.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal,
+    };
+    if (body !== undefined) {
+      headers['content-type'] = 'application/json';
+      init.body = JSON.stringify(body);
+    }
+
+    try {
+      return await this.#fetch(`${this.#baseUrl}${path}`, init);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes(this.#accessToken)) {
+        const redacted = new Error(redact(error.message, this.#accessToken));
+        redacted.name = error.name;
+        throw redacted;
+      }
+      throw error;
+    }
   }
 }
 

@@ -268,9 +268,18 @@ describe('PlatformLinearIntegration', () => {
     ).rejects.toThrow('Linear capabilities require an OAuth connection.');
   });
 
-  it('exposes platform-backed route and agent-tool surfaces without local OAuth routes', async () => {
+  it('exposes platform-backed route and agent-tool surfaces with platform connect routing', async () => {
     const seed = await seedFactoryStorageForTests();
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ workspaces: [workspace] }));
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
+      const url = String(input);
+      if (url.includes('/v1/server/linear/authorize')) {
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'https://linear.app/oauth/authorize?state=abc' },
+        });
+      }
+      return json({ workspaces: [workspace] });
+    });
     const integration = createIntegration(fetchImpl);
     const projectRecord = await seed.projects.create({
       orgId: 'org-1',
@@ -310,15 +319,27 @@ describe('PlatformLinearIntegration', () => {
     expect(integration.intake).toBeDefined();
     expect('versionControl' in integration).toBe(false);
     expect(routes.map(route => route.path)).toEqual(
-      expect.arrayContaining(['/web/linear/status', '/web/linear/projects', '/web/linear/issues']),
+      expect.arrayContaining([
+        '/auth/linear/connect',
+        '/web/linear/status',
+        '/web/linear/projects',
+        '/web/linear/issues',
+      ]),
     );
-    expect(routes.some(route => route.path.startsWith('/auth/linear/'))).toBe(false);
+    expect(routes.some(route => route.path === '/auth/linear/callback')).toBe(false);
     await expect(app.request('/web/linear/status').then(res => res.json())).resolves.toMatchObject({
       enabled: true,
       connected: true,
       reason: 'ready',
       workspace: { name: 'Acme', urlKey: 'acme' },
     });
+    const connect = await app.request('/auth/linear/connect');
+    expect(connect.status).toBe(302);
+    expect(connect.headers.get('location')).toBe('https://linear.app/oauth/authorize?state=abc');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://platform.example.com/v1/server/linear/authorize?return_to=%2F',
+      expect.objectContaining({ redirect: 'manual' }),
+    );
     await expect(integration.agentTools({ requestContext })).resolves.toEqual(
       expect.objectContaining({ linear_get_issue: expect.anything(), linear_create_comment: expect.anything() }),
     );

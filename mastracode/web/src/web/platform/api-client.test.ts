@@ -53,6 +53,26 @@ describe('PlatformApiClient', () => {
     expect(fetchImpl.mock.calls[0]?.[1]).not.toHaveProperty('credentials');
   });
 
+  it('returns manual redirect locations without following them', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(null, { status: 302, headers: { location: 'https://linear.app/oauth/authorize' } }),
+      );
+
+    await expect(client(fetchImpl).requestRedirect('GET', '/v1/server/linear/authorize')).resolves.toBe(
+      'https://linear.app/oauth/authorize',
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://platform.example.com/v1/server/linear/authorize',
+      expect.objectContaining({
+        method: 'GET',
+        redirect: 'manual',
+        headers: expect.objectContaining({ authorization: `Bearer ${accessToken}` }),
+      }),
+    );
+  });
+
   it('propagates rate-limit status and retry timing', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ detail: 'Rate limited' }), {
