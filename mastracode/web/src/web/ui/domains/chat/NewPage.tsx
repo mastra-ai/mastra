@@ -21,17 +21,17 @@ export function NewPage() {
   const overlays = useOverlays();
   const { activeFactory } = useActiveFactoryContext();
 
+  if (!activeFactory) {
+    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+  }
+
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       main={
         <ChatSessionBoundary>
-          {activeFactory ? (
-            <NewPageContent activeFactory={activeFactory} />
-          ) : (
-            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-          )}
+          <NewPageContent activeFactory={activeFactory} />
         </ChatSessionBoundary>
       }
     />
