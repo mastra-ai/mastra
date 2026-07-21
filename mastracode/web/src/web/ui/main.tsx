@@ -28,7 +28,7 @@ if (import.meta.env.DEV && import.meta.env.VITE_REACT_GRAB === 'true') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider defaultTheme="dark" storageKey="mastracode.theme">
+    <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider baseUrl="">

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router';
 
 import { OverlaysProvider } from '../../lib/overlays';
-import { ActiveFactoryProvider } from '../workspaces';
+import { ActiveFactoryProvider } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';

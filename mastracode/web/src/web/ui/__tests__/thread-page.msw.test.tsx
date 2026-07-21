@@ -245,14 +245,20 @@ describe('MastraCode thread pages', () => {
       resourceId: RESOURCE_ID,
       createdAt: 2,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-thread',
-        worktrees: [
+        kind: 'factory',
+        factoryProjectId: 'fp-github-thread',
+        repositories: [
           {
-            branch: 'user/thread-session',
-            worktreePath: '/tmp/thread-project-session',
-            baseBranch: 'main',
-            threadId: threadOne.id,
+            projectRepositoryId: 'pr-github-thread',
+            slug: 'mastra-ai/thread-project',
+            worktrees: [
+              {
+                branch: 'user/thread-session',
+                worktreePath: '/tmp/thread-project-session',
+                baseBranch: 'main',
+                threadId: threadOne.id,
+              },
+            ],
           },
         ],
       },

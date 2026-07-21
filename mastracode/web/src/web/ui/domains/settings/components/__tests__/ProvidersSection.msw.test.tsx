@@ -18,8 +18,10 @@ function providersResponse(providers: ProviderInfo[]) {
   return HttpResponse.json({ providers });
 }
 
-function rowFor(provider: string): HTMLElement {
-  return screen.getByText(providerDisplayName(provider)).closest('[role="listitem"]') as HTMLElement;
+function rowFor(provider: string): HTMLLIElement {
+  const row = screen.getByText(providerDisplayName(provider)).closest('li');
+  if (!(row instanceof HTMLLIElement)) throw new Error(`Provider row not found for ${provider}`);
+  return row;
 }
 
 afterEach(() => {
@@ -49,7 +51,7 @@ describe('ProvidersSection', () => {
   });
 
   describe('when providers load', () => {
-    it('shows OAuth providers above the API-key search and reveals other providers through search', async () => {
+    it('shows OAuth providers above a browsable API-key list and filters that list through search', async () => {
       server.use(
         http.get(PROVIDERS_URL, () =>
           providersResponse([
@@ -68,11 +70,12 @@ describe('ProvidersSection', () => {
       const search = screen.getByLabelText('Search providers');
       expect(anthropic.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(screen.getByText('OR')).toBeInTheDocument();
-      expect(screen.queryByText('OpenAI')).not.toBeInTheDocument();
-      expect(screen.queryByText('google')).not.toBeInTheDocument();
+      expect(await screen.findByText('OpenAI')).toBeInTheDocument();
+      expect(screen.getByText('Google')).toBeInTheDocument();
 
       await user.type(search, 'openai');
-      expect(await screen.findByText('OpenAI')).toBeInTheDocument();
+      expect(screen.getByText('OpenAI')).toBeInTheDocument();
+      expect(screen.queryByText('Google')).not.toBeInTheDocument();
     });
   });
 
@@ -102,7 +105,6 @@ describe('ProvidersSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ProvidersSection />);
 
-      // `none` providers only appear via search.
       await user.type(screen.getByLabelText('Search providers'), 'openai');
       const row = rowFor('openai');
 

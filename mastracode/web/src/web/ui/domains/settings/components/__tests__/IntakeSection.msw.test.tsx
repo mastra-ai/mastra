@@ -47,9 +47,9 @@ function seedGithubProject() {
         resourceId: 'resource-gh',
         createdAt: 1,
         binding: {
-          kind: 'github',
-          githubProjectId: 'ghp-1',
-          worktrees: [],
+          kind: 'factory',
+          factoryProjectId: 'fp-1',
+          repositories: [{ projectRepositoryId: 'ghp-1', slug: 'mastra', worktrees: [] }],
         },
       },
     ]),
