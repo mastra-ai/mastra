@@ -28,9 +28,9 @@ import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { BetterAuthWebAuth } from '../web/auth-better-adapter.js';
-import type { WebAuthAdapter } from '../web/auth-adapter.js';
-import { WorkOSWebAuth } from '../web/auth-workos-adapter.js';
+import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '../web/factory-integration.js';
 import { GithubIntegration } from '../web/github/integration.js';
@@ -69,23 +69,23 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-// Web auth, by env precedence (any custom `WebAuthAdapter` works here too):
+// Web auth, by env precedence (any custom `MastraAuthProvider` works here too):
 //   1. WORKOS_API_KEY + WORKOS_CLIENT_ID → WorkOS AuthKit (hosted login). The
 //      WorkOS SDK reads its own credentials; the redirect URI falls back to
-//      `<publicUrl>/auth/callback` inside the adapter's init().
+//      `<publicUrl>/auth/callback` inside the provider's init().
 //   2. BETTER_AUTH_SECRET → self-hosted better-auth (email/password on the
 //      configured factory storage — no external identity vendor in the availability path).
 //      MASTRACODE_AUTH_SIGNUP_DISABLED=1 turns off public sign-up.
 //   3. Neither → auth disabled (open server, bare local dev).
 const workosConfigured = Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
 const betterAuthSecret = process.env.BETTER_AUTH_SECRET;
-let auth: WebAuthAdapter | undefined;
+let auth: IMastraAuthProvider | undefined;
 if (workosConfigured) {
-  auth = new WorkOSWebAuth({ redirectUri: process.env.WORKOS_REDIRECT_URI });
+  auth = new MastraAuthWorkos({ redirectUri: process.env.WORKOS_REDIRECT_URI, fetchMemberships: true });
 } else if (betterAuthSecret) {
-  auth = new BetterAuthWebAuth({
+  auth = new MastraAuthBetterAuth({
     secret: betterAuthSecret,
-    signUpDisabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED === '1',
+    signUpEnabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED !== '1',
   });
 }
 
