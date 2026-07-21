@@ -1,4 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
 
@@ -7,7 +9,7 @@ import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../..
 import { useGithubReposQuery } from '../../../../../shared/hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../shared/hooks/useGithubStatus';
 import { useLinearStatusQuery } from '../../../../../shared/hooks/useLinearData';
-import { GithubIcon, SearchIcon } from '../../../ui/icons';
+import { GithubIcon, LinearIcon, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { connectLinear } from '../../factory/services/linear';
@@ -34,6 +36,9 @@ export function EmptyFactoryState({ onOpenFactories: _onOpenFactories }: { onOpe
   const { factories, factoriesPending, selectFactory } = useActiveFactoryContext();
   const [step, setStep] = useState<Step>(storedStep);
   const [query, setQuery] = useState('');
+  const [githubRedirecting, setGithubRedirecting] = useState(false);
+  const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | null>(null);
+  const [finishing, setFinishing] = useState(false);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const githubStatus = useGithubStatusQuery(step === 'vcs');
   const connectedToGithub = githubStatus.data?.connected === true;
@@ -69,6 +74,7 @@ export function EmptyFactoryState({ onOpenFactories: _onOpenFactories }: { onOpe
     if (createFactory.isPending || linkRepository.isPending) return;
     createFactory.reset();
     linkRepository.reset();
+    setConnectingRepositoryId(repo.id);
     try {
       const factory = await createFactory.mutateAsync({ name: repo.name });
       sessionStorage.setItem(FACTORY_KEY, factory.id);
@@ -76,6 +82,8 @@ export function EmptyFactoryState({ onOpenFactories: _onOpenFactories }: { onOpe
       goTo('project-management');
     } catch {
       // The mutations expose their server messages inline so the user can retry.
+    } finally {
+      setConnectingRepositoryId(null);
     }
   };
 
@@ -87,9 +95,14 @@ export function EmptyFactoryState({ onOpenFactories: _onOpenFactories }: { onOpe
       goTo('vcs');
       return;
     }
-    await selectFactory(factory);
-    sessionStorage.removeItem(STEP_KEY);
-    sessionStorage.removeItem(FACTORY_KEY);
+    setFinishing(true);
+    try {
+      await selectFactory(factory);
+      sessionStorage.removeItem(STEP_KEY);
+      sessionStorage.removeItem(FACTORY_KEY);
+    } finally {
+      setFinishing(false);
+    }
   };
 
   return (
@@ -99,8 +112,8 @@ export function EmptyFactoryState({ onOpenFactories: _onOpenFactories }: { onOpe
       </div>
 
       <div className="relative mx-auto flex min-h-dvh w-full max-w-7xl items-center px-6 py-10 sm:px-10 lg:px-16">
-        <section className={`w-full max-w-3xl ${step === 'initial' ? 'mx-auto text-center' : ''}`}>
-          <ol className={`mb-8 flex gap-2 ${step === 'initial' ? 'justify-center' : ''}`} aria-label="Factory setup progress">
+        <section className="mx-auto w-full max-w-3xl text-center">
+          <ol className="mb-8 flex justify-center gap-2" aria-label="Factory setup progress">
             {(['initial', 'vcs', 'project-management'] as const).map((item, index) => (
               <li
                 key={item}
@@ -166,15 +179,18 @@ export function EmptyFactoryState({ onOpenFactories: _onOpenFactories }: { onOpe
 
             {step === 'vcs' && (
               <>
-                <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Choose your codebase.</h1>
-                <Txt as="p" variant="ui-lg" className="mt-4 max-w-2xl leading-7 text-neutral3">
+                <h1 className="mx-auto max-w-2xl text-3xl leading-tight font-semibold tracking-[-0.035em] text-balance sm:text-4xl lg:text-5xl">
+                  Choose your codebase.
+                </h1>
+                <Txt as="p" variant="ui-lg" className="mx-auto mt-6 max-w-2xl leading-7 text-neutral3 sm:text-lg">
                   Connect GitHub, then select the repository that will become your first Factory.
                 </Txt>
-                <section aria-label="GitHub repository" className="mt-8 max-w-2xl rounded-2xl border border-border1 bg-surface2/80 p-5">
+                <section aria-label="GitHub repository" className="mx-auto mt-8 max-w-2xl rounded-2xl border border-border1 bg-surface2/80 p-5 text-left">
                   {githubStatus.isPending ? (
                     <SkeletonRows label="Loading GitHub status" rows={3} rowClassName="h-12 w-full rounded-xl" />
                   ) : !connectedToGithub ? (
-                    <GithubConnection status={githubStatus.data} onConnect={() => {
+                    <GithubConnection status={githubStatus.data} isConnecting={githubRedirecting} onConnect={() => {
+                      setGithubRedirecting(true);
                       persistBeforeRedirect('vcs');
                       connectGithub(baseUrl);
                     }} />
@@ -196,21 +212,29 @@ export function EmptyFactoryState({ onOpenFactories: _onOpenFactories }: { onOpe
                         <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-12 w-full rounded-xl" />
                       ) : repos.data?.length ? (
                         <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
-                          {repos.data.map(repo => (
-                            <button
-                              key={repo.id}
-                              className="flex items-center gap-3 rounded-xl border border-border1 bg-surface1 px-4 py-3 text-left hover:border-border2 hover:bg-surface4 disabled:opacity-60"
-                              disabled={createFactory.isPending || linkRepository.isPending}
-                              onClick={() => void chooseRepository(repo)}
-                            >
-                              <GithubIcon className="shrink-0 text-icon3" />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-ui-sm font-medium text-icon6">{repo.fullName}</span>
-                                <span className="block text-ui-xs text-icon3">{repo.private ? 'Private' : 'Public'} · {repo.defaultBranch}</span>
-                              </span>
-                              <span className="text-ui-xs text-accent1">{createFactory.isPending || linkRepository.isPending ? 'Creating…' : 'Select'}</span>
-                            </button>
-                          ))}
+                          {repos.data.map(repo => {
+                            const isConnecting = connectingRepositoryId === repo.id;
+
+                            return (
+                              <button
+                                key={repo.id}
+                                className="flex items-center gap-3 rounded-xl border border-border1 bg-surface1 px-4 py-3 text-left hover:border-border2 hover:bg-surface4 disabled:opacity-60"
+                                disabled={createFactory.isPending || linkRepository.isPending}
+                                onClick={() => void chooseRepository(repo)}
+                              >
+                                <GithubIcon className="shrink-0 text-icon3" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-ui-sm font-medium text-icon6">{repo.fullName}</span>
+                                  <span className="block text-ui-xs text-icon3">{repo.private ? 'Private' : 'Public'} · {repo.defaultBranch}</span>
+                                </span>
+                                {isConnecting ? (
+                                  <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="shrink-0 text-accent1" />
+                                ) : (
+                                  <span className="text-ui-xs text-accent1">Select</span>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       ) : (
                         <Txt as="p" variant="ui-sm" className="m-0 text-icon3">No repositories found.</Txt>
@@ -227,11 +251,10 @@ export function EmptyFactoryState({ onOpenFactories: _onOpenFactories }: { onOpe
 
             {step === 'project-management' && (
               <>
-                <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Connect the work behind the code.</h1>
-                <Txt as="p" variant="ui-lg" className="mt-4 max-w-2xl leading-7 text-neutral3">
-                  Add Linear so your Factory can understand priorities and turn issues into production-ready changes. You can also do this later.
-                </Txt>
-                <section aria-label="Linear connection" className="mt-8 max-w-xl rounded-2xl border border-border1 bg-surface2/80 p-5">
+                <h1 className="mx-auto max-w-2xl text-3xl leading-tight font-semibold tracking-[-0.035em] text-balance sm:text-4xl lg:text-5xl">
+                  Connect the work behind the code.
+                </h1>
+                <section aria-label="Linear connection" className="mx-auto mt-8 max-w-xl rounded-2xl border border-border1 bg-surface2/80 p-5">
                   {linearStatus.isPending ? (
                     <SkeletonRows label="Loading Linear status" rows={2} rowClassName="h-12 w-full rounded-xl" />
                   ) : linearStatus.data?.connected ? (
@@ -240,15 +263,29 @@ export function EmptyFactoryState({ onOpenFactories: _onOpenFactories }: { onOpe
                       <Button variant="primary" onClick={() => void finish()}>Finish setup</Button>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-3">
-                      {linearStatus.data?.reason !== 'missing_config' && linearStatus.data?.reason !== 'organization_required' && (
-                        <Button variant="primary" onClick={() => {
-                          persistBeforeRedirect('project-management');
-                          connectLinear(baseUrl);
-                        }}>{linearStatus.data?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear'}</Button>
+                    <EmptyState
+                      className="py-8"
+                      iconSlot={<LinearIcon className="size-10 text-icon3" />}
+                      titleSlot="Connect Linear"
+                      descriptionSlot="Give your Factory the issue context and priorities behind your code."
+                      actionSlot={(
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          {linearStatus.data?.reason !== 'missing_config' && linearStatus.data?.reason !== 'organization_required' && (
+                            <Button variant="primary" onClick={() => {
+                              persistBeforeRedirect('project-management');
+                              connectLinear(baseUrl);
+                            }}>
+                              <LinearIcon />
+                              {linearStatus.data?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear'}
+                            </Button>
+                          )}
+                          <Button variant="ghost" disabled={finishing} onClick={() => void finish()}>
+                            {finishing && <Spinner size="sm" aria-label="Finishing setup" />}
+                            Skip for now
+                          </Button>
+                        </div>
                       )}
-                      <Button variant="outline" onClick={() => void finish()}>Skip for now</Button>
-                    </div>
+                    />
                   )}
                   {completionError && <p role="alert" className="mt-4 text-ui-sm text-notice-destructive-fg">{completionError}</p>}
                 </section>
@@ -261,7 +298,11 @@ export function EmptyFactoryState({ onOpenFactories: _onOpenFactories }: { onOpe
   );
 }
 
-function GithubConnection({ status, onConnect }: { status: ReturnType<typeof useGithubStatusQuery>['data']; onConnect: () => void }) {
+function GithubConnection({ status, isConnecting, onConnect }: {
+  status: ReturnType<typeof useGithubStatusQuery>['data'];
+  isConnecting: boolean;
+  onConnect: () => void;
+}) {
   const unavailable = status?.reason === 'missing_config' || status?.reason === 'organization_required';
   const message = status?.reason === 'missing_config'
     ? 'GitHub is not configured for this deployment.'
@@ -272,9 +313,17 @@ function GithubConnection({ status, onConnect }: { status: ReturnType<typeof use
         : 'Connect GitHub to choose a repository.';
 
   return (
-    <div className="flex flex-col items-start gap-4">
-      <Txt as="p" variant="ui-md" className="m-0 text-icon4">{message}</Txt>
-      {!unavailable && <Button variant="primary" onClick={onConnect}><GithubIcon />Connect GitHub</Button>}
-    </div>
+    <EmptyState
+      className="py-8"
+      iconSlot={<GithubIcon className="size-10 text-icon3" />}
+      titleSlot="Connect GitHub"
+      descriptionSlot={message}
+      actionSlot={!unavailable ? (
+        <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
+          {isConnecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon />}
+          Connect GitHub
+        </Button>
+      ) : undefined}
+    />
   );
 }
