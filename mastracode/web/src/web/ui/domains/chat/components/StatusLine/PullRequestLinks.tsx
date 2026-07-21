@@ -32,7 +32,7 @@ interface PullRequestLinksProps {
   baseUrl: string;
   resourceId: string;
   projectPath: string | undefined;
-  githubProjectId: unknown;
+  projectRepositoryId: unknown;
   threadId: string | undefined;
   transcriptEntries: TranscriptState['entries'];
   busy: boolean;
@@ -43,7 +43,7 @@ export function PullRequestLinks({
   baseUrl,
   resourceId,
   projectPath,
-  githubProjectId,
+  projectRepositoryId,
   threadId,
   transcriptEntries,
   busy,
@@ -63,7 +63,7 @@ export function PullRequestLinks({
     })
     .filter(id => typeof id === 'string')
     .join(':');
-  const enabled = typeof githubProjectId === 'string' && Boolean(threadId);
+  const enabled = typeof projectRepositoryId === 'string' && Boolean(threadId);
   const query = useQuery({
     queryKey: ['github', 'subscriptions', resourceId, threadId, projectPath],
     queryFn: async () => {

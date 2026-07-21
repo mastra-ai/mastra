@@ -23,7 +23,7 @@ const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-gh';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
-const GITHUB_PROJECT_ID = 'github-project-1';
+const FACTORY_PROJECT_ID = 'fp-1';
 
 const githubProject: Factory = {
   id: 'project-gh',
@@ -31,12 +31,18 @@ const githubProject: Factory = {
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: GITHUB_PROJECT_ID,
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra',
-    worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
+    kind: 'factory',
+    factoryProjectId: FACTORY_PROJECT_ID,
+    repositories: [
+      {
+        projectRepositoryId: 'pr-1',
+        slug: 'mastra-ai/mastra',
+        gitBranch: 'main',
+        sandboxWorkdir: '/sandbox/mastra',
+        selectedWorktreePath: '/sandbox/mastra',
+        worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
+      },
+    ],
   },
 };
 
@@ -66,7 +72,7 @@ function makeEvent(overrides: Partial<AuditEvent> = {}): AuditEvent {
     action: 'factory.work_item.stage_moved',
     targets: [{ type: 'work_item', id: 'wi-1', name: 'Fix flaky test' }],
     metadata: { from: ['triage'], to: ['building'] },
-    githubProjectId: GITHUB_PROJECT_ID,
+    githubProjectId: FACTORY_PROJECT_ID,
     context: {},
     occurredAt: '2026-07-15T18:00:00.000Z',
     ...overrides,
@@ -131,7 +137,7 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
-    http.get(`${TEST_BASE_URL}/web/factory/repositories/${GITHUB_PROJECT_ID}/audit`, ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/audit`, ({ request }) => {
       const url = new URL(request.url);
       state.requests.push({ actions: url.searchParams.get('actions'), before: url.searchParams.get('before') });
       const page = pages[Math.min(state.requests.length - 1, pages.length - 1)]!;
@@ -302,7 +308,7 @@ describe('Factory Audit page', () => {
     renderAt('/factory/audit', localProject);
 
     expect(
-      await screen.findByText(/Board, metrics, and audit require a Factory connected to GitHub/),
+      await screen.findByText(/Board, metrics, and audit are available for server-backed Factories/),
     ).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Audit events' })).not.toBeInTheDocument();
   });
