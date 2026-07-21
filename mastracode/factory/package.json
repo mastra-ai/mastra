@@ -53,6 +53,8 @@
   "dependencies": {
     "@mastra/code-sdk": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@octokit/auth-app": "^8.0.0",
+    "@octokit/rest": "^22.0.1",
     "hono": "^4.12.8",
     "zod": "^4.3.6"
   },

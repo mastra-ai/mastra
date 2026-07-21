@@ -2,18 +2,36 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import type { WebAuthUser } from '../auth';
-import { getWebAuthOrgId, getWebAuthUserId } from '../auth';
 import type {
   ProjectRepository,
   ProjectSourceControlConnection,
   SourceControlInstallation,
   SourceControlRepository,
-} from '@mastra/factory/storage/domains/source-control/base';
+} from '../../storage/domains/source-control/base';
 import type { GithubIntegration } from './integration';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions';
 
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
+
+/**
+ * Minimal shape of the host-authenticated user placed on the request context
+ * under the `user` key. Mirrors the host's auth user without importing it:
+ * `workosId` (stable external id) wins over the row `id`, and `organizationId`
+ * scopes org tenancy.
+ */
+interface SessionAuthUser {
+  workosId?: string;
+  id?: string;
+  organizationId?: string;
+}
+
+function sessionUserId(user: SessionAuthUser | undefined): string | undefined {
+  return user?.workosId ?? user?.id;
+}
+
+function sessionOrgId(user: SessionAuthUser | undefined): string | undefined {
+  return user?.organizationId;
+}
 
 const pullRequestInputSchema = z.object({
   pullRequest: z.union([z.number().int().positive(), z.string().min(1)]),
@@ -47,17 +65,17 @@ function parsePullRequest(value: number | string, expectedRepo: string): number 
  */
 function isGithubProjectSession(requestContext: RequestContext): boolean {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  const user = requestContext.get('user') as WebAuthUser | undefined;
+  const user = requestContext.get('user') as SessionAuthUser | undefined;
   return Boolean(
-    context?.threadId && context.getState().projectRepositoryId && getWebAuthOrgId(user) && getWebAuthUserId(user),
+    context?.threadId && context.getState().projectRepositoryId && sessionOrgId(user) && sessionUserId(user),
   );
 }
 
 async function resolveSessionTarget(requestContext: RequestContext, github: GithubIntegration): Promise<SessionTarget> {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  const user = requestContext.get('user') as WebAuthUser | undefined;
-  const orgId = getWebAuthOrgId(user);
-  const userId = getWebAuthUserId(user);
+  const user = requestContext.get('user') as SessionAuthUser | undefined;
+  const orgId = sessionOrgId(user);
+  const userId = sessionUserId(user);
   const projectRepositoryId = context?.getState().projectRepositoryId;
   if (!context || !context.threadId || !projectRepositoryId || !orgId || !userId) {
     throw new Error('GitHub subscriptions require an authenticated repository session with an active thread.');
@@ -135,8 +153,8 @@ export async function unsubscribeCurrentSessionFromPullRequest(
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  const user = requestContext.get('user') as WebAuthUser | undefined;
-  if (!context?.getState().projectRepositoryId || !getWebAuthOrgId(user) || !getWebAuthUserId(user)) return {};
+  const user = requestContext.get('user') as SessionAuthUser | undefined;
+  if (!context?.getState().projectRepositoryId || !sessionOrgId(user) || !sessionUserId(user)) return {};
 
   return {
     github_subscribe_pr: createTool({

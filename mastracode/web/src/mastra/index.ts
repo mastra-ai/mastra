@@ -32,7 +32,7 @@ import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { WorkOSAuditIntegration } from '../web/audit/workos-integration.js';
 import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '@mastra/factory/integrations/base';
-import { GithubIntegration } from '../web/github/integration.js';
+import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 
 /**

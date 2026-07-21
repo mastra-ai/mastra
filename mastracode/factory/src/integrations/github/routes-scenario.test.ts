@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SourceControlStorageInMemory } from '@mastra/factory/storage/domains/source-control/inmemory';
+import type { CreatePullRequestInput } from '../../capabilities/version-control';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils';
+import type { SandboxFleet } from '../../sandbox/fleet';
+import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory';
+import { buildGithubRoutes } from './routes';
 
 // ── Scenario tests (S1, S2) ──────────────────────────────────────────────
 // These exercise the *composition* of the real Phase 4 git route handlers
@@ -154,7 +158,7 @@ const githubStub = {
   // A fresh token string per call so the scenario can prove per-op minting.
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
   versionControl: {
-    createPullRequest: async (input: import('@mastra/factory/capabilities/version-control').CreatePullRequestInput) => {
+    createPullRequest: async (input: CreatePullRequestInput) => {
       const result = await createPullRequest(input);
       return {
         id: '1',
@@ -195,11 +199,11 @@ vi.mock('./subscriptions', () => ({
   subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
 }));
 
-const ensureProjectSandbox = vi.fn(async (row: any, storage: SourceControlStorageInMemory['sandboxes']) => {
-  await storage.setSandboxId(row.id, 'sb');
+const ensureProjectSandbox = vi.fn(async (opts: { row: any; storage: SourceControlStorageInMemory['sandboxes'] }) => {
+  await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
   return { id: 'sb' };
 });
-const materializeRepo = vi.fn(async () => {});
+const materializeRepo = vi.fn(async (_opts: any) => {});
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
@@ -210,23 +214,19 @@ const commitAll = vi.fn(async () => ({ committed: true }));
 // pushBranch is overridable per-test so S2 can make it block on a deferred.
 let pushImpl: (...args: any[]) => Promise<void> = async () => {};
 const pushBranch = vi.fn((...args: any[]) => pushImpl(...args));
-const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
+const createPullRequest = vi.fn(async (..._args: any[]) => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
-vi.mock('../sandbox/fleet', () => {
-  class SandboxBudgetError extends Error {
-    readonly code = 'sandbox-budget-exceeded';
-    constructor(readonly max: number) {
-      super(`Sandbox budget exceeded: ${max}`);
-    }
-  }
-  return {
-    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-    getSandboxProvider: () => 'railway',
-    isSandboxEnabled: () => sandboxEnabled,
-    reattachSandbox: (id: string) => reattachSandbox(id),
-    SandboxBudgetError,
-  };
-});
+/** DI-injected fleet stub — routes read `enabled`/`provider`/`computeWorkdir`/`reattachSandbox`. */
+const fleet = {
+  get enabled() {
+    return sandboxEnabled;
+  },
+  get provider() {
+    return sandboxEnabled ? 'railway' : 'none';
+  },
+  computeWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+  reattachSandbox: (id: string) => reattachSandbox(id),
+} as unknown as SandboxFleet;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -243,9 +243,8 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    ensureProjectSandbox: (row: any, storage: SourceControlStorageInMemory['sandboxes']) =>
-      ensureProjectSandbox(row, storage),
-    materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
+    ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
+    materializeRepo: (opts: any) => materializeRepo(opts),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
@@ -263,9 +262,6 @@ vi.mock('./config', () => ({
   getGithubFeatureDiagnostics: () => ({}),
 }));
 
-import { mountApiRoutes } from '../test-utils';
-import { buildGithubRoutes } from './routes';
-
 // ── Fake table helpers (mirrors routes.test.ts) ─────────────────────────
 function tableKind(table: any): keyof Tables {
   if (table === installationsRef) return 'installations';
@@ -278,7 +274,7 @@ function tableKind(table: any): keyof Tables {
 let installationsRef: any;
 let repositoriesRef: any;
 let connectionsRef: any;
-let projectRepositoriesRef: any;
+let _projectRepositoriesRef: any;
 let worktreesRef: any;
 let sandboxesRef: any;
 
@@ -341,7 +337,7 @@ const githubWorktrees = {};
 installationsRef = githubInstallations;
 repositoriesRef = githubRepositories;
 connectionsRef = githubConnections;
-projectRepositoriesRef = githubProjectRepositories;
+_projectRepositoriesRef = githubProjectRepositories;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
 
@@ -364,7 +360,13 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
   });
   mountApiRoutes(
     app as any,
-    buildGithubRoutes({ baseUrl: 'http://localhost:4111', github: githubStub as any, stateSigner }),
+    buildGithubRoutes({
+      baseUrl: 'http://localhost:4111',
+      github: githubStub as any,
+      stateSigner,
+      auth: fakeRouteAuth(),
+      fleet,
+    }),
   );
   return app;
 }

@@ -21,7 +21,7 @@
 
 import { createHash } from 'node:crypto';
 
-import { getSeededStorage } from '../runtime-config';
+import type { FactoryStorage } from '@mastra/core/storage';
 
 /** Minimal pg pool surface used by the distributed lock (for testability). */
 export interface LockPool {
@@ -36,12 +36,12 @@ const inProcessLocks = new Map<string, Promise<unknown>>();
 
 /**
  * True when the cross-replica lock layer should be used: not force-disabled
- * via env, and the seeded factory storage backend exposes the
+ * via env, and the factory storage backend exposes the
  * `withDistributedLock` capability.
  */
-export function isDistributedLockEnabled(): boolean {
+export function isDistributedLockEnabled(storage: FactoryStorage | undefined): boolean {
   if (process.env.MASTRACODE_DISTRIBUTED_LOCK === '0') return false;
-  return typeof getSeededStorage()?.withDistributedLock === 'function';
+  return typeof storage?.withDistributedLock === 'function';
 }
 
 /**
@@ -66,9 +66,17 @@ export function hashKey(key: string): [number, number] {
  * The in-process chain swallows rejections so one failed operation does not
  * poison the lock for subsequent callers.
  */
-export function withProjectLock<T>(key: string, fn: () => Promise<T>, poolOverride?: LockPool): Promise<T> {
+export function withProjectLock<T>(options: {
+  key: string;
+  /** Factory storage backend supplying the `withDistributedLock` capability, when available. */
+  storage?: FactoryStorage;
+  fn: () => Promise<T>;
+  /** Test seam: fake pg pool standing in for the distributed layer. */
+  pool?: LockPool;
+}): Promise<T> {
+  const { key, storage, fn, pool } = options;
   const prev = inProcessLocks.get(key) ?? Promise.resolve();
-  const run = () => withDbAdvisoryLock(key, fn, poolOverride);
+  const run = () => withDbAdvisoryLock({ key, storage, fn, pool });
   const next = prev.then(run, run);
   const tail = next.then(
     () => undefined,
@@ -97,14 +105,19 @@ export function withProjectLock<T>(key: string, fn: () => Promise<T>, poolOverri
  * pool (each simulated replica has its own in-process state but shares one
  * database).
  */
-export async function withDbAdvisoryLock<T>(key: string, fn: () => Promise<T>, poolOverride?: LockPool): Promise<T> {
+export async function withDbAdvisoryLock<T>(options: {
+  key: string;
+  storage?: FactoryStorage;
+  fn: () => Promise<T>;
+  pool?: LockPool;
+}): Promise<T> {
+  const { key, storage, fn, pool } = options;
   if (process.env.MASTRACODE_DISTRIBUTED_LOCK === '0') {
     return fn();
   }
 
-  if (poolOverride) return advisoryLockOver(poolOverride, key, fn);
+  if (pool) return advisoryLockOver(pool, key, fn);
 
-  const storage = getSeededStorage();
   if (typeof storage?.withDistributedLock !== 'function') {
     return fn();
   }

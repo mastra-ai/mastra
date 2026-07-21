@@ -5,15 +5,16 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
+import type { FactoryStorage } from '@mastra/core/storage';
 import type { AuditEmitter } from '@mastra/factory/storage/domains/audit/domain';
 import { factoryRouteAuth } from './auth.js';
 import type { FactoryIntegration, IntegrationContext } from '@mastra/factory/integrations/base';
-import { getGithubFeatureDiagnostics } from './github/config.js';
+import { getGithubFeatureDiagnostics } from '@mastra/factory/integrations/github/config';
+import type { SandboxFleet } from '@mastra/factory/sandbox/fleet';
 import { WorkItemRoutes } from '@mastra/factory/routes/work-items';
 import { buildFsRoutes } from './fs-routes.js';
 import { IntakeRoutes } from '@mastra/factory/routes/intake';
 import { OAuthRoutes } from '@mastra/factory/routes/oauth';
-import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
 import type { StateSigner } from '@mastra/factory/state-signing';
 import { invalidateTenantCredentialSnapshots } from '@mastra/factory/routes/tenant-credentials';
@@ -26,8 +27,6 @@ import type { ModelPacksStorage } from '@mastra/factory/storage/domains/model-pa
 import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
 import type { QueueHealthStorage } from '@mastra/factory/storage/domains/queue-health/base';
 import type { WorkItemsStorage } from '@mastra/factory/storage/domains/work-items/base';
-
-registerSandboxReattach();
 
 export interface IntegrationRegistration {
   integration: FactoryIntegration;
@@ -43,6 +42,10 @@ export interface WebApiRoutesDeps {
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
+  /** Sandbox fleet constructed by the factory (disabled when no machine). */
+  fleet: SandboxFleet;
+  /** Root factory storage backend (distributed locks, app-db diagnostics). */
+  factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
   sourceControlStorage: SourceControlStorage;
   /** App-table domain handles, registered and owned by `MastraFactory.prepare()`. */
@@ -113,7 +116,10 @@ function guardIntegrationRoutes({
  * when collecting integration workers at finalize.
  */
 export function buildIntegrationContext(
-  deps: Pick<WebApiRoutesDeps, 'controller' | 'publicOrigin' | 'integrationStorage' | 'sourceControlStorage'> & {
+  deps: Pick<
+    WebApiRoutesDeps,
+    'controller' | 'publicOrigin' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
+  > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
     domains: Pick<WebApiRoutesDeps['domains'], 'projects' | 'intake'>;
@@ -122,6 +128,8 @@ export function buildIntegrationContext(
 ): IntegrationContext {
   return {
     auth: factoryRouteAuth,
+    fleet: deps.fleet,
+    factoryStorage: deps.factoryStorage,
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
     stateSigner: deps.stateSigner,
@@ -141,7 +149,7 @@ export function buildIntegrationContext(
  * integration is absent (or not ready) the status contract must still hold.
  * Unknown custom ids get no stub — the SPA doesn't poll them.
  */
-function disabledIntegrationStatusRoutes(id: string, configured = false): ApiRoute[] {
+function disabledIntegrationStatusRoutes(deps: WebApiRoutesDeps, id: string, configured = false): ApiRoute[] {
   if (id === 'github') {
     return [
       registerApiRoute('/web/github/status', {
@@ -153,7 +161,13 @@ function disabledIntegrationStatusRoutes(id: string, configured = false): ApiRou
             connected: false,
             installations: [],
             reason: 'missing_config',
-            diagnostics: getGithubFeatureDiagnostics(),
+            diagnostics: getGithubFeatureDiagnostics({
+              github: undefined,
+              auth: factoryRouteAuth,
+              appDbConfigured: deps.factoryStorage !== undefined,
+              stateSigner: deps.stateSigner,
+              fleet: deps.fleet,
+            }),
           }),
       }),
     ];
@@ -195,14 +209,14 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
-    if (!deps.stateSigner) return disabledIntegrationStatusRoutes(integration.id, true);
+    if (!deps.stateSigner) return disabledIntegrationStatusRoutes(deps, integration.id, true);
     const context = buildIntegrationContext({ ...deps, stateSigner: deps.stateSigner, emitAudit }, integration.id);
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });
   // Absent known integrations still get their disabled-status stub.
   const absentStubs = ['github', 'linear']
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
-    .flatMap(id => disabledIntegrationStatusRoutes(id));
+    .flatMap(id => disabledIntegrationStatusRoutes(deps, id));
 
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),

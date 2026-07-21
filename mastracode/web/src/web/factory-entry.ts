@@ -39,6 +39,8 @@ import type {
 import { getFactoryWorkspace } from './factory/workspace.js';
 import { ProjectRoutes } from '@mastra/factory/routes/projects';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { SandboxFleet } from '@mastra/factory/sandbox/fleet';
+import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { seedRuntimeConfig } from './runtime-config.js';
 import { AuditStorage } from '@mastra/factory/storage/domains/audit/base';
 import { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
@@ -357,10 +359,24 @@ export class MastraFactory {
       );
     }
 
+    // One sandbox fleet per boot: constructed with the machine config when
+    // sandboxes are configured, disabled otherwise. Handed to integrations
+    // through the IntegrationContext — no global registry.
+    const fleet = new SandboxFleet(
+      machine
+        ? {
+            machine,
+            workdirBase: resolveSandboxWorkdirBase(machine, sandboxConfig?.workdir),
+            maxSandboxes: sandboxConfig?.maxSandboxes,
+          }
+        : undefined,
+    );
+    // Core's `getDynamicWorkspace` reattaches project sandboxes through the
+    // SDK seam; only this factory owns the fleet, so register it here.
+    registerSandboxReattach(fleet);
+
     // Seed runtime config first: readiness checks below reach app domains
-    // through the seeded FactoryStorage, gate on the active auth adapter via
-    // `isWebAuthEnabled()`, and probe the sandbox runtime via
-    // `isSandboxEnabled()`.
+    // through the seeded FactoryStorage and gate on the active auth adapter.
     // One shared OAuth state signer per boot. The deploy entry supplies a
     // replica-stable secret when needed; otherwise local development gets a
     // per-process random signer (`stable: false`).
@@ -373,13 +389,6 @@ export class MastraFactory {
       publicUrl: publicOrigin,
       authProvider: auth,
       stateSigner,
-      sandbox: machine
-        ? {
-            machine,
-            workdirBase: resolveSandboxWorkdirBase(machine, sandboxConfig?.workdir),
-            maxSandboxes: sandboxConfig?.maxSandboxes,
-          }
-        : undefined,
     });
 
     // One-time provider initialization with factory-level context (e.g.
@@ -529,6 +538,8 @@ export class MastraFactory {
           audit: auditDomain,
           publicOrigin,
           stateSigner,
+          fleet,
+          factoryStorage: storage,
           integrationStorage,
           sourceControlStorage,
           domains,
@@ -591,6 +602,8 @@ export class MastraFactory {
               controller: prepared.base.controller,
               publicOrigin,
               stateSigner,
+              fleet,
+              factoryStorage: storage,
               integrationStorage,
               sourceControlStorage,
               domains,

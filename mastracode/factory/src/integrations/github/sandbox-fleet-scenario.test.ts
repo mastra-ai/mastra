@@ -1,7 +1,6 @@
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
 
 /** Minimal cloneable template sandbox standing in for a RailwaySandbox. */
 function templateSandbox(): WorkspaceSandbox {
@@ -9,15 +8,16 @@ function templateSandbox(): WorkspaceSandbox {
   return template as unknown as WorkspaceSandbox;
 }
 
-function seedSandboxRuntime(opts: { maxSandboxes?: number } = {}): void {
-  seedRuntimeConfig({
-    sandbox: {
-      machine: templateSandbox(),
-      workdirBase: '/workspace',
-      ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
-    },
+function makeFleet(opts: { maxSandboxes?: number } = {}): SandboxFleet {
+  return new SandboxFleet({
+    machine: templateSandbox(),
+    workdirBase: '/workspace',
+    ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
   });
 }
+
+/** The fleet under test; recreated per test where a budget cap is needed. */
+let fleet = makeFleet();
 
 // ── Phase 7 sandbox-fleet scenario tests ─────────────────────────────────
 // These prove the lightweight per-replica sandbox budget and the per-user
@@ -134,18 +134,12 @@ const tables: Tables = {
   sandboxes: [],
 };
 
-import { mountApiRoutes } from '../test-utils';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils';
+import { SandboxBudgetError, SandboxFleet } from '../../sandbox/fleet';
+import type { MaterializationSandbox } from '../../sandbox/fleet';
+import type { ProjectRepositorySandbox } from '../../storage/domains/source-control/base';
 import type * as RoutesModule from './routes';
-import {
-  __resetLiveSandboxCount,
-  getLiveSandboxCount,
-  resetSandboxFactory,
-  SandboxBudgetError,
-  setSandboxFactory,
-} from '../sandbox/fleet';
-import type { MaterializationSandbox } from '../sandbox/fleet';
 import { ensureProjectSandbox, teardownProjectSandbox } from './sandbox';
-import type { ProjectRepositorySandbox } from '@mastra/factory/storage/domains/source-control/base';
 
 /** Minimal fake sandbox VM that records lifecycle calls. */
 class FakeSandbox implements MaterializationSandbox {
@@ -184,9 +178,7 @@ function makeBindingRow(id: string): ProjectRepositorySandbox {
 }
 
 afterEach(() => {
-  resetSandboxFactory();
-  __resetLiveSandboxCount(0);
-  __resetRuntimeConfigForTests();
+  fleet = makeFleet();
   tables.installations = [];
   tables.repositories = [];
   tables.connections = [];
@@ -197,70 +189,86 @@ afterEach(() => {
 
 describe('S7 — sandbox fleet budget', () => {
   it('cap=1: a second fresh provision is rejected, then succeeds after teardown frees a slot', async () => {
-    seedSandboxRuntime({ maxSandboxes: 1 });
+    fleet = makeFleet({ maxSandboxes: 1 });
     let made = 0;
-    setSandboxFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? `fresh-${++made}`));
+    fleet.setFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? `fresh-${++made}`));
 
     const rowA = makeBindingRow('a');
     const rowB = makeBindingRow('b');
 
     // First fresh provision succeeds and consumes the single slot.
-    const sandboxA = (await ensureProjectSandbox(rowA, sourceControlStorage.sandboxes)) as FakeSandbox;
+    const sandboxA = (await ensureProjectSandbox({
+      fleet,
+      row: rowA,
+      storage: sourceControlStorage.sandboxes,
+    })) as FakeSandbox;
     expect(sandboxA.startCount).toBe(1);
-    expect(getLiveSandboxCount()).toBe(1);
+    expect(fleet.liveCount).toBe(1);
     expect(rowA.sandboxId).toBe('vm-fresh-1');
 
     // Second fresh provision is over budget → rejected before spending quota.
-    const err = await ensureProjectSandbox(rowB, sourceControlStorage.sandboxes).catch(e => e);
+    const err = await ensureProjectSandbox({ fleet, row: rowB, storage: sourceControlStorage.sandboxes }).catch(e => e);
     expect(err).toBeInstanceOf(SandboxBudgetError);
     expect(err.max).toBe(1);
-    expect(getLiveSandboxCount()).toBe(1);
+    expect(fleet.liveCount).toBe(1);
     expect(rowB.sandboxId).toBeNull();
 
     // Tear down A → frees the slot.
-    await teardownProjectSandbox(rowA, sourceControlStorage.sandboxes, sandboxA);
+    await teardownProjectSandbox({ fleet, row: rowA, storage: sourceControlStorage.sandboxes, sandbox: sandboxA });
     expect(sandboxA.stopCount).toBe(1);
-    expect(getLiveSandboxCount()).toBe(0);
+    expect(fleet.liveCount).toBe(0);
     expect(rowA.sandboxId).toBeNull();
 
     // Now B provisions successfully.
-    const sandboxB = (await ensureProjectSandbox(rowB, sourceControlStorage.sandboxes)) as FakeSandbox;
+    const sandboxB = (await ensureProjectSandbox({
+      fleet,
+      row: rowB,
+      storage: sourceControlStorage.sandboxes,
+    })) as FakeSandbox;
     expect(sandboxB.startCount).toBe(1);
-    expect(getLiveSandboxCount()).toBe(1);
+    expect(fleet.liveCount).toBe(1);
     expect(rowB.sandboxId).toBe('vm-fresh-2');
   });
 
   it('teardown clears the per-(project,user) binding and the next open re-provisions fresh', async () => {
     let made = 0;
-    setSandboxFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? `fresh-${++made}`));
+    fleet.setFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? `fresh-${++made}`));
 
     const row = makeBindingRow('a');
 
-    const first = (await ensureProjectSandbox(row, sourceControlStorage.sandboxes)) as FakeSandbox;
-    expect(getLiveSandboxCount()).toBe(1);
+    const first = (await ensureProjectSandbox({
+      fleet,
+      row: row,
+      storage: sourceControlStorage.sandboxes,
+    })) as FakeSandbox;
+    expect(fleet.liveCount).toBe(1);
     expect(row.sandboxId).toBe('vm-fresh-1');
 
     // Simulate a materialized binding so teardown clears that too.
     (row as { materializedAt: Date | null }).materializedAt = new Date();
 
-    await teardownProjectSandbox(row, sourceControlStorage.sandboxes, first);
+    await teardownProjectSandbox({ fleet, row: row, storage: sourceControlStorage.sandboxes, sandbox: first });
     expect(first.stopCount).toBe(1);
-    expect(getLiveSandboxCount()).toBe(0);
+    expect(fleet.liveCount).toBe(0);
     expect(row.sandboxId).toBeNull();
     expect(row.materializedAt).toBeNull();
 
     // Next open re-provisions a brand new sandbox (fresh provider id).
-    const second = (await ensureProjectSandbox(row, sourceControlStorage.sandboxes)) as FakeSandbox;
+    const second = (await ensureProjectSandbox({
+      fleet,
+      row: row,
+      storage: sourceControlStorage.sandboxes,
+    })) as FakeSandbox;
     expect(second).not.toBe(first);
     expect(second.startCount).toBe(1);
-    expect(getLiveSandboxCount()).toBe(1);
+    expect(fleet.liveCount).toBe(1);
     expect(row.sandboxId).toBe('vm-fresh-2');
   });
 
   it('teardown of a never-provisioned binding is a no-op that does not underflow the counter', async () => {
     const row = makeBindingRow('a'); // sandboxId stays null
-    await teardownProjectSandbox(row, sourceControlStorage.sandboxes);
-    expect(getLiveSandboxCount()).toBe(0);
+    await teardownProjectSandbox({ fleet, row: row, storage: sourceControlStorage.sandboxes });
+    expect(fleet.liveCount).toBe(0);
     expect(row.sandboxId).toBeNull();
   });
 });
@@ -338,12 +346,12 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
       },
     ];
     process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
-    // A seeded sandbox template makes isSandboxEnabled() true.
-    seedSandboxRuntime();
+    // A default fleet makes fleet.enabled true.
+    fleet = makeFleet();
 
     // Real teardown/reattach run; the factory yields a fake VM so reattach starts
     // a recordable sandbox instead of hitting Railway.
-    setSandboxFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? 'fresh'));
+    fleet.setFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? 'fresh'));
 
     ({ buildGithubRoutes } = await import('./routes'));
   });
@@ -358,7 +366,7 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
       (c as any).set('webAuthUser', { id: workosId, workosId, organizationId: 'org1', name: 'Test', email: 't@e.co' });
       await next();
     });
-    mountApiRoutes(app as any, buildGithubRoutes({ github: githubStub, stateSigner }));
+    mountApiRoutes(app as any, buildGithubRoutes({ github: githubStub, stateSigner, auth: fakeRouteAuth(), fleet }));
     return app;
   }
 
@@ -379,7 +387,7 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
   });
 
   it('user 1 can tear down their own sandbox', async () => {
-    __resetLiveSandboxCount(1); // u1 has one live sandbox
+    fleet.__resetLiveCount(1); // u1 has one live sandbox
     const app = buildApp('u1');
     const res = await app.request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
 
@@ -389,6 +397,6 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
     // The caller's own binding is cleared and the counter is decremented.
     const u1Row = tables.sandboxes.find(r => r.userId === 'u1');
     expect(u1Row?.sandboxId).toBeNull();
-    expect(getLiveSandboxCount()).toBe(0);
+    expect(fleet.liveCount).toBe(0);
   });
 });

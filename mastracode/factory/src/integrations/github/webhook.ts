@@ -4,12 +4,8 @@ import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
 import type { GithubIntegration } from './integration';
 import type { GithubIssueTriageInput, GithubIssueTriageResult } from './issue-triage';
-import {
-  listPullRequestSubscriptionsForWebhook,
-  retirePullRequestSubscription,
-  type GithubSignalSubscriptionRow,
-  type GithubWebhookPullRequestTarget,
-} from './subscriptions';
+import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions';
+import type { GithubSignalSubscriptionRow, GithubWebhookPullRequestTarget } from './subscriptions';
 
 export type GithubIssueTriageRunInput = GithubIssueTriageInput;
 export type GithubIssueTriageRunResult = GithubIssueTriageResult;
@@ -485,7 +481,7 @@ export async function handleGithubWebhook(
   }
 
   const metadata = normalizeGithubWebhookMetadata(parsed);
-  console.log('[GitHub Webhook]', metadata);
+  console.info('[GitHub Webhook]', metadata);
 
   const issueTriageRun = getIssueTriageRunInput(parsed);
   if (issueTriageRun && options.runIssueTriage) {

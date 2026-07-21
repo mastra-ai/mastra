@@ -1,6 +1,5 @@
-import type { AgentController } from '@mastra/core/agent-controller';
-
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
+import type { AgentController } from '@mastra/core/agent-controller';
 
 export interface GithubIssueTriageInput {
   repository: string;

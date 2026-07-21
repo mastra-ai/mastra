@@ -5,21 +5,20 @@
  *  - a `GithubIntegration` instance is registered with the factory
  *    (constructed by the deploy entry from the `GITHUB_APP_*` env vars),
  *  - web auth is enabled (a per-user installation requires a logged-in user),
- *  - the application database is configured (`isAppDbConfigured`).
+ *  - the application database is configured.
  *
- * OAuth/install `state` signing lives in `../state-signing.ts` — the factory
+ * OAuth/install `state` signing lives in `../../state-signing.ts` — the factory
  * creates one shared signer at boot and hands it to every integration.
+ *
+ * Everything here is pure: callers pass the handles they already own (the
+ * integration, auth seam, state signer, sandbox fleet) — there is no global
+ * registry lookup.
  */
 
-import { isWebAuthEnabled } from '../auth';
-import { getSeededIntegration, getSeededStateSigner, getSeededStorage } from '../runtime-config';
-import { getSandboxProvider, isSandboxEnabled } from '../sandbox/fleet';
+import type { RouteAuth } from '../../routes/route';
+import type { SandboxFleet } from '../../sandbox/fleet';
+import type { StateSigner } from '../../state-signing';
 import type { GithubIntegration } from './integration';
-
-function getGithubIntegration(): GithubIntegration | undefined {
-  const integration = getSeededIntegration('github');
-  return integration && 'getInstallationOctokit' in integration ? (integration as GithubIntegration) : undefined;
-}
 
 /**
  * Env vars the deploy entry reads to construct a `GithubIntegration`. Names
@@ -36,11 +35,25 @@ const GITHUB_APP_ENV_VARS = [
   'GITHUB_APP_SLUG',
 ] as const;
 
+/** Handles the GitHub feature gate + diagnostics are computed from. */
+export interface GithubFeatureGateOptions {
+  /** The registered GitHub integration, when configured. */
+  github: GithubIntegration | undefined;
+  /** Web auth seam — the feature requires a logged-in user. */
+  auth: RouteAuth;
+  /** True when the application database is configured. */
+  appDbConfigured: boolean;
+  /** Shared OAuth/install `state` signer, when configured. */
+  stateSigner?: StateSigner;
+  /** Sandbox fleet, when sandboxes are configured. */
+  fleet?: SandboxFleet;
+}
+
 /**
  * True when the GitHub App project feature should be active.
  */
-export function isGithubFeatureEnabled(): boolean {
-  return getGithubIntegration() !== undefined && isWebAuthEnabled();
+export function isGithubFeatureEnabled(options: Pick<GithubFeatureGateOptions, 'github' | 'auth'>): boolean {
+  return options.github !== undefined && options.auth.enabled();
 }
 
 /**
@@ -65,15 +78,15 @@ export interface GithubFeatureDiagnostics {
  * the feature-gate reasoning so startup logs, the status API, and the SPA explain
  * the same state. Does not change `isGithubFeatureEnabled()` behavior.
  */
-export function getGithubFeatureDiagnostics(): GithubFeatureDiagnostics {
-  const github = getGithubIntegration();
+export function getGithubFeatureDiagnostics(options: GithubFeatureGateOptions): GithubFeatureDiagnostics {
+  const { github, auth, appDbConfigured, stateSigner, fleet } = options;
   return {
     githubAppConfigured: github !== undefined,
-    webAuthEnabled: isWebAuthEnabled(),
-    appDbConfigured: getSeededStorage() !== undefined,
-    stateSecretConfigured: getSeededStateSigner()?.stable ?? false,
-    sandboxEnabled: isSandboxEnabled(),
-    sandboxProvider: getSandboxProvider(),
+    webAuthEnabled: auth.enabled(),
+    appDbConfigured,
+    stateSecretConfigured: stateSigner?.stable ?? false,
+    sandboxEnabled: fleet?.enabled ?? false,
+    sandboxProvider: fleet?.provider ?? 'none',
     missingGithubAppEnvVars: github ? [] : [...GITHUB_APP_ENV_VARS],
   };
 }

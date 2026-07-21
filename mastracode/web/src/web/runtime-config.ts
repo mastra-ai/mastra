@@ -14,28 +14,8 @@
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { FactoryIntegration } from '@mastra/factory/integrations/base';
-import type { GithubIntegration } from './github/integration.js';
 import type { StateSigner } from '@mastra/factory/state-signing';
-
-/**
- * Factory-resolved sandbox runtime: the machine GitHub projects clone their
- * per-project sandboxes from, plus the web-level knobs the factory resolved
- * around it.
- */
-export interface WebSandboxRuntime {
-  /**
-   * Template machine (validated by the factory to implement `clone()`).
-   * Never started — acts purely as the credential/default holder that
-   * per-project sandboxes are cloned from.
-   */
-  machine: WorkspaceSandbox;
-  /** In-sandbox base directory repos check out under (no trailing slash). */
-  workdirBase: string;
-  /** Per-replica cap on concurrently provisioned sandboxes. 0 = unlimited. */
-  maxSandboxes?: number;
-}
 
 export interface WebRuntimeConfig {
   /**
@@ -51,8 +31,6 @@ export interface WebRuntimeConfig {
   publicUrl?: string;
   /** Active auth provider, or `undefined` when auth is disabled. */
   authProvider?: IMastraAuthProvider;
-  /** Active sandbox runtime, or `undefined` when sandboxes are disabled. */
-  sandbox?: WebSandboxRuntime;
   /** Registered integrations (GitHub, Linear, third-party), keyed by their stable id. */
   integrations?: FactoryIntegration[];
   /** Shared OAuth state signer created by the factory (see `./state-signing.ts`). */
@@ -108,30 +86,9 @@ export function getSeededAuthProvider(): IMastraAuthProvider | undefined {
   return seeded?.authProvider;
 }
 
-/**
- * Sandbox runtime seeded by the factory. `undefined` when the factory was
- * configured without a `sandbox` slot (or never ran) — GitHub-backed projects
- * stay off in that case.
- */
-export function getSeededSandbox(): WebSandboxRuntime | undefined {
-  return seeded?.sandbox;
-}
-
 /** Look up a registered integration by its stable id. */
 export function getSeededIntegration(id: string): FactoryIntegration | undefined {
   return seeded?.integrations?.find(integration => integration.id === id);
-}
-
-/**
- * GitHub App integration seeded by the factory. Typed convenience over
- * {@link getSeededIntegration} for the sandbox fleet + session tooling, which
- * need GitHub-typed API methods. `undefined` when no GitHub integration was
- * registered (or the factory never ran) — GitHub-backed repositories stay off in
- * that case.
- */
-export function getSeededGithubIntegration(): GithubIntegration | undefined {
-  const integration = getSeededIntegration('github');
-  return integration?.versionControl ? (integration as GithubIntegration) : undefined;
 }
 
 /**

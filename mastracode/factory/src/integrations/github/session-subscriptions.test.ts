@@ -1,5 +1,6 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GithubIntegration } from './integration';
 
 const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(async (_input: { sessionScope: string }) => ({ created: true })),
@@ -44,7 +45,7 @@ const githubStub = {
     },
   },
   getInstallationOctokit: () => ({ pulls: { get: mocks.getPullRequest } }),
-} as unknown as import('./integration').GithubIntegration;
+} as unknown as GithubIntegration;
 
 import {
   createGithubSubscriptionTools,

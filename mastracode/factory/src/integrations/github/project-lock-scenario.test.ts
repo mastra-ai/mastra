@@ -111,15 +111,15 @@ describe('cross-replica serialization via advisory locks', () => {
     const gateA = deferred();
 
     // Replica A acquires the advisory lock first.
-    const a = withDbAdvisoryLock(
-      'proj1:user1',
-      async () => {
+    const a = withDbAdvisoryLock({
+      key: 'proj1:user1',
+      fn: async () => {
         order.push('A:start');
         await gateA.promise;
         order.push('A:end');
       },
-      pg,
-    );
+      pool: pg,
+    });
     // Let A's BEGIN + advisory-lock acquisition settle.
     await Promise.resolve();
     await Promise.resolve();
@@ -127,14 +127,14 @@ describe('cross-replica serialization via advisory locks', () => {
 
     // Replica B (separate process → no shared in-process chain) tries the same
     // key and must block on the Postgres advisory lock.
-    const b = withDbAdvisoryLock(
-      'proj1:user1',
-      async () => {
+    const b = withDbAdvisoryLock({
+      key: 'proj1:user1',
+      fn: async () => {
         order.push('B:start');
         order.push('B:end');
       },
-      pg,
-    );
+      pool: pg,
+    });
 
     await Promise.resolve();
     await Promise.resolve();
@@ -155,28 +155,28 @@ describe('cross-replica serialization via advisory locks', () => {
     const [k1a, k1b] = hashKey('proj1:user1');
     const key1 = `${k1a}:${k1b}`;
 
-    const op1 = withDbAdvisoryLock(
-      'proj1:user1',
-      async () => {
+    const op1 = withDbAdvisoryLock({
+      key: 'proj1:user1',
+      fn: async () => {
         order.push('1:start');
         await gate1.promise;
         order.push('1:end');
       },
-      pg,
-    );
+      pool: pg,
+    });
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
 
     // A different key should not be blocked by op1 holding key1.
-    const op2 = withDbAdvisoryLock(
-      'proj2:user1',
-      async () => {
+    const op2 = withDbAdvisoryLock({
+      key: 'proj2:user1',
+      fn: async () => {
         order.push('2:start');
         order.push('2:end');
       },
-      pg,
-    );
+      pool: pg,
+    });
 
     await op2;
     // op2 finished while op1 is still holding its lock.
@@ -198,26 +198,26 @@ describe('lock released on failure', () => {
     const key = `${k1}:${k2}`;
 
     await expect(
-      withProjectLock(
-        'proj1:user1',
-        async () => {
+      withProjectLock({
+        key: 'proj1:user1',
+        fn: async () => {
           throw new Error('boom');
         },
-        pg,
-      ),
+        pool: pg,
+      }),
     ).rejects.toThrow('boom');
 
     // Lock must be free after the failed (rolled-back) transaction.
     expect(pg.isHeld(key)).toBe(false);
 
     let ran = false;
-    await withProjectLock(
-      'proj1:user1',
-      async () => {
+    await withProjectLock({
+      key: 'proj1:user1',
+      fn: async () => {
         ran = true;
       },
-      pg,
-    );
+      pool: pg,
+    });
     expect(ran).toBe(true);
     expect(pg.isHeld(key)).toBe(false);
   });
@@ -234,13 +234,13 @@ describe('disabled distributed lock falls back to in-process only', () => {
       },
     };
     let ran = false;
-    await withProjectLock(
-      'proj1:user1',
-      async () => {
+    await withProjectLock({
+      key: 'proj1:user1',
+      fn: async () => {
         ran = true;
       },
-      pg,
-    );
+      pool: pg,
+    });
     expect(ran).toBe(true);
     expect(connects).toBe(0);
   });

@@ -1,7 +1,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { IntegrationStorage } from '@mastra/factory/storage/domains/integrations/base';
+import { IntegrationStorage } from '../../storage/domains/integrations/base';
 import type { GithubSubscriptionStorage, SubscribeToPullRequestInput } from './subscriptions';
 
 describe('GitHub signal subscription store', () => {

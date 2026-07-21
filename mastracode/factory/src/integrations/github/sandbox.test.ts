@@ -1,9 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbUpdates: Array<Record<string, unknown>> = [];
 
-import { resetSandboxFactory, setSandboxFactory } from '../sandbox/fleet';
-import type { MaterializationSandbox, SandboxCommandResult } from '../sandbox/fleet';
+import { SandboxFleet } from '../../sandbox/fleet';
+import type { MaterializationSandbox, SandboxCommandResult, SandboxFactory } from '../../sandbox/fleet';
+import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../../storage/domains/source-control/base';
 import {
   computeWorktreePath,
   configureGitIdentity,
@@ -22,12 +24,6 @@ import {
   WorktreeError,
 } from './sandbox';
 import type { RepoMaterializeInfo } from './sandbox';
-import type {
-  ProjectRepositorySandbox,
-  SourceControlStorageHandle,
-} from '@mastra/factory/storage/domains/source-control/base';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
 
 /** Minimal cloneable template sandbox standing in for Railway/Local instances. */
 function templateSandbox(opts: { provider?: string; idleTimeoutMinutes?: number } = {}): WorkspaceSandbox {
@@ -41,17 +37,22 @@ function templateSandbox(opts: { provider?: string; idleTimeoutMinutes?: number 
   return template as unknown as WorkspaceSandbox;
 }
 
-/** Seed the runtime-config registry with a factory-shaped sandbox runtime. */
-function seedSandboxRuntime(
+/** Build a fleet from a factory-shaped sandbox runtime. */
+function makeFleet(
   opts: { provider?: string; idleTimeoutMinutes?: number; workdirBase?: string; maxSandboxes?: number } = {},
-): void {
-  seedRuntimeConfig({
-    sandbox: {
-      machine: templateSandbox(opts),
-      workdirBase: opts.workdirBase ?? '/workspace',
-      ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
-    },
+): SandboxFleet {
+  return new SandboxFleet({
+    machine: templateSandbox(opts),
+    workdirBase: opts.workdirBase ?? '/workspace',
+    ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
   });
+}
+
+/** The fleet under test; recreated per test, factory overridden as needed. */
+let fleet = makeFleet();
+
+function setSandboxFactory(factory: SandboxFactory): void {
+  fleet.setFactory(factory);
 }
 
 type Responder = (script: string) => SandboxCommandResult;
@@ -114,9 +115,9 @@ const storage = {
 
 function ensureProjectSandbox(
   row: ProjectRepositorySandbox,
-  onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[2],
+  onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[0]['onProgress'],
 ) {
-  return ensureProjectSandboxWithStorage(row, storage, onProgress);
+  return ensureProjectSandboxWithStorage({ fleet, row, storage, onProgress });
 }
 
 function materializeRepo(
@@ -125,16 +126,12 @@ function materializeRepo(
   sandbox: MaterializationSandbox,
   token: string,
 ) {
-  return materializeRepoWithStorage(row, repoInfo, sandbox, token, storage);
+  return materializeRepoWithStorage({ row, repoInfo, sandbox, token, storage });
 }
 
 beforeEach(() => {
   dbUpdates.length = 0;
-});
-
-afterEach(() => {
-  resetSandboxFactory();
-  __resetRuntimeConfigForTests();
+  fleet = makeFleet();
 });
 
 describe('ensureProjectSandbox', () => {
@@ -164,7 +161,7 @@ describe('ensureProjectSandbox', () => {
   });
 
   it('passes the template-configured idle timeout on provision', async () => {
-    seedSandboxRuntime({ idleTimeoutMinutes: 15 });
+    fleet = makeFleet({ idleTimeoutMinutes: 15 });
     const sandbox = new FakeSandbox();
     let factoryArgs: { idleTimeoutMinutes?: number } | undefined;
     setSandboxFactory(opts => {

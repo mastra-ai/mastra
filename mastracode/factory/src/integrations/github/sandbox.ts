@@ -18,12 +18,15 @@
  */
 
 import { createHash } from 'node:crypto';
-import { ensureSandbox, reportProgress, teardownSandbox } from '../sandbox/fleet';
-import type { MaterializationSandbox, ProgressFn, SandboxBindingStore, SandboxCommandResult } from '../sandbox/fleet';
+import { reportProgress } from '../../sandbox/fleet';
 import type {
-  ProjectRepositorySandbox,
-  SourceControlStorageHandle,
-} from '@mastra/factory/storage/domains/source-control/base';
+  MaterializationSandbox,
+  ProgressFn,
+  SandboxBindingStore,
+  SandboxCommandResult,
+  SandboxFleet,
+} from '../../sandbox/fleet';
+import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../../storage/domains/source-control/base';
 
 type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
 
@@ -41,12 +44,14 @@ function bindingStore(row: ProjectRepositorySandbox, storage: SourceControlSandb
  * Provision a new sandbox (persisting its provider id on first open) or
  * reattach to the stored one. Returns a started, live sandbox.
  */
-export async function ensureProjectSandbox(
-  row: ProjectRepositorySandbox,
-  storage: SourceControlSandboxStorage,
-  onProgress?: ProgressFn,
-): Promise<MaterializationSandbox> {
-  return ensureSandbox(bindingStore(row, storage), onProgress);
+export async function ensureProjectSandbox(options: {
+  fleet: SandboxFleet;
+  row: ProjectRepositorySandbox;
+  storage: SourceControlSandboxStorage;
+  onProgress?: ProgressFn;
+}): Promise<MaterializationSandbox> {
+  const { fleet, row, storage, onProgress } = options;
+  return fleet.ensureSandbox(bindingStore(row, storage), onProgress);
 }
 
 /**
@@ -57,12 +62,14 @@ export async function ensureProjectSandbox(
  * @param row     the per-(project,user) sandbox binding to tear down
  * @param sandbox an already-reattached live sandbox to stop, when available
  */
-export async function teardownProjectSandbox(
-  row: ProjectRepositorySandbox,
-  storage: SourceControlSandboxStorage,
-  sandbox?: MaterializationSandbox,
-): Promise<void> {
-  return teardownSandbox(bindingStore(row, storage), sandbox);
+export async function teardownProjectSandbox(options: {
+  fleet: SandboxFleet;
+  row: ProjectRepositorySandbox;
+  storage: SourceControlSandboxStorage;
+  sandbox?: MaterializationSandbox;
+}): Promise<void> {
+  const { fleet, row, storage, sandbox } = options;
+  return fleet.teardownSandbox(bindingStore(row, storage), sandbox);
 }
 
 /**
@@ -124,20 +131,20 @@ export interface RepoMaterializeInfo {
  * re-open. Always scrubs the install token from the remote afterwards and sets
  * `materialized_at` on the per-user sandbox binding row.
  *
- * @param sandboxRow the per-(project,user) sandbox binding (provisioned via
- *                   `ensureProjectSandbox`)
- * @param repo       repo metadata from the org-owned project row
- * @param sandbox    the live sandbox to run git inside
- * @param token      a freshly minted, short-lived installation access token
  */
-export async function materializeRepo(
-  sandboxRow: ProjectRepositorySandbox,
-  repoInfo: RepoMaterializeInfo,
-  sandbox: MaterializationSandbox,
-  token: string,
-  storage: SourceControlSandboxStorage,
-  onProgress?: ProgressFn,
-): Promise<void> {
+export async function materializeRepo(options: {
+  /** The per-(project,user) sandbox binding (provisioned via `ensureProjectSandbox`). */
+  row: ProjectRepositorySandbox;
+  /** Repo metadata from the org-owned project row. */
+  repoInfo: RepoMaterializeInfo;
+  /** The live sandbox to run git inside. */
+  sandbox: MaterializationSandbox;
+  /** A freshly minted, short-lived installation access token. */
+  token: string;
+  storage: SourceControlSandboxStorage;
+  onProgress?: ProgressFn;
+}): Promise<void> {
+  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
 

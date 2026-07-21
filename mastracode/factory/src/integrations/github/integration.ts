@@ -23,12 +23,12 @@
  * talks to the instance.
  */
 
-import { createAppAuth } from '@octokit/auth-app';
-import { Octokit } from '@octokit/rest';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import { createAppAuth } from '@octokit/auth-app';
+import { Octokit } from '@octokit/rest';
 
-import type { IntegrationConnection } from '@mastra/factory/capabilities/connection';
+import type { IntegrationConnection } from '../../capabilities/connection';
 import type {
   CreateIntakeCommentInput,
   GetIntakeIssueInput,
@@ -36,15 +36,15 @@ import type {
   IntakeIssue,
   IntakeIssueDetail,
   ListIntakeIssuesInput,
-} from '@mastra/factory/capabilities/intake';
+} from '../../capabilities/intake';
 import type {
   PullRequest,
   PullRequestComment,
   Review,
   ReviewComment,
   VersionControl,
-} from '@mastra/factory/capabilities/version-control';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
+} from '../../capabilities/version-control';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base';
 import { runGithubIssueTriage } from './issue-triage.js';
 import { buildGithubRoutes } from './routes.js';
 import {
@@ -988,6 +988,9 @@ export class GithubIntegration implements FactoryIntegration {
     this.#storage = ctx.storage;
     return buildGithubRoutes({
       github: this,
+      auth: ctx.auth,
+      fleet: ctx.fleet,
+      storage: ctx.factoryStorage,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       controller: ctx.controller,

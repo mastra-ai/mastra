@@ -15,7 +15,6 @@ import {
   getFactoryStorage,
   getSeededAuthProvider,
   getSeededIntegration,
-  getSeededSandbox,
   getSeededStateSigner,
   getSeededStorage,
 } from './runtime-config.js';
@@ -67,6 +66,23 @@ async function prepareFactory(config: ConstructorParameters<typeof MastraFactory
   return prepareMock.mock.calls[0]![0];
 }
 
+/**
+ * Prepare the factory with a probe integration and return the
+ * {@link IntegrationContext} the factory hands to `routes()` — the fleet has
+ * no global getter anymore, so tests observe it through the context.
+ */
+async function prepareIntegrationContext(config: ConstructorParameters<typeof MastraFactory>[0]) {
+  const routes = vi.fn((_ctx: IntegrationContext) => []);
+  const prepared = await prepareFactory({
+    ...config,
+    integrations: [...(config.integrations ?? []), fakeIntegration({ id: 'context-probe', routes })],
+  });
+  const buildApiRoutes = prepared.buildApiRoutes as (deps: object) => unknown;
+  buildApiRoutes({ controller: {}, authStorage: {} });
+  expect(routes).toHaveBeenCalledOnce();
+  return routes.mock.calls[0]![0];
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   __resetRuntimeConfigForTests();
@@ -103,13 +119,18 @@ describe('MastraFactory.prepare', () => {
 
   it('seeds the runtime-config registry with the explicit config', async () => {
     const auth = fakeProvider();
-    const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
     const storage = fakeStorage();
-    await prepareFactory({ storage, auth, sandbox: { machine: sandbox } });
+    await prepareFactory({ storage, auth });
     expect(getSeededStorage()).toBe(storage);
     expect(getFactoryStorage()).toBe(storage);
     expect(getSeededAuthProvider()).toBe(auth);
-    expect(getSeededSandbox()?.machine).toBe(sandbox);
+  });
+
+  it('constructs an enabled sandbox fleet from the configured machine', async () => {
+    const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: sandbox } });
+    expect(ctx.fleet.enabled).toBe(true);
+    expect(ctx.fleet.provider).toBe('local');
   });
 
   it('registers and initializes factory domains through the storage lifecycle', async () => {
@@ -130,9 +151,10 @@ describe('MastraFactory.prepare', () => {
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
 
-  it('leaves the sandbox runtime unset when the slot is omitted', async () => {
-    await prepareFactory({ storage: fakeStorage() });
-    expect(getSeededSandbox()).toBeUndefined();
+  it('disables the sandbox fleet when the slot is omitted', async () => {
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.fleet.enabled).toBe(false);
+    expect(ctx.fleet.provider).toBe('none');
   });
 
   it('rejects a sandbox that does not implement clone()', async () => {
@@ -146,11 +168,11 @@ describe('MastraFactory.prepare', () => {
   });
 
   it("defaults the workdir base to the machine's workingDirectory, else /workspace", async () => {
-    await prepareFactory({
+    const local = await prepareIntegrationContext({
       storage: fakeStorage(),
       sandbox: { machine: new LocalSandbox({ workingDirectory: '/srv/checkouts/' }) },
     });
-    expect(getSeededSandbox()?.workdirBase).toBe('/srv/checkouts');
+    expect(local.fleet.computeWorkdir('acme/api')).toBe('/srv/checkouts/acme/api');
 
     prepareMock.mockClear();
     __resetRuntimeConfigForTests();
@@ -161,12 +183,12 @@ describe('MastraFactory.prepare', () => {
       provider: 'railway',
       clone: () => remote,
     } as unknown as WorkspaceSandbox;
-    await prepareFactory({ storage: fakeStorage(), sandbox: { machine: remote } });
-    expect(getSeededSandbox()?.workdirBase).toBe('/workspace');
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: remote } });
+    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/workspace/acme/api');
   });
 
   it("keeps LocalSandbox checkouts under its host root even when workdir is '/workspace'", async () => {
-    await prepareFactory({
+    const ctx = await prepareIntegrationContext({
       storage: fakeStorage(),
       sandbox: {
         machine: new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }),
@@ -174,8 +196,8 @@ describe('MastraFactory.prepare', () => {
         maxSandboxes: 5,
       },
     });
-    expect(getSeededSandbox()?.workdirBase).toBe('/tmp/mc-factory-test');
-    expect(getSeededSandbox()?.maxSandboxes).toBe(5);
+    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/tmp/mc-factory-test/acme/api');
+    expect(ctx.fleet.maxSandboxes).toBe(5);
   });
 
   it('honors an explicit workdir override for remote sandboxes', async () => {
@@ -185,11 +207,11 @@ describe('MastraFactory.prepare', () => {
       provider: 'railway',
       clone: () => remote,
     } as unknown as WorkspaceSandbox;
-    await prepareFactory({
+    const ctx = await prepareIntegrationContext({
       storage: fakeStorage(),
       sandbox: { machine: remote, workdir: '/custom/base/' },
     });
-    expect(getSeededSandbox()?.workdirBase).toBe('/custom/base');
+    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/custom/base/acme/api');
   });
 
   it("forwards the backend's Mastra store and the vector instance to the SDK mount", async () => {

@@ -20,11 +20,13 @@
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { Intake } from '../capabilities/intake';
 import type { VersionControl } from '../capabilities/version-control';
 import type { RouteAuth } from '../routes/route.js';
+import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -60,6 +62,18 @@ export interface IntegrationPostToolContext {
 export interface IntegrationContext {
   /** Host auth seam — integration routes resolve callers through this. */
   auth: RouteAuth;
+  /**
+   * Sandbox fleet for per-project sandboxes. Always constructed at boot; a
+   * fleet built without a machine config reports `enabled: false` and
+   * sandbox-backed routes respond 503.
+   */
+  fleet: SandboxFleet;
+  /**
+   * Root factory storage backend. Supplies the cross-replica
+   * `withDistributedLock` capability and the `appDbConfigured` diagnostic.
+   * Absent when the host runs without an application database.
+   */
+  factoryStorage?: FactoryStorage;
   /** Browser-facing origin (OAuth redirect base), no trailing slash. */
   baseUrl?: string;
   /** Mounted agent controller for webhook → session signal delivery. */

@@ -1,9 +1,10 @@
 import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { __resetRuntimeConfigForTests } from '../runtime-config.js';
-import { createStateSigner } from '@mastra/factory/state-signing';
-import { seedFactoryStorageForTests } from '../storage/test-utils.js';
+import { fakeRouteAuth } from '../../routes/test-utils.js';
+import { SandboxFleet } from '../../sandbox/fleet.js';
+import { createStateSigner } from '../../state-signing';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubIntegration, normalizePrivateKey } from './integration.js';
 
 // Real RSA key so we can prove Node's PEM decoder accepts the normalized
@@ -344,18 +345,18 @@ describe('GithubIntegration capability surface', () => {
 });
 
 describe('GithubIntegration FactoryIntegration surface', () => {
-  afterEach(() => {
-    __resetRuntimeConfigForTests();
-  });
-
   it('routes() returns the GitHub HTTP surface as ApiRoute[]', async () => {
-    const { integrations, sourceControl } = await seedFactoryStorageForTests();
+    const { integrations, sourceControl, projects, intake } = await createFactoryStorageForTests();
     const github = new GithubIntegration(validConfig());
     const routes = github.routes({
+      auth: fakeRouteAuth(),
+      fleet: new SandboxFleet(),
       stateSigner: createStateSigner('secret'),
       storage: {
         generic: integrations.forIntegration(github.id),
         sourceControl: sourceControl.forIntegration(github.id),
+        projects,
+        intake,
       },
     });
     expect(routes.length).toBeGreaterThan(0);
@@ -365,7 +366,7 @@ describe('GithubIntegration FactoryIntegration surface', () => {
   });
 
   it('registers provider installations and repositories through its version-control capability', async () => {
-    const { sourceControl } = await seedFactoryStorageForTests();
+    const { sourceControl } = await createFactoryStorageForTests();
     const github = new GithubIntegration(validConfig());
     github.versionControl.initialize({ storage: sourceControl.forIntegration(github.id) });
 

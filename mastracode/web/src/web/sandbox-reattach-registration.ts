@@ -1,13 +1,13 @@
 /**
- * Wires the core workspace sandbox seam to this package's sandbox
- * provisioning. Core's `getDynamicWorkspace` reattaches GitHub project
- * sandboxes through `@mastra/code-sdk/agents/sandbox-reattach`, but only
- * the web surface knows the sandbox provider factory — so the implementation
- * is registered here at web-surface load time.
+ * Wires the core workspace sandbox seam to the factory's sandbox fleet.
+ * Core's `getDynamicWorkspace` reattaches project sandboxes through
+ * `@mastra/code-sdk/agents/sandbox-reattach`, but only the factory owns the
+ * fleet — so `MastraFactory.prepare()` registers the implementation here once
+ * the fleet is constructed.
  */
 import { registerSandboxReattach as registerOnCore } from '@mastra/code-sdk/agents/sandbox-reattach';
-import { reattachSandbox } from './sandbox/fleet.js';
+import type { SandboxFleet } from '@mastra/factory/sandbox/fleet';
 
-export function registerSandboxReattach(): void {
-  registerOnCore(reattachSandbox);
+export function registerSandboxReattach(fleet: SandboxFleet): void {
+  registerOnCore(providerSandboxId => fleet.reattachSandbox(providerSandboxId));
 }

@@ -1,7 +1,11 @@
 import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type * as AuthModule from '../auth';
+import type { ListIntakeIssuesInput } from '../../capabilities/intake';
+import type { CreatePullRequestInput, ListPullRequestsInput } from '../../capabilities/version-control';
+import type { RouteAuth } from '../../routes/route';
+import { mountApiRoutes } from '../../routes/test-utils';
+import type { SandboxFleet } from '../../sandbox/fleet';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock drizzle's `eq`/`and` so the fake DB below can honour `where` predicates.
@@ -33,7 +37,7 @@ const tables: Tables = {
   subscriptions: [],
 };
 
-import { SourceControlStorageInMemory } from '@mastra/factory/storage/domains/source-control/inmemory';
+import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory';
 const sourceControlStorage = new SourceControlStorageInMemory();
 
 function installationRow(row: Record<string, any>) {
@@ -293,7 +297,7 @@ const githubStub = {
   listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
     listRepoOpenIssues(installationId, repoFullName, page, options),
   intake: {
-    listIssues: async (input: import('@mastra/factory/capabilities/intake').ListIntakeIssuesInput) => {
+    listIssues: async (input: ListIntakeIssuesInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenIssues(
         input.connection.installationId,
@@ -323,7 +327,7 @@ const githubStub = {
     },
   },
   versionControl: {
-    listPullRequests: async (input: import('@mastra/factory/capabilities/version-control').ListPullRequestsInput) => {
+    listPullRequests: async (input: ListPullRequestsInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenPullRequests(
         input.connection.installationId,
@@ -335,7 +339,7 @@ const githubStub = {
         nextCursor: result.nextPage === null ? null : String(result.nextPage),
       };
     },
-    createPullRequest: async (input: import('@mastra/factory/capabilities/version-control').CreatePullRequestInput) => {
+    createPullRequest: async (input: CreatePullRequestInput) => {
       const result = await createPullRequest(input);
       return {
         id: '1',
@@ -370,15 +374,14 @@ const stateSigner = {
 };
 
 const ensureProjectSandbox = vi.fn(
-  async (row: any, storage: SourceControlStorageInMemory['sandboxes'], onProgress?: (e: any) => void) => {
-    await storage.setSandboxId({ id: row.id, sandboxId: 'sb' });
-    onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
+  async (opts: { row: any; storage: SourceControlStorageInMemory['sandboxes']; onProgress?: (e: any) => void }) => {
+    await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
+    opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
     return { id: 'sb' };
   },
 );
-const materializeRepo = vi.fn(async (..._args: any[]) => {
-  const onProgress = _args[5] as ((e: any) => void) | undefined;
-  onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
+const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) => {
+  opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
@@ -390,23 +393,21 @@ const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch:
 const runWorktreeSetup = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
-const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
+const createPullRequest = vi.fn(async (_input: CreatePullRequestInput) => ({
+  url: 'https://github.com/octo/hello/pull/1',
+}));
 let sandboxEnabled = true;
-vi.mock('../sandbox/fleet', () => {
-  class SandboxBudgetError extends Error {
-    readonly code = 'sandbox-budget-exceeded';
-    constructor(readonly max: number) {
-      super(`Sandbox budget exceeded: ${max}`);
-    }
-  }
-  return {
-    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-    getSandboxProvider: () => 'railway',
-    isSandboxEnabled: () => sandboxEnabled,
-    reattachSandbox: (id: string) => reattachSandbox(id),
-    SandboxBudgetError,
-  };
-});
+/** DI-injected fleet stub — routes read `enabled`/`provider`/`computeWorkdir`/`reattachSandbox`. */
+const fleet = {
+  get enabled() {
+    return sandboxEnabled;
+  },
+  get provider() {
+    return sandboxEnabled ? 'railway' : 'none';
+  },
+  computeWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+  reattachSandbox: (id: string) => reattachSandbox(id),
+} as unknown as SandboxFleet;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -425,15 +426,14 @@ vi.mock('./sandbox', () => {
   return {
     computeWorktreePath: (repoWorkdir: string, branch: string) =>
       `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
-    ensureProjectSandbox: (row: any, storage: SourceControlStorageInMemory['sandboxes'], onProgress?: any) =>
-      ensureProjectSandbox(row, storage, onProgress),
-    materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
+    ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
+    materializeRepo: (opts: any) => materializeRepo(opts),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
-    createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
+    createPullRequest: (input: any) => createPullRequest(input),
     // Match the real ref validator closely enough for route tests.
     isValidGitRef: (v: unknown): v is string =>
       typeof v === 'string' && v.length > 0 && v.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(v),
@@ -448,32 +448,31 @@ vi.mock('./config', () => ({
   getGithubFeatureDiagnostics: () => ({}),
 }));
 
-// Partially mock `../auth`: keep all real helpers (getWebAuthUser/webAuthTenant)
-// so the harness's middleware-stashed user flows through normally, but make
-// `ensureWebAuthUser` simulate cookie-based session resolution on `/auth/*`
-// routes the gate skips — it stashes `cookieUser` onto the context the same way
-// production resolves a session cookie before scoping the tenant.
+// RouteAuth fake mirroring the web host: the harness middleware stashes a
+// `webAuthUser` on the context, and `ensureUser` additionally simulates
+// cookie-based session resolution (`cookieUser`) the same way production
+// resolves a session cookie before scoping the tenant.
 let cookieUser: { workosId: string; organizationId?: string } | null = null;
-vi.mock('../auth', async () => {
-  const actual = (await vi.importActual('../auth')) as typeof AuthModule;
-  return {
-    ...actual,
-    ensureWebAuthUser: async (c: any) => {
-      const existing = actual.getWebAuthUser(c);
-      if (existing) return existing;
-      if (!cookieUser) return undefined;
-      const u = cookieUser as { workosId: string; organizationId?: string };
-      const withOrg: { workosId: string; organizationId?: string } = {
-        workosId: u.workosId,
-        organizationId: u.organizationId ?? 'org1',
-      };
-      c.set('webAuthUser', withOrg);
-      return withOrg;
-    },
-  };
-});
+const testAuth: RouteAuth = {
+  enabled: () => true,
+  ensureUser: async (c: any) => {
+    const existing = c.get('webAuthUser');
+    if (existing) return existing;
+    if (!cookieUser) return undefined;
+    const withOrg: { workosId: string; organizationId?: string } = {
+      workosId: cookieUser.workosId,
+      organizationId: cookieUser.organizationId ?? 'org1',
+    };
+    c.set('webAuthUser', withOrg);
+    return withOrg;
+  },
+  tenant: (c: any) => {
+    const u = c.get('webAuthUser') as { workosId: string; organizationId?: string } | undefined;
+    return u ? { orgId: u.organizationId, userId: u.workosId } : undefined;
+  },
+  isOrganizationAdmin: async () => true,
+};
 
-import { mountApiRoutes } from '../test-utils';
 import { buildGithubRoutes } from './routes';
 // The mocked class from the `./sandbox` factory above — routes match on
 // `instanceof WorktreeError`, so failure specs must throw this exact class.
@@ -591,6 +590,8 @@ function buildApp(
     buildGithubRoutes({
       baseUrl: 'http://localhost:4111',
       github: githubStub as any,
+      auth: testAuth,
+      fleet,
       stateSigner: signerOverride === null ? undefined : (signerOverride ?? stateSigner),
       emitAudit: async ({ context, input }) => {
         try {
@@ -680,7 +681,7 @@ function signedGithubWebhookRequest(event: string, payload: Record<string, unkno
 describe('webhook route', () => {
   it('accepts a valid signed issues event without guessing a Factory project repository', async () => {
     seedMaterializedProject();
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
     const res = await buildApp(null, { runIssueTriage }).request(
@@ -716,7 +717,7 @@ describe('webhook route', () => {
   });
 
   it('accepts a valid signed PR review comment event and logs normalized PR metadata', async () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const res = await buildApp(null).request(
       signedGithubWebhookRequest('pull_request_review_comment', {
         action: 'created',
@@ -793,7 +794,7 @@ describe('webhook route', () => {
   });
 
   it('rejects invalid signatures without logging', async () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const req = signedGithubWebhookRequest(
       'issues',
       { action: 'opened' },
@@ -844,7 +845,7 @@ describe('webhook route', () => {
   });
 
   it('accepts and ignores a valid unsupported event', async () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const res = await buildApp(null).request(signedGithubWebhookRequest('installation', { action: 'created' }));
 
     expect(res.status).toBe(202);

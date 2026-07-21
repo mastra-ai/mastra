@@ -1,7 +1,10 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type * as AuthModule from '../auth';
-import { SourceControlStorageInMemory } from '@mastra/factory/storage/domains/source-control/inmemory';
+import type { RouteAuth } from '../../routes/route';
+import { mountApiRoutes } from '../../routes/test-utils';
+import type { SandboxFleet } from '../../sandbox/fleet';
+import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory';
+import { buildGithubRoutes } from './routes';
 
 // ── Phase 2 org-isolation scenario tests ─────────────────────────────────
 // These prove the org-tenancy boundary end to end through the real GitHub
@@ -18,34 +21,35 @@ vi.mock('drizzle-orm', () => ({
   and: (...conds: any[]) => ({ kind: 'and', conds: conds.filter(Boolean) }),
 }));
 
-// Partially mock `../auth`: keep the real helpers (getWebAuthUser/webAuthTenant)
-// so middleware-stashed users flow through unchanged, but make
-// `ensureWebAuthUser` simulate cookie-based session resolution + personal-org
-// bootstrap on `/auth/*` routes the gate skips. A no-org cookie user comes back
-// with an `organizationId` populated (mirroring the provider's `ensureOrganization`), so
-// downstream `webAuthTenant` yields a real tenant instead of an org gate 403.
+// RouteAuth fake mirroring the web host: middleware-stashed users flow through
+// unchanged, and `ensureUser` simulates cookie-based session resolution +
+// personal-org bootstrap. A no-org cookie user comes back with an
+// `organizationId` populated (mirroring the provider's `ensureOrganization`),
+// so `tenant()` yields a real tenant instead of an org gate 403.
 let cookieUser: { workosId: string; organizationId?: string } | null = null;
 // Bootstrap is always attempted for no-org users, but the WorkOS create can
 // fail (e.g. missing API permissions); toggle to exercise that failure path.
 let bootstrapSucceeds = true;
-vi.mock('../auth', async () => {
-  const actual = (await vi.importActual('../auth')) as typeof AuthModule;
-  return {
-    ...actual,
-    ensureWebAuthUser: async (c: any) => {
-      const existing = actual.getWebAuthUser(c);
-      if (existing) return existing;
-      if (!cookieUser) return undefined;
-      const u = cookieUser as { workosId: string; organizationId?: string };
-      // Bootstrap: a personal (no-org) user gets a personal org. When the WorkOS
-      // create fails, the user stays no-org and the org gate still fires.
-      const organizationId = u.organizationId ?? (bootstrapSucceeds ? `org-personal-${u.workosId}` : undefined);
-      const resolved: { workosId: string; organizationId?: string } = { workosId: u.workosId, organizationId };
-      c.set('webAuthUser', resolved);
-      return resolved;
-    },
-  };
-});
+const testAuth: RouteAuth = {
+  enabled: () => true,
+  ensureUser: async (c: any) => {
+    const existing = c.get('webAuthUser');
+    if (existing) return existing;
+    if (!cookieUser) return undefined;
+    const u = cookieUser;
+    // Bootstrap: a personal (no-org) user gets a personal org. When the WorkOS
+    // create fails, the user stays no-org and the org gate still fires.
+    const organizationId = u.organizationId ?? (bootstrapSucceeds ? `org-personal-${u.workosId}` : undefined);
+    const resolved: { workosId: string; organizationId?: string } = { workosId: u.workosId, organizationId };
+    c.set('webAuthUser', resolved);
+    return resolved;
+  },
+  tenant: (c: any) => {
+    const u = c.get('webAuthUser') as { workosId: string; organizationId?: string } | undefined;
+    return u ? { orgId: u.organizationId, userId: u.workosId } : undefined;
+  },
+  isOrganizationAdmin: async () => true,
+};
 
 interface Tables {
   installations: Array<Record<string, any>>;
@@ -200,12 +204,12 @@ const stateSigner = {
 
 // Mirror production: provisioning persists a sandboxId onto the binding row so
 // the later git routes can reattach. We update the fake DB row in place.
-const ensureProjectSandbox = vi.fn(async (row: any, storage: SourceControlStorageInMemory['sandboxes']) => {
-  const sandboxId = row.sandboxId ?? `sb-${row.userId}`;
-  await storage.setSandboxId({ id: row.id, sandboxId });
+const ensureProjectSandbox = vi.fn(async (opts: { row: any; storage: SourceControlStorageInMemory['sandboxes'] }) => {
+  const sandboxId = opts.row.sandboxId ?? `sb-${opts.row.userId}`;
+  await opts.storage.setSandboxId({ id: opts.row.id, sandboxId });
   return { id: sandboxId };
 });
-const materializeRepo = vi.fn(async () => {});
+const materializeRepo = vi.fn(async (_opts: any) => {});
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
@@ -216,21 +220,17 @@ const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
-vi.mock('../sandbox/fleet', () => {
-  class SandboxBudgetError extends Error {
-    readonly code = 'sandbox-budget-exceeded';
-    constructor(readonly max: number) {
-      super(`Sandbox budget exceeded: ${max}`);
-    }
-  }
-  return {
-    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-    getSandboxProvider: () => 'railway',
-    isSandboxEnabled: () => sandboxEnabled,
-    reattachSandbox: (id: string) => reattachSandbox(id),
-    SandboxBudgetError,
-  };
-});
+/** DI-injected fleet stub — routes read `enabled`/`provider`/`computeWorkdir`/`reattachSandbox`. */
+const fleet = {
+  get enabled() {
+    return sandboxEnabled;
+  },
+  get provider() {
+    return sandboxEnabled ? 'railway' : 'none';
+  },
+  computeWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+  reattachSandbox: (id: string) => reattachSandbox(id),
+} as unknown as SandboxFleet;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -247,9 +247,8 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    ensureProjectSandbox: (row: any, storage: SourceControlStorageInMemory['sandboxes']) =>
-      ensureProjectSandbox(row, storage),
-    materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
+    ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
+    materializeRepo: (opts: any) => materializeRepo(opts),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
@@ -267,9 +266,6 @@ vi.mock('./config', () => ({
   getGithubFeatureDiagnostics: () => ({}),
 }));
 
-import { mountApiRoutes } from '../test-utils';
-import { buildGithubRoutes } from './routes';
-
 // ── Fake table helpers (mirrors routes.test.ts) ─────────────────────────
 function tableKind(table: any): keyof Tables {
   if (table === installationsRef) return 'installations';
@@ -282,7 +278,7 @@ function tableKind(table: any): keyof Tables {
 let installationsRef: any;
 let repositoriesRef: any;
 let connectionsRef: any;
-let projectRepositoriesRef: any;
+let _projectRepositoriesRef: any;
 let worktreesRef: any;
 let sandboxesRef: any;
 
@@ -345,7 +341,7 @@ const githubWorktrees = {};
 installationsRef = githubInstallations;
 repositoriesRef = githubRepositories;
 connectionsRef = githubConnections;
-projectRepositoriesRef = githubProjectRepositories;
+_projectRepositoriesRef = githubProjectRepositories;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
 
@@ -357,7 +353,13 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
   });
   mountApiRoutes(
     app as any,
-    buildGithubRoutes({ baseUrl: 'http://localhost:4111', github: githubStub as any, stateSigner }),
+    buildGithubRoutes({
+      baseUrl: 'http://localhost:4111',
+      github: githubStub as any,
+      stateSigner,
+      auth: testAuth,
+      fleet,
+    }),
   );
   return app;
 }
