@@ -5,11 +5,13 @@ import { isLeaseProvider, NoopLeaseProvider, type LeaseProvider, type PubSub } f
 import { MastraWorker, type WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
 
+import { dispatchGithubWebhook, type GithubWebhookNotification, type ParsedGithubWebhook } from '../../github/webhook.js';
+import type { GithubRepositoryPermission } from '../../github/integration.js';
 import {
-  dispatchGithubWebhook,
-  type GithubWebhookDispatchDependencies,
-  type ParsedGithubWebhook,
-} from '../../github/webhook.js';
+  listPullRequestSubscriptionsForWebhook,
+  retirePullRequestSubscription,
+  type GithubSubscriptionStorage,
+} from '../../github/subscriptions.js';
 import { PlatformApiClient, PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/github-app';
@@ -25,6 +27,15 @@ const SUPPORTED_EVENTS = new Set([
   'pull_request_review',
   'pull_request_review_comment',
 ]);
+const AUTHOR_GATED_KINDS = new Set([
+  'issue-comment',
+  'pull-request-comment',
+  'pull-request-review',
+  'pull-request-review-comment',
+]);
+const AUTHORIZED_BOTS = new Set(['coderabbitai[bot]', 'devin-ai-integration[bot]']);
+const AUTHORIZED_PERMISSIONS = new Set<GithubRepositoryPermission>(['admin', 'maintain', 'write']);
+const PERMISSION_CHECK_TIMEOUT_MS = 5_000;
 
 type EventCursor = { afterEventId: string } | { afterTimestamp: number };
 type PlatformGithubEventWorkerSettings = {
@@ -47,10 +58,20 @@ type EventLogEntry = {
 
 type Repository = { id: number };
 
+export interface PlatformGithubEventDispatchIntegration {
+  readonly integrationStorage: GithubSubscriptionStorage;
+  getRepositoryCollaboratorPermission(
+    installationId: number,
+    repoFullName: string,
+    username: string,
+    signal?: AbortSignal,
+  ): Promise<GithubRepositoryPermission | undefined>;
+}
+
 export interface PlatformGithubEventWorkerConfig {
   client: PlatformApiClient;
   controller: MountedMastraCode['controller'];
-  github: NonNullable<GithubWebhookDispatchDependencies['github']>;
+  github: PlatformGithubEventDispatchIntegration;
   storage: PlatformGithubEventStorage;
   intervalMs?: number;
   now?: () => number;
@@ -62,7 +83,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
 
   readonly #client: PlatformApiClient;
   readonly #controller: MountedMastraCode['controller'];
-  readonly #github: NonNullable<GithubWebhookDispatchDependencies['github']>;
+  readonly #github: PlatformGithubEventDispatchIntegration;
   readonly #storage: PlatformGithubEventStorage;
   readonly #intervalMs: number;
   readonly #now: () => number;
@@ -269,7 +290,10 @@ export class PlatformGithubEventWorker extends MastraWorker {
         }
         const result = await this.#dispatch(parsed, {
           controller: this.#controller,
-          github: this.#github,
+          listSubscriptions: (target, options) =>
+            listPullRequestSubscriptionsForWebhook(target, options, this.#github.integrationStorage),
+          retireSubscription: (id, status) => retirePullRequestSubscription(id, status, this.#github.integrationStorage),
+          isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
           onTargetError: (subscription, error) => {
             this.deps?.logger.warn('Platform GitHub event delivery failed for a subscription', {
               subscriptionId: subscription.id,
@@ -289,6 +313,30 @@ export class PlatformGithubEventWorker extends MastraWorker {
       if (page.nextCursor === ('afterEventId' in cursor ? cursor.afterEventId : undefined)) return;
       this.#settings.repositories[key] = { afterEventId: page.nextCursor };
       await this.#saveSettings();
+    }
+  }
+
+  async #isAuthorizedSender(notification: GithubWebhookNotification): Promise<boolean> {
+    if (!AUTHOR_GATED_KINDS.has(notification.kind)) return true;
+    const sender = notification.metadata.sender;
+    const repository = notification.metadata.repository;
+    if (!sender || !repository) return false;
+    if (AUTHORIZED_BOTS.has(sender)) return true;
+
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), PERMISSION_CHECK_TIMEOUT_MS);
+    try {
+      const permission = await this.#github.getRepositoryCollaboratorPermission(
+        notification.metadata.installationId,
+        repository,
+        sender,
+        abortController.signal,
+      );
+      return permission !== undefined && AUTHORIZED_PERMISSIONS.has(permission);
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
