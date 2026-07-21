@@ -63,11 +63,7 @@ export interface InworldTool {
 }
 
 export type InworldToolChoice =
-  | 'auto'
-  | 'none'
-  | 'required'
-  | { type: 'function'; name: string }
-  | { type: 'mcp'; server_label: string };
+  'auto' | 'none' | 'required' | { type: 'function'; name: string } | { type: 'mcp'; server_label: string };
 
 /**
  * Transcription configuration for incoming user audio.
@@ -166,13 +162,7 @@ export interface InworldSttProviderData {
  */
 export interface InworldTtsProviderData {
   segmenter_strategy?:
-    | 'auto'
-    | 'balanced'
-    | 'sentence'
-    | 'full_turn'
-    | 'fast_start'
-    | 'per_segment_context'
-    | (string & {});
+    'auto' | 'balanced' | 'sentence' | 'full_turn' | 'fast_start' | 'per_segment_context' | (string & {});
   steering_handling?: 'repeat_each_chunk' | 'emit_once' | (string & {});
   language?: string;
   delivery_mode?: 'STABLE' | 'BALANCED' | 'CREATIVE' | (string & {});

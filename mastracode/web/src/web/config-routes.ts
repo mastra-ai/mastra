@@ -50,13 +50,7 @@ function loose(c: unknown): import('hono').Context {
  * reports the scoped variants (`oauth-user`/`stored-user`/`stored-org`).
  */
 export type ProviderCredentialSource =
-  | 'oauth'
-  | 'stored'
-  | 'env'
-  | 'none'
-  | 'oauth-user'
-  | 'stored-user'
-  | 'stored-org';
+  'oauth' | 'stored' | 'env' | 'none' | 'oauth-user' | 'stored-user' | 'stored-org';
 
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {

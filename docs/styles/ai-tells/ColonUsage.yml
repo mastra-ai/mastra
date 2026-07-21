@@ -13,6 +13,6 @@ nonword: true
 # label ("**Note:** Like this.") flags too. Disable the rule where that
 # convention is established.
 scope:
-  - "~heading"
+  - '~heading'
 tokens:
   - "(?<!:[^ ]+?):\\s(?!I\\b)[A-Z][a-z]*\\b"

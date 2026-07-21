@@ -13,9 +13,12 @@ import type { Context } from 'hono';
 
 import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
-import type { GithubStorage } from '../github/storage/base';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
+import { getFactoryStorage } from '../runtime-config';
+import { getQueueHealthStorage } from '../storage/domains';
 import type { WorkItemRow } from '../storage/domains/work-items/base';
+import { thresholdsOrDefault } from '../storage/domains/queue-health/base';
 import type { WorkItemPriorState } from './store';
 import {
   deleteWorkItem,
@@ -55,7 +58,7 @@ async function resolveTenant(c: Context): Promise<{ orgId: string; userId: strin
  */
 async function resolveGithubRepository(
   c: Context,
-  storage?: GithubStorage,
+  storage?: SourceControlStorageHandle,
 ): Promise<{ orgId: string; userId: string; projectId: string } | { response: Response }> {
   const tenant = await resolveTenant(c);
   if ('response' in tenant) return tenant;
@@ -69,7 +72,7 @@ async function resolveGithubRepository(
   if (!projectId || !UUID_RE.test(projectId)) {
     return { response: c.json({ error: 'Repository not found' }, 404) };
   }
-  const project = await storage.getOrgProject(tenant.orgId, projectId);
+  const project = await storage.projects.getOrg(tenant.orgId, projectId);
   if (!project) {
     return { response: c.json({ error: 'Repository not found' }, 404) };
   }
@@ -138,7 +141,7 @@ async function auditWorkItemPatch(
 }
 
 /** Build the Factory work-item routes as Mastra `apiRoutes`. */
-export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
+export function buildFactoryRoutes(storage?: SourceControlStorageHandle): ApiRoute[] {
   return [
     // ── List the org's work items for a repository ─────────────────────────
     registerApiRoute('/web/factory/repositories/:id/work-items', {
@@ -162,6 +165,24 @@ export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
         const days = clampMetricsWindow(loose(c).req.query('days'));
         const items = await listWorkItems(resolved.orgId, resolved.projectId);
         return c.json({ metrics: computeFactoryMetrics(items, { days, now: new Date() }) });
+      },
+    }),
+
+    // ── Per-project queue-health age-threshold config (seconds) ─────────────
+    registerApiRoute('/web/factory/repositories/:id/health/thresholds', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveGithubRepository(loose(c), storage);
+        if ('response' in resolved) return resolved.response;
+        const factoryStorage = getFactoryStorage();
+        await factoryStorage.ensureDomainReady('queue-health');
+        const stored = await getQueueHealthStorage().getConfig(resolved.orgId, resolved.projectId);
+        // Validate at the read choke point: `getConfig` round-trips a stored
+        // JSONB row, and only `saveConfig` validates on write — a corrupted or
+        // hand-edited row (empty / non-ascending) would otherwise flow to the
+        // chart and invert bucket colors. Fall back to the default on invalid.
+        return c.json({ thresholds: thresholdsOrDefault(stored) });
       },
     }),
 

@@ -8,7 +8,7 @@ import type { Context } from 'hono';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { ensureWebAuthUser, isWebAuthEnabled, webAuthTenant } from '../auth';
-import type { GithubStorage } from '../github/storage/base';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
 
 const MAX_RESOURCE_ID_LENGTH = 512;
 const MAX_SCOPE_LENGTH = 2048;
@@ -38,8 +38,8 @@ interface SkillSession {
 export interface BuildSkillRoutesDeps {
   controllerId: string;
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
-  githubStorage?: GithubStorage;
-  ensureGithubReady?: () => Promise<void>;
+  sourceControlStorage?: SourceControlStorageHandle;
+  ensureSourceControlReady?: () => Promise<void>;
   authorizeSessionAddress?: (
     context: Context,
     address: { resourceId: string; scope?: string },
@@ -77,8 +77,8 @@ function parseBody(value: unknown): SkillInvocationBody | undefined {
 async function authorizeSessionAddress(
   context: Context,
   address: { resourceId: string; scope?: string },
-  storage?: GithubStorage,
-  ensureGithubReady?: () => Promise<void>,
+  storage?: SourceControlStorageHandle,
+  ensureSourceControlReady?: () => Promise<void>,
 ): Promise<SessionAuthorizationResult> {
   if (!isWebAuthEnabled()) return { allowed: true };
 
@@ -104,14 +104,14 @@ async function authorizeSessionAddress(
   if (!storage) {
     return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
   }
-  if (ensureGithubReady) {
+  if (ensureSourceControlReady) {
     try {
-      await ensureGithubReady();
+      await ensureSourceControlReady();
     } catch {
       return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
     }
   }
-  const worktree = await storage.findWorktreeByPath(address.resourceId, tenant.userId, address.scope);
+  const worktree = await storage.worktrees.findByPath(address.resourceId, tenant.userId, address.scope);
   return worktree?.orgId === tenant.orgId
     ? { allowed: true }
     : { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
@@ -120,14 +120,14 @@ async function authorizeSessionAddress(
 export function buildSkillRoutes({
   controllerId,
   controller,
-  githubStorage,
-  ensureGithubReady,
+  sourceControlStorage,
+  ensureSourceControlReady,
   authorizeSessionAddress: customAuthorize,
 }: BuildSkillRoutesDeps): ApiRoute[] {
   const authorize =
     customAuthorize ??
     ((context: Context, address: { resourceId: string; scope?: string }) =>
-      authorizeSessionAddress(context, address, githubStorage, ensureGithubReady));
+      authorizeSessionAddress(context, address, sourceControlStorage, ensureSourceControlReady));
   const handleSkillRequest = async (context: unknown, dispatch: boolean) => {
     const c = loose(context);
     if (c.req.param('controllerId') !== controllerId) {
