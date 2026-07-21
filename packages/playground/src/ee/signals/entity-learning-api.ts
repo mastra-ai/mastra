@@ -1,4 +1,13 @@
-import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeSnapshotsResponse } from './types';
+import type {
+  ThemeDetailResponse,
+  ThemeEntitiesResponse,
+  ThemeExamplesResponse,
+  ThemeFlowResponse,
+  ThemeHistoryResponse,
+  ThemePathsResponse,
+  ThemeSnapshotsResponse,
+  TraceSignalName,
+} from './types';
 
 export function fetchThemeEntities(entityType: string) {
   const query = new URLSearchParams({ entityType });
@@ -30,6 +39,91 @@ export function fetchThemeFlow(
     themeLimitPerStage: String(themeLimitPerStage),
   });
   return learningJson<ThemeFlowResponse>(`/api/learning/entities/${encodeURIComponent(entityId)}/theme-flow?${query}`);
+}
+
+export function fetchThemeDetail(
+  entityId: string,
+  entityType: string,
+  signalName: TraceSignalName,
+  snapshotId: string,
+  themeId: string,
+) {
+  const query = new URLSearchParams({ entityType, signalName, snapshotId });
+  return learningJson<ThemeDetailResponse>(themePath(entityId, themeId, `?${query}`));
+}
+
+export function fetchThemeExamples(
+  entityId: string,
+  entityType: string,
+  signalName: TraceSignalName,
+  snapshotId: string,
+  themeId: string,
+  limit = 20,
+  offset = 0,
+) {
+  const query = new URLSearchParams({
+    entityType,
+    signalName,
+    snapshotId,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return learningJson<ThemeExamplesResponse>(themePath(entityId, themeId, `/examples?${query}`));
+}
+
+export function fetchThemeHistory(
+  entityId: string,
+  entityType: string,
+  signalName: TraceSignalName,
+  themeId: string,
+  limit = 100,
+) {
+  const query = new URLSearchParams({ entityType, signalName, limit: String(limit) });
+  return learningJson<ThemeHistoryResponse>(themePath(entityId, themeId, `/history?${query}`));
+}
+
+export async function fetchThemePaths(
+  entityId: string,
+  entityType: string,
+  signalNames: TraceSignalName[],
+  snapshotId: string,
+): Promise<ThemePathsResponse> {
+  const firstPage = await fetchThemePathsPage(entityId, entityType, signalNames, snapshotId, 0);
+  const paths = [...firstPage.paths];
+  const themes = { ...firstPage.themes };
+  let nextOffset = firstPage.nextOffset;
+
+  while (nextOffset !== undefined) {
+    const page = await fetchThemePathsPage(entityId, entityType, signalNames, snapshotId, nextOffset);
+    paths.push(...page.paths);
+    Object.assign(themes, page.themes);
+    nextOffset = page.nextOffset;
+  }
+
+  return { snapshot: firstPage.snapshot, signals: firstPage.signals, themes, paths };
+}
+
+function fetchThemePathsPage(
+  entityId: string,
+  entityType: string,
+  signalNames: TraceSignalName[],
+  snapshotId: string,
+  offset: number,
+) {
+  const query = new URLSearchParams({
+    entityType,
+    signalNames: signalNames.join(','),
+    snapshotId,
+    limit: '500',
+    offset: String(offset),
+  });
+  return learningJson<ThemePathsResponse>(
+    `/api/learning/entities/${encodeURIComponent(entityId)}/theme-paths?${query}`,
+  );
+}
+
+function themePath(entityId: string, themeId: string, suffix: string) {
+  return `/api/learning/entities/${encodeURIComponent(entityId)}/themes/${encodeURIComponent(themeId)}${suffix}`;
 }
 
 async function learningJson<T>(path: string): Promise<T> {
