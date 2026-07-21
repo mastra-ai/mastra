@@ -337,7 +337,7 @@ describe('PlatformLinearIntegration', () => {
     expect(connect.status).toBe(302);
     expect(connect.headers.get('location')).toBe('https://linear.app/oauth/authorize?state=abc');
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://platform.example.com/v1/server/linear/authorize?return_to=%2F',
+      'https://platform.example.com/v1/server/linear/authorize?return_to=%2Forgs%2Forg-1%2Fsettings%2Fgeneral',
       expect.objectContaining({ redirect: 'manual' }),
     );
     await expect(integration.agentTools({ requestContext })).resolves.toEqual(
