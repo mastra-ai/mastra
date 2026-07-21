@@ -43,6 +43,8 @@ export async function create(args: CreateArgs): Promise<void> {
   try {
     await cloneTemplate(args.template, projectPath);
     await renameProject(projectPath, projectName);
+    // Seed .env from the example. Nothing is filled in here — configuration (model providers, integrations, database) happens in the web UI.
+    fs.copyFileSync(path.join(projectPath, '.env.example'), path.join(projectPath, '.env'));
     s.stop('Template downloaded.');
   } catch (err) {
     s.stop('Template download failed.');
