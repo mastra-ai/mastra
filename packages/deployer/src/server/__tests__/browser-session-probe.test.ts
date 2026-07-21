@@ -58,6 +58,27 @@ describe('deployer browser session probe', () => {
     await expect(response.json()).resolves.toEqual({ hasSession: false, screencastAvailable: true });
   });
 
+  it('skips setupBrowserStream and registers fallback when browser streaming is disabled', async () => {
+    const setupBrowserStreamMock = vi.fn().mockResolvedValue({ injectWebSocket: () => {}, registry: {} });
+    vi.doMock('@mastra/hono', async () => {
+      const actual = await vi.importActual<typeof MastraHono>('@mastra/hono');
+      return {
+        ...actual,
+        setupBrowserStream: setupBrowserStreamMock,
+      };
+    });
+
+    const { createHonoServer } = await import('../index');
+    const mastra = new Mastra({ logger: false });
+    const app = await createHonoServer(mastra, { tools: {}, browserStream: false });
+
+    expect(setupBrowserStreamMock).not.toHaveBeenCalled();
+
+    const response = await app.request('http://localhost/api/agents/some-agent/browser/session');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ hasSession: false, screencastAvailable: false });
+  });
+
   it('mounts the fallback under a custom apiPrefix and forwards it to setupBrowserStream', async () => {
     const setupBrowserStreamMock = vi.fn().mockResolvedValue(null);
     vi.doMock('@mastra/hono', async () => {

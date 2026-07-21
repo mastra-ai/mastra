@@ -240,6 +240,10 @@ function transformPackageJson() {
   // these transitive runtime peers are not, so declare them explicitly.
   // (In the monorepo dev setup pnpm's auto-install-peers provides them.)
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
+  const memoryVersion = resolvePinnedVersion('@mastra/memory', 'packages/memory');
+  manifest.dependencies['@mastra/memory'] = `^${memoryVersion}`; // peer of @mastra/playground-ui
+  pins.push(['@mastra/memory', memoryVersion]);
+  console.log(`  ✓ @mastra/memory@^${memoryVersion}`);
 
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   return pins;

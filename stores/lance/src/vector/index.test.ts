@@ -2306,7 +2306,7 @@ describe('Lance vector store tests', () => {
       // 256+ rows are required for index creation; place the exact/far vectors deterministically.
       const rows = Array.from({ length: 300 }, (_, i) => ({
         id: String(i + 1),
-        vector: i === 0 ? [1, 0, 0] : i === 1 ? [0, 1, 0] : [Math.random(), Math.random(), Math.random()],
+        vector: i === 0 ? [1, 0, 0] : i === 1 ? [0, 1, 0] : [0.2, 0.2, 0.2 + i / 1000],
       }));
       await vectorDB.createTable(tableName, rows);
       await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 3, metric: 'euclidean' });
@@ -2338,7 +2338,7 @@ describe('Lance vector store tests', () => {
       const tableName = 'score_semantics_index_metric_conflict_' + Date.now();
       const rows = Array.from({ length: 300 }, (_, i) => ({
         id: String(i + 1),
-        vector: i === 0 ? [1, 0, 0] : i === 1 ? [0, 1, 0] : [Math.random(), Math.random(), Math.random()],
+        vector: i === 0 ? [1, 0, 0] : i === 1 ? [0, 1, 0] : [0.2, 0.2, 0.2 + i / 1000],
       }));
       await vectorDB.createTable(tableName, rows);
       await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 3, metric: 'euclidean' });

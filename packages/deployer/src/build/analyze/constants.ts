@@ -1,4 +1,4 @@
-export const DEPS_TO_IGNORE = ['#tools', 'execa'];
+export const DEPS_TO_IGNORE = ['#tools', 'execa', 'effect', 'sury', '@ast-grep/napi', '@hono/node-ws'];
 
 export const GLOBAL_EXTERNALS = [
   'pino',
@@ -13,5 +13,7 @@ export const GLOBAL_EXTERNALS = [
   'bufferutil',
   'utf-8-validate',
   'execa',
+  '@ast-grep/napi',
+  '@hono/node-ws',
 ];
 export const DEPRECATED_EXTERNALS = ['fastembed', 'nodemailer', 'jsdom', 'sqlite3'];

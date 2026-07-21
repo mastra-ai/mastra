@@ -33,7 +33,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest run --no-isolate --retry=1 --exclude='src/__tests__/adapters/**'",
     "test:unit": "vitest run --no-isolate --retry=1 src/__tests__/create-inngest-agent.test.ts",
@@ -74,7 +74,7 @@
     "inngest-cli": "^1.26.0",
     "koa": "^3.1.2",
     "koa-bodyparser": "^4.4.1",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

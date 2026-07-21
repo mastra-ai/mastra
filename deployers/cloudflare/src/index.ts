@@ -229,7 +229,7 @@ export default stream;
           _mastra.__registerInternalWorkflow(scoreTracesWorkflow);
         }
 
-        const app = await createHonoServer(_mastra, { tools: getToolExports(tools) });
+        const app = await createHonoServer(_mastra, { tools: getToolExports(tools), browserStream: false });
         return app.fetch(request, env, context);
       }
     }
@@ -259,8 +259,14 @@ export default stream;
         nodeBuiltinsExternal(),
         virtual({
           '#polyfills': `
-process.versions = process.versions || {};
-process.versions.node = '${process.versions.node}';
+try {
+  if (!process.versions) {
+    Object.defineProperty(process, 'versions', { value: {}, configurable: true });
+  }
+  if (!process.versions.node) {
+    Object.defineProperty(process.versions, 'node', { value: '${process.versions.node}', configurable: true });
+  }
+} catch {}
       `,
         }),
         ...inputOptions.plugins,

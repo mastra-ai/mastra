@@ -23,7 +23,7 @@
   },
   "scripts": {
     "prepare-docs": "tsx ./scripts/prepare-docs.ts",
-    "build:cli": "tsup --silent --config tsup.config.ts",
+    "build:cli": "tsdown --silent --config tsdown.config.ts",
     "pretest": "pnpm turbo build --filter @mastra/mcp-docs-server",
     "test": "vitest run",
     "lint": "eslint ."
@@ -52,7 +52,7 @@
     "cross-env": "^10.1.0",
     "eslint": "^10.7.0",
     "hono": "^4.12.8",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -23,7 +23,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test:client": "vitest run ./src/client/client.test.ts ./src/client/configuration.test.ts ./src/client/oauth.test.ts ./src/client/oauth-callback-server.test.ts ./src/client/oauth-flow.test.ts",
@@ -63,7 +63,7 @@
     "get-port": "^7.1.0",
     "hono": "^4.12.8",
     "hono-mcp-server-sse-transport": "0.0.7",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

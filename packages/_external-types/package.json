@@ -23,7 +23,7 @@
     }
   },
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "build": "api-extractor run --local",
     "test": "vitest run",
     "lint": "eslint ."
@@ -34,11 +34,11 @@
   "devDependencies": {
     "@ai-sdk/provider-utils": "^3.0.30",
     "@ai-sdk/ui-utils": "^1.2.11",
-    "@opentelemetry/api": "^1.9.1",
-    "@standard-schema/spec": "^1.1.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.58.9",
+    "@opentelemetry/api": "^1.9.1",
+    "@standard-schema/spec": "^1.1.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
@@ -47,7 +47,7 @@
     "eslint": "^10.7.0",
     "eventsource-parser": "^3.0.6",
     "json-schema": "^0.4.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
