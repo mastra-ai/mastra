@@ -409,6 +409,7 @@ async function startMastraCodeApp(
         result.controller.stopIntervals(),
         closeSignalsPubSub?.(),
       ]);
+      await result.storageMaintenance.closeStorage?.();
     },
   };
 }

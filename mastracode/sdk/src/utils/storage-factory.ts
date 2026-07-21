@@ -19,6 +19,10 @@ export const MASTRA_CODE_LOCAL_PRAGMAS = {
   mmapSize: 536870912,
 };
 
+function isLocalFileUrl(url: string): boolean {
+  return url.startsWith('file:') && !url.includes(':memory:');
+}
+
 /**
  * Construct a LibSQL store for an arbitrary url/authToken, applying the same
  * local pragmas the default factory uses.
@@ -28,22 +32,24 @@ export function buildLibSQLStore(opts: {
   url: string;
   authToken?: string;
   retention?: RetentionConfig;
-}): MastraCompositeStore {
+}): LibSQLStore {
   return new LibSQLStore({
     id: opts.id ?? 'mastra-code-storage',
     url: opts.url,
     ...(opts.authToken ? { authToken: opts.authToken } : {}),
     ...(opts.retention ? { retention: opts.retention } : {}),
+    ...(isLocalFileUrl(opts.url) ? { journalMode: 'delete' } : {}),
     localPragmas: MASTRA_CODE_LOCAL_PRAGMAS,
   });
 }
 
 /** Construct a LibSQL vector store for an arbitrary url/authToken. */
-export function buildLibSQLVector(opts: { id?: string; url: string; authToken?: string }): MastraVector {
+export function buildLibSQLVector(opts: { id?: string; url: string; authToken?: string }): LibSQLVector {
   return new LibSQLVector({
     id: opts.id ?? 'mastra-code-vectors',
     url: opts.url,
     ...(opts.authToken ? { authToken: opts.authToken } : {}),
+    ...(isLocalFileUrl(opts.url) ? { journalMode: 'delete' } : {}),
   });
 }
 
@@ -137,30 +143,45 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
  * Uses a separate LibSQL file to avoid bloating the main storage DB with embedding data.
  * For PG backends, reuses the same connection (PG handles the extra tables fine).
  */
-export async function createVectorStore(
+export interface OwnedVectorStore {
+  vector: MastraVector;
+  close?: () => Promise<void>;
+}
+
+export async function createOwnedVectorStore(
   config: StorageConfig,
   effectiveBackend: 'libsql' | 'pg' = config.backend,
-): Promise<MastraVector | undefined> {
+): Promise<OwnedVectorStore | undefined> {
   if (effectiveBackend === 'pg') {
     // PG can handle vector tables in the same database
     const pgConfig = config as PgStorageConfig;
     if (!pgConfig.connectionString && !pgConfig.host) return undefined;
 
     const { PgVector } = await import('@mastra/pg');
-    return new PgVector({
-      id: 'mastra-code-vectors',
-      connectionString:
-        pgConfig.connectionString ??
-        `postgresql://${pgConfig.user}:${pgConfig.password}@${pgConfig.host}:${pgConfig.port ?? 5432}/${pgConfig.database}`,
-    });
+    return {
+      vector: new PgVector({
+        id: 'mastra-code-vectors',
+        connectionString:
+          pgConfig.connectionString ??
+          `postgresql://${pgConfig.user}:${pgConfig.password}@${pgConfig.host}:${pgConfig.port ?? 5432}/${pgConfig.database}`,
+      }),
+    };
   }
 
   // LibSQL: separate file for vectors. Per-tenant configs supply an explicit
   // vectorUrl so each tenant's recall vectors are isolated; otherwise use the
   // shared default file.
   const libsqlConfig = config as { vectorUrl?: string; vectorAuthToken?: string };
-  return buildLibSQLVector({
+  const vector = buildLibSQLVector({
     url: libsqlConfig.vectorUrl ?? `file:${getVectorDatabasePath()}`,
     authToken: libsqlConfig.vectorAuthToken,
   });
+  return { vector, close: () => vector.close() };
+}
+
+export async function createVectorStore(
+  config: StorageConfig,
+  effectiveBackend: 'libsql' | 'pg' = config.backend,
+): Promise<MastraVector | undefined> {
+  return (await createOwnedVectorStore(config, effectiveBackend))?.vector;
 }
