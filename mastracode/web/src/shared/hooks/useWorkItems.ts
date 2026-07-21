@@ -21,6 +21,9 @@ export function useWorkItemsQuery(factoryProjectId: string | undefined) {
     queryKey: queryKeys.workItems(factoryProjectId),
     queryFn: () => listWorkItems(baseUrl, factoryProjectId!),
     enabled: Boolean(factoryProjectId),
+    // Relationships can be created by GitHub ingestion or another open tab.
+    // Keep thread-page counterpart links current without requiring a reload.
+    refetchInterval: 5_000,
   });
 }
 
@@ -56,10 +59,18 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueryData<WorkItem[]>(listKey);
-      if (previous && patch.stages) {
+      if (previous && (patch.stages || patch.parentWorkItemId !== undefined)) {
         queryClient.setQueryData<WorkItem[]>(
           listKey,
-          previous.map(item => (item.id === id ? { ...item, stages: patch.stages! } : item)),
+          previous.map(item =>
+            item.id === id
+              ? {
+                  ...item,
+                  ...(patch.stages ? { stages: patch.stages } : {}),
+                  ...(patch.parentWorkItemId !== undefined ? { parentWorkItemId: patch.parentWorkItemId } : {}),
+                }
+              : item,
+          ),
         );
       }
       return { previous };

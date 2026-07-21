@@ -20,6 +20,8 @@
  * `inline` so the utilities resolve `var(--neutral*)` at the class site and
  * keep flipping with the light/dark theme. */
 @theme inline {
+  --font-mona-sans: 'Mona Sans Variable', ui-sans-serif, sans-serif;
+
   --color-icon1: var(--neutral1);
   --color-icon2: var(--neutral2);
   --color-icon3: var(--neutral3);

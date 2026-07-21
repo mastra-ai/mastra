@@ -25,6 +25,7 @@ import type {
   WorkItemStage,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base';
+import { WorkItemRelationError } from '../storage/domains/work-items/base';
 import { clampMetricsWindow, computeFactoryMetrics } from '../storage/domains/work-items/metrics';
 import type { RouteDependencies } from './route';
 import { Route } from './route';
@@ -86,6 +87,12 @@ function parseExternalSource(value: unknown): ExternalWorkItemSource | null | un
   return { integrationId, type, externalId, ...(url !== undefined ? { url } : {}) };
 }
 
+function parseParentWorkItemId(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== 'string' || !UUID_RE.test(value)) return undefined;
+  return value;
+}
+
 function parseSessions(value: unknown): Record<string, WorkItemSessionInput> | undefined {
   if (!isRecord(value)) return undefined;
   const out: Record<string, WorkItemSessionInput> = {};
@@ -106,6 +113,9 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
   const { externalSource, title, stages, sessions, metadata } = body;
   if (typeof title !== 'string' || title.trim().length === 0 || title.length > 500) return null;
 
+  const hasParentWorkItemId = 'parentWorkItemId' in body;
+  const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
+  if (hasParentWorkItemId && parentWorkItemId === undefined) return null;
   const parsedSource = parseExternalSource(externalSource);
   if (externalSource !== undefined && parsedSource === undefined) return null;
   if (stages !== undefined && !validStages(stages)) return null;
@@ -116,6 +126,7 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
   return {
     title: title.trim(),
     ...(parsedSource !== undefined ? { externalSource: parsedSource } : {}),
+    ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
     ...(metadata !== undefined ? { metadata } : {}),
@@ -126,7 +137,17 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
 export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (!isRecord(body)) return null;
   const { title, stages, sessions, metadata } = body;
-  if (title === undefined && stages === undefined && sessions === undefined && metadata === undefined) return null;
+  const hasParentWorkItemId = 'parentWorkItemId' in body;
+  if (
+    title === undefined &&
+    stages === undefined &&
+    sessions === undefined &&
+    metadata === undefined &&
+    !hasParentWorkItemId
+  )
+    return null;
+  const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
+  if (hasParentWorkItemId && parentWorkItemId === undefined) return null;
   if (title !== undefined && (typeof title !== 'string' || title.trim().length === 0 || title.length > 500))
     return null;
   if (stages !== undefined && !validStages(stages)) return null;
@@ -135,6 +156,7 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (metadata !== undefined && !validMetadata(metadata)) return null;
 
   return {
+    ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(title !== undefined ? { title: title.trim() } : {}),
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
@@ -327,34 +349,41 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_work_item' }, 400);
 
           await workItems.ensureReady();
-          const result = await workItems.upsert({
-            orgId: resolved.orgId,
-            userId: resolved.userId,
-            factoryProjectId: resolved.factoryProjectId,
-            input,
-          });
-          const item = result.item;
-          if (result.created) {
-            await audit.emit({
-              context: loose(c),
-              input: {
-                action: 'factory.work_item.created',
-                factoryProjectId: resolved.factoryProjectId,
-                targets: [{ type: 'work_item', id: item.id, name: item.title }],
-                metadata: { externalSource: item.externalSource, stages: item.stages },
-              },
+          try {
+            const result = await workItems.upsert({
+              orgId: resolved.orgId,
+              userId: resolved.userId,
+              factoryProjectId: resolved.factoryProjectId,
+              input,
             });
-          } else {
-            // Source-key reuse: the POST updated an existing card, so audit it
-            // as an update (plus stage/run events) instead of a false creation.
-            await this.#auditWorkItemPatch({
-              context: loose(c),
-              item,
-              previous: result.previous,
-              patch: input as unknown as Record<string, unknown>,
-            });
+            const item = result.item;
+            if (result.created) {
+              await audit.emit({
+                context: loose(c),
+                input: {
+                  action: 'factory.work_item.created',
+                  factoryProjectId: resolved.factoryProjectId,
+                  targets: [{ type: 'work_item', id: item.id, name: item.title }],
+                  metadata: { externalSource: item.externalSource, stages: item.stages },
+                },
+              });
+            } else {
+              // Source-key reuse: the POST updated an existing card, so audit it
+              // as an update (plus stage/run events) instead of a false creation.
+              await this.#auditWorkItemPatch({
+                context: loose(c),
+                item,
+                previous: result.previous,
+                patch: input as unknown as Record<string, unknown>,
+              });
+            }
+            return c.json({ workItem: item });
+          } catch (error) {
+            if (error instanceof WorkItemRelationError) {
+              return c.json({ error: error.code, message: error.message }, 400);
+            }
+            throw error;
           }
-          return c.json({ workItem: item });
         },
       }),
 
@@ -375,15 +404,22 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!patch) return c.json({ error: 'invalid_work_item_patch' }, 400);
 
           await workItems.ensureReady();
-          const updated = await workItems.update({ orgId: tenant.orgId, id, userId: tenant.userId, patch });
-          if (!updated) return c.json({ error: 'Work item not found' }, 404);
-          await this.#auditWorkItemPatch({
-            context: loose(c),
-            item: updated.item,
-            previous: updated.previous,
-            patch: patch as Record<string, unknown>,
-          });
-          return c.json({ workItem: updated.item });
+          try {
+            const updated = await workItems.update({ orgId: tenant.orgId, id, userId: tenant.userId, patch });
+            if (!updated) return c.json({ error: 'Work item not found' }, 404);
+            await this.#auditWorkItemPatch({
+              context: loose(c),
+              item: updated.item,
+              previous: updated.previous,
+              patch: patch as Record<string, unknown>,
+            });
+            return c.json({ workItem: updated.item });
+          } catch (error) {
+            if (error instanceof WorkItemRelationError) {
+              return c.json({ error: error.code, message: error.message }, 400);
+            }
+            throw error;
+          }
         },
       }),
 

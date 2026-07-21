@@ -276,14 +276,14 @@ describe('MastraCode web routing', () => {
 
     await expectPathname(router, '/signin');
     expect(router.state.location.search).toBe('?returnTo=%2Fnew');
-    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Continue with GitHub' })).toBeInTheDocument();
     expect(screen.queryByText('What do you want to work on?')).not.toBeInTheDocument();
   });
 
   it('given an unauthenticated user on /signin with a returnTo, when they click Sign in, then they are sent to the hosted login with that returnTo', async () => {
     renderRoutes('/signin?returnTo=%2Fchat', UNAUTHENTICATED);
 
-    await userEvent.click(await screen.findByRole('button', { name: /sign in/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue with GitHub' }));
 
     expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/chat');
     expect(loginUrl(TEST_BASE_URL, '/chat')).toBe(`${TEST_BASE_URL}/auth/login?returnTo=%2Fchat`);
@@ -292,7 +292,7 @@ describe('MastraCode web routing', () => {
   it('given an unauthenticated user on /signin with an unsafe returnTo, when they click Sign in, then it falls back to the app root', async () => {
     renderRoutes('/signin?returnTo=https%3A%2F%2Fevil.example', UNAUTHENTICATED);
 
-    await userEvent.click(await screen.findByRole('button', { name: /sign in/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue with GitHub' }));
 
     expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/');
   });

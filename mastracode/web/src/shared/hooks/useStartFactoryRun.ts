@@ -42,6 +42,7 @@ export interface StartFactoryRunWorkItem {
   stages: string[];
   source: WorkItemSource;
   sourceKey: string | null;
+  parentWorkItemId?: string;
   title: string;
   url?: string | null;
   metadata?: Record<string, unknown>;
@@ -201,6 +202,7 @@ export function useStartFactoryRun() {
             await createWorkItem(baseUrl, factoryProjectId, {
               source: workItem.source,
               sourceKey: workItem.sourceKey,
+              parentWorkItemId: workItem.parentWorkItemId,
               title: workItem.title,
               url: workItem.url ?? null,
               stages: workItem.stages,
