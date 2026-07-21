@@ -29,12 +29,18 @@ function getStepDetail(step: WorkflowDraftStep): string | undefined {
       return step.agentId;
     case 'tool':
       return step.toolId;
+    case 'workflow':
+      return step.workflowId;
     case 'mapping':
       return 'Transform data';
     case 'parallel':
       return `${step.steps.length} branches`;
     case 'foreach':
       return step.opts?.concurrency ? `Concurrency ${step.opts.concurrency}` : 'For each item';
+    case 'conditional':
+      return `${step.steps.length} branches`;
+    case 'loop':
+      return step.loopType === 'dowhile' ? 'Do while' : 'Do until';
     case 'sleep':
       return `${step.duration} ms`;
     case 'sleepUntil':
@@ -48,12 +54,18 @@ function getStepLabel(step: WorkflowDraftStep): string {
       return step.id;
     case 'tool':
       return step.id;
+    case 'workflow':
+      return step.id;
     case 'mapping':
       return step.id;
     case 'parallel':
       return 'Parallel';
     case 'foreach':
       return 'For each';
+    case 'conditional':
+      return 'Conditional';
+    case 'loop':
+      return 'Loop';
     case 'sleep':
       return step.id;
     case 'sleepUntil':

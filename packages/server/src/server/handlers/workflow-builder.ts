@@ -96,7 +96,7 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
       }
 
       const { structuredOutput, ...streamOptions } = rest;
-      const options = {
+      const options: Record<string, any> = {
         ...streamOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,

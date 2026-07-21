@@ -4823,7 +4823,7 @@ export type PostAgentsAgentIdVoiceSpeak_Body = {
   speakerId?: string | undefined;
 };
 
-export type PostAgentsAgentIdVoiceSpeak_Response = any;
+export type PostAgentsAgentIdVoiceSpeak_Response = PostAgentsAgentIdGenerate_Response;
 
 export type PostAgentsAgentIdVoiceSpeak_Request = Simplify<
   (PostAgentsAgentIdVoiceSpeak_PathParams extends never ? {} : { params: PostAgentsAgentIdVoiceSpeak_PathParams }) &
@@ -4854,7 +4854,7 @@ export type PostAgentsAgentIdSpeak_PathParams = GetAgentsAgentIdVoiceSpeakers_Pa
 export type PostAgentsAgentIdSpeak_Body = PostAgentsAgentIdVoiceSpeak_Body;
 
 /** @deprecated */
-export type PostAgentsAgentIdSpeak_Response = PostAgentsAgentIdVoiceSpeak_Response;
+export type PostAgentsAgentIdSpeak_Response = PostAgentsAgentIdGenerate_Response;
 
 /** @deprecated */
 export type PostAgentsAgentIdSpeak_Request = Simplify<
@@ -4883,10 +4883,10 @@ export interface PostAgentsAgentIdSpeak_RouteContract {
 export type PostAgentsAgentIdVoiceListen_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
 export type PostAgentsAgentIdVoiceListen_Body = {
-  audio: any;
+  audio: unknown;
   options?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
 };
@@ -4952,7 +4952,7 @@ export interface PostAgentsAgentIdListen_RouteContract {
 // ============================================================================
 export type GetAgentsAgentIdVoiceListener_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
-export type GetAgentsAgentIdVoiceListener_Response = PostAgentsAgentIdVoiceSpeak_Response;
+export type GetAgentsAgentIdVoiceListener_Response = PostAgentsAgentIdGenerate_Response;
 
 export type GetAgentsAgentIdVoiceListener_Request = Simplify<
   (GetAgentsAgentIdVoiceListener_PathParams extends never ? {} : { params: GetAgentsAgentIdVoiceListener_PathParams }) &
