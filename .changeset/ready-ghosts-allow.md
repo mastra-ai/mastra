@@ -1,6 +1,11 @@
 ---
 '@mastra/core': minor
 '@mastra/react': minor
+'@mastra/pg': minor
+'@mastra/mysql': minor
+'@mastra/mssql': minor
+'@mastra/mongodb': minor
+'@mastra/spanner': minor
 '@mastra/client-js': patch
 '@mastra/inngest': patch
 '@mastra/server': patch
@@ -73,6 +78,22 @@ workflow
 **`POST /stored/workflows` body schema is now a typed discriminated union.** The `graph` field was previously typed as `z.array(z.any())` and would only surface malformed entries deep inside `rehydrateWorkflow`. It is now a discriminated union over `type: 'step' | 'agent' | 'tool' | 'mapping' | 'parallel' | 'foreach' | 'sleep' | 'sleepUntil'`, matching the shape the `save-workflow` tool emits. Combined with the new `Mastra.addStoredWorkflow` pre-flight, invalid ids and mis-classified refs are rejected at the HTTP boundary with actionable errors before rehydration runs. `inputSchema` / `outputSchema` / `stateSchema` / `requestContextSchema` remain `z.any()` — they're JSON Schema Draft 2020-12 blobs, validated downstream when the workflow is rehydrated.
 
 **New HTTP-layer test coverage in `packages/server/src/server/handlers/stored-workflows.test.ts`.** End-to-end coverage for list / get / upsert / delete, including agent `outputSchema` round-trip, `foreach(agent)` rehydration, scalar `${stepResults.<id>}` templating, registry pre-flight rejecting unregistered / mis-classified refs, replace-on-re-upsert, and DELETE removing both the stored row and the live registration.
+
+---
+
+## `@mastra/pg`, `@mastra/mysql`, `@mastra/mssql`, `@mastra/mongodb`, `@mastra/spanner` — `workflowDefinitions` domain
+
+Implement the `workflowDefinitions` storage domain for pg, mysql, mssql, mongodb, and spanner. Previously the stored-workflow persistence path (agent-builder `POST /stored/workflows`, `save-workflow` / `list-workflows` / `delete-workflow` tools, `Mastra.addStoredWorkflow`) only worked against `@mastra/libsql`. Every other adapter returned `undefined` from `storage.getStore('workflowDefinitions')` and threw when the HTTP handler or SDK tool tried to read/write a workflow.
+
+Each adapter now ships a `WorkflowDefinitions*` domain that:
+
+- Creates the shared `mastra_workflow_definitions` table (or Mongo collection) from `WORKFLOW_DEFINITIONS_SCHEMA` during `init()`, plus a default index on `status`.
+- Implements `upsert` / `get` / `list` / `delete` matching `WorkflowDefinitionsStorage` semantics (`list` supports `status` and `authorId` filters and orders by `updatedAt` desc).
+- Round-trips the JSON columns (`inputSchema`, `outputSchema`, `stateSchema`, `requestContextSchema`, `metadata`, `graph`) through each adapter's JSON handling, so declarative workflow graphs authored via the builder rehydrate identically no matter which backend they were stored in.
+
+Exported class names by adapter: `WorkflowDefinitionsPG`, `WorkflowDefinitionsMySQL`, `WorkflowDefinitionsMSSQL`, `MongoDBWorkflowDefinitionsStore`, `WorkflowDefinitionsSpanner`. The composite stores (`PostgresStore`, `MySQLStore`, `MSSQLStore`, `MongoDBStore`, `SpannerStore`) auto-wire the new domain, so callers do not need to construct it manually — `storage.getStore('workflowDefinitions')` now returns a live handle.
+
+The pg adapter reads `createdAt` / `updatedAt` from the auto-added `createdAtZ` / `updatedAtZ` `timestamptz` companion columns to avoid the naive-timestamp / local-TZ drift that a plain `TIMESTAMP` read exhibits under node-pg.
 
 ---
 
