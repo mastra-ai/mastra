@@ -5,7 +5,7 @@ import { createWorktree, pushBranch } from '../../web/ui/domains/workspaces/serv
 
 /**
  * Mutation hooks for the per-project git write operations
- * (`/web/github/repositories/:id/{worktree,commit,push,pr}`).
+ * (`/web/github/projects/:id/{worktree,commit,push,pr}`).
  *
  * Thin wrappers over the services: callers get `isPending`/`error` for UI
  * state, and failures surface as `GitOpError` (with `code`, `status`, and
@@ -14,7 +14,7 @@ import { createWorktree, pushBranch } from '../../web/ui/domains/workspaces/serv
  */
 
 export interface CreateWorktreeVariables {
-  githubProjectId: string;
+  projectRepositoryId: string;
   branch: string;
   baseBranch?: string;
 }
@@ -23,13 +23,13 @@ export interface CreateWorktreeVariables {
 export function useCreateWorktreeMutation() {
   const { baseUrl } = useApiConfig();
   return useMutation({
-    mutationFn: ({ githubProjectId, branch, baseBranch }: CreateWorktreeVariables) =>
-      createWorktree(baseUrl, githubProjectId, branch, baseBranch),
+    mutationFn: ({ projectRepositoryId, branch, baseBranch }: CreateWorktreeVariables) =>
+      createWorktree(baseUrl, projectRepositoryId, branch, baseBranch),
   });
 }
 
 export interface PushBranchVariables {
-  githubProjectId: string;
+  projectRepositoryId: string;
   branch: string;
   worktreePath?: string;
 }
@@ -38,7 +38,7 @@ export interface PushBranchVariables {
 export function usePushBranchMutation() {
   const { baseUrl } = useApiConfig();
   return useMutation({
-    mutationFn: ({ githubProjectId, branch, worktreePath }: PushBranchVariables) =>
-      pushBranch(baseUrl, githubProjectId, branch, worktreePath),
+    mutationFn: ({ projectRepositoryId, branch, worktreePath }: PushBranchVariables) =>
+      pushBranch(baseUrl, projectRepositoryId, branch, worktreePath),
   });
 }

@@ -20,16 +20,17 @@
 import { createHash } from 'node:crypto';
 import { ensureSandbox, reportProgress, teardownSandbox } from '../sandbox/fleet';
 import type { MaterializationSandbox, ProgressFn, SandboxBindingStore, SandboxCommandResult } from '../sandbox/fleet';
-import type { SourceControlProjectSandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
 
 type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
 
 /** Adapt a per-(project,user) sandbox binding row to the fleet's persistence seam. */
-function bindingStore(row: SourceControlProjectSandbox, storage: SourceControlSandboxStorage): SandboxBindingStore {
+function bindingStore(row: ProjectRepositorySandbox, storage: SourceControlSandboxStorage): SandboxBindingStore {
   return {
     sandboxId: row.sandboxId,
-    setSandboxId: id => (id === null ? storage.clearBinding(row.id) : storage.setSandboxId(row.id, id)),
-    clear: () => storage.clearBinding(row.id),
+    setSandboxId: id =>
+      id === null ? storage.clearBinding({ id: row.id }) : storage.setSandboxId({ id: row.id, sandboxId: id }),
+    clear: () => storage.clearBinding({ id: row.id }),
   };
 }
 
@@ -38,7 +39,7 @@ function bindingStore(row: SourceControlProjectSandbox, storage: SourceControlSa
  * reattach to the stored one. Returns a started, live sandbox.
  */
 export async function ensureProjectSandbox(
-  row: SourceControlProjectSandbox,
+  row: ProjectRepositorySandbox,
   storage: SourceControlSandboxStorage,
   onProgress?: ProgressFn,
 ): Promise<MaterializationSandbox> {
@@ -54,7 +55,7 @@ export async function ensureProjectSandbox(
  * @param sandbox an already-reattached live sandbox to stop, when available
  */
 export async function teardownProjectSandbox(
-  row: SourceControlProjectSandbox,
+  row: ProjectRepositorySandbox,
   storage: SourceControlSandboxStorage,
   sandbox?: MaterializationSandbox,
 ): Promise<void> {
@@ -127,7 +128,7 @@ export interface RepoMaterializeInfo {
  * @param token      a freshly minted, short-lived installation access token
  */
 export async function materializeRepo(
-  sandboxRow: SourceControlProjectSandbox,
+  sandboxRow: ProjectRepositorySandbox,
   repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,
@@ -205,7 +206,7 @@ export async function materializeRepo(
 
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
-  await storage.markMaterialized(sandboxRow.id);
+  await storage.markMaterialized({ id: sandboxRow.id });
 }
 
 /**

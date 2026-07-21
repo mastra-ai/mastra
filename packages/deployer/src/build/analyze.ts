@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative } from 'node:path';
-import * as babel from '@babel/core';
+import { transformAsync, transformSync } from '@babel/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { OutputAsset, OutputChunk } from 'rollup';
@@ -393,7 +393,7 @@ export async function analyzeBundle(
     hasValidConfig: false,
   } as const;
 
-  await babel.transformAsync(mastraConfig, {
+  await transformAsync(mastraConfig, {
     filename: mastraEntry,
     presets: [import.meta.resolve('@babel/preset-typescript')],
     plugins: [() => checkConfigExport(mastraConfigResult)],
@@ -441,7 +441,7 @@ export async function analyzeBundle(
     });
 
     // Detect pino transports in the bundled output
-    babel.transformSync(analyzeResult.output.code, {
+    transformSync(analyzeResult.output.code, {
       filename: 'pino-detection.js',
       plugins: [() => detectPinoTransports(detectedPinoTransports)],
       configFile: false,

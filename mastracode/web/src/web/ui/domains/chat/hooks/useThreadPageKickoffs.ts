@@ -16,7 +16,7 @@ export function useThreadPageKickoffs(): void {
   const sendMessage = useSendAgentControllerMessageMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });

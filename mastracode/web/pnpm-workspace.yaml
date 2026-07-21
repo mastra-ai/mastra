@@ -17,5 +17,12 @@ enableGlobalVirtualStore: true
 # Listing them here (even as false) also prevents pnpm v10 from exiting with
 # ERR_PNPM_IGNORED_BUILDS when the deployer copies this file to .mastra/output.
 allowBuilds:
+  '@google/genai': true
+  agent-browser: true
+  bufferutil: true
+  edgedriver: false
   esbuild: false
+  geckodriver: false
   msw: false
+  onnxruntime-node: false
+  protobufjs: true

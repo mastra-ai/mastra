@@ -18,14 +18,14 @@ export function useRouteThreadSync() {
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
   const switchThreadMutation = useSwitchAgentControllerThreadMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
@@ -34,13 +34,14 @@ export function useRouteThreadSync() {
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
   const latestRouteThreadId = useRef<string | undefined>(undefined);
-  const previousScope = useRef<string | undefined>(undefined);
-  const scope = `${resourceId}:${projectPath ?? ''}`;
+  const previousSessionKey = useRef<string | undefined>(undefined);
+  const sessionKey = `${resourceId}:${projectPath ?? ''}`;
 
   const switchToRouteThread = useEffectEvent((targetThreadId: string, fallbackForScopeChange: boolean) => {
     latestRouteThreadId.current = targetThreadId;
@@ -81,11 +82,11 @@ export function useRouteThreadSync() {
   });
 
   useEffect(() => {
-    const scopeChanged = previousScope.current !== undefined && previousScope.current !== scope;
-    previousScope.current = scope;
+    const sessionKeyChanged = previousSessionKey.current !== undefined && previousSessionKey.current !== sessionKey;
+    previousSessionKey.current = sessionKey;
     latestRouteThreadId.current = routeThreadId;
     if (!routeThreadId || status !== 'ready' || !threadsQuery.isSuccess) return;
     if (threadId === routeThreadId) return;
-    switchToRouteThread(routeThreadId, scopeChanged);
-  }, [routeThreadId, scope, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
+    switchToRouteThread(routeThreadId, sessionKeyChanged);
+  }, [routeThreadId, sessionKey, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
 }

@@ -37,22 +37,27 @@ const project: Factory = {
   },
 };
 
-/** GitHub project with a feature worktree selected — thread list is read-only. */
+/** Server factory with a feature worktree selected — thread list is read-only. */
+const worktreeRepository = {
+  projectRepositoryId: 'pr-gh-1',
+  slug: 'mastra-ai/mastra',
+  gitBranch: 'main',
+  sandboxWorkdir: '/sandbox/mastra',
+  selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+};
 const worktreeProject: Factory = {
   id: 'p-gh',
   name: 'Mastra',
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: 'gh-1',
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
-    worktrees: [
-      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-    ],
+    kind: 'factory',
+    factoryProjectId: 'fp-gh-1',
+    repositories: [worktreeRepository],
   },
 };
 
@@ -242,7 +247,11 @@ describe('ThreadList', () => {
     // it is no longer a workspace, so GitHub lists never expose thread controls.
     seedFactory({
       ...worktreeProject,
-      binding: { ...worktreeProject.binding, selectedWorktreePath: '/sandbox/mastra' },
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'fp-gh-1',
+        repositories: [{ ...worktreeRepository, selectedWorktreePath: '/sandbox/mastra' }],
+      },
     });
     useAgentControllerHandlers([threadOne]);
     renderThreadList();

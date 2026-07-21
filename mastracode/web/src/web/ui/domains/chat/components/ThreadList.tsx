@@ -11,7 +11,7 @@ import { useNavigate, useParams } from 'react-router';
 import { relativeTime } from '../../../../../shared/lib/date';
 import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
-import { isGithubFactory, useActiveFactoryContext } from '../../workspaces';
+import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import {
   useCloneAgentControllerThreadMutation,
@@ -29,7 +29,7 @@ export function ThreadList() {
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
@@ -42,7 +42,7 @@ export function ThreadList() {
   // "Threads" header/count, no rename/clone/delete actions, and no way to
   // create more threads. Every GitHub chat target is a worktree (the repo
   // root is not a workspace), so any GitHub project path is read-only here.
-  const readOnly = isGithubFactory(activeFactory) && Boolean(projectPath);
+  const readOnly = isServerFactory(activeFactory) && Boolean(projectPath);
 
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;
@@ -84,7 +84,7 @@ function useThreadHookArgs() {
   return {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };

@@ -15,6 +15,7 @@ import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
+import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { DurableStepIds } from '../../constants';
@@ -215,7 +216,7 @@ export function createDurableToolCallStep() {
     inputSchema: durableToolCallInputSchema,
     outputSchema: durableToolCallOutputSchema,
     execute: async params => {
-      const { inputData, mastra, suspend, resumeData: workflowResumeData, requestContext, getInitData } = params;
+      const { inputData, mastra, suspend, resumeData: workflowResumeData, requestContext, actor, getInitData } = params;
 
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
@@ -554,6 +555,9 @@ export function createDurableToolCallStep() {
           required: ['approved'],
         });
 
+        // Persist active goal time before exposing the approval wait.
+        await stopGoalActivity({ agentId: initData.agentId, runId });
+
         // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue)
         if (pubsub) {
           await emitChunkEvent(pubsub, runId, {
@@ -715,9 +719,9 @@ export function createDurableToolCallStep() {
         workspace,
         requestContext,
         tracingContext: toolTracingContext,
-        // Forward per-call ActorSignal so FGA checks inside tool execution
-        // see the same actor as the non-durable Agent path.
-        actor: agentOptions?.actor,
+        // Use the actor supplied for this workflow segment. A resumed segment
+        // must never recover the initial actor from serialized agent options.
+        actor,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
         ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         // Provide outputWriter so context.writer.write() / context.writer.custom()
@@ -740,6 +744,8 @@ export function createDurableToolCallStep() {
               },
               required: ['approved'],
             });
+
+            await stopGoalActivity({ agentId: initData.agentId, runId });
 
             if (pubsub) {
               await emitChunkEvent(pubsub, runId, {

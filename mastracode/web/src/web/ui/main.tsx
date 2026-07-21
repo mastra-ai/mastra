@@ -8,6 +8,7 @@ import { RouterProvider } from 'react-router/dom';
 import { ApiConfigProvider } from '../../shared/api/config';
 import { createQueryClient } from '../../shared/query-client';
 import { createAppRouter } from './router';
+import '@fontsource-variable/mona-sans';
 import '@mastra/playground-ui/style.css';
 import './tailwind.css';
 import { ToastProvider } from './ui';
@@ -22,9 +23,13 @@ import { ToastProvider } from './ui';
 const queryClient = createQueryClient();
 const router = createAppRouter();
 
+if (import.meta.env.DEV && import.meta.env.VITE_REACT_GRAB === 'true') {
+  void import('react-grab');
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider defaultTheme="dark" storageKey="mastracode.theme">
+    <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider baseUrl="">

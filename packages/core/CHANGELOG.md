@@ -1,5 +1,135 @@
 # @mastra/core
 
+## 1.52.0-alpha.10
+
+### Minor Changes
+
+- Added optional provider-driven authorization for system (non-user) actors, enabling per-agent least privilege after tenant scope has been validated. ([#19338](https://github.com/mastra-ai/mastra/pull/19338))
+
+  System actors (`actor: { actorKind: 'system' }` or `actor: true`) skip the user-centric FGA path. Previously the only boundary for them was tenant scope — there was no way to constrain which agent could do what, and no deny path. FGA providers can now opt in to enforce least privilege for those actors.
+
+  **What's new**
+
+  - `IFGAProvider` gains an optional `requireActor(actor, params)` method that throws `FGADeniedError` to deny.
+  - `ActorSignal` gains optional `agentId`, `permissions`, and `scope` so a provider can identify and constrain the acting agent. `permissions` reuses the `MastraFGAPermissionInput` vocabulary — the actor analog of a user's resolved permissions. It is a self-asserted claim: a provider enforcing real least privilege should resolve authoritative grants from a trusted source keyed by `agentId` rather than trusting it directly.
+  - When a provider does not implement `requireActor`, the existing trusted-actor bypass is preserved exactly — this change is fully backward compatible.
+
+  **Before** — system actors had tenant scoping but no provider-defined per-agent authorization:
+
+  ```ts
+  // Cron/system run: tenant scope is required, but no per-agent limits are possible.
+  await agent.generate('run nightly report', {
+    actor: { actorKind: 'system', sourceWorkflow: 'nightly' },
+  });
+  ```
+
+  **After** — a provider enforces least privilege on the acting agent:
+
+  ```ts
+  import type { IFGAProvider } from '@mastra/core/auth/ee';
+  import { FGADeniedError } from '@mastra/core/auth/ee';
+
+  class MyFga implements IFGAProvider {
+    // ...existing check / require / filterAccessible...
+
+    async requireActor(actor, { resource, permission }) {
+      const agentId = actor === true ? undefined : actor.agentId;
+      // Resolve authoritative grants from a trusted source keyed by agentId.
+      const granted = await this.grantsForAgent(agentId);
+      // `permission` may be a single value or an array (needs ANY one of them).
+      const required = Array.isArray(permission) ? permission : [permission];
+      if (!required.some(p => granted.includes(p))) {
+        throw new FGADeniedError(null, resource, permission, 'actor lacks required permission');
+      }
+    }
+  }
+
+  // The acting agent is now identified and constrained by its granted permissions.
+  await agent.generate('run nightly report', {
+    actor: {
+      actorKind: 'system',
+      agentId: 'nightly-agent',
+      permissions: ['agents:execute', 'tools:execute'],
+    },
+  });
+  ```
+
+- Added request-scoped model overrides to agent execution and approvals, and fixed Studio model selection so each tab can use a different model without changing the agent's configured default. ([#19749](https://github.com/mastra-ai/mastra/pull/19749))
+
+  ```ts
+  await agent.stream(messages, { model: 'google/gemini-2.5-flash' });
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#19813](https://github.com/mastra-ai/mastra/pull/19813))
+  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.30` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.30) (from `npm:@ai-sdk/provider-utils@3.0.28`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.40` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.40) (from `npm:@ai-sdk/provider-utils@4.0.38`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.11` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.11) (from `npm:@ai-sdk/provider-utils@5.0.9`, in `dependencies`)
+
+- Fixed fine-grained authorization (FGA) checks for `DurableAgent` execution and tool approvals. ([#19338](https://github.com/mastra-ai/mastra/pull/19338))
+
+  **Durable agents now enforce `agents:execute`**
+
+  `DurableAgent` overrides `stream()` and `generate()` to run a workflow instead of the base agent path. Those methods now resolve default and per-call options once, then authorize the same effective actor, request context, and memory resource used for execution.
+
+  Behavior change: with an FGA provider configured, durable runs that were previously allowed through are now checked and can be denied.
+
+  **Durable resumes reauthorize each call**
+
+  Durable approval and decline methods now forward the trusted request context and selected tool-call ID into resume authorization and workflow resume. The actor is resolved for each call and forwarded to both agent authorization and tool execution. An explicit resume actor replaces the initial actor, while a newly resolved default actor can still apply. If neither exists, the resume uses normal user authorization and fails closed when no user is available.
+
+- Added optional auth provider capability interfaces and type guards to `@mastra/core/server`: `IOrganizationsProvider` (personal organization bootstrap and admin checks), `IAuthInit` (host-driven initialization with database, public URL, and allowed origins), and `IAuthHttpHandler` (mounting a provider's own HTTP auth endpoints). Server hosts can use the `isOrganizationsProvider`, `isAuthHttpHandler`, and `hasAuthInit` guards to detect what an auth provider supports and wire routes accordingly. ([#19765](https://github.com/mastra-ai/mastra/pull/19765))
+
+- Fixed DurableAgent throwing ToolNotFoundError when a ToolSearchProcessor meta-tool (search_tools / load_tool) was called. The durable tool-call step now resolves processor-injected per-step tools, matching the regular Agent. ([#19578](https://github.com/mastra-ai/mastra/pull/19578))
+
+- Replaced GitHub-specific Mastra Code session state with Factory project and linked-repository identities. This lets SDK consumers represent sessions independently of a source-control provider and select a repository explicitly when sandbox execution is required. ([#19849](https://github.com/mastra-ai/mastra/pull/19849))
+
+  Updated Mastra Code onboarding to be Factory-first: create a Factory by name, then link repositories from your connected source-control installations in a separate step. A Factory is valid with zero linked repositories, and the Board, Metrics, and Audit pages stay available for any server-backed Factory. Factory pages keep project-scoped data separate from repository-scoped intake and provide a repository selector when a Factory has multiple linked repositories. Creating a Factory from a local folder remains available as a secondary option.
+
+  **Before**
+
+  ```ts
+  const state = { githubProjectId: 'project-1', sandboxId, sandboxWorkdir };
+  ```
+
+  **After**
+
+  ```ts
+  const state = {
+    factoryProjectId: 'factory-project-1',
+    projectRepositoryId: 'project-repository-1',
+    sandboxId,
+    sandboxWorkdir,
+  };
+  ```
+
+- Fixed durable goal objectives so active execution time is preserved across runs and excludes tool approval waits. ([#19837](https://github.com/mastra-ai/mastra/pull/19837))
+
+- Fixed agents with channels failing on Cloudflare Workers with `No such module "chat"`. ([#19570](https://github.com/mastra-ai/mastra/pull/19570))
+
+  Agents with Slack, Discord, or Telegram channels now deploy to Cloudflare Workers and other serverless targets without extra configuration — channels initialize correctly and webhooks work out of the box. The `bundler.dynamicPackages: ['chat']` workaround is no longer needed for Node deploys. Projects that don't use channels still load the Chat SDK lazily.
+
+  Fixes #19254
+
+## 1.52.0-alpha.9
+
+### Minor Changes
+
+- The 'workers' option on the Mastra class now merges with the default workers instead of replacing them. Passing custom workers (e.g. a polling worker for an integration) no longer silently drops the built-in orchestration and background-task workers — a custom worker only replaces a default when it shares its name, and 'workers: false' still disables all workers. ([#19766](https://github.com/mastra-ai/mastra/pull/19766))
+
+  ```ts
+  const mastra = new Mastra({
+    // before: only myPoller ran — orchestration was dropped
+    // after: myPoller runs alongside the default workers
+    workers: [myPoller],
+  });
+  ```
+
+### Patch Changes
+
+- Fixed goal judges changing the parent agent's observational-memory model state. ([#19710](https://github.com/mastra-ai/mastra/pull/19710))
+
 ## 1.52.0-alpha.8
 
 ### Minor Changes

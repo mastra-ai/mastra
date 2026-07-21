@@ -11,11 +11,13 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { emitAudit } from '../audit/audit';
+import type { AuditEmitter } from '../audit/domain';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import { getFactoryStorage } from '../runtime-config';
+import { getFactoryProjectsStorage, getQueueHealthStorage } from '../storage/domains';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
 import type { WorkItemRow } from '../storage/domains/work-items/base';
+import { thresholdsOrDefault } from '../storage/domains/queue-health/base';
 import type { WorkItemPriorState } from './store';
 import {
   deleteWorkItem,
@@ -24,6 +26,7 @@ import {
   parseUpdateWorkItem,
   updateWorkItem,
   upsertWorkItem,
+  WorkItemRelationError,
 } from './store';
 
 function loose(c: unknown): Context {
@@ -49,31 +52,27 @@ async function resolveTenant(c: Context): Promise<{ orgId: string; userId: strin
 }
 
 /**
- * Resolve the tenant AND the org-owned connected repository from the `:id` param.
- * Work items hang off a repository, so listing/creating requires the repository to exist
+ * Resolve the tenant AND the org-owned project from the `:id` param. Work
+ * items hang off a project, so listing/creating requires the project to exist
  * in the caller's org.
  */
-async function resolveGithubRepository(
+async function resolveProject(
   c: Context,
-  storage?: SourceControlStorageHandle,
-): Promise<{ orgId: string; userId: string; projectId: string } | { response: Response }> {
+): Promise<{ orgId: string; userId: string; factoryProjectId: string } | { response: Response }> {
   const tenant = await resolveTenant(c);
   if ('response' in tenant) return tenant;
 
-  if (!storage) {
-    return {
-      response: c.json({ error: 'integration_unavailable', message: 'GitHub integration is unavailable.' }, 503),
-    };
-  }
   const projectId = c.req.param('id');
   if (!projectId || !UUID_RE.test(projectId)) {
-    return { response: c.json({ error: 'Repository not found' }, 404) };
+    return { response: c.json({ error: 'Project not found' }, 404) };
   }
-  const project = await storage.projects.getOrg(tenant.orgId, projectId);
+  const storage = getFactoryStorage();
+  await storage.ensureDomainReady('projects');
+  const project = await getFactoryProjectsStorage().get({ orgId: tenant.orgId, id: projectId });
   if (!project) {
-    return { response: c.json({ error: 'Repository not found' }, 404) };
+    return { response: c.json({ error: 'Project not found' }, 404) };
   }
-  return { ...tenant, projectId };
+  return { ...tenant, factoryProjectId: projectId };
 }
 
 async function readJson(c: Context): Promise<unknown | undefined> {
@@ -94,83 +93,117 @@ function patchedFields(patch: Record<string, unknown>): string[] {
  * `updated`, plus `stage_moved` when the stages actually changed and one
  * `run.started` per session role the patch introduced.
  */
-async function auditWorkItemPatch(
-  c: Context,
-  item: WorkItemRow,
-  previous: WorkItemPriorState,
-  patch: Record<string, unknown>,
-): Promise<void> {
+async function auditWorkItemPatch({
+  audit,
+  context,
+  item,
+  previous,
+  patch,
+}: {
+  audit: AuditEmitter;
+  context: Context;
+  item: WorkItemRow;
+  previous: WorkItemPriorState;
+  patch: Record<string, unknown>;
+}): Promise<void> {
   const target = { type: 'work_item', id: item.id, name: item.title };
-  await emitAudit(c, {
-    action: 'factory.work_item.updated',
-    projectId: item.githubProjectId,
-    targets: [target],
-    metadata: { fields: patchedFields(patch) },
+  await audit.emit({
+    context,
+    input: {
+      action: 'factory.work_item.updated',
+      factoryProjectId: item.factoryProjectId,
+      targets: [target],
+      metadata: { fields: patchedFields(patch) },
+    },
   });
 
   const stagesChanged =
     patch.stages !== undefined &&
     (previous.stages.length !== item.stages.length || previous.stages.some((s, i) => s !== item.stages[i]));
   if (stagesChanged) {
-    await emitAudit(c, {
-      action: 'factory.work_item.stage_moved',
-      projectId: item.githubProjectId,
-      targets: [target],
-      metadata: { from: previous.stages, to: item.stages },
+    await audit.emit({
+      context,
+      input: {
+        action: 'factory.work_item.stage_moved',
+        factoryProjectId: item.factoryProjectId,
+        targets: [target],
+        metadata: { from: previous.stages, to: item.stages },
+      },
     });
   }
 
   const newRoles = Object.keys(item.sessions).filter(role => !previous.sessionRoles.includes(role));
   for (const role of newRoles) {
     const session = item.sessions[role];
-    await emitAudit(c, {
-      action: 'factory.run.started',
-      projectId: item.githubProjectId,
-      targets: [target],
-      metadata: {
-        role,
-        branch: session?.branch,
-        threadId: session?.threadId,
-        projectPath: session?.projectPath,
+    await audit.emit({
+      context,
+      input: {
+        action: 'factory.run.started',
+        factoryProjectId: item.factoryProjectId,
+        targets: [target],
+        metadata: {
+          role,
+          branch: session?.branch,
+          threadId: session?.threadId,
+          projectPath: session?.projectPath,
+        },
       },
     });
   }
 }
 
 /** Build the Factory work-item routes as Mastra `apiRoutes`. */
-export function buildFactoryRoutes(storage?: SourceControlStorageHandle): ApiRoute[] {
+export function buildFactoryRoutes({ audit }: { audit: AuditEmitter }): ApiRoute[] {
   return [
-    // ── List the org's work items for a repository ─────────────────────────
-    registerApiRoute('/web/factory/repositories/:id/work-items', {
+    // ── List the org's work items for a project ─────────────────────────────
+    registerApiRoute('/web/factory/projects/:id/work-items', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveGithubRepository(loose(c), storage);
+        const resolved = await resolveProject(loose(c));
         if ('response' in resolved) return resolved.response;
-        const items = await listWorkItems(resolved.orgId, resolved.projectId);
+        const items = await listWorkItems({ orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId });
         return c.json({ workItems: items });
       },
     }),
 
-    // ── Flow metrics aggregated over the repository's work items ─────────────
-    registerApiRoute('/web/factory/repositories/:id/metrics', {
+    // ── Flow metrics aggregated over the project's work items ───────────────
+    registerApiRoute('/web/factory/projects/:id/metrics', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveGithubRepository(loose(c), storage);
+        const resolved = await resolveProject(loose(c));
         if ('response' in resolved) return resolved.response;
         const days = clampMetricsWindow(loose(c).req.query('days'));
-        const items = await listWorkItems(resolved.orgId, resolved.projectId);
+        const items = await listWorkItems({ orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId });
         return c.json({ metrics: computeFactoryMetrics(items, { days, now: new Date() }) });
       },
     }),
 
+    // ── Per-project queue-health age-threshold config (seconds) ─────────────
+    registerApiRoute('/web/factory/projects/:id/health/thresholds', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveProject(loose(c));
+        if ('response' in resolved) return resolved.response;
+        const factoryStorage = getFactoryStorage();
+        await factoryStorage.ensureDomainReady('queue-health');
+        const stored = await getQueueHealthStorage().getConfig(resolved.orgId, resolved.factoryProjectId);
+        // Validate at the read choke point: `getConfig` round-trips a stored
+        // JSONB row, and only `saveConfig` validates on write — a corrupted or
+        // hand-edited row (empty / non-ascending) would otherwise flow to the
+        // chart and invert bucket colors. Fall back to the default on invalid.
+        return c.json({ thresholds: thresholdsOrDefault(stored) });
+      },
+    }),
+
     // ── Create (upsert on sourceKey) a work item ─────────────────────────────
-    registerApiRoute('/web/factory/repositories/:id/work-items', {
+    registerApiRoute('/web/factory/projects/:id/work-items', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveGithubRepository(loose(c), storage);
+        const resolved = await resolveProject(loose(c));
         if ('response' in resolved) return resolved.response;
 
         const body = await readJson(loose(c));
@@ -178,26 +211,40 @@ export function buildFactoryRoutes(storage?: SourceControlStorageHandle): ApiRou
         const input = parseCreateWorkItem(body);
         if (!input) return c.json({ error: 'invalid_work_item' }, 400);
 
-        const result = await upsertWorkItem({
-          orgId: resolved.orgId,
-          userId: resolved.userId,
-          githubProjectId: resolved.projectId,
-          input,
-        });
-        const item = result.item;
-        if (result.created) {
-          await emitAudit(loose(c), {
-            action: 'factory.work_item.created',
-            projectId: resolved.projectId,
-            targets: [{ type: 'work_item', id: item.id, name: item.title }],
-            metadata: { source: item.source, sourceKey: item.sourceKey, stages: item.stages },
+        try {
+          const result = await upsertWorkItem({
+            orgId: resolved.orgId,
+            userId: resolved.userId,
+            factoryProjectId: resolved.factoryProjectId,
+            input,
           });
-        } else {
-          // Source-key reuse: the POST updated an existing card, so audit it
-          // as an update (plus stage/run events) instead of a false creation.
-          await auditWorkItemPatch(loose(c), item, result.previous, input as unknown as Record<string, unknown>);
+          const item = result.item;
+          if (result.created) {
+            await audit.emit({
+              context: loose(c),
+              input: {
+                action: 'factory.work_item.created',
+                factoryProjectId: resolved.factoryProjectId,
+                targets: [{ type: 'work_item', id: item.id, name: item.title }],
+                metadata: { externalSource: item.externalSource, stages: item.stages },
+              },
+            });
+          } else {
+            await auditWorkItemPatch({
+              audit,
+              context: loose(c),
+              item,
+              previous: result.previous,
+              patch: input as unknown as Record<string, unknown>,
+            });
+          }
+          return c.json({ workItem: item });
+        } catch (error) {
+          if (error instanceof WorkItemRelationError) {
+            return c.json({ error: error.code, message: error.message }, 400);
+          }
+          throw error;
         }
-        return c.json({ workItem: item });
       },
     }),
 
@@ -217,10 +264,23 @@ export function buildFactoryRoutes(storage?: SourceControlStorageHandle): ApiRou
         const patch = parseUpdateWorkItem(body);
         if (!patch) return c.json({ error: 'invalid_work_item_patch' }, 400);
 
-        const updated = await updateWorkItem(tenant.orgId, id, tenant.userId, patch);
-        if (!updated) return c.json({ error: 'Work item not found' }, 404);
-        await auditWorkItemPatch(loose(c), updated.item, updated.previous, patch as Record<string, unknown>);
-        return c.json({ workItem: updated.item });
+        try {
+          const updated = await updateWorkItem({ orgId: tenant.orgId, id, userId: tenant.userId, patch });
+          if (!updated) return c.json({ error: 'Work item not found' }, 404);
+          await auditWorkItemPatch({
+            audit,
+            context: loose(c),
+            item: updated.item,
+            previous: updated.previous,
+            patch: patch as Record<string, unknown>,
+          });
+          return c.json({ workItem: updated.item });
+        } catch (error) {
+          if (error instanceof WorkItemRelationError) {
+            return c.json({ error: error.code, message: error.message }, 400);
+          }
+          throw error;
+        }
       },
     }),
 
@@ -235,12 +295,15 @@ export function buildFactoryRoutes(storage?: SourceControlStorageHandle): ApiRou
         const id = loose(c).req.param('id');
         if (!id || !UUID_RE.test(id)) return c.json({ error: 'Work item not found' }, 404);
 
-        const deleted = await deleteWorkItem(tenant.orgId, id);
+        const deleted = await deleteWorkItem({ orgId: tenant.orgId, id });
         if (!deleted) return c.json({ error: 'Work item not found' }, 404);
-        await emitAudit(loose(c), {
-          action: 'factory.work_item.deleted',
-          projectId: deleted.githubProjectId,
-          targets: [{ type: 'work_item', id: deleted.id, name: deleted.title }],
+        await audit.emit({
+          context: loose(c),
+          input: {
+            action: 'factory.work_item.deleted',
+            factoryProjectId: deleted.factoryProjectId,
+            targets: [{ type: 'work_item', id: deleted.id, name: deleted.title }],
+          },
         });
         return c.json({ ok: true });
       },

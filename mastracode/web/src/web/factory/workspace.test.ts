@@ -78,7 +78,9 @@ describe('getFactoryWorkspace', () => {
     expect(workspace.id).toContain('-web-factory');
     expect(understandIssue?.instructions).toContain('# Understand Issue');
     expect(understandIssue?.instructions).not.toContain('# Shadowed Project Skill');
+    expect(understandIssue?.metadata).toMatchObject({ goal: true });
     expect(understandPr?.instructions).toContain('# Understand PR');
+    expect(understandPr?.metadata).toMatchObject({ goal: true });
     expect(filesystem.allowedPaths).not.toContain('/__mastracode_factory_skills__');
     await expect(filesystem.writeFile(path.join(understandIssue!.path, 'SKILL.md'), 'mutated')).rejects.toMatchObject({
       name: 'PermissionError',

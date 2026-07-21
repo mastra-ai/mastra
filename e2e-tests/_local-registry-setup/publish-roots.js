@@ -33,6 +33,15 @@ const SHARED_REGISTRY_SUITES = {
     extraRoots: ['create-mastra'],
     includeCreateMastraBuildRoots: true,
   },
+  softwarefactory: {
+    tag: 'softwarefactory-e2e-test',
+    manifestGlobs: [],
+    // The Software Factory template is generated from mastracode/web by
+    // create-factory's sync-template.mjs; its roots are whatever the
+    // web project links from the monorepo, so discover them from the manifest
+    // instead of hardcoding a list that can drift.
+    linkManifests: ['mastracode/web/package.json'],
+  },
 };
 
 function readJson(path) {
@@ -109,6 +118,27 @@ async function getFixtureRoots(rootDir, suite) {
   return roots;
 }
 
+/** Collect deps declared with `link:` specs (standalone projects like mastracode/web). */
+function collectLinkDependencies(manifest) {
+  const roots = [];
+  for (const field of DEPENDENCY_FIELDS) {
+    for (const [name, version] of Object.entries(manifest[field] || {})) {
+      if (version.startsWith('link:')) {
+        roots.push(name);
+      }
+    }
+  }
+  return roots;
+}
+
+function getLinkManifestRoots(rootDir, suite) {
+  const roots = [];
+  for (const manifestPath of suite.linkManifests || []) {
+    roots.push(...collectLinkDependencies(readJson(join(rootDir, manifestPath))));
+  }
+  return roots;
+}
+
 function getCreateMastraBuildRoots(rootDir) {
   const turbo = readJson(join(rootDir, 'packages/create-mastra/turbo.json'));
   return (turbo.tasks?.build?.dependsOn || [])
@@ -126,7 +156,11 @@ export async function getSuitePublishRoots(rootDir, suiteName) {
     throw new Error(`Unknown shared E2E registry suite: ${suiteName}`);
   }
 
-  const roots = [...(suite.extraRoots || []), ...(await getFixtureRoots(rootDir, suite))];
+  const roots = [
+    ...(suite.extraRoots || []),
+    ...(await getFixtureRoots(rootDir, suite)),
+    ...getLinkManifestRoots(rootDir, suite),
+  ];
   if (suite.includeCreateMastraBuildRoots) {
     roots.push(...getCreateMastraBuildRoots(rootDir));
   }

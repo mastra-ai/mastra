@@ -1,11 +1,11 @@
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { WebAuthAdapter } from './auth-adapter';
 import {
   __resetRuntimeConfigForTests,
   getFactoryStorage,
   getPublicUrl,
-  getSeededAuthAdapter,
+  getSeededAuthProvider,
   getSeededStorage,
   isRuntimeConfigSeeded,
   seedRuntimeConfig,
@@ -56,24 +56,24 @@ describe('runtime-config', () => {
     });
   });
 
-  describe('auth adapter slot', () => {
-    const adapter = { kind: 'fake' } as WebAuthAdapter;
+  describe('auth provider slot', () => {
+    const provider = { name: 'fake' } as IMastraAuthProvider;
 
     it('is unseeded before the factory runs', () => {
       expect(isRuntimeConfigSeeded()).toBe(false);
-      expect(getSeededAuthAdapter()).toBeUndefined();
+      expect(getSeededAuthProvider()).toBeUndefined();
     });
 
-    it('returns the seeded adapter', () => {
-      seedRuntimeConfig({ authAdapter: adapter });
+    it('returns the seeded provider', () => {
+      seedRuntimeConfig({ authProvider: provider });
       expect(isRuntimeConfigSeeded()).toBe(true);
-      expect(getSeededAuthAdapter()).toBe(adapter);
+      expect(getSeededAuthProvider()).toBe(provider);
     });
 
-    it('seeding without an adapter marks auth explicitly disabled', () => {
+    it('seeding without a provider marks auth explicitly disabled', () => {
       seedRuntimeConfig({});
       expect(isRuntimeConfigSeeded()).toBe(true);
-      expect(getSeededAuthAdapter()).toBeUndefined();
+      expect(getSeededAuthProvider()).toBeUndefined();
     });
   });
 

@@ -1,11 +1,10 @@
+import type { TranscriptState } from '../services/transcript';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
-import type { TranscriptState } from '../services/transcript';
-
 function getStreamingLength(transcript: TranscriptState) {
-  const lastTranscriptEntry = transcript.entries[transcript.entries.length - 1];
-  return lastTranscriptEntry?.kind === 'message' && lastTranscriptEntry.message.role === 'assistant'
-    ? lastTranscriptEntry.message.content.parts.reduce((n, part) => {
+  const lastEntry = transcript.entries[transcript.entries.length - 1];
+  return lastEntry?.kind === 'message' && lastEntry.message.role === 'assistant'
+    ? lastEntry.message.content.parts.reduce((n, part) => {
         if (part.type === 'text') return n + part.text.length;
         if (part.type === 'reasoning') return n + part.reasoning.length;
         return n;
@@ -36,8 +35,6 @@ export function useTranscriptScroll(transcript: TranscriptState, threadId?: stri
     el.scrollTo({ top: el.scrollHeight, behavior });
   };
 
-  // Scroll position is DOM state. Only upward movement detaches follow intent; downward
-  // movement may come from smooth scrolling or browser scroll anchoring as content grows.
   useEffect(() => {
     const el = threadRef.current;
     if (!el) return;
@@ -57,15 +54,12 @@ export function useTranscriptScroll(transcript: TranscriptState, threadId?: stri
     if (attachedRef.current) scrollToBottom('auto');
   });
 
-  // Thread changes require imperative DOM scrolling after the new transcript has rendered.
   useEffect(() => {
     setAttached(true);
     const raf = requestAnimationFrame(() => scrollToBottomOnThreadChange('auto'));
     return () => cancelAnimationFrame(raf);
   }, [threadId]);
 
-  // Streaming updates should follow immediately while attached. Repeated smooth-scroll
-  // animations lag behind fast token and tool-output updates.
   useEffect(() => {
     if (attachedRef.current) scrollToBottom('auto');
   }, [transcript.entries.length, transcript.pending, streamingLen]);
