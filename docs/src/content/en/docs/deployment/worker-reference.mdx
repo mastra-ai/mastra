@@ -1,0 +1,204 @@
+---
+title: "Worker reference | Deployment"
+description: "Environment variables, CLI commands, and configuration options for Mastra workers."
+packages:
+  - "@mastra/core"
+---
+
+# Worker reference
+
+Configuration reference for [Mastra workers](/docs/deployment/workers). This page covers environment variables, CLI commands, and Mastra configuration options.
+
+## Environment variables
+
+### `MASTRA_WORKERS`
+
+Controls which workers start in the current process.
+
+| Value | Behavior |
+| - | - |
+| _(not set)_ | Default workers are auto-created based on configuration |
+| `"false"` | Disables all event processing. The process only serves HTTP requests. |
+| `"orchestration"` | Only the orchestration worker starts |
+| `"scheduler"` | Only the scheduler worker starts |
+| `"backgroundTasks"` | Only the background task worker starts |
+| `"orchestration,scheduler"` | Multiple workers (comma-separated) |
+
+Use this to run different worker types in separate containers from the same build artifact.
+
+### `MASTRA_STEP_EXECUTION_URL`
+
+The base URL of the API server, used by the orchestration worker to execute workflow steps remotely. Required when the orchestration worker runs in a separate process from the API.
+
+```
+MASTRA_STEP_EXECUTION_URL=http://api:4111/api
+```
+
+The orchestration worker sends step execution requests to:
+
+```
+${MASTRA_STEP_EXECUTION_URL}/workflows/:workflowId/runs/:runId/steps/execute
+```
+
+### `MASTRA_WORKER_AUTH_TOKEN`
+
+A bearer token sent by the orchestration worker when calling the API's step execution endpoint. The API's configured auth provider must recognize this token. See [Worker authentication](/docs/deployment/worker-auth).
+
+```
+MASTRA_WORKER_AUTH_TOKEN=sk-worker-secret-token
+```
+
+### `MASTRA_EVENTED_EXECUTION`
+
+When set to `"true"`, workflows use the evented execution engine by default, routing step execution through PubSub events rather than running in-process.
+
+```
+MASTRA_EVENTED_EXECUTION=true
+```
+
+This is automatically set when a pull-capable PubSub (like Redis Streams) is configured and the orchestration worker is present.
+
+## CLI commands
+
+### `mastra worker build`
+
+Bundles your Mastra application for worker deployment. Produces the same output as `mastra build` — a self-contained `.mastra/output/` directory.
+
+```bash
+mastra worker build [options]
+```
+
+| Option | Description |
+| - | - |
+| `--dir <path>` | Path to your Mastra source directory (default: `src/mastra`) |
+| `--root <path>` | Project root directory (default: current directory) |
+| `--tools <paths>` | Comma-separated tool paths to include |
+| `--output-dir <path>` | Custom output directory (default: `.mastra/output`) |
+| `--debug` | Enable debug logging |
+
+### `mastra worker start`
+
+Starts a worker process from a previously built bundle.
+
+```bash
+mastra worker start [name] [options]
+```
+
+| Argument/Option | Description |
+| - | - |
+| `name` | Worker name to start. Sets `MASTRA_WORKERS` in the spawned process. |
+| `--dir <path>` | Path to the build output (default: `.mastra/output`) |
+| `--env <path>` | Path to environment file (default: `.env.production`, then `.env`) |
+
+Examples:
+
+```bash
+# Start only the orchestration worker
+mastra worker start orchestration
+
+# Start only the scheduler
+mastra worker start scheduler
+
+# Start from a custom build directory
+mastra worker start orchestration --dir ./dist
+```
+
+## Mastra configuration
+
+### `workers`
+
+Configure which workers run in this Mastra instance.
+
+```typescript
+import { Mastra } from '@mastra/core/mastra'
+
+export const mastra = new Mastra({
+  workers: false, // or MastraWorker[] or undefined
+})
+```
+
+| Value | Behavior |
+| - | - |
+| `undefined` (default) | Auto-creates default workers based on PubSub and config |
+| `false` | Disables all event processing |
+| `MastraWorker[]` | Use exactly these worker instances |
+
+When `workers` is `undefined`, Mastra auto-creates:
+
+- **OrchestrationWorker** — if the PubSub supports `pull` mode
+- **SchedulerWorker** — if any workflow declares a `schedule`
+- **BackgroundTaskWorker** — if `backgroundTasks.enabled` is `true`
+
+### `backgroundTasks`
+
+Configure background task execution for agents.
+
+```typescript
+export const mastra = new Mastra({
+  backgroundTasks: {
+    enabled: true,
+    globalConcurrency: 10,
+    perAgentConcurrency: 5,
+    defaultTimeoutMs: 300_000,
+  },
+})
+```
+
+| Option | Type | Default | Description |
+| - | - | - | - |
+| `enabled` | `boolean` | `false` | Enable background task dispatch |
+| `globalConcurrency` | `number` | `10` | Max concurrent tasks across all agents |
+| `perAgentConcurrency` | `number` | `5` | Max concurrent tasks per agent |
+| `backpressure` | `'queue' \| 'reject' \| 'fallback-sync'` | `'queue'` | Behavior when concurrency limit is reached |
+| `defaultTimeoutMs` | `number` | `300000` | Default task timeout in milliseconds |
+| `defaultRetries` | `RetryConfig` | — | Default retry configuration |
+| `cleanup` | `CleanupConfig` | — | Cleanup configuration for old task records |
+| `progressThrottleMs` | `number` | — | Min delay between progress events per task |
+| `waitTimeoutMs` | `number` | — | Max time the agentic loop waits for a task |
+
+### `scheduler`
+
+Configure the scheduler worker for cron-driven workflow triggers.
+
+```typescript
+export const mastra = new Mastra({
+  scheduler: {
+    enabled: true,
+  },
+})
+```
+
+The scheduler auto-enables when any workflow declares a `schedule` config. See [Scheduled workflows](/docs/workflows/scheduled-workflows).
+
+## Worker types
+
+### OrchestrationWorker
+
+Processes workflow events from the PubSub `workflows` topic. Requires a pull-capable PubSub like `@mastra/redis-streams`.
+
+- **Name**: `orchestration`
+- **PubSub topic**: `workflows`
+- **Consumer group**: `mastra-orchestration`
+
+### SchedulerWorker
+
+Polls storage for due cron schedules and publishes `workflow.start` events.
+
+- **Name**: `scheduler`
+- **Not horizontally scalable**: Run exactly one instance to avoid duplicate fires
+
+### BackgroundTaskWorker
+
+Executes background tool calls dispatched by agents.
+
+- **Name**: `backgroundTasks`
+- **PubSub topic**: `background-tasks`
+- **Consumer group**: `background-task-workers`
+- **Horizontally scalable**: Multiple instances share the consumer group
+
+## Related
+
+- [Workers overview](/docs/deployment/workers): What workers are and when to use them
+- [Worker deployment](/docs/deployment/worker-deployment): Deployment topologies and Docker Compose setup
+- [Worker authentication](/docs/deployment/worker-auth): Secure worker-to-API communication
+- [PubSub](/docs/server/pubsub): Event delivery backends

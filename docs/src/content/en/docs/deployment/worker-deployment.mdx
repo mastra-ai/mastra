@@ -1,0 +1,323 @@
+---
+title: "Worker deployment | Deployment"
+description: "Choose a worker deployment topology and set up split worker processes with Docker Compose and Redis Streams."
+packages:
+  - "@mastra/core"
+  - "@mastra/redis-streams"
+  - "@mastra/pg"
+---
+
+# Worker deployment
+
+Mastra supports several deployment topologies for [workers](/docs/deployment/workers). Start with the simplest setup that meets your requirements and split workers out when you need independent scaling or event durability.
+
+## Choosing a topology
+
+### In-process (default)
+
+All workers run inside the API process. Events flow through the in-memory PubSub, and no external infrastructure is needed beyond your storage adapter.
+
+```
+┌─────────────────────────────────────────┐
+│              Mastra Server              │
+│                                         │
+│  API + Orchestration + Scheduler        │
+│       + Background Tasks                │
+│                                         │
+│  PubSub: EventEmitterPubSub (in-memory) │
+└─────────────────────────────────────────┘
+```
+
+Use this when:
+
+- Traffic is light and workflows are short-lived
+- You don't need event durability across restarts
+- Operational simplicity is the priority
+
+No configuration is required. This is the default behavior.
+
+### In-process with external PubSub
+
+Same single process, but events are persisted in Redis Streams. If the process restarts, in-flight events survive in the stream and are picked up when the process comes back.
+
+```
+┌──────────────────────────────────┐
+│           Mastra Server          │
+│  API + All Workers               │
+│  PubSub: RedisStreamsPubSub      │
+└────────────┬─────────────────────┘
+             │
+      ┌──────▼──────┐
+      │    Redis     │
+      └─────────────┘
+```
+
+Use this when:
+
+- You want event durability without splitting processes
+- Your workflows are long-running and shouldn't be lost on restart
+- You don't yet need to scale components independently
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL!,
+  }),
+  pubsub: new RedisStreamsPubSub({
+    url: process.env.REDIS_URL!,
+  }),
+})
+```
+
+### Fully split
+
+Each worker type runs as its own process or container. The API handles HTTP requests and publishes events. Workers consume events from Redis Streams and process them independently.
+
+```
+┌──────────────┐    ┌────────────────────┐    ┌───────────────────┐
+│   API Server │    │ Orchestration      │    │ Scheduler Worker  │
+│ WORKERS=false│    │ Worker             │    │ WORKERS=scheduler │
+│              │◄───│ WORKERS=           │    │                   │
+│ Serves HTTP, │    │ orchestration      │    │ Polls for due     │
+│ publishes    │    │                    │    │ schedules         │
+│ events       │    │ Pulls events,      │    │                   │
+└──────┬───────┘    │ delegates steps    │    └────────┬──────────┘
+       │            │ via HTTP           │             │
+       │            └────────┬───────────┘             │
+       │                     │                         │
+  ┌────▼─────────────────────▼─────────────────────────▼────┐
+  │                     Redis Streams                        │
+  └────┬────────────────────────────────────────────────────┘
+       │
+  ┌────▼──────────────┐    ┌───────────────┐
+  │ Background Task   │    │  PostgreSQL   │
+  │ Worker            │    │  (Storage)    │
+  │ WORKERS=          │    └───────────────┘
+  │ backgroundTasks   │
+  └───────────────────┘
+```
+
+Use this when:
+
+- You need to scale orchestration capacity without adding API instances
+- The scheduler must be isolated to prevent duplicate schedule fires during horizontal scaling
+- Background tool execution should run on dedicated compute
+- You want full process isolation between the API and event processing
+
+## Setting up a fully split deployment
+
+The rest of this guide walks through a fully split deployment using Docker Compose with Redis Streams and PostgreSQL.
+
+### Mastra configuration
+
+The same `Mastra` configuration runs in every container. The `MASTRA_WORKERS` environment variable controls which workers start in each process.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL!,
+  }),
+  pubsub: new RedisStreamsPubSub({
+    url: process.env.REDIS_URL!,
+  }),
+})
+```
+
+### Build the application
+
+Build your Mastra application once. The output runs in every container.
+
+```bash
+mastra build
+```
+
+This produces a self-contained `.mastra/output/` directory. See [Deploy a Mastra server](/docs/deployment/mastra-server) for details on the build output.
+
+### Docker Compose
+
+The following `docker-compose.yml` runs the fully split topology with six services: PostgreSQL, Redis, the API, and three workers.
+
+```yaml title="docker-compose.yml"
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mastra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: mastra
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mastra']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: ./app
+    ports:
+      - '4111:4111'
+    environment:
+      DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
+      REDIS_URL: redis://redis:6379
+      MASTRA_WORKERS: 'false'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  orchestration-worker:
+    build: ./app
+    environment:
+      DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
+      REDIS_URL: redis://redis:6379
+      MASTRA_WORKERS: orchestration
+      MASTRA_STEP_EXECUTION_URL: http://api:4111/api
+    depends_on:
+      api:
+        condition: service_started
+
+  scheduler-worker:
+    build: ./app
+    environment:
+      DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
+      REDIS_URL: redis://redis:6379
+      MASTRA_WORKERS: scheduler
+    depends_on:
+      api:
+        condition: service_started
+
+  background-task-worker:
+    build: ./app
+    environment:
+      DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
+      REDIS_URL: redis://redis:6379
+      MASTRA_WORKERS: backgroundTasks
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  pgdata:
+```
+
+Create a `.env` file next to your `docker-compose.yml`:
+
+```bash title=".env"
+POSTGRES_PASSWORD=your-secure-password
+```
+
+### Dockerfile
+
+The Dockerfile copies the pre-built `.mastra/output` directory and installs production dependencies:
+
+```dockerfile title="app/Dockerfile"
+FROM node:22-alpine
+
+WORKDIR /app
+
+COPY .mastra/output/package.json .mastra/output/.npmrc* ./
+RUN npm install --omit=dev
+
+COPY .mastra/output/ .
+
+EXPOSE 4111
+CMD ["node", "index.mjs"]
+```
+
+### Start the stack
+
+```bash
+docker compose up -d
+```
+
+Verify all services are running:
+
+```bash
+docker compose ps
+```
+
+Test the API:
+
+```bash
+curl http://localhost:4111/api/health
+```
+
+### Step execution URL
+
+In the fully split topology, the orchestration worker runs in a separate container from the API. When it processes a workflow event, it needs to execute the step somewhere. The `MASTRA_STEP_EXECUTION_URL` environment variable tells it where.
+
+Set it to the API's internal URL, including the `/api` prefix:
+
+```
+MASTRA_STEP_EXECUTION_URL=http://api:4111/api
+```
+
+The orchestration worker sends a `POST` request to `${MASTRA_STEP_EXECUTION_URL}/workflows/:workflowId/runs/:runId/steps/execute` for each step. The API resolves the workflow and executes the step locally.
+
+Without this variable, the orchestration worker attempts to execute steps in-process. That works when the worker runs in the same process as the API, but fails in split deployments where the worker doesn't have access to the full Mastra runtime.
+
+## Scaling considerations
+
+### Orchestration worker
+
+The orchestration worker is safe to scale horizontally. Redis Streams consumer groups distribute events across instances, so each event is processed once.
+
+```bash
+docker compose up -d --scale orchestration-worker=3
+```
+
+### Scheduler worker
+
+Run exactly one scheduler instance. Multiple schedulers polling the same storage fire duplicate events for the same schedule.
+
+### Background task worker
+
+The background task worker is safe to scale horizontally. The `background-task-workers` consumer group distributes tasks across instances.
+
+### API server
+
+The API can scale horizontally behind a load balancer. Each instance connects to the same PostgreSQL and Redis.
+
+## Crash recovery
+
+Workers recover from crashes because Redis Streams persists unacknowledged events.
+
+- **Orchestration worker crash**: Pending events stay in the Redis stream. When the worker restarts, it picks up where it left off.
+- **Scheduler worker crash**: No events are missed permanently. The scheduler computes the next fire time from the current time on restart, not from where it left off.
+- **API crash during step execution**: The orchestration worker's HTTP request fails. The event is nacked and redelivered on the next attempt.
+
+:::warning
+
+If the API crashes while a step is already executing (e.g., mid-sleep), that step's work is lost. The workflow run may remain stuck in a `running` state. Mastra doesn't yet have automatic timeout-based recovery for this scenario.
+
+:::
+
+## Related
+
+- [Workers overview](/docs/deployment/workers): What workers are and when to use them
+- [Worker authentication](/docs/deployment/worker-auth): Secure worker-to-API communication
+- [Worker configuration reference](/docs/deployment/worker-reference): Environment variables, CLI commands, and config options
+- [PubSub](/docs/server/pubsub): Event delivery backends
+- [Deploy a Mastra server](/docs/deployment/mastra-server): Build output and server configuration

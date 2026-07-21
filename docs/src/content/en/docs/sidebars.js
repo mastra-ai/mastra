@@ -1002,6 +1002,38 @@ const sidebars = {
               id: 'deployment/workflow-runners',
               label: 'Workflow Runners',
             },
+            {
+              type: 'doc',
+              id: 'deployment/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'deployment/worker-deployment',
+              label: 'Worker Deployment',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'deployment/worker-auth',
+              label: 'Worker Auth',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'deployment/worker-reference',
+              label: 'Worker Reference',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
           ],
         },
       ],
