@@ -30,3 +30,4 @@ export type { ChatModesApi } from './context/ChatModesContext';
 export { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 export { useTranscriptScroll } from './hooks/useTranscriptScroll';
 export type { SlashCommand } from './services/commands';
+export type { TranscriptState } from './services/transcript';

@@ -1,31 +1,14 @@
-import type { AgentControllerTaskSnapshot, MastraDBMessage } from '@mastra/client-js';
 import { createContext } from 'react';
 
 import type { SessionStateSnapshot } from '../hooks/useAgentControllerTranscript';
-import type {
-  NoticeEntry,
-  NotificationEntry,
-  NotificationSummaryEntry,
-  OutgoingFile,
-  PromptEntry,
-  SubagentEntry,
-} from '../services/chatState';
+import type { OutgoingFile, TranscriptState } from '../services/transcript';
 
 export interface ChatTranscriptApi {
-  messages: MastraDBMessage[];
-  prompts: PromptEntry[];
-  notices: NoticeEntry[];
-  notifications: NotificationEntry[];
-  notificationSummaries: NotificationSummaryEntry[];
-  subagents: SubagentEntry[];
-  tasks: AgentControllerTaskSnapshot[];
-  pending: boolean;
-  threadId?: string;
-  workspaceReady?: boolean;
+  transcript: TranscriptState;
   busy: boolean;
   showWorkingIndicator: boolean;
   localUser: (text: string, steer?: boolean, files?: OutgoingFile[]) => void;
-  reset: (threadId?: string, state?: SessionStateSnapshot, messages?: MastraDBMessage[]) => void;
+  reset: (threadId?: string, state?: SessionStateSnapshot) => void;
   resolvePrompt: (id: string) => void;
   clearPending: () => void;
   pushNotice: (text: string, level?: 'info' | 'error') => void;

@@ -20,7 +20,7 @@ export function StatusLine() {
   const { threadId } = useParams<{ threadId: string }>();
   const { activeFactory } = useActiveFactoryContext();
   const { baseUrl, resourceId, projectPath } = useChatSessionContext();
-  const { messages, notifications, busy } = useChatTranscript();
+  const { transcript, busy } = useChatTranscript();
   const githubProjectId =
     activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined;
 
@@ -43,8 +43,7 @@ export function StatusLine() {
         projectPath={projectPath}
         githubProjectId={githubProjectId}
         threadId={threadId}
-        messages={messages}
-        notifications={notifications}
+        transcriptEntries={transcript.entries}
         busy={busy}
       />
     </div>

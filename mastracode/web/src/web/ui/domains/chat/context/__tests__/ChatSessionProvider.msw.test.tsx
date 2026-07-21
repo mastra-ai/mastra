@@ -96,9 +96,9 @@ const githubProjectWithWorktree: Factory = {
   },
 };
 
-function seedFactory(factories: Factory[] = [project], activeFactory: Factory = project) {
-  localStorage.setItem('mastracode-factories', JSON.stringify(factories));
-  localStorage.setItem('mastracode-active-factory', activeFactory.id);
+function seedProject(projects: Factory[] = [project], activeProject: Factory = project) {
+  localStorage.setItem('mastracode-factories', JSON.stringify(projects));
+  localStorage.setItem('mastracode-active-factory', activeProject.id);
 }
 
 function sessionState(resourceId = RESOURCE_ID): AgentControllerSessionState {
@@ -172,11 +172,12 @@ function useAgentControllerHandlers(
 
 function Probe() {
   const { status, threadId } = useChatConnection();
-  const { messages, busy, showWorkingIndicator, localUser, threadId: transcriptThreadId } = useChatTranscript();
+  const { transcript, busy, showWorkingIndicator, localUser } = useChatTranscript();
   const { usage, followUpCount, omPhase, goal } = useChatRuntime();
   const { selectFactory } = useActiveFactoryContext();
-  const messageText = messages
-    .flatMap(message => message.content.parts)
+  const messageText = transcript.entries
+    .filter(entry => entry.kind === 'message')
+    .flatMap(entry => entry.message.content.parts)
     .filter(part => part.type === 'text')
     .map(part => part.text)
     .join('\n');
@@ -185,8 +186,8 @@ function Probe() {
     <div>
       <span data-testid="status">{status}</span>
       <span data-testid="thread-id">{threadId ?? '(none)'}</span>
-      <span data-testid="transcript-thread-id">{transcriptThreadId ?? '(none)'}</span>
-      <span data-testid="entries-count">{messages.length}</span>
+      <span data-testid="transcript-thread-id">{transcript.threadId ?? '(none)'}</span>
+      <span data-testid="entries-count">{transcript.entries.length}</span>
       <span data-testid="message-text">{messageText}</span>
       <span data-testid="busy">{busy ? 'yes' : 'no'}</span>
       <span data-testid="working">{showWorkingIndicator ? 'yes' : 'no'}</span>
@@ -245,10 +246,11 @@ function PermissionsProbe() {
 }
 
 function TranscriptProbe() {
-  const { messages } = useChatTranscript();
+  const { transcript } = useChatTranscript();
   const { threadId } = useChatConnection();
-  const messageText = messages
-    .flatMap(message => message.content.parts)
+  const messageText = transcript.entries
+    .filter(entry => entry.kind === 'message')
+    .flatMap(entry => entry.message.content.parts)
     .filter(part => part.type === 'text')
     .map(part => part.text)
     .join('\n');
@@ -256,7 +258,7 @@ function TranscriptProbe() {
   return (
     <div>
       <span data-testid="focused-thread-id">{threadId ?? '(none)'}</span>
-      <span data-testid="focused-entries-count">{messages.length}</span>
+      <span data-testid="focused-entries-count">{transcript.entries.length}</span>
       <span data-testid="focused-message-text">{messageText}</span>
     </div>
   );
@@ -312,7 +314,7 @@ describe('ChatSessionProvider', () => {
       const modeSwitchPending = new Promise<void>(resolve => {
         completeModeSwitch = resolve;
       });
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers([], requests);
       server.use(
         http.get(`${API}/modes`, () => {
@@ -399,7 +401,7 @@ describe('ChatSessionProvider', () => {
     it('given a synced model, when a model consumer renders, then it reads and switches model without transcript context', async () => {
       const requests: string[] = [];
       let activeModelId = 'openai/gpt-4o-mini';
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers([], requests);
       server.use(
         http.get(`${API}/modes`, () => {
@@ -466,7 +468,7 @@ describe('ChatSessionProvider', () => {
         tools: { 'shell.run': 'deny' },
       };
       let resolvePermissionUpdate: (() => void) | undefined;
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers([], requests);
       server.use(
         http.get(`${SESSION}/permissions`, () => HttpResponse.json(permissions)),
@@ -507,7 +509,7 @@ describe('ChatSessionProvider', () => {
     });
 
     it('given a route thread prop, when a transcript consumer renders, then it receives persisted route-thread messages', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers();
       server.use(
         http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () =>
@@ -523,7 +525,7 @@ describe('ChatSessionProvider', () => {
     });
 
     it('given /new with no threadId, when a transcript consumer renders, then it remains an empty draft session', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers();
 
       renderFocusedProbe(<TranscriptProbe />);
@@ -536,7 +538,7 @@ describe('ChatSessionProvider', () => {
 
   describe('when a route thread has persisted messages', () => {
     it('renders fetched messages through the provider session', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers();
       server.use(
         http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () =>
@@ -553,7 +555,7 @@ describe('ChatSessionProvider', () => {
 
     it('given session state names another thread, then it still loads only the URL thread history', async () => {
       const requests: string[] = [];
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers([], requests);
       server.use(
         http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () => {
@@ -583,7 +585,7 @@ describe('ChatSessionProvider', () => {
 
   describe('when the route switches to another thread', () => {
     it('renders only the new thread messages after they load', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers();
       server.use(
         http.get(`${SESSION}/threads/thread-one/messages`, () =>
@@ -624,7 +626,7 @@ describe('ChatSessionProvider', () => {
 
   describe('when route thread messages are still loading', () => {
     it('renders the loading skeleton in the explicit message boundary while the route-thread provider stays available', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers();
       server.use(http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () => new Promise(() => undefined)));
 
@@ -642,7 +644,7 @@ describe('ChatSessionProvider', () => {
 
   describe('when a chat session metadata consumer renders', () => {
     it('reads session metadata from chat context without taking ownership of active project state', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers();
 
       renderFocusedProbe(<SessionContextProbe />);
@@ -655,7 +657,7 @@ describe('ChatSessionProvider', () => {
 
     it('disables a GitHub project until a factory worktree is selected', async () => {
       const requests: string[] = [];
-      seedFactory([githubProject], githubProject);
+      seedProject([githubProject], githubProject);
       useAgentControllerHandlers([], requests);
 
       renderFocusedProbe(<SessionContextProbe />);
@@ -668,7 +670,7 @@ describe('ChatSessionProvider', () => {
 
     it('enables a GitHub project when a factory worktree is selected', async () => {
       const requests: string[] = [];
-      seedFactory([githubProjectWithWorktree], githubProjectWithWorktree);
+      seedProject([githubProjectWithWorktree], githubProjectWithWorktree);
       useAgentControllerHandlers([], requests);
 
       renderFocusedProbe(<SessionContextProbe />);
@@ -681,7 +683,7 @@ describe('ChatSessionProvider', () => {
 
   describe('when route thread messages fail to load', () => {
     it('shows a user-visible message loading error without exposing message query state through transcript context', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers();
       server.use(
         http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () =>
@@ -701,7 +703,7 @@ describe('ChatSessionProvider', () => {
     });
 
     it('shows a user-visible message loading error', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers();
       server.use(
         http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () =>
@@ -717,7 +719,7 @@ describe('ChatSessionProvider', () => {
 
   describe('when no route thread is provided', () => {
     it('starts with an empty draft transcript while the connection becomes ready', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers();
 
       renderProbe();
@@ -730,7 +732,7 @@ describe('ChatSessionProvider', () => {
 
   it('given a seeded project, when the session connects, then it binds the session to the workspace path before ready', async () => {
     const requests: string[] = [];
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers([], requests);
     renderProbe();
 
@@ -744,7 +746,7 @@ describe('ChatSessionProvider', () => {
 
   it('given the workspace bind fails, then the connection still becomes ready', async () => {
     const requests: string[] = [];
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers([], requests, 500);
     renderProbe();
 
@@ -754,7 +756,7 @@ describe('ChatSessionProvider', () => {
 
   it('given a different project is selected, then the new session is bound to the new workspace path', async () => {
     const requests: string[] = [];
-    seedFactory([project, nextProject]);
+    seedProject([project, nextProject]);
     useAgentControllerHandlers([], requests);
     renderProbe();
 
@@ -766,7 +768,7 @@ describe('ChatSessionProvider', () => {
 
   it('given live state in one project, when selecting another project, then the next project starts with its own empty transcript and runtime', async () => {
     const requests: string[] = [];
-    seedFactory([project, nextProject]);
+    seedProject([project, nextProject]);
     useAgentControllerHandlers(
       [
         { type: 'agent_start' },
@@ -819,7 +821,7 @@ describe('ChatSessionProvider', () => {
   });
 
   it('given an idle transcript, then busy and the working indicator are off', async () => {
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers();
     renderProbe();
 
@@ -831,7 +833,7 @@ describe('ChatSessionProvider', () => {
   it('given the session snapshot is running, when chat mounts, then it stays busy and shows working without a render loop', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const onRender = vi.fn();
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers([], [], 200, { ...sessionState(), running: true });
 
     renderFocusedProbe(
@@ -851,7 +853,7 @@ describe('ChatSessionProvider', () => {
 
   it('given a reconnect re-sync returns a new state without a route thread, then the draft transcript remains empty', async () => {
     const requests: string[] = [];
-    seedFactory();
+    seedProject();
 
     server.use(
       http.post(`${API}/sessions`, () =>
@@ -907,7 +909,7 @@ describe('ChatSessionProvider', () => {
   });
 
   it('given an idle connection, when a local message is sent before the start event, then pending keeps busy on', async () => {
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers();
     renderProbe();
 
@@ -919,7 +921,7 @@ describe('ChatSessionProvider', () => {
   });
 
   it('given a run started without streamed assistant text, then busy is on and the working indicator shows', async () => {
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers([{ type: 'agent_start' }]);
     renderProbe();
 
@@ -928,7 +930,7 @@ describe('ChatSessionProvider', () => {
   });
 
   it('given a running snapshot, when an agent end event arrives, then busy turns off', async () => {
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers([{ type: 'agent_end' }], [], 200, { ...sessionState(), running: true });
     renderProbe();
 
@@ -942,7 +944,7 @@ describe('ChatSessionProvider', () => {
   ])(
     'given running is $initialRunning, when display state changes running to $eventRunning, then busy is $expectedBusy',
     async ({ initialRunning, eventRunning, expectedBusy }) => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers(
         [{ type: 'display_state_changed', displayState: { isRunning: eventRunning } }],
         [],
@@ -957,7 +959,7 @@ describe('ChatSessionProvider', () => {
   );
 
   it('given a running turn whose last entry is a streaming assistant message with text, then the working indicator hides while busy stays on', async () => {
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers([
       { type: 'agent_start' },
       {

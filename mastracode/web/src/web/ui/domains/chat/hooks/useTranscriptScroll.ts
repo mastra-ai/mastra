@@ -1,10 +1,10 @@
-import type { MastraDBMessage } from '@mastra/client-js';
+import type { TranscriptState } from '../services/transcript';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
-function getStreamingLength(messages: MastraDBMessage[]) {
-  const lastMessage = messages[messages.length - 1];
-  return lastMessage?.role === 'assistant'
-    ? lastMessage.content.parts.reduce((n, part) => {
+function getStreamingLength(transcript: TranscriptState) {
+  const lastEntry = transcript.entries[transcript.entries.length - 1];
+  return lastEntry?.kind === 'message' && lastEntry.message.role === 'assistant'
+    ? lastEntry.message.content.parts.reduce((n, part) => {
         if (part.type === 'text') return n + part.text.length;
         if (part.type === 'reasoning') return n + part.reasoning.length;
         return n;
@@ -16,12 +16,12 @@ function nearBottom(el: HTMLDivElement) {
   return el.scrollHeight - el.scrollTop - el.clientHeight < 160;
 }
 
-export function useTranscriptScroll(messages: MastraDBMessage[], pending: boolean, threadId?: string) {
+export function useTranscriptScroll(transcript: TranscriptState, threadId?: string) {
   const threadRef = useRef<HTMLDivElement>(null);
   const attachedRef = useRef(true);
   const lastScrollTopRef = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
-  const streamingLen = getStreamingLength(messages);
+  const streamingLen = getStreamingLength(transcript);
 
   const setAttached = (attached: boolean) => {
     attachedRef.current = attached;
@@ -62,7 +62,7 @@ export function useTranscriptScroll(messages: MastraDBMessage[], pending: boolea
 
   useEffect(() => {
     if (attachedRef.current) scrollToBottom('auto');
-  }, [messages.length, pending, streamingLen]);
+  }, [transcript.entries.length, transcript.pending, streamingLen]);
 
   useEffect(() => {
     const el = threadRef.current;

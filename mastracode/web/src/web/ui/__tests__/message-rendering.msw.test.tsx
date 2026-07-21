@@ -58,16 +58,16 @@ describe('web UI stylesheet entry', () => {
   });
 });
 
-function seedFactory() {
-  const factory: Factory = {
+function seedProject() {
+  const project: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
     resourceId: RESOURCE_ID,
     binding: { kind: 'local', path: PROJECT_PATH },
     createdAt: 1,
   };
-  localStorage.setItem('mastracode-factories', JSON.stringify([factory]));
-  localStorage.setItem('mastracode-active-factory', factory.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -122,32 +122,6 @@ function delayedSse(event: AgentControllerEvent) {
         pending = true;
         emitters.forEach(emit => emit());
       }),
-  };
-}
-
-function controlledSse() {
-  const encoder = new TextEncoder();
-  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-  let markReady: () => void = () => {};
-  const ready = new Promise<void>(resolve => {
-    markReady = resolve;
-  });
-  return {
-    response: () =>
-      new Response(
-        new ReadableStream<Uint8Array>({
-          start(streamController) {
-            controller = streamController;
-            markReady();
-          },
-          cancel() {},
-        }),
-        { headers: { 'content-type': 'text/event-stream' } },
-      ),
-    emit: async (event: AgentControllerEvent) => {
-      await ready;
-      controller?.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-    },
   };
 }
 
@@ -210,7 +184,7 @@ function useAuthMe(state: { authenticated?: boolean; user?: { name?: string; ema
 function renderSeededApp(
   authState: { authenticated?: boolean; user?: { name?: string; email?: string } | null } | null = null,
 ) {
-  seedFactory();
+  seedProject();
   useAgentControllerHandlers();
   if (authState) window.__MASTRACODE_CONFIG__ = { authEnabled: true };
   useAuthMe(authState);
@@ -290,7 +264,7 @@ describe('MastraCode empty thread state', () => {
 
 describe('MastraCode message rendering', () => {
   it('renders hydrated persisted text, thinking, and tool content through Mastra message parts', async () => {
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers({
       messages: [
         dbMessage('assistant-1', 'assistant', [
@@ -322,35 +296,8 @@ describe('MastraCode message rendering', () => {
     });
   });
 
-  it('renders an answered ask_user result from its content instead of coercing the result object', async () => {
-    seedFactory();
-    useAgentControllerHandlers({
-      messages: [
-        dbMessage('assistant-ask-user', 'assistant', [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'ask-user-result',
-              toolName: 'ask_user',
-              args: {},
-              result: { content: 'User answered: Blue', isError: false },
-            },
-          },
-        ]),
-      ],
-    });
-
-    renderChat();
-
-    const card = await screen.findByRole('group', { name: 'Question from the agent' });
-    expect(within(card).getByText('User answered: Blue')).toBeInTheDocument();
-    expect(within(card).queryByText('[object Object]')).not.toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Tool: ask_user' })).not.toBeInTheDocument();
-  });
-
   it('composes consecutive tool cards into a single bordered container', async () => {
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers({
       messages: [
         dbMessage('assistant-tools', 'assistant', [
@@ -397,143 +344,8 @@ describe('MastraCode message rendering', () => {
     });
   });
 
-  it('renders the latest active task snapshot in the dock', async () => {
-    seedFactory();
-    useAgentControllerHandlers({
-      messages: [
-        dbMessage('assistant-tasks', 'assistant', [
-          { type: 'text', text: 'I am tracking the work.' },
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tasks-initial',
-              toolName: 'task_write',
-              args: {},
-              result: {
-                tasks: [{ id: 'one', content: 'Add dispatcher', activeForm: 'Adding dispatcher', status: 'in_progress' }],
-              },
-            },
-          },
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tasks-active',
-              toolName: 'task_check',
-              args: {},
-              result: {
-                tasks: [
-                  { id: 'one', content: 'Add dispatcher', activeForm: 'Adding dispatcher', status: 'completed' },
-                  { id: 'two', content: 'Verify rendering', activeForm: 'Verifying rendering', status: 'in_progress' },
-                ],
-              },
-            },
-          },
-        ]),
-      ],
-    });
-
-    renderChat();
-
-    expect(await screen.findByText('Verifying rendering')).toBeInTheDocument();
-    expect(screen.getByText('1/2 completed')).toBeInTheDocument();
-    expect(screen.getAllByRole('region', { name: 'Current tasks' })).toHaveLength(1);
-    expect(screen.queryByRole('group', { name: 'Tool: task_write' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Tool: task_check' })).not.toBeInTheDocument();
-
-    const dock = screen.getByRole('region', { name: 'Current tasks' });
-    const composer = screen.getByPlaceholderText(/Ask Mastra Code/);
-    expect(dock.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it('updates one docked task list from live events and clears it', async () => {
-    seedFactory();
-    const stream = controlledSse();
-    useAgentControllerHandlers();
-    server.use(http.get(`${SESSION}/stream`, () => stream.response()));
-
-    renderChat();
-
-    await screen.findByText('Ready for new conversation');
-    await stream.emit({
-      type: 'task_updated',
-      tasks: [{ id: 'one', content: 'Implement dock', activeForm: 'Implementing dock', status: 'in_progress' }],
-    });
-    expect(await screen.findByText('Implementing dock')).toBeInTheDocument();
-    const dock = screen.getByRole('region', { name: 'Current tasks' });
-
-    await stream.emit({
-      type: 'task_updated',
-      tasks: [
-        { id: 'one', content: 'Implement dock', activeForm: 'Implementing dock', status: 'completed' },
-        { id: 'two', content: 'Verify dock', activeForm: 'Verifying dock', status: 'in_progress' },
-      ],
-    });
-    expect(await screen.findByText('Verifying dock')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Current tasks' })).toBe(dock);
-    expect(screen.getAllByRole('region', { name: 'Current tasks' })).toHaveLength(1);
-
-    await stream.emit({ type: 'task_updated', tasks: [] });
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Current tasks' })).not.toBeInTheDocument());
-  });
-
-  it('hides the dock for a completed-only latest task snapshot', async () => {
-    seedFactory();
-    useAgentControllerHandlers({
-      messages: [
-        dbMessage('assistant-tasks-complete', 'assistant', [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tasks-complete',
-              toolName: 'task_check',
-              args: {},
-              result: JSON.stringify({
-                tasks: [{ id: 'done', content: 'Ship change', activeForm: 'Shipping change', status: 'completed' }],
-              }),
-            },
-          },
-        ]),
-      ],
-    });
-
-    renderChat();
-
-    await waitFor(() => {
-      expect(screen.queryByRole('region', { name: 'Current tasks' })).not.toBeInTheDocument();
-      expect(screen.queryByText('Ship change')).not.toBeInTheDocument();
-    });
-  });
-
-  it('falls back to the generic tool card for unknown tools', async () => {
-    seedFactory();
-    useAgentControllerHandlers({
-      messages: [
-        dbMessage('assistant-unknown-tool', 'assistant', [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tool-custom',
-              toolName: 'custom_tool',
-              args: { value: 1 },
-              result: 'custom result',
-            },
-          },
-        ]),
-      ],
-    });
-
-    renderChat();
-
-    const card = await findToolCard('custom_tool');
-    expect(within(card).getByText('Done')).toBeInTheDocument();
-  });
-
   it('renders assistant text when SSE message updates arrive after subscription', async () => {
-    seedFactory();
+    seedProject();
     const stream = delayedSse({
       type: 'message_update',
       message: dbMessage('assistant-stream', 'assistant', [{ type: 'text', text: 'Streaming now' }]),
@@ -550,8 +362,8 @@ describe('MastraCode message rendering', () => {
     await waitFor(() => expect(screen.getByText('Streaming now')).toBeInTheDocument());
   });
 
-  it('does not synthesize a message from tool lifecycle events and renders the later canonical tool part once', async () => {
-    seedFactory();
+  it('renders tool lifecycle events inline before a later message update re-emits the tool part', async () => {
+    seedProject();
     useAgentControllerHandlers({
       events: [
         { type: 'tool_input_start', toolCallId: 'tool-live', toolName: 'execute_command' },
@@ -566,37 +378,16 @@ describe('MastraCode message rendering', () => {
         { type: 'tool_end', toolCallId: 'tool-live', result: 'ok' },
       ],
     });
-    const stream = controlledSse();
-    server.use(http.get(`${SESSION}/stream`, () => stream.response()));
 
     renderChat();
 
-    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
-    expect(screen.queryByRole('group', { name: 'Tool: execute_command' })).not.toBeInTheDocument();
-
-    await stream.emit({
-      type: 'message_update',
-      message: dbMessage('assistant-tool-live', 'assistant', [
-        {
-          type: 'tool-invocation',
-          toolInvocation: {
-            state: 'result',
-            toolCallId: 'tool-live',
-            toolName: 'execute_command',
-            args: { command: 'pnpm test' },
-            result: 'ok',
-          },
-        },
-      ]),
-    });
-
-    const cards = await screen.findAllByRole('group', { name: 'Tool: execute_command' });
-    expect(cards).toHaveLength(1);
-    expect(within(cards[0]).getByText('Done')).toBeInTheDocument();
+    const card = await findToolCard('execute_command');
+    expect(within(card).getByText('Done')).toBeInTheDocument();
+    expect(within(card).getByText('passing tests')).toBeInTheDocument();
   });
 
   it('renders status metadata as status UI instead of raw JSON', async () => {
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers({
       messages: [
         {
@@ -622,7 +413,7 @@ describe('MastraCode message rendering', () => {
 
   describe('when a tool has JSON arguments', () => {
     it('shows the argument values when the card is expanded', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers({
         messages: [
           dbMessage('assistant-args', 'assistant', [
@@ -651,7 +442,7 @@ describe('MastraCode message rendering', () => {
 
   describe('when a tool approval is required', () => {
     it('renders an approval prompt with approve and decline controls', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers({
         events: [
           { type: 'tool_approval_required', toolCallId: 'tool-1', toolName: 'edit', args: { path: 'src/index.ts' } },
@@ -667,22 +458,16 @@ describe('MastraCode message rendering', () => {
   });
 
   describe('when a plan approval is suspended', () => {
-    it('renders the plan file and markdown with approve and reject controls', async () => {
-      seedFactory();
+    it('renders the plan title with approve and reject controls', async () => {
+      seedProject();
       useAgentControllerHandlers({
         events: [
           {
             type: 'tool_suspended',
             toolCallId: 'plan-1',
             toolName: 'submit_plan',
-            args: { path: '.mastracode/plans/migration.md' },
-            suspendPayload: {
-              plan: {
-                title: 'Ship the migration',
-                path: '.mastracode/plans/migration.md',
-                content: '## Verification\n\nRun **focused tests**.',
-              },
-            },
+            args: {},
+            suspendPayload: { plan: { title: 'Ship the migration', summary: 'Do the thing' } },
           },
         ],
       });
@@ -690,49 +475,15 @@ describe('MastraCode message rendering', () => {
       renderChat();
 
       const card = await screen.findByRole('group', { name: 'Plan approval' });
-      expect(within(card).getByRole('heading', { name: 'Ship the migration' })).toBeInTheDocument();
-      expect(within(card).getByText('migration.md')).toHaveAttribute('title', '.mastracode/plans/migration.md');
-      expect(within(card).getByRole('heading', { name: 'Verification' })).toBeInTheDocument();
-      expect(within(card).getByText('focused tests').tagName).toBe('STRONG');
+      expect(within(card).getByText('Plan: Ship the migration')).toBeInTheDocument();
       expect(within(card).getByRole('button', { name: 'Approve the plan and switch to build' })).toBeInTheDocument();
       expect(within(card).getByRole('button', { name: 'Reject the plan' })).toBeInTheDocument();
-      expect(within(card).getByRole('button', { name: 'Copy plan' })).toBeInTheDocument();
-    });
-
-    it('submits approval and rejection through the suspension endpoint', async () => {
-      seedFactory();
-      const suspensions: unknown[] = [];
-      useAgentControllerHandlers({
-        events: [
-          {
-            type: 'tool_suspended',
-            toolCallId: 'plan-2',
-            toolName: 'submit_plan',
-            args: {},
-            suspendPayload: { plan: { title: 'Review the rollout', content: 'Check the rollout.' } },
-          },
-        ],
-      });
-      server.use(
-        http.post(`${SESSION}/tool-suspension`, async ({ request }) => {
-          suspensions.push(await request.json());
-          return HttpResponse.json({});
-        }),
-      );
-
-      const user = userEvent.setup();
-      renderChat();
-
-      await user.click(await screen.findByRole('button', { name: 'Reject the plan' }));
-      await waitFor(() =>
-        expect(suspensions).toEqual([{ toolCallId: 'plan-2', resumeData: { action: 'rejected' } }]),
-      );
     });
   });
 
   describe('when an access request is suspended', () => {
     it('renders allow and deny controls for the requested path', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers({
         events: [
           {
@@ -754,17 +505,10 @@ describe('MastraCode message rendering', () => {
   });
 
   describe('when the agent asks the user a question', () => {
-    it('submits a selected answer through the suspension endpoint', async () => {
-      seedFactory();
-      const suspensions: unknown[] = [];
+    it('renders the question with selectable answer options', async () => {
+      seedProject();
       useAgentControllerHandlers({
         events: [
-          {
-            type: 'tool_start',
-            toolCallId: 'ask-1',
-            toolName: 'ask_user',
-            args: { question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
-          },
           {
             type: 'tool_suspended',
             toolCallId: 'ask-1',
@@ -774,60 +518,19 @@ describe('MastraCode message rendering', () => {
           },
         ],
       });
-      server.use(
-        http.post(`${SESSION}/tool-suspension`, async ({ request }) => {
-          suspensions.push(await request.json());
-          return HttpResponse.json({});
-        }),
-      );
-      const user = userEvent.setup();
 
       renderChat();
 
       const card = await screen.findByRole('group', { name: 'Question from the agent' });
-      expect(screen.getAllByRole('group', { name: 'Question from the agent' })).toHaveLength(1);
-      expect(screen.queryByRole('button', { name: /Expand all/ })).not.toBeInTheDocument();
       expect(within(card).getByText('Which database?')).toBeInTheDocument();
-      await user.click(within(card).getByRole('radio', { name: 'Postgres' }));
-      await waitFor(() => expect(suspensions).toEqual([{ toolCallId: 'ask-1', resumeData: 'Postgres' }]));
-    });
-
-    it('submits a trimmed free-text answer through the suspension endpoint', async () => {
-      seedFactory();
-      const suspensions: unknown[] = [];
-      useAgentControllerHandlers({
-        events: [
-          {
-            type: 'tool_suspended',
-            toolCallId: 'ask-2',
-            toolName: 'ask_user',
-            args: {},
-            suspendPayload: { question: 'What should change?' },
-          },
-        ],
-      });
-      server.use(
-        http.post(`${SESSION}/tool-suspension`, async ({ request }) => {
-          suspensions.push(await request.json());
-          return HttpResponse.json({});
-        }),
-      );
-      const user = userEvent.setup();
-
-      renderChat();
-
-      const card = await screen.findByRole('group', { name: 'Question from the agent' });
-      await user.type(within(card).getByRole('textbox'), '  Keep the API stable  ');
-      await user.click(within(card).getByRole('button', { name: 'Submit answer' }));
-      await waitFor(() =>
-        expect(suspensions).toEqual([{ toolCallId: 'ask-2', resumeData: 'Keep the API stable' }]),
-      );
+      expect(within(card).getByRole('button', { name: 'Postgres' })).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'SQLite' })).toBeInTheDocument();
     });
   });
 
   describe('when a subagent is delegated work', () => {
     it('renders a subagent entry with its task', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers({
         events: [
           {
@@ -848,7 +551,7 @@ describe('MastraCode message rendering', () => {
 
   describe('when a notice contains markdown', () => {
     it('renders the notice text as formatted markdown instead of raw syntax', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers({
         events: [{ type: 'info', message: "I'm in **plan mode** — run `/mode build`" }],
       });
@@ -865,7 +568,7 @@ describe('MastraCode message rendering', () => {
     });
 
     it('renders fenced code blocks through Shiki while keeping raw HTML escaped', async () => {
-      seedFactory();
+      seedProject();
       useAgentControllerHandlers({
         events: [
           {
@@ -892,7 +595,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('renders edit diffs without highlight.js classes', async () => {
-    seedFactory();
+    seedProject();
     useAgentControllerHandlers({
       messages: [
         dbMessage('assistant-edit', 'assistant', [
@@ -928,7 +631,7 @@ describe('MastraCode message rendering', () => {
 describe('App mode + theme controls', () => {
   describe('when a project with multiple modes is active', () => {
     function seedMultiMode() {
-      seedFactory();
+      seedProject();
       const handlers = useAgentControllerHandlers();
       server.use(
         http.get(`${API}/modes`, () =>
@@ -975,7 +678,7 @@ describe('App mode + theme controls', () => {
       expect(screen.queryByLabelText('Toggle theme')).not.toBeInTheDocument();
     });
 
-    it('does not render a factory switcher in the header', async () => {
+    it('does not render a project switcher in the header', async () => {
       seedMultiMode();
 
       renderChat();
@@ -985,8 +688,8 @@ describe('App mode + theme controls', () => {
       const header = document.querySelector('header');
       expect(header).not.toBeNull();
 
-      // The header must not contain any factory switcher.
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Select factory' })).not.toBeInTheDocument();
+      // The header must not contain any project switcher.
+      expect(within(header as HTMLElement).queryByRole('button', { name: 'Select project' })).not.toBeInTheDocument();
 
       // The sidebar remains the single source of the factory switcher.
       const switcher = screen.getByRole('button', { name: 'Select factory' });

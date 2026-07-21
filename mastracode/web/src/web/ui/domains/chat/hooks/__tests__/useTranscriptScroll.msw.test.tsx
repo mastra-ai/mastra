@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { createInitialTranscript, type TranscriptState } from '../../services/transcript';
 import { act, render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -48,8 +49,8 @@ function assistantMessage(id: string, text: string): MastraDBMessage {
   } satisfies MastraDBMessage;
 }
 
-function messages(text: string): MastraDBMessage[] {
-  return [assistantMessage('assistant-1', text)];
+function messages(text: string): TranscriptState {
+  return createInitialTranscript({ messages: [assistantMessage('assistant-1', text)] });
 }
 
 function Harness({
@@ -57,11 +58,11 @@ function Harness({
   threadId = 'thread-a',
   onSnapshot,
 }: {
-  transcriptState: MastraDBMessage[];
+  transcriptState: TranscriptState;
   threadId?: string;
   onSnapshot: (snapshot: HookSnapshot) => void;
 }) {
-  const scroll = useTranscriptScroll(transcriptState, true, threadId);
+  const scroll = useTranscriptScroll(transcriptState, threadId);
 
   useEffect(() => {
     onSnapshot({ showScrollDown: scroll.showScrollDown, scrollToBottom: scroll.scrollToBottom });

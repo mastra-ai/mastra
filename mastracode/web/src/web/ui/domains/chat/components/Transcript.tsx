@@ -1,9 +1,10 @@
-import type { MastraDBMessage, PlanResume } from '@mastra/client-js';
+import type { PlanResume } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MessageFactory } from '@mastra/react';
@@ -57,34 +58,15 @@ import { Markdown } from '../../../ui/Markdown';
 
 import type {
   ApprovalPrompt,
-  NoticeEntry as SurfaceNoticeEntry,
-  NotificationEntry as SurfaceNotificationEntry,
-  NotificationSummaryEntry as SurfaceNotificationSummaryEntry,
-  PromptEntry,
-  SubagentEntry as SurfaceSubagentEntry,
+  MessageEntry,
+  NoticeEntry,
+  NotificationEntry,
+  NotificationSummaryEntry,
+  SubagentEntry,
   SuspensionPrompt,
-} from '../services/chatState';
-
-type ToolCall = {
-  toolCallId: string;
-  toolName: string;
-  argsText: string;
-  args?: unknown;
-  status: 'running' | 'done' | 'error';
-  result?: unknown;
-  output: string;
-};
-type NoticeEntry = SurfaceNoticeEntry & { kind: 'notice' };
-type NotificationEntry = SurfaceNotificationEntry & { kind: 'notification' };
-type NotificationSummaryEntry = SurfaceNotificationSummaryEntry & { kind: 'notification_summary' };
-type SubagentEntry = SurfaceSubagentEntry & { kind: 'subagent' };
-
-type MessageEntry = {
-  id: string;
-  message: MastraDBMessage;
-  streaming: boolean;
-  steer?: boolean;
-};
+  TimelineEntry,
+  ToolCall,
+} from '../services/transcript';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -480,27 +462,34 @@ function SuspensionCard({
 }) {
   const payload = suspensionPayloadShape(prompt.suspendPayload);
 
-  if (prompt.toolName !== 'request_access') {
+  if (prompt.toolName === 'submit_plan') {
     return (
-      <ToolFactory
-        toolName={prompt.toolName}
-        toolCallId={prompt.toolCallId}
-        input={prompt.suspendPayload}
-        status="running"
-        onRespond={response => onRespond(prompt.toolCallId, response, prompt.id)}
-        fallback={() => (
-          <ToolCard
-            tool={{
-              toolCallId: prompt.toolCallId,
-              toolName: prompt.toolName,
-              argsText: '',
-              args: prompt.suspendPayload,
-              status: 'running',
-              output: '',
-            }}
-          />
+      <div className={promptCardSuspension} role="group" aria-label="Plan approval">
+        <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
+        {payload.plan?.summary && (
+          <div className="whitespace-pre-wrap break-words font-mono text-ui-smd leading-relaxed text-icon5">
+            {payload.plan.summary}
+          </div>
         )}
-      />
+        <div className={promptActions}>
+          <Button
+            variant="primary"
+            size="sm"
+            aria-label="Approve the plan and switch to build"
+            autoFocus
+            onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
+          >
+            Approve &amp; build
+          </Button>
+          <Button
+            size="sm"
+            aria-label="Reject the plan"
+            onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
+          >
+            Reject
+          </Button>
+        </div>
+      </div>
     );
   }
 
@@ -530,6 +519,63 @@ function SuspensionCard({
       </div>
     );
   }
+
+  return <AskUserCard prompt={prompt} payload={payload} onRespond={onRespond} />;
+}
+
+function AskUserCard({
+  prompt,
+  payload,
+  onRespond,
+}: {
+  prompt: SuspensionPrompt;
+  payload: SuspendPayloadShape;
+  onRespond: (toolCallId: string, resumeData: string | string[], promptId: string) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const options = payload.options ?? [];
+  const question = payload.question ?? 'The agent has a question';
+  return (
+    <div className={promptCardSuspension} role="group" aria-label="Question from the agent">
+      <div className={promptTitle}>{question}</div>
+      {options.length > 0 ? (
+        <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label="Answer options">
+          {options.map(opt => (
+            <Button
+              key={opt.label}
+              variant="outline"
+              size="sm"
+              className="justify-start"
+              aria-label={opt.description ? `${opt.label}: ${opt.description}` : opt.label}
+              onClick={() => onRespond(prompt.toolCallId, opt.label, prompt.id)}
+            >
+              <strong>{opt.label}</strong>
+              {opt.description && <span className="text-icon3"> — {opt.description}</span>}
+            </Button>
+          ))}
+        </div>
+      ) : (
+        <form
+          className="mt-2 flex gap-2"
+          onSubmit={e => {
+            e.preventDefault();
+            if (draft.trim()) onRespond(prompt.toolCallId, draft.trim(), prompt.id);
+          }}
+        >
+          <Input
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder="Your answer…"
+            aria-label={question}
+            autoFocus
+          />
+          <Button variant="primary" size="sm" type="submit">
+            Reply
+          </Button>
+        </form>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -634,8 +680,7 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
 
 export function Transcript() {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { messages, prompts, notices, notifications, notificationSummaries, subagents, pending, resolvePrompt } =
-    useChatTranscript();
+  const { transcript, resolvePrompt } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -655,116 +700,77 @@ export function Transcript() {
     resolvePrompt(promptId);
   };
 
-  return (
-    <TranscriptEntries
-      messages={messages}
-      prompts={prompts}
-      notices={notices}
-      notifications={notifications}
-      notificationSummaries={notificationSummaries}
-      subagents={subagents}
-      pending={pending}
-      onApprove={onApprove}
-      onRespond={onRespond}
-    />
-  );
+  return <TranscriptEntries entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />;
 }
 
 export function TranscriptEntries({
-  messages = [],
-  prompts = [],
-  notices = [],
-  notifications = [],
-  notificationSummaries = [],
-  subagents = [],
-  pending = false,
+  entries,
   onApprove,
   onRespond,
 }: {
-  messages?: MastraDBMessage[];
-  prompts?: PromptEntry[];
-  notices?: import('../services/chatState').NoticeEntry[];
-  notifications?: import('../services/chatState').NotificationEntry[];
-  notificationSummaries?: import('../services/chatState').NotificationSummaryEntry[];
-  subagents?: import('../services/chatState').SubagentEntry[];
-  pending?: boolean;
+  entries: TimelineEntry[];
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
-  const suspendedToolCallIds = new Set(
-    prompts.flatMap(prompt => (prompt.kind === 'suspension' ? [prompt.toolCallId] : [])),
+  const suspensions = new Map(
+    entries.flatMap(entry => (entry.kind === 'suspension' ? [[entry.toolCallId, entry] as const] : [])),
+  );
+  const canonicalToolCallIds = new Set(
+    entries.flatMap(entry =>
+      entry.kind === 'message'
+        ? entry.message.content.parts.flatMap(part =>
+            part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
+          )
+        : [],
+    ),
   );
 
   return (
     <>
-      {messages.map((message, index) => (
-        <MessageBubble
-          key={message.id}
-          entry={{
-            id: message.id,
-            message,
-            streaming: pending && index === messages.length - 1 && message.role === 'assistant',
-            steer: message.content.metadata?.delivery === 'while-active',
-          }}
-          suspendedToolCallIds={suspendedToolCallIds}
-          followsToolEntry={index > 0 && message.role === 'assistant' && messageEndsWithTool(messages[index - 1])}
-        />
-      ))}
-      {notices.map(entry => <NoticeCard key={entry.id} entry={{ ...entry, kind: 'notice' }} />)}
-      {notifications.map(entry => <NotificationCard key={entry.id} entry={{ ...entry, kind: 'notification' }} />)}
-      {notificationSummaries.map(entry => (
-        <NotificationSummaryCard key={entry.id} entry={{ ...entry, kind: 'notification_summary' }} />
-      ))}
-      {prompts.map(prompt =>
-        prompt.kind === 'approval' ? (
-          <ApprovalCard key={prompt.id} prompt={prompt} onApprove={onApprove} />
-        ) : (
-          <SuspensionCard key={prompt.id} prompt={prompt} onRespond={onRespond} />
-        ),
-      )}
-      {subagents.map(entry => <SubagentCard key={entry.id} entry={{ ...entry, kind: 'subagent' }} />)}
+      {entries.map(entry => {
+        switch (entry.kind) {
+          case 'message':
+            return <MessageBubble key={entry.id} entry={entry} suspensions={suspensions} onRespond={onRespond} />;
+          case 'notice':
+            return <NoticeCard key={entry.id} entry={entry} />;
+          case 'approval':
+            return <ApprovalCard key={entry.id} prompt={entry} onApprove={onApprove} />;
+          case 'notification':
+            return <NotificationCard key={entry.id} entry={entry} />;
+          case 'notification_summary':
+            return <NotificationSummaryCard key={entry.id} entry={entry} />;
+          case 'suspension':
+            return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
+              <SuspensionCard key={entry.id} prompt={entry} onRespond={onRespond} />
+            ) : null;
+          case 'subagent':
+            return <SubagentCard key={entry.id} entry={entry} />;
+          default:
+            return null;
+        }
+      })}
     </>
   );
 }
 
-function messageEndsWithTool(message: MastraDBMessage | undefined): boolean {
-  if (!message || message.role !== 'assistant') return false;
-  const parts = message.content.parts ?? [];
-  return parts.length > 0 && parts[parts.length - 1]?.type === 'tool-invocation';
-}
-
-function isUserSignalMessage(message: MastraDBMessage): boolean {
-  if (message.role !== 'signal') return false;
-  const metadata = message.content.metadata;
-  if (!metadata || typeof metadata !== 'object') return false;
-  const signal = 'signal' in metadata ? metadata.signal : undefined;
-  return Boolean(signal && typeof signal === 'object' && 'type' in signal && signal.type === 'user');
-}
-
 function MessageBubble({
   entry,
-  suspendedToolCallIds,
-  followsToolEntry,
+  suspensions,
+  onRespond,
 }: {
   entry: MessageEntry;
-  suspendedToolCallIds: ReadonlySet<string>;
-  followsToolEntry: boolean;
+  suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   // null = no group override; true/false = expand/collapse all in this bubble.
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
   const parts = entry.message.content.parts ?? [];
-  const isUserMessage = entry.message.role === 'user' || isUserSignalMessage(entry.message);
-  const isRenderableToolPart = (part: ToolInvocationPart) =>
-    !suspendedToolCallIds.has(part.toolInvocation.toolCallId);
-  const toolCount = parts.reduce(
-    (count, part) => (part.type === 'tool-invocation' && isRenderableToolPart(part) ? count + 1 : count),
-    0,
-  );
+  const toolCount = parts.reduce((n, part) => (part.type === 'tool-invocation' ? n + 1 : n), 0);
   const hasRenderablePart = parts.some(
     part =>
       (part.type === 'text' && part.text.trim().length > 0) ||
       (part.type === 'reasoning' && part.reasoning.trim().length > 0) ||
-      (part.type === 'tool-invocation' && isRenderableToolPart(part)) ||
+      part.type === 'tool-invocation' ||
       part.type === 'file',
   );
 
@@ -817,29 +823,12 @@ function MessageBubble({
       </div>
     ),
     System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
-    Signal: ({ children }) =>
-      isUserMessage ? (
-        <div className="flex w-full flex-col items-end">
-          <div
-            className={`max-w-[70%] break-words rounded-xl px-4 py-2 text-text1 ${
-              entry.steer ? 'bg-warning1/10' : 'bg-surface3'
-            }`}
-          >
-            {children}
-          </div>
-        </div>
-      ) : (
-        <div className="text-ui-sm text-icon3">{children}</div>
-      ),
+    Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
   };
 
   const renderers = {
     Text: (part: TextPart) => {
-      const renderedPart: unknown = part;
-      const partIndex = parts.findIndex(candidate => candidate === renderedPart);
-      const followsTool = partIndex > 0 && parts[partIndex - 1]?.type === 'tool-invocation';
-
-      if (isUserMessage) {
+      if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
         return activation ? (
           <SkillActivationCard activation={activation} />
@@ -851,7 +840,7 @@ function MessageBubble({
       }
 
       return (
-        <div className={`prose ${followsToolEntry ? 'mt-4' : followsTool ? 'mt-3' : ''}`}>
+        <div className="prose">
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
@@ -865,17 +854,23 @@ function MessageBubble({
       </div>
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
-      if (!isRenderableToolPart(part)) return null;
-      const tool = toolFromInvocationPart(part);
-      const groupPosition = toolGroupPositions.get(part.toolInvocation.toolCallId);
+      const runtime = entry.runtimeTools?.[part.toolInvocation.toolCallId];
+      const tool = toolFromInvocationPart(part, runtime);
+      const suspension = suspensions.get(tool.toolCallId);
+      const groupPosition = toolGroupPositions.get(tool.toolCallId);
       return (
         <ToolFactory
           toolName={tool.toolName}
           toolCallId={tool.toolCallId}
-          input={tool.args}
+          input={suspension?.suspendPayload ?? tool.args}
           output={tool.result}
-          status={tool.status}
-          fallback={() => <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />}
+          status={suspension ? 'running' : tool.status}
+          onRespond={
+            suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined
+          }
+          fallback={() => (
+            <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />
+          )}
         />
       );
     },
@@ -919,18 +914,18 @@ function FileAttachment({ part }: { part: FilePart }) {
   return <pre className={resultBlock}>{stringify(part)}</pre>;
 }
 
-function toolFromInvocationPart(part: ToolInvocationPart): ToolCall {
+function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {
   const invocation = part.toolInvocation;
   const failed = invocation.state === 'output-error' || invocation.state === 'output-denied';
   const persistedResult = 'result' in invocation ? invocation.result : undefined;
   return {
     toolCallId: invocation.toolCallId,
     toolName: invocation.toolName,
-    argsText: '',
-    args: 'args' in invocation ? invocation.args : undefined,
-    status: failed ? 'error' : invocation.state === 'result' ? 'done' : 'running',
-    result: persistedResult ?? invocation.errorText,
-    output: '',
+    argsText: runtime?.argsText ?? '',
+    args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
+    status: runtime?.status ?? (failed ? 'error' : invocation.state === 'result' ? 'done' : 'running'),
+    result: runtime?.result ?? persistedResult ?? invocation.errorText,
+    output: runtime?.output ?? '',
   };
 }
 
