@@ -7,6 +7,7 @@
  * fetch transport with MSW at the network boundary.
  */
 import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@mastra/client-js';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -17,7 +18,6 @@ import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/Ch
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
-import { ToastProvider } from '../../../../ui';
 import type { Factory } from '../../../workspaces';
 import { ActiveFactoryProvider } from '../../../workspaces';
 import { ThreadList } from '../ThreadList';
@@ -168,17 +168,16 @@ function LocationProbe() {
 function renderThreadList() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/chat']}>
-      <ToastProvider>
-        <ActiveFactoryProvider>
-          <ChatSessionProvider>
-            <OverlaysProvider>
-              <ThreadList />
-              <SidebarOverlayProbe />
-              <LocationProbe />
-            </OverlaysProvider>
-          </ChatSessionProvider>
-        </ActiveFactoryProvider>
-      </ToastProvider>
+      <ActiveFactoryProvider>
+        <ChatSessionProvider>
+          <OverlaysProvider>
+            <ThreadList />
+            <SidebarOverlayProbe />
+            <LocationProbe />
+          </OverlaysProvider>
+        </ChatSessionProvider>
+      </ActiveFactoryProvider>
+      <Toaster position="bottom-right" />
     </MemoryRouter>,
   );
 }

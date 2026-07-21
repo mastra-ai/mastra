@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -10,7 +11,6 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useToast } from '../../../ui/toast';
 import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { userSessionResourceId } from '../../auth/services/auth';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
@@ -58,7 +58,6 @@ export function UserSessionsSection() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
@@ -172,7 +171,7 @@ export function UserSessionsSection() {
     },
     onError: error => {
       setConfirmDelete(null);
-      toast(error instanceof Error ? error.message : 'Failed to delete session', 'error');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete session');
     },
   });
 
@@ -196,7 +195,7 @@ export function UserSessionsSection() {
       invalidate();
       void navigate(`/user/threads/${thread.id}`);
     } catch (error) {
-      toast(error instanceof Error ? error.message : 'Failed to open session', 'error');
+      toast.error(error instanceof Error ? error.message : 'Failed to open session');
     }
   };
 
