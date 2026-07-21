@@ -14,11 +14,7 @@ interface AgentControllerThreadMutationArgs {
   enabled?: boolean;
 }
 
-function useThreadMutationInvalidation({
-  agentControllerId,
-  resourceId,
-  scope,
-}: AgentControllerThreadMutationArgs) {
+function useThreadMutationInvalidation({ agentControllerId, resourceId, scope }: AgentControllerThreadMutationArgs) {
   const queryClient = useQueryClient();
   return () =>
     queryClient.invalidateQueries({
@@ -80,10 +76,7 @@ export function useSwitchAgentControllerThreadMutation(args: AgentControllerThre
       return requireAgentControllerSession(session).state();
     },
     onSuccess: state => {
-      queryClient.setQueryData(
-        queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope),
-        state,
-      );
+      queryClient.setQueryData(queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope), state);
     },
   });
 }

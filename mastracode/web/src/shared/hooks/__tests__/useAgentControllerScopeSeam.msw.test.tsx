@@ -154,8 +154,6 @@ describe('agent-controller hook seam forwards session scope on the wire', () => 
     await waitFor(() => expect(result.current.list.data).toEqual([]));
     await act(async () => result.current.create.mutateAsync('x'));
     await waitForMutationsIdle(client);
-    await waitFor(() =>
-      expect(result.current.list.data?.map(t => t.id)).toEqual(['thread-created']),
-    );
+    await waitFor(() => expect(result.current.list.data?.map(t => t.id)).toEqual(['thread-created']));
   });
 });

@@ -37,11 +37,7 @@ export function useAgentControllerSessionInit({
   });
 
   return useQuery({
-    queryKey: [
-      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, scope),
-      'init',
-      projectState,
-    ],
+    queryKey: [...queryKeys.agentControllerConnection(agentControllerId, resourceId, scope), 'init', projectState],
     queryFn: async () => {
       const activeSession = requireAgentControllerSession(session);
       const created = await activeSession.create({ tags: scope ? { projectPath: scope } : undefined });

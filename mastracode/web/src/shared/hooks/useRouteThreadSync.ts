@@ -82,8 +82,7 @@ export function useRouteThreadSync() {
   });
 
   useEffect(() => {
-    const sessionKeyChanged =
-      previousSessionKey.current !== undefined && previousSessionKey.current !== sessionKey;
+    const sessionKeyChanged = previousSessionKey.current !== undefined && previousSessionKey.current !== sessionKey;
     previousSessionKey.current = sessionKey;
     latestRouteThreadId.current = routeThreadId;
     if (!routeThreadId || status !== 'ready' || !threadsQuery.isSuccess) return;
