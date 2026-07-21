@@ -1,13 +1,14 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { CreateLLMProvider } from './command';
 import { adaptDefaultTemplate, MANAGED_PROVIDER_CONFIGS } from './provider-adapter';
 
-const templatePath = path.resolve('../../templates/template-agent-harness');
+const templatePath = fileURLToPath(new URL('../../../../../templates/template-agent-harness', import.meta.url));
 const temporaryDirectories: string[] = [];
 
 async function createFixture(): Promise<string> {
