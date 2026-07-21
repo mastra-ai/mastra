@@ -19,12 +19,7 @@ export const FACTORY_GITHUB_EVENTS = [
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | FactoryRuleJsonValue[]
-  | { [key: string]: FactoryRuleJsonValue };
+  null | boolean | number | string | FactoryRuleJsonValue[] | { [key: string]: FactoryRuleJsonValue };
 
 export interface FactoryRuleItemContext {
   id: string;

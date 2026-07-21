@@ -158,8 +158,30 @@ describe('FactoryStartCoordinator', () => {
     const prepared = await coordinator.prepare(startRequest({ kickoffMessage: null }));
 
     expect(prepared.threadId).toBe('thread-new');
+    expect(session.thread.list).toHaveBeenCalledWith({ metadata: { projectPath: '/worktrees/issue-1' } });
     expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-new' });
     expect(session.thread.create).not.toHaveBeenCalled();
+  });
+
+  it('reuses one work-item thread across roles and converges every session ref', async () => {
+    const storage = (await seedFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    const coordinator = new FactoryStartCoordinator(controller as never, storage);
+
+    const triage = await coordinator.prepare(
+      startRequest({ role: 'triage', kickoffKey: 'triage-1', kickoffMessage: null }),
+    );
+    const plan = await coordinator.prepare(
+      startRequest({ id: triage.workItemId, role: 'plan', kickoffKey: 'plan-1', kickoffMessage: null }),
+    );
+
+    expect(plan.threadId).toBe(triage.threadId);
+    expect(session.thread.create).toHaveBeenCalledTimes(1);
+    expect(session.thread.switch).toHaveBeenCalledWith({ threadId: triage.threadId });
+    expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'factoryWorkItemId', value: triage.workItemId });
+    const item = await storage.get({ orgId: 'org-1', id: triage.workItemId });
+    expect(item?.sessions.triage?.threadId).toBe(triage.threadId);
+    expect(item?.sessions.plan?.threadId).toBe(triage.threadId);
   });
 
   it('keeps the bound pending start recoverable and sends nothing when the governed transition rejects', async () => {

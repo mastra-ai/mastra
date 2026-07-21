@@ -73,17 +73,25 @@ function createScopedSession(
   });
 }
 
-async function resolveThread(session: ScopedSession, request: FactoryStartRequest): Promise<string> {
-  const tags = {
+async function resolveThread(
+  session: ScopedSession,
+  request: FactoryStartRequest,
+  existingThreadId?: string,
+): Promise<string> {
+  const identityTags = {
     projectPath: request.projectPath,
-    factoryWorkItemRole: request.workItem.role,
-    ...(request.threadTags ?? {}),
+    ...(request.workItem.id ? { factoryWorkItemId: request.workItem.id } : {}),
   };
-  const matching = await session.thread.list({ metadata: tags });
-  const thread = [...matching].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
-  if (thread) await session.thread.switch({ threadId: thread.id });
-  else await session.thread.create({ title: request.threadTitle });
-  await Promise.all(Object.entries(tags).map(([key, value]) => session.thread.setSetting({ key, value })));
+  if (existingThreadId) {
+    await session.thread.switch({ threadId: existingThreadId });
+  } else {
+    const matching = await session.thread.list({ metadata: identityTags });
+    const thread = [...matching].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+    if (thread) await session.thread.switch({ threadId: thread.id });
+    else await session.thread.create({ title: request.threadTitle });
+  }
+  const settings = { ...(request.threadTags ?? {}), ...identityTags };
+  await Promise.all(Object.entries(settings).map(([key, value]) => session.thread.setSetting({ key, value })));
   return session.thread.requireId();
 }
 
@@ -103,9 +111,13 @@ export class FactoryStartCoordinator {
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
-    const session = await createScopedSession(this.#controller, request);
-    const threadId = await resolveThread(session, request);
     const storage = this.#storage ?? getFactoryStorage().getDomain<WorkItemsStorage>('work-items');
+    const existingItem = request.workItem.id
+      ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
+      : null;
+    const existingThreadId = existingItem ? Object.values(existingItem.sessions).at(-1)?.threadId : undefined;
+    const session = await createScopedSession(this.#controller, request);
+    const threadId = await resolveThread(session, request, existingThreadId);
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,
       userId: request.userId,
@@ -117,6 +129,7 @@ export class FactoryStartCoordinator {
       kickoffKey: request.kickoffKey,
       kickoffMessage: request.kickoffMessage,
     });
+    await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 
     let revision = prepared.item.revision;
     if (prepared.item.stages.length !== 1 || prepared.item.stages[0] !== request.destinationStage) {

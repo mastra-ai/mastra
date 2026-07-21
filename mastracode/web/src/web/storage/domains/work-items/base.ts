@@ -797,13 +797,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             : null;
         let item: WorkItemRow;
         if (row) {
-          row = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current =>
-            applyUpdate({
-              current,
-              userId: input.userId,
-              input: { sessions: { [input.role]: input.session } },
-            }),
-          );
+          row = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
+            const roles = new Set([...Object.keys(current.sessions), input.role]);
+            const sessions = Object.fromEntries([...roles].map(role => [role, input.session]));
+            return applyUpdate({ current, userId: input.userId, input: { sessions } });
+          });
           item = toRow(row!);
         } else {
           if (create.parentWorkItemId)
