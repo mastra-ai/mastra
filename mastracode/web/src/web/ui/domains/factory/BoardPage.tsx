@@ -809,7 +809,7 @@ function WorkItemCard({
   onRemove: () => void;
 }) {
   const projectRoute = useProjectRoute();
-  const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source];
+  const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source] ?? SOURCE_ICONS.manual;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   // Session refs whose worktree was deleted are stale: their threads went with
