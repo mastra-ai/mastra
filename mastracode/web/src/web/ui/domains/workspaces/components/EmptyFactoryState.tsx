@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 /** Factory onboarding shown when no factory is active yet. */
 export function EmptyFactoryState({ onOpenFactories }: { onOpenFactories: () => void }) {
   return (
-    <div className="m-auto flex max-w-md flex-col items-center gap-3 px-6 text-center h-screen justify-center">
+    <div className="m-auto flex h-full max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
       <Txt as="h2" variant="header-md" className="text-icon6">
         Welcome to MastraCode
       </Txt>

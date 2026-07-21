@@ -53,7 +53,10 @@ function ChatShell() {
   const { factories, factoriesPending } = useActiveFactoryContext();
   const { isMobile } = useMainSidebar();
   const factorySetupRequired = factories.length === 0 && !factoriesPending;
-  const factoriesOpen = overlays.isOpen('factories') || factorySetupRequired;
+  // First run shows the welcome empty state; the panel opens from its call to
+  // action (or the switcher) rather than being forced open, but stays
+  // non-dismissable until a first factory exists.
+  const factoriesOpen = overlays.isOpen('factories');
 
   const closeFactories = () => {
     overlays.close('factories');

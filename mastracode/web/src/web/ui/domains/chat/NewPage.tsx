@@ -6,6 +6,7 @@ import { useLocation } from 'react-router';
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui/ChatLayout';
+import { PageLayout } from '../../ui/PageLayout';
 import { FolderIcon } from '../../ui/icons';
 import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
@@ -26,7 +27,13 @@ export function NewPage() {
   const { activeFactory } = useActiveFactoryContext();
 
   if (!activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+    // Inside the app layout so the Create Factory panel (layout main view) can
+    // open from the empty state's call to action.
+    return (
+      <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
+        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+      </PageLayout>
+    );
   }
 
   return (

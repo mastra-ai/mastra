@@ -36,7 +36,13 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
 
   if (!activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+    // Inside the app layout so the Create Factory panel (layout main view) can
+    // open from the empty state's call to action.
+    return (
+      <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
+        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+      </PageLayout>
+    );
   }
 
   return (

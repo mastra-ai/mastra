@@ -162,7 +162,7 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
-  it('given no factory, when visiting /new, then the create factory panel is shown', async () => {
+  it('given no factory, when visiting /new, then factory onboarding leads to the create factory panel', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
         HttpResponse.json({
@@ -176,6 +176,11 @@ describe('MastraCode web routing', () => {
 
     renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
 
+    // First run renders the onboarding empty state instead of the chat layout.
+    expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
+
+    // Its call to action surfaces the Create Factory panel.
+    await userEvent.click(screen.getByRole('button', { name: 'Create factory from local folder' }));
     const panel = await screen.findByRole('region', { name: 'Create Factory' });
     expect(within(panel).getByLabelText('Factory name')).toBeInTheDocument();
   });

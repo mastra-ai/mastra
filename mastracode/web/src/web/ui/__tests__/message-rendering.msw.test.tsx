@@ -519,12 +519,18 @@ describe('MastraCode message rendering', () => {
     expect(streamRequests).toHaveBeenCalledTimes(1);
   });
 
-  it('shows required first-run Factory creation in the layout after empty backend hydration', async () => {
+  it('leads from the first-run welcome state to non-dismissable Factory creation in the layout', async () => {
     useAgentControllerHandlers();
     server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
 
     renderChat();
 
+    // First run shows the welcome empty state inside the app layout.
+    expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
+
+    // Its call to action opens Factory creation as the layout main view; with
+    // zero factories it cannot be dismissed.
+    await userEvent.click(screen.getByRole('button', { name: 'Create factory from local folder' }));
     const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
     expect(factorySurface.closest('main')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
