@@ -7,7 +7,6 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasetReviewItems } from '../use-dataset-review-items';
 import {
   DATASET_ID,
@@ -17,6 +16,7 @@ import {
   resultsResponse,
   updatedResultResponse,
 } from './fixtures/dataset-review-items';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
