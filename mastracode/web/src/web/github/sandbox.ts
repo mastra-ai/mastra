@@ -20,7 +20,10 @@
 import { createHash } from 'node:crypto';
 import { ensureSandbox, reportProgress, teardownSandbox } from '../sandbox/fleet';
 import type { MaterializationSandbox, ProgressFn, SandboxBindingStore, SandboxCommandResult } from '../sandbox/fleet';
-import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import type {
+  ProjectRepositorySandbox,
+  SourceControlStorageHandle,
+} from '@mastra/factory/storage/domains/source-control/base';
 
 type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
 

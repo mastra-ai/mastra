@@ -1,20 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { __resetRuntimeConfigForTests } from '../../../runtime-config';
-import { seedFactoryStorageForTests } from '../../test-utils';
-
-let closeStorage: (() => Promise<void>) | undefined;
-
-afterEach(async () => {
-  __resetRuntimeConfigForTests();
-  await closeStorage?.();
-  closeStorage = undefined;
-});
+import { createFactoryStorageForTests } from '../../test-utils';
 
 describe('ModelPacksStorage', () => {
   it('creates an org-owned pack and scopes reads to the organization', async () => {
-    const seed = await seedFactoryStorageForTests();
-    closeStorage = () => seed.storage.close();
+    const seed = await createFactoryStorageForTests();
 
     const pack = await seed.modelPacks.upsert({
       orgId: 'org-1',
@@ -45,8 +35,7 @@ describe('ModelPacksStorage', () => {
   });
 
   it('upserts by (org, name) instead of duplicating packs', async () => {
-    const seed = await seedFactoryStorageForTests();
-    closeStorage = () => seed.storage.close();
+    const seed = await createFactoryStorageForTests();
 
     const first = await seed.modelPacks.upsert({
       orgId: 'org-1',
@@ -82,8 +71,7 @@ describe('ModelPacksStorage', () => {
   });
 
   it('lists packs alphabetically and deletes only within the org', async () => {
-    const seed = await seedFactoryStorageForTests();
-    closeStorage = () => seed.storage.close();
+    const seed = await createFactoryStorageForTests();
 
     const models = { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6', fast: 'openai/gpt-5.4-mini' };
     await seed.modelPacks.upsert({ orgId: 'org-1', userId: 'user-1', input: { name: 'Zeta', models } });

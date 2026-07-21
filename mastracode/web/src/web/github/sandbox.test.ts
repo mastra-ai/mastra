@@ -22,7 +22,10 @@ import {
   WorktreeError,
 } from './sandbox';
 import type { RepoMaterializeInfo } from './sandbox';
-import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import type {
+  ProjectRepositorySandbox,
+  SourceControlStorageHandle,
+} from '@mastra/factory/storage/domains/source-control/base';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
 

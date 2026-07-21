@@ -4,7 +4,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
-import type { AuditEventRow } from '../storage/domains/audit/base';
+import type { AuditEventRow } from '@mastra/factory/storage/domains/audit/base';
 import type { FactoryIntegration } from '../factory-integration';
 
 type WorkOSClient = ConstructorParameters<typeof WorkOSAdminPortal>[0];

@@ -38,8 +38,8 @@ import type { OAuthCredentials } from '@mastra/code-sdk/auth/types';
 import { getAuthProviderId, resolveCredentialContext, WEB_OAUTH_FLOW_KINDS } from './provider-credentials.js';
 import type { CredentialContext } from './provider-credentials.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
-import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
-import type { LoginSessionKind, LoginSessionRow } from './storage/domains/credentials/base.js';
+import { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
+import type { LoginSessionKind, LoginSessionRow } from '@mastra/factory/storage/domains/credentials/base';
 
 /** Lifetime of a paste-code session (Anthropic gives no explicit expiry). */
 const PASTE_CODE_TTL_MS = 10 * 60 * 1000;
@@ -235,15 +235,21 @@ async function readJsonBody(c: Context): Promise<Record<string, unknown>> {
  *   - `DELETE /web/config/providers/:provider/oauth/session/:sessionId` — cancel a flow
  *   - `DELETE /web/config/providers/:provider/oauth`                    — sign out (caller only)
  */
-export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): ApiRoute[] {
-  const { authStorage } = options;
+export function buildOAuthRoutes(
+  options: {
+    authStorage?: AuthStorage;
+    /** Tenant credential domain handle; absent in local (no-DB) mode. */
+    modelCredentials?: ModelCredentialsStorage;
+  } = {},
+): ApiRoute[] {
+  const { authStorage, modelCredentials } = options;
 
   return [
     registerApiRoute('/web/config/providers/:provider/oauth/start', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c));
+        const ctx = await resolveCredentialContext(loose(c), modelCredentials);
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');
@@ -296,7 +302,7 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c));
+        const ctx = await resolveCredentialContext(loose(c), modelCredentials);
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');
@@ -340,7 +346,7 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c));
+        const ctx = await resolveCredentialContext(loose(c), modelCredentials);
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');
@@ -406,7 +412,7 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c));
+        const ctx = await resolveCredentialContext(loose(c), modelCredentials);
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');
@@ -421,7 +427,7 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c));
+        const ctx = await resolveCredentialContext(loose(c), modelCredentials);
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');

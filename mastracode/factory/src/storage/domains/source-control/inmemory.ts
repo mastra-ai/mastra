@@ -14,7 +14,7 @@ import type {
   UpsertSourceControlInstallationInput,
   UpsertSourceControlRepositoryInput,
   UpsertSourceControlWorktreeInput,
-} from './base';
+} from './base.js';
 
 /** In-memory provider-scoped source-control handle for route tests. */
 export class SourceControlStorageInMemory implements SourceControlStorageHandle {

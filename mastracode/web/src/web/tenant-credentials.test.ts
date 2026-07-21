@@ -58,7 +58,7 @@ describe('TenantCredentialStore', () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
     await seed.credentials.setCredential(ORG_TENANT, 'google', { type: 'api_key', key: 'org-google' });
 
-    const store = new TenantCredentialStore(ORG, USER);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials);
     await store.ensureFresh();
 
     expect(store.getStoredApiKey('openai')).toBe('user-key');
@@ -69,7 +69,7 @@ describe('TenantCredentialStore', () => {
 
   it('getApiKey resolves api keys with user > org precedence', async () => {
     await seed.credentials.setCredential(ORG_TENANT, 'openai', { type: 'api_key', key: 'org-key' });
-    const store = new TenantCredentialStore(ORG, USER);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials);
     await expect(store.getApiKey('openai')).resolves.toBe('org-key');
 
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
@@ -77,13 +77,13 @@ describe('TenantCredentialStore', () => {
   });
 
   it('getApiKey returns undefined when no credential is stored (env fallback stays with the gateway)', async () => {
-    const store = new TenantCredentialStore(ORG, USER);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials);
     await expect(store.getApiKey('openai')).resolves.toBeUndefined();
   });
 
   it('getApiKey serves non-expired OAuth tokens without refreshing', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'anthropic', FRESH_OAUTH);
-    const store = new TenantCredentialStore(ORG, USER);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials);
 
     await expect(store.getApiKey('anthropic')).resolves.toBe('a-1');
     expect(refreshToken).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('TenantCredentialStore', () => {
     const refreshed = { refresh: 'r-new', access: 'a-new', expires: Date.now() + 3_600_000 };
     refreshToken.mockResolvedValue(refreshed);
 
-    const store = new TenantCredentialStore(ORG, USER);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials);
     await expect(store.getApiKey('anthropic')).resolves.toBe('a-new');
     expect(refreshToken).toHaveBeenCalledWith(expect.objectContaining({ refresh: 'r-old' }));
 
@@ -109,20 +109,20 @@ describe('TenantCredentialStore', () => {
     await seed.credentials.setCredential(USER_TENANT, 'anthropic', EXPIRED_OAUTH);
     refreshToken.mockRejectedValue(new Error('invalid_grant'));
 
-    const store = new TenantCredentialStore(ORG, USER);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials);
     await expect(store.getApiKey('anthropic')).resolves.toBeUndefined();
   });
 
   it('getApiKey returns undefined for OAuth credentials of providers without a registered flow', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'unknown-provider', FRESH_OAUTH);
-    const store = new TenantCredentialStore(ORG, USER);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials);
     await expect(store.getApiKey('unknown-provider')).resolves.toBeUndefined();
   });
 
   it('isolates tenants: user B never sees user A credentials', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-a-key' });
 
-    const storeB = new TenantCredentialStore(ORG, 'user-b');
+    const storeB = new TenantCredentialStore(ORG, 'user-b', seed.credentials);
     await storeB.ensureFresh();
     expect(storeB.getStoredApiKey('openai')).toBeUndefined();
     await expect(storeB.getApiKey('openai')).resolves.toBeUndefined();
@@ -130,7 +130,7 @@ describe('TenantCredentialStore', () => {
 
   it('drops removed credentials from the snapshot on authoritative reads', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
-    const store = new TenantCredentialStore(ORG, USER);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials);
     await store.ensureFresh();
     expect(store.getStoredApiKey('openai')).toBe('user-key');
 
@@ -143,7 +143,7 @@ describe('TenantCredentialStore', () => {
 describe('registerTenantCredentialResolver', () => {
   it('wires the SDK resolver to tenant stores derived from the request context', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
-    registerTenantCredentialResolver();
+    registerTenantCredentialResolver(seed.credentials);
 
     const requestContext = new RequestContext();
     requestContext.set('user', { workosId: USER, organizationId: ORG });
@@ -154,14 +154,14 @@ describe('registerTenantCredentialResolver', () => {
   });
 
   it('returns the same store instance per tenant (snapshot reuse)', () => {
-    registerTenantCredentialResolver();
+    registerTenantCredentialResolver(seed.credentials);
     const ctx = new RequestContext();
     ctx.set('user', { workosId: USER, organizationId: ORG });
     expect(resolveCredentialStore(ctx)).toBe(resolveCredentialStore(ctx));
   });
 
   it('scopes personal accounts (no org) under a synthetic per-user org', async () => {
-    registerTenantCredentialResolver();
+    registerTenantCredentialResolver(seed.credentials);
     const ctx = new RequestContext();
     ctx.set('user', { workosId: USER });
 
@@ -173,7 +173,7 @@ describe('registerTenantCredentialResolver', () => {
   });
 
   it('fails closed without an authenticated tenant', async () => {
-    registerTenantCredentialResolver();
+    registerTenantCredentialResolver(seed.credentials);
     const withoutContext = resolveCredentialStore(undefined);
     const emptyContext = resolveCredentialStore(new RequestContext());
 
@@ -183,7 +183,7 @@ describe('registerTenantCredentialResolver', () => {
   });
 
   it('clears registration on reset (local fallback restored)', () => {
-    registerTenantCredentialResolver();
+    registerTenantCredentialResolver(seed.credentials);
     resetTenantCredentialResolverForTests();
     setCredentialStoreProvider(undefined);
     const ctx = new RequestContext();
@@ -199,14 +199,14 @@ describe('createTenantCredentialPrimer', () => {
       if (user) c.set('webAuthUser' as never, user as never);
       await next();
     });
-    app.use('*', createTenantCredentialPrimer());
+    app.use('*', createTenantCredentialPrimer(seed.credentials));
     app.get('/ok', c => c.text('ok'));
     return app;
   }
 
   it('primes the caller snapshot so the first model call sees tenant credentials', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
-    registerTenantCredentialResolver();
+    registerTenantCredentialResolver(seed.credentials);
 
     const res = await buildApp({ workosId: USER, organizationId: ORG }).request('/ok');
     expect(res.status).toBe(200);

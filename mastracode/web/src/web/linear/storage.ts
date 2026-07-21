@@ -13,8 +13,10 @@
  * only). Tokens are stored server-side only and rewritten on every refresh.
  */
 
-import { getIntegrationStorage } from '../storage/domains';
-import type { IntegrationStorageHandle } from '../storage/domains/integrations/base';
+import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
+
+/** Linear's slice of the generic integration storage domain. */
+export type LinearStorageHandle = IntegrationStorageHandle<LinearConnectionData>;
 
 /**
  * JSON payload stored in the connection's `data` column. JSON can't hold
@@ -74,13 +76,12 @@ export interface LinearTokenUpdate {
   scope: string | null;
 }
 
-function store(): IntegrationStorageHandle<LinearConnectionData> {
-  return getIntegrationStorage().forIntegration<LinearConnectionData>('linear');
-}
-
 /** The org's connection, or null when Linear has not been connected. */
-export async function getLinearConnection(orgId: string): Promise<LinearConnectionRow | null> {
-  const connection = await store().connections.get(orgId);
+export async function getLinearConnection(
+  storage: LinearStorageHandle,
+  orgId: string,
+): Promise<LinearConnectionRow | null> {
+  const connection = await storage.connections.get(orgId);
   if (!connection) return null;
   const { data } = connection;
   return {
@@ -99,8 +100,11 @@ export async function getLinearConnection(orgId: string): Promise<LinearConnecti
 }
 
 /** Insert or replace the org's connection (one per org). */
-export async function upsertLinearConnection(input: UpsertLinearConnectionInput): Promise<void> {
-  await store().connections.upsert(input.orgId, {
+export async function upsertLinearConnection(
+  storage: LinearStorageHandle,
+  input: UpsertLinearConnectionInput,
+): Promise<void> {
+  await storage.connections.upsert(input.orgId, {
     userId: input.userId,
     data: {
       accessToken: input.accessToken,
@@ -114,8 +118,12 @@ export async function upsertLinearConnection(input: UpsertLinearConnectionInput)
 }
 
 /** Persist a rotated token set on the org's existing connection row. */
-export async function updateLinearTokens(orgId: string, tokens: LinearTokenUpdate): Promise<void> {
-  await store().connections.update(orgId, data => ({
+export async function updateLinearTokens(
+  storage: LinearStorageHandle,
+  orgId: string,
+  tokens: LinearTokenUpdate,
+): Promise<void> {
+  await storage.connections.update(orgId, data => ({
     ...data,
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,

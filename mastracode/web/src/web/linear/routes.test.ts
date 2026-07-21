@@ -44,9 +44,13 @@ const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _so
 
 // Stub integration instance: real DI through `MountLinearRoutesOptions.linear`
 // instead of module mocking — mirrors how the factory hands the instance to
-// `buildLinearRoutes` in production.
+// `buildLinearRoutes` in production. `storage` resolves lazily against the
+// per-test seed the same way `initialize()` binds it in production.
 const linearStub = {
   id: 'linear',
+  get storage() {
+    return linearStorage();
+  },
   buildAuthorizeUrl: (state: string, redirectUri: string) =>
     `https://linear.app/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
   exchangeOAuthCode: (...args: any[]) => exchangeLinearOAuthCode(...(args as [])),
@@ -98,9 +102,16 @@ vi.mock('../auth', async () => {
 
 import { mountApiRoutes } from '../test-utils';
 import { __resetRuntimeConfigForTests } from '../runtime-config';
-import { seedFactoryStorageForTests } from '../storage/test-utils';
+import { seedFactoryStorageForTests, type FactoryStorageTestSeed } from '../storage/test-utils';
 import { buildLinearRoutes } from './routes';
-import { getLinearConnection, upsertLinearConnection } from './storage';
+import { getLinearConnection, upsertLinearConnection, type LinearStorageHandle } from './storage';
+
+let seed!: FactoryStorageTestSeed;
+
+/** Linear's slice of the seeded integration storage domain (per-test). */
+function linearStorage(): LinearStorageHandle {
+  return seed.integrations.forIntegration('linear') as unknown as LinearStorageHandle;
+}
 
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
@@ -117,13 +128,18 @@ function buildApp(
   });
   mountApiRoutes(
     app as any,
-    buildLinearRoutes({ baseUrl: 'http://localhost:4111', linear: linearStub, stateSigner: signer ?? undefined }),
+    buildLinearRoutes({
+      baseUrl: 'http://localhost:4111',
+      linear: linearStub,
+      stateSigner: signer ?? undefined,
+      intake: seed.intake,
+    }),
   );
   return app;
 }
 
 const connect = (overrides: Record<string, any> = {}) =>
-  upsertLinearConnection({
+  upsertLinearConnection(linearStorage(), {
     orgId: 'org1',
     userId: 'u1',
     accessToken: 'linear-token',
@@ -137,7 +153,7 @@ const connect = (overrides: Record<string, any> = {}) =>
   });
 
 beforeEach(async () => {
-  await seedFactoryStorageForTests();
+  seed = await seedFactoryStorageForTests();
   featureEnabled = true;
   cookieUser = null;
   getIntakeConfig.mockClear();
@@ -214,7 +230,7 @@ describe('callback route', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/?linear=connected');
     expect(exchangeLinearOAuthCode).toHaveBeenCalledWith('abc', 'http://localhost:4111/auth/linear/callback');
-    expect(await getLinearConnection('org1')).toMatchObject({
+    expect(await getLinearConnection(linearStorage(), 'org1')).toMatchObject({
       orgId: 'org1',
       accessToken: 'linear-token',
       refreshToken: 'linear-refresh',
@@ -228,15 +244,15 @@ describe('callback route', () => {
     fetchLinearWorkspace.mockResolvedValueOnce({ name: 'Other', urlKey: 'other' });
     cookieUser = { workosId: 'u1' };
     await buildApp(null).request('/auth/linear/callback?code=abc&state=state.org1.u1');
-    expect(await getLinearConnection('org1')).toMatchObject({ workspaceName: 'Other' });
+    expect(await getLinearConnection(linearStorage(), 'org1')).toMatchObject({ workspaceName: 'Other' });
   });
 
   it('rejects a state minted for another tenant', async () => {
     cookieUser = { workosId: 'u1' };
     const res = await buildApp(null).request('/auth/linear/callback?code=abc&state=state.org2.u9');
     expect(res.headers.get('location')).toBe('/?linear=error');
-    expect(await getLinearConnection('org1')).toBeNull();
-    expect(await getLinearConnection('org2')).toBeNull();
+    expect(await getLinearConnection(linearStorage(), 'org1')).toBeNull();
+    expect(await getLinearConnection(linearStorage(), 'org2')).toBeNull();
   });
 
   it('redirects to the error page when consent is denied (no code)', async () => {
@@ -334,7 +350,7 @@ describe('issues route', () => {
     expect(res.status).toBe(200);
     expect(refreshLinearAccessToken).toHaveBeenCalledWith('linear-refresh');
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token-2', undefined, ['proj-1']);
-    expect(await getLinearConnection('org1')).toMatchObject({
+    expect(await getLinearConnection(linearStorage(), 'org1')).toMatchObject({
       accessToken: 'linear-token-2',
       refreshToken: 'linear-refresh-2',
       expiresAt: new Date('2026-07-15T00:00:00Z'),

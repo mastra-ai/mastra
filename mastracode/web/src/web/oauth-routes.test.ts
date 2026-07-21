@@ -56,13 +56,16 @@ function makeAuthStorage() {
 let authStorage: ReturnType<typeof makeAuthStorage>;
 let seed: FactoryStorageTestSeed;
 
-function buildApp(user: { workosId: string; organizationId?: string } | null) {
+function buildApp(user: { workosId: string; organizationId?: string } | null, opts?: { noCredentials?: boolean }) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildOAuthRoutes({ authStorage }));
+  mountApiRoutes(
+    app as any,
+    buildOAuthRoutes({ authStorage, modelCredentials: opts?.noCredentials ? undefined : seed.credentials }),
+  );
   return app;
 }
 
@@ -343,7 +346,7 @@ describe('gating', () => {
     seedRuntimeConfig({
       authProvider: { name: 'test', authenticateToken: async () => null } as unknown as IMastraAuthProvider,
     });
-    const res = await post(buildApp(userA), '/web/config/providers/anthropic/oauth/start');
+    const res = await post(buildApp(userA, { noCredentials: true }), '/web/config/providers/anthropic/oauth/start');
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe('credentials_unavailable');
   });

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
+import { SourceControlStorageInMemory } from '@mastra/factory/storage/domains/source-control/inmemory';
 
 // ── Scenario tests (S1, S2) ──────────────────────────────────────────────
 // These exercise the *composition* of the real Phase 4 git route handlers

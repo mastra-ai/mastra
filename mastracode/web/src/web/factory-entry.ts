@@ -34,16 +34,16 @@ import { getFactoryWorkspace } from './factory/workspace.js';
 import { ProjectDomain } from './projects/domain.js';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { seedRuntimeConfig } from './runtime-config.js';
-import { AuditStorage } from './storage/domains/audit/base.js';
-import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
-import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
+import { AuditStorage } from '@mastra/factory/storage/domains/audit/base';
+import { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
+import { ModelPacksStorage } from '@mastra/factory/storage/domains/model-packs/base';
 import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './tenant-credentials.js';
-import { IntakeStorage } from './storage/domains/intake/base.js';
-import { IntegrationStorage } from './storage/domains/integrations/base.js';
-import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
-import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
-import { SourceControlStorage } from './storage/domains/source-control/base.js';
-import { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
+import { IntegrationStorage } from '@mastra/factory/storage/domains/integrations/base';
+import { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
+import { QueueHealthStorage } from '@mastra/factory/storage/domains/queue-health/base';
+import { SourceControlStorage } from '@mastra/factory/storage/domains/source-control/base';
+import { WorkItemsStorage } from '@mastra/factory/storage/domains/work-items/base';
 import { handleServerError } from './server-error.js';
 import { createStateSigner } from './state-signing.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
@@ -206,17 +206,27 @@ export class MastraFactory {
     }
     // FactoryStorage owns every app-table domain and initializes them through
     // the same lifecycle as the backend connection.
-    storage.registerDomain(new IntakeStorage());
+    const intakeStorage = storage.registerDomain(new IntakeStorage());
     storage.registerDomain(new AuditStorage());
-    storage.registerDomain(new WorkItemsStorage());
-    storage.registerDomain(new ModelCredentialsStorage());
-    storage.registerDomain(new ModelPacksStorage());
-    storage.registerDomain(new QueueHealthStorage());
+    const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
+    const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage());
+    const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
+    const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage());
-    storage.registerDomain(new FactoryProjectsStorage());
+    const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
+    // Every app-table domain handle the route builders and integrations need,
+    // threaded explicitly (no service locator).
+    const domains = {
+      intake: intakeStorage,
+      modelCredentials: modelCredentialsStorage,
+      modelPacks: modelPacksStorage,
+      projects: factoryProjectsStorage,
+      queueHealth: queueHealthStorage,
+      workItems: workItemsStorage,
+    };
     const projectDomain = new ProjectDomain({
       storage,
       sourceControlIntegrationIds: integrations
@@ -291,9 +301,13 @@ export class MastraFactory {
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
     // mirroring stored API keys into process.env.
-    registerTenantCredentialResolver();
+    registerTenantCredentialResolver(modelCredentialsStorage);
 
     for (const integration of integrations) {
+      integration.initialize?.({
+        storage: integrationStorage.forIntegration(integration.id),
+        projects: factoryProjectsStorage,
+      });
       if (integration.sourceControl) {
         integration.sourceControl.initialize({
           storage: sourceControlStorage.forIntegration(integration.id),
@@ -419,6 +433,7 @@ export class MastraFactory {
           stateSigner,
           integrationStorage,
           sourceControlStorage,
+          domains,
           integrations: integrationRegistrations,
           intakeReady,
           factoryReady,
@@ -450,7 +465,7 @@ export class MastraFactory {
         //               request's first model call resolves tenant credentials.
         //   3. spa    — serves the built UI for everything the server doesn't own.
         return {
-          middleware: [createWebAuthGate(auth), createTenantCredentialPrimer(), ...spa],
+          middleware: [createWebAuthGate(auth), createTenantCredentialPrimer(modelCredentialsStorage), ...spa],
           ...cors,
           ...onError,
         };
@@ -476,6 +491,7 @@ export class MastraFactory {
               stateSigner,
               integrationStorage,
               sourceControlStorage,
+              domains,
             },
             integration.id,
           ),

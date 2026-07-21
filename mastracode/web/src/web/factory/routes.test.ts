@@ -45,7 +45,10 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildFactoryRoutes({ audit }));
+  mountApiRoutes(
+    app as any,
+    buildFactoryRoutes({ audit, projects: seed.projects, workItems: seed.workItems, queueHealth: seed.queueHealth }),
+  );
   return app;
 }
 

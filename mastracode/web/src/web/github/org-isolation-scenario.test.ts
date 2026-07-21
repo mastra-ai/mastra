@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as AuthModule from '../auth';
-import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
+import { SourceControlStorageInMemory } from '@mastra/factory/storage/domains/source-control/inmemory';
 
 // ── Phase 2 org-isolation scenario tests ─────────────────────────────────
 // These prove the org-tenancy boundary end to end through the real GitHub

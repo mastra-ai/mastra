@@ -28,6 +28,7 @@ import {
   loadLinearConnection as loadConnection,
 } from './connection';
 import { upsertLinearConnection } from './storage';
+import type { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
 
 type RouteContext = Context;
 
@@ -55,6 +56,11 @@ export interface MountLinearRoutesOptions {
    * `status` route is served.
    */
   stateSigner?: StateSigner;
+  /**
+   * Cross-integration intake selection domain. Required for the issues route's
+   * project filter; when absent, only the disabled `status` route is served.
+   */
+  intake?: IntakeStorage;
 }
 
 /**
@@ -138,7 +144,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
           });
         }
 
-        const connection = await loadConnection(tenant.orgId);
+        const connection = await loadConnection(linear.storage, tenant.orgId);
         return c.json({
           enabled: true,
           connected: Boolean(connection),
@@ -153,8 +159,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
   // Without the integration instance or a state signer the connect/callback
   // flow cannot talk to Linear or bind the OAuth round-trip to a tenant —
   // serve only the disabled `status` route (mirrors the feature gate).
-  const { linear, stateSigner } = options;
-  if (!isLinearFeatureEnabled() || !linear || !stateSigner) {
+  const { linear, stateSigner, intake } = options;
+  if (!isLinearFeatureEnabled() || !linear || !stateSigner || !intake) {
     return routes;
   }
 
@@ -201,7 +207,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         try {
           const tokens = await linear.exchangeOAuthCode(code, redirectUri);
           const workspace = await linear.fetchWorkspace(tokens.accessToken);
-          await upsertLinearConnection({
+          await upsertLinearConnection(linear.storage, {
             orgId,
             userId,
             accessToken: tokens.accessToken,
@@ -232,13 +238,13 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
 
-        const connection = await loadConnection(resolved.tenant.orgId);
+        const connection = await loadConnection(linear.storage, resolved.tenant.orgId);
         if (!connection) {
           return c.json({ error: 'linear_not_connected', message: 'Connect Linear to list Linear projects.' }, 409);
         }
 
         try {
-          const accessToken = await getFreshAccessToken(linear, connection);
+          const accessToken = await getFreshAccessToken(linear, linear.storage, connection);
           const projects = await linear.listProjects(accessToken);
           return c.json({ projects });
         } catch (err) {
@@ -262,12 +268,12 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         const after = parseAfterCursor(c.req.query('after'));
         if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
 
-        const connection = await loadConnection(resolved.tenant.orgId);
+        const connection = await loadConnection(linear.storage, resolved.tenant.orgId);
         if (!connection) {
           return c.json({ error: 'linear_not_connected', message: 'Connect Linear to see intake issues.' }, 409);
         }
 
-        const config = await getIntakeConfig({
+        const config = await getIntakeConfig(intake, {
           orgId: resolved.tenant.orgId,
           userId: resolved.tenant.userId,
           integrationIds: ['linear'],
@@ -284,7 +290,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         }
 
         try {
-          const accessToken = await getFreshAccessToken(linear, connection);
+          const accessToken = await getFreshAccessToken(linear, linear.storage, connection);
           const { issues, nextCursor } = await linear.listActiveIssues(accessToken, after, projectIds);
           return c.json({ issues, nextCursor });
         } catch (err) {

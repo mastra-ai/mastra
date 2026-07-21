@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { QueueHealthConfig } from '../../../storage/domains/queue-health/base';
+import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
 import type { QueueHealthWorkItem } from './queue-health';
 import { computeQueueHealth } from './queue-health';
 

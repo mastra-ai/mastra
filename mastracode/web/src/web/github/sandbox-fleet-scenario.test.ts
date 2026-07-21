@@ -145,7 +145,7 @@ import {
 } from '../sandbox/fleet';
 import type { MaterializationSandbox } from '../sandbox/fleet';
 import { ensureProjectSandbox, teardownProjectSandbox } from './sandbox';
-import type { ProjectRepositorySandbox } from '../storage/domains/source-control/base';
+import type { ProjectRepositorySandbox } from '@mastra/factory/storage/domains/source-control/base';
 
 /** Minimal fake sandbox VM that records lifecycle calls. */
 class FakeSandbox implements MaterializationSandbox {

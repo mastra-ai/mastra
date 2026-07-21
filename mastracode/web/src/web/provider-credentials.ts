@@ -17,9 +17,11 @@
 import type { Context } from 'hono';
 
 import { ensureWebAuthUser, isWebAuthEnabled, webAuthTenant } from './auth.js';
-import { getFactoryStorage, isRuntimeConfigSeeded } from './runtime-config.js';
-import { getModelCredentialsStorage } from './storage/domains.js';
-import type { CredentialRecord, LoginSessionKind, ModelCredentialsStorage } from './storage/domains/credentials/base';
+import type {
+  CredentialRecord,
+  LoginSessionKind,
+  ModelCredentialsStorage,
+} from '@mastra/factory/storage/domains/credentials/base';
 
 /**
  * OAuth credentials are stored under the auth provider id, which differs from
@@ -48,23 +50,19 @@ export type CredentialContext =
 
 /**
  * The tenant credentials domain, when registered and ready. `undefined` means
- * the factory never ran, storage was not provided, or the domain's init failed
+ * the factory never ran (no handle threaded in) or the domain's init failed
  * (fail-soft — callers report the feature unavailable instead of crashing).
  */
-export async function getTenantCredentialsStorage(): Promise<ModelCredentialsStorage | undefined> {
-  if (!isRuntimeConfigSeeded()) return undefined;
-  let storage: ReturnType<typeof getFactoryStorage>;
+export async function getTenantCredentialsStorage(
+  credentials: ModelCredentialsStorage | undefined,
+): Promise<ModelCredentialsStorage | undefined> {
+  if (!credentials) return undefined;
   try {
-    storage = getFactoryStorage();
+    await credentials.ensureReady();
   } catch {
     return undefined;
   }
-  try {
-    await storage.ensureDomainReady('model-credentials');
-  } catch {
-    return undefined;
-  }
-  return getModelCredentialsStorage();
+  return credentials;
 }
 
 /**
@@ -81,7 +79,10 @@ export function tenantOrgId(tenant: { orgId?: string; userId: string }): string 
  * response. Mutating credential routes call this and hard-fail (401/503)
  * when the tenant path is required but unavailable.
  */
-export async function resolveCredentialContext(c: Context): Promise<CredentialContext | { response: Response }> {
+export async function resolveCredentialContext(
+  c: Context,
+  credentials: ModelCredentialsStorage | undefined,
+): Promise<CredentialContext | { response: Response }> {
   await ensureWebAuthUser(c);
   const tenant = webAuthTenant(c);
   if (!tenant) {
@@ -91,7 +92,7 @@ export async function resolveCredentialContext(c: Context): Promise<CredentialCo
     if (isWebAuthEnabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
     return { mode: 'local' };
   }
-  const storage = await getTenantCredentialsStorage();
+  const storage = await getTenantCredentialsStorage(credentials);
   if (!storage) {
     return {
       response: c.json(
@@ -113,11 +114,14 @@ export async function resolveCredentialContext(c: Context): Promise<CredentialCo
  * unavailable gets an empty list (sources show `env`/`none`) instead of a 503
  * so the settings page still renders.
  */
-export async function listTenantCredentialsForRequest(c: Context): Promise<CredentialRecord[] | undefined> {
+export async function listTenantCredentialsForRequest(
+  c: Context,
+  credentials: ModelCredentialsStorage | undefined,
+): Promise<CredentialRecord[] | undefined> {
   await ensureWebAuthUser(c);
   const tenant = webAuthTenant(c);
   if (!tenant) return isWebAuthEnabled() ? [] : undefined;
-  const storage = await getTenantCredentialsStorage();
+  const storage = await getTenantCredentialsStorage(credentials);
   if (!storage) return [];
   return storage.listCredentials(tenantOrgId(tenant), tenant.userId);
 }

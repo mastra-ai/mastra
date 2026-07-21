@@ -5,14 +5,17 @@ import type { Context } from 'hono';
 
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import { FactoryDomain } from '../factory-domain';
-import type { CreateFactoryProjectInput, UpdateFactoryProjectInput } from '../storage/domains/projects/base';
-import { FactoryProjectsStorage } from '../storage/domains/projects/base';
+import type {
+  CreateFactoryProjectInput,
+  UpdateFactoryProjectInput,
+} from '@mastra/factory/storage/domains/projects/base';
+import { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
 import type {
   ProjectRepository,
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
-} from '../storage/domains/source-control/base';
-import { SourceControlStorage } from '../storage/domains/source-control/base';
+} from '@mastra/factory/storage/domains/source-control/base';
+import { SourceControlStorage } from '@mastra/factory/storage/domains/source-control/base';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;

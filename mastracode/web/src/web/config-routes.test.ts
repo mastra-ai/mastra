@@ -175,7 +175,7 @@ describe('provider key routes with a tenant', () => {
       if (user) c.set('webAuthUser' as never, user as never);
       await next();
     });
-    mountApiRoutes(app as any, buildConfigRoutes({ controller, authStorage }));
+    mountApiRoutes(app as any, buildConfigRoutes({ controller, authStorage, modelCredentials: seed.credentials }));
     return app;
   }
 
@@ -332,7 +332,7 @@ describe('model pack routes with a tenant', () => {
       if (user) c.set('webAuthUser' as never, user as never);
       await next();
     });
-    mountApiRoutes(app as any, buildConfigRoutes({ controller }));
+    mountApiRoutes(app as any, buildConfigRoutes({ controller, modelPacks: seed.modelPacks }));
     return app;
   }
 

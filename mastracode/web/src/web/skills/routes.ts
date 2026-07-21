@@ -8,7 +8,7 @@ import type { Context } from 'hono';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { ensureWebAuthUser, isWebAuthEnabled, webAuthTenant } from '../auth';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import type { SourceControlStorageHandle } from '@mastra/factory/storage/domains/source-control/base';
 
 const MAX_RESOURCE_ID_LENGTH = 512;
 const MAX_SCOPE_LENGTH = 2048;

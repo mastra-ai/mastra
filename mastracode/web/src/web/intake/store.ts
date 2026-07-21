@@ -1,9 +1,7 @@
 /** Provider-neutral intake selection validation and persistence. */
 
-import { getFactoryStorage } from '../runtime-config';
-import { getIntakeStorage } from '../storage/domains';
-import { DEFAULT_INTAKE_CONFIG } from '../storage/domains/intake/base';
-import type { IntakeConfig } from '../storage/domains/intake/base';
+import { DEFAULT_INTAKE_CONFIG } from '@mastra/factory/storage/domains/intake/base';
+import type { IntakeConfig, IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
 
 export { DEFAULT_INTAKE_CONFIG };
 export type { IntakeConfig };
@@ -40,33 +38,37 @@ export function parseIntakeConfig(body: unknown): IntakeConfig | null {
   return config;
 }
 
-export async function getIntakeConfig({
-  orgId,
-  userId,
-  integrationIds = [],
-}: {
-  orgId: string;
-  userId: string;
-  integrationIds?: string[];
-}): Promise<IntakeConfig> {
-  const storage = getFactoryStorage();
-  await storage.ensureDomainReady('intake');
-  const saved = await getIntakeStorage().getConfig({ orgId, userId });
+export async function getIntakeConfig(
+  intake: IntakeStorage,
+  {
+    orgId,
+    userId,
+    integrationIds = [],
+  }: {
+    orgId: string;
+    userId: string;
+    integrationIds?: string[];
+  },
+): Promise<IntakeConfig> {
+  await intake.ensureReady();
+  const saved = await intake.getConfig({ orgId, userId });
   return Object.fromEntries(
     integrationIds.map(integrationId => [integrationId, saved[integrationId] ?? { enabled: true, sourceIds: null }]),
   );
 }
 
-export async function saveIntakeConfig({
-  orgId,
-  userId,
-  config,
-}: {
-  orgId: string;
-  userId: string;
-  config: IntakeConfig;
-}): Promise<void> {
-  const storage = getFactoryStorage();
-  await storage.ensureDomainReady('intake');
-  await getIntakeStorage().saveConfig({ orgId, userId, config });
+export async function saveIntakeConfig(
+  intake: IntakeStorage,
+  {
+    orgId,
+    userId,
+    config,
+  }: {
+    orgId: string;
+    userId: string;
+    config: IntakeConfig;
+  },
+): Promise<void> {
+  await intake.ensureReady();
+  await intake.saveConfig({ orgId, userId, config });
 }

@@ -2,8 +2,7 @@
  * Factory work-item input validation and persistence helpers.
  */
 
-import { getFactoryStorage } from '../runtime-config';
-import { getWorkItemsStorage } from '../storage/domains';
+import type { WorkItemsStorage } from '@mastra/factory/storage/domains/work-items/base';
 import type {
   CreateWorkItemInput,
   ExternalWorkItemSource,
@@ -14,7 +13,7 @@ import type {
   WorkItemSessionInput,
   WorkItemSessionRef,
   WorkItemStage,
-} from '../storage/domains/work-items/base';
+} from '@mastra/factory/storage/domains/work-items/base';
 
 export type {
   CreateWorkItemInput,
@@ -124,40 +123,45 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   };
 }
 
-async function workItemsDomain() {
-  const storage = getFactoryStorage();
-  await storage.ensureDomainReady('work-items');
-  return getWorkItemsStorage();
+async function workItemsDomain(workItems: WorkItemsStorage): Promise<WorkItemsStorage> {
+  await workItems.ensureReady();
+  return workItems;
 }
 
-export async function listWorkItems({
-  orgId,
-  factoryProjectId,
-}: {
-  orgId: string;
-  factoryProjectId: string;
-}): Promise<WorkItemRow[]> {
-  return (await workItemsDomain()).list({ orgId, factoryProjectId });
+export async function listWorkItems(
+  workItems: WorkItemsStorage,
+  { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string },
+): Promise<WorkItemRow[]> {
+  return (await workItemsDomain(workItems)).list({ orgId, factoryProjectId });
 }
 
-export async function upsertWorkItem(params: {
-  orgId: string;
-  userId: string;
-  factoryProjectId: string;
-  input: CreateWorkItemInput;
-}): Promise<UpsertWorkItemResult> {
-  return (await workItemsDomain()).upsert(params);
+export async function upsertWorkItem(
+  workItems: WorkItemsStorage,
+  params: {
+    orgId: string;
+    userId: string;
+    factoryProjectId: string;
+    input: CreateWorkItemInput;
+  },
+): Promise<UpsertWorkItemResult> {
+  return (await workItemsDomain(workItems)).upsert(params);
 }
 
-export async function updateWorkItem(params: {
-  orgId: string;
-  id: string;
-  userId: string;
-  patch: UpdateWorkItemInput;
-}): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
-  return (await workItemsDomain()).update(params);
+export async function updateWorkItem(
+  workItems: WorkItemsStorage,
+  params: {
+    orgId: string;
+    id: string;
+    userId: string;
+    patch: UpdateWorkItemInput;
+  },
+): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
+  return (await workItemsDomain(workItems)).update(params);
 }
 
-export async function deleteWorkItem({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
-  return (await workItemsDomain()).delete({ orgId, id });
+export async function deleteWorkItem(
+  workItems: WorkItemsStorage,
+  { orgId, id }: { orgId: string; id: string },
+): Promise<WorkItemRow | null> {
+  return (await workItemsDomain(workItems)).delete({ orgId, id });
 }

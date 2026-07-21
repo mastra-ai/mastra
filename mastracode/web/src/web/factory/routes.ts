@@ -13,11 +13,11 @@ import type { Context } from 'hono';
 
 import type { AuditEmitter } from '../audit/domain';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
-import { getFactoryStorage } from '../runtime-config';
-import { getFactoryProjectsStorage, getQueueHealthStorage } from '../storage/domains';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
-import type { WorkItemRow } from '../storage/domains/work-items/base';
-import { thresholdsOrDefault } from '../storage/domains/queue-health/base';
+import type { WorkItemRow, WorkItemsStorage } from '@mastra/factory/storage/domains/work-items/base';
+import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
+import type { QueueHealthStorage } from '@mastra/factory/storage/domains/queue-health/base';
+import { thresholdsOrDefault } from '@mastra/factory/storage/domains/queue-health/base';
 import type { WorkItemPriorState } from './store';
 import {
   deleteWorkItem,
@@ -57,6 +57,7 @@ async function resolveTenant(c: Context): Promise<{ orgId: string; userId: strin
  */
 async function resolveProject(
   c: Context,
+  projects: FactoryProjectsStorage,
 ): Promise<{ orgId: string; userId: string; factoryProjectId: string } | { response: Response }> {
   const tenant = await resolveTenant(c);
   if ('response' in tenant) return tenant;
@@ -65,9 +66,8 @@ async function resolveProject(
   if (!projectId || !UUID_RE.test(projectId)) {
     return { response: c.json({ error: 'Project not found' }, 404) };
   }
-  const storage = getFactoryStorage();
-  await storage.ensureDomainReady('projects');
-  const project = await getFactoryProjectsStorage().get({ orgId: tenant.orgId, id: projectId });
+  await projects.ensureReady();
+  const project = await projects.get({ orgId: tenant.orgId, id: projectId });
   if (!project) {
     return { response: c.json({ error: 'Project not found' }, 404) };
   }
@@ -152,16 +152,32 @@ async function auditWorkItemPatch({
 }
 
 /** Build the Factory work-item routes as Mastra `apiRoutes`. */
-export function buildFactoryRoutes({ audit }: { audit: AuditEmitter }): ApiRoute[] {
+export function buildFactoryRoutes({
+  audit,
+  projects,
+  workItems,
+  queueHealth,
+}: {
+  audit: AuditEmitter;
+  /** Factory projects domain — validates the `:id` project belongs to the caller's org. */
+  projects: FactoryProjectsStorage;
+  /** Work-items domain backing the kanban board. */
+  workItems: WorkItemsStorage;
+  /** Per-project queue-health threshold config. */
+  queueHealth: QueueHealthStorage;
+}): ApiRoute[] {
   return [
     // ── List the org's work items for a project ─────────────────────────────
     registerApiRoute('/web/factory/projects/:id/work-items', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c));
+        const resolved = await resolveProject(loose(c), projects);
         if ('response' in resolved) return resolved.response;
-        const items = await listWorkItems({ orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId });
+        const items = await listWorkItems(workItems, {
+          orgId: resolved.orgId,
+          factoryProjectId: resolved.factoryProjectId,
+        });
         return c.json({ workItems: items });
       },
     }),
@@ -171,10 +187,13 @@ export function buildFactoryRoutes({ audit }: { audit: AuditEmitter }): ApiRoute
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c));
+        const resolved = await resolveProject(loose(c), projects);
         if ('response' in resolved) return resolved.response;
         const days = clampMetricsWindow(loose(c).req.query('days'));
-        const items = await listWorkItems({ orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId });
+        const items = await listWorkItems(workItems, {
+          orgId: resolved.orgId,
+          factoryProjectId: resolved.factoryProjectId,
+        });
         return c.json({ metrics: computeFactoryMetrics(items, { days, now: new Date() }) });
       },
     }),
@@ -184,11 +203,10 @@ export function buildFactoryRoutes({ audit }: { audit: AuditEmitter }): ApiRoute
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c));
+        const resolved = await resolveProject(loose(c), projects);
         if ('response' in resolved) return resolved.response;
-        const factoryStorage = getFactoryStorage();
-        await factoryStorage.ensureDomainReady('queue-health');
-        const stored = await getQueueHealthStorage().getConfig(resolved.orgId, resolved.factoryProjectId);
+        await queueHealth.ensureReady();
+        const stored = await queueHealth.getConfig(resolved.orgId, resolved.factoryProjectId);
         // Validate at the read choke point: `getConfig` round-trips a stored
         // JSONB row, and only `saveConfig` validates on write — a corrupted or
         // hand-edited row (empty / non-ascending) would otherwise flow to the
@@ -202,7 +220,7 @@ export function buildFactoryRoutes({ audit }: { audit: AuditEmitter }): ApiRoute
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c));
+        const resolved = await resolveProject(loose(c), projects);
         if ('response' in resolved) return resolved.response;
 
         const body = await readJson(loose(c));
@@ -210,7 +228,7 @@ export function buildFactoryRoutes({ audit }: { audit: AuditEmitter }): ApiRoute
         const input = parseCreateWorkItem(body);
         if (!input) return c.json({ error: 'invalid_work_item' }, 400);
 
-        const result = await upsertWorkItem({
+        const result = await upsertWorkItem(workItems, {
           orgId: resolved.orgId,
           userId: resolved.userId,
           factoryProjectId: resolved.factoryProjectId,
@@ -258,7 +276,7 @@ export function buildFactoryRoutes({ audit }: { audit: AuditEmitter }): ApiRoute
         const patch = parseUpdateWorkItem(body);
         if (!patch) return c.json({ error: 'invalid_work_item_patch' }, 400);
 
-        const updated = await updateWorkItem({ orgId: tenant.orgId, id, userId: tenant.userId, patch });
+        const updated = await updateWorkItem(workItems, { orgId: tenant.orgId, id, userId: tenant.userId, patch });
         if (!updated) return c.json({ error: 'Work item not found' }, 404);
         await auditWorkItemPatch({
           audit,
@@ -282,7 +300,7 @@ export function buildFactoryRoutes({ audit }: { audit: AuditEmitter }): ApiRoute
         const id = loose(c).req.param('id');
         if (!id || !UUID_RE.test(id)) return c.json({ error: 'Work item not found' }, 404);
 
-        const deleted = await deleteWorkItem({ orgId: tenant.orgId, id });
+        const deleted = await deleteWorkItem(workItems, { orgId: tenant.orgId, id });
         if (!deleted) return c.json({ error: 'Work item not found' }, 404);
         await audit.emit({
           context: loose(c),

@@ -1,20 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { __resetRuntimeConfigForTests } from '../../../runtime-config';
-import { seedFactoryStorageForTests } from '../../test-utils';
-
-let closeStorage: (() => Promise<void>) | undefined;
-
-afterEach(async () => {
-  __resetRuntimeConfigForTests();
-  await closeStorage?.();
-  closeStorage = undefined;
-});
+import { createFactoryStorageForTests } from '../../test-utils';
 
 describe('FactoryProjectsStorage', () => {
   it('creates an org-owned project without any integration or repository', async () => {
-    const seed = await seedFactoryStorageForTests();
-    closeStorage = () => seed.storage.close();
+    const seed = await createFactoryStorageForTests();
 
     const project = await seed.projects.create({
       orgId: 'org-1',
@@ -33,8 +23,7 @@ describe('FactoryProjectsStorage', () => {
   });
 
   it('lists, updates, and deletes projects within their organization', async () => {
-    const seed = await seedFactoryStorageForTests();
-    closeStorage = () => seed.storage.close();
+    const seed = await createFactoryStorageForTests();
     const first = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'First' } });
     await seed.projects.create({ orgId: 'org-2', userId: 'user-2', input: { name: 'Other org' } });
 

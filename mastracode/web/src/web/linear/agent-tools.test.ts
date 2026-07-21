@@ -21,6 +21,12 @@ const refreshLinearAccessToken = vi.fn();
 // the instance to the extraTools provider in production.
 const linearStub = {
   id: 'linear',
+  get storage() {
+    return seed.integrations.forIntegration('linear');
+  },
+  get projects() {
+    return seed.projects;
+  },
   fetchIssueDetail: (...args: any[]) => fetchLinearIssueDetail(...(args as [])),
   createIssueComment: (...args: any[]) => createLinearIssueComment(...(args as [])),
   refreshAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
@@ -49,7 +55,7 @@ async function seedProject(): Promise<void> {
 }
 
 function seedConnection(overrides: Partial<UpsertLinearConnectionInput> = {}): Promise<void> {
-  return upsertLinearConnection({
+  return upsertLinearConnection(seed.integrations.forIntegration('linear'), {
     orgId: ORG_ID,
     userId: 'user-1',
     accessToken: 'linear-token',

@@ -18,8 +18,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { getFactoryStorage } from '../runtime-config';
-import { FactoryProjectsStorage } from '../storage/domains/projects/base';
+import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
 import { isLinearFeatureEnabled } from './config';
 import type { LinearIntegration } from './integration';
 import {
@@ -48,7 +47,7 @@ const connectionCheckByOrg = new Map<string, ConnectionCheck>();
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function resolveOrgId(resourceId: string): Promise<string | null> {
+async function resolveOrgId(projects: FactoryProjectsStorage, resourceId: string): Promise<string | null> {
   const cached = orgIdByResourceId.get(resourceId);
   if (cached !== undefined) return cached;
   // Non-UUID resource ids (local/dev resources) would make the uuid column
@@ -59,9 +58,7 @@ async function resolveOrgId(resourceId: string): Promise<string | null> {
   }
   let orgId: string | null;
   try {
-    const storage = getFactoryStorage();
-    await storage.ensureDomainReady('projects');
-    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    await projects.ensureReady();
     const project = await projects.getById({ id: resourceId });
     orgId = project?.orgId ?? null;
   } catch {
@@ -73,10 +70,10 @@ async function resolveOrgId(resourceId: string): Promise<string | null> {
   return orgId;
 }
 
-async function checkLinearConnection(orgId: string): Promise<ConnectionCheck> {
+async function checkLinearConnection(linear: LinearIntegration, orgId: string): Promise<ConnectionCheck> {
   const cached = connectionCheckByOrg.get(orgId);
   if (cached && Date.now() - cached.checkedAt < CONNECTION_TTL_MS) return cached;
-  const connection = await loadLinearConnection(orgId);
+  const connection = await loadLinearConnection(linear.storage, orgId);
   const check: ConnectionCheck = {
     connected: connection !== null,
     canComment: connection !== null && canPostLinearComments(connection),
@@ -110,12 +107,12 @@ function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
       issue: z.string().min(1).describe('The Linear issue identifier (e.g. "ENG-123") or issue UUID.'),
     }),
     execute: async ({ issue }: { issue: string }) => {
-      const connection = await loadLinearConnection(orgId);
+      const connection = await loadLinearConnection(linear.storage, orgId);
       if (!connection) {
         return { error: 'Linear is not connected for this repository. Connect Linear in Settings to fetch issues.' };
       }
       try {
-        const accessToken = await getFreshLinearAccessToken(linear, connection);
+        const accessToken = await getFreshLinearAccessToken(linear, linear.storage, connection);
         const detail = await linear.fetchIssueDetail(accessToken, issue.trim());
         if (!detail) {
           return { error: `Linear issue "${issue}" was not found in this workspace.` };
@@ -141,7 +138,7 @@ function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
       body: z.string().min(1).describe('The comment body, as Linear-flavored markdown.'),
     }),
     execute: async ({ issue, body }: { issue: string; body: string }) => {
-      const connection = await loadLinearConnection(orgId);
+      const connection = await loadLinearConnection(linear.storage, orgId);
       if (!connection) {
         return { error: 'Linear is not connected for this repository. Connect Linear in Settings to post comments.' };
       }
@@ -151,7 +148,7 @@ function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
         };
       }
       try {
-        const accessToken = await getFreshLinearAccessToken(linear, connection);
+        const accessToken = await getFreshLinearAccessToken(linear, linear.storage, connection);
         const comment = await linear.createIssueComment(accessToken, issue.trim(), body);
         if (!comment) {
           return { error: `Linear issue "${issue}" was not found in this workspace.` };
@@ -185,9 +182,9 @@ export async function buildLinearAgentTools({
   const resourceId = ctx?.resourceId;
   if (!resourceId) return {};
 
-  const orgId = await resolveOrgId(resourceId);
+  const orgId = await resolveOrgId(linear.projects, resourceId);
   if (!orgId) return {};
-  const check = await checkLinearConnection(orgId);
+  const check = await checkLinearConnection(linear, orgId);
   if (!check.connected) return {};
 
   return {

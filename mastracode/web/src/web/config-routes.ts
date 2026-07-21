@@ -26,11 +26,13 @@ import {
   tenantOrgId,
   WEB_OAUTH_FLOW_KINDS,
 } from './provider-credentials.js';
-import { getFactoryStorage, isRuntimeConfigSeeded } from './runtime-config.js';
-import { getModelPacksStorage } from './storage/domains.js';
-import type { ModelPackRecord, ModelPacksStorage } from './storage/domains/model-packs/base';
+import type { ModelPackRecord, ModelPacksStorage } from '@mastra/factory/storage/domains/model-packs/base';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
-import type { CredentialRecord, LoginSessionKind } from './storage/domains/credentials/base';
+import type {
+  CredentialRecord,
+  LoginSessionKind,
+  ModelCredentialsStorage,
+} from '@mastra/factory/storage/domains/credentials/base';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): import('hono').Context {
@@ -268,31 +270,30 @@ export type PackContext =
   { mode: 'local' } | { mode: 'tenant'; storage: ModelPacksStorage; orgId: string; userId: string };
 
 /** The tenant model-packs domain, when registered and ready (fail-soft). */
-async function getTenantModelPacksStorage(): Promise<ModelPacksStorage | undefined> {
-  if (!isRuntimeConfigSeeded()) return undefined;
-  let storage: ReturnType<typeof getFactoryStorage>;
+async function getTenantModelPacksStorage(
+  modelPacks: ModelPacksStorage | undefined,
+): Promise<ModelPacksStorage | undefined> {
+  if (!modelPacks) return undefined;
   try {
-    storage = getFactoryStorage();
+    await modelPacks.ensureReady();
   } catch {
     return undefined;
   }
-  try {
-    await storage.ensureDomainReady('model-packs');
-  } catch {
-    return undefined;
-  }
-  return getModelPacksStorage();
+  return modelPacks;
 }
 
 /** Resolve the pack context for a request, or a ready-to-return error response. */
-async function resolvePackContext(c: import('hono').Context): Promise<PackContext | { response: Response }> {
+async function resolvePackContext(
+  c: import('hono').Context,
+  modelPacks: ModelPacksStorage | undefined,
+): Promise<PackContext | { response: Response }> {
   await ensureWebAuthUser(c);
   const tenant = webAuthTenant(c);
   if (!tenant) {
     if (isWebAuthEnabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
     return { mode: 'local' };
   }
-  const storage = await getTenantModelPacksStorage();
+  const storage = await getTenantModelPacksStorage(modelPacks);
   if (!storage) {
     return {
       response: c.json(
@@ -449,7 +450,14 @@ function persistOmRoleOverride(
  *   - `PUT    /web/config/om/thresholds`           — set observation/reflection thresholds
  *   - `PUT    /web/config/om/observe-attachments`  — set observe-attachments (auto/on/off)
  */
-export function buildConfigRoutes(options: { controller: ModelCatalog; authStorage?: AuthStorage }): ApiRoute[] {
+export function buildConfigRoutes(options: {
+  controller: ModelCatalog;
+  authStorage?: AuthStorage;
+  /** Tenant credential domain handle; absent in local (no-DB) mode. */
+  modelCredentials?: ModelCredentialsStorage;
+  /** Tenant model-packs domain handle; absent in local (no-DB) mode. */
+  modelPacks?: ModelPacksStorage;
+}): ApiRoute[] {
   const { controller, authStorage } = options;
 
   return [
@@ -460,7 +468,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
         try {
           // Tenant mode lists the caller's rows and never exposes the
           // server-global auth.json; local mode is unchanged.
-          const tenantCredentials = await listTenantCredentialsForRequest(loose(c));
+          const tenantCredentials = await listTenantCredentialsForRequest(loose(c), options.modelCredentials);
           return c.json({
             providers: await listProviders(controller, tenantCredentials ? undefined : authStorage, tenantCredentials),
           });
@@ -474,7 +482,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'PUT',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c));
+        const ctx = await resolveCredentialContext(loose(c), options.modelCredentials);
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');
@@ -517,7 +525,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        const ctx = await resolveCredentialContext(loose(c));
+        const ctx = await resolveCredentialContext(loose(c), options.modelCredentials);
         if ('response' in ctx) return ctx.response;
 
         const provider = c.req.param('provider');
@@ -640,7 +648,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const packContext = await resolvePackContext(loose(c));
+        const packContext = await resolvePackContext(loose(c), options.modelPacks);
         if ('response' in packContext) return packContext.response;
         const resourceId = c.req.query('resourceId');
         const scope = c.req.query('scope') || undefined;
@@ -661,7 +669,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const packContext = await resolvePackContext(loose(c));
+        const packContext = await resolvePackContext(loose(c), options.modelPacks);
         if ('response' in packContext) return packContext.response;
         let body: { name?: unknown; models?: unknown };
         try {
@@ -704,7 +712,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        const packContext = await resolvePackContext(loose(c));
+        const packContext = await resolvePackContext(loose(c), options.modelPacks);
         if ('response' in packContext) return packContext.response;
         const id = decodeURIComponent(c.req.param('id'));
         try {
@@ -727,7 +735,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const packContext = await resolvePackContext(loose(c));
+        const packContext = await resolvePackContext(loose(c), options.modelPacks);
         if ('response' in packContext) return packContext.response;
         const id = decodeURIComponent(c.req.param('id'));
         let body: { resourceId?: unknown; scope?: unknown };

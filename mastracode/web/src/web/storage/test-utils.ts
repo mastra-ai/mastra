@@ -9,15 +9,15 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { onTestFinished } from 'vitest';
 
 import { seedRuntimeConfig } from '../runtime-config';
-import { AuditStorage } from './domains/audit/base';
-import { ModelCredentialsStorage } from './domains/credentials/base';
-import { IntakeStorage } from './domains/intake/base';
-import { IntegrationStorage } from './domains/integrations/base';
-import { ModelPacksStorage } from './domains/model-packs/base';
-import { FactoryProjectsStorage } from './domains/projects/base';
-import { QueueHealthStorage } from './domains/queue-health/base';
-import { SourceControlStorage } from './domains/source-control/base';
-import { WorkItemsStorage } from './domains/work-items/base';
+import { AuditStorage } from '@mastra/factory/storage/domains/audit/base';
+import { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
+import { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
+import { IntegrationStorage } from '@mastra/factory/storage/domains/integrations/base';
+import { ModelPacksStorage } from '@mastra/factory/storage/domains/model-packs/base';
+import { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
+import { QueueHealthStorage } from '@mastra/factory/storage/domains/queue-health/base';
+import { SourceControlStorage } from '@mastra/factory/storage/domains/source-control/base';
+import { WorkItemsStorage } from '@mastra/factory/storage/domains/work-items/base';
 
 export interface FactoryStorageTestSeed {
   storage: LibSQLFactoryStorage;

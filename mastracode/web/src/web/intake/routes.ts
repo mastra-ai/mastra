@@ -5,6 +5,7 @@ import type { Context } from 'hono';
 import type { AuditEmitter } from '../audit/domain';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import type { FactoryIntegration, IntakeItem } from '../factory-integration';
+import type { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
 import { getIntakeConfig, parseIntakeConfig, saveIntakeConfig } from './store';
 
 interface IntakeIntegration {
@@ -60,9 +61,12 @@ function decodeCursor(value: string | undefined): Record<string, string> | null 
 
 export function buildIntakeRoutes({
   audit,
+  intake,
   integrations = [],
 }: {
   audit: AuditEmitter;
+  /** Intake selection domain handle. */
+  intake: IntakeStorage;
   integrations?: IntakeIntegration[];
 }): ApiRoute[] {
   const integrationIds = integrations.map(integration => integration.id);
@@ -74,7 +78,7 @@ export function buildIntakeRoutes({
       handler: async c => {
         const tenant = await resolveTenant(loose(c));
         if ('response' in tenant) return tenant.response;
-        const config = await getIntakeConfig({ ...tenant, integrationIds });
+        const config = await getIntakeConfig(intake, { ...tenant, integrationIds });
         return c.json({ config });
       },
     }),
@@ -96,7 +100,7 @@ export function buildIntakeRoutes({
           return c.json({ error: 'invalid_config' }, 400);
         }
 
-        await saveIntakeConfig({ ...tenant, config });
+        await saveIntakeConfig(intake, { ...tenant, config });
         await audit.emit({
           context: loose(c),
           input: {
@@ -141,7 +145,7 @@ export function buildIntakeRoutes({
         const cursors = decodeCursor(c.req.query('cursor'));
         if (!cursors) return c.json({ error: 'invalid_cursor' }, 400);
 
-        const config = await getIntakeConfig({ ...tenant, integrationIds });
+        const config = await getIntakeConfig(intake, { ...tenant, integrationIds });
         const items: AggregatedIntakeItem[] = [];
         const nextCursors: Record<string, string> = {};
         for (const integration of integrations) {

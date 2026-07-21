@@ -9,11 +9,11 @@
 
 import type { LinearIntegration, LinearTokenSet } from './integration';
 import { getLinearConnection, updateLinearTokens } from './storage';
-import type { LinearConnectionRow } from './storage';
+import type { LinearConnectionRow, LinearStorageHandle } from './storage';
 
 /** Load the org's Linear connection, or `null` when not connected. */
-export function loadLinearConnection(orgId: string): Promise<LinearConnectionRow | null> {
-  return getLinearConnection(orgId);
+export function loadLinearConnection(storage: LinearStorageHandle, orgId: string): Promise<LinearConnectionRow | null> {
+  return getLinearConnection(storage, orgId);
 }
 
 /** Refresh this many ms before the recorded expiry to absorb clock skew. */
@@ -34,8 +34,12 @@ export class LinearReauthRequiredError extends Error {
 }
 
 /** Persist a rotated token set on the org's connection row. */
-export function persistLinearTokens(orgId: string, tokens: LinearTokenSet): Promise<void> {
-  return updateLinearTokens(orgId, {
+export function persistLinearTokens(
+  storage: LinearStorageHandle,
+  orgId: string,
+  tokens: LinearTokenSet,
+): Promise<void> {
+  return updateLinearTokens(storage, orgId, {
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     expiresAt: tokens.expiresAt,
@@ -61,6 +65,7 @@ export function canPostLinearComments(connection: LinearConnectionRow): boolean 
  */
 export async function getFreshLinearAccessToken(
   linear: LinearIntegration,
+  storage: LinearStorageHandle,
   connection: LinearConnectionRow,
 ): Promise<string> {
   const expired = connection.expiresAt !== null && connection.expiresAt.getTime() - TOKEN_REFRESH_SKEW_MS <= Date.now();
@@ -77,7 +82,7 @@ export async function getFreshLinearAccessToken(
   // The caller may hold a stale row: another request could have refreshed and
   // rotated the refresh token since this row was loaded. Reload before
   // refreshing so we don't burn the rotated token and force a false reauth.
-  const latest = await loadLinearConnection(connection.orgId);
+  const latest = await loadLinearConnection(storage, connection.orgId);
   if (!latest) throw new LinearReauthRequiredError();
 
   const concurrent = inflightRefreshes.get(connection.orgId);
@@ -91,7 +96,7 @@ export async function getFreshLinearAccessToken(
   const refresh = (async () => {
     try {
       const tokens = await linear.refreshAccessToken(refreshToken);
-      await persistLinearTokens(connection.orgId, tokens);
+      await persistLinearTokens(storage, connection.orgId, tokens);
       return tokens.accessToken;
     } catch (err) {
       const status = (err as { status?: number }).status;

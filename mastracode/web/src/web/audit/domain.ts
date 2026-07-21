@@ -16,9 +16,9 @@ import type {
   AuditTarget,
   ListAuditEventsInput,
   RecordAuditEventInput,
-} from '../storage/domains/audit/base';
-import { AuditStorage } from '../storage/domains/audit/base';
-import { FactoryProjectsStorage } from '../storage/domains/projects/base';
+} from '@mastra/factory/storage/domains/audit/base';
+import { AuditStorage } from '@mastra/factory/storage/domains/audit/base';
+import { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
 
 export interface EmitAuditInput {
   action: string;

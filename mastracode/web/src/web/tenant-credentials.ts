@@ -25,7 +25,8 @@ import type { AuthCredential, CredentialStore } from '@mastra/code-sdk/auth/type
 
 import { getWebAuthUser, getWebAuthOrgId, getWebAuthUserId } from './auth.js';
 import { getTenantCredentialsStorage, tenantOrgId } from './provider-credentials.js';
-import { isOAuthCredentialExpired } from './storage/domains/credentials/base.js';
+import { isOAuthCredentialExpired } from '@mastra/factory/storage/domains/credentials/base';
+import type { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
 
 /** How long a hydrated snapshot is considered fresh. */
 const SNAPSHOT_TTL_MS = 15_000;
@@ -37,13 +38,15 @@ export class TenantCredentialStore implements CredentialStore {
   readonly allowEnvironmentFallback = false;
   readonly #orgId: string;
   readonly #userId: string;
+  readonly #credentials: ModelCredentialsStorage | undefined;
   #snapshot = new Map<string, AuthCredential>();
   #fetchedAt = 0;
   #hydrating: Promise<void> | undefined;
 
-  constructor(orgId: string, userId: string) {
+  constructor(orgId: string, userId: string, credentials: ModelCredentialsStorage | undefined) {
     this.#orgId = orgId;
     this.#userId = userId;
+    this.#credentials = credentials;
   }
 
   /** Hydrate the snapshot when stale; coalesces concurrent callers. */
@@ -56,7 +59,7 @@ export class TenantCredentialStore implements CredentialStore {
   }
 
   async #hydrate(): Promise<void> {
-    const storage = await getTenantCredentialsStorage();
+    const storage = await getTenantCredentialsStorage(this.#credentials);
     if (!storage) return; // Keep the last tenant-scoped snapshot.
     const records = await storage.listCredentials(this.#orgId, this.#userId);
     const next = new Map<string, AuthCredential>();
@@ -94,7 +97,7 @@ export class TenantCredentialStore implements CredentialStore {
    * failed refresh (caller surfaces a re-login error).
    */
   async getApiKey(provider: string): Promise<string | undefined> {
-    const storage = await getTenantCredentialsStorage();
+    const storage = await getTenantCredentialsStorage(this.#credentials);
     if (!storage) {
       // Domain unavailable: best effort from the snapshot; expired OAuth
       // tokens cannot be refreshed without the domain's lock.
@@ -144,7 +147,7 @@ export class TenantCredentialStore implements CredentialStore {
 
 const tenantStores = new Map<string, TenantCredentialStore>();
 
-function storeFor(tenant: SdkCredentialTenant): TenantCredentialStore {
+function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStorage): TenantCredentialStore {
   const orgId = tenantOrgId(tenant);
   const key = `${orgId}\u0000${tenant.userId}`;
   let store = tenantStores.get(key);
@@ -153,7 +156,7 @@ function storeFor(tenant: SdkCredentialTenant): TenantCredentialStore {
       const oldest = tenantStores.keys().next().value;
       if (oldest !== undefined) tenantStores.delete(oldest);
     }
-    store = new TenantCredentialStore(orgId, tenant.userId);
+    store = new TenantCredentialStore(orgId, tenant.userId, credentials);
     tenantStores.set(key, store);
   }
   return store;
@@ -161,12 +164,12 @@ function storeFor(tenant: SdkCredentialTenant): TenantCredentialStore {
 
 /**
  * Register the web tenant credential store provider with the SDK. Called by
- * the factory after storage init when the `model-credentials` domain is
- * registered; from then on `resolveModel` uses per-tenant credentials and the
- * SDK skips the `loadStoredApiKeysIntoEnv` env side-channel.
+ * the factory after storage init with the `model-credentials` domain handle;
+ * from then on `resolveModel` uses per-tenant credentials and the SDK skips
+ * the `loadStoredApiKeysIntoEnv` env side-channel.
  */
-export function registerTenantCredentialResolver(): void {
-  setCredentialStoreProvider(tenant => storeFor(tenant));
+export function registerTenantCredentialResolver(credentials: ModelCredentialsStorage): void {
+  setCredentialStoreProvider(tenant => storeFor(tenant, credentials));
 }
 
 /** Test hook: clear registration and cached tenant snapshots. */
@@ -197,13 +200,13 @@ export function invalidateTenantCredentialSnapshots(tenant: { orgId: string; use
  * async seam in model resolution. Cheap when fresh (TTL check), best-effort
  * when not — a failed hydrate falls back to env vars, never blocks a request.
  */
-export function createTenantCredentialPrimer(): MiddlewareHandler {
+export function createTenantCredentialPrimer(credentials: ModelCredentialsStorage): MiddlewareHandler {
   return async (c, next) => {
     const user = getWebAuthUser(c);
     const userId = getWebAuthUserId(user);
     if (userId) {
       try {
-        await storeFor({ orgId: getWebAuthOrgId(user), userId }).ensureFresh();
+        await storeFor({ orgId: getWebAuthOrgId(user), userId }, credentials).ensureFresh();
       } catch {
         // Fail open: model calls fall back to env credentials.
       }

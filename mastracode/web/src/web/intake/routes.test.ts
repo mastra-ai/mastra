@@ -56,7 +56,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null, in
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildIntakeRoutes({ audit, integrations: intakeIntegrations }));
+  mountApiRoutes(app as any, buildIntakeRoutes({ audit, intake: seed.intake, integrations: intakeIntegrations }));
   return app;
 }
 

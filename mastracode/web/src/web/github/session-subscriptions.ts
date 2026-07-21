@@ -9,7 +9,7 @@ import type {
   ProjectSourceControlConnection,
   SourceControlInstallation,
   SourceControlRepository,
-} from '../storage/domains/source-control/base';
+} from '@mastra/factory/storage/domains/source-control/base';
 import type { GithubIntegration } from './integration';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions';
 

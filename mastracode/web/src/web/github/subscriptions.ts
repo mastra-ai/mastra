@@ -1,4 +1,7 @@
-import type { IntegrationStorageHandle, IntegrationSubscription } from '../storage/domains/integrations/base';
+import type {
+  IntegrationStorageHandle,
+  IntegrationSubscription,
+} from '@mastra/factory/storage/domains/integrations/base';
 
 export type GithubSignalSubscriptionSource = 'auto-gh-pr-create' | 'factory-pr-create' | 'explicit-tool';
 export type GithubSignalSubscriptionStatus = 'open' | 'closed' | 'merged';

@@ -23,10 +23,9 @@
  * any replica can complete or poll a flow started on another.
  */
 
+import type { AuthCredential, OAuthCredential } from '@mastra/code-sdk/auth/types';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
-
-import type { AuthCredential, OAuthCredential } from '@mastra/code-sdk/auth/types';
 
 /** Owning tenant of a credential row. `userId` absent = org-scoped row. */
 export interface CredentialTenant {

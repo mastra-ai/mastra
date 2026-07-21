@@ -33,7 +33,7 @@ const tables: Tables = {
   subscriptions: [],
 };
 
-import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
+import { SourceControlStorageInMemory } from '@mastra/factory/storage/domains/source-control/inmemory';
 const sourceControlStorage = new SourceControlStorageInMemory();
 
 function installationRow(row: Record<string, any>) {

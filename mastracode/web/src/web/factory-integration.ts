@@ -23,14 +23,16 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { AuditEmitter } from './audit/domain.js';
-import type { AuditEventRow } from './storage/domains/audit/base.js';
+import type { AuditEventRow } from '@mastra/factory/storage/domains/audit/base';
 import type { StateSigner } from './state-signing.js';
-import type { IntegrationStorageHandle } from './storage/domains/integrations/base.js';
+import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
+import type { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
+import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
 import type {
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlStorageHandle,
-} from './storage/domains/source-control/base.js';
+} from '@mastra/factory/storage/domains/source-control/base';
 
 export interface IntakeSource {
   id: string;
@@ -137,6 +139,10 @@ export interface IntegrationContext {
   storage: {
     generic: IntegrationStorageHandle;
     sourceControl: SourceControlStorageHandle;
+    /** Factory projects domain — e.g. resolving a project's default model. */
+    projects: FactoryProjectsStorage;
+    /** Cross-integration intake selection (which sources are synced). */
+    intake: IntakeStorage;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
@@ -153,6 +159,14 @@ export interface FactoryIntegration {
   readonly intake?: IntakeIntegrationCapability;
   /** Optional provider-neutral source-control capability. */
   readonly sourceControl?: SourceControlIntegrationCapability;
+  /**
+   * Bind the integration's generic persistence handle. Called once by the
+   * factory during `prepare()` (before routes/tools/workers are collected),
+   * so instance methods that run outside an `IntegrationContext` — per-request
+   * agent tools, intake capability calls — reach storage without a service
+   * locator. Mirrors `sourceControl.initialize`.
+   */
+  initialize?(args: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage }): void;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds

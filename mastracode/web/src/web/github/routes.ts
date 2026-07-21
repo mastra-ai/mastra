@@ -69,8 +69,8 @@ import type {
   ProjectSourceControlConnection,
   SourceControlInstallation,
   SourceControlRepository,
-} from '../storage/domains/source-control/base';
-import { getFactoryProjectsStorage } from '../storage/domains';
+} from '@mastra/factory/storage/domains/source-control/base';
+import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions';
 
 export interface MountGithubRoutesOptions {
@@ -99,6 +99,8 @@ export interface MountGithubRoutesOptions {
   runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
   /** Best-effort audit emission supplied by the factory-owned audit domain. */
   emitAudit?: AuditEmitter['emit'];
+  /** Factory projects domain — resolves a project's default triage model. */
+  projects?: FactoryProjectsStorage;
 }
 
 /**
@@ -106,10 +108,13 @@ export interface MountGithubRoutesOptions {
  * a missing project or an uninitialized storage domain simply means "no
  * default", never a failed run.
  */
-async function resolveFactoryDefaultModelId(factoryProjectId: string | undefined): Promise<string | undefined> {
-  if (!factoryProjectId) return undefined;
+async function resolveFactoryDefaultModelId(
+  projects: FactoryProjectsStorage | undefined,
+  factoryProjectId: string | undefined,
+): Promise<string | undefined> {
+  if (!projects || !factoryProjectId) return undefined;
   try {
-    const project = await getFactoryProjectsStorage().getById({ id: factoryProjectId });
+    const project = await projects.getById({ id: factoryProjectId });
     return project?.defaultModelId ?? undefined;
   } catch {
     return undefined;
@@ -353,7 +358,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
         return runIssueTriage({
           ...input,
-          defaultModelId: input.defaultModelId ?? (await resolveFactoryDefaultModelId(input.resourceId)),
+          defaultModelId:
+            input.defaultModelId ?? (await resolveFactoryDefaultModelId(options.projects, input.resourceId)),
           labels: input.labels.includes('auto-triaged') ? input.labels : [...input.labels, 'auto-triaged'],
         });
       }
@@ -706,7 +712,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           resourceId: project.factoryProjectId,
           projectPath,
           branch,
-          defaultModelId: await resolveFactoryDefaultModelId(project.factoryProjectId),
+          defaultModelId: await resolveFactoryDefaultModelId(options.projects, project.factoryProjectId),
         });
         await emitAudit?.({
           context: loose(c),

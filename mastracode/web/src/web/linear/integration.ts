@@ -28,9 +28,12 @@ import type {
   IntegrationContext,
   IntegrationTools,
 } from '../factory-integration.js';
+import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
+import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
 import { buildLinearAgentTools } from './agent-tools.js';
 import { getFreshLinearAccessToken, loadLinearConnection } from './connection.js';
 import { buildLinearRoutes } from './routes.js';
+import type { LinearStorageHandle } from './storage.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
 const LINEAR_TOKEN_URL = 'https://api.linear.app/oauth/token';
@@ -236,11 +239,36 @@ export class LinearIntegration implements FactoryIntegration {
    */
   readonly requiresStableStateSigner = true;
 
+  /** Bound once by the factory via `initialize()` before any surface is used. */
+  #storage: LinearStorageHandle | undefined;
+  #projects: FactoryProjectsStorage | undefined;
+
+  /** Bind Linear's slice of the generic integration storage + the projects domain. */
+  initialize({ storage, projects }: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage }): void {
+    this.#storage = storage as unknown as LinearStorageHandle;
+    this.#projects = projects;
+  }
+
+  get storage(): LinearStorageHandle {
+    if (!this.#storage) {
+      throw new Error('LinearIntegration is not initialized — the factory binds storage during prepare().');
+    }
+    return this.#storage;
+  }
+
+  /** Factory projects domain — maps a session's resourceId to its owning org. */
+  get projects(): FactoryProjectsStorage {
+    if (!this.#projects) {
+      throw new Error('LinearIntegration is not initialized — the factory binds storage during prepare().');
+    }
+    return this.#projects;
+  }
+
   readonly intake: IntakeIntegrationCapability = {
     listSources: async ({ orgId }) => {
-      const connection = await loadLinearConnection(orgId);
+      const connection = await loadLinearConnection(this.storage, orgId);
       if (!connection) return [];
-      const accessToken = await getFreshLinearAccessToken(this, connection);
+      const accessToken = await getFreshLinearAccessToken(this, this.storage, connection);
       const projects = await this.listProjects(accessToken);
       return projects.map(project => ({
         id: project.id,
@@ -250,9 +278,9 @@ export class LinearIntegration implements FactoryIntegration {
     },
     listItems: async ({ orgId, sourceIds, cursor }) => {
       if (sourceIds.length === 0) return { items: [], nextCursor: null };
-      const connection = await loadLinearConnection(orgId);
+      const connection = await loadLinearConnection(this.storage, orgId);
       if (!connection) return { items: [], nextCursor: null };
-      const accessToken = await getFreshLinearAccessToken(this, connection);
+      const accessToken = await getFreshLinearAccessToken(this, this.storage, connection);
       const page = await this.listActiveIssues(accessToken, cursor, sourceIds);
       return {
         items: page.issues.map(issue => ({
@@ -599,6 +627,7 @@ export class LinearIntegration implements FactoryIntegration {
       linear: this,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
+      intake: ctx.storage.intake,
     });
   }
 

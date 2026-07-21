@@ -9,7 +9,7 @@
  * and returns a plain shape, so it is unit-testable without a network or DOM.
  */
 
-import type { QueueHealthConfig } from '../../../storage/domains/queue-health/base';
+import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
 import type { WorkItem, WorkItemStageEntry } from './services/workItems';
 import { BOARD_STAGES } from './stages';
 

@@ -9,7 +9,7 @@ vi.mock('../auth', () => ({
 }));
 
 import { webAuthTenant } from '../auth';
-import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
+import { SourceControlStorageInMemory } from '@mastra/factory/storage/domains/source-control/inmemory';
 import { mountApiRoutes } from '../test-utils';
 import { buildSkillRoutes } from './routes';
 

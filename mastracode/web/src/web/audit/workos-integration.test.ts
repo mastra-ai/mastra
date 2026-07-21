@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AuditEventRow } from '../storage/domains/audit/base';
+import type { AuditEventRow } from '@mastra/factory/storage/domains/audit/base';
 import { mountApiRoutes } from '../test-utils';
 import { toWorkOSEvent, WorkOSAuditIntegration } from './workos-integration';
 

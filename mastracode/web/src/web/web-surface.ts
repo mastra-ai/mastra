@@ -17,8 +17,14 @@ import { buildOAuthRoutes } from './oauth-routes.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
 import type { StateSigner } from './state-signing.js';
-import type { IntegrationStorage } from './storage/domains/integrations/base.js';
-import type { SourceControlStorage } from './storage/domains/source-control/base.js';
+import type { IntegrationStorage } from '@mastra/factory/storage/domains/integrations/base';
+import type { SourceControlStorage } from '@mastra/factory/storage/domains/source-control/base';
+import type { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
+import type { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
+import type { ModelPacksStorage } from '@mastra/factory/storage/domains/model-packs/base';
+import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
+import type { QueueHealthStorage } from '@mastra/factory/storage/domains/queue-health/base';
+import type { WorkItemsStorage } from '@mastra/factory/storage/domains/work-items/base';
 
 registerSandboxReattach();
 
@@ -38,6 +44,15 @@ export interface WebApiRoutesDeps {
   stateSigner?: StateSigner;
   integrationStorage: IntegrationStorage;
   sourceControlStorage: SourceControlStorage;
+  /** App-table domain handles, registered and owned by `MastraFactory.prepare()`. */
+  domains: {
+    intake: IntakeStorage;
+    modelCredentials: ModelCredentialsStorage;
+    modelPacks: ModelPacksStorage;
+    projects: FactoryProjectsStorage;
+    queueHealth: QueueHealthStorage;
+    workItems: WorkItemsStorage;
+  };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
   factoryReady: boolean;
@@ -100,6 +115,7 @@ export function buildIntegrationContext(
   deps: Pick<WebApiRoutesDeps, 'controller' | 'publicOrigin' | 'integrationStorage' | 'sourceControlStorage'> & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
+    domains: Pick<WebApiRoutesDeps['domains'], 'projects' | 'intake'>;
   },
   integrationId: string,
 ): IntegrationContext {
@@ -110,6 +126,8 @@ export function buildIntegrationContext(
     storage: {
       generic: deps.integrationStorage.forIntegration(integrationId),
       sourceControl: deps.sourceControlStorage.forIntegration(integrationId),
+      projects: deps.domains.projects,
+      intake: deps.domains.intake,
     },
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
@@ -182,8 +200,13 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
 
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
-    ...buildConfigRoutes({ controller: deps.controller, authStorage: deps.authStorage }),
-    ...buildOAuthRoutes({ authStorage: deps.authStorage }),
+    ...buildConfigRoutes({
+      controller: deps.controller,
+      authStorage: deps.authStorage,
+      modelCredentials: deps.domains.modelCredentials,
+      modelPacks: deps.domains.modelPacks,
+    }),
+    ...buildOAuthRoutes({ authStorage: deps.authStorage, modelCredentials: deps.domains.modelCredentials }),
     ...buildSkillRoutes({
       controllerId: deps.controllerId,
       controller: deps.controller,
@@ -195,11 +218,19 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...(deps.intakeReady
       ? buildIntakeRoutes({
           audit: deps.audit,
+          intake: deps.domains.intake,
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),
         })
       : []),
-    ...(deps.factoryReady ? buildFactoryRoutes({ audit: deps.audit }) : []),
+    ...(deps.factoryReady
+      ? buildFactoryRoutes({
+          audit: deps.audit,
+          projects: deps.domains.projects,
+          workItems: deps.domains.workItems,
+          queueHealth: deps.domains.queueHealth,
+        })
+      : []),
   ];
 }
