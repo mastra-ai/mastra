@@ -67,8 +67,8 @@ describe('resolveWorkflowGraphStep', () => {
         { type: 'tool', id: 't', toolId: 't-tool' },
       ],
     };
-    const children = (parallel as Extract<SerializedStepFlowEntry, { type: 'parallel' }>).steps.map(child =>
-      resolveWorkflowGraphStep(child).kind,
+    const children = (parallel as Extract<SerializedStepFlowEntry, { type: 'parallel' }>).steps.map(
+      child => resolveWorkflowGraphStep(child).kind,
     );
     expect(children).toEqual(['agent-step', 'tool-step']);
   });
@@ -170,5 +170,56 @@ describe('resolveWorkflowGraphStep', () => {
         }),
       ]),
     );
+  });
+
+  it('surfaces predicate-derived labels on conditional branch condition nodes', () => {
+    // Simulate what the fluent builder writes for a `.branch({ predicate })`
+    // call: `serializedConditions[i].fn` holds the derivePredicateLabel output.
+    const { nodes } = constructNodesAndEdges({
+      stepGraph: [
+        {
+          type: 'conditional',
+          steps: [
+            { type: 'step', step: step('high') },
+            { type: 'step', step: step('low') },
+          ],
+          serializedConditions: [
+            { id: 'high-branch', fn: 'inputData.value > 10' },
+            { id: 'low-branch', fn: 'inputData.value <= 10' },
+          ],
+        },
+      ] as unknown as SerializedStepFlowEntry[],
+    });
+
+    const conditionNodes = nodes.filter(
+      (node): node is Extract<typeof node, { type: typeof WORKFLOW_STEP_NODE_TYPE }> =>
+        node.type === WORKFLOW_STEP_NODE_TYPE && node.data.nodeRole === 'condition',
+    );
+    expect(conditionNodes).toHaveLength(2);
+    expect(conditionNodes[0].data.conditions).toEqual([{ type: 'when', fnString: 'inputData.value > 10' }]);
+    expect(conditionNodes[1].data.conditions).toEqual([{ type: 'when', fnString: 'inputData.value <= 10' }]);
+  });
+
+  it('surfaces predicate-derived labels on loop condition nodes', () => {
+    // Simulate what the fluent builder writes for `.dountil({ predicate })`:
+    // `serializedCondition.fn` holds the derivePredicateLabel output, and
+    // loopType flows through to the condition-node label.
+    const { nodes } = constructNodesAndEdges({
+      stepGraph: [
+        {
+          type: 'loop',
+          step: step('increment'),
+          serializedCondition: { id: 'stop-when-three', fn: 'inputData.count >= 3' },
+          loopType: 'dountil',
+        },
+      ] as unknown as SerializedStepFlowEntry[],
+    });
+
+    const conditionNodes = nodes.filter(
+      (node): node is Extract<typeof node, { type: typeof WORKFLOW_STEP_NODE_TYPE }> =>
+        node.type === WORKFLOW_STEP_NODE_TYPE && node.data.nodeRole === 'condition',
+    );
+    expect(conditionNodes).toHaveLength(1);
+    expect(conditionNodes[0].data.conditions).toEqual([{ type: 'dountil', fnString: 'inputData.count >= 3' }]);
   });
 });

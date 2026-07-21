@@ -8,3 +8,4 @@ export * from './scheduler';
 export * from './state-reader';
 export * from './create';
 export * from './load-from-storage';
+export * from './predicate';

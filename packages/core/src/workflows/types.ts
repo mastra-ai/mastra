@@ -16,6 +16,7 @@ import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { ExecutionEngine } from './execution-engine';
+import type { Predicate } from './predicate';
 import type { WorkflowScheduleInput } from './scheduler/types';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
@@ -565,19 +566,30 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
       steps: SingleStepEntry<TEngineType>[];
       conditions: ConditionFunction<any, any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
+      /**
+       * Declarative predicates for each condition, aligned by index. Present
+       * for entries built via the `.branch({ predicate })` overload; absent
+       * for `.branch(fn)` closures. When present the entry is storable and
+       * round-trips through `toStorableGraph` / `rehydrateWorkflow`.
+       */
+      predicates?: (Predicate | null)[];
     }
   | {
-      // `loop` is not yet round-trippable end-to-end: the condition is still a
-      // closure (see the "Phase-2 predicate DSL" throw in `toStorableGraph`), so
-      // the storage side of this variant does not exist yet. The *live* step
-      // shape is aligned with `parallel` / `foreach` up front so the builder can
-      // accept an Agent / Tool directly today and the phase-2 unblock is
-      // purely about the condition, not restructuring the inner step.
+      // `loop` supports two condition forms: a closure (`.dowhile(fn)`, not
+      // storable) and a declarative predicate (`.dowhile({ predicate })`,
+      // storable). The live step shape is aligned with `parallel` / `foreach`
+      // so the builder can accept an Agent / Tool directly.
       type: 'loop';
       step: SingleStepEntry<TEngineType>;
       condition: LoopConditionFunction<any, any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
+      /**
+       * Declarative predicate for the loop condition. Present when built via
+       * `.dowhile({ predicate })` / `.dountil({ predicate })`; absent for
+       * closure loops. Enables storage round-trip.
+       */
+      predicate?: Predicate;
     }
   | {
       type: 'foreach';
@@ -685,12 +697,28 @@ export type SerializedStepFlowEntry =
       type: 'conditional';
       steps: SerializedSingleStepEntry[];
       serializedConditions: { id: string; fn: string }[];
+      /**
+       * Optional declarative predicate for each condition, aligned by index
+       * with `steps` / `serializedConditions`. When present, the entry is
+       * fully round-trippable through storage — the runtime rebuilds a live
+       * `ConditionFunction` by evaluating the predicate against the workflow
+       * context. When absent, the entry originated from a closure-based
+       * `.branch(fn)` call and cannot be stored (see `toStorableGraph`).
+       * Additive: never changes the shape of closure-based workflows.
+       */
+      predicates?: (Predicate | null)[];
     }
   | {
       type: 'loop';
       step: SerializedStep;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
+      /**
+       * Optional declarative predicate for the loop condition. When present,
+       * the entry is fully round-trippable through storage. When absent, the
+       * loop uses a closure predicate and cannot be stored. Additive.
+       */
+      predicate?: Predicate;
     }
   | {
       type: 'foreach';

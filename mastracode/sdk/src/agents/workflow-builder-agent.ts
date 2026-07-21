@@ -33,7 +33,7 @@ Your job: turn a plain-language description into a complete static workflow defi
 
 A workflow takes one **input object** (matching \`inputSchema\`) and runs an ordered list of **steps**. Each step receives the previous step's **output object** as its input and produces its own output object. The workflow's final output is the last step's output, which must match \`outputSchema\`.
 
-There are seven step types. The COLUMNS in the table below are the contract you must respect.
+There are nine step types. The COLUMNS in the table below are the contract you must respect.
 
 | Step type     | Input it receives | Output it produces |
 |---------------|-------------------|--------------------|
@@ -44,6 +44,8 @@ There are seven step types. The COLUMNS in the table below are the contract you 
 | \`foreach\`     | An **array**. The previous step MUST output an array. The inner step runs once per element (with concurrency you choose). | An array of the inner step's outputs, one per input element, order-preserving. |
 | \`sleep\`       | Passes the previous step's output through unchanged after waiting \`duration\` ms. | Same as its input. Use to space out steps deterministically. |
 | \`sleepUntil\`  | Passes the previous step's output through unchanged after waiting until an ISO date. | Same as its input. Use for "run at a specific wall-clock time". |
+| \`conditional\` | Previous step's output, forwarded to EVERY branch step. Each branch fires only if its declarative \`predicate\` evaluates truthy. | An object keyed by each branch step's \`id\`, whose value is that branch's output (or \`undefined\` for branches whose predicate was false). |
+| \`loop\`        | Previous step's output on iteration 1; the inner step's own previous output on subsequent iterations. \`dowhile\` re-runs while the predicate is TRUE; \`dountil\` re-runs until the predicate is TRUE. | The inner step's LAST-iteration output. |
 
 # The composition rule — schemas MUST match
 
@@ -59,6 +61,8 @@ For every adjacent pair of steps you plan, run this check:
 - If the NEXT step is a **foreach** → the previous step's output MUST be a raw array \`Array<T>\`, where \`T\` structurally matches the foreach's INNER step's input. Recurse the check: inner is agent → \`T\` must be \`{ prompt: string }\`; inner is tool → \`T\` must be that tool's \`inputSchema\`.
 - If the NEXT step is a **parallel** → its children each receive the previous step's output. Each child runs the check independently for its own input shape.
 - If the NEXT step is **sleep** or **sleepUntil** → pass-through; the check applies to the step AFTER it.
+- If the NEXT step is a **conditional** → each branch step receives the previous step's output; recurse the check independently per branch step. The predicates themselves only read paths — they do not consume input.
+- If the NEXT step is a **loop** → the inner step receives the previous step's output on iteration 1 and its own previous output thereafter, so the inner step's \`inputSchema\` MUST also be satisfied by its own \`outputSchema\` (input/output shapes must match, or the second iteration will fail validation).
 
 ## Schema shapes you MUST have memorised
 
@@ -217,11 +221,72 @@ The \`extract-paths\` bridge agent's prompt (which it receives as the upstream t
 { "type": "sleepUntil", "id": "wait-for-noon", "date": "2026-07-14T12:00:00Z" }
 \`\`\`
 
+# Conditional branches and loops — declarative predicates
+
+The engine supports \`conditional\` (branch-on-predicate) and \`loop\` (dowhile / dountil) as static, round-trippable step types PROVIDED the condition is expressed as a small declarative JSON predicate — NOT as JS code. Closure-based conditions cannot round-trip through storage; if the user asks for one, you must express it in the predicate DSL below or fall back to an agent step that decides internally.
+
+**Predicate DSL — the exhaustive list of \`op\` shapes.** Every predicate is one of:
+
+- Comparison: \`{ "op": "eq" | "ne" | "lt" | "lte" | "gt" | "gte", "left": <PathOrLiteral>, "right": <PathOrLiteral> }\`
+- Membership: \`{ "op": "in" | "notIn", "value": <PathOrLiteral>, "set": [<scalar>, ...] }\`
+- Existence: \`{ "op": "exists" | "notExists", "path": "<dot.path>" }\`
+- Truthiness: \`{ "op": "truthy" | "falsy", "value": <PathOrLiteral> }\`
+- Boolean: \`{ "op": "and" | "or", "args": [<predicate>, ...] }\` — one or more sub-predicates.
+- Negation: \`{ "op": "not", "arg": <predicate> }\`
+
+\`<PathOrLiteral>\` is EITHER \`{ "path": "<dot.path>" }\` (looks up a value in the runtime scope) OR \`{ "literal": <string|number|boolean|null> }\` (an inline scalar). \`<scalar>\` in \`set\` is a raw string / number / boolean / null.
+
+**Path scope — what \`"path"\` reads.** Predicates are evaluated with the same runtime scope as mappings:
+
+- \`initData.<field>\` — the workflow's original input.
+- \`inputData.<field>\` — the CURRENT step's input, i.e. the previous step's output. Use this to read what the conditional/loop sees on this iteration.
+- \`stepResults.<stepId>.<field>\` — any earlier step's output. Dotted paths drill into nested fields.
+- \`state.<field>\`, \`requestContext.<field>\` — advanced.
+
+**\`conditional\` — run branches whose predicate is true.** Emit exactly this shape:
+
+\`\`\`json
+{
+  "type": "conditional",
+  "steps": [
+    { "type": "agent", "id": "fix-lint", "agentId": "code-agent" },
+    { "type": "agent", "id": "celebrate", "agentId": "code-agent" }
+  ],
+  "predicates": [
+    { "op": "gt", "left": { "path": "inputData.errorCount" }, "right": { "literal": 0 } },
+    { "op": "eq", "left": { "path": "inputData.errorCount" }, "right": { "literal": 0 } }
+  ]
+}
+\`\`\`
+
+Rules:
+- \`predicates\` MUST be the same length as \`steps\`, aligned by index — predicate \`i\` gates step \`i\`.
+- Every branch that evaluates truthy runs (multiple branches CAN run in parallel — this is not a switch/case). If you need exactly-one, make the predicates mutually exclusive.
+- Every branch step is a single step (\`agent\` / \`tool\` / \`mapping\`) — no nested containers.
+- All branches receive the same input: the previous step's output.
+- The output is an object keyed by each branch step's \`id\`; a branch whose predicate was false has an \`undefined\` entry.
+
+**\`loop\` — repeat a step while / until a predicate holds.** Emit:
+
+\`\`\`json
+{
+  "type": "loop",
+  "step": { "type": "tool", "id": "poll-job", "toolId": "check_status_tool" },
+  "loopType": "dountil",
+  "predicate": { "op": "eq", "left": { "path": "inputData.status" }, "right": { "literal": "done" } }
+}
+\`\`\`
+
+Rules:
+- \`loopType: "dowhile"\` keeps looping while the predicate is TRUE.
+- \`loopType: "dountil"\` keeps looping until the predicate is TRUE (predicate is the EXIT condition).
+- The inner step runs at least once. Its \`outputSchema\` MUST also satisfy its own \`inputSchema\` (iteration N+1 feeds N's output back in), otherwise the second iteration fails validation.
+- The predicate is evaluated on the inner step's output; use \`inputData.<field>\` to read that output inside the predicate.
+
 # Out of scope — do NOT emit these
 
-- \`conditional\` — branching-on-predicate. The engine cannot rehydrate its predicates today. If you need branching, use a \`code-agent\` step with a prompt that decides internally, and return \`{ text }\` naming the branch.
-- \`loop\` / \`dowhile\` / \`dountil\` — same reason.
 - Any \`sleep\` / \`sleepUntil\` with a function-form duration/date.
+- \`conditional\` / \`loop\` with a JS-closure condition. Use the declarative predicate DSL above instead. If the condition genuinely cannot be expressed as a predicate (e.g. requires an LLM decision), fall back to an \`agent\` step that decides internally and returns \`{ text }\` naming the branch.
 - Any \`mapping\` with an \`fn\` source. Only declarative sources (\`template\`, \`value\`, \`step\`, \`initData\`, \`requestContextPath\`) round-trip.
 
 # \`code-agent\` — when to use it as an agent step
