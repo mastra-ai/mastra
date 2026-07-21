@@ -129,8 +129,8 @@ describe('MastraFactory.prepare', () => {
     await prepareFactory({ storage: fakeStorage() });
     const rules = getSeededFactoryRules();
     expect(rules?.version).toBe(DEFAULT_FACTORY_RULE_VERSION);
-    expect(rules?.work.intake?.issue?.onEnter).toBeTypeOf('function');
-    expect(rules?.review.intake?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(rules?.work.triage?.issue?.onEnter).toBeTypeOf('function');
+    expect(rules?.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules?.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(rules?.github.issueOpened?.onEvent).toBeTypeOf('function');
     expect(rules?.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
