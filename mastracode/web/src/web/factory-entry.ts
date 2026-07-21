@@ -32,7 +32,7 @@ import type { WebAuthUser } from './auth.js';
 import { buildAuthRoutes, createFactoryAuthGate, factoryRouteAuth, getWebAuthOrgId, getWebAuthUserId } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './factory-integration.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
-import { ProjectDomain } from './projects/domain.js';
+import { ProjectRoutes } from '@mastra/factory/routes/projects';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { seedRuntimeConfig } from './runtime-config.js';
 import { AuditStorage } from '@mastra/factory/storage/domains/audit/base';
@@ -231,8 +231,10 @@ export class MastraFactory {
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
     };
-    const projectDomain = new ProjectDomain({
-      storage,
+    const projectRoutes = new ProjectRoutes({
+      auth: factoryRouteAuth,
+      projects: factoryProjectsStorage,
+      sourceControl: sourceControlStorage,
       versionControlIntegrationIds: integrations
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
@@ -451,7 +453,7 @@ export class MastraFactory {
           intakeReady,
           factoryReady,
         }),
-        ...projectDomain.routes(),
+        ...projectRoutes.routes(),
         ...auditDomain.routes(),
       ],
       buildServerConfig: () => {

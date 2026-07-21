@@ -1,29 +1,28 @@
 import { Hono } from 'hono';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { __resetRuntimeConfigForTests } from '../runtime-config';
-import { seedFactoryStorageForTests } from '../storage/test-utils';
-import { mountApiRoutes } from '../test-utils';
-import { ProjectDomain } from './domain';
+import type { FactoryStorageTestSeed } from '../storage/test-utils';
+import { createFactoryStorageForTests } from '../storage/test-utils';
+import { ProjectRoutes } from './projects';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils';
 
-let closeStorage: (() => Promise<void>) | undefined;
+const projectRoutes = (seed: FactoryStorageTestSeed, versionControlIntegrationIds?: string[]) =>
+  new ProjectRoutes({
+    auth: fakeRouteAuth(),
+    projects: seed.projects,
+    sourceControl: seed.sourceControl,
+    versionControlIntegrationIds,
+  }).routes();
 
-afterEach(async () => {
-  __resetRuntimeConfigForTests();
-  await closeStorage?.();
-  closeStorage = undefined;
-});
-
-describe('ProjectDomain', () => {
+describe('ProjectRoutes', () => {
   it('creates, lists, reads, updates, and deletes a project without integrations', async () => {
-    const seed = await seedFactoryStorageForTests();
-    closeStorage = () => seed.storage.close();
+    const seed = await createFactoryStorageForTests();
     const app = new Hono();
     app.use('*', async (context, next) => {
       context.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
-    mountApiRoutes(app as never, new ProjectDomain({ storage: seed.storage }).routes());
+    mountApiRoutes(app as never, projectRoutes(seed));
 
     const createdResponse = await app.request('/web/factory/projects', {
       method: 'POST',
@@ -53,8 +52,7 @@ describe('ProjectDomain', () => {
   });
 
   it('requires an organization and scopes project access by organization', async () => {
-    const seed = await seedFactoryStorageForTests();
-    closeStorage = () => seed.storage.close();
+    const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Private' } });
     const buildApp = (user?: { workosId: string; organizationId?: string }) => {
       const app = new Hono();
@@ -62,7 +60,7 @@ describe('ProjectDomain', () => {
         if (user) context.set('webAuthUser' as never, user as never);
         await next();
       });
-      mountApiRoutes(app as never, new ProjectDomain({ storage: seed.storage }).routes());
+      mountApiRoutes(app as never, projectRoutes(seed));
       return app;
     };
 
@@ -75,8 +73,7 @@ describe('ProjectDomain', () => {
   });
 
   it('links installations and repositories from multiple source-control providers', async () => {
-    const seed = await seedFactoryStorageForTests();
-    closeStorage = () => seed.storage.close();
+    const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
     const github = seed.sourceControl.forIntegration('github');
     const gitlab = seed.sourceControl.forIntegration('gitlab');
@@ -115,10 +112,7 @@ describe('ProjectDomain', () => {
       context.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
-    mountApiRoutes(
-      app as never,
-      new ProjectDomain({ storage: seed.storage, versionControlIntegrationIds: ['github', 'gitlab'] }).routes(),
-    );
+    mountApiRoutes(app as never, projectRoutes(seed, ['github', 'gitlab']));
 
     const connect = async (integrationId: string, installationId: string) => {
       const response = await app.request(`/web/factory/projects/${project.id}/source-control-connections`, {
@@ -175,8 +169,7 @@ describe('ProjectDomain', () => {
   });
 
   it('rejects cross-organization and cross-installation project links', async () => {
-    const seed = await seedFactoryStorageForTests();
-    closeStorage = () => seed.storage.close();
+    const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
     const github = seed.sourceControl.forIntegration('github');
     const installation = await github.installations.upsert({
@@ -208,10 +201,7 @@ describe('ProjectDomain', () => {
       context.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
-    mountApiRoutes(
-      app as never,
-      new ProjectDomain({ storage: seed.storage, versionControlIntegrationIds: ['github'] }).routes(),
-    );
+    mountApiRoutes(app as never, projectRoutes(seed, ['github']));
 
     expect(
       (
@@ -248,14 +238,13 @@ describe('ProjectDomain', () => {
   });
 
   it('rejects invalid create and update payloads', async () => {
-    const seed = await seedFactoryStorageForTests();
-    closeStorage = () => seed.storage.close();
+    const seed = await createFactoryStorageForTests();
     const app = new Hono();
     app.use('*', async (context, next) => {
       context.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
-    mountApiRoutes(app as never, new ProjectDomain({ storage: seed.storage }).routes());
+    mountApiRoutes(app as never, projectRoutes(seed));
 
     expect(
       (

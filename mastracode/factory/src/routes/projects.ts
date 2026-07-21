@@ -1,21 +1,20 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 
-import { ensureWebAuthUser, webAuthTenant } from '../auth';
-import { FactoryDomain } from '../factory-domain';
 import type {
   CreateFactoryProjectInput,
+  FactoryProjectsStorage,
   UpdateFactoryProjectInput,
-} from '@mastra/factory/storage/domains/projects/base';
-import { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
+} from '../storage/domains/projects/base';
 import type {
   ProjectRepository,
+  SourceControlStorage,
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
-} from '@mastra/factory/storage/domains/source-control/base';
-import { SourceControlStorage } from '@mastra/factory/storage/domains/source-control/base';
+} from '../storage/domains/source-control/base';
+import type { RouteDependencies } from './route';
+import { Route } from './route';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
@@ -150,28 +149,31 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
-export class ProjectDomain extends FactoryDomain {
+export interface ProjectRoutesDeps extends RouteDependencies {
+  /** Factory projects domain backing the CRUD surface. */
+  projects: FactoryProjectsStorage;
+  /** Source-control domain the connection/repository routes fan out over. */
+  sourceControl: SourceControlStorage;
+  /** Integration ids allowed as source-control connection targets. */
+  versionControlIntegrationIds?: string[];
+}
+
+export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   readonly #versionControlIntegrationIds: Set<string>;
 
-  constructor({
-    storage,
-    versionControlIntegrationIds = [],
-  }: {
-    storage: FactoryStorage;
-    versionControlIntegrationIds?: string[];
-  }) {
-    super({ storage });
-    this.#versionControlIntegrationIds = new Set(versionControlIntegrationIds);
+  constructor(deps: ProjectRoutesDeps) {
+    super(deps);
+    this.#versionControlIntegrationIds = new Set(deps.versionControlIntegrationIds ?? []);
   }
 
   async #projects(): Promise<FactoryProjectsStorage> {
-    await this.storage.ensureDomainReady('projects');
-    return this.storage.getDomain<FactoryProjectsStorage>('projects');
+    await this.deps.projects.ensureReady();
+    return this.deps.projects;
   }
 
   async #sourceControl(): Promise<SourceControlStorage> {
-    await this.storage.ensureDomainReady('source-control');
-    return this.storage.getDomain<SourceControlStorage>('source-control');
+    await this.deps.sourceControl.ensureReady();
+    return this.deps.sourceControl;
   }
 
   async #handles(): Promise<SourceControlStorageHandle[]> {
@@ -207,8 +209,8 @@ export class ProjectDomain extends FactoryDomain {
   }
 
   async #resolveTenant(context: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
-    await ensureWebAuthUser(context);
-    const tenant = webAuthTenant(context);
+    await this.deps.auth.ensureUser(context);
+    const tenant = this.deps.auth.tenant(context);
     if (!tenant) return { response: context.json({ error: 'unauthorized' }, 401) };
     if (!tenant.orgId) {
       return {
