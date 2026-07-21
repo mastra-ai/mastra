@@ -1,5 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntegrationContext } from '@mastra/factory/integrations/base';
 
@@ -49,9 +49,21 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+beforeEach(() => {
+  vi.stubEnv('MASTRA_PLATFORM_BASE_URL', config.baseUrl);
+  vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', config.accessToken);
+});
+
 afterEach(() => {
   __resetRuntimeConfigForTests();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
+
+function createIntegration(fetchImpl?: typeof fetch): PlatformGithubIntegration {
+  if (fetchImpl) vi.stubGlobal('fetch', fetchImpl);
+  return new PlatformGithubIntegration();
+}
 
 describe('PlatformGithubIntegration', () => {
   it('lists platform-owned installations and repositories as Intake sources', async () => {
@@ -94,7 +106,7 @@ describe('PlatformGithubIntegration', () => {
         }),
       );
     const { sourceControl } = await seedFactoryStorageForTests();
-    const integration = new PlatformGithubIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
     const storage = sourceControl.forIntegration('github');
     integration.versionControl.initialize({ storage });
 
@@ -130,7 +142,7 @@ describe('PlatformGithubIntegration', () => {
       if (url.includes('/pulls?')) return json({ pullRequests: [pullRequest] });
       throw new Error(`Unexpected request: ${url}`);
     });
-    const integration = new PlatformGithubIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
     const oauthConnection = { type: 'oauth' as const, accessToken: 'unused-provider-token' };
     const installationConnection = { type: 'app-installation' as const, installationId: 7 };
 
@@ -178,7 +190,7 @@ describe('PlatformGithubIntegration', () => {
       .mockResolvedValueOnce(json(comment))
       .mockResolvedValueOnce(json({ detail: 'Not found' }, 404))
       .mockResolvedValueOnce(json({ detail: 'Not found' }, 404));
-    const integration = new PlatformGithubIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
     const connection = { type: 'app-installation' as const, installationId: 7 };
 
     await expect(integration.intake.getIssue({ connection, sourceId: 'acme/app', issueId: '12' })).resolves.toEqual(
@@ -200,7 +212,7 @@ describe('PlatformGithubIntegration', () => {
         headers: { 'content-type': 'application/json', 'retry-after': '9' },
       }),
     );
-    const integration = new PlatformGithubIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
 
     await expect(
       integration.intake.listIssues({
@@ -239,7 +251,7 @@ describe('PlatformGithubIntegration', () => {
       .mockResolvedValueOnce(json(review))
       .mockResolvedValueOnce(json(reviewComment))
       .mockResolvedValueOnce(json({ users: ['grace'], teams: ['platform'] }));
-    const integration = new PlatformGithubIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
     const ref = {
       connection: { type: 'app-installation' as const, installationId: 7 },
       sourceId: 'acme/app',
@@ -327,7 +339,7 @@ describe('PlatformGithubIntegration', () => {
       }
       return json(pullRequest);
     });
-    const integration = new PlatformGithubIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
     const connection = { type: 'app-installation' as const, installationId: 7 };
     const sourceId = 'acme/app';
     const ref = { connection, sourceId, pullRequestId: '34' };
@@ -410,7 +422,7 @@ describe('PlatformGithubIntegration', () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValue(json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }));
-    const integration = new PlatformGithubIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
     integration.versionControl.initialize({ storage: sourceControl.forIntegration('github') });
     const installation = await integration.versionControl.registerInstallation({
       orgId: 'org-1',
@@ -437,7 +449,7 @@ describe('PlatformGithubIntegration', () => {
 
   it('exposes platform-backed routes and session tools without local OAuth or webhook routes', async () => {
     const seed = await seedFactoryStorageForTests();
-    const integration = new PlatformGithubIntegration(config);
+    const integration = createIntegration();
     seedRuntimeConfig({
       storage: seed.storage,
       authProvider: {} as never,
@@ -491,10 +503,19 @@ describe('PlatformGithubIntegration', () => {
       polling: { enabled: true },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
-    expect(() => new PlatformGithubIntegration({ ...config, accessToken: '' })).toThrow(/accessToken/);
+  });
+
+  it('defaults the Platform base URL and requires the access token environment variable', () => {
+    vi.stubEnv('MASTRA_PLATFORM_BASE_URL', '');
+    expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'platform.mastra.ai' });
+
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    expect(() => new PlatformGithubIntegration()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
   });
 
   it('can disable polling and resolves collaborator permissions through the platform API', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '9000');
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       json({
         permission: 'maintain',
@@ -502,11 +523,7 @@ describe('PlatformGithubIntegration', () => {
         user: actor,
       }),
     );
-    const integration = new PlatformGithubIntegration({
-      ...config,
-      fetchImpl,
-      polling: { enabled: false, intervalMs: 9_000 },
-    });
+    const integration = createIntegration(fetchImpl);
 
     await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('maintain');
     expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(

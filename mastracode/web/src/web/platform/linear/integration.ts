@@ -10,7 +10,7 @@ import { buildLinearAgentTools } from '../../linear/agent-tools.js';
 import type { LinearIntegration } from '../../linear/integration.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import type { LinearConnectionData, LinearStorageHandle } from '../../linear/storage.js';
-import { PlatformApiClient, PlatformApiError, type PlatformApiClientConfig } from '../api-client.js';
+import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearUser = {
@@ -66,8 +66,6 @@ const API_PREFIX = '/v1/server/linear';
 const PAGE_SIZE = 30;
 const MAX_REFERENCE_PAGES = 20;
 const MAX_COMMENT_PAGES = 20;
-
-export type PlatformLinearIntegrationConfig = PlatformApiClientConfig;
 
 export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
@@ -150,7 +148,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     },
   };
 
-  constructor(config: PlatformLinearIntegrationConfig) {
+  constructor() {
+    const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
     this.#accessToken = config.accessToken;

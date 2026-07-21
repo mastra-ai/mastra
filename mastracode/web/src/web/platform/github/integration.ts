@@ -14,7 +14,7 @@ import type {
 } from '@mastra/factory/capabilities/version-control';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
 
-import { PlatformApiClient, PlatformApiError, type PlatformApiClientConfig } from '../api-client.js';
+import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
 import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
 import { buildGithubRoutes } from '../../github/routes.js';
 import {
@@ -90,13 +90,6 @@ type GithubReviewComment = GithubComment & {
 
 const PAGE_SIZE = 30;
 const API_PREFIX = '/v1/server';
-
-export interface PlatformGithubIntegrationConfig extends PlatformApiClientConfig {
-  polling?: {
-    enabled?: boolean;
-    intervalMs?: number;
-  };
-}
 
 export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
@@ -297,11 +290,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     removeRequestedReviewers: input => this.#requestedReviewers('DELETE', input),
   };
 
-  constructor(config: PlatformGithubIntegrationConfig) {
+  constructor() {
+    const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
-    this.#pollingEnabled = config.polling?.enabled ?? true;
-    this.#pollingIntervalMs = config.polling?.intervalMs;
+    this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
+    this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
   }
 
   get storage(): SourceControlStorageHandle {
@@ -894,6 +888,14 @@ function parsePositiveInteger(value: string): number | null {
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function optionalPositiveIntegerEnv(name: 'MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS'): number | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) return undefined;
+  const parsed = parsePositiveInteger(value);
+  if (parsed === null) throw new Error(`${name} must be a positive integer.`);
+  return parsed;
 }
 
 function requirePositiveId(value: string, resource: string): number {

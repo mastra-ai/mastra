@@ -1,5 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntegrationContext } from '@mastra/factory/integrations/base';
 
@@ -58,9 +58,21 @@ function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 }
 
+beforeEach(() => {
+  vi.stubEnv('MASTRA_PLATFORM_BASE_URL', config.baseUrl);
+  vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', config.accessToken);
+});
+
 afterEach(() => {
   __resetRuntimeConfigForTests();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
+
+function createIntegration(fetchImpl?: typeof fetch): PlatformLinearIntegration {
+  if (fetchImpl) vi.stubGlobal('fetch', fetchImpl);
+  return new PlatformLinearIntegration();
+}
 
 describe('PlatformLinearIntegration', () => {
   it('lists connected workspace projects as Intake sources', async () => {
@@ -70,7 +82,7 @@ describe('PlatformLinearIntegration', () => {
         json({ workspaces: [workspace, { ...workspace, linearWorkspaceId: 'old', connected: false }] }),
       )
       .mockResolvedValueOnce(json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } }));
-    const integration = new PlatformLinearIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
 
     await expect(integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual([
       {
@@ -101,7 +113,7 @@ describe('PlatformLinearIntegration', () => {
           pageInfo: { hasNextPage: true, endCursor: 'cursor-2' },
         }),
       );
-    const integration = new PlatformLinearIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
 
     await expect(
       integration.intake.listIssues({
@@ -146,7 +158,7 @@ describe('PlatformLinearIntegration', () => {
         json({ ...issue, comments: { nodes: [comment], pageInfo: { hasNextPage: false, endCursor: null } } }),
       )
       .mockResolvedValueOnce(json(comment));
-    const integration = new PlatformLinearIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
     const connection = { type: 'oauth' as const, accessToken: 'unused-provider-token' };
 
     await expect(
@@ -174,7 +186,7 @@ describe('PlatformLinearIntegration', () => {
       .mockResolvedValueOnce(json({ workspaces: [workspace, secondWorkspace] }))
       .mockResolvedValueOnce(json({ detail: 'Not found' }, 404))
       .mockResolvedValueOnce(json({ detail: 'Not found' }, 404));
-    const integration = new PlatformLinearIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
 
     await expect(
       integration.intake.getIssue({
@@ -208,7 +220,7 @@ describe('PlatformLinearIntegration', () => {
       }
       throw new Error(`Unexpected request: ${url}`);
     });
-    const integration = new PlatformLinearIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
 
     const result = await integration.intake.listItems({
       orgId: 'org-1',
@@ -226,7 +238,7 @@ describe('PlatformLinearIntegration', () => {
         headers: { 'content-type': 'application/json', 'retry-after': '11' },
       }),
     );
-    const integration = new PlatformLinearIntegration({ ...config, fetchImpl });
+    const integration = createIntegration(fetchImpl);
 
     await expect(
       integration.intake.listIssues({
@@ -237,7 +249,7 @@ describe('PlatformLinearIntegration', () => {
   });
 
   it('rejects GitHub-style app-installation connections', async () => {
-    const integration = new PlatformLinearIntegration(config);
+    const integration = createIntegration();
     await expect(
       integration.intake.listIssues({
         connection: { type: 'app-installation', installationId: 7 },
@@ -248,7 +260,7 @@ describe('PlatformLinearIntegration', () => {
 
   it('exposes platform-backed route and agent-tool surfaces without local OAuth routes', async () => {
     const seed = await seedFactoryStorageForTests();
-    const integration = new PlatformLinearIntegration(config);
+    const integration = createIntegration();
     const projectRecord = await seed.projects.create({
       orgId: 'org-1',
       userId: 'user-1',
@@ -286,6 +298,16 @@ describe('PlatformLinearIntegration', () => {
     );
     expect(integration.diagnostics()).toEqual({ mode: 'platform', endpointHost: 'platform.example.com' });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
-    expect(() => new PlatformLinearIntegration({ ...config, baseUrl: '' })).toThrow(/baseUrl/);
+  });
+
+  it('defaults the Platform base URL and requires the access token environment variable', () => {
+    vi.stubEnv('MASTRA_PLATFORM_BASE_URL', '');
+    expect(new PlatformLinearIntegration().diagnostics()).toEqual({
+      mode: 'platform',
+      endpointHost: 'platform.mastra.ai',
+    });
+
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
   });
 });

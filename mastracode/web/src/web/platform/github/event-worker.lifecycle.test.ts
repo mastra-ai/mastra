@@ -67,6 +67,9 @@ function json(data: unknown): Response {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.stubEnv('MASTRA_PLATFORM_BASE_URL', 'https://platform.example.com');
+  vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+  vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '60000');
   harness.reset();
   __resetRuntimeConfigForTests();
 });
@@ -74,6 +77,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   __resetRuntimeConfigForTests();
 });
 
@@ -114,12 +119,8 @@ describe('Platform GitHub event worker factory lifecycle', () => {
       }
       throw new Error(`Unexpected request: ${url}`);
     });
-    const github = new PlatformGithubIntegration({
-      baseUrl: 'https://platform.example.com',
-      accessToken: 'platform-token',
-      fetchImpl,
-      polling: { intervalMs: 60_000 },
-    });
+    vi.stubGlobal('fetch', fetchImpl);
+    const github = new PlatformGithubIntegration();
     const factory = new MastraFactory({ storage, pubsub, integrations: [github] });
 
     try {

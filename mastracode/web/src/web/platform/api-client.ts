@@ -4,6 +4,15 @@ export interface PlatformApiClientConfig {
   fetchImpl?: typeof fetch;
 }
 
+export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
+  const baseUrl = process.env.MASTRA_PLATFORM_BASE_URL?.trim() || 'https://platform.mastra.ai';
+  const accessToken = process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim();
+  if (!accessToken) {
+    throw new Error('Platform integration: missing required environment variable MASTRA_PLATFORM_ACCESS_TOKEN.');
+  }
+  return { baseUrl, accessToken };
+}
+
 export class PlatformApiError extends Error {
   readonly status: number;
   readonly retryAfterSeconds: number | null;
