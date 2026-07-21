@@ -38,8 +38,8 @@ import type { OAuthCredentials } from '@mastra/code-sdk/auth/types';
 import { getAuthProviderId, resolveCredentialContext, WEB_OAUTH_FLOW_KINDS } from './provider-credentials.js';
 import type { CredentialContext } from './provider-credentials.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
-import type { LoginSessionKind, LoginSessionRow } from './storage/domains/credentials/base';
-import { ModelCredentialsStorageInMemory } from './storage/domains/credentials/inmemory.js';
+import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
+import type { LoginSessionKind, LoginSessionRow } from './storage/domains/credentials/base.js';
 
 /** Lifetime of a paste-code session (Anthropic gives no explicit expiry). */
 const PASTE_CODE_TTL_MS = 10 * 60 * 1000;
@@ -159,14 +159,25 @@ function loose(c: unknown): Context {
 }
 
 /**
- * Local-mode login sessions. Flows in local mode are single-process, so the
- * in-memory domain impl (which already handles TTL cleanup) is sufficient.
+ * Local-mode login sessions. Flows in local mode are single-process, so a
+ * process-local libsql `:memory:` database (which already handles TTL
+ * cleanup) is sufficient.
  */
-const localSessions = new ModelCredentialsStorageInMemory();
+let localSessionsPromise: Promise<ModelCredentialsStorage> | undefined;
+function localSessions(): Promise<ModelCredentialsStorage> {
+  localSessionsPromise ??= (async () => {
+    const { LibSQLFactoryStorage } = await import('@mastra/libsql');
+    const storage = new LibSQLFactoryStorage({ id: 'local-oauth-sessions', url: ':memory:' });
+    const store = storage.registerDomain(new ModelCredentialsStorage());
+    await storage.init();
+    return store;
+  })();
+  return localSessionsPromise;
+}
 const LOCAL_TENANT = { orgId: 'local', userId: 'local' } as const;
 
-function sessionStore(ctx: CredentialContext) {
-  return ctx.mode === 'tenant' ? ctx.storage : localSessions;
+async function sessionStore(ctx: CredentialContext): Promise<ModelCredentialsStorage> {
+  return ctx.mode === 'tenant' ? ctx.storage : localSessions();
 }
 
 function sessionTenant(ctx: CredentialContext): { orgId: string; userId: string } {
@@ -179,7 +190,7 @@ async function loadOwnedSession(
   provider: string,
   sessionId: string,
 ): Promise<LoginSessionRow | undefined> {
-  const session = await sessionStore(ctx).getLoginSession(sessionId);
+  const session = await (await sessionStore(ctx)).getLoginSession(sessionId);
   if (!session) return undefined;
   const tenant = sessionTenant(ctx);
   if (session.orgId !== tenant.orgId || session.userId !== tenant.userId) return undefined;
@@ -256,7 +267,9 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
 
         const sessionId = randomUUID();
         const tenant = sessionTenant(ctx);
-        await sessionStore(ctx).createLoginSession({
+        await (
+          await sessionStore(ctx)
+        ).createLoginSession({
           sessionId,
           orgId: tenant.orgId,
           userId: tenant.userId,
@@ -299,7 +312,9 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
         if (!session) return c.json({ error: 'session_not_found' }, 404);
         if (session.kind !== 'paste-code') return c.json({ error: 'wrong_session_kind' }, 400);
 
-        const claimed = await sessionStore(ctx).claimLoginSession(sessionId, {
+        const claimed = await (
+          await sessionStore(ctx)
+        ).claimLoginSession(sessionId, {
           orgId: session.orgId,
           userId: session.userId,
           provider,
@@ -311,12 +326,12 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
         try {
           credentials = await flow.complete(claimed.pending, code);
         } catch (error) {
-          await sessionStore(ctx).touchLoginSession(sessionId, { nextPollAt: null });
+          await (await sessionStore(ctx)).touchLoginSession(sessionId, { nextPollAt: null });
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
         }
 
         await persistOAuthCredential(ctx, provider, credentials, authStorage);
-        await sessionStore(ctx).deleteLoginSession(sessionId);
+        await (await sessionStore(ctx)).deleteLoginSession(sessionId);
         return c.json({ status: 'complete', ok: true });
       },
     }),
@@ -348,7 +363,9 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
           return c.json({ status: 'pending', nextPollMs: nextPollAt - now });
         }
 
-        const claimed = await sessionStore(ctx).claimLoginSession(sessionId, {
+        const claimed = await (
+          await sessionStore(ctx)
+        ).claimLoginSession(sessionId, {
           orgId: session.orgId,
           userId: session.userId,
           provider,
@@ -360,22 +377,24 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
         try {
           result = await flow.poll(claimed.pending);
         } catch (error) {
-          await sessionStore(ctx).touchLoginSession(sessionId, { nextPollAt: null });
+          await (await sessionStore(ctx)).touchLoginSession(sessionId, { nextPollAt: null });
           throw error;
         }
 
         if (result.status === 'complete') {
           await persistOAuthCredential(ctx, provider, result.credentials, authStorage);
-          await sessionStore(ctx).deleteLoginSession(sessionId);
+          await (await sessionStore(ctx)).deleteLoginSession(sessionId);
           return c.json({ status: 'complete', ok: true });
         }
 
         if (result.status === 'failed') {
-          await sessionStore(ctx).deleteLoginSession(sessionId);
+          await (await sessionStore(ctx)).deleteLoginSession(sessionId);
           return c.json({ status: 'failed', error: result.error });
         }
 
-        await sessionStore(ctx).touchLoginSession(sessionId, {
+        await (
+          await sessionStore(ctx)
+        ).touchLoginSession(sessionId, {
           ...(result.pending ? { pending: result.pending } : {}),
           nextPollAt: new Date(now + result.nextPollMs),
         });
@@ -393,7 +412,7 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
         const provider = c.req.param('provider');
         const sessionId = c.req.param('sessionId');
         const session = await loadOwnedSession(ctx, provider, sessionId);
-        if (session) await sessionStore(ctx).deleteLoginSession(sessionId);
+        if (session) await (await sessionStore(ctx)).deleteLoginSession(sessionId);
         return c.json({ ok: true });
       },
     }),

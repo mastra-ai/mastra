@@ -113,6 +113,7 @@ describe('DurableAgent workflow actor forwarding', () => {
       agent: createBaseAgent(`core-resume-actor-${actor ? 'new' : 'none'}`),
       pubsub: createPubsub(),
     });
+    vi.spyOn(agent as any, 'requireAgentExecutionFGA').mockResolvedValue(undefined);
     const prepared = await agent.prepare('hello', { actor: initialActor });
     runIds.push(prepared.runId);
     const resume = vi.fn().mockResolvedValue({ status: 'suspended' });

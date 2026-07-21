@@ -22,13 +22,15 @@ import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { PgVector, PostgresStore } from '@mastra/pg';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
+import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { BetterAuthWebAuth } from '../web/auth-better-adapter.js';
-import type { WebAuthAdapter } from '../web/auth-adapter.js';
-import { WorkOSWebAuth } from '../web/auth-workos-adapter.js';
+import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '../web/factory-integration.js';
 import { GithubIntegration } from '../web/github/integration.js';
@@ -67,23 +69,23 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-// Web auth, by env precedence (any custom `WebAuthAdapter` works here too):
+// Web auth, by env precedence (any custom `MastraAuthProvider` works here too):
 //   1. WORKOS_API_KEY + WORKOS_CLIENT_ID → WorkOS AuthKit (hosted login). The
 //      WorkOS SDK reads its own credentials; the redirect URI falls back to
-//      `<publicUrl>/auth/callback` inside the adapter's init().
-//   2. BETTER_AUTH_SECRET → self-hosted better-auth (email/password on the app
-//      Postgres — no external identity vendor in the availability path).
+//      `<publicUrl>/auth/callback` inside the provider's init().
+//   2. BETTER_AUTH_SECRET → self-hosted better-auth (email/password on the
+//      configured factory storage — no external identity vendor in the availability path).
 //      MASTRACODE_AUTH_SIGNUP_DISABLED=1 turns off public sign-up.
 //   3. Neither → auth disabled (open server, bare local dev).
 const workosConfigured = Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
 const betterAuthSecret = process.env.BETTER_AUTH_SECRET;
-let auth: WebAuthAdapter | undefined;
+let auth: IMastraAuthProvider | undefined;
 if (workosConfigured) {
-  auth = new WorkOSWebAuth({ redirectUri: process.env.WORKOS_REDIRECT_URI });
+  auth = new MastraAuthWorkos({ redirectUri: process.env.WORKOS_REDIRECT_URI, fetchMemberships: true });
 } else if (betterAuthSecret) {
-  auth = new BetterAuthWebAuth({
+  auth = new MastraAuthBetterAuth({
     secret: betterAuthSecret,
-    signUpDisabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED === '1',
+    signUpEnabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED !== '1',
   });
 }
 
@@ -221,19 +223,28 @@ const linear = linearEnv
 
 const integrations: FactoryIntegration[] = [github, linear].filter(i => i !== undefined);
 
-// Single app Postgres: one PostgresStore (and one pg pool) powers agent
-// storage, the factory app tables, the distributed project lock, and
-// better-auth. The paired PgVector rides the same database for recall search.
-// Unset (bare local dev) → no instances; the SDK mount falls back to its
-// default local libSQL resolution and app-DB-gated features stay off.
+// One FactoryStorage backend powers agent storage, the factory app tables,
+// the distributed project lock, and better-auth. `APP_DATABASE_URL` set →
+// Postgres (the paired PgVector rides the same database for recall search).
+// Unset (bare local dev) → libSQL on the same local file the SDK's default
+// storage resolution uses, running the FULL app surface (auth, intake,
+// audit, work-items, integrations) — no features silently off.
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
+const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+if (!appDatabaseUrl && !localDevelopmentMode) {
+  throw new Error('APP_DATABASE_URL is required outside local development and tests.');
+}
 const storage = appDatabaseUrl
-  ? new PostgresStore({
+  ? new PgFactoryStorage({
       id: 'mastra-code-storage',
       connectionString: appDatabaseUrl,
       retention: DEFAULT_RETENTION,
     })
-  : undefined;
+  : new LibSQLFactoryStorage({
+      id: 'mastra-code-storage',
+      url: `file:${getDatabasePath()}`,
+      retention: DEFAULT_RETENTION,
+    });
 const vector = appDatabaseUrl
   ? new PgVector({ id: 'mastra-code-vectors', connectionString: appDatabaseUrl })
   : undefined;
@@ -242,8 +253,8 @@ export const factory = new MastraFactory({
   auth,
   sandbox: {
     machine: sandbox,
-    // Checkout base inside sandboxes (nested `owner/name` per repo). Unset →
-    // the machine's own workingDirectory (local) or `/workspace` (cloud).
+    // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
+    // this in-sandbox path and uses its host workingDirectory instead.
     workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
     // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
     maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),

@@ -101,6 +101,4 @@ export function isObservationMarker(part: { type: string }): part is OmMarkerPar
  * Union of observation-only marker parts rendered by `ObservationIndicator`.
  */
 export type OmObservationMarkerPart =
-  | DataOmObservationStartPart
-  | DataOmObservationEndPart
-  | DataOmObservationFailedPart;
+  DataOmObservationStartPart | DataOmObservationEndPart | DataOmObservationFailedPart;

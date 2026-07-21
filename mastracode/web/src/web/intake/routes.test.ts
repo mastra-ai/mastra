@@ -25,8 +25,8 @@ vi.mock('../audit/store', () => ({
 }));
 
 import { __resetRuntimeConfigForTests } from '../runtime-config';
-import { seedInMemoryFactoryStoreForTests } from '../storage/test-utils';
-import type { InMemoryFactoryStoreSeed } from '../storage/test-utils';
+import { seedFactoryStorageForTests } from '../storage/test-utils';
+import type { FactoryStorageTestSeed } from '../storage/test-utils';
 import { mountApiRoutes } from '../test-utils';
 import { buildIntakeRoutes } from './routes';
 import { DEFAULT_INTAKE_CONFIG, parseIntakeConfig } from './store';
@@ -44,10 +44,10 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
 
-let seed: InMemoryFactoryStoreSeed;
+let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
-  seed = await seedInMemoryFactoryStoreForTests();
+  seed = await seedFactoryStorageForTests();
   auditRecorded = [];
   auditFailure = undefined;
 });
@@ -212,15 +212,18 @@ describe('parseIntakeConfig', () => {
 
 describe('GET /web/intake/config with prerelease storage rows', () => {
   it('returns defaults when a stored row still uses github.projectIds', async () => {
-    // Seed through the in-memory raw path so the typed save path cannot rewrite it.
-    (seed.intake as { seedRawConfig: (orgId: string, userId: string, raw: unknown) => void }).seedRawConfig(
-      'org1',
-      'u1',
-      {
+    // Seed through the backend ops path so the typed save path cannot rewrite it.
+    const now = new Date();
+    await seed.storage.ops.insertOne('intake_settings', {
+      org_id: 'org1',
+      user_id: 'u1',
+      config: {
         github: { enabled: false, projectIds: ['old-gp'] },
         linear: { enabled: true, projectIds: ['lp-legacy'] },
       },
-    );
+      created_at: now,
+      updated_at: now,
+    });
     const res = await buildApp(orgUser).request('/web/intake/config');
     const json = await res.json();
     expect(json).toEqual({ config: DEFAULT_INTAKE_CONFIG });

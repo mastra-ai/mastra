@@ -72,8 +72,7 @@ export declare function appendResponseMessages({
  It can be a string or an array of text, image, reasoning, redacted reasoning, and tool call parts.
  */
 export declare type AssistantContent =
-  | string
-  | Array<TextPart | FilePart | ReasoningPart | RedactedReasoningPart | ToolCallPart>;
+  string | Array<TextPart | FilePart | ReasoningPart | RedactedReasoningPart | ToolCallPart>;
 
 declare type AsyncIterableStream<T> = AsyncIterable<T> & ReadableStream<T>;
 
@@ -2063,13 +2062,7 @@ declare interface LanguageModelV1FilePart {
  - `unknown`: the model has not transmitted a finish reason
  */
 declare type LanguageModelV1FinishReason =
-  | 'stop'
-  | 'length'
-  | 'content-filter'
-  | 'tool-calls'
-  | 'error'
-  | 'other'
-  | 'unknown';
+  'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown';
 
 /**
  A tool has a name, a description, and a set of parameters.
@@ -4482,11 +4475,13 @@ declare type ToToolsWithDefinedExecute<TOOLS extends ToolSet> = {
 };
 
 declare type ToToolsWithExecute<TOOLS extends ToolSet> = {
-  [K in keyof TOOLS as TOOLS[K] extends {
-    execute: any;
-  }
-    ? K
-    : never]: TOOLS[K];
+  [
+    K in keyof TOOLS as TOOLS[K] extends {
+      execute: any;
+    }
+      ? K
+      : never
+  ]: TOOLS[K];
 };
 
 /**

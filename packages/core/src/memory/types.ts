@@ -1238,8 +1238,7 @@ export type SharedMemoryConfig = {
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
 export type WorkingMemoryTemplate =
-  | { format: 'markdown'; content: string }
-  | { format: 'json'; content: string | Record<string, unknown> };
+  { format: 'markdown'; content: string } | { format: 'json'; content: string | Record<string, unknown> };
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];

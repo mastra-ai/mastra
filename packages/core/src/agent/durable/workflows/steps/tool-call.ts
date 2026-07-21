@@ -715,10 +715,8 @@ export function createDurableToolCallStep() {
         workspace,
         requestContext,
         tracingContext: toolTracingContext,
-        // Forward the actor for the current workflow segment. On resume this
-        // must come from resume(), not the serialized options from the initial
-        // run, so a new actor wins and an omitted actor does not reuse stale
-        // trusted state.
+        // Use the actor supplied for this workflow segment. A resumed segment
+        // must never recover the initial actor from serialized agent options.
         actor,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
         ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),

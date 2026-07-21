@@ -8,7 +8,7 @@ describe('checkConfigExport Babel plugin', () => {
     transformSync(code, {
       filename: 'testfile.ts',
       presets: ['@babel/preset-typescript'],
-      plugins: [checkConfigExport(result)],
+      plugins: [() => checkConfigExport(result)],
       configFile: false,
       babelrc: false,
     });
