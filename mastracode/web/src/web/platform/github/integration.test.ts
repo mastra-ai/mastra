@@ -8,7 +8,7 @@ import { seedFactoryStorageForTests } from '../../storage/test-utils.js';
 import { PlatformGithubIntegration } from './integration.js';
 
 const config = {
-  baseUrl: 'https://platform.example.com/',
+  baseUrl: 'https://platform.example.com/v1',
   accessToken: 'platform-token',
 };
 
@@ -50,7 +50,7 @@ function json(data: unknown, status = 200): Response {
 }
 
 beforeEach(() => {
-  vi.stubEnv('MASTRA_PLATFORM_BASE_URL', config.baseUrl);
+  vi.stubEnv('MASTRA_SHARED_API_URL', config.baseUrl);
   vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', config.accessToken);
 });
 
@@ -506,7 +506,7 @@ describe('PlatformGithubIntegration', () => {
   });
 
   it('defaults the Platform base URL and requires the access token environment variable', () => {
-    vi.stubEnv('MASTRA_PLATFORM_BASE_URL', '');
+    vi.stubEnv('MASTRA_SHARED_API_URL', '');
     expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'platform.mastra.ai' });
 
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');

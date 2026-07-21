@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PlatformApiClient, PlatformApiError } from './api-client.js';
+import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from './api-client.js';
 
 const accessToken = 'platform-secret-token';
 
@@ -11,9 +11,29 @@ function client(fetchImpl: typeof fetch) {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('PlatformApiClient', () => {
+  it('resolves config from MASTRA_SHARED_API_URL and normalizes the /v1 root', () => {
+    vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.example.com/v1/');
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', accessToken);
+
+    expect(platformApiClientConfigFromEnv()).toEqual({
+      baseUrl: 'https://platform.example.com',
+      accessToken,
+    });
+  });
+
+  it('defaults shared API config to platform.mastra.ai and requires an access token', () => {
+    vi.stubEnv('MASTRA_SHARED_API_URL', '');
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', accessToken);
+    expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://platform.mastra.ai' });
+
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    expect(() => platformApiClientConfigFromEnv()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
+  });
+
   it('uses bearer authentication without ambient cookie credentials', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
