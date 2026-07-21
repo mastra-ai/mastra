@@ -295,14 +295,9 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         },
       });
 
-      // TODO: output processors in v2 still run when the model throws an error! that doesn't seem right.
-      // it means in v2 our message history processor saves the input message.
-      if (version === `v1`) {
-        const result = await mockMemory.recall({ threadId: 'thread-3', resourceId: 'resource-3' });
-        const messages = result.messages;
-        expect(saveCallCount).toBe(0);
-        expect(messages.length).toBe(0);
-      }
+      const result = await mockMemory.recall({ threadId: 'thread-3', resourceId: 'resource-3' });
+      expect(saveCallCount).toBe(0);
+      expect(result.messages.length).toBe(0);
     });
 
     it('should save thread but not messages if error occurs during streaming', async () => {
@@ -314,7 +309,8 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       // v1 (legacy): Does not use memory processors, so the old behavior applies where
       // threads are not saved until the request completes successfully.
       const mockMemory = new MockMemory();
-      const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
+      const storage = await mockMemory.getMemoryStore();
+      const saveMessagesSpy = vi.spyOn(storage, 'saveMessages');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
       if (version === 'v1') {
