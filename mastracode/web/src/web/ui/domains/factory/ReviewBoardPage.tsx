@@ -7,18 +7,21 @@ import { stagesAfterMove } from './boardUtils';
 import { Board, LoadMoreButton } from './components/Board';
 import type { BoardCard } from './components/Board';
 import { FactoryPageShell } from './components/FactoryPageShell';
+import { selectedRepository, type ServerFactory } from '../workspaces/services/factories';
 
 export function ReviewBoardPage() {
   return (
     <FactoryPageShell title="Review" description="Review active work and open pull requests before completion.">
-      {factory => <ReviewBoard factoryProjectId={factory.binding.factoryProjectId} />}
+      {factory => <ReviewBoard factory={factory} />}
     </FactoryPageShell>
   );
 }
 
-function ReviewBoard({ factoryProjectId }: { factoryProjectId: string }) {
+function ReviewBoard({ factory }: { factory: ServerFactory }) {
+  const factoryProjectId = factory.binding.factoryProjectId;
+  const projectRepositoryId = selectedRepository(factory)?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryProjectId);
-  const pulls = useProjectPullRequestsQuery(factoryProjectId);
+  const pulls = useProjectPullRequestsQuery(projectRepositoryId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
 
   if (items.isPending || pulls.isPending) return <p role="status">Loading Review board</p>;

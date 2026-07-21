@@ -421,20 +421,22 @@ describe('Factory sidebar section', () => {
 });
 
 describe('Factory Board routing', () => {
-  it('given the intake route, when visited, then it renders the dedicated Intake board', async () => {
-    useBoardHandlers();
+  it('given the intake route, when visited, then it loads candidates by repository ID', async () => {
+    useBoardHandlers({ issues });
     const { router } = renderAt('/factory/intake');
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/factory/intake'));
     expect(await screen.findByRole('heading', { name: 'Intake' })).toBeInTheDocument();
+    expect(await screen.findByText('Fix flaky test')).toBeInTheDocument();
   });
 
-  it('given the review route, when visited, then it renders the dedicated Review board', async () => {
-    useBoardHandlers();
+  it('given the review route, when visited, then it loads pull requests by repository ID', async () => {
+    useBoardHandlers({ pullRequests });
     const { router } = renderAt('/factory/review');
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/factory/review'));
     expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    expect(await screen.findByText('Add factory pages')).toBeInTheDocument();
   });
 
   it('given a local project, when visiting the Board, then the route is not found', async () => {

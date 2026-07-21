@@ -21,6 +21,6 @@ export function useRouteFactory() {
     factoriesPending: factoriesQuery.isFetching,
     activeFactory,
     resourceId,
-    sessionEnabled: !!activeFactory?.resourceId,
+    sessionEnabled: activeFactory !== null,
   };
 }
