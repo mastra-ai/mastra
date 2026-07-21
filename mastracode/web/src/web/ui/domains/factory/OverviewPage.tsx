@@ -99,7 +99,7 @@ function useActivePaths(): ReadonlySet<string> {
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
     enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory) && projectPath),
