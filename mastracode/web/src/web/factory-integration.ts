@@ -25,81 +25,12 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { AuditEmitter } from './audit/domain.js';
 import type { AuditEventRow } from '@mastra/factory/storage/domains/audit/base';
 import type { StateSigner } from './state-signing.js';
+import type { Intake } from './capabilities/intake.js';
+import type { VersionControl } from './capabilities/version-control.js';
 import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
 import type { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
 import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
-import type {
-  SourceControlInstallation,
-  SourceControlRepository,
-  SourceControlStorageHandle,
-} from '@mastra/factory/storage/domains/source-control/base';
-
-export interface IntakeSource {
-  id: string;
-  name: string;
-  type: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface IntakeItem {
-  source: {
-    type: string;
-    externalId: string;
-    url?: string;
-  };
-  sourceId: string;
-  title: string;
-  status?: string;
-  labels?: string[];
-  assignee?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface IntakePage {
-  items: IntakeItem[];
-  nextCursor: string | null;
-}
-
-export interface IntakeIntegrationCapability {
-  listSources(args: { orgId: string; userId: string }): Promise<IntakeSource[]>;
-  listItems(args: { orgId: string; userId: string; sourceIds: string[]; cursor?: string }): Promise<IntakePage>;
-}
-
-export interface SourceControlInstallationInput {
-  externalId: string;
-  accountName?: string | null;
-  accountType?: string | null;
-  metadata?: Record<string, unknown>;
-}
-
-export interface SourceControlRepositoryInput {
-  externalId: string;
-  slug: string;
-  defaultBranch: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface SourceControlRepositoryAccess {
-  cloneUrl: string;
-  authorization?: { scheme: 'bearer'; token: string };
-}
-
-export interface SourceControlIntegrationCapability {
-  initialize(args: { storage: SourceControlStorageHandle }): void;
-  registerInstallation(args: {
-    orgId: string;
-    userId: string;
-    installation: SourceControlInstallationInput;
-  }): Promise<SourceControlInstallation>;
-  registerRepositories(args: {
-    orgId: string;
-    installationId: string;
-    repositories: SourceControlRepositoryInput[];
-  }): Promise<SourceControlRepository[]>;
-  getRepositoryAccess(args: { orgId: string; repositoryId: string }): Promise<SourceControlRepositoryAccess>;
-}
+import type { SourceControlStorageHandle } from '@mastra/factory/storage/domains/source-control/base';
 
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
@@ -155,10 +86,10 @@ export interface IntegrationContext {
 export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
   readonly id: string;
-  /** Optional normalized external-work intake capability. */
-  readonly intake?: IntakeIntegrationCapability;
-  /** Optional provider-neutral source-control capability. */
-  readonly sourceControl?: SourceControlIntegrationCapability;
+  /** Issue-oriented capability consumed by Intake. */
+  readonly intake?: Intake;
+  /** Repository, installation, and pull-request capability. */
+  readonly versionControl?: VersionControl;
   /**
    * Bind the integration's generic persistence handle. Called once by the
    * factory during `prepare()` (before routes/tools/workers are collected),

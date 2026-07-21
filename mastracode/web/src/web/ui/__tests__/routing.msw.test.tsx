@@ -162,7 +162,7 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
-  it('given no factory, when visiting /new, then the create factory modal is shown', async () => {
+  it('given no factory, when visiting /new, then the create factory panel is shown', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
         HttpResponse.json({
@@ -176,8 +176,8 @@ describe('MastraCode web routing', () => {
 
     renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
 
-    const dialog = await screen.findByRole('dialog', { name: 'Create Factory' });
-    expect(within(dialog).getByLabelText('Factory name')).toBeInTheDocument();
+    const panel = await screen.findByRole('region', { name: 'Create Factory' });
+    expect(within(panel).getByLabelText('Factory name')).toBeInTheDocument();
   });
 
   it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {

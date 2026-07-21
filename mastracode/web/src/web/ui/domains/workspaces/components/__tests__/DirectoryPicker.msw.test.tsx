@@ -42,7 +42,7 @@ describe('DirectoryBrowser', () => {
         }),
       );
 
-      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} />);
 
       expect(await screen.findByRole('status', { name: 'Loading folders' })).toBeInTheDocument();
       expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
@@ -58,7 +58,7 @@ describe('DirectoryBrowser', () => {
         http.get(FS_URL, ({ request }) => HttpResponse.json(listingFor(new URL(request.url).searchParams.get('path')))),
       );
 
-      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} />);
 
       expect(await screen.findByText('alpha')).toBeInTheDocument();
       expect(screen.getByText('beta')).toBeInTheDocument();
@@ -72,7 +72,7 @@ describe('DirectoryBrowser', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} />);
 
       await user.click(await screen.findByText('alpha'));
 
@@ -91,7 +91,7 @@ describe('DirectoryBrowser', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} />);
 
       const back = screen.getByRole('button', { name: 'Back' });
       const forward = screen.getByRole('button', { name: 'Forward' });
@@ -124,7 +124,7 @@ describe('DirectoryBrowser', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} />);
 
       await screen.findByText('alpha');
       const breadcrumb = screen.getByRole('navigation', { name: 'Path' });
@@ -146,7 +146,7 @@ describe('DirectoryBrowser', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} />);
 
       await screen.findByText('alpha');
       await user.type(screen.getByRole('textbox', { name: 'Search folders' }), 'ALP');
@@ -161,7 +161,7 @@ describe('DirectoryBrowser', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} />);
 
       await screen.findByText('alpha');
       await user.type(screen.getByRole('textbox', { name: 'Search folders' }), 'alp');
@@ -179,7 +179,7 @@ describe('DirectoryBrowser', () => {
       );
 
       const onPick = vi.fn();
-      renderWithProviders(<DirectoryBrowser onPick={onPick} onCancel={vi.fn()} />);
+      renderWithProviders(<DirectoryBrowser onPick={onPick} />);
 
       fireEvent.doubleClick(await screen.findByText('alpha'));
 
@@ -187,7 +187,7 @@ describe('DirectoryBrowser', () => {
     });
   });
 
-  describe('when "Create Factory" is clicked', () => {
+  describe('when "Use this folder" is clicked', () => {
     it('picks the current listing path', async () => {
       server.use(
         http.get(FS_URL, ({ request }) => HttpResponse.json(listingFor(new URL(request.url).searchParams.get('path')))),
@@ -195,10 +195,11 @@ describe('DirectoryBrowser', () => {
 
       const onPick = vi.fn();
       const user = userEvent.setup();
-      renderWithProviders(<DirectoryBrowser onPick={onPick} onCancel={vi.fn()} />);
+      renderWithProviders(<DirectoryBrowser onPick={onPick} />);
 
       await screen.findByText('alpha');
-      await user.click(screen.getByRole('button', { name: 'Create Factory' }));
+      expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Use this folder' }));
 
       expect(onPick).toHaveBeenCalledWith('/projects', 'projects');
     });
@@ -207,7 +208,7 @@ describe('DirectoryBrowser', () => {
     it('shows an error', async () => {
       server.use(http.get(FS_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));
 
-      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} />);
 
       expect(await screen.findByText('nope')).toBeInTheDocument();
     });

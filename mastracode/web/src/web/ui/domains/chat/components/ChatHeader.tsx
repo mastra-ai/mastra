@@ -4,7 +4,7 @@ import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 export function ChatHeader() {
   return (
     <header className="flex items-center gap-2 px-3 py-2 md:hidden">
-      <MainSidebar.MobileTrigger />
+      <MainSidebar.MobileTrigger id="mobile-navigation-trigger" />
     </header>
   );
 }

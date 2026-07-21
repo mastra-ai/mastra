@@ -16,15 +16,13 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
  * (confined to the server's configured root). The user drills into folders and
  * picks one — yielding a real absolute path with no typing.
  *
- * This is a *body* component with no backdrop of its own: it's embedded inside
- * a host modal (see FactoriesModal) so Factory selection is a first-class,
- * centered flow rather than a sidebar popover.
+ * This is a body component with no backdrop of its own. It is embedded in the
+ * in-layout Factory creation surface rather than opening another overlay.
  */
 
 interface DirectoryBrowserProps {
   /** Called with the chosen absolute path and its basename. */
   onPick: (path: string, name: string) => void;
-  onCancel?: () => void;
   /** True while the chosen folder is being resolved (server round-trip). */
   busy?: boolean;
   /** Error from resolving the chosen folder, if any. */
@@ -164,7 +162,7 @@ function DirectoryEntries({ entries, busy, navigating, navigate }: DirectoryEntr
   );
 }
 
-export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickError = null }: DirectoryBrowserProps) {
+export function DirectoryBrowser({ onPick, busy = false, error: pickError = null }: DirectoryBrowserProps) {
   const [navigation, navigate] = useReducer(navigationReducer, initialNavigationState);
   const path = navigation.paths[navigation.index];
   const listingQuery = useDirectoryListing(path);
@@ -202,11 +200,6 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
         <div className="min-w-0 flex-1">
           {listing && <DirectoryBreadcrumb path={listing.path} navigate={navigate} />}
         </div>
-        {onCancel && (
-          <Button variant="ghost" size="sm" className="shrink-0" onClick={onCancel} disabled={busy}>
-            Cancel
-          </Button>
-        )}
         <Button
           variant="primary"
           size="sm"
@@ -245,22 +238,6 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
           {pickError}
         </Txt>
       )}
-
-      <div className="flex items-center justify-end gap-3">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!listing || busy}
-            onClick={() => listing && onPick(listing.path, basename(listing.path))}
-          >
-            {busy ? 'Creating…' : 'Create Factory'}
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

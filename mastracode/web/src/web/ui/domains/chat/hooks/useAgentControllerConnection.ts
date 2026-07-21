@@ -14,7 +14,7 @@ type SseConnectionState = 'never' | 'connected' | 'dropped';
 interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
   resourceId: string;
-  projectPath?: string;
+  scope?: string;
   factorySessionState?: FactorySessionState;
   baseUrl?: string;
   enabled?: boolean;
@@ -24,7 +24,7 @@ interface UseAgentControllerConnectionArgs {
 export function useAgentControllerConnection({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
   factorySessionState,
   baseUrl = '',
   enabled = true,
@@ -37,14 +37,14 @@ export function useAgentControllerConnection({
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope: projectPath,
+    scope,
     baseUrl,
     enabled,
   });
   const initQuery = useAgentControllerSessionInit({
     agentControllerId,
     resourceId,
-    projectPath,
+    scope,
     factorySessionState,
     baseUrl,
     enabled,
@@ -52,7 +52,7 @@ export function useAgentControllerConnection({
   const syncQuery = useAgentControllerSessionSync({
     agentControllerId,
     resourceId,
-    projectPath,
+    scope,
     baseUrl,
     enabled: enabled && initQuery.isSuccess,
     sseConnected,
@@ -75,7 +75,7 @@ export function useAgentControllerConnection({
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     if (typeof running === 'boolean') {
-      const stateQueryKey = queryKeys.agentControllerConnectionState(agentControllerId, resourceId, projectPath);
+      const stateQueryKey = queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope);
       const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
       queryClient.setQueryData<AgentControllerSessionState>(
         stateQueryKey,

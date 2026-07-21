@@ -113,7 +113,10 @@ function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
       }
       try {
         const accessToken = await getFreshLinearAccessToken(linear, linear.storage, connection);
-        const detail = await linear.fetchIssueDetail(accessToken, issue.trim());
+        const detail = await linear.intake.getIssue({
+          connection: { type: 'oauth', accessToken },
+          issueId: issue.trim(),
+        });
         if (!detail) {
           return { error: `Linear issue "${issue}" was not found in this workspace.` };
         }
@@ -149,7 +152,11 @@ function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
       }
       try {
         const accessToken = await getFreshLinearAccessToken(linear, linear.storage, connection);
-        const comment = await linear.createIssueComment(accessToken, issue.trim(), body);
+        const comment = await linear.intake.createComment({
+          connection: { type: 'oauth', accessToken },
+          issueId: issue.trim(),
+          body,
+        });
         if (!comment) {
           return { error: `Linear issue "${issue}" was not found in this workspace.` };
         }

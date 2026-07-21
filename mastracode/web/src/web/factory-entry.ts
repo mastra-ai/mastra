@@ -232,8 +232,8 @@ export class MastraFactory {
     };
     const projectDomain = new ProjectDomain({
       storage,
-      sourceControlIntegrationIds: integrations
-        .filter(integration => integration.sourceControl)
+      versionControlIntegrationIds: integrations
+        .filter(integration => integration.versionControl)
         .map(integration => integration.id),
     });
     const auditDomain = new AuditDomain({ storage, integrations });
@@ -311,18 +311,18 @@ export class MastraFactory {
         storage: integrationStorage.forIntegration(integration.id),
         projects: factoryProjectsStorage,
       });
-      if (integration.sourceControl) {
-        integration.sourceControl.initialize({
+      if (integration.versionControl) {
+        integration.versionControl.initialize({
           storage: sourceControlStorage.forIntegration(integration.id),
         });
       }
     }
 
-    // Every integration uses generic integration storage. Source-control
-    // providers additionally require the source-control domain. Readiness is
-    // derived solely from capability presence, never from provider ids.
+    // Every integration uses generic integration storage. Version-control
+    // providers additionally require the source-control storage domain. Readiness
+    // is derived solely from capability presence, never from provider ids.
     const integrationRegistrations = integrations.map(integration => {
-      const requiredDomains = ['integrations', ...(integration.sourceControl ? ['source-control'] : [])];
+      const requiredDomains = ['integrations', ...(integration.versionControl ? ['source-control'] : [])];
       return {
         integration,
         ready: requiredDomains.every(domain => storage.isDomainReady(domain)),
