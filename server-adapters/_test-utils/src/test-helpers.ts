@@ -1,4 +1,4 @@
-import { Agent, createMessageSignal, createSignal, isDurableAgentLike } from '@mastra/core/agent';
+import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { expect, Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
@@ -180,25 +180,6 @@ export function mockAgentMethods(agent: Agent) {
 
   // Mock resumeStream method - returns object with fullStream property
   vi.spyOn(agent, 'resumeStream').mockResolvedValue({ fullStream: createMockStream() } as any);
-
-  // Mock durable-only methods — attach directly since they don't exist on the
-  // base Agent class (only on DurableAgent). Handlers like RECOVER_ROUTE use
-  // isDurableAgentLike() to duck-type. Make sure the mocked shape satisfies
-  // that guard.
-  (agent as any).recover = vi.fn().mockResolvedValue({ fullStream: createMockStream() });
-  (agent as any).recoverActiveRuns = vi.fn().mockResolvedValue({ recovered: [], succeeded: 0, failed: 0 });
-  // Force a self-referential `agent` property so the mock satisfies
-  // isDurableAgentLike. The base Agent class exposes an `agent` getter that
-  // returns undefined unless `durable: true` is configured.
-  Object.defineProperty(agent, 'agent', {
-    value: agent,
-    configurable: true,
-  });
-  if (!isDurableAgentLike(agent)) {
-    throw new Error(
-      'mockAgentMethods: mocked agent does not satisfy isDurableAgentLike. Update the mock to match the current contract.',
-    );
-  }
 
   // Mock legacy generate - returns GenerateTextResult (JSON object, not stream)
   vi.spyOn(agent, 'generateLegacy').mockResolvedValue({
