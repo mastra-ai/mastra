@@ -3621,6 +3621,46 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
     await new Promise<void>(resolve => httpServer.close(() => resolve()));
   });
 
+  it('clears the SDK client transport when severing the attached transport', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'wedge-sdk-transport-match',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+
+    const attachedTransport = (client as any).client.transport;
+    expect(attachedTransport).toBeDefined();
+
+    (client as any).severClientTransportLink(attachedTransport);
+
+    expect((client as any).client.transport).toBeUndefined();
+    expect(attachedTransport.onclose).toBeUndefined();
+    expect(attachedTransport.onerror).toBeUndefined();
+    expect(attachedTransport.onmessage).toBeUndefined();
+  });
+
+  it('keeps the SDK client transport when severing a different transport', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'wedge-sdk-transport-mismatch',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+
+    const attachedTransport = (client as any).client.transport;
+    const unrelatedTransport = {
+      onclose: vi.fn(),
+      onerror: vi.fn(),
+      onmessage: vi.fn(),
+    };
+
+    (client as any).severClientTransportLink(unrelatedTransport);
+
+    expect((client as any).client.transport).toBe(attachedTransport);
+    expect(unrelatedTransport.onclose).toBeUndefined();
+    expect(unrelatedTransport.onerror).toBeUndefined();
+    expect(unrelatedTransport.onmessage).toBeUndefined();
+  });
+
   it('connect() succeeds after an earlier connect attempt failed during the SSE fallback', async () => {
     // First-ever connect during the outage: streamable init POST gets 404, the
     // SSE fallback GET gets 405 so SSEClientTransport.start() throws. The SDK
