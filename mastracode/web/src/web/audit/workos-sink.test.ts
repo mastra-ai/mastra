@@ -10,7 +10,14 @@ vi.mock('../auth', async () => {
   };
 });
 
-import type { WebAuthAdapter } from '../auth-adapter';
+// Mock the provider class so `isWorkOSAuth()`'s instanceof check matches
+// instances seeded below without constructing a real WorkOS client.
+vi.mock('@mastra/auth-workos', () => ({
+  MastraAuthWorkos: class {},
+}));
+
+import { MastraAuthWorkos } from '@mastra/auth-workos';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
 import type { AuditEventRow } from '../storage/domains/audit/base';
 import { forwardToWorkOS, toWorkOSEvent } from './workos-sink';
@@ -74,14 +81,14 @@ describe('forwardToWorkOS', () => {
     expect(createEvent).not.toHaveBeenCalled();
   });
 
-  it('is a no-op when auth is enabled but the active adapter is not WorkOS (better-auth)', async () => {
-    seedRuntimeConfig({ authAdapter: { kind: 'better-auth' } as WebAuthAdapter });
+  it('is a no-op when auth is enabled but the active provider is not WorkOS (better-auth)', async () => {
+    seedRuntimeConfig({ authProvider: { name: 'better-auth' } as IMastraAuthProvider });
     await forwardToWorkOS(makeRow());
     expect(createEvent).not.toHaveBeenCalled();
   });
 
-  it('forwards when the factory seeded a WorkOS adapter', async () => {
-    seedRuntimeConfig({ authAdapter: { kind: 'workos' } as WebAuthAdapter });
+  it('forwards when the factory seeded a WorkOS provider', async () => {
+    seedRuntimeConfig({ authProvider: new MastraAuthWorkos() as unknown as IMastraAuthProvider });
     await forwardToWorkOS(makeRow());
     expect(createEvent).toHaveBeenCalledTimes(1);
   });
