@@ -127,7 +127,7 @@ export function buildDrilledThemeFlow(
   }));
 
   return {
-    snapshot: { ...pathsResponse.snapshot, traceCount: filteredPaths.length },
+    snapshot: { ...flow.snapshot, traceCount: filteredPaths.length },
     stages,
     links: drilledLinks,
   };

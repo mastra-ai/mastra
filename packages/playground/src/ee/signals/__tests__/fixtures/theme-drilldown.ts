@@ -316,6 +316,20 @@ export const allThemePathsResponse = {
   nextOffset: undefined,
 } satisfies ThemePathsResponse;
 
+export const pathsWithCollapsedOutcomeResponse = {
+  ...allThemePathsResponse,
+  paths: [
+    {
+      traceId: 'trace-1',
+      assignments: {
+        goal: 'opaque-goal-key',
+        outcome: 'opaque-outcome-other-key',
+        behavior: 'opaque-behavior-key',
+      },
+    },
+  ],
+} satisfies ThemePathsResponse;
+
 export const missingSelectedThemePathsResponse = {
   ...firstThemePathsResponse,
   snapshot: twoDrilldownThemeSnapshotsResponse.snapshots[0],

@@ -19,6 +19,7 @@ import {
   missingThemeDetailResponse,
   nonNumericThemeFlowResponse,
   olderDrilldownThemeFlowResponse,
+  pathsWithCollapsedOutcomeResponse,
   secondThemeExamplesResponse,
   secondThemePathsResponse,
   singleDrilldownThemeSnapshotsResponse,
@@ -377,17 +378,31 @@ describe('SankeySignals drill-in', () => {
       expect(await screen.findByText('2 traces analyzed')).not.toBeNull();
       expect(pathsRequestCount).toBe(2);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Clear drill-in' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
 
       expect(await screen.findByText('3 traces analyzed')).not.toBeNull();
       expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
+    });
+
+    it('keeps themes revealed from an overview other node interactive', async () => {
+      useFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, () =>
+          HttpResponse.json(pathsWithCollapsedOutcomeResponse),
+        ),
+      );
+      renderSignals();
+
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+
+      expect(await screen.findByRole('button', { name: /Transcript located.+1 trace \(100%\)/ })).not.toBeNull();
     });
 
     it('opens theme details from the active drill-in', async () => {
       useFlowHandlers();
       renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      fireEvent.click(await screen.findByRole('button', { name: 'View Add transcript theme details' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
 
       expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
       expect(await screen.findByText('Users want to add a transcript to their workspace.')).not.toBeNull();
@@ -424,7 +439,7 @@ describe('SankeySignals drill-in', () => {
       fireEvent.change(sliderInput, { target: { value: '0' } });
 
       expect(await screen.findByText(/This theme is not present in the selected snapshot/)).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Clear drill-in' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Clear filter' })).not.toBeNull();
     });
   });
 
@@ -535,7 +550,42 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
 
       expect(await screen.findByText('Unable to load signal flow.')).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Clear drill-in' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Clear filter' })).not.toBeNull();
+    });
+
+    it('stops snapshot playback after the paths request fails', async () => {
+      const flowRequests: string[] = [];
+      useFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(twoDrilldownThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          if (!snapshotId) return HttpResponse.json({ error: 'Missing snapshot' }, { status: 400 });
+          flowRequests.push(snapshotId);
+          return HttpResponse.json({
+            ...drilldownThemeFlowResponse,
+            snapshot: { ...drilldownThemeFlowResponse.snapshot, snapshotId },
+          });
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          if (snapshotId === 'older-opaque-snapshot-cursor') {
+            return HttpResponse.json({ error: 'Paths failed' }, { status: 500 });
+          }
+          return HttpResponse.json(allThemePathsResponse);
+        }),
+      );
+      renderSignals();
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      await screen.findByText('2 traces analyzed');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
+      await screen.findByRole('button', { name: 'Retry' }, { timeout: 2000 });
+      await new Promise(resolve => window.setTimeout(resolve, 1100));
+
+      expect(flowRequests).toEqual(['opaque-snapshot-cursor', 'older-opaque-snapshot-cursor']);
     });
   });
 

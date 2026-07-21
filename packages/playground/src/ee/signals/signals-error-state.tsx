@@ -22,7 +22,7 @@ export function SignalsErrorState({
               Retry
             </Button>
             {onClear ? (
-              <Button aria-label="Clear drill-in" onClick={onClear} size="sm" type="button" variant="ghost">
+              <Button onClick={onClear} size="sm" type="button" variant="ghost">
                 Clear filter
               </Button>
             ) : null}

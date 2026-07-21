@@ -10,6 +10,6 @@ Added optional Sankey node activation with mouse and keyboard support, including
 ```tsx
 <SankeyChart
   onNodeClick={({ column, value }) => openDrilldown(column.id, value)}
-  isNodeClickable={({ value }) => value !== 'other'}
+  isNodeClickable={({ value }) => drillableNodeIds.has(value)}
 />
 ```

@@ -12,7 +12,7 @@ export function useThemePaths(
   themeId: string | undefined,
 ) {
   return useQuery({
-    queryKey: ['entity-learning', entityType, entityId, 'theme-paths', signalNames, snapshotId, themeId],
+    queryKey: ['entity-learning', entityType, entityId, 'theme-paths', signalNames, snapshotId],
     queryFn: () => fetchThemePaths(entityId, entityType, signalNames, requireSnapshotId(snapshotId)),
     enabled: snapshotId !== undefined && isNumericThemeId(themeId),
   });
