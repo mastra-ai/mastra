@@ -28,18 +28,12 @@ const scorer = createScorer({
     instructions: 'You are an expert evaluator...',
   },
 })
-  .preprocess({
-    /* step config */
-  })
-  .analyze({
-    /* step config */
-  })
+  .preprocess({/* step config */})
+  .analyze({/* step config */})
   .generateScore(({ run, results }) => {
     // Return a number
   })
-  .generateReason({
-    /* step config */
-  })
+  .generateReason({/* step config */})
 ```
 
 ## `createScorer` options
@@ -87,10 +81,10 @@ const scorer = createScorer({
           },
           {
             name: 'jsonPromptInjection',
-            type: 'boolean',
+            type: "boolean | 'system' | 'inline' | 'auto'",
             isOptional: true,
             description:
-              "When true, inject the JSON schema into the prompt instead of using the provider's native `response_format` API. Set this for models that don't support native structured output (e.g. some Groq Llama models) to avoid a wasted 400 call.",
+              "Controls how the judge's structured output schema reaches the model. Defaults to 'auto', which uses native structured output when supported and inline prompt injection otherwise. Explicit values override automatic routing.",
           },
           {
             name: 'inputProcessors',

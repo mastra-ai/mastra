@@ -14,8 +14,8 @@
  * the loop, identical to a code-registered subagent map.
  *
  * The matrix `'fs'` variant cannot model this on its own (it spreads a code
- * `agents:` map), so this is a standalone file. It runs on the normal/evented
- * engines; durable wraps the agent and is orthogonal to the assembly path.
+ * `agents:` map), so this is a standalone file. It runs on the normal engine;
+ * durable wraps the agent and is orthogonal to the assembly path.
  */
 
 import { createOpenAI } from '@ai-sdk/openai-v5';
@@ -105,8 +105,7 @@ describeForAllEngines(
       // original delegation call id.
       const supervisorFinalTurn = requests.at(-1)?.body?.messages ?? [];
       const toolMessage = supervisorFinalTurn.find(message => (message as { role?: string }).role === 'tool') as
-        | { tool_call_id?: string; content?: unknown }
-        | undefined;
+        { tool_call_id?: string; content?: unknown } | undefined;
       expect(toolMessage?.tool_call_id).toBe('call_writer');
       expect(JSON.stringify(toolMessage?.content)).toContain('Brewed fresh, served warm.');
 

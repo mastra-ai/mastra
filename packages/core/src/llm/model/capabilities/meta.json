@@ -1,4 +1,5 @@
 {
   "attachment": ["muse-spark-1.1"],
-  "temperature": ["muse-spark-1.1"]
+  "temperature": ["muse-spark-1.1"],
+  "structuredOutput": ["muse-spark-1.1"]
 }

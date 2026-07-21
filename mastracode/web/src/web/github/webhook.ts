@@ -2,36 +2,26 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
-import { getRepositoryCollaboratorPermission } from './client';
-import type { GithubSignalSubscriptionRow } from './schema';
+import type { IssueTriageRunInput, IssueTriageRunResult } from '../factory-integration';
+import type { GithubIntegration } from './integration';
 import {
   listPullRequestSubscriptionsForWebhook,
   retirePullRequestSubscription,
+  type GithubSignalSubscriptionRow,
   type GithubWebhookPullRequestTarget,
 } from './subscriptions';
-import { getGithubWebhookSecret } from './config';
 
-export interface GithubIssueTriageRunInput {
-  repository: string;
-  issueNumber: number;
-  issueTitle: string;
-  issueUrl: string;
-  labels: string[];
-  sender?: string;
-  installationId: number;
-  /** Active project resource id used by chat thread queries; projectPath remains the worktree scope. */
-  resourceId?: string;
-  projectPath?: string;
-  branch?: string;
-}
-
-export interface GithubIssueTriageRunResult {
-  threadId?: string;
-  projectPath?: string;
-  branch?: string;
-}
+/**
+ * The triage-run hook types are part of the system-wide integration contract
+ * (`../factory-integration.ts`); re-exported under the GitHub-prefixed names
+ * existing consumers import from this module.
+ */
+export type GithubIssueTriageRunInput = IssueTriageRunInput;
+export type GithubIssueTriageRunResult = IssueTriageRunResult;
 
 export interface GithubWebhookHandlerOptions {
+  /** Integration providing webhook-secret verification + collaborator permission checks. */
+  github: GithubIntegration;
   runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
 }
 
@@ -79,6 +69,12 @@ export interface GithubWebhookNotification {
 
 export interface GithubWebhookDispatchDependencies {
   controller: MountedMastraCode['controller'];
+  /**
+   * Integration used by the default sender-authorization check (collaborator
+   * permission lookup). Author-gated notifications fail closed when neither
+   * this nor an `isAuthorizedSender` override is supplied.
+   */
+  github?: GithubIntegration;
   listSubscriptions?: (
     target: GithubWebhookPullRequestTarget,
     options?: { includeTerminal?: boolean },
@@ -105,8 +101,10 @@ function verifySignature(rawBody: string, signature: string, secret: string): bo
   return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
-async function parseGithubWebhook(c: Context): Promise<ParsedGithubWebhook | GithubWebhookResult> {
-  const secret = getGithubWebhookSecret();
+async function parseGithubWebhook(
+  c: Context,
+  secret: string | undefined,
+): Promise<ParsedGithubWebhook | GithubWebhookResult> {
   if (!secret) {
     return { status: 401, body: { error: 'unauthorized', message: 'GitHub webhook secret is not configured' } };
   }
@@ -325,26 +323,30 @@ async function resolveSubscriptionSession(
   controller: MountedMastraCode['controller'],
   subscription: GithubSignalSubscriptionRow,
 ) {
+  const { sessionId, resourceId, threadId } = subscription;
+  if (!sessionId || !resourceId || !threadId) {
+    throw new Error(`GitHub subscription ${subscription.id} is missing its session binding.`);
+  }
   const scope = subscription.sessionScope || undefined;
-  let session = await controller.getSessionByResource(subscription.resourceId, scope);
+  let session = await controller.getSessionByResource(resourceId, scope);
   if (!session) {
     const tags = {
-      githubProjectId: subscription.githubProjectId,
+      githubProjectId: subscription.data.projectId,
       ...(scope ? { projectPath: scope } : {}),
     };
     session = await controller.createSession({
-      id: subscription.sessionId,
-      ownerId: subscription.ownerId,
-      resourceId: subscription.resourceId,
+      id: sessionId,
+      ownerId: subscription.data.ownerId,
+      resourceId,
       scope,
       tags,
     });
   }
-  if (session.thread.getId() !== subscription.threadId) {
-    await session.thread.switch({ threadId: subscription.threadId, emitEvent: false });
+  if (session.thread.getId() !== threadId) {
+    await session.thread.switch({ threadId, emitEvent: false });
   }
-  if (session.thread.getId() !== subscription.threadId) {
-    throw new Error(`Session ${subscription.sessionId} did not bind thread ${subscription.threadId}.`);
+  if (session.thread.getId() !== threadId) {
+    throw new Error(`Session ${sessionId} did not bind thread ${threadId}.`);
   }
   return session;
 }
@@ -361,7 +363,10 @@ const AUTHOR_GATED_KINDS = new Set([
   'review-dismissed',
 ]);
 
-async function isAuthorizedGithubSender(notification: GithubWebhookNotification): Promise<boolean> {
+async function isAuthorizedGithubSender(
+  notification: GithubWebhookNotification,
+  github: GithubIntegration | undefined,
+): Promise<boolean> {
   if (!AUTHOR_GATED_KINDS.has(notification.kind)) return true;
   const sender = notification.metadata.sender;
   const repository = notification.metadata.repository;
@@ -370,12 +375,22 @@ async function isAuthorizedGithubSender(notification: GithubWebhookNotification)
   if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {
     return AUTHORIZED_BOTS.has(normalizedSender);
   }
+  if (!github) return false;
+  const abortController = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const permission = await Promise.race([
-      getRepositoryCollaboratorPermission(notification.metadata.installationId, repository, sender),
+      github.getRepositoryCollaboratorPermission(
+        notification.metadata.installationId,
+        repository,
+        sender,
+        abortController.signal,
+      ),
       new Promise<undefined>(resolve => {
-        timeout = setTimeout(() => resolve(undefined), PERMISSION_CHECK_TIMEOUT_MS);
+        timeout = setTimeout(() => {
+          abortController.abort();
+          resolve(undefined);
+        }, PERMISSION_CHECK_TIMEOUT_MS);
       }),
     ]);
     return permission !== undefined && AUTHORIZED_PERMISSIONS.has(permission);
@@ -392,18 +407,34 @@ export async function dispatchGithubWebhook(
 ): Promise<{ delivered: number; failed: number; ignored: boolean }> {
   const notification = classifyGithubWebhook(parsed);
   if (!notification) return { delivered: 0, failed: 0, ignored: true };
-  const isAuthorizedSender = dependencies.isAuthorizedSender ?? isAuthorizedGithubSender;
+  const isAuthorizedSender =
+    dependencies.isAuthorizedSender ??
+    ((n: GithubWebhookNotification) => isAuthorizedGithubSender(n, dependencies.github));
   if (!(await isAuthorizedSender(notification))) {
     return { delivered: 0, failed: 0, ignored: true };
   }
 
   const target = {
-    installationId: notification.metadata.installationId,
-    repoId: notification.metadata.repositoryId,
-    pullRequestNumber: notification.metadata.pullRequestNumber,
+    installationExternalId: notification.metadata.installationId.toString(),
+    repositoryExternalId: notification.metadata.repositoryId.toString(),
+    changeRequestId: notification.metadata.pullRequestNumber.toString(),
   };
-  const listSubscriptions = dependencies.listSubscriptions ?? listPullRequestSubscriptionsForWebhook;
-  const retireSubscription = dependencies.retireSubscription ?? retirePullRequestSubscription;
+  const listSubscriptions =
+    dependencies.listSubscriptions ??
+    ((subscriptionTarget: GithubWebhookPullRequestTarget, options?: { includeTerminal?: boolean }) => {
+      if (!dependencies.github) throw new Error('GitHub integration is required to load webhook subscriptions.');
+      return listPullRequestSubscriptionsForWebhook(
+        subscriptionTarget,
+        options,
+        dependencies.github.integrationStorage,
+      );
+    });
+  const retireSubscription =
+    dependencies.retireSubscription ??
+    ((id: string, status: 'open' | 'closed' | 'merged') => {
+      if (!dependencies.github) throw new Error('GitHub integration is required to retire webhook subscriptions.');
+      return retirePullRequestSubscription(id, status, dependencies.github.integrationStorage);
+    });
   const subscriptions = await listSubscriptions(target, { includeTerminal: notification.action === 'reopened' });
   let delivered = 0;
   let failed = 0;
@@ -419,7 +450,7 @@ export async function dispatchGithubWebhook(
         payload: notification.payload,
         sourceId: parsed.deliveryId,
         dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
-        coalesceKey: `github:${subscription.repoId}:pull-request:${subscription.pullRequestNumber}`,
+        coalesceKey: `github:${subscription.data.repositoryExternalId}:pull-request:${subscription.data.changeRequestId}`,
         metadata: {
           event: notification.metadata.event,
           action: notification.action,
@@ -448,9 +479,9 @@ export async function dispatchGithubWebhook(
 
 export async function handleGithubWebhook(
   c: Context,
-  options: GithubWebhookHandlerOptions & Partial<GithubWebhookDispatchDependencies> = {},
+  options: GithubWebhookHandlerOptions & Partial<Omit<GithubWebhookDispatchDependencies, 'github'>>,
 ): Promise<GithubWebhookResult> {
-  const parsed = await parseGithubWebhook(c);
+  const parsed = await parseGithubWebhook(c, options.github.webhookSecret);
   if ('status' in parsed) return parsed;
 
   if (!SUPPORTED_GITHUB_WEBHOOK_EVENTS.has(parsed.event)) {

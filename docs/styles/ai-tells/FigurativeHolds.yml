@@ -1,0 +1,44 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. State the comparison or the claim directly. Disable this rule for legal or wrestling prose."
+level: error
+nonword: true
+ignorecase: true
+# "Holds" is an AI fingerprint for possession applied to abstractions: a
+# chart "holds the same wide spread," a result "holds across datasets," an
+# approach "holds promise," a claim "holds up under scrutiny." Literal
+# holding is everywhere (hands, containers, courts, wrestling), so the
+# complement after the verb is the discriminator, in the FigurativeSits
+# mold. "Holds its own" stays in AnthropomorphicJustification; the tokens
+# here avoid that span so the two rules never double-flag.
+tokens:
+  # --- Mirrored possession: an artifact possessing a property another one
+  # has ("holds the same wide spread," "holds a similar shape"). A person
+  # holding the same title fires too; state who has what instead.
+  - "\\bhold(?:s|ing)? (?:the same|an? (?:similar|identical|comparable|matching)) \\w+"
+  - "\\bheld (?:the same|an? (?:similar|identical|comparable|matching)) \\w+"
+
+  # --- Validity theater: a claim graded like a load-bearing beam ("holds
+  # true," "holds up under scrutiny," "the analogy holds water").
+  - "\\bhold(?:s|ing)? true\\b"
+  - "\\bheld true\\b"
+  - "\\bhold(?:s|ing)? up (?:well|under|to scrutiny|against)\\b"
+  - "\\bheld up (?:well|under|to scrutiny|against)\\b"
+  - "\\bhold(?:s|ing)? water\\b"
+  - "\\bhold(?:s|ing)? at scale\\b"
+  - "\\bhold(?:s|ing)? across\\b"
+  - "\\bheld across\\b"
+
+  # --- Subject-gated survival: an abstraction that persists ("the pattern
+  # holds," "the correlation still holds"). The curated subject is the
+  # gate, since a bare "holds" would flood.
+  - "\\b(?:pattern|trend|rule|result|relationship|correlation|observation|logic|argument|analogy|comparison|intuition|assumption|invariant|principle|premise|claim|conclusion) (?:still |no longer |always |generally |mostly |largely )?(?:holds|held)\\b"
+
+  # --- Promise and potential: the crystal-ball possession ("holds
+  # promise," "holds great potential," "holds the key to").
+  - "\\bhold(?:s|ing)? (?:great |much |real |considerable |enormous |immense |significant )?(?:promise|potential|appeal)\\b"
+  - "\\bheld (?:great |much |real |considerable |enormous |immense |significant )?(?:promise|potential|appeal)\\b"
+  - "\\bhold(?:s|ing)? (?:more |less |little |no |equal |the same )?(?:weight|sway)\\b"
+  - "\\bhold(?:s|ing)? the key to\\b"
+  - "\\bholds? the line\\b"
+  - "\\bhold(?:s|ing)? court\\b"

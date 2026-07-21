@@ -1,24 +1,24 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SquareKanban } from 'lucide-react';
+import { ChartLine, LayoutDashboard, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
 import { useOverlays } from '../../../lib/overlays';
-import { useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
+import { isGithubFactory, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
 
 /**
  * The Factory menu: Board navigation plus whatever the caller nests under it
  * (the factory Sessions list). Factory work is GitHub-backed, so the section
- * only renders for GitHub projects; the Board link additionally requires the
+ * only renders for GitHub factories; the Board link additionally requires the
  * GitHub integration to be enabled and connected, while the nested sessions
- * work off the project's own worktrees.
+ * work off the factory's own worktrees.
  */
 export function FactorySection({ children }: { children?: ReactNode }) {
-  const { activeProject } = useActiveProjectContext();
-  const isGithubProject = activeProject?.source === 'github';
-  const { data: status } = useGithubStatusQuery(isGithubProject);
+  const { activeFactory } = useActiveFactoryContext();
+  const isGithub = activeFactory ? isGithubFactory(activeFactory) : false;
+  const { data: status } = useGithubStatusQuery(isGithub);
 
-  if (!isGithubProject) return null;
+  if (!isGithub) return null;
 
   const showBoard = Boolean(status?.enabled && status.connected);
 
@@ -31,10 +31,13 @@ export function FactorySection({ children }: { children?: ReactNode }) {
       </div>
       {showBoard && (
         <div className="flex flex-col gap-1">
+          <FactoryLink to="/factory/overview" icon={LayoutDashboard} label="Overview" />
           <FactoryLink to="/factory/board" icon={SquareKanban} label="Board" />
+          <FactoryLink to="/factory/metrics" icon={ChartLine} label="Metrics" />
+          <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit" />
         </div>
       )}
-      {children && <div className="flex flex-col gap-2 pl-2">{children}</div>}
+      {children}
     </nav>
   );
 }
