@@ -60,11 +60,18 @@ describe('nested-workflow round-trip', () => {
     const stored = toStorableGraph(outer.stepGraph);
     const wire = JSON.parse(JSON.stringify(stored));
 
-    // The nested workflow entry must be declarative and reference by id.
+    // The nested workflow entry must be declarative and reference by id,
+    // with the nested graph inlined for Studio/API consumers.
     const nestedEntry = wire.find((e: any) => e.type === 'workflow');
     expect(nestedEntry).toBeDefined();
     expect(nestedEntry.workflowId).toBe('inner-wf');
     expect(nestedEntry.id).toBe('inner-wf');
+    expect(Array.isArray(nestedEntry.serializedStepFlow)).toBe(true);
+    expect(nestedEntry.serializedStepFlow.length).toBeGreaterThan(0);
+
+    // The live wire graph (serializedStepGraph) also inlines the child flow.
+    const liveNested = outer.serializedStepGraph.find((e: any) => e.type === 'workflow') as any;
+    expect(liveNested?.serializedStepFlow?.length).toBeGreaterThan(0);
 
     // Rehydrate on a Mastra instance that already has the inner registered.
     const mastra = new Mastra({

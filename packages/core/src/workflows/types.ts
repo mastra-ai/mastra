@@ -685,8 +685,20 @@ export type SerializedSingleStepEntry =
    * A nested workflow referenced by its registered id (code-defined or
    * another stored workflow). The referenced workflow must resolve on the
    * live Mastra registry at rehydration time; missing refs fail loudly.
+   *
+   * `serializedStepFlow` is the nested workflow's full graph, inlined for
+   * Studio/API consumers (same role `SerializedStep.serializedStepFlow`
+   * played when nested workflows were emitted as `type: 'step'` +
+   * `component: 'WORKFLOW'`). Stored JSON definitions may omit it and keep
+   * only the id reference.
    */
-  | { type: 'workflow'; id: string; workflowId: string; description?: string };
+  | {
+      type: 'workflow';
+      id: string;
+      workflowId: string;
+      description?: string;
+      serializedStepFlow?: SerializedStepFlowEntry[];
+    };
 
 export type SerializedStepFlowEntry =
   | SerializedSingleStepEntry

@@ -204,7 +204,12 @@ const unwrapForeachInner = (
 ): SerializedStepLike => {
   if (inner.type === 'step') return inner.step;
   if (inner.type === 'workflow') {
-    return { id: inner.id, description: undefined, component: 'WORKFLOW' };
+    return {
+      id: inner.id,
+      description: inner.description,
+      component: 'WORKFLOW',
+      serializedStepFlow: inner.serializedStepFlow,
+    };
   }
   return { id: inner.id, description: undefined, component: undefined };
 };
@@ -243,7 +248,8 @@ const getStepNodeAndEdge = ({
     nextStepFlow?.type === 'sleepUntil' ||
     nextStepFlow?.type === 'agent' ||
     nextStepFlow?.type === 'tool' ||
-    nextStepFlow?.type === 'mapping'
+    nextStepFlow?.type === 'mapping' ||
+    nextStepFlow?.type === 'workflow'
   ) {
     const nextStepId = allPrevNodeIds.has(getWorkflowNodeId(nextStepFlow.id))
       ? `${nextStepFlow.id}-${yIndex + 1}`
@@ -351,7 +357,12 @@ const getStepNodeAndEdge = ({
     return { nodes, edges, nextPrevNodeIds: [nodeId], nextPrevStepIds: [innerStep.id] };
   }
 
-  if (stepFlow.type === 'agent' || stepFlow.type === 'tool' || stepFlow.type === 'mapping') {
+  if (
+    stepFlow.type === 'agent' ||
+    stepFlow.type === 'tool' ||
+    stepFlow.type === 'mapping' ||
+    stepFlow.type === 'workflow'
+  ) {
     const stepId = stepFlow.id;
     const rawNodeId = allPrevNodeIds.has(getWorkflowNodeId(stepId)) ? `${stepId}-${yIndex}` : stepId;
     const nodeId = getWorkflowNodeId(rawNodeId);
@@ -391,6 +402,7 @@ const getStepNodeAndEdge = ({
           withoutTopHandle: condition ? false : !prevNodeIds.length,
           withoutBottomHandle: !nextNodeIds.length,
           mapConfig: stepFlow.type === 'mapping' ? stepFlow.mapConfig : undefined,
+          stepGraph: stepFlow.type === 'workflow' ? stepFlow.serializedStepFlow : undefined,
         },
       },
     ];

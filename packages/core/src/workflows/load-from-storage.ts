@@ -190,13 +190,21 @@ function serializeSingleEntry(entry: SingleStepEntry): SerializedSingleStepEntry
   }
   // A nested Workflow reached the generic `.then(step)` fallback (its
   // component discriminator is 'WORKFLOW'). Emit a declarative `workflow`
-  // entry so the rehydrator can rebuild it by id.
+  // entry so the rehydrator can rebuild it by id. Inline the nested graph
+  // when present so Studio/API consumers can expand it (same role the old
+  // `type:'step' + component:'WORKFLOW'` shape played).
   if ((entry.step as any)?.component === 'WORKFLOW') {
+    // Prefer the public getter (serializedStepGraph); fall back to the
+    // protected/legacy serializedStepFlow field.
+    const nestedFlow =
+      ((entry.step as any).serializedStepGraph as SerializedStepFlowEntry[] | undefined) ??
+      ((entry.step as any).serializedStepFlow as SerializedStepFlowEntry[] | undefined);
     return {
       type: 'workflow',
       id: (entry.step as any).id,
       workflowId: (entry.step as any).id,
       ...((entry.step as any).description ? { description: (entry.step as any).description } : {}),
+      ...(nestedFlow ? { serializedStepFlow: nestedFlow } : {}),
     };
   }
   // generic `.then(step)` — descriptor only; rehydration looks the step up

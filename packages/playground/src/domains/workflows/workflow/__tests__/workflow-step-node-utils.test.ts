@@ -8,20 +8,21 @@ import {
 } from '../workflow-step-node-utils';
 
 const step = (id: string) => ({ id, description: `${id} description` });
+const stepEntry = (id: string): SerializedStepFlowEntry => ({ type: 'step', step: step(id) });
 
 describe('resolveWorkflowGraphStep', () => {
   it.each([
-    [{ type: 'step', step: step('regular') }, 'step'],
+    [stepEntry('regular'), 'step'],
     [{ type: 'step', step: { ...step('map'), mapConfig: 'return input' } }, 'map-step'],
     [{ type: 'agent', id: 'writer', agentId: 'writer-agent' }, 'agent-step'],
     [{ type: 'tool', id: 'double', toolId: 'double-tool' }, 'tool-step'],
     [{ type: 'mapping', id: 'map-1', mapConfig: 'return input' }, 'map-step'],
-    [{ type: 'foreach', step: step('each'), opts: { concurrency: 2 } }, 'foreach-step'],
-    [{ type: 'parallel', steps: [{ type: 'step', step: step('a') }] }, 'parallel-step'],
+    [{ type: 'foreach', step: stepEntry('each'), opts: { concurrency: 2 } }, 'foreach-step'],
+    [{ type: 'parallel', steps: [stepEntry('a')] }, 'parallel-step'],
     [
       {
         type: 'conditional',
-        steps: [{ type: 'step', step: step('when-true') }],
+        steps: [stepEntry('when-true')],
         serializedConditions: [{ id: 'condition-1', fn: 'true' }],
       },
       'conditional',
@@ -29,7 +30,7 @@ describe('resolveWorkflowGraphStep', () => {
     [
       {
         type: 'loop',
-        step: step('loop'),
+        step: stepEntry('loop'),
         serializedCondition: { id: 'loop-condition', fn: 'true' },
         loopType: 'dountil',
       },
@@ -40,11 +41,24 @@ describe('resolveWorkflowGraphStep', () => {
     [
       {
         type: 'step',
-        step: { ...step('nested'), component: 'WORKFLOW', serializedStepFlow: [{ type: 'step', step: step('child') }] },
+        step: {
+          ...step('nested'),
+          component: 'WORKFLOW',
+          serializedStepFlow: [stepEntry('child')],
+        },
       },
       'nested-workflow-step',
     ],
-  ] satisfies [SerializedStepFlowEntry, string][])('maps %s to %s', (flow, kind) => {
+    [
+      {
+        type: 'workflow',
+        id: 'nested-wf',
+        workflowId: 'nested-wf',
+        serializedStepFlow: [stepEntry('child')],
+      },
+      'nested-workflow-step',
+    ],
+  ] as [SerializedStepFlowEntry, string][])('maps %s to %s', (flow, kind) => {
     expect(resolveWorkflowGraphStep(flow).kind).toBe(kind);
   });
 
@@ -84,6 +98,71 @@ describe('resolveWorkflowGraphStep', () => {
 
     const stepNodes = nodes.filter(node => node.type === WORKFLOW_STEP_NODE_TYPE);
     expect(stepNodes.map(node => node.data.workflowStep.kind)).toEqual(['agent-step', 'tool-step', 'map-step']);
+  });
+
+  it('builds graph nodes for type:workflow entries and attaches nested stepGraph', () => {
+    const nestedFlow: SerializedStepFlowEntry[] = [
+      stepEntry('child-a'),
+      { type: 'tool', id: 'child-tool', toolId: 'echo' },
+    ];
+    const { nodes } = constructNodesAndEdges({
+      stepGraph: [
+        {
+          type: 'workflow',
+          id: 'sub-wf',
+          workflowId: 'sub-wf',
+          description: 'nested digest',
+          serializedStepFlow: nestedFlow,
+        },
+      ],
+    });
+
+    const stepNodes = nodes.filter(
+      node => node.type === WORKFLOW_STEP_NODE_TYPE && !('nodeRole' in node.data && node.data.nodeRole === 'condition'),
+    );
+    expect(stepNodes).toHaveLength(1);
+    expect(stepNodes[0].id).toBe('node-sub-wf');
+    const data = stepNodes[0].data as {
+      stepId?: string;
+      workflowStep: { kind: string };
+      stepGraph?: SerializedStepFlowEntry[];
+      description?: string;
+    };
+    expect(data.stepId).toBe('sub-wf');
+    expect(data.workflowStep.kind).toBe('nested-workflow-step');
+    expect(data.stepGraph).toEqual(nestedFlow);
+    expect(data.description).toBe('nested digest');
+  });
+
+  it('attaches nested stepGraph when type:workflow sits inside a conditional branch', () => {
+    const nestedFlow: SerializedStepFlowEntry[] = [stepEntry('branch-child')];
+    const { nodes } = constructNodesAndEdges({
+      stepGraph: [
+        {
+          type: 'conditional',
+          steps: [
+            {
+              type: 'workflow',
+              id: 'escalation-branch',
+              workflowId: 'daily-standup-with-escalation',
+              serializedStepFlow: nestedFlow,
+            },
+          ],
+          serializedConditions: [{ id: 'has-blockers', fn: 'stepResults.detect-blockers.hasBlockers' }],
+        },
+      ] as SerializedStepFlowEntry[],
+    });
+
+    const stepNodes = nodes.filter(
+      node => node.type === WORKFLOW_STEP_NODE_TYPE && !('nodeRole' in node.data && node.data.nodeRole === 'condition'),
+    );
+    expect(stepNodes).toHaveLength(1);
+    const data = stepNodes[0].data as {
+      workflowStep: { kind: string };
+      stepGraph?: SerializedStepFlowEntry[];
+    };
+    expect(data.workflowStep.kind).toBe('nested-workflow-step');
+    expect(data.stepGraph).toEqual(nestedFlow);
   });
 
   it('keeps workflow graph nodes on one React Flow node type with resolved step data', () => {

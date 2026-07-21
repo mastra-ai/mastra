@@ -1044,11 +1044,17 @@ function toSerializedSingleStepEntry(step: StepWithRefMetadata): SerializedSingl
     };
   }
   if ((step as any)?.component === 'WORKFLOW') {
+    // Prefer the public getter; fall back to the protected field / legacy
+    // SerializedStep shape for any partial mock consumers.
+    const nestedFlow =
+      (step as { serializedStepGraph?: SerializedStepFlowEntry[] }).serializedStepGraph ??
+      (step as SerializedStep).serializedStepFlow;
     return {
       type: 'workflow',
       id: step.id,
       workflowId: step.id,
       description: step.description,
+      ...(nestedFlow ? { serializedStepFlow: nestedFlow } : {}),
     };
   }
   return {
