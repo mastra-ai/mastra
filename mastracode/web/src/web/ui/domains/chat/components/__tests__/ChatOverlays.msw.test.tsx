@@ -56,5 +56,4 @@ describe('ChatOverlays', () => {
     expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close' }));
   });
-
 });
