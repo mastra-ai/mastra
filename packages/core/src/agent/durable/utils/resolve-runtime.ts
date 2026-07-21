@@ -260,6 +260,13 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   // LLM step on the same worker) reuse it instead of rebuilding per call. Only
   // persist when we actually rehydrated from Mastra — never clobber a fully
   // populated in-process entry.
+  //
+  // Built BEFORE the write-back so the registry entry carries it: finish-time
+  // memory persistence (create-durable-agentic-workflow's terminal .map) reads
+  // `registryEntry.saveQueueManager`, and on a cross-process worker this
+  // write-back is the only thing that populates it — without it the guarded
+  // persistence block silently no-ops and the run's messages are never saved.
+  const saveQueueManager = makeSaveQueueManager(memory, mastra);
   if (rehydratedFromMastra) {
     const rebuilt: Partial<RunRegistryEntry> = {
       // The entry now carries real runtime state — drop the placeholder mark
@@ -270,6 +277,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       modelList,
       workspace,
       memory,
+      saveQueueManager,
       inputProcessors,
       llmRequestInputProcessors,
       outputProcessors,
@@ -282,9 +290,6 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       globalRunRegistry.set(runId, rebuilt as RunRegistryEntry);
     }
   }
-
-  // 3. Get or create SaveQueueManager
-  const saveQueueManager = makeSaveQueueManager(memory, mastra);
 
   // 4. Reconstruct _internal for compatibility with existing code
   const _internal = resolveInternalState({
