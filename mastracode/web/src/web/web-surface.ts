@@ -5,14 +5,14 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
-import type { AuditEmitter } from './audit/domain.js';
+import type { AuditEmitter } from '@mastra/factory/storage/domains/audit/domain';
 import { factoryRouteAuth } from './auth.js';
 import type { FactoryIntegration, IntegrationContext } from './factory-integration.js';
 import { getGithubFeatureDiagnostics } from './github/config.js';
 import { getLinearFeatureDiagnostics } from './linear/config.js';
-import { buildFactoryRoutes } from './factory/routes.js';
+import { WorkItemRoutes } from '@mastra/factory/routes/work-items';
 import { buildFsRoutes } from './fs-routes.js';
-import { buildIntakeRoutes } from './intake/routes.js';
+import { IntakeRoutes } from '@mastra/factory/routes/intake';
 import { OAuthRoutes } from '@mastra/factory/routes/oauth';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
@@ -225,21 +225,23 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...integrationRoutes,
     ...absentStubs,
     ...(deps.intakeReady
-      ? buildIntakeRoutes({
+      ? new IntakeRoutes({
+          auth: factoryRouteAuth,
           audit: deps.audit,
           intake: deps.domains.intake,
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),
-        })
+        }).routes()
       : []),
     ...(deps.factoryReady
-      ? buildFactoryRoutes({
+      ? new WorkItemRoutes({
+          auth: factoryRouteAuth,
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           queueHealth: deps.domains.queueHealth,
-        })
+        }).routes()
       : []),
   ];
 }

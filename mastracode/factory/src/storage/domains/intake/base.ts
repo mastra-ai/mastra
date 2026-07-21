@@ -49,12 +49,28 @@ export class IntakeStorage extends FactoryStorageDomain {
     return this.ops;
   }
 
-  async getConfig({ orgId, userId }: { orgId: string; userId: string }): Promise<IntakeConfig> {
+  async getConfig({
+    orgId,
+    userId,
+    integrationIds,
+  }: {
+    orgId: string;
+    userId: string;
+    /**
+     * When provided, the result contains exactly these integration ids, with
+     * unset integrations defaulting to `{ enabled: true, sourceIds: null }`.
+     */
+    integrationIds?: string[];
+  }): Promise<IntakeConfig> {
     const row = await this.#db.findOne<{ config: IntakeConfig }>('intake_settings', {
       org_id: orgId,
       user_id: userId,
     });
-    return structuredClone(row?.config ?? DEFAULT_INTAKE_CONFIG);
+    const saved = structuredClone(row?.config ?? DEFAULT_INTAKE_CONFIG);
+    if (!integrationIds) return saved;
+    return Object.fromEntries(
+      integrationIds.map(integrationId => [integrationId, saved[integrationId] ?? { enabled: true, sourceIds: null }]),
+    );
   }
 
   async saveConfig({ orgId, userId, config }: { orgId: string; userId: string; config: IntakeConfig }): Promise<void> {

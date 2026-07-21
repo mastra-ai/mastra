@@ -26,9 +26,10 @@ import type { MastraVector } from '@mastra/core/vector';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { hasAuthInit } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { observeAgentGitAction } from './audit/agent-audit.js';
-import { AuditDomain } from './audit/domain.js';
-import { buildAuthRoutes, createFactoryAuthGate, factoryRouteAuth } from './auth.js';
+import { observeAgentGitAction } from '@mastra/factory/storage/domains/audit/agent-audit';
+import { AuditDomain } from '@mastra/factory/storage/domains/audit/domain';
+import type { WebAuthUser } from './auth.js';
+import { buildAuthRoutes, createFactoryAuthGate, factoryRouteAuth, getWebAuthOrgId, getWebAuthUserId } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './factory-integration.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
 import { ProjectDomain } from './projects/domain.js';
@@ -210,7 +211,7 @@ export class MastraFactory {
     // FactoryStorage owns every app-table domain and initializes them through
     // the same lifecycle as the backend connection.
     const intakeStorage = storage.registerDomain(new IntakeStorage());
-    storage.registerDomain(new AuditStorage());
+    const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage());
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
@@ -236,7 +237,16 @@ export class MastraFactory {
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
     });
-    const auditDomain = new AuditDomain({ storage, integrations });
+    const auditDomain = new AuditDomain({
+      auth: factoryRouteAuth,
+      audit: auditStorage,
+      projects: factoryProjectsStorage,
+      sinks: integrations,
+      agentTenant: requestContext => {
+        const user = requestContext.get('user') as WebAuthUser | undefined;
+        return { orgId: getWebAuthOrgId(user), userId: getWebAuthUserId(user) };
+      },
+    });
 
     // Multi-replica deployments (distributed pubsub configured) need
     // cross-replica serialization; warn loud when the storage backend can't

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import type { WorkItemRow, WorkItemStageEntry } from './base';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
-import type { WorkItemRow, WorkItemStageEntry } from '@mastra/factory/storage/domains/work-items/base';
 
 /** Fixed "now" so every duration in the specs is deterministic. */
 const NOW = new Date('2026-07-15T12:00:00.000Z');
@@ -61,7 +61,7 @@ describe('clampMetricsWindow', () => {
 
 describe('computeFactoryMetrics', () => {
   it('given an empty board, then everything is zeroed with a gap-filled throughput series', () => {
-    const metrics = computeFactoryMetrics([], { days: 7, now: NOW });
+    const metrics = computeFactoryMetrics({ items: [], days: 7, now: NOW });
 
     expect(metrics.windowDays).toBe(7);
     expect(metrics.throughput).toHaveLength(7);
@@ -85,7 +85,7 @@ describe('computeFactoryMetrics', () => {
       doneItem('00000000-0000-4000-8000-000000000003', 30, 26), // done yesterday, 4h cycle
     ];
 
-    const metrics = computeFactoryMetrics(items, { days: 7, now: NOW });
+    const metrics = computeFactoryMetrics({ items, days: 7, now: NOW });
 
     const byDate = Object.fromEntries(metrics.throughput.map(p => [p.date, p.count]));
     expect(byDate['2026-07-15']).toBe(1);
@@ -96,7 +96,8 @@ describe('computeFactoryMetrics', () => {
   });
 
   it('given a done entry outside the window, then it does not count toward throughput or cycle time', () => {
-    const metrics = computeFactoryMetrics([doneItem('00000000-0000-4000-8000-000000000001', 30 * 24, 10 * 24)], {
+    const metrics = computeFactoryMetrics({
+      items: [doneItem('00000000-0000-4000-8000-000000000001', 30 * 24, 10 * 24)],
       days: 7,
       now: NOW,
     });
@@ -116,7 +117,7 @@ describe('computeFactoryMetrics', () => {
       ],
     });
 
-    const metrics = computeFactoryMetrics([item], { days: 7, now: NOW });
+    const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
 
     expect(metrics.cycleTime.samples).toBe(0);
     expect(metrics.throughput.every(point => point.count === 0)).toBe(true);
@@ -134,7 +135,7 @@ describe('computeFactoryMetrics', () => {
       ],
     });
 
-    const metrics = computeFactoryMetrics([item], { days: 7, now: NOW });
+    const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
 
     const review = metrics.stageDurations.find(d => d.stage === 'review');
     const execute = metrics.stageDurations.find(d => d.stage === 'execute');
@@ -168,7 +169,7 @@ describe('computeFactoryMetrics', () => {
       doneItem('00000000-0000-4000-8000-000000000003', 40, 2),
     ];
 
-    const metrics = computeFactoryMetrics(items, { days: 30, now: NOW });
+    const metrics = computeFactoryMetrics({ items, days: 30, now: NOW });
 
     const wip = Object.fromEntries(metrics.wip.map(w => [w.stage, w.count]));
     expect(wip).toEqual({ review: 2, execute: 1, done: 1 });
@@ -186,7 +187,7 @@ describe('computeFactoryMetrics', () => {
       createdAt: new Date(NOW.getTime() - 6 * HOUR),
     });
 
-    const metrics = computeFactoryMetrics([item], { days: 7, now: NOW });
+    const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
 
     expect(metrics.agingWip).toHaveLength(1);
     expect(metrics.agingWip[0]).toMatchObject({ stage: 'triage', enteredAt: hoursAgo(6) });
@@ -209,7 +210,7 @@ describe('computeFactoryMetrics', () => {
       }),
     ];
 
-    const metrics = computeFactoryMetrics(items, { days: 30, now: NOW });
+    const metrics = computeFactoryMetrics({ items, days: 30, now: NOW });
 
     expect(metrics.sourceMix).toEqual([
       { source: 'github:issue', count: 2 },
@@ -227,7 +228,7 @@ describe('computeFactoryMetrics', () => {
       ],
     });
 
-    const metrics = computeFactoryMetrics([item], { days: 30, now: NOW });
+    const metrics = computeFactoryMetrics({ items: [item], days: 30, now: NOW });
 
     expect(metrics.transitions).toEqual({ human: 1, total: 2 });
   });

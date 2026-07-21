@@ -28,11 +28,11 @@ const linearStub = {
     return seed.projects;
   },
   intake: {
-    getIssue: (input: import('../capabilities/intake').GetIntakeIssueInput) => {
+    getIssue: (input: import('@mastra/factory/capabilities/intake').GetIntakeIssueInput) => {
       if (input.connection.type !== 'oauth') throw new Error('expected OAuth connection');
       return fetchLinearIssueDetail(input.connection.accessToken, input.issueId);
     },
-    createComment: (input: import('../capabilities/intake').CreateIntakeCommentInput) => {
+    createComment: (input: import('@mastra/factory/capabilities/intake').CreateIntakeCommentInput) => {
       if (input.connection.type !== 'oauth') throw new Error('expected OAuth connection');
       return createLinearIssueComment(input.connection.accessToken, input.issueId, input.body);
     },

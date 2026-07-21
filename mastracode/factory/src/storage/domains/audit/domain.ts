@@ -2,23 +2,19 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 
-import type { WebAuthUser } from '../auth';
-import { ensureWebAuthUser, getWebAuthOrgId, getWebAuthUserId, webAuthTenant } from '../auth';
-import { FactoryDomain } from '../factory-domain';
-import type { FactoryIntegration } from '../factory-integration';
+import type { RouteAuth } from '../../../routes/route';
+import type { FactoryProjectsStorage } from '../projects/base';
 import type {
   AuditContext,
   AuditEventPage,
   AuditEventRow,
+  AuditStorage,
   AuditTarget,
   ListAuditEventsInput,
   RecordAuditEventInput,
-} from '@mastra/factory/storage/domains/audit/base';
-import { AuditStorage } from '@mastra/factory/storage/domains/audit/base';
-import { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
+} from './base';
 
 export interface EmitAuditInput {
   action: string;
@@ -42,14 +38,27 @@ export interface AuditAgentEmitter {
   emitAgent(args: { requestContext: RequestContext; input: EmitAgentAuditInput }): Promise<void>;
 }
 
+/** Best-effort destination for locally persisted audit events (e.g. an integration's audit log). */
+export interface AuditSink {
+  id: string;
+  audit?(args: { event: AuditEventRow }): Promise<void>;
+}
+
 interface FactorySessionState {
   factoryProjectId?: string;
   projectRepositoryId?: string;
 }
 
 export interface AuditDomainOptions {
-  storage: FactoryStorage;
-  integrations?: FactoryIntegration[];
+  auth: RouteAuth;
+  /** Audit storage domain handle. */
+  audit: AuditStorage;
+  /** Projects domain handle, used to scope the audit trail route. */
+  projects: FactoryProjectsStorage;
+  /** Best-effort fan-out destinations notified after each recorded event. */
+  sinks?: AuditSink[];
+  /** Resolve the acting tenant for agent-emitted events from the request context. */
+  agentTenant?: (requestContext: RequestContext) => { orgId?: string; userId?: string } | undefined;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -84,33 +93,40 @@ export function auditRequestContext(c: Context): AuditContext {
   };
 }
 
-/** Factory-owned audit behavior backed by the separately registered audit storage domain. */
-export class AuditDomain extends FactoryDomain implements AuditEmitter, AuditAgentEmitter {
-  readonly #integrations: FactoryIntegration[];
+/** Factory-owned audit behavior backed by the audit storage domain. */
+export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
+  readonly #auth: RouteAuth;
+  readonly #audit: AuditStorage;
+  readonly #projects: FactoryProjectsStorage;
+  readonly #sinks: AuditSink[];
+  readonly #agentTenant: AuditDomainOptions['agentTenant'];
 
-  constructor({ storage, integrations = [] }: AuditDomainOptions) {
-    super({ storage });
-    this.#integrations = integrations;
+  constructor({ auth, audit, projects, sinks = [], agentTenant }: AuditDomainOptions) {
+    this.#auth = auth;
+    this.#audit = audit;
+    this.#projects = projects;
+    this.#sinks = sinks;
+    this.#agentTenant = agentTenant;
 
     const ids = new Set<string>();
-    for (const integration of this.#integrations) {
-      if (!integration.id) throw new Error('Audit integration id must not be empty');
-      if (ids.has(integration.id)) throw new Error(`Duplicate audit integration id '${integration.id}'`);
-      ids.add(integration.id);
+    for (const sink of this.#sinks) {
+      if (!sink.id) throw new Error('Audit integration id must not be empty');
+      if (ids.has(sink.id)) throw new Error(`Duplicate audit integration id '${sink.id}'`);
+      ids.add(sink.id);
     }
   }
 
   async record(input: RecordAuditEventInput): Promise<AuditEventRow | null> {
     try {
-      await this.storage.ensureDomainReady('audit');
-      const row = await this.storage.getDomain<AuditStorage>('audit').record(input);
-      for (const integration of this.#integrations) {
-        if (!integration.audit) continue;
+      await this.#audit.ensureReady();
+      const row = await this.#audit.record(input);
+      for (const sink of this.#sinks) {
+        if (!sink.audit) continue;
         void Promise.resolve()
-          .then(() => integration.audit?.({ event: row }))
+          .then(() => sink.audit?.({ event: row }))
           .catch(err => {
             console.warn('[Audit] Audit integration failed', {
-              integration: integration.id,
+              integration: sink.id,
               action: row.action,
               error: err instanceof Error ? err.message : String(err),
             });
@@ -127,13 +143,13 @@ export class AuditDomain extends FactoryDomain implements AuditEmitter, AuditAge
   }
 
   async list(input: ListAuditEventsInput): Promise<AuditEventPage> {
-    await this.storage.ensureDomainReady('audit');
-    return this.storage.getDomain<AuditStorage>('audit').list(input);
+    await this.#audit.ensureReady();
+    return this.#audit.list(input);
   }
 
   async emit({ context, input }: { context: Context; input: EmitAuditInput }): Promise<void> {
     try {
-      const tenant = webAuthTenant(context);
+      const tenant = this.#auth.tenant(context);
       if (!tenant?.orgId) return;
       await this.record({
         orgId: tenant.orgId,
@@ -163,9 +179,9 @@ export class AuditDomain extends FactoryDomain implements AuditEmitter, AuditAge
     try {
       const context = requestContext.get('controller') as
         AgentControllerRequestContext<FactorySessionState> | undefined;
-      const user = requestContext.get('user') as WebAuthUser | undefined;
-      const orgId = getWebAuthOrgId(user);
-      const userId = getWebAuthUserId(user);
+      const tenant = this.#agentTenant?.(requestContext);
+      const orgId = tenant?.orgId;
+      const userId = tenant?.userId;
       const threadId = context?.threadId;
       const state = context?.getState();
       if (!orgId || !userId || !threadId || !state?.factoryProjectId) return;
@@ -200,10 +216,8 @@ export class AuditDomain extends FactoryDomain implements AuditEmitter, AuditAge
 
           const projectId = c.req.param('id');
           if (!projectId || !UUID_RE.test(projectId)) return c.json({ error: 'Project not found' }, 404);
-          await this.storage.ensureDomainReady('projects');
-          const project = await this.storage
-            .getDomain<FactoryProjectsStorage>('projects')
-            .get({ orgId: tenant.orgId, id: projectId });
+          await this.#projects.ensureReady();
+          const project = await this.#projects.get({ orgId: tenant.orgId, id: projectId });
           if (!project) return c.json({ error: 'Project not found' }, 404);
 
           const page = await this.list({
@@ -221,8 +235,8 @@ export class AuditDomain extends FactoryDomain implements AuditEmitter, AuditAge
   }
 
   async #resolveTenant(c: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
-    await ensureWebAuthUser(c);
-    const tenant = webAuthTenant(c);
+    await this.#auth.ensureUser(c);
+    const tenant = this.#auth.tenant(c);
     if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
     if (!tenant.orgId) {
       return {

@@ -30,7 +30,7 @@ function loose(c: unknown): RouteContext {
   return c as RouteContext;
 }
 import { streamSSE } from 'hono/streaming';
-import type { AuditEmitter } from '../audit/domain';
+import type { AuditEmitter } from '@mastra/factory/storage/domains/audit/domain';
 import { ensureWebAuthUser, getWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
 import type { StateSigner } from '../state-signing';

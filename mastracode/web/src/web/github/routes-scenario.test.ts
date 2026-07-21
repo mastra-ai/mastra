@@ -154,7 +154,7 @@ const githubStub = {
   // A fresh token string per call so the scenario can prove per-op minting.
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
   versionControl: {
-    createPullRequest: async (input: import('../capabilities/version-control').CreatePullRequestInput) => {
+    createPullRequest: async (input: import('@mastra/factory/capabilities/version-control').CreatePullRequestInput) => {
       const result = await createPullRequest(input);
       return {
         id: '1',

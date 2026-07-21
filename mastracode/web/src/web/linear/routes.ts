@@ -19,7 +19,6 @@ import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
 import type { StateSigner } from '../state-signing';
 import type { LinearIntegration } from './integration';
-import { getIntakeConfig } from '../intake/store';
 import { invalidateLinearConnectionCache } from './agent-tools';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './config';
 import {
@@ -273,7 +272,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
           return c.json({ error: 'linear_not_connected', message: 'Connect Linear to see intake issues.' }, 409);
         }
 
-        const config = await getIntakeConfig(intake, {
+        await intake.ensureReady();
+        const config = await intake.getConfig({
           orgId: resolved.tenant.orgId,
           userId: resolved.tenant.userId,
           integrationIds: ['linear'],

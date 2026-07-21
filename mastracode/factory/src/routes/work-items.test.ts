@@ -3,8 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
-import type { AuditEmitter } from '../audit/domain';
-import { __resetRuntimeConfigForTests } from '../runtime-config';
+import type { AuditEmitter } from '../storage/domains/audit/domain';
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
@@ -32,11 +31,10 @@ const audit: AuditEmitter = {
     }
   },
 };
-import { seedFactoryStorageForTests } from '../storage/test-utils';
+import { createFactoryStorageForTests } from '../storage/test-utils';
 import type { FactoryStorageTestSeed } from '../storage/test-utils';
-import { mountApiRoutes } from '../test-utils';
-import { buildFactoryRoutes } from './routes';
-import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils';
+import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items';
 
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(user: { workosId: string; organizationId?: string } | null) {
@@ -47,7 +45,13 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
   });
   mountApiRoutes(
     app as any,
-    buildFactoryRoutes({ audit, projects: seed.projects, workItems: seed.workItems, queueHealth: seed.queueHealth }),
+    new WorkItemRoutes({
+      auth: fakeRouteAuth(),
+      audit,
+      projects: seed.projects,
+      workItems: seed.workItems,
+      queueHealth: seed.queueHealth,
+    }).routes(),
   );
   return app;
 }
@@ -89,14 +93,13 @@ const createBody = (overrides: Record<string, unknown> = {}) => ({
 let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
-  seed = await seedFactoryStorageForTests();
+  seed = await createFactoryStorageForTests();
   auditRecorded = [];
   auditFailure = undefined;
   await seedProject();
 });
 
 afterEach(() => {
-  __resetRuntimeConfigForTests();
   vi.clearAllMocks();
 });
 

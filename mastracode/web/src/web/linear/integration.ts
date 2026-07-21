@@ -22,7 +22,7 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
-import type { IntegrationConnection } from '../capabilities/connection.js';
+import type { IntegrationConnection } from '@mastra/factory/capabilities/connection';
 import type {
   CreateIntakeCommentInput,
   GetIntakeIssueInput,
@@ -30,7 +30,7 @@ import type {
   IntakeIssue,
   IntakeIssueDetail,
   ListIntakeIssuesInput,
-} from '../capabilities/intake.js';
+} from '@mastra/factory/capabilities/intake';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
 import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
 import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';

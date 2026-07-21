@@ -1,14 +1,12 @@
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AuditEmitter } from '../audit/domain';
 import type { Intake } from '../capabilities/intake';
-import { __resetRuntimeConfigForTests } from '../runtime-config';
-import { seedFactoryStorageForTests } from '../storage/test-utils';
+import type { AuditEmitter } from '../storage/domains/audit/domain';
+import { createFactoryStorageForTests } from '../storage/test-utils';
 import type { FactoryStorageTestSeed } from '../storage/test-utils';
-import { mountApiRoutes } from '../test-utils';
-import { buildIntakeRoutes } from './routes';
-import { parseIntakeConfig } from './store';
+import { IntakeRoutes, parseIntakeConfig } from './intake';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils';
 
 const auditEvents: Array<Record<string, unknown>> = [];
 const audit: AuditEmitter = {
@@ -56,7 +54,10 @@ function buildApp(user: { workosId: string; organizationId?: string } | null, in
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildIntakeRoutes({ audit, intake: seed.intake, integrations: intakeIntegrations }));
+  mountApiRoutes(
+    app as any,
+    new IntakeRoutes({ auth: fakeRouteAuth(), audit, intake: seed.intake, integrations: intakeIntegrations }).routes(),
+  );
   return app;
 }
 
@@ -64,13 +65,9 @@ const orgUser = { workosId: 'u1', organizationId: 'org1' };
 let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
-  seed = await seedFactoryStorageForTests();
+  seed = await createFactoryStorageForTests();
   auditEvents.length = 0;
   vi.clearAllMocks();
-});
-
-afterEach(() => {
-  __resetRuntimeConfigForTests();
 });
 
 describe('intake configuration', () => {

@@ -58,7 +58,7 @@ const linearStub = {
   fetchWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
   listProjects: (...args: any[]) => listLinearProjects(...(args as [])),
   intake: {
-    listIssues: async (input: import('../capabilities/intake').ListIntakeIssuesInput) => {
+    listIssues: async (input: import('@mastra/factory/capabilities/intake').ListIntakeIssuesInput) => {
       if (input.connection.type !== 'oauth') throw new Error('expected OAuth connection');
       const result = await listActiveLinearIssues(input.connection.accessToken, input.cursor, input.sourceIds);
       return {
@@ -97,14 +97,6 @@ const stateSigner: import('../state-signing').StateSigner = {
     return { orgId, userId };
   },
 };
-
-const getIntakeConfig = vi.fn(async () => ({
-  github: { enabled: true, sourceIds: null as string[] | null },
-  linear: { enabled: true, sourceIds: null as string[] | null },
-}));
-vi.mock('../intake/store', () => ({
-  getIntakeConfig: (...args: any[]) => getIntakeConfig(...(args as [])),
-}));
 
 // Partially mock `../auth` the same way as the GitHub route tests: the
 // harness middleware stashes the user; `ensureWebAuthUser` falls back to a
@@ -181,10 +173,10 @@ beforeEach(async () => {
   seed = await seedFactoryStorageForTests();
   featureEnabled = true;
   cookieUser = null;
-  getIntakeConfig.mockClear();
-  getIntakeConfig.mockResolvedValue({
-    github: { enabled: true, sourceIds: null },
-    linear: { enabled: true, sourceIds: ['proj-1'] },
+  await seed.intake.saveConfig({
+    orgId: 'org1',
+    userId: 'u1',
+    config: { linear: { enabled: true, sourceIds: ['proj-1'] } },
   });
   listActiveLinearIssues.mockClear();
   listLinearProjects.mockClear();
@@ -339,9 +331,10 @@ describe('issues route', () => {
 
   it('applies the intake config project selection', async () => {
     await connect();
-    getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, sourceIds: null },
-      linear: { enabled: true, sourceIds: ['proj-1'] },
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: true, sourceIds: ['proj-1'] } },
     });
     await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
@@ -349,9 +342,10 @@ describe('issues route', () => {
 
   it('returns an empty page without calling Linear when no projects are selected', async () => {
     await connect();
-    getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, sourceIds: null },
-      linear: { enabled: true, sourceIds: null },
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: true, sourceIds: null } },
     });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(await res.json()).toEqual({ issues: [], nextCursor: null });
@@ -360,9 +354,10 @@ describe('issues route', () => {
 
   it('404s when Linear intake is disabled in settings', async () => {
     await connect();
-    getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, sourceIds: null },
-      linear: { enabled: false, sourceIds: null },
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: false, sourceIds: null } },
     });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(res.status).toBe(404);

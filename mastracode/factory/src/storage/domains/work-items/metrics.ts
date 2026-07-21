@@ -7,7 +7,7 @@
  * testable and lets the route stay a thin shell.
  */
 
-import type { WorkItemRow, WorkItemStageEntry } from '@mastra/factory/storage/domains/work-items/base';
+import type { WorkItemRow, WorkItemStageEntry } from './base';
 
 /** Windows the metrics endpoint accepts; anything else clamps to the default. */
 export const METRICS_WINDOWS = [7, 30, 90] as const;
@@ -91,8 +91,15 @@ function openEntries(item: WorkItemRow): WorkItemStageEntry[] {
   );
 }
 
-export function computeFactoryMetrics(items: WorkItemRow[], opts: { days: number; now: Date }): FactoryMetrics {
-  const { days, now } = opts;
+export function computeFactoryMetrics({
+  items,
+  days,
+  now,
+}: {
+  items: WorkItemRow[];
+  days: number;
+  now: Date;
+}): FactoryMetrics {
   const nowMs = now.getTime();
   const windowStart = nowMs - days * 86_400_000;
 
