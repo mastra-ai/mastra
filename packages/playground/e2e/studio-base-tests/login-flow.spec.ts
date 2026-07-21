@@ -11,7 +11,7 @@ import { setupMockAuth } from '../tests/__utils__/auth';
  */
 test.describe('Studio base-path login flow', () => {
   test.describe('when an unauthenticated user signs in from a protected Studio route', () => {
-    test('opens the credentials login page within the Studio base path', async ({ page }) => {
+    test('navigates to the login route within the Studio base path', async ({ page }) => {
       await setupMockAuth(page, {
         authenticated: false,
         loginType: 'credentials',
@@ -21,6 +21,17 @@ test.describe('Studio base-path login flow', () => {
       await page.getByRole('button', { name: 'Sign in' }).click();
 
       await expect(page).toHaveURL(/\/studio\/login\?redirect=/);
+    });
+
+    test('shows the credentials login form', async ({ page }) => {
+      await setupMockAuth(page, {
+        authenticated: false,
+        loginType: 'credentials',
+      });
+      await page.goto('/studio/agents');
+
+      await page.getByRole('button', { name: 'Sign in' }).click();
+
       await expect(page.getByRole('heading', { name: 'Sign in to Mastra Studio' })).toBeVisible();
     });
   });
