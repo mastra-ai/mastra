@@ -1,4 +1,4 @@
-import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeSnapshotsResponse } from '../../types';
+import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeSnapshotsResponse } from '@mastra/client-js';
 
 export const emptyThemeEntitiesResponse: ThemeEntitiesResponse = { entities: [] };
 
