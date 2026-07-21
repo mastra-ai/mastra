@@ -381,6 +381,27 @@ describe('GET /web/factory/repositories/:id/metrics', () => {
   });
 });
 
+describe('GET /web/factory/repositories/:id/health/thresholds', () => {
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect(
+      (await json('GET', `/web/factory/repositories/${PROJECT_ID}/health/thresholds`, undefined, null)).status,
+    ).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', `/web/factory/repositories/${PROJECT_ID}/health/thresholds`)).status).toBe(404);
+  });
+
+  it('returns the default config when unset and the saved config after saveConfig', async () => {
+    const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/health/thresholds`);
+    expect(res.status).toBe(200);
+    expect((await res.json()).thresholds).toEqual([14400, 86400, 259200]);
+
+    await seed.queueHealth.saveConfig('org1', PROJECT_ID, { thresholdsSeconds: [60, 300, 3600] });
+    const res2 = await json('GET', `/web/factory/repositories/${PROJECT_ID}/health/thresholds`);
+    expect((await res2.json()).thresholds).toEqual([60, 300, 3600]);
+  });
+});
+
 // ── Audit events ─────────────────────────────────────────────────────────
 describe('audit events', () => {
   async function createItem(overrides: Record<string, unknown> = {}) {

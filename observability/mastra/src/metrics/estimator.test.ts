@@ -7,8 +7,167 @@ import { TokenMetrics } from './types';
 
 const fixturePath = path.join(import.meta.dirname, '__fixtures__', 'pricing-data-test.jsonl');
 const pricingRegistry = PricingRegistry.fromText(fs.readFileSync(fixturePath, 'utf-8'));
+const embeddedPricingPath = path.join(import.meta.dirname, 'pricing-data.jsonl');
+const embeddedPricingRegistry = PricingRegistry.fromText(fs.readFileSync(embeddedPricingPath, 'utf-8'));
 
 describe('estimateCosts', () => {
+  it.each([
+    ['gpt-5.6', '02673ef8836dfa48', 0.005, 0.0005, 0.00625, 0.03, 0.00001, 0.000045],
+    ['gpt-5.6-sol', '20d0cde775d1441d', 0.005, 0.0005, 0.00625, 0.03, 0.00001, 0.000045],
+    ['gpt-5.6-terra', 'd39bbd4dbe73180a', 0.0025, 0.00025, 0.003125, 0.015, 0.000005, 0.0000225],
+    ['gpt-5.6-luna', '3ad0e58759c048c0', 0.001, 0.0001, 0.00125, 0.006, 0.000002, 0.000009],
+  ])(
+    'estimates embedded OpenAI pricing for %s',
+    (
+      model,
+      pricingId,
+      inputCost,
+      cacheReadCost,
+      cacheWriteCost,
+      outputCost,
+      longContextInputRate,
+      longContextOutputRate,
+    ) => {
+      const costs = estimateCosts(
+        {
+          provider: 'openai',
+          model,
+          usage: {
+            inputTokens: 3_000,
+            outputTokens: 1_000,
+            inputDetails: { text: 1_000, cacheRead: 1_000, cacheWrite: 1_000 },
+            outputDetails: { text: 1_000 },
+          },
+        },
+        embeddedPricingRegistry,
+      );
+
+      expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
+      expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(cacheReadCost);
+      expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE)?.estimatedCost).toBeCloseTo(cacheWriteCost);
+      expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(outputCost);
+      expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({ pricing_id: pricingId, tier_index: 0 });
+
+      const longContextCosts = estimateCosts(
+        {
+          provider: 'openai',
+          model,
+          usage: { inputTokens: 272_001, outputTokens: 1_000 },
+        },
+        embeddedPricingRegistry,
+      );
+
+      expect(longContextCosts.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(272_001 * longContextInputRate);
+      expect(longContextCosts.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(1_000 * longContextOutputRate);
+      expect(longContextCosts.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
+        pricing_id: pricingId,
+        tier_index: 1,
+      });
+    },
+  );
+
+  it.each([
+    ['claude-fable-5', '00de3426817c9886', 0.01, 0.001, 0.0125, 0.05],
+    ['claude-opus-4-8', '93c628c3a9d22500', 0.005, 0.0005, 0.00625, 0.025],
+    ['claude-sonnet-5', '916837951831cfe5', 0.002, 0.0002, 0.0025, 0.01],
+  ])(
+    'estimates embedded Anthropic pricing for %s',
+    (model, pricingId, inputCost, cacheReadCost, cacheWriteCost, outputCost) => {
+      const costs = estimateCosts(
+        {
+          provider: 'anthropic',
+          model,
+          usage: {
+            inputTokens: 3_000,
+            outputTokens: 1_000,
+            inputDetails: { text: 1_000, cacheRead: 1_000, cacheWrite: 1_000 },
+            outputDetails: { text: 1_000 },
+          },
+        },
+        embeddedPricingRegistry,
+      );
+
+      expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
+      expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(cacheReadCost);
+      expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE)?.estimatedCost).toBeCloseTo(cacheWriteCost);
+      expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(outputCost);
+      expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({ pricing_id: pricingId, tier_index: 0 });
+    },
+  );
+
+  it('estimates embedded Google pricing for gemini-3.5-flash', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'google',
+        model: 'gemini-3.5-flash',
+        usage: {
+          inputTokens: 2_000,
+          outputTokens: 1_000,
+          inputDetails: { text: 1_000, cacheRead: 1_000 },
+          outputDetails: { text: 1_000 },
+        },
+      },
+      embeddedPricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(0.0015);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(0.00015);
+    expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(0.009);
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
+      pricing_id: 'f13bc1ec3f88b97d',
+      tier_index: 0,
+    });
+  });
+
+  it.each([
+    ['grok-4.5', 'ec1c2a95e38faa9b', 0.002, 0.0003, 0.006, 0.000004, 0.0000006, 0.000012],
+    ['grok-build-0.1', 'd03e4214108e83a2', 0.001, 0.0002, 0.002, 0.000002, 0.0000004, 0.000004],
+  ])(
+    'estimates embedded xAI pricing for %s',
+    (model, pricingId, inputCost, cacheReadCost, outputCost, longInputRate, longCacheReadRate, longOutputRate) => {
+      const costs = estimateCosts(
+        {
+          provider: 'xai',
+          model,
+          usage: {
+            inputTokens: 2_000,
+            outputTokens: 1_000,
+            inputDetails: { text: 1_000, cacheRead: 1_000 },
+            outputDetails: { text: 1_000 },
+          },
+        },
+        embeddedPricingRegistry,
+      );
+
+      expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
+      expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(cacheReadCost);
+      expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(outputCost);
+      expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({ pricing_id: pricingId, tier_index: 0 });
+
+      const longContextCosts = estimateCosts(
+        {
+          provider: 'xai',
+          model,
+          usage: {
+            inputTokens: 201_000,
+            outputTokens: 1_000,
+            inputDetails: { text: 200_000, cacheRead: 1_000 },
+            outputDetails: { text: 1_000 },
+          },
+        },
+        embeddedPricingRegistry,
+      );
+
+      expect(longContextCosts.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(200_000 * longInputRate);
+      expect(longContextCosts.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(1_000 * longCacheReadRate);
+      expect(longContextCosts.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(1_000 * longOutputRate);
+      expect(longContextCosts.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
+        pricing_id: pricingId,
+        tier_index: 1,
+      });
+    },
+  );
+
   it('returns total-row error contexts when provider and model do not match a pricing row', () => {
     const costs = estimateCosts(
       {

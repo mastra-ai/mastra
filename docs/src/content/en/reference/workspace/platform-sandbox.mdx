@@ -1,0 +1,276 @@
+---
+title: "Reference: PlatformSandbox | Workspace"
+description: "Documentation for the PlatformSandbox provider for executing commands in a Mastra Platform environment."
+packages:
+  - "@mastra/platform-workspace"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# PlatformSandbox
+
+Executes commands inside a Mastra Platform sandbox tied to a Platform environment. Sandboxes boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed.
+
+Use `PlatformSandbox` when your agent runs on a Mastra Platform deployment and you want the sandbox to be provisioned and managed by the platform. For self-hosted Railway sandboxes, see [`RailwaySandbox`](/reference/workspace/railway-sandbox). For a local sandbox during development, see [`LocalSandbox`](/reference/workspace/local-sandbox).
+
+:::info
+
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/platform-workspace
+```
+
+Configure the platform credentials. The access token, project ID, and environment ID fall back to environment variables, so a Mastra Platform deployment can pass zero constructor options.
+
+<Tabs>
+  <TabItem value="env-file" label=".env file">
+    ```bash
+    MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
+    MASTRA_PROJECT_ID=your-project-id
+    MASTRA_ENVIRONMENT_ID=your-environment-id
+    ```
+  </TabItem>
+
+  <TabItem value="constructor" label="Constructor">
+    ```typescript
+    new PlatformSandbox({
+      accessToken: 'your-platform-access-token',
+      projectId: 'your-project-id',
+      environmentId: 'your-environment-id',
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+On a Mastra Platform deployment these variables are injected automatically, so the constructor can be called with no options.
+
+## Usage
+
+Add a `PlatformSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { PlatformSandbox } from '@mastra/platform-workspace'
+
+const workspace = new Workspace({
+  sandbox: new PlatformSandbox({
+    // accessToken, projectId, environmentId all fall back to env vars
+    idleTimeoutMinutes: 30,
+  }),
+})
+
+const agent = new Agent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  instructions: 'You are a coding assistant working in this workspace.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  workspace,
+})
+
+const response = await agent.generate(
+  'Print "Hello, world!" and show the current working directory.',
+)
+
+console.log(response.text)
+```
+
+### Private networking
+
+Set `networkIsolation` to `PRIVATE` to join the environment's private network and reach other services running in the same Mastra Platform environment:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new PlatformSandbox({
+    networkIsolation: 'PRIVATE',
+  }),
+})
+```
+
+The default `ISOLATED` mode allows outbound internet access only, with no private network connectivity.
+
+### Reattaching to a running sandbox
+
+Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a new one. This is useful for stateful agents that resume between requests:
+
+```typescript
+const sandbox = new PlatformSandbox({
+  sandboxId: 'sbx_abc123',
+})
+await sandbox.start()
+
+const result = await sandbox.executeCommand('cat', ['/workspace/state.json'])
+```
+
+When `sandboxId` is set, `environmentId` is not required because the sandbox already exists.
+
+### Executing commands
+
+`executeCommand` runs a command on the remote sandbox and returns its output. Pass `args` to have arguments safely shell-quoted:
+
+```typescript
+const result = await sandbox.executeCommand('python', ['analyze.py'], {
+  timeout: 30_000,
+  cwd: '/workspace',
+  env: { INPUT: 'repo' },
+})
+
+console.log(result.stdout)
+console.log(result.exitCode)
+```
+
+:::warning
+
+The `command` argument is a shell string and is concatenated verbatim into the remote shell. This lets you use pipes, redirects, and chaining (`ls -la | grep foo`) but means untrusted input must be passed through `args` (safely quoted) or shell-quoted by the caller. Untrusted `command` values allow arbitrary shell execution on the sandbox.
+
+:::
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'Platform access token. Falls back to the MASTRA_PLATFORM_ACCESS_TOKEN environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description: 'Platform project ID. Falls back to the MASTRA_PROJECT_ID environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'environmentId',
+    type: 'string',
+    description:
+      'Platform environment ID the sandbox belongs to. Falls back to the MASTRA_ENVIRONMENT_ID environment variable. Required unless sandboxId is passed.',
+    isOptional: true,
+  },
+  {
+    name: 'sandboxId',
+    type: 'string',
+    description:
+      'Existing sandbox ID to reattach to instead of creating a new sandbox. When set, environmentId is not required.',
+    isOptional: true,
+  },
+  {
+    name: 'idleTimeoutMinutes',
+    type: 'number',
+    description: 'How long the sandbox stays alive with no activity before the platform destroys it.',
+    isOptional: true,
+  },
+  {
+    name: 'networkIsolation',
+    type: "'ISOLATED' | 'PRIVATE'",
+    description:
+      "Network mode. 'ISOLATED' (default) allows outbound internet only. 'PRIVATE' joins the platform environment's private network.",
+    isOptional: true,
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description:
+      'Environment variables baked into the sandbox at creation time. Per-command environment variables can also be passed to executeCommand.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description:
+      'Default command execution timeout in milliseconds. Overridable per call via ExecuteCommandOptions.timeout.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string)',
+    description:
+      'Custom instructions returned by getInstructions(). A string fully replaces the defaults; a function receives the defaults and can extend or customize them per-request.',
+    isOptional: true,
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this sandbox instance.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'fetch',
+    type: 'typeof fetch',
+    description: 'Custom fetch implementation, mainly for testing.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sandbox instance identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('PlatformSandbox').",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('platform').",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description:
+      "'pending' | 'initializing' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'.",
+  },
+  {
+    name: 'processes',
+    type: 'PlatformProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
+]}
+/>
+
+## Errors
+
+Platform API failures raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string); the raw response body stays available on `.body`:
+
+```typescript
+import { PlatformApiError } from '@mastra/platform-workspace'
+
+try {
+  await sandbox.executeCommand('cat', ['/missing.txt'])
+} catch (err) {
+  if (err instanceof PlatformApiError) {
+    if (err.code === 'not_found') {
+      // handle missing resource
+    } else if (err.code === 'authentication_error') {
+      // refresh token
+    }
+    console.error(err.status, err.code, err.proxyMessage)
+  }
+}
+```
+
+`code` and `proxyMessage` are `undefined` when the response body is not JSON, for example an HTML 502 from a load balancer.
+
+## Related
+
+- [PlatformFilesystem reference](/reference/workspace/platform-filesystem)
+- [RailwaySandbox reference](/reference/workspace/railway-sandbox)
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [SandboxProcessManager reference](/reference/workspace/process-manager)

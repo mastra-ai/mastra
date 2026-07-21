@@ -101,9 +101,15 @@ const AUTHENTICATED = () =>
 function renderRoutes(
   initialEntry: string,
   authMe: () => Response | Promise<Response>,
-  options?: { project?: Factory; workItemCount?: number; workItemsReady?: Promise<void>; workItemsError?: boolean },
+  options?: {
+    project?: Factory;
+    withFactory?: boolean;
+    workItemCount?: number;
+    workItemsReady?: Promise<void>;
+    workItemsError?: boolean;
+  },
 ) {
-  seedFactory(options?.project);
+  if (options?.withFactory !== false) seedFactory(options?.project);
   useAgentControllerHandlers();
   server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
   if (options?.project?.binding.kind === 'github') {
@@ -154,6 +160,25 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
+  });
+
+  it('given no factory, when visiting /new, then factory setup is rendered directly in the window content', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
+        HttpResponse.json({
+          root: '/projects',
+          path: '/projects',
+          parent: null,
+          entries: [],
+        }),
+      ),
+    );
+
+    renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
+
+    const heading = await screen.findByRole('heading', { name: 'Create factory' });
+    expect(heading.closest('main')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Create factory' })).not.toBeInTheDocument();
   });
 
   it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {
