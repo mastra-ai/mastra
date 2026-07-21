@@ -13,6 +13,8 @@ import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
 import type { GithubFactory } from '../workspaces/services/factories';
+import { projectPath } from '../../lib/projectRoutes';
+import { useProjectRoute } from '../../lib/useProjectRoute';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
@@ -34,16 +36,13 @@ import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import { connectLinear, isLinearReauthError } from './services/linear';
+import { guidedPrompt, hasLabel, metadataLabels, stagesAfterMove, stagesAfterRunStart } from './boardUtils';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 import { BOARD_STAGES, stageLabel } from './stages';
 import type { BoardStageId } from './stages';
 
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
 const NEEDS_APPROVAL_LABEL = 'needs-approval';
-
-function hasLabel(labels: readonly string[], label: string): boolean {
-  return labels.some(item => item.toLowerCase() === label);
-}
 
 function githubNewIssueUrl(repoFullName: string): string | undefined {
   const [owner, repo, extra] = repoFullName.split('/');
@@ -52,12 +51,6 @@ function githubNewIssueUrl(repoFullName: string): string | undefined {
     return undefined;
   }
   return `https://github.com/${owner}/${repo}/issues/new`;
-}
-
-function metadataLabels(metadata: Record<string, unknown>): string[] {
-  return Array.isArray(metadata.labels)
-    ? metadata.labels.filter((label): label is string => typeof label === 'string')
-    : [];
 }
 
 function issueTriageThreadTags(issueNumber: number): Record<string, string> {
@@ -76,37 +69,6 @@ const INTAKE_SOURCES = [
 ] as const;
 
 type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
-
-/**
- * Stage list after moving a card out of `from` into `to`. Other concurrent
- * stages are kept — except `done`, which replaces everything (the item is
- * finished, all open stages exit).
- */
-function stagesAfterMove(stages: string[], from: string | null, to: string): string[] {
-  if (to === 'done') return ['done'];
-  const rest = stages.filter(stage => stage !== from && stage !== to && stage !== 'done');
-  return [...rest, to];
-}
-
-/** Pre-work stages a card exits when a run starts on it. */
-const PRE_RUN_STAGES: string[] = ['intake', 'triage', 'planning'];
-
-function stagesAfterRunStart(stages: string[], to: string): string[] {
-  return stagesAfterMove(
-    stages.filter(stage => !PRE_RUN_STAGES.includes(stage)),
-    null,
-    to,
-  );
-}
-
-/**
- * Custom prompts keep the same base context as the default run (what the
- * issue/PR is and how to pick it up) — the typed text guides the run instead
- * of directing an explicit skill.
- */
-function guidedPrompt(base: string, instructions: string): string {
-  return `${base}\n\nGuidance for this run: ${instructions}`;
-}
 
 // ── Run actions ─────────────────────────────────────────────────────────────
 
@@ -470,7 +432,7 @@ function Board({ factory }: { factory: GithubFactory }) {
   });
   const openThread = async (session: WorkItemSessionRef) => {
     await selectWorkspace.mutateAsync(session.projectPath);
-    navigate(`/threads/${session.threadId}`);
+    navigate(projectPath(factory, `threads/${session.threadId}`));
   };
 
   const workItems = useMemo(() => items.data ?? [], [items.data]);
@@ -840,6 +802,7 @@ function WorkItemCard({
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
+  const projectRoute = useProjectRoute();
   const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source];
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
@@ -864,7 +827,7 @@ function WorkItemCard({
         <Icon size={14} className={`mt-0.5 shrink-0 ${iconClassName}`} aria-hidden />
         {threadSession !== null ? (
           <a
-            href={`/threads/${threadSession.threadId}`}
+            href={projectRoute.path(`threads/${threadSession.threadId}`)}
             onClick={event => {
               event.preventDefault();
               onOpenThread(threadSession);

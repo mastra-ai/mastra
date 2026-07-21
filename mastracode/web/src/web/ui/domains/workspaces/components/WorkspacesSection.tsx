@@ -26,6 +26,7 @@ import {
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
+import { useProjectRoute } from '../../../lib/useProjectRoute';
 import { isGithubFactory } from '../services/factories';
 import type { Worktree } from '../services/factories';
 
@@ -46,6 +47,7 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
   const selectWorkspace = useSelectWorkspaceMutation(activeFactory, scope);
   const navigate = useNavigate();
+  const projectRoute = useProjectRoute();
   const location = useLocation();
   const queryClient = useQueryClient();
   const { session } = createAgentControllerClient({
@@ -120,14 +122,14 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
           queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, latest.id),
           queryFn: () => chatSession.listMessages(latest.id),
         });
-        void navigate(`/threads/${latest.id}`, { replace: true });
+        void navigate(projectRoute.path(`threads/${latest.id}`), { replace: true });
         return;
       }
       // Empty worktree: leave the stale thread route before creating, so the
       // route-thread sync can't race the create call and error on the old
       // thread. The scoped session is pinned to this worktree, so the new
       // thread is tagged with its projectPath.
-      if (location.pathname.startsWith('/threads/')) void navigate('/new', { replace: true });
+      if (location.pathname.startsWith(projectRoute.path('threads/'))) void navigate(projectRoute.path('new'), { replace: true });
       const created = await chatSession.createThread();
       // A fresh thread has no messages; seed the cache to skip the skeleton.
       queryClient.setQueryData(
@@ -135,9 +137,9 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
         [],
       );
       void queryClient.invalidateQueries({ queryKey: threadsKey });
-      void navigate(`/threads/${created.id}`, { replace: true });
+      void navigate(projectRoute.path(`threads/${created.id}`), { replace: true });
     } catch {
-      void navigate('/new', { replace: true });
+      void navigate(projectRoute.path('new'), { replace: true });
     }
   };
 
@@ -150,10 +152,10 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
         // Threads under the deleted worktree are gone; if we were inside one,
         // land on the fallback workspace's latest thread. Factory pages are
         // worktree-independent, so deleting from there stays put.
-        if (wasSelected && !location.pathname.startsWith('/factory')) {
+        if (wasSelected && !location.pathname.startsWith(projectRoute.path('factory'))) {
           const fallback = isGithubFactory(updated) ? updated.binding.selectedWorktreePath : undefined;
           if (fallback) void openWorktreeThread(fallback);
-          else void navigate('/new', { replace: true });
+          else void navigate(projectRoute.path('new'), { replace: true });
         }
       },
       onError: () => setConfirmDelete(null),

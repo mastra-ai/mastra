@@ -159,7 +159,8 @@ function renderAt(initialEntry: string, project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const scopedEntry = `/${project.binding.kind === 'github' ? 'dashboard' : 'local'}/${project.id}${initialEntry}`;
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [scopedEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -257,13 +258,11 @@ describe('Factory Metrics page', () => {
     expect(within(cycle).getByText('—')).toBeInTheDocument();
   });
 
-  it('given a local project, when visiting Metrics, then the GitHub-only notice renders instead of the dashboard', async () => {
+  it('given a local project, when visiting Metrics, then the route is not found', async () => {
     useMetricsHandlers();
     renderAt('/factory/metrics', localProject);
 
-    expect(
-      await screen.findByText(/Board, metrics, and audit require a Factory connected to GitHub/),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
     expect(screen.queryByText('Median cycle time')).not.toBeInTheDocument();
   });
 });

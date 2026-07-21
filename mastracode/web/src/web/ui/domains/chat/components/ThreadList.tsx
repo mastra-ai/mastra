@@ -10,6 +10,7 @@ import { useNavigate, useParams } from 'react-router';
 
 import { relativeTime } from '../../../../../shared/lib/date';
 import { useOverlays } from '../../../lib/overlays';
+import { useProjectRoute } from '../../../lib/useProjectRoute';
 import { useToast } from '../../../ui';
 import { isGithubFactory, useActiveFactoryContext } from '../../workspaces';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -93,6 +94,7 @@ function useThreadHookArgs() {
 function ThreadListHeader({ threadCount }: { threadCount: number }) {
   const overlays = useOverlays();
   const navigate = useNavigate();
+  const projectRoute = useProjectRoute();
 
   return (
     <div className="flex items-center justify-between px-1">
@@ -110,7 +112,7 @@ function ThreadListHeader({ threadCount }: { threadCount: number }) {
         aria-label="New thread"
         onClick={() => {
           overlays.close('sidebar');
-          void navigate('/new');
+          void navigate(projectRoute.path('new'));
         }}
       >
         <Plus size={15} />
@@ -167,27 +169,28 @@ function ThreadRow({
   const overlays = useOverlays();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const projectRoute = useProjectRoute();
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
 
   const deleteThreadMutation = useDeleteAgentControllerThreadMutation(hookArgs);
   const cloneThreadMutation = useCloneAgentControllerThreadMutation(hookArgs);
 
   const openThread = () => {
-    void navigate(`/threads/${thread.id}`);
+    void navigate(projectRoute.path(`threads/${thread.id}`));
     overlays.close('sidebar');
   };
 
   const cloneThread = async () => {
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
     toast('Thread cloned', 'success');
-    void navigate(`/threads/${clonedThread.id}`);
+    void navigate(projectRoute.path(`threads/${clonedThread.id}`));
   };
 
   const deleteThread = async () => {
     await deleteThreadMutation.mutateAsync(thread.id);
     toast('Thread deleted');
     if (thread.id === routeThreadId) {
-      void navigate('/new');
+      void navigate(projectRoute.path('new'));
     }
   };
 

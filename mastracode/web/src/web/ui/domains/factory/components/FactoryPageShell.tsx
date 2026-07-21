@@ -2,9 +2,6 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 
 import { useOverlays } from '../../../lib/overlays';
-import { Sidebar } from '../../../Sidebar';
-import { PageLayout } from '../../../ui';
-import { ChatHeader } from '../../chat/components/ChatHeader';
 import { EmptyFactoryState, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
 import type { GithubFactory } from '../../workspaces';
 import { isGithubFactory } from '../../workspaces';
@@ -29,28 +26,31 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
   const status = useGithubStatusQuery(Boolean(githubFactory));
 
   return (
-    <PageLayout
-      sidebar={<Sidebar />}
-      header={<ChatHeader />}
-      title={activeFactory ? title : undefined}
-      description={activeFactory ? description : undefined}
-    >
-      {activeFactory ? (
-        !githubFactory ? (
-          <Notice variant="info">
-            Board, metrics, and audit require a Factory connected to GitHub. Switch to a GitHub-backed factory.
-          </Notice>
-        ) : status.isPending ? null : status.data?.enabled && status.data.connected ? (
-          children(githubFactory)
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-4 md:px-4 md:py-5">
+      <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+        {activeFactory ? (
+          <header className="flex flex-col gap-1">
+            <h1 className="m-0 text-xl text-icon6">{title}</h1>
+            <p className="m-0 text-ui-sm text-icon3">{description}</p>
+          </header>
+        ) : null}
+        {activeFactory ? (
+          !githubFactory ? (
+            <Notice variant="info">
+              Board, metrics, and audit require a Factory connected to GitHub. Switch to a GitHub-backed factory.
+            </Notice>
+          ) : status.isPending ? null : status.data?.enabled && status.data.connected ? (
+            children(githubFactory)
+          ) : (
+            <Notice variant="info">
+              {title} requires a Factory connected to GitHub. Connect GitHub from the factories menu to see issues and
+              pull requests.
+            </Notice>
+          )
         ) : (
-          <Notice variant="info">
-            {title} requires a Factory connected to GitHub. Connect GitHub from the factories menu to see issues and
-            pull requests.
-          </Notice>
-        )
-      ) : (
-        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-      )}
-    </PageLayout>
+          <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+        )}
+      </div>
+    </div>
   );
 }

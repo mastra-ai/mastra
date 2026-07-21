@@ -39,7 +39,13 @@ afterEach(() => {
   vi.mocked(redirectToLogin).mockClear();
 });
 
-function seedFactory(project?: Factory) {
+function seedFactory(project?: Factory | null) {
+  if (project === null) {
+    localStorage.setItem('mastracode-factories', JSON.stringify([]));
+    localStorage.removeItem('mastracode-active-factory');
+    return;
+  }
+
   const selectedProject: Factory = project ?? {
     id: 'project-test',
     name: 'MastraCode Test',
@@ -101,11 +107,16 @@ const AUTHENTICATED = () =>
 function renderRoutes(
   initialEntry: string,
   authMe: () => Response | Promise<Response>,
-  options?: { project?: Factory; workItemCount?: number; workItemsReady?: Promise<void>; workItemsError?: boolean },
+  options?: { project?: Factory | null; workItemCount?: number; workItemsReady?: Promise<void>; workItemsError?: boolean },
 ) {
   seedFactory(options?.project);
   useAgentControllerHandlers();
-  server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
+  server.use(
+    http.get(`${TEST_BASE_URL}/auth/me`, authMe),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: false, connected: false, installations: [], reason: 'missing_config' }),
+    ),
+  );
   if (options?.project?.binding.kind === 'github') {
     const workItems = Array.from({ length: options.workItemCount ?? 0 }, (_, index) => ({ id: `work-${index}` }));
     server.use(
@@ -134,8 +145,8 @@ async function expectPathname(router: ReturnType<typeof createMemoryRouter>, pat
 }
 
 describe('MastraCode web routing', () => {
-  it('given the auth check is pending, when visiting /new, then a skeleton renders instead of a blank screen', async () => {
-    renderRoutes('/new', async () => {
+  it('given the auth check is pending, when visiting a scoped new-project route, then a skeleton renders instead of a blank screen', async () => {
+    renderRoutes('/local/project-test/new', async () => {
       await delay(150);
       return new Response(null, { status: 404 });
     });
@@ -146,21 +157,70 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument();
   });
 
-  it('given auth is disabled, when visiting /new, then the chat UI renders without auth affordances', async () => {
-    const { router } = renderRoutes('/new', AUTH_DISABLED);
+  it('given auth is disabled, when visiting a scoped new-project route, then the chat UI renders without auth affordances', async () => {
+    const { router } = renderRoutes('/local/project-test/new', AUTH_DISABLED);
 
     expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
-    await expectPathname(router, '/new');
+    await expectPathname(router, '/local/project-test/new');
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
-  it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {
+  it('given GitHub configuration is unavailable and a local Factory exists, when visiting /, then the first local Factory opens', async () => {
     const { router } = renderRoutes('/', AUTH_DISABLED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, '/local/project-test/new');
     expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
+  });
+
+  it('given no usable Factory exists, when visiting /, then onboarding opens', async () => {
+    const { router } = renderRoutes('/', AUTH_DISABLED, { project: null });
+
+    await expectPathname(router, '/onboarding');
+    expect(await screen.findByRole('button', { name: 'Skip and setup local project' })).toBeInTheDocument();
+  });
+
+  it.each(['/local', '/dashboard'])(
+    'given a project namespace has no Factory ID, when visiting %s, then the route is not found',
+    async initialEntry => {
+      const { router } = renderRoutes(initialEntry, AUTH_DISABLED);
+
+      await expectPathname(router, initialEntry);
+      expect(await screen.findByText('Page not found')).toBeInTheDocument();
+      expect(screen.queryByText('What do you want to work on?')).not.toBeInTheDocument();
+    },
+  );
+
+  it('given the Factory ID is unknown, when visiting its scoped route, then the route is not found without project data', async () => {
+    const { router } = renderRoutes('/local/unknown-project/new', AUTH_DISABLED);
+
+    await expectPathname(router, '/local/unknown-project/new');
+    expect(await screen.findByText('Page not found')).toBeInTheDocument();
+    expect(screen.queryByText('What do you want to work on?')).not.toBeInTheDocument();
+  });
+
+  it('given a local Factory ID is used in the dashboard namespace, when visiting it, then the route is not found without project data', async () => {
+    const { router } = renderRoutes('/dashboard/project-test/new', AUTH_DISABLED);
+
+    await expectPathname(router, '/dashboard/project-test/new');
+    expect(await screen.findByText('Page not found')).toBeInTheDocument();
+    expect(screen.queryByText('What do you want to work on?')).not.toBeInTheDocument();
+  });
+
+  it('given a GitHub Factory ID is used in the local namespace, when visiting it, then the route is not found without project data', async () => {
+    const project: Factory = {
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: { kind: 'github', githubProjectId: 'github-project-id', worktrees: [] },
+    };
+    const { router } = renderRoutes('/local/github-project/new', AUTH_DISABLED, { project });
+
+    await expectPathname(router, '/local/github-project/new');
+    expect(await screen.findByText('Page not found')).toBeInTheDocument();
+    expect(screen.queryByText('What do you want to work on?')).not.toBeInTheDocument();
   });
 
   it('given a GitHub project has persisted Factory work, when visiting /, then the user lands on the board', async () => {
@@ -177,7 +237,7 @@ describe('MastraCode web routing', () => {
     };
     const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
 
-    await expectPathname(router, '/factory/board');
+    await expectPathname(router, '/dashboard/github-project/factory/board');
     expect(await screen.findByText(/requires a Factory connected to GitHub/)).toBeInTheDocument();
   });
 
@@ -202,7 +262,7 @@ describe('MastraCode web routing', () => {
     await screen.findByRole('status', { name: 'Loading Factory board' });
     expect(router.state.location.pathname).toBe('/');
     resolveWorkItems();
-    await expectPathname(router, '/factory/board');
+    await expectPathname(router, '/dashboard/github-project/factory/board');
   });
 
   it('given persisted Factory work cannot be loaded, when visiting /, then the app does not redirect', async () => {
@@ -223,7 +283,7 @@ describe('MastraCode web routing', () => {
     expect(router.state.location.pathname).toBe('/');
   });
 
-  it('given a GitHub project has no persisted Factory work, when visiting /, then the user lands on /new', async () => {
+  it('given a GitHub project has no persisted Factory work, when visiting /, then the scoped new-project route opens', async () => {
     const project: Factory = {
       id: 'github-project',
       name: 'mastra-ai/mastra',
@@ -237,21 +297,22 @@ describe('MastraCode web routing', () => {
     };
     const { router } = renderRoutes('/', AUTHENTICATED, { project });
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, '/dashboard/github-project/new');
     expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
   });
 
-  it('given auth is disabled, when visiting an unknown path, then the user is redirected to /new', async () => {
+  it('given auth is disabled, when visiting an unknown path, then the route is not found', async () => {
     const { router } = renderRoutes('/does-not-exist', AUTH_DISABLED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, '/does-not-exist');
+    expect(await screen.findByText('Page not found')).toBeInTheDocument();
   });
 
-  it('given auth is enabled and the session is unauthenticated, when visiting /new, then the user lands on /signin with a sign-in action', async () => {
-    const { router } = renderRoutes('/new', UNAUTHENTICATED);
+  it('given auth is enabled and the session is unauthenticated, when visiting a scoped new-project route, then the user lands on /signin with a sign-in action', async () => {
+    const { router } = renderRoutes('/local/project-test/new', UNAUTHENTICATED);
 
     await expectPathname(router, '/signin');
-    expect(router.state.location.search).toBe('?returnTo=%2Fnew');
+    expect(router.state.location.search).toBe('?returnTo=%2Flocal%2Fproject-test%2Fnew');
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument();
     expect(screen.queryByText('What do you want to work on?')).not.toBeInTheDocument();
   });
@@ -273,10 +334,10 @@ describe('MastraCode web routing', () => {
     expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/');
   });
 
-  it('given auth is enabled and the session is authenticated, when visiting /new, then chat renders with identity and sign-out only', async () => {
-    const { router } = renderRoutes('/new', AUTHENTICATED);
+  it('given auth is enabled and the session is authenticated, when visiting a scoped new-project route, then chat renders with identity and sign-out only', async () => {
+    const { router } = renderRoutes('/local/project-test/new', AUTHENTICATED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, '/local/project-test/new');
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
@@ -286,7 +347,7 @@ describe('MastraCode web routing', () => {
   it('given an authenticated session, when visiting /signin, then the user is redirected through the root landing', async () => {
     const { router } = renderRoutes('/signin', AUTHENTICATED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, '/local/project-test/new');
   });
 
   it('given an authenticated session and a safe returnTo, when visiting /signin, then the explicit destination wins', async () => {
@@ -298,12 +359,12 @@ describe('MastraCode web routing', () => {
   it('given an authenticated session and an unsafe returnTo, when visiting /signin, then it falls back through root landing', async () => {
     const { router } = renderRoutes('/signin?returnTo=https%3A%2F%2Fevil.example', AUTHENTICATED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, '/local/project-test/new');
   });
 
-  it('given auth is disabled, when visiting /signin, then the user is redirected to /new', async () => {
+  it('given auth is disabled, when visiting /signin, then the user is redirected to the scoped new-project route', async () => {
     const { router } = renderRoutes('/signin', AUTH_DISABLED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, '/local/project-test/new');
   });
 });

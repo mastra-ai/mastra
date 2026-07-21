@@ -14,8 +14,8 @@ export type ActiveFactoryApi = ReturnType<typeof useActiveFactory>;
 
 const ActiveFactoryContext = createContext<ActiveFactoryApi | null>(null);
 
-export function ActiveFactoryProvider({ children }: { children: ReactNode }) {
-  const value = useActiveFactory();
+export function ActiveFactoryProvider({ children, factoryId }: { children: ReactNode; factoryId?: string }) {
+  const value = useActiveFactory(factoryId);
   return <ActiveFactoryContext.Provider value={value}>{children}</ActiveFactoryContext.Provider>;
 }
 

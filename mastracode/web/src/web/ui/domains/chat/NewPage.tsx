@@ -3,12 +3,10 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useLocation } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
-import { Sidebar } from '../../Sidebar';
-import { ChatLayout, FolderIcon } from '../../ui';
+import { FolderIcon } from '../../ui';
 import type { Factory } from '../workspaces';
 import { EmptyFactoryState, useActiveFactoryContext } from '../workspaces';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
-import { ChatHeader } from './components/ChatHeader';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
@@ -23,20 +21,14 @@ export function NewPage() {
   const { activeFactory } = useActiveFactoryContext();
 
   return (
-    <ChatLayout
-      sidebar={<Sidebar />}
-      header={<ChatHeader />}
-      main={
-        <ChatSessionBoundary>
-          {activeFactory ? (
-            <NewPageContent activeFactory={activeFactory} />
-          ) : (
-            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-          )}
-          <ChatOverlays />
-        </ChatSessionBoundary>
-      }
-    />
+    <ChatSessionBoundary>
+      {activeFactory ? (
+        <NewPageContent activeFactory={activeFactory} />
+      ) : (
+        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+      )}
+      <ChatOverlays />
+    </ChatSessionBoundary>
   );
 }
 

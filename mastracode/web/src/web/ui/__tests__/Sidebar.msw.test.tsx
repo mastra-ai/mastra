@@ -23,7 +23,7 @@ import type * as AuthService from '../domains/auth/services/auth';
 import type { Factory } from '../domains/workspaces';
 import { ActiveFactoryProvider } from '../domains/workspaces';
 import { OverlaysProvider } from '../lib/overlays';
-import { Sidebar } from '../Sidebar';
+import { DashboardSidebar, LocalSidebar } from '../Sidebar';
 import { ToastProvider } from '../ui';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
@@ -204,6 +204,11 @@ function LocationProbe() {
 }
 
 function renderSidebar() {
+  const factories = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];
+  const activeFactoryId = localStorage.getItem('mastracode-active-factory');
+  const activeFactory = factories.find(factory => factory.id === activeFactoryId);
+  const sidebar = activeFactory?.binding.kind === 'github' ? <DashboardSidebar /> : <LocalSidebar />;
+
   return renderWithProviders(
     <MemoryRouter initialEntries={['/chat']}>
       <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
@@ -211,7 +216,7 @@ function renderSidebar() {
           <ActiveFactoryProvider>
             <ChatSessionProvider>
               <OverlaysProvider>
-                <Sidebar />
+                {sidebar}
                 <LocationProbe />
               </OverlaysProvider>
             </ChatSessionProvider>

@@ -168,7 +168,8 @@ function renderAt(initialEntry: string, project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const scopedEntry = `/${project.binding.kind === 'github' ? 'dashboard' : 'local'}/${project.id}${initialEntry}`;
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [scopedEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -242,11 +243,11 @@ describe('Factory Overview page', () => {
     expect(screen.getByText(/1 active/)).toBeInTheDocument();
   });
 
-  it('given a local project, when visiting Overview, then the GitHub-only notice renders instead of the chart', async () => {
+  it('given a local project, when visiting Overview, then the route is not found', async () => {
     useOverviewHandlers({ workItems: [] });
     renderAt('/factory/overview', localProject);
 
-    expect(await screen.findByText(/require a Factory connected to GitHub/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Queue health' })).not.toBeInTheDocument();
   });
 });

@@ -16,6 +16,7 @@ import { userSessionResourceId } from '../../auth/services/auth';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
+import { useProjectRoute } from '../../../lib/useProjectRoute';
 import { useWorkspaceActivity } from '../../../../../shared/hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import { createWorktree, deleteWorktree } from '../services/github';
@@ -55,6 +56,7 @@ export function UserSessionsSection() {
   const { activeFactory } = useActiveFactoryContext();
   const auth = useWebAuth();
   const navigate = useNavigate();
+  const projectRoute = useProjectRoute();
   const location = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -135,7 +137,7 @@ export function UserSessionsSection() {
       setCreating(false);
       setName('');
       invalidate();
-      void navigate(`/user/threads/${threadId}`);
+      void navigate(projectRoute.path(`user/threads/${threadId}`));
     },
   });
 
@@ -158,8 +160,8 @@ export function UserSessionsSection() {
       setConfirmDelete(null);
       invalidate();
       toast('Session deleted');
-      if (worktree.threadId && location.pathname === `/user/threads/${worktree.threadId}`) {
-        void navigate('/new', { replace: true });
+      if (worktree.threadId && location.pathname === projectRoute.path(`user/threads/${worktree.threadId}`)) {
+        void navigate(projectRoute.path('new'), { replace: true });
       }
     },
     onError: error => {
@@ -175,7 +177,7 @@ export function UserSessionsSection() {
   const openSession = async (worktree: Worktree) => {
     clearAttention(worktree.worktreePath);
     if (worktree.threadId) {
-      void navigate(`/user/threads/${worktree.threadId}`);
+      void navigate(projectRoute.path(`user/threads/${worktree.threadId}`));
       return;
     }
     // Legacy user worktree without a recorded thread: create one now so the
@@ -186,7 +188,7 @@ export function UserSessionsSection() {
       const thread = await chatSession.createThread();
       if (activeFactory) upsertWorktree(latestFactory(activeFactory), { ...worktree, threadId: thread.id });
       invalidate();
-      void navigate(`/user/threads/${thread.id}`);
+      void navigate(projectRoute.path(`user/threads/${thread.id}`));
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Failed to open session', 'error');
     }
@@ -229,7 +231,7 @@ export function UserSessionsSection() {
 
       <div className="flex flex-col gap-1">
         {worktrees.map(worktree => {
-          const active = Boolean(worktree.threadId) && location.pathname === `/user/threads/${worktree.threadId}`;
+          const active = Boolean(worktree.threadId) && location.pathname === projectRoute.path(`user/threads/${worktree.threadId}`);
           return (
             <WorkspaceRow
               key={worktree.worktreePath}

@@ -12,7 +12,7 @@ function FilledArrowLeft() {
 }
 
 type ChatLayoutProps = {
-  sidebar: ReactNode;
+  sidebar?: ReactNode;
   /** Optional bar above the chat content (e.g. mobile sidebar toggle). */
   header?: ReactNode;
   content?: ReactNode;
@@ -46,40 +46,40 @@ export function ChatLayout({
 }: ChatLayoutProps) {
   const frameRef = useRef<HTMLDivElement>(null);
 
-  return (
-    <PageLayout sidebar={sidebar} header={header}>
-      <div ref={frameRef} className="relative flex h-full min-w-0 flex-1 overflow-visible">
-        <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-          {main ?? (
-            <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
-              {content}
-              {footer}
-            </div>
-          )}
-        </div>
-        {rightPanel ? (
-          <DesktopRightPanelFrame
-            frameRef={frameRef}
-            initialWidth={rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH}
-          >
-            {rightPanel}
-          </DesktopRightPanelFrame>
-        ) : null}
-        {!rightPanel && rightPanelAvailable ? (
-          <button
-            type="button"
-            className="absolute right-2 top-2 hidden items-center text-icon6 lg:inline-flex"
-            onClick={onRightPanelOpen}
-            aria-label="Open workspace files"
-          >
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border2 bg-surface1 shadow-sm hover:bg-surface2">
-              <FilledArrowLeft />
-            </span>
-          </button>
-        ) : null}
+  const frame = (
+    <div ref={frameRef} className="relative flex h-full min-w-0 flex-1 overflow-visible">
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+        {main ?? (
+          <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+            {content}
+            {footer}
+          </div>
+        )}
       </div>
-    </PageLayout>
+      {rightPanel ? (
+        <DesktopRightPanelFrame
+          frameRef={frameRef}
+          initialWidth={rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH}
+        >
+          {rightPanel}
+        </DesktopRightPanelFrame>
+      ) : null}
+      {!rightPanel && rightPanelAvailable ? (
+        <button
+          type="button"
+          className="absolute right-2 top-2 hidden items-center text-icon6 lg:inline-flex"
+          onClick={onRightPanelOpen}
+          aria-label="Open workspace files"
+        >
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border2 bg-surface1 shadow-sm hover:bg-surface2">
+            <FilledArrowLeft />
+          </span>
+        </button>
+      ) : null}
+    </div>
   );
+
+  return sidebar ? <PageLayout sidebar={sidebar} header={header}>{frame}</PageLayout> : frame;
 }
 
 function DesktopRightPanelFrame({

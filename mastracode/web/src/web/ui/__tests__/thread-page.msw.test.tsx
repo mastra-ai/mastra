@@ -79,7 +79,9 @@ function seedFactory(projects?: Factory[], activeFactoryId?: string) {
   };
   const storedProjects = projects ?? [project];
   localStorage.setItem('mastracode-factories', JSON.stringify(storedProjects));
-  localStorage.setItem('mastracode-active-factory', activeFactoryId ?? storedProjects[0]?.id ?? project.id);
+  const activeProject = storedProjects.find(candidate => candidate.id === activeFactoryId) ?? storedProjects[0] ?? project;
+  localStorage.setItem('mastracode-active-factory', activeProject.id);
+  return activeProject;
 }
 
 function sessionState(threadId: string): AgentControllerSessionState {
@@ -215,16 +217,18 @@ function useAgentControllerHandlers({
 }
 
 function renderRoutes(initialEntry: string, projects?: Factory[], activeFactoryId?: string) {
-  seedFactory(projects, activeFactoryId);
+  const activeProject = seedFactory(projects, activeFactoryId);
+  const scopedEntry = `/${activeProject.binding.kind === 'github' ? 'dashboard' : 'local'}/${activeProject.id}${initialEntry}`;
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [scopedEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
 
 async function expectPathname(router: ReturnType<typeof createMemoryRouter>, pathname: string) {
-  await waitFor(() => expect(router.state.location.pathname).toBe(pathname));
+  const expected = `/local/project-test${pathname}`;
+  await waitFor(() => expect(router.state.location.pathname).toBe(expected));
 }
 
 describe('MastraCode thread pages', () => {
@@ -235,8 +239,9 @@ describe('MastraCode thread pages', () => {
       resourceId: RESOURCE_ID,
       createdAt: 1,
       binding: {
-        kind: 'local',
-        path: '/tmp/active-project',
+        kind: 'github',
+        githubProjectId: 'github-active',
+        worktrees: [],
       },
     };
     const threadProject: Factory = {
@@ -320,7 +325,7 @@ describe('MastraCode thread pages', () => {
     expect(within(draftRegion).getByRole('button', { name: 'Attach image' })).toBeVisible();
     expect(within(draftRegion).getByRole('button', { name: 'Send message' })).toBeVisible();
     expect(within(draftRegion).getByText('MastraCode Test')).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/new');
+    expect(router.state.location.pathname).toBe('/local/project-test/new');
     expect(screen.queryByText('Reply from thread one')).not.toBeInTheDocument();
     expect(captured.created).toBe(0);
   });
@@ -379,16 +384,16 @@ describe('MastraCode thread pages', () => {
 
     await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
 
-    await act(() => router.navigate(`/threads/${threadTwo.id}`));
+    await act(() => router.navigate(`/local/project-test/threads/${threadTwo.id}`));
     await expectPathname(router, `/threads/${threadTwo.id}`);
     await waitFor(() => expect(captured.switched).toContain(threadTwo.id));
 
-    await act(() => router.navigate(`/threads/${threadOne.id}`));
+    await act(() => router.navigate(`/local/project-test/threads/${threadOne.id}`));
     await expectPathname(router, `/threads/${threadOne.id}`);
     await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
 
     await act(() => delay(200));
-    expect(router.state.location.pathname).toBe(`/threads/${threadOne.id}`);
+    expect(router.state.location.pathname).toBe(`/local/project-test/threads/${threadOne.id}`);
     expect(screen.getByText('Reply from thread one')).toBeInTheDocument();
     expect(screen.queryByText('Reply from thread two')).not.toBeInTheDocument();
   });
@@ -399,7 +404,7 @@ describe('MastraCode thread pages', () => {
 
     await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
     // The thread page must survive bootstrap — no wildcard redirect to /new.
-    expect(router.state.location.pathname).toBe(`/threads/${threadOne.id}`);
+    expect(router.state.location.pathname).toBe(`/local/project-test/threads/${threadOne.id}`);
 
     const row = (await screen.findByText('First thread')).closest('[role="listitem"]') as HTMLElement;
     await userEvent.click(within(row).getByRole('button', { name: 'Thread actions' }));

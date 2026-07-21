@@ -8,6 +8,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MemoryRouter } from 'react-router';
 
 import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
@@ -48,12 +49,14 @@ function OverlayProbe() {
 
 function renderSwitcher() {
   return renderWithProviders(
-    <ActiveFactoryProvider>
-      <OverlaysProvider>
-        <FactorySwitcher />
-        <OverlayProbe />
-      </OverlaysProvider>
-    </ActiveFactoryProvider>,
+    <MemoryRouter initialEntries={['/local/project-test/new']}>
+      <ActiveFactoryProvider>
+        <OverlaysProvider>
+          <FactorySwitcher />
+          <OverlayProbe />
+        </OverlaysProvider>
+      </ActiveFactoryProvider>
+    </MemoryRouter>,
   );
 }
 

@@ -21,6 +21,7 @@ import type { Factory } from '../../web/ui/domains/workspaces/services/factories
 import { isGithubFactory } from '../../web/ui/domains/workspaces/services/factories';
 import { createWorkItem, updateWorkItem } from '../../web/ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../../web/ui/domains/factory/services/workItems';
+import { projectPath as projectRoutePath } from '../../web/ui/lib/projectRoutes';
 
 /**
  * Board record to file once the run is underway. With an `id` the existing
@@ -166,19 +167,23 @@ export function useStartFactoryRun() {
       // before filing the board card as an active run. Without an invocation
       // (opening an empty session) there is nothing to dispatch — navigate and
       // let the user type the first message.
+      const threadRoute = projectRoutePath(updatedFactory, `threads/${threadId}`);
       if (kickoffMessage !== undefined) {
         const kickoffCompleted = queueThreadPageKickoff({ resourceId, projectPath, threadId }, kickoffMessage);
-        void navigate(`/threads/${threadId}`);
+        void navigate(threadRoute);
         try {
           await kickoffCompleted;
         } catch (error) {
           if (error instanceof ThreadPageKickoffTimeoutError) {
-            void navigate('/new', { replace: true, state: { routeErrorNotice: error.message } });
+            void navigate(projectRoutePath(updatedFactory, 'new'), {
+              replace: true,
+              state: { routeErrorNotice: error.message },
+            });
           }
           throw error;
         }
       } else {
-        void navigate(`/threads/${threadId}`);
+        void navigate(threadRoute);
       }
 
       // File the board card now that the run is underway, hanging the run's

@@ -1,9 +1,10 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChartLine, LayoutDashboard, ScrollText, SquareKanban } from 'lucide-react';
+import { ChartLine, Inbox, LayoutDashboard, ScrollText, SquareKanban, SearchCheck } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
 import { useOverlays } from '../../../lib/overlays';
+import { projectPath } from '../../../lib/projectRoutes';
 import { isGithubFactory, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
 
 /**
@@ -29,12 +30,14 @@ export function FactorySection({ children }: { children?: ReactNode }) {
           Factory
         </Txt>
       </div>
-      {showBoard && (
+      {showBoard && activeFactory && (
         <div className="flex flex-col gap-1">
-          <FactoryLink to="/factory/overview" icon={LayoutDashboard} label="Overview" />
-          <FactoryLink to="/factory/board" icon={SquareKanban} label="Board" />
-          <FactoryLink to="/factory/metrics" icon={ChartLine} label="Metrics" />
-          <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit" />
+          <FactoryLink to={projectPath(activeFactory, 'factory/overview')} icon={LayoutDashboard} label="Overview" />
+          <FactoryLink to={projectPath(activeFactory, 'factory/intake')} icon={Inbox} label="Intake" />
+          <FactoryLink to={projectPath(activeFactory, 'factory/board')} icon={SquareKanban} label="Board" />
+          <FactoryLink to={projectPath(activeFactory, 'factory/review')} icon={SearchCheck} label="Review" />
+          <FactoryLink to={projectPath(activeFactory, 'factory/metrics')} icon={ChartLine} label="Metrics" />
+          <FactoryLink to={projectPath(activeFactory, 'factory/audit')} icon={ScrollText} label="Audit" />
         </div>
       )}
       {children}

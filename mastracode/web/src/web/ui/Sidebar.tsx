@@ -1,18 +1,13 @@
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { redirectToLogout, useWebAuth } from './domains/auth';
 import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
-import {
-  isGithubFactory,
-  FactorySwitcher,
-  useActiveFactoryContext,
-  UserSessionsSection,
-  WorkspacesSection,
-} from './domains/workspaces';
+import { FactorySwitcher, UserSessionsSection, WorkspacesSection } from './domains/workspaces';
 import { useOverlays } from './lib/overlays';
 
 /**
@@ -26,10 +21,7 @@ import { useOverlays } from './lib/overlays';
  * there is no nested thread list. Local factories (no worktrees) keep the flat
  * thread list.
  */
-export function Sidebar() {
-  const { activeFactory } = useActiveFactoryContext();
-  const isGithub = activeFactory ? isGithubFactory(activeFactory) : false;
-
+function SidebarShell({ navigation }: { navigation: ReactNode }) {
   return (
     <MainSidebar className="bg-transparent h-full">
       <MainSidebar.Nav>
@@ -38,16 +30,7 @@ export function Sidebar() {
             <FactorySwitcher />
           </section>
           <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
-            {isGithub ? (
-              <>
-                <FactorySection>
-                  <WorkspacesSection />
-                </FactorySection>
-                <UserSessionsSection />
-              </>
-            ) : (
-              <ThreadList />
-            )}
+            {navigation}
           </section>
         </div>
       </MainSidebar.Nav>
@@ -55,6 +38,25 @@ export function Sidebar() {
         <SidebarFooter />
       </MainSidebar.Bottom>
     </MainSidebar>
+  );
+}
+
+export function LocalSidebar() {
+  return <SidebarShell navigation={<ThreadList />} />;
+}
+
+export function DashboardSidebar() {
+  return (
+    <SidebarShell
+      navigation={
+        <>
+          <FactorySection>
+            <WorkspacesSection />
+          </FactorySection>
+          <UserSessionsSection />
+        </>
+      }
+    />
   );
 }
 

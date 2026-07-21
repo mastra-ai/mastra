@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
-import { Sidebar } from '../../Sidebar';
+import { useProjectRoute } from '../../lib/useProjectRoute';
 import { ChatLayout } from '../../ui';
 import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
 import {
@@ -11,7 +11,6 @@ import {
   findUserSessionByThreadId,
   useActiveFactoryContext,
 } from '../workspaces';
-import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
@@ -28,12 +27,13 @@ export function ThreadPage() {
   const { activeFactory } = useActiveFactoryContext();
   const { threadId } = useParams();
   const location = useLocation();
+  const projectRoute = useProjectRoute();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
   const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
   const activeUserSessionMatch =
     userSessionMatch && activeFactory?.id === userSessionMatch.factory.id ? userSessionMatch : undefined;
-  const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
+  const isUserThreadRoute = location.pathname.startsWith(projectRoute.path('user/threads/'));
   const workspaceFactory = isUserThreadRoute ? activeUserSessionMatch?.factory : activeFactory;
   const workspacePath = workspaceFactory
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
@@ -41,8 +41,6 @@ export function ThreadPage() {
 
   return (
     <ChatLayout
-      sidebar={<Sidebar />}
-      header={<ChatHeader />}
       rightPanelExpanded={workspaceViewerExpanded}
       rightPanelAvailable={Boolean(workspacePath)}
       onRightPanelOpen={() => setWorkspaceViewerVisible(true)}

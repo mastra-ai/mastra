@@ -8,6 +8,7 @@ import { useChatSessionContext } from '../../web/ui/domains/chat/context/useChat
 import { useChatTranscript } from '../../web/ui/domains/chat/context/useChatTranscript';
 import { createAgentControllerClient } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
+import { useProjectRoute } from '../../web/ui/lib/useProjectRoute';
 import { useSwitchAgentControllerThreadMutation } from './useAgentControllerThreadMutations';
 import { useAgentControllerThreads } from './useAgentControllerThreads';
 
@@ -30,6 +31,7 @@ export function useRouteThreadSync() {
     enabled: sessionEnabled,
   });
   const navigate = useNavigate();
+  const projectRoute = useProjectRoute();
   const queryClient = useQueryClient();
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -61,14 +63,14 @@ export function useRouteThreadSync() {
             })
           : Promise.resolve();
         void warm.finally(() => {
-          if (isLatestRequest()) void navigate(`/threads/${latest.id}`, { replace: true });
+          if (isLatestRequest()) void navigate(projectRoute.path(`threads/${latest.id}`), { replace: true });
         });
         return;
       }
 
       const message = `Failed to switch thread: thread ${targetThreadId} was not found`;
       pushNotice(message, 'error');
-      void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
+      void navigate(projectRoute.path('new'), { replace: true, state: { routeErrorNotice: message } });
       return;
     }
 
@@ -76,7 +78,7 @@ export function useRouteThreadSync() {
       if (!isLatestRequest()) return;
       const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
       pushNotice(message, 'error');
-      void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
+      void navigate(projectRoute.path('new'), { replace: true, state: { routeErrorNotice: message } });
     });
   });
 

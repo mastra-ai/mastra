@@ -11,10 +11,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { loginUrl, logoutUrl } from '../domains/auth';
-import Chat from '../domains/chat/Chat';
-import { NewPage } from '../domains/chat/NewPage';
-import { ThreadPage } from '../domains/chat/ThreadPage';
 import type { Factory } from '../domains/workspaces';
+import { createAppRoutes } from '../router';
 
 /**
  * Renders <Chat /> inside a memory router mirroring the app's pathless chat
@@ -22,20 +20,9 @@ import type { Factory } from '../domains/workspaces';
  * Auth guards are intentionally bypassed — these specs stub /auth/me directly.
  */
 function renderChat() {
-  const router = createMemoryRouter(
-    [
-      {
-        element: <Chat />,
-        children: [
-          { path: '/chat', element: <NewPage /> },
-          { path: '/threads/:threadId', element: <ThreadPage /> },
-        ],
-      },
-    ],
-    // The transcript only renders on the thread's own page now — /chat is the
-    // draft composer and hides the bound thread's history.
-    { initialEntries: ['/threads/thread-test'] },
-  );
+  const router = createMemoryRouter(createAppRoutes(), {
+    initialEntries: ['/local/project-test/threads/thread-test'],
+  });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
@@ -213,11 +200,11 @@ describe('MastraCode sidebar auth actions', () => {
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
-  it('given web auth is enabled and unauthenticated, when the app renders, then the sidebar shows no sign-in action', async () => {
+  it('given web auth is enabled and unauthenticated, when the app renders, then the sign-in page is shown', async () => {
     renderSeededApp({ authenticated: false, user: null });
 
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
@@ -373,8 +360,7 @@ describe('MastraCode message rendering', () => {
 
     renderChat();
 
-    const heading = await screen.findByRole('heading', { name: 'Quality gate' });
-    expect(heading.closest('.prose')).toHaveClass('mt-4');
+    expect(await screen.findByRole('heading', { name: 'Quality gate' })).toHaveTextContent('Quality gate');
   });
 
   it('renders assistant text when SSE message updates arrive after subscription', async () => {

@@ -15,6 +15,7 @@ import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from 'reac
 import { useLocation, useNavigate } from 'react-router';
 
 import { queryKeys } from '../../../../../shared/api/keys';
+import { useProjectRoute } from '../../../lib/useProjectRoute';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatModes } from '../context/useChatModes';
@@ -71,6 +72,7 @@ function readFileAsBase64(file: File): Promise<string> {
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const projectRoute = useProjectRoute();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -202,12 +204,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const send = async (text: string, files: PendingImage[]) => {
     if (!text.trim() && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
-    if (location.pathname === '/new') {
+    if (location.pathname === projectRoute.path('new')) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
       await sendMutation.mutateAsync({ text, files: outgoing });
       seedThreadMessageCache(threadId, text, files);
-      void navigate(`/threads/${threadId}`, { replace: true });
+      void navigate(projectRoute.path(`threads/${threadId}`), { replace: true });
       return;
     }
     localUser(text, false, outgoing);

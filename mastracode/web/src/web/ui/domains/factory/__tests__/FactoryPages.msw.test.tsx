@@ -343,7 +343,8 @@ function renderAt(
   seedActiveFactory(project);
   useAppHandlers(githubStatus, options);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const scopedEntry = `/${project.binding.kind === 'github' ? 'dashboard' : 'local'}/${project.id}${initialEntry}`;
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [scopedEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -383,9 +384,11 @@ describe('Factory sidebar section', () => {
     const nav = await screen.findByRole('navigation', { name: 'Factory' });
     expect(within(nav).getByText('Factory')).toBeInTheDocument();
     // The Board link appears once the GitHub status query resolves as connected.
-    expect(await within(nav).findByRole('link', { name: /Board/ })).toHaveAttribute('href', '/factory/board');
-    expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute('href', '/factory/metrics');
-    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute('href', '/factory/audit');
+    expect(await within(nav).findByRole('link', { name: /Board/ })).toHaveAttribute('href', '/dashboard/project-gh/factory/board');
+    expect(within(nav).getByRole('link', { name: /Intake/ })).toHaveAttribute('href', '/dashboard/project-gh/factory/intake');
+    expect(within(nav).getByRole('link', { name: /Review/ })).toHaveAttribute('href', '/dashboard/project-gh/factory/review');
+    expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute('href', '/dashboard/project-gh/factory/metrics');
+    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute('href', '/dashboard/project-gh/factory/audit');
     // The factory Sessions list is nested under the same menu.
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
   });
@@ -411,28 +414,26 @@ describe('Factory sidebar section', () => {
 });
 
 describe('Factory Board routing', () => {
-  it('given the legacy intake route, when visited, then it redirects to the Board', async () => {
+  it('given the intake route, when visited, then it renders the dedicated Intake board', async () => {
     useBoardHandlers();
     const { router } = renderAt('/factory/intake');
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factory/board'));
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/factory/intake'));
+    expect(await screen.findByRole('heading', { name: 'Intake' })).toBeInTheDocument();
   });
 
-  it('given the legacy review route, when visited, then it redirects to the Board', async () => {
+  it('given the review route, when visited, then it renders the dedicated Review board', async () => {
     useBoardHandlers();
     const { router } = renderAt('/factory/review');
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factory/board'));
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/factory/review'));
+    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
   });
 
-  it('given a local project, when visiting the Board, then a GitHub-only notice renders instead of columns', async () => {
+  it('given a local project, when visiting the Board, then the route is not found', async () => {
     renderAt('/factory/board', localProject);
 
-    expect(
-      await screen.findByText(/Board, metrics, and audit require a Factory connected to GitHub/),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
 
@@ -629,7 +630,7 @@ describe('Factory Board — Intake candidates', () => {
     const unfilteredRequestsBeforeResolve = state.issueRequests.filter(label => label === null).length;
     const autoTriagedRequestsBeforeResolve = state.issueRequests.filter(label => label === 'auto-triaged').length;
     resolveTriage();
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factory/board'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/factory/board'));
     await waitFor(() => {
       expect(state.issueRequests.filter(label => label === null).length).toBeGreaterThan(
         unfilteredRequestsBeforeResolve,
@@ -842,7 +843,7 @@ describe('Factory Board — persisted cards', () => {
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
-    expect(within(card).getByRole('link', { name: 'Fix flaky test' })).toHaveAttribute('href', '/threads/thread-work');
+    expect(within(card).getByRole('link', { name: 'Fix flaky test' })).toHaveAttribute('href', '/dashboard/project-gh/threads/thread-work');
   });
 
   it('given plan and work sessions on the same thread, when the Board renders, then the card shows a single thread link', async () => {
@@ -866,7 +867,7 @@ describe('Factory Board — persisted cards', () => {
     const links = within(card).getAllByRole('link');
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAccessibleName('Fix flaky test');
-    expect(links[0]).toHaveAttribute('href', '/threads/thread-shared');
+    expect(links[0]).toHaveAttribute('href', '/dashboard/project-gh/threads/thread-shared');
   });
 
   it('given legacy sessions that diverged onto different threads, when the Board renders, then the card still shows a single thread link', async () => {
@@ -892,7 +893,7 @@ describe('Factory Board — persisted cards', () => {
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAccessibleName('Fix flaky test');
     // The last-filed ref wins until the next run converges them.
-    expect(links[0]).toHaveAttribute('href', '/threads/thread-work');
+    expect(links[0]).toHaveAttribute('href', '/dashboard/project-gh/threads/thread-work');
   });
 
   it('given a session ref whose worktree was deleted, when the Board renders, then the title offers to open a fresh session and runs are offered again', async () => {
@@ -954,7 +955,7 @@ describe('Factory Board — persisted cards', () => {
     const card = within(column('execute')).getByTestId('work-item-card');
     await userEvent.click(within(card).getByRole('link', { name: 'Fix flaky test' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-work'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-work'));
     const stored = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];
     expect(stored[0]?.binding.kind === 'github' ? stored[0].binding.selectedWorktreePath : undefined).toBe(
       issueWorktreePath,
@@ -999,7 +1000,7 @@ describe('Factory Board — persisted cards', () => {
     await userEvent.click(within(column('triage')).getByRole('button', { name: 'Actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     await waitFor(() => expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['planning'] }]));
   });
@@ -1025,7 +1026,7 @@ describe('Factory Board — persisted cards', () => {
     await userEvent.click(within(column('triage')).getByRole('button', { name: 'Actions for Add OAuth support' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Prepare approval' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-21' });
     await waitFor(() =>
       expect(captured.messages[0]!.message).toContain(
@@ -1295,7 +1296,7 @@ describe('Factory Board — persisted cards', () => {
     await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     await waitFor(() => expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12'));
     await waitFor(() => expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['execute'] }]));
@@ -1524,7 +1525,7 @@ describe('Factory Board — investigate flow', () => {
     await within(intake).findByText('Fix flaky test');
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
     await waitFor(() => expect(captured.messages).toHaveLength(1));
@@ -1587,7 +1588,7 @@ describe('Factory Board — investigate flow', () => {
 
       expect(await screen.findByRole('button', { name: /Show understand-issue skill contents/ })).toBeInTheDocument();
       await waitFor(() => expect(captured.messages).toHaveLength(1));
-      expect(pathWhenDispatched).toBe('/threads/thread-factory');
+      expect(pathWhenDispatched).toBe('/dashboard/project-gh/threads/thread-factory');
       expect(captured.skillInvocations).toHaveLength(1);
       expect(captured.messages[0]?.message).toContain('<skill name="understand-issue">');
       expect(state.posts).toHaveLength(0);
@@ -1644,7 +1645,7 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
 
     expect(await screen.findByText('Skill not found: understand-issue.')).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/factory/board');
+    expect(router.state.location.pathname).toBe('/dashboard/project-gh/factory/board');
     expect(captured.skillInvocations).toHaveLength(1);
     expect(captured.messages).toHaveLength(0);
     expect(state.posts).toHaveLength(0);
@@ -1677,7 +1678,7 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
     await promptRequested;
-    expect(router.state.location.pathname).toBe('/threads/thread-factory');
+    expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory');
     releasePrompt();
     await waitFor(() => expect(state.posts).toHaveLength(1));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
@@ -1711,7 +1712,7 @@ describe('Factory Board — investigate flow', () => {
       await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
 
       // Filing is best-effort: the user still lands on the running thread.
-      await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+      await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
       expect(captured.skillInvocations).toHaveLength(1);
       await waitFor(() =>
         expect(errorSpy).toHaveBeenCalledWith('Failed to file the board card for this run', expect.anything()),
@@ -1732,7 +1733,7 @@ describe('Factory Board — investigate flow', () => {
     await within(intake).findByText('Add factory pages');
     await userEvent.click(within(intake).getByRole('button', { name: 'Review Add factory pages' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/pr-34' });
     expect(captured.threadTitles).toEqual(['PR #34: Add factory pages']);
     await waitFor(() => expect(captured.messages).toHaveLength(1));
@@ -1776,7 +1777,7 @@ describe('Factory Board — investigate flow', () => {
     await within(intake).findByText('Fix intake sync');
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix intake sync' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/linear-eng-42' });
     await waitFor(() => expect(captured.messages).toHaveLength(1));
     expect(captured.messages[0]?.message).toContain('<skill name="understand-issue">');
@@ -1806,7 +1807,7 @@ describe('Factory Board — investigate flow', () => {
     );
     await userEvent.click(within(form).getByRole('button', { name: 'Run' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     await waitFor(() => expect(captured.messages).toHaveLength(1));
     // The base issue context survives; the typed text guides the run instead
     // of the explicit skill directive.
@@ -1839,7 +1840,7 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     await waitFor(() => expect(captured.messages).toHaveLength(1));
     expect(captured.messages[0]?.message).toContain('<skill name="understand-issue">');
@@ -1889,7 +1890,7 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     // One thread per item: every role ref converges onto the run's thread.
     await waitFor(() =>
@@ -1941,7 +1942,7 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(column('review')).getByRole('button', { name: 'Actions for Add factory pages' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Review' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${THREAD_ID}`));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/dashboard/project-gh/threads/${THREAD_ID}`));
     // No new thread was created — the resumed thread carried the follow-up run.
     expect(captured.threadTitles).toEqual([]);
     await waitFor(() => expect(captured.messages).toHaveLength(1));
@@ -1980,7 +1981,7 @@ describe('Factory Board — investigate flow', () => {
     expect(await screen.findByText('worktree failed')).toBeInTheDocument();
     expect(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' })).toBeEnabled();
     expect(state.posts).toEqual([]);
-    expect(router.state.location.pathname).toBe('/factory/board');
+    expect(router.state.location.pathname).toBe('/dashboard/project-gh/factory/board');
   });
 });
 
@@ -2018,7 +2019,7 @@ describe('Factory Board — open session from the card title', () => {
     const card = within(column('intake')).getByTestId('work-item-card');
     await userEvent.click(within(card).getByRole('button', { name: 'Fix flaky test' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
     // No agent run: nothing was sent to the session.
@@ -2063,7 +2064,7 @@ describe('Factory Board — open session from the card title', () => {
     const card = within(column('execute')).getByTestId('work-item-card');
     await userEvent.click(within(card).getByRole('button', { name: 'Fix flaky test' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.messages).toEqual([]);
     // The fresh thread is filed under chat only — repointing the stale `work`
     // role would make it look live and hide Investigate/Build again.
@@ -2082,7 +2083,7 @@ describe('Factory Board — open session from the card title', () => {
     await within(intake).findByText('Fix flaky test');
     await userEvent.click(within(intake).getByRole('button', { name: 'Fix flaky test' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.messages).toEqual([]);
     expect(state.posts).toMatchObject([
@@ -2109,7 +2110,7 @@ describe('Factory Board — open session from the card title', () => {
     const card = within(column('intake')).getByTestId('work-item-card');
     await userEvent.click(within(card).getByRole('button', { name: 'Manual card' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/item-wi-manual' });
     expect(captured.threadTitles).toEqual(['Manual card']);
     expect(captured.messages).toEqual([]);
@@ -2143,7 +2144,7 @@ describe('Factory Board — open session from the card title', () => {
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('intake')).getByTestId('work-item-card');
-    expect(within(card).getByRole('link', { name: 'Fix flaky test' })).toHaveAttribute('href', '/threads/thread-work');
+    expect(within(card).getByRole('link', { name: 'Fix flaky test' })).toHaveAttribute('href', '/dashboard/project-gh/threads/thread-work');
     // A chat session occupies no run slot: Investigate and Build stay offered.
     await userEvent.click(within(card).getByRole('button', { name: 'Actions for Fix flaky test' }));
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeInTheDocument();

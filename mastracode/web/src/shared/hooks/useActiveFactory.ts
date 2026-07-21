@@ -8,13 +8,14 @@ import {
 import type { Factory } from '../../web/ui/domains/workspaces/services/factories';
 import { useFactoriesQuery } from './useFactories';
 
-export function useActiveFactory() {
+export function useActiveFactory(routeFactoryId?: string) {
   const factoriesQuery = useFactoriesQuery();
   const { data: factories } = factoriesQuery;
   const [selectedFactoryId, setSelectedFactoryId] = useState<string | null>(() => loadActiveFactoryId());
+  const requestedFactoryId = routeFactoryId ?? selectedFactoryId;
   // Derived: a selection pointing at a deleted factory counts as no selection.
   const activeFactoryId =
-    selectedFactoryId && factories.some(factory => factory.id === selectedFactoryId) ? selectedFactoryId : null;
+    requestedFactoryId && factories.some(factory => factory.id === requestedFactoryId) ? requestedFactoryId : null;
   const activeFactory = factories.find(factory => factory.id === activeFactoryId) ?? null;
   const resourceId = activeFactory?.resourceId ?? DEFAULT_RESOURCE_ID;
   const sessionEnabled = !!activeFactory?.resourceId;
