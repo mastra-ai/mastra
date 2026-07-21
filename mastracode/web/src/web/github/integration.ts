@@ -109,6 +109,22 @@ export interface PullRequestPage {
   nextPage: number | null;
 }
 
+/** GitHub issue operations exposed to the factory's Intake surface. */
+export interface GithubIntake {
+  addIssueLabels(installationId: number, repoFullName: string, issueNumber: number, labels: string[]): Promise<void>;
+  listRepoOpenIssues(
+    installationId: number,
+    repoFullName: string,
+    page: number,
+    options?: ListRepoOpenIssuesOptions,
+  ): Promise<IssuePage>;
+}
+
+/** GitHub pull-request operations exposed to version-control consumers. */
+export interface GithubVersionControl {
+  listRepoOpenPullRequests(installationId: number, repoFullName: string, page: number): Promise<PullRequestPage>;
+}
+
 export interface GithubIntegrationConfig {
   /** GitHub App id (the numeric id, as a string). */
   appId: string;
@@ -137,6 +153,14 @@ const REQUIRED_FIELDS = ['appId', 'privateKey', 'clientId', 'clientSecret', 'slu
 export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
+  /** GitHub issues are an Intake source. */
+  get intake(): GithubIntake {
+    return this;
+  }
+  /** GitHub pull requests are the integration's version-control surface. */
+  get versionControl(): GithubVersionControl {
+    return this;
+  }
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
    * multi-replica deploy needs a deployment-stable state secret.

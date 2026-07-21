@@ -94,6 +94,17 @@ export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
   readonly id: string;
   /**
+   * Issue-oriented capability consumed by Intake. Presence marks the
+   * integration as an intake source; the concrete integration class exposes
+   * the typed surface (e.g. `GithubIntake`, `LinearIntake`).
+   */
+  readonly intake?: unknown;
+  /**
+   * Repository and pull-request capability consumed by version-control flows.
+   * Presence marker; see `GithubVersionControl` for the typed surface.
+   */
+  readonly versionControl?: unknown;
+  /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds
    * the result into the server's route table.

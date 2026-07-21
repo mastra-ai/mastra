@@ -132,9 +132,7 @@ export function getSeededIntegration(id: string): FactoryIntegration | undefined
  */
 export function getSeededGithubIntegration(): GithubIntegration | undefined {
   const integration = getSeededIntegration('github');
-  return integration instanceof Object && 'getInstallationOctokit' in integration
-    ? (integration as GithubIntegration)
-    : undefined;
+  return integration?.versionControl ? (integration as GithubIntegration) : undefined;
 }
 
 /**
@@ -144,9 +142,7 @@ export function getSeededGithubIntegration(): GithubIntegration | undefined {
  */
 export function getSeededLinearIntegration(): LinearIntegration | undefined {
   const integration = getSeededIntegration('linear');
-  return integration instanceof Object && 'listActiveIssues' in integration
-    ? (integration as LinearIntegration)
-    : undefined;
+  return integration?.intake ? (integration as LinearIntegration) : undefined;
 }
 
 /**

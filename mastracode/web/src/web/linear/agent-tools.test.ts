@@ -30,7 +30,7 @@ const refreshLinearAccessToken = vi.fn();
 const githubStub = {
   id: 'github',
   sourceControlStorage: sourceControlStorageHandle,
-  getInstallationOctokit: vi.fn(),
+  versionControl: { listRepoOpenPullRequests: vi.fn() },
 } as unknown as import('../github/integration').GithubIntegration;
 
 // Stub integration instance: real DI through `buildLinearAgentTools`'s

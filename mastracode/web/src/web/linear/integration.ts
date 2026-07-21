@@ -118,6 +118,14 @@ export interface LinearCreatedComment {
   url: string;
 }
 
+/** Linear issue operations exposed to the factory's Intake surface. */
+export interface LinearIntake {
+  listProjects(accessToken: string): Promise<LinearProject[]>;
+  listActiveIssues(accessToken: string, after?: string, projectIds?: string[]): Promise<LinearIssuePage>;
+  fetchIssueDetail(accessToken: string, idOrIdentifier: string): Promise<LinearIssueDetail | null>;
+  createIssueComment(accessToken: string, idOrIdentifier: string, body: string): Promise<LinearCreatedComment | null>;
+}
+
 const LINEAR_ISSUES_PAGE_SIZE = 30;
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
 /** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
@@ -221,6 +229,10 @@ async function linearGraphql<T>(accessToken: string, query: string, variables?: 
 export class LinearIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'linear';
+  /** Linear issues are an Intake source. */
+  get intake(): LinearIntake {
+    return this;
+  }
   /**
    * The OAuth connect/callback flow round-trips a signed `state` through
    * Linear, so a multi-replica deploy needs a deployment-stable state secret.
