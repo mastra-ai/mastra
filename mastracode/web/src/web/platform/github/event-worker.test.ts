@@ -138,7 +138,12 @@ describe('PlatformGithubEventWorker', () => {
         deliveryId: 'delivery-1',
         payload: { action: 'opened' },
       },
-      expect.objectContaining({ controller: expect.anything(), github: expect.anything() }),
+      expect.objectContaining({
+        controller: expect.anything(),
+        listSubscriptions: expect.any(Function),
+        retireSubscription: expect.any(Function),
+        isAuthorizedSender: expect.any(Function),
+      }),
     );
     expect(eventRequests[0]?.searchParams.get('afterTimestamp')).toBe('999');
     expect(eventRequests[1]?.searchParams.get('afterEventId')).toBe('1001-0');
