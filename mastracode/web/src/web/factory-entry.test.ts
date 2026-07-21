@@ -4,6 +4,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import type { VersionControl } from './capabilities/version-control.js';
 import { PgVector } from '@mastra/pg';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import { MastraFactory } from './factory-entry.js';
@@ -357,22 +358,22 @@ describe('MastraFactory.prepare integrations', () => {
     expect(getSeededIntegration('missing')).toBeUndefined();
   });
 
-  it('initializes source-control capabilities with integration-scoped storage', async () => {
+  it('initializes version-control capabilities with integration-scoped storage', async () => {
     const initialize = vi.fn();
     const custom = fakeIntegration({
-      id: 'custom-source-control',
-      sourceControl: {
+      id: 'custom-version-control',
+      versionControl: {
         initialize,
         registerInstallation: vi.fn(),
         registerRepositories: vi.fn(),
         getRepositoryAccess: vi.fn(),
-      },
+      } as unknown as VersionControl,
     });
 
     await prepareFactory({ storage: fakeStorage(), integrations: [custom] });
 
     expect(initialize).toHaveBeenCalledOnce();
-    expect(initialize.mock.calls[0]![0].storage.integrationId).toBe('custom-source-control');
+    expect(initialize.mock.calls[0]![0].storage.integrationId).toBe('custom-version-control');
   });
 
   it("folds a ready integration's routes into buildApiRoutes", async () => {
