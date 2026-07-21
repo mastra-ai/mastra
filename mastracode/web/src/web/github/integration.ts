@@ -28,7 +28,21 @@ import { Octokit } from '@octokit/rest';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
+import type {
+  CreateIntakeCommentInput,
+  FactoryIntegration,
+  GetIntakeIssueInput,
+  Intake,
+  IntakeIssue,
+  IntakeIssueDetail,
+  IntegrationConnection,
+  IntegrationContext,
+  IntegrationTools,
+  ListIntakeIssuesInput,
+  ListVersionControlPullRequestsInput,
+  VersionControl,
+  VersionControlPullRequestPage,
+} from '../factory-integration.js';
 import { buildGithubRoutes } from './routes.js';
 import { createGithubSubscriptionTools } from './session-subscriptions.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
@@ -109,22 +123,6 @@ export interface PullRequestPage {
   nextPage: number | null;
 }
 
-/** GitHub issue operations exposed to the factory's Intake surface. */
-export interface GithubIntake {
-  addIssueLabels(installationId: number, repoFullName: string, issueNumber: number, labels: string[]): Promise<void>;
-  listRepoOpenIssues(
-    installationId: number,
-    repoFullName: string,
-    page: number,
-    options?: ListRepoOpenIssuesOptions,
-  ): Promise<IssuePage>;
-}
-
-/** GitHub pull-request operations exposed to version-control consumers. */
-export interface GithubVersionControl {
-  listRepoOpenPullRequests(installationId: number, repoFullName: string, page: number): Promise<PullRequestPage>;
-}
-
 export interface GithubIntegrationConfig {
   /** GitHub App id (the numeric id, as a string). */
   appId: string;
@@ -153,14 +151,14 @@ const REQUIRED_FIELDS = ['appId', 'privateKey', 'clientId', 'clientSecret', 'slu
 export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
-  /** GitHub issues are an Intake source. */
-  get intake(): GithubIntake {
-    return this;
-  }
-  /** GitHub pull requests are the integration's version-control surface. */
-  get versionControl(): GithubVersionControl {
-    return this;
-  }
+  readonly intake: Intake = {
+    listIssues: input => this.#listIntakeIssues(input),
+    getIssue: input => this.#getIntakeIssue(input),
+    createComment: input => this.#createIntakeComment(input),
+  };
+  readonly versionControl: VersionControl = {
+    listPullRequests: input => this.#listVersionControlPullRequests(input),
+  };
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
    * multi-replica deploy needs a deployment-stable state secret.
@@ -340,6 +338,120 @@ export class GithubIntegration implements FactoryIntegration {
     }
   }
 
+  async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
+    const installationId = getGithubInstallationId(input.connection);
+    const repoFullName = getSingleSourceId(input.sourceIds, 'GitHub Intake requires exactly one repository source.');
+    const page = parsePositiveCursor(input.cursor);
+    const result = await this.listRepoOpenIssues(installationId, repoFullName, page);
+    return {
+      issues: result.issues.map(issue => ({
+        id: String(issue.number),
+        identifier: `#${issue.number}`,
+        title: issue.title,
+        url: issue.url,
+        author: issue.author,
+        state: 'open',
+        stateType: 'open',
+        priority: null,
+        assignee: null,
+        source: repoFullName,
+        labels: issue.labels,
+        commentCount: issue.comments,
+        createdAt: issue.createdAt,
+        updatedAt: issue.updatedAt,
+      })),
+      nextCursor: result.nextPage === null ? null : String(result.nextPage),
+    };
+  }
+
+  async #getIntakeIssue(input: GetIntakeIssueInput): Promise<IntakeIssueDetail | null> {
+    const installationId = getGithubInstallationId(input.connection);
+    const repoFullName = requireSourceId(input.sourceId, 'GitHub Intake requires a repository source.');
+    const parts = splitRepoFullName(repoFullName);
+    const issueNumber = parsePositiveInteger(input.issueId);
+    if (!parts || issueNumber === null) return null;
+    const octokit = this.getInstallationOctokit(installationId);
+    try {
+      const [{ data: issue }, comments] = await Promise.all([
+        octokit.issues.get({ owner: parts.owner, repo: parts.repo, issue_number: issueNumber }),
+        octokit.paginate(octokit.issues.listComments, {
+          owner: parts.owner,
+          repo: parts.repo,
+          issue_number: issueNumber,
+          per_page: 100,
+        }),
+      ]);
+      if (issue.pull_request) return null;
+      return {
+        id: String(issue.number),
+        identifier: `#${issue.number}`,
+        title: issue.title,
+        url: issue.html_url,
+        author: issue.user?.login ?? null,
+        state: issue.state,
+        stateType: issue.state,
+        priority: null,
+        assignee: issue.assignee?.login ?? null,
+        source: repoFullName,
+        labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
+        commentCount: issue.comments,
+        createdAt: issue.created_at,
+        updatedAt: issue.updated_at,
+        description: issue.body?.trim() ? issue.body : null,
+        comments: comments.map(comment => ({
+          author: comment.user?.login ?? null,
+          body: comment.body ?? '',
+          createdAt: comment.created_at,
+        })),
+      };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  }
+
+  async #createIntakeComment(input: CreateIntakeCommentInput): Promise<{ id: string; url: string } | null> {
+    const installationId = getGithubInstallationId(input.connection);
+    const repoFullName = requireSourceId(input.sourceId, 'GitHub Intake requires a repository source.');
+    const parts = splitRepoFullName(repoFullName);
+    const issueNumber = parsePositiveInteger(input.issueId);
+    if (!parts || issueNumber === null) return null;
+    const octokit = this.getInstallationOctokit(installationId);
+    try {
+      const { data } = await octokit.issues.createComment({
+        owner: parts.owner,
+        repo: parts.repo,
+        issue_number: issueNumber,
+        body: input.body,
+      });
+      return { id: String(data.id), url: data.html_url };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  }
+
+  async #listVersionControlPullRequests(
+    input: ListVersionControlPullRequestsInput,
+  ): Promise<VersionControlPullRequestPage> {
+    const installationId = getGithubInstallationId(input.connection);
+    const page = parsePositiveCursor(input.cursor);
+    const result = await this.listRepoOpenPullRequests(installationId, input.sourceId, page);
+    return {
+      pullRequests: result.pullRequests.map(pr => ({
+        id: String(pr.number),
+        title: pr.title,
+        url: pr.url,
+        author: pr.author,
+        baseBranch: pr.baseBranch,
+        headBranch: pr.headBranch,
+        createdAt: pr.createdAt,
+        updatedAt: pr.updatedAt,
+      })),
+      nextCursor: result.nextPage === null ? null : String(result.nextPage),
+    };
+  }
+
   /** Add labels to an issue (deduplicated; no-op on empty/malformed input). */
   async addIssueLabels(
     installationId: number,
@@ -508,6 +620,40 @@ export class GithubIntegration implements FactoryIntegration {
       webhookSecretConfigured: this.#webhookSecret !== undefined,
     };
   }
+}
+
+function getGithubInstallationId(connection: IntegrationConnection): number {
+  if (connection.type !== 'app-installation') {
+    throw new Error('GitHub capabilities require an app-installation connection.');
+  }
+  return connection.installationId;
+}
+
+function getSingleSourceId(sourceIds: string[], message: string): string {
+  if (sourceIds.length !== 1) throw new Error(message);
+  return sourceIds[0]!;
+}
+
+function requireSourceId(sourceId: string | undefined, message: string): string {
+  if (!sourceId) throw new Error(message);
+  return sourceId;
+}
+
+function parsePositiveCursor(cursor: string | undefined): number {
+  if (cursor === undefined) return 1;
+  const page = parsePositiveInteger(cursor);
+  if (page === null) throw new Error('GitHub cursor must be a positive page number.');
+  return page;
+}
+
+function parsePositiveInteger(value: string): number | null {
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'status' in error && error.status === 404;
 }
 
 /** Split an `owner/name` full name into its parts, or `null` when malformed. */

@@ -86,6 +86,100 @@ export interface IntegrationContext {
   hooks?: IntegrationHooks;
 }
 
+/** Authentication material accepted by integration capabilities. */
+export type IntegrationConnection =
+  { type: 'app-installation'; installationId: number } | { type: 'oauth'; accessToken: string };
+
+/** Provider-neutral issue returned by every Intake integration. */
+export interface IntakeIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+  author: string | null;
+  state: string | null;
+  stateType: string | null;
+  priority: string | null;
+  assignee: string | null;
+  source: string | null;
+  labels: string[];
+  commentCount: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IntakeIssueComment {
+  author: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface IntakeIssueDetail extends IntakeIssue {
+  description: string | null;
+  comments: IntakeIssueComment[];
+}
+
+export interface IntakeIssuePage {
+  issues: IntakeIssue[];
+  nextCursor: string | null;
+}
+
+export interface ListIntakeIssuesInput {
+  connection: IntegrationConnection;
+  /** Provider-defined source ids: repositories for GitHub, projects for Linear. */
+  sourceIds: string[];
+  cursor?: string;
+}
+
+export interface GetIntakeIssueInput {
+  connection: IntegrationConnection;
+  sourceId?: string;
+  issueId: string;
+}
+
+export interface CreateIntakeCommentInput extends GetIntakeIssueInput {
+  body: string;
+}
+
+export interface CreatedIntakeComment {
+  id: string;
+  url: string;
+}
+
+/** Fixed issue-oriented contract implemented by GitHub, Linear, and future sources. */
+export interface Intake {
+  listIssues(input: ListIntakeIssuesInput): Promise<IntakeIssuePage>;
+  getIssue(input: GetIntakeIssueInput): Promise<IntakeIssueDetail | null>;
+  createComment(input: CreateIntakeCommentInput): Promise<CreatedIntakeComment | null>;
+}
+
+export interface VersionControlPullRequest {
+  id: string;
+  title: string;
+  url: string;
+  author: string | null;
+  baseBranch: string;
+  headBranch: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VersionControlPullRequestPage {
+  pullRequests: VersionControlPullRequest[];
+  nextCursor: string | null;
+}
+
+export interface ListVersionControlPullRequestsInput {
+  connection: IntegrationConnection;
+  sourceId: string;
+  cursor?: string;
+}
+
+/** Fixed repository and pull-request contract implemented by source-control integrations. */
+export interface VersionControl {
+  listPullRequests(input: ListVersionControlPullRequestsInput): Promise<VersionControlPullRequestPage>;
+}
+
 /**
  * A pluggable web integration. Implementations own their credentials
  * (validated at construction), their API surface, and their HTTP routes.
@@ -93,17 +187,10 @@ export interface IntegrationContext {
 export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
   readonly id: string;
-  /**
-   * Issue-oriented capability consumed by Intake. Presence marks the
-   * integration as an intake source; the concrete integration class exposes
-   * the typed surface (e.g. `GithubIntake`, `LinearIntake`).
-   */
-  readonly intake?: unknown;
-  /**
-   * Repository and pull-request capability consumed by version-control flows.
-   * Presence marker; see `GithubVersionControl` for the typed surface.
-   */
-  readonly versionControl?: unknown;
+  /** Issue-oriented capability consumed by Intake. */
+  readonly intake?: Intake;
+  /** Repository and pull-request capability consumed by version-control flows. */
+  readonly versionControl?: VersionControl;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds

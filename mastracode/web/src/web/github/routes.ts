@@ -706,13 +706,36 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const label = parseIssueLabelFilter(c.req.query('label'));
         if (label === null) return c.json({ error: 'invalid_label' }, 400);
         try {
-          const { issues, nextPage } = await github.listRepoOpenIssues(
-            Number(loaded.project.installationExternalId),
-            loaded.project.repositorySlug,
-            page,
-            { label },
-          );
-          return c.json({ issues, nextPage });
+          if (label) {
+            const { issues, nextPage } = await github.listRepoOpenIssues(
+              Number(loaded.project.installationExternalId),
+              loaded.project.repositorySlug,
+              page,
+              { label },
+            );
+            return c.json({ issues, nextPage });
+          }
+          const { issues, nextCursor } = await github.intake.listIssues({
+            connection: {
+              type: 'app-installation',
+              installationId: Number(loaded.project.installationExternalId),
+            },
+            sourceIds: [loaded.project.repositorySlug],
+            cursor: String(page),
+          });
+          return c.json({
+            issues: issues.map(issue => ({
+              number: Number(issue.id),
+              title: issue.title,
+              url: issue.url,
+              author: issue.author,
+              labels: issue.labels,
+              comments: issue.commentCount ?? 0,
+              createdAt: issue.createdAt,
+              updatedAt: issue.updatedAt,
+            })),
+            nextPage: nextCursor === null ? null : Number(nextCursor),
+          });
         } catch (err) {
           return c.json(
             { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
@@ -800,12 +823,27 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const page = parseListPage(c.req.query('page'));
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
         try {
-          const { pullRequests, nextPage } = await github.listRepoOpenPullRequests(
-            Number(loaded.project.installationExternalId),
-            loaded.project.repositorySlug,
-            page,
-          );
-          return c.json({ pullRequests, nextPage });
+          const { pullRequests, nextCursor } = await github.versionControl.listPullRequests({
+            connection: {
+              type: 'app-installation',
+              installationId: Number(loaded.project.installationExternalId),
+            },
+            sourceId: loaded.project.repositorySlug,
+            cursor: String(page),
+          });
+          return c.json({
+            pullRequests: pullRequests.map(pr => ({
+              number: Number(pr.id),
+              title: pr.title,
+              url: pr.url,
+              author: pr.author,
+              baseBranch: pr.baseBranch,
+              headBranch: pr.headBranch,
+              createdAt: pr.createdAt,
+              updatedAt: pr.updatedAt,
+            })),
+            nextPage: nextCursor === null ? null : Number(nextCursor),
+          });
         } catch (err) {
           return c.json(
             { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },

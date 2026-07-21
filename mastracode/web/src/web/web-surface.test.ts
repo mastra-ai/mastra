@@ -19,7 +19,10 @@ import { buildIssueTriagePrompt, resolveLinearReady } from './web-surface';
 let stderrSpy: ReturnType<typeof vi.spyOn>;
 
 async function enableLinearFeature(options?: { stableStateSigner?: boolean }): Promise<void> {
-  const linearStub = { id: 'linear', intake: { listActiveIssues: vi.fn() } } as any;
+  const linearStub = {
+    id: 'linear',
+    intake: { listIssues: vi.fn(), getIssue: vi.fn(), createComment: vi.fn() },
+  } as any;
   const seed = await seedFactoryStorageForTests();
   seedRuntimeConfig({
     storage: seed.storage,

@@ -1,5 +1,5 @@
 import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createStateSigner } from '../state-signing.js';
 import { GithubIntegration, normalizePrivateKey } from './integration.js';
@@ -67,6 +67,114 @@ describe('GithubIntegration constructor', () => {
   it('normalizes an \\n-escaped private key at construction', () => {
     const escaped = pem.replace(/\n/g, '\\n');
     expect(() => new GithubIntegration({ ...validConfig(), privateKey: escaped })).not.toThrow();
+  });
+});
+
+describe('GithubIntegration capability surface', () => {
+  it('normalizes GitHub issues through the shared Intake contract', async () => {
+    const github = new GithubIntegration(validConfig());
+    const listForRepo = vi.fn(async () => ({
+      data: [
+        {
+          number: 12,
+          title: 'Fix intake',
+          html_url: 'https://github.com/acme/app/issues/12',
+          user: { login: 'ada' },
+          labels: [{ name: 'bug' }],
+          comments: 3,
+          created_at: '2026-07-01T00:00:00Z',
+          updated_at: '2026-07-02T00:00:00Z',
+        },
+      ],
+    }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { listForRepo } } as any);
+
+    await expect(
+      github.intake.listIssues({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceIds: ['acme/app'],
+      }),
+    ).resolves.toEqual({
+      issues: [
+        expect.objectContaining({
+          id: '12',
+          identifier: '#12',
+          source: 'acme/app',
+          state: 'open',
+          labels: ['bug'],
+          commentCount: 3,
+        }),
+      ],
+      nextCursor: null,
+    });
+  });
+
+  it('fetches issue details and creates comments through the shared Intake contract', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn(async () => ({
+      data: {
+        number: 12,
+        title: 'Fix intake',
+        html_url: 'https://github.com/acme/app/issues/12',
+        user: { login: 'ada' },
+        state: 'open',
+        assignee: null,
+        labels: [{ name: 'bug' }],
+        comments: 1,
+        body: 'Issue body',
+        created_at: '2026-07-01T00:00:00Z',
+        updated_at: '2026-07-02T00:00:00Z',
+      },
+    }));
+    const createComment = vi.fn(async () => ({
+      data: { id: 99, html_url: 'https://github.com/acme/app/issues/12#issuecomment-99' },
+    }));
+    const paginate = vi.fn(async () => [
+      { user: { login: 'grace' }, body: 'Looking now', created_at: '2026-07-03T00:00:00Z' },
+    ]);
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      issues: { get, listComments: vi.fn(), createComment },
+      paginate,
+    } as any);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+
+    await expect(github.intake.getIssue({ connection, sourceId: 'acme/app', issueId: '12' })).resolves.toMatchObject({
+      description: 'Issue body',
+      comments: [{ author: 'grace', body: 'Looking now' }],
+    });
+    await expect(
+      github.intake.createComment({ connection, sourceId: 'acme/app', issueId: '12', body: 'Done' }),
+    ).resolves.toEqual({ id: '99', url: 'https://github.com/acme/app/issues/12#issuecomment-99' });
+  });
+
+  it('normalizes pull requests through the shared VersionControl contract', async () => {
+    const github = new GithubIntegration(validConfig());
+    const list = vi.fn(async () => ({
+      data: [
+        {
+          number: 34,
+          title: 'Ship intake',
+          html_url: 'https://github.com/acme/app/pull/34',
+          user: { login: 'ada' },
+          base: { ref: 'main' },
+          head: { ref: 'feat/intake' },
+          draft: false,
+          created_at: '2026-07-01T00:00:00Z',
+          updated_at: '2026-07-02T00:00:00Z',
+        },
+      ],
+    }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { list } } as any);
+
+    await expect(
+      github.versionControl.listPullRequests({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+      }),
+    ).resolves.toEqual({
+      pullRequests: [expect.objectContaining({ id: '34', baseBranch: 'main', headBranch: 'feat/intake' })],
+      nextCursor: null,
+    });
   });
 });
 

@@ -261,8 +261,50 @@ const githubStub = {
     addIssueLabels(installationId, repoFullName, issueNumber, labels),
   listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
     listRepoOpenIssues(installationId, repoFullName, page, options),
-  listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
-    listRepoOpenPullRequests(installationId, repoFullName, page),
+  intake: {
+    listIssues: async (input: import('../factory-integration').ListIntakeIssuesInput) => {
+      if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
+      const result = await listRepoOpenIssues(
+        input.connection.installationId,
+        input.sourceIds[0]!,
+        Number(input.cursor ?? '1'),
+        { label: undefined },
+      );
+      return {
+        issues: result.issues.map(issue => ({
+          id: String(issue.number),
+          identifier: `#${issue.number}`,
+          title: issue.title,
+          url: issue.url,
+          author: issue.author,
+          state: 'open',
+          stateType: 'open',
+          priority: null,
+          assignee: null,
+          source: input.sourceIds[0]!,
+          labels: issue.labels,
+          commentCount: issue.comments,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+        })),
+        nextCursor: result.nextPage === null ? null : String(result.nextPage),
+      };
+    },
+  },
+  versionControl: {
+    listPullRequests: async (input: import('../factory-integration').ListVersionControlPullRequestsInput) => {
+      if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
+      const result = await listRepoOpenPullRequests(
+        input.connection.installationId,
+        input.sourceId,
+        Number(input.cursor ?? '1'),
+      );
+      return {
+        pullRequests: result.pullRequests.map(pr => ({ ...pr, id: String(pr.number) })),
+        nextCursor: result.nextPage === null ? null : String(result.nextPage),
+      };
+    },
+  },
 };
 
 // Deterministic state signer stub (replaces the old signState/verifyState mocks).

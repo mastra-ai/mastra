@@ -30,7 +30,7 @@ const refreshLinearAccessToken = vi.fn();
 const githubStub = {
   id: 'github',
   sourceControlStorage: sourceControlStorageHandle,
-  versionControl: { listRepoOpenPullRequests: vi.fn() },
+  versionControl: { listPullRequests: vi.fn() },
 } as unknown as import('../github/integration').GithubIntegration;
 
 // Stub integration instance: real DI through `buildLinearAgentTools`'s
@@ -38,8 +38,16 @@ const githubStub = {
 // the instance to the extraTools provider in production.
 const linearStub = {
   id: 'linear',
-  fetchIssueDetail: (...args: any[]) => fetchLinearIssueDetail(...(args as [])),
-  createIssueComment: (...args: any[]) => createLinearIssueComment(...(args as [])),
+  intake: {
+    getIssue: (input: import('../factory-integration').GetIntakeIssueInput) => {
+      if (input.connection.type !== 'oauth') throw new Error('expected OAuth connection');
+      return fetchLinearIssueDetail(input.connection.accessToken, input.issueId);
+    },
+    createComment: (input: import('../factory-integration').CreateIntakeCommentInput) => {
+      if (input.connection.type !== 'oauth') throw new Error('expected OAuth connection');
+      return createLinearIssueComment(input.connection.accessToken, input.issueId, input.body);
+    },
+  },
   refreshAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
 } as unknown as import('./integration').LinearIntegration;
 
