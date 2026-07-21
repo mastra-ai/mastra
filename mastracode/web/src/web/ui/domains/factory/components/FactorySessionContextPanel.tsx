@@ -190,7 +190,7 @@ function FactoryTaskDetails({
 
       {url ? (
         <div>
-          <Button as="a" href={url} size="sm" variant="outline">
+          <Button as="a" href={url} target="_blank" rel="noopener noreferrer" size="sm" variant="outline">
             <ExternalLink />
             Open source
           </Button>

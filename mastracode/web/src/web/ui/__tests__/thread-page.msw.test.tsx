@@ -20,6 +20,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
+import type { FactoryThreadTaskContext } from '../../../shared/api/types';
 import type * as AuthService from '../domains/auth/services/auth';
 import type { Factory } from '../domains/workspaces';
 import { createAppRoutes } from '../router';
@@ -33,6 +34,168 @@ vi.mock('../domains/auth/services/auth', async importOriginal => {
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
+const GITHUB_PROJECT_ID = 'github-project-context';
+const FACTORY_CONTEXT_URL = `${TEST_BASE_URL}/web/factory/repositories/:projectId/threads/:threadId/context`;
+
+class TestMediaQueryList extends EventTarget implements MediaQueryList {
+  readonly media: string;
+  onchange: MediaQueryList['onchange'] = null;
+  private currentMatches: boolean;
+  private readonly changeListeners = new Set<EventListenerOrEventListenerObject>();
+
+  constructor(media: string, matches: boolean) {
+    super();
+    this.media = media;
+    this.currentMatches = matches;
+  }
+
+  get matches() {
+    return this.currentMatches;
+  }
+
+  get changeListenerCount() {
+    return this.changeListeners.size;
+  }
+
+  addListener: MediaQueryList['addListener'] = () => {};
+  removeListener: MediaQueryList['removeListener'] = () => {};
+
+  override addEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: AddEventListenerOptions | boolean,
+  ) {
+    if (type === 'change' && callback) this.changeListeners.add(callback);
+    super.addEventListener(type, callback, options);
+  }
+
+  override removeEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: EventListenerOptions | boolean,
+  ) {
+    if (type === 'change' && callback) this.changeListeners.delete(callback);
+    super.removeEventListener(type, callback, options);
+  }
+
+  setMatches(matches: boolean) {
+    this.currentMatches = matches;
+    const event = new Event('change');
+    Object.defineProperty(event, 'matches', { value: matches });
+    Object.defineProperty(event, 'media', { value: this.media });
+    this.dispatchEvent(event);
+  }
+}
+
+function installDesktopMedia(matches: boolean) {
+  const media = new TestMediaQueryList('(min-width: 64rem)', matches);
+  const fallbackMatchMedia = window.matchMedia;
+  vi.spyOn(window, 'matchMedia').mockImplementation(query =>
+    query === '(min-width: 64rem)' ? media : fallbackMatchMedia(query),
+  );
+  return media;
+}
+
+function githubFactory(): Factory {
+  return {
+    id: 'factory-github',
+    name: 'Mastra GitHub',
+    resourceId: RESOURCE_ID,
+    binding: {
+      kind: 'github',
+      githubProjectId: GITHUB_PROJECT_ID,
+      worktrees: [
+        {
+          branch: 'feat/factory-context',
+          worktreePath: '/tmp/mastra-factory',
+          baseBranch: 'main',
+        },
+        {
+          branch: 'user/personal-context',
+          worktreePath: '/tmp/mastra-personal',
+          baseBranch: 'main',
+          threadId: threadTwo.id,
+        },
+      ],
+      selectedWorktreePath: '/tmp/mastra-factory',
+    },
+    createdAt: 2,
+  };
+}
+
+function factoryTaskContext(threadId: string): FactoryThreadTaskContext {
+  return {
+    task: {
+      source: 'github-issue',
+      identifier: threadId === threadOne.id ? '42' : '77',
+      title: threadId === threadOne.id ? 'Factory task one' : 'Factory task two',
+      description: `Context for ${threadId}`,
+      state: 'open',
+      labels: ['factory'],
+      assignees: ['ada'],
+      url: `https://github.com/mastra-ai/mastra/issues/${threadId === threadOne.id ? '42' : '77'}`,
+    },
+    resolution: { mode: 'live' },
+  };
+}
+
+function installFactoryContextHandler(requests: string[]) {
+  server.use(
+    http.get(FACTORY_CONTEXT_URL, ({ params }) => {
+      const threadId = String(params.threadId);
+      requests.push(threadId);
+      return HttpResponse.json({ context: factoryTaskContext(threadId) });
+    }),
+  );
+}
+
+function installWorkspaceFiles() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
+      HttpResponse.json({
+        workspacePath: '/tmp/mastra-factory',
+        root: '.artifacts',
+        rootPath: '/tmp/mastra-factory/.artifacts',
+        entries: [
+          {
+            name: 'proof',
+            path: 'proof',
+            type: 'directory',
+            size: 0,
+            updatedAt: '2026-07-17T00:00:00.000Z',
+          },
+          {
+            name: 'NOTES.md',
+            path: 'proof/NOTES.md',
+            type: 'file',
+            size: 7,
+            updatedAt: '2026-07-17T00:00:00.000Z',
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/workspace/file`, ({ request }) => {
+      const path = new URL(request.url).searchParams.get('path');
+      return HttpResponse.json({
+        workspacePath: '/tmp/mastra-factory',
+        path,
+        name: 'NOTES.md',
+        size: 7,
+        updatedAt: '2026-07-17T00:00:00.000Z',
+        contentType: 'text',
+        content: '# Fixture notes',
+      });
+    }),
+  );
+}
+
+function deferred() {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>(next => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
 
 function thread(id: string, title: string, updatedAt: string): AgentControllerThreadInfo {
   return { id, title, resourceId: RESOURCE_ID, createdAt: '2026-06-01T00:00:00.000Z', updatedAt };
@@ -64,6 +227,7 @@ const MESSAGES: Record<string, MastraDBMessage[]> = {
 
 afterEach(() => {
   localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 function seedFactory(projects?: Factory[], activeFactoryId?: string) {
@@ -145,6 +309,7 @@ function useAgentControllerHandlers({
     http.get(`${TEST_BASE_URL}/web/github/status`, () =>
       HttpResponse.json({ enabled: true, connected: false, installations: [] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.post(`${API}/sessions`, () => {
       captured.sessionsCreated += 1;
       return HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: bound });
@@ -219,8 +384,8 @@ function renderRoutes(initialEntry: string, projects?: Factory[], activeFactoryI
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
-  renderWithProviders(<RouterProvider router={router} />, client);
-  return { router, client };
+  const rendered = renderWithProviders(<RouterProvider router={router} />, client);
+  return { router, ...rendered };
 }
 
 async function expectPathname(router: ReturnType<typeof createMemoryRouter>, pathname: string) {
@@ -264,6 +429,211 @@ describe('MastraCode thread pages', () => {
     await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
     expect(screen.queryByTestId('workspace-viewer-panel')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Open workspace files' })).not.toBeInTheDocument();
+  });
+
+  it('given a desktop Factory thread, when Task and Files are used, then one shared panel fetches only visible Task context', async () => {
+    installDesktopMedia(true);
+    useAgentControllerHandlers();
+    const contextRequests: string[] = [];
+    installFactoryContextHandler(contextRequests);
+    installWorkspaceFiles();
+    const factory = githubFactory();
+    const user = userEvent.setup();
+    renderRoutes(`/threads/${threadOne.id}`, [factory], factory.id);
+
+    expect(await screen.findByRole('heading', { name: 'Factory task one' })).toBeInTheDocument();
+    expect(contextRequests).toEqual([threadOne.id]);
+    expect(screen.getByRole('tab', { name: 'Task' })).toHaveAttribute('aria-selected', 'true');
+
+    await user.click(screen.getByRole('tab', { name: 'Files' }));
+    await user.click(await screen.findByRole('button', { name: 'Artifacts' }));
+    await user.click(await screen.findByRole('button', { name: 'proof' }));
+    await user.click(await screen.findByText('NOTES.md'));
+
+    expect(await screen.findByLabelText('Workspace file viewer')).toBeInTheDocument();
+    expect(screen.getByLabelText('Session task and workspace context')).toHaveAttribute('data-expanded', 'true');
+    expect(contextRequests).toEqual([threadOne.id]);
+
+    await user.click(screen.getByRole('button', { name: 'Close workspace file viewer' }));
+    await user.click(screen.getByRole('button', { name: 'Close workspace files' }));
+    await user.click(screen.getByRole('button', { name: 'Open task and workspace context' }));
+
+    expect(await screen.findByRole('heading', { name: 'Factory task one' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Task' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Session task and workspace context')).toHaveAttribute('data-expanded', 'false');
+    await waitFor(() => expect(contextRequests).toEqual([threadOne.id, threadOne.id]));
+  });
+
+  it('given a personal session under a GitHub Factory, when it opens, then it remains Files-only with zero task requests', async () => {
+    installDesktopMedia(true);
+    useAgentControllerHandlers({ boundThreadId: threadTwo.id });
+    const contextRequests: string[] = [];
+    installFactoryContextHandler(contextRequests);
+    const factory = githubFactory();
+    renderRoutes(`/user/threads/${threadTwo.id}`, [factory], factory.id);
+
+    await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
+    expect(screen.getByTestId('workspace-viewer-panel')).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Task' })).not.toBeInTheDocument();
+    expect(contextRequests).toEqual([]);
+  });
+
+  it('given a local Factory thread, when it opens, then it remains Files-only with zero task requests', async () => {
+    installDesktopMedia(true);
+    useAgentControllerHandlers();
+    const contextRequests: string[] = [];
+    installFactoryContextHandler(contextRequests);
+    renderRoutes(`/threads/${threadOne.id}`);
+
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
+    expect(screen.getByTestId('workspace-viewer-panel')).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Task' })).not.toBeInTheDocument();
+    expect(contextRequests).toEqual([]);
+  });
+
+  it('given a Factory thread starts on mobile, when desktop availability changes, then requests follow the visible Task lifecycle and listeners clean up', async () => {
+    const media = installDesktopMedia(false);
+    useAgentControllerHandlers();
+    const started = deferred();
+    const aborted = deferred();
+    let contextRequests = 0;
+    server.use(
+      http.get(FACTORY_CONTEXT_URL, async ({ request }) => {
+        contextRequests += 1;
+        if (contextRequests === 1) {
+          request.signal.addEventListener('abort', () => aborted.resolve(), { once: true });
+          started.resolve();
+          await aborted.promise;
+        }
+        return HttpResponse.json({ context: factoryTaskContext(threadOne.id) });
+      }),
+    );
+    const factory = githubFactory();
+    const rendered = renderRoutes(`/threads/${threadOne.id}`, [factory], factory.id);
+
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
+    expect(contextRequests).toBe(0);
+    expect(screen.queryByRole('tab', { name: 'Task' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('workspace-viewer-panel')).not.toBeInTheDocument();
+
+    act(() => media.setMatches(true));
+    await started.promise;
+    expect(contextRequests).toBe(1);
+
+    act(() => media.setMatches(false));
+    await expect(aborted.promise).resolves.toBeUndefined();
+    expect(screen.queryByRole('tab', { name: 'Task' })).not.toBeInTheDocument();
+
+    act(() => media.setMatches(true));
+    expect(await screen.findByRole('heading', { name: 'Factory task one' })).toBeInTheDocument();
+    expect(contextRequests).toBe(2);
+    expect(screen.getByLabelText('Session task and workspace context')).toHaveAttribute('data-expanded', 'false');
+
+    rendered.unmount();
+    expect(media.changeListenerCount).toBe(0);
+
+    act(() => media.setMatches(false));
+    const remounted = renderRoutes(`/threads/${threadOne.id}`, [factory], factory.id);
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
+    expect(contextRequests).toBe(2);
+    expect(media.changeListenerCount).toBe(1);
+
+    act(() => media.setMatches(true));
+    await waitFor(() => expect(contextRequests).toBe(3));
+    remounted.unmount();
+    expect(media.changeListenerCount).toBe(0);
+  });
+
+  it('given expanded Files on Factory thread A, when navigating A to B to A, then each thread starts on compact Task with its own query key', async () => {
+    installDesktopMedia(true);
+    useAgentControllerHandlers();
+    const contextRequests: string[] = [];
+    installFactoryContextHandler(contextRequests);
+    installWorkspaceFiles();
+    const factory = githubFactory();
+    const user = userEvent.setup();
+    const { router } = renderRoutes(`/threads/${threadOne.id}`, [factory], factory.id);
+    await screen.findByRole('heading', { name: 'Factory task one' });
+
+    await user.click(screen.getByRole('tab', { name: 'Files' }));
+    await user.click(await screen.findByRole('button', { name: 'Artifacts' }));
+    await user.click(await screen.findByRole('button', { name: 'proof' }));
+    await user.click(await screen.findByText('NOTES.md'));
+    expect(screen.getByLabelText('Session task and workspace context')).toHaveAttribute('data-expanded', 'true');
+
+    await act(async () => {
+      await router.navigate(`/threads/${threadTwo.id}`);
+    });
+    expect(await screen.findByRole('heading', { name: 'Factory task two' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Task' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Session task and workspace context')).toHaveAttribute('data-expanded', 'false');
+
+    await act(async () => {
+      await router.navigate(`/threads/${threadOne.id}`);
+    });
+    expect(await screen.findByRole('heading', { name: 'Factory task one' })).toBeInTheDocument();
+    await waitFor(() => expect(contextRequests).toEqual([threadOne.id, threadTwo.id, threadOne.id]));
+  });
+
+  it('given expanded Factory Files, when navigating through a personal session, then personal stays Files-only and Factory returns to compact Task', async () => {
+    installDesktopMedia(true);
+    useAgentControllerHandlers();
+    const contextRequests: string[] = [];
+    installFactoryContextHandler(contextRequests);
+    installWorkspaceFiles();
+    const factory = githubFactory();
+    const user = userEvent.setup();
+    const { router } = renderRoutes(`/threads/${threadOne.id}`, [factory], factory.id);
+    await screen.findByRole('heading', { name: 'Factory task one' });
+
+    await user.click(screen.getByRole('tab', { name: 'Files' }));
+    await user.click(await screen.findByRole('button', { name: 'Artifacts' }));
+    await user.click(await screen.findByRole('button', { name: 'proof' }));
+    await user.click(await screen.findByText('NOTES.md'));
+
+    await act(async () => {
+      await router.navigate(`/user/threads/${threadTwo.id}`);
+    });
+    await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
+    expect(screen.queryByRole('tab', { name: 'Task' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('workspace-viewer-panel')).toBeInTheDocument();
+    expect(contextRequests).toEqual([threadOne.id]);
+
+    await act(async () => {
+      await router.navigate(`/threads/${threadOne.id}`);
+    });
+    expect(await screen.findByRole('heading', { name: 'Factory task one' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Task' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Session task and workspace context')).toHaveAttribute('data-expanded', 'false');
+    await waitFor(() => expect(contextRequests).toEqual([threadOne.id, threadOne.id]));
+  });
+
+  it('given expanded Factory Files, when crossing the desktop breakpoint and returning, then the panel returns to compact Task without stale requests', async () => {
+    const media = installDesktopMedia(true);
+    useAgentControllerHandlers();
+    const contextRequests: string[] = [];
+    installFactoryContextHandler(contextRequests);
+    installWorkspaceFiles();
+    const factory = githubFactory();
+    const user = userEvent.setup();
+    renderRoutes(`/threads/${threadOne.id}`, [factory], factory.id);
+    await screen.findByRole('heading', { name: 'Factory task one' });
+
+    await user.click(screen.getByRole('tab', { name: 'Files' }));
+    await user.click(await screen.findByRole('button', { name: 'Artifacts' }));
+    await user.click(await screen.findByRole('button', { name: 'proof' }));
+    await user.click(await screen.findByText('NOTES.md'));
+    expect(screen.getByLabelText('Session task and workspace context')).toHaveAttribute('data-expanded', 'true');
+
+    act(() => media.setMatches(false));
+    expect(screen.queryByRole('tab', { name: 'Task' })).not.toBeInTheDocument();
+    expect(contextRequests).toEqual([threadOne.id]);
+
+    act(() => media.setMatches(true));
+    expect(await screen.findByRole('heading', { name: 'Factory task one' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Task' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Session task and workspace context')).toHaveAttribute('data-expanded', 'false');
+    await waitFor(() => expect(contextRequests).toEqual([threadOne.id, threadOne.id]));
   });
 
   it('given persisted messages load slowly, when deep-linking to /threads/:threadId, then a skeleton renders before the thread history', async () => {

@@ -25,10 +25,10 @@ import type {
 import { buildFsRoutes } from './fs-routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './github/config.js';
-import { GithubIntegration } from './github/integration.js';
+import type { GithubIntegration } from './github/integration.js';
 import { buildFactoryRoutes } from './factory/routes.js';
 import { buildIntakeRoutes } from './intake/routes.js';
-import { LinearIntegration } from './linear/integration.js';
+import type { LinearIntegration } from './linear/integration.js';
 import { getFactoryStorage, getSeededStateSigner } from './runtime-config.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
 import type { IntegrationStorage } from './storage/domains/integrations/base.js';
@@ -47,6 +47,24 @@ export interface IntegrationRegistration {
   ready: boolean;
   /** Retry a failed storage-domain init before serving the integration. */
   ensureReady?: () => Promise<void>;
+}
+
+function githubTaskContextIntegration(integration: FactoryIntegration | undefined): GithubIntegration | undefined {
+  return integration?.id === 'github' &&
+    'getIssueDetail' in integration &&
+    typeof integration.getIssueDetail === 'function' &&
+    'getPullRequestDetail' in integration &&
+    typeof integration.getPullRequestDetail === 'function'
+    ? (integration as GithubIntegration)
+    : undefined;
+}
+
+function linearTaskContextIntegration(integration: FactoryIntegration | undefined): LinearIntegration | undefined {
+  return integration?.id === 'linear' &&
+    'fetchIssueContext' in integration &&
+    typeof integration.fetchIssueContext === 'function'
+    ? (integration as LinearIntegration)
+    : undefined;
 }
 
 export interface WebApiRoutesDeps {
@@ -417,10 +435,8 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
   const linearRegistration = registrations.find(({ integration }) => integration.id === 'linear');
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
-  const githubIntegration =
-    githubRegistration?.integration instanceof GithubIntegration ? githubRegistration.integration : undefined;
-  const linearIntegration =
-    linearRegistration?.integration instanceof LinearIntegration ? linearRegistration.integration : undefined;
+  const githubIntegration = githubTaskContextIntegration(githubRegistration?.integration);
+  const linearIntegration = linearTaskContextIntegration(linearRegistration?.integration);
   const factoryRoutes = deps.factoryReady
     ? buildFactoryRoutes({
         sourceControlStorage: githubStorage,

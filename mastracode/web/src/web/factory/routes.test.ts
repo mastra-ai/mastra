@@ -24,27 +24,54 @@ vi.mock('../audit/store', () => ({
   listAuditEvents: async () => ({ events: [] }),
 }));
 
+import { GithubIntegration } from '../github/integration';
+import { LinearIntegration } from '../linear/integration';
+import { upsertLinearConnection } from '../linear/storage';
 import { __resetRuntimeConfigForTests } from '../runtime-config';
+import { handleServerError } from '../server-error';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
 import { seedFactoryStorageForTests } from '../storage/test-utils';
 import type { FactoryStorageTestSeed } from '../storage/test-utils';
 import { mountApiRoutes } from '../test-utils';
 import { buildFactoryRoutes } from './routes';
+import type { FactoryRoutesDeps } from './routes';
 import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
 
 // ── Test harness ─────────────────────────────────────────────────────────
 let sourceControlStorage!: SourceControlStorageHandle;
+let githubIntegration!: GithubIntegration;
+let linearIntegration!: LinearIntegration;
+
+interface ProviderOverrides {
+  githubIntegration?: GithubIntegration | null;
+  linearIntegration?: LinearIntegration | null;
+  ensureGithubReady?: FactoryRoutesDeps['ensureGithubReady'];
+  ensureLinearReady?: FactoryRoutesDeps['ensureLinearReady'];
+}
 
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   storage: SourceControlStorageHandle | null = sourceControlStorage,
+  overrides: ProviderOverrides = {},
 ) {
   const app = new Hono();
+  app.onError(handleServerError);
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildFactoryRoutes(storage ?? undefined));
+  const github = overrides.githubIntegration === null ? undefined : (overrides.githubIntegration ?? githubIntegration);
+  const linear = overrides.linearIntegration === null ? undefined : (overrides.linearIntegration ?? linearIntegration);
+  mountApiRoutes(
+    app as any,
+    buildFactoryRoutes({
+      ...(storage ? { sourceControlStorage: storage } : {}),
+      ...(github ? { githubIntegration: github } : {}),
+      ...(linear ? { linearIntegration: linear } : {}),
+      ...(overrides.ensureGithubReady ? { ensureGithubReady: overrides.ensureGithubReady } : {}),
+      ...(overrides.ensureLinearReady ? { ensureLinearReady: overrides.ensureLinearReady } : {}),
+    }),
+  );
   return app;
 }
 
@@ -89,6 +116,14 @@ let seed: FactoryStorageTestSeed;
 beforeEach(async () => {
   seed = await seedFactoryStorageForTests();
   sourceControlStorage = seed.sourceControl.forIntegration('github');
+  githubIntegration = new GithubIntegration({
+    appId: '123',
+    privateKey: 'test-private-key',
+    clientId: 'github-client',
+    clientSecret: 'github-secret',
+    slug: 'test-app',
+  });
+  linearIntegration = new LinearIntegration({ clientId: 'linear-client', clientSecret: 'linear-secret' });
   auditRecorded = [];
   auditFailure = undefined;
   await seedProject();
@@ -135,6 +170,364 @@ describe('auth and scoping', () => {
     const body = await res.json();
     expect(body.workItems).toHaveLength(1);
     expect(body.workItems[0].createdBy).toBe('u1');
+  });
+});
+
+// ── Thread task context ──────────────────────────────────────────────────
+describe('GET /web/factory/repositories/:id/threads/:threadId/context', () => {
+  async function createLinkedItem(threadId: string, overrides: Record<string, unknown> = {}) {
+    const response = await json(
+      'POST',
+      `/web/factory/repositories/${PROJECT_ID}/work-items`,
+      createBody({
+        sessions: { work: { projectPath: `/workspace/${threadId}`, branch: `factory/${threadId}`, threadId } },
+        ...overrides,
+      }),
+    );
+    expect(response.status).toBe(200);
+  }
+
+  function requestContext(threadId: string, overrides: ProviderOverrides = {}) {
+    return buildApp(orgUser, sourceControlStorage, overrides).request(
+      `/web/factory/repositories/${PROJECT_ID}/threads/${encodeURIComponent(threadId)}/context`,
+    );
+  }
+
+  async function connectLinear(overrides: {
+    accessToken?: string;
+    refreshToken?: string | null;
+    expiresAt?: Date | null;
+  } = {}) {
+    await upsertLinearConnection({
+      orgId: 'org1',
+      userId: 'u1',
+      accessToken: overrides.accessToken ?? 'linear-access-token',
+      refreshToken: overrides.refreshToken ?? null,
+      expiresAt: overrides.expiresAt ?? null,
+      scope: 'read',
+      workspaceName: 'Acme',
+      workspaceUrlKey: 'acme',
+    });
+  }
+
+  it('hydrates GitHub issues and pull requests with the scoped installation and repository', async () => {
+    await createLinkedItem('issue-thread');
+    await createLinkedItem('pr-thread', {
+      source: 'github-pr',
+      sourceKey: 'github-pr:77',
+      title: 'Stored PR title',
+      url: 'https://github.com/acme/org1-app/pull/77',
+    });
+    const issue = vi.spyOn(githubIntegration, 'getIssueDetail').mockResolvedValue({
+      number: 42,
+      title: 'Live issue title',
+      description: 'Live **markdown** body',
+      state: 'open',
+      labels: ['bug'],
+      assignees: ['octocat'],
+      url: 'https://github.com/acme/org1-app/issues/42',
+    });
+    const pullRequest = vi.spyOn(githubIntegration, 'getPullRequestDetail').mockResolvedValue({
+      number: 77,
+      title: 'Live PR title',
+      description: 'PR body',
+      state: 'merged',
+      labels: ['feature'],
+      assignees: ['grace'],
+      url: 'https://github.com/acme/org1-app/pull/77',
+    });
+
+    const issueResponse = await requestContext('issue-thread');
+    const prResponse = await requestContext('pr-thread');
+
+    expect(issueResponse.status).toBe(200);
+    await expect(issueResponse.json()).resolves.toEqual({
+      context: {
+        task: {
+          source: 'github-issue',
+          identifier: '42',
+          title: 'Live issue title',
+          description: 'Live **markdown** body',
+          state: 'open',
+          labels: ['bug'],
+          assignees: ['octocat'],
+          url: 'https://github.com/acme/org1-app/issues/42',
+        },
+        resolution: { mode: 'live' },
+      },
+    });
+    expect(prResponse.status).toBe(200);
+    expect((await prResponse.json()).context.task).toMatchObject({
+      source: 'github-pr',
+      identifier: '77',
+      title: 'Live PR title',
+      state: 'merged',
+    });
+    expect(issue).toHaveBeenCalledWith(1, 'acme/org1-app', 42);
+    expect(pullRequest).toHaveBeenCalledWith(1, 'acme/org1-app', 77);
+  });
+
+  it('hydrates a Linear issue with one lightweight provider read', async () => {
+    await createLinkedItem('linear-thread', {
+      source: 'linear-issue',
+      sourceKey: 'linear:ENG-42',
+      title: 'Stored Linear title',
+      url: 'https://linear.app/acme/issue/ENG-42',
+    });
+    await connectLinear();
+    const fetchIssue = vi.spyOn(linearIntegration, 'fetchIssueContext').mockResolvedValue({
+      identifier: 'ENG-42',
+      title: 'Live Linear title',
+      description: 'Linear description',
+      state: 'In Progress',
+      labels: ['factory'],
+      assignees: ['ada'],
+      url: 'https://linear.app/acme/issue/ENG-42',
+    });
+
+    const response = await requestContext('linear-thread');
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).context).toEqual({
+      task: {
+        source: 'linear-issue',
+        identifier: 'ENG-42',
+        title: 'Live Linear title',
+        description: 'Linear description',
+        state: 'In Progress',
+        labels: ['factory'],
+        assignees: ['ada'],
+        url: 'https://linear.app/acme/issue/ENG-42',
+      },
+      resolution: { mode: 'live' },
+    });
+    expect(fetchIssue).toHaveBeenCalledWith('linear-access-token', 'ENG-42');
+  });
+
+  it('returns null for an unlinked thread and 409 for ambiguous linkage', async () => {
+    const unlinked = await requestContext('unlinked-thread');
+    expect(unlinked.status).toBe(200);
+    await expect(unlinked.json()).resolves.toEqual({ context: null });
+
+    await createLinkedItem('ambiguous-thread');
+    await createLinkedItem('ambiguous-thread', { sourceKey: 'github-issue:43' });
+    const ambiguous = await requestContext('ambiguous-thread');
+    expect(ambiguous.status).toBe(409);
+    await expect(ambiguous.json()).resolves.toEqual({
+      error: 'ambiguous_thread_context',
+      message: 'Multiple work items reference this thread.',
+    });
+  });
+
+  it('uses stored context for manual and malformed source identities without provider calls', async () => {
+    const issue = vi.spyOn(githubIntegration, 'getIssueDetail');
+    const pullRequest = vi.spyOn(githubIntegration, 'getPullRequestDetail');
+    const linear = vi.spyOn(linearIntegration, 'fetchIssueContext');
+
+    await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      githubProjectId: PROJECT_ID,
+      input: {
+        source: 'manual',
+        sourceKey: null,
+        title: 'Manual task',
+        url: 'javascript:alert(1)',
+        stages: ['intake'],
+        sessions: {
+          work: { projectPath: '/workspace/manual-thread', branch: 'factory/manual-thread', threadId: 'manual-thread' },
+        },
+        metadata: {},
+      },
+    });
+    const manual = await requestContext('manual-thread');
+    expect((await manual.json()).context).toEqual({
+      task: { source: 'manual', title: 'Manual task', labels: [], assignees: [] },
+      resolution: { mode: 'stored', reason: 'manual' },
+    });
+
+    const invalid = [
+      ['github-issue', 'github-issue:0'],
+      ['github-issue', 'github-issue:042'],
+      ['github-pr', 'github-issue:42'],
+      ['linear-issue', 'linear:eng-42'],
+      ['linear-issue', 'linear: ENG-42'],
+      ['linear-issue', `linear:${'A'.repeat(129)}`],
+    ] as const;
+    for (const [index, [source, sourceKey]] of invalid.entries()) {
+      const threadId = `invalid-${index}`;
+      await createLinkedItem(threadId, { source, sourceKey, title: `Stored ${index}` });
+      const response = await requestContext(threadId);
+      expect((await response.json()).context.resolution).toEqual({ mode: 'stored', reason: 'invalid-source' });
+    }
+
+    expect(issue).not.toHaveBeenCalled();
+    expect(pullRequest).not.toHaveBeenCalled();
+    expect(linear).not.toHaveBeenCalled();
+  });
+
+  it('degrades provider absence, disconnect, reauth, not-found, and provider failures to stored context', async () => {
+    await createLinkedItem('github-missing', { url: 'https://github.com/acme/org1-app/issues/42' });
+    const githubMissing = await requestContext('github-missing', { githubIntegration: null });
+    expect((await githubMissing.json()).context.resolution).toEqual({
+      mode: 'stored',
+      reason: 'provider-unavailable',
+    });
+
+    await createLinkedItem('github-not-found', { sourceKey: 'github-issue:43' });
+    vi.spyOn(githubIntegration, 'getIssueDetail').mockResolvedValueOnce(null);
+    const githubNotFound = await requestContext('github-not-found');
+    expect((await githubNotFound.json()).context.resolution).toEqual({ mode: 'stored', reason: 'not-found' });
+
+    await createLinkedItem('github-error', { sourceKey: 'github-issue:44' });
+    vi.spyOn(githubIntegration, 'getIssueDetail').mockRejectedValueOnce(new Error('provider token must not leak'));
+    const githubError = await requestContext('github-error');
+    const githubErrorBody = await githubError.json();
+    expect(githubErrorBody.context.resolution).toEqual({ mode: 'stored', reason: 'provider-unavailable' });
+    expect(JSON.stringify(githubErrorBody)).not.toContain('provider token must not leak');
+
+    await createLinkedItem('linear-disconnected', {
+      source: 'linear-issue',
+      sourceKey: 'linear:ENG-42',
+      title: 'Stored Linear title',
+    });
+    const disconnected = await requestContext('linear-disconnected');
+    expect((await disconnected.json()).context.resolution).toEqual({ mode: 'stored', reason: 'not-connected' });
+
+    await connectLinear({ expiresAt: new Date(Date.now() - 120_000) });
+    const reauth = await requestContext('linear-disconnected');
+    expect((await reauth.json()).context.resolution).toEqual({ mode: 'stored', reason: 'reauth-required' });
+
+    await connectLinear({ refreshToken: 'refresh-token', expiresAt: new Date(Date.now() - 120_000) });
+    vi.spyOn(linearIntegration, 'refreshAccessToken').mockRejectedValueOnce(
+      Object.assign(new Error('upstream token secret'), { status: 503 }),
+    );
+    const unavailable = await requestContext('linear-disconnected');
+    const unavailableBody = await unavailable.json();
+    expect(unavailableBody.context.resolution).toEqual({ mode: 'stored', reason: 'provider-unavailable' });
+    expect(JSON.stringify(unavailableBody)).not.toContain('upstream token secret');
+  });
+
+  it('keeps integration storage readiness failures on the normal 500 path', async () => {
+    await createLinkedItem('github-readiness');
+    const issue = vi.spyOn(githubIntegration, 'getIssueDetail');
+    const githubFailure = await requestContext('github-readiness', {
+      ensureGithubReady: vi.fn().mockRejectedValue(new Error('github storage initialization failed')),
+    });
+    expect(githubFailure.status).toBe(500);
+    expect(issue).not.toHaveBeenCalled();
+
+    await createLinkedItem('linear-readiness', {
+      source: 'linear-issue',
+      sourceKey: 'linear:ENG-42',
+      title: 'Stored Linear title',
+    });
+    await connectLinear();
+    const linear = vi.spyOn(linearIntegration, 'fetchIssueContext');
+    const linearFailure = await requestContext('linear-readiness', {
+      ensureLinearReady: vi.fn().mockRejectedValue(new Error('linear storage initialization failed')),
+    });
+    expect(linearFailure.status).toBe(500);
+    expect(linear).not.toHaveBeenCalled();
+  });
+
+  it('keeps connection storage and mapping failures on the normal 500 path', async () => {
+    await createLinkedItem('linear-storage', {
+      source: 'linear-issue',
+      sourceKey: 'linear:ENG-42',
+      title: 'Stored Linear title',
+    });
+    const realLinearStorage = seed.integrations.forIntegration('linear');
+    vi.spyOn(seed.integrations, 'forIntegration').mockReturnValue({
+      ...realLinearStorage,
+      connections: {
+        ...realLinearStorage.connections,
+        get: vi.fn().mockRejectedValue(new Error('connection storage unavailable')),
+      },
+    } as never);
+
+    const storageFailure = await requestContext('linear-storage');
+    expect(storageFailure.status).toBe(500);
+
+    vi.restoreAllMocks();
+    await connectLinear();
+    vi.spyOn(linearIntegration, 'fetchIssueContext').mockResolvedValue({
+      identifier: 'ENG-42',
+      get title(): string {
+        throw new Error('mapping bug');
+      },
+      state: 'open',
+      labels: [],
+      assignees: [],
+    });
+    const mappingFailure = await requestContext('linear-storage');
+    expect(mappingFailure.status).toBe(500);
+  });
+
+  it('fails with 500 when a rotated Linear token cannot be persisted or the connection disappears', async () => {
+    await createLinkedItem('linear-refresh', {
+      source: 'linear-issue',
+      sourceKey: 'linear:ENG-42',
+      title: 'Stored Linear title',
+    });
+    await connectLinear({ refreshToken: 'refresh-token', expiresAt: new Date(Date.now() - 120_000) });
+    const realLinearStorage = seed.integrations.forIntegration('linear');
+    vi.spyOn(seed.integrations, 'forIntegration').mockReturnValue({
+      ...realLinearStorage,
+      connections: {
+        ...realLinearStorage.connections,
+        update: vi.fn().mockRejectedValue(new Error('token persistence failed')),
+      },
+    } as never);
+    vi.spyOn(linearIntegration, 'refreshAccessToken').mockResolvedValue({
+      accessToken: 'rotated-access-token',
+      refreshToken: 'rotated-refresh-token',
+      expiresAt: new Date(Date.now() + 3_600_000),
+      scope: 'read',
+    });
+    const fetchIssue = vi.spyOn(linearIntegration, 'fetchIssueContext');
+
+    const persistenceFailure = await requestContext('linear-refresh');
+    expect(persistenceFailure.status).toBe(500);
+    expect(fetchIssue).not.toHaveBeenCalled();
+
+    vi.restoreAllMocks();
+    await connectLinear({ refreshToken: 'refresh-token-2', expiresAt: new Date(Date.now() - 120_000) });
+    const storage = seed.integrations.forIntegration('linear');
+    vi.spyOn(linearIntegration, 'refreshAccessToken').mockImplementationOnce(async () => {
+      await storage.connections.delete('org1');
+      return {
+        accessToken: 'orphaned-access-token',
+        refreshToken: 'orphaned-refresh-token',
+        expiresAt: new Date(Date.now() + 3_600_000),
+        scope: 'read',
+      };
+    });
+    const fetchAfterDelete = vi.spyOn(linearIntegration, 'fetchIssueContext');
+
+    const disappeared = await requestContext('linear-refresh');
+    expect(disappeared.status).toBe(500);
+    expect(fetchAfterDelete).not.toHaveBeenCalled();
+  });
+
+  it('retains tenant, repository, input, and work-item storage failures as route errors', async () => {
+    const wrongOrg = await seedProject('other-org');
+    const crossOrg = await buildApp(orgUser).request(
+      `/web/factory/repositories/${PROJECT_ID}/threads/thread/context`,
+    );
+    expect(wrongOrg).toBeUndefined();
+    expect(crossOrg.status).toBe(404);
+
+    await seedProject('org1');
+    const invalid = await buildApp(orgUser).request(
+      `/web/factory/repositories/${PROJECT_ID}/threads/${'x'.repeat(1_025)}/context`,
+    );
+    expect(invalid.status).toBe(400);
+    await expect(invalid.json()).resolves.toEqual({ error: 'invalid_thread_id' });
+
+    vi.spyOn(seed.workItems, 'findByThreadId').mockRejectedValueOnce(new Error('work-item storage failed'));
+    const storageFailure = await requestContext('storage-error');
+    expect(storageFailure.status).toBe(500);
   });
 });
 

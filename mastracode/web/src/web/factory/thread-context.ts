@@ -182,9 +182,9 @@ export async function loadFactoryThreadTaskContext(
     if (!Number.isSafeInteger(installationId) || installationId <= 0) {
       return storedContext(workItem, 'provider-unavailable');
     }
+    await deps.ensureGithubReady?.();
     let detail: GithubTaskDetail | null;
     try {
-      await deps.ensureGithubReady?.();
       detail =
         parsed.source === 'github-issue'
           ? await github.getIssueDetail(installationId, deps.project.repositorySlug, parsed.number)
@@ -200,11 +200,7 @@ export async function loadFactoryThreadTaskContext(
   const connection = await loadLinearConnection(deps.orgId);
   if (!connection) return storedContext(workItem, 'not-connected');
 
-  try {
-    await deps.ensureLinearReady?.();
-  } catch {
-    return storedContext(workItem, 'provider-unavailable');
-  }
+  await deps.ensureLinearReady?.();
 
   let accessToken: string;
   try {

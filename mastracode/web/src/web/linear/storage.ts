@@ -115,7 +115,7 @@ export async function upsertLinearConnection(input: UpsertLinearConnectionInput)
 
 /** Persist a rotated token set on the org's existing connection row. */
 export async function updateLinearTokens(orgId: string, tokens: LinearTokenUpdate): Promise<void> {
-  await store().connections.update(orgId, data => ({
+  const updated = await store().connections.update(orgId, data => ({
     ...data,
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
@@ -123,4 +123,7 @@ export async function updateLinearTokens(orgId: string, tokens: LinearTokenUpdat
     // Refresh responses may omit scope; keep the recorded grant.
     scope: tokens.scope ?? data.scope,
   }));
+  if (!updated) {
+    throw new Error('Linear connection disappeared while persisting refreshed tokens.');
+  }
 }
