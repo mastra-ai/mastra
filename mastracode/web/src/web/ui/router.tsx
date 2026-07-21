@@ -19,7 +19,7 @@ import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
 import { useActiveFactory } from '../../shared/hooks/useActiveFactory';
 import { useWorkItemsQuery } from '../../shared/hooks/useWorkItems';
-import { isGithubFactory } from './domains/workspaces/services/factories';
+import { isServerFactory } from './domains/workspaces/services/factories';
 import { AuditPage } from './domains/factory/AuditPage';
 import { BoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
@@ -72,12 +72,12 @@ function SignInGate() {
 
 function RootLanding() {
   const { activeFactory } = useActiveFactory();
-  const githubProjectId =
-    activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined;
-  const workItems = useWorkItemsQuery(githubProjectId);
+  const factoryProjectId =
+    activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
+  const workItems = useWorkItemsQuery(factoryProjectId);
 
-  if (githubProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;
-  if (githubProjectId && workItems.isError) {
+  if (factoryProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;
+  if (factoryProjectId && workItems.isError) {
     return (
       <div className="flex h-dvh w-full items-center justify-center bg-surface1 p-4">
         <Notice variant="destructive">
@@ -86,7 +86,7 @@ function RootLanding() {
       </div>
     );
   }
-  return <Navigate to={githubProjectId && (workItems.data?.length ?? 0) > 0 ? '/factory/board' : '/new'} replace />;
+  return <Navigate to={factoryProjectId && (workItems.data?.length ?? 0) > 0 ? '/factory/board' : '/new'} replace />;
 }
 
 function RedirectToDraftThread() {

@@ -8,7 +8,12 @@ export const AGENT_CONTROLLER_THREAD_PAGE_SIZE = 20;
 interface UseAgentControllerThreadsArgs {
   agentControllerId: string;
   resourceId: string;
-  projectPath?: string;
+  /**
+   * Session scope. Callers whose local variable is the worktree project path
+   * pass it in as `scope: worktreeProjectPath` — the value is also filtered
+   * against the server-side `projectPath` tag so lists stay per-worktree.
+   */
+  scope?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -16,24 +21,24 @@ interface UseAgentControllerThreadsArgs {
 export function useAgentControllerThreads({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerThreadsArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope: projectPath,
+    scope,
     baseUrl,
     enabled,
   });
 
   return useQuery({
-    queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, projectPath),
+    queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, scope),
     queryFn: () =>
       session!.listThreads({
         limit: AGENT_CONTROLLER_THREAD_PAGE_SIZE,
-        tags: projectPath ? { projectPath } : undefined,
+        tags: scope ? { projectPath: scope } : undefined,
       }),
     enabled: enabled && Boolean(session),
   });

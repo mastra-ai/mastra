@@ -968,17 +968,26 @@ export class Agent<
       maxRuns?: number;
       prompt?: string;
       id?: string;
+      activeDurationMs?: number;
     },
   ): Promise<GoalObjectiveRecord | undefined> {
     const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
     if (!store || !options.threadId) return undefined;
 
     const now = Date.now();
+    const suppliedActiveDurationMs = options.activeDurationMs;
+    const activeDurationMs =
+      suppliedActiveDurationMs !== undefined &&
+      Number.isFinite(suppliedActiveDurationMs) &&
+      suppliedActiveDurationMs >= 0
+        ? suppliedActiveDurationMs
+        : 0;
     const record: GoalObjectiveRecord = {
       id: options.id ?? randomUUID(),
       objective,
       status: 'active',
       runsUsed: 0,
+      activeDurationMs,
       startedAt: now,
       updatedAt: now,
       ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
@@ -6631,7 +6640,13 @@ export class Agent<
     return resourceIdFromContext || memory?.resource || snapshotMemoryInfo?.resourceId;
   }
 
-  async #requireAgentExecutionFGA({
+  /**
+   * Enforce agent-level FGA (`agents:execute`) before running the agent.
+   * `protected` so durable/evented subclasses can enforce the same gate before
+   * their workflow-based execution (they override the public entry points and
+   * would otherwise bypass it).
+   */
+  protected async requireAgentExecutionFGA({
     requestContext,
     memory,
     runId,
@@ -7323,9 +7338,10 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
+        model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
-      } as unknown as AgentExecutionOptions<OUTPUT>,
+      },
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages,
@@ -7398,6 +7414,7 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
+        model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
@@ -7513,7 +7530,7 @@ export class Agent<
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
 
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
@@ -8108,7 +8125,7 @@ export class Agent<
       );
     }
 
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
@@ -8461,7 +8478,7 @@ export class Agent<
       loopStreamOptions.memory = mergedStreamOptions.memory;
     }
 
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedStreamOptions.requestContext,
       memory: mergedStreamOptions.memory,
       runId: mergedStreamOptions.runId,
@@ -8625,11 +8642,8 @@ export class Agent<
     delete loopOptions.actor;
 
     const runId = options?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
-      runId,
-      method: 'resumeGenerate',
-    });
-    await this.#requireAgentExecutionFGA({
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,

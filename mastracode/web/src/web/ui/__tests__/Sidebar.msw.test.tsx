@@ -22,6 +22,7 @@ import { redirectToLogout } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
 import type { Factory } from '../domains/workspaces';
 import { ActiveFactoryProvider } from '../domains/workspaces';
+import { SettingsNavigationProvider } from '../domains/settings/context/SettingsNavigationProvider';
 import { OverlaysProvider } from '../lib/overlays';
 import { Sidebar } from '../Sidebar';
 import { ToastProvider } from '../ui';
@@ -59,21 +60,27 @@ const secondLocalProject: Factory = {
   },
 };
 
+const githubRepository = {
+  projectRepositoryId: 'pr-mastra-1',
+  slug: 'mastra-ai/mastra',
+  gitBranch: 'main',
+  sandboxWorkdir: '/sandbox/mastra',
+  selectedWorktreePath: '/sandbox/mastra',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+};
+
 const githubProject: Factory = {
   id: 'p-github',
   name: 'Mastra',
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: 'gh-project-1',
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra',
-    worktrees: [
-      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-    ],
+    kind: 'factory',
+    factoryProjectId: 'fp-github-project-1',
+    repositories: [githubRepository],
   },
 };
 
@@ -211,8 +218,10 @@ function renderSidebar() {
           <ActiveFactoryProvider>
             <ChatSessionProvider>
               <OverlaysProvider>
-                <Sidebar />
-                <LocationProbe />
+                <SettingsNavigationProvider>
+                  <Sidebar />
+                  <LocationProbe />
+                </SettingsNavigationProvider>
               </OverlaysProvider>
             </ChatSessionProvider>
           </ActiveFactoryProvider>
@@ -253,9 +262,79 @@ describe('Sidebar', () => {
       expect(await within(navigation).findByText('First thread')).toBeInTheDocument();
       const footerNavigation = within(account).getByRole('list');
       expect(within(footerNavigation).getByRole('button', { name: 'Sign out' })).toHaveTextContent('Ada Lovelace');
-      expect(within(footerNavigation).getByRole('button', { name: 'Open settings' })).toHaveTextContent('Settings');
+      const settingsTrigger = within(footerNavigation).getByRole('button', { name: 'Settings' });
+      expect(settingsTrigger).toHaveTextContent('Settings');
+      expect(settingsTrigger).toHaveAttribute('id', 'settings-trigger');
+      expect(settingsTrigger).not.toHaveAttribute('aria-current');
       expect(projectSwitcher.compareDocumentPosition(navigation)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
       expect(navigation.compareDocumentPosition(account)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
+    it('replaces the main navigation with settings sections and restores it from the back button or footer', async () => {
+      const user = userEvent.setup();
+      seedFactory();
+      useAuthHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      expect(await screen.findByText('First thread')).toBeInTheDocument();
+      const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
+
+      await user.click(settingsTrigger);
+
+      const settingsNavigation = screen.getByRole('navigation', { name: 'Settings sections' });
+      const generalButton = within(settingsNavigation).getByRole('button', { name: 'General' });
+      const backButton = within(settingsNavigation).getByRole('button', { name: 'Back to app' });
+      const behaviorButton = within(settingsNavigation).getByRole('button', { name: 'Behavior' });
+      expect(settingsTrigger).toHaveAttribute('aria-current', 'page');
+      expect(generalButton).toHaveAttribute('aria-current', 'page');
+      expect(screen.queryByRole('region', { name: 'Factory switcher' })).not.toBeInTheDocument();
+      expect(backButton.compareDocumentPosition(generalButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+      await user.click(behaviorButton);
+      expect(behaviorButton).toHaveAttribute('aria-current', 'page');
+      expect(generalButton).not.toHaveAttribute('aria-current');
+
+      await user.click(backButton);
+
+      expect(settingsTrigger).not.toHaveAttribute('aria-current');
+      expect(await screen.findByText('First thread')).toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
+
+      await user.click(settingsTrigger);
+      expect(
+        within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('button', { name: 'General' }),
+      ).toHaveAttribute('aria-current', 'page');
+
+      await user.click(settingsTrigger);
+      expect(settingsTrigger).not.toHaveAttribute('aria-current');
+      expect(await screen.findByText('First thread')).toBeInTheDocument();
+    });
+
+    it('filters settings sections by section names and control keywords', async () => {
+      const user = userEvent.setup();
+      seedFactory();
+      useAuthHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      expect(await screen.findByText('First thread')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Settings' }));
+
+      const settingsNavigation = screen.getByRole('navigation', { name: 'Settings sections' });
+      const search = within(settingsNavigation).getByRole('searchbox', { name: 'Search settings' });
+
+      await user.type(search, 'notifications');
+
+      expect(within(settingsNavigation).getByRole('button', { name: 'Behavior' })).toBeInTheDocument();
+      expect(within(settingsNavigation).queryByRole('button', { name: 'General' })).not.toBeInTheDocument();
+
+      await user.clear(search);
+      expect(within(settingsNavigation).getByRole('button', { name: 'General' })).toBeInTheDocument();
+
+      await user.type(search, 'not a setting');
+      expect(within(settingsNavigation).getByRole('status')).toHaveTextContent('No settings found.');
+      expect(within(settingsNavigation).getByRole('button', { name: 'Back to app' })).toBeInTheDocument();
     });
 
     it('navigates to the thread page when a thread is clicked', async () => {
@@ -292,8 +371,7 @@ describe('Sidebar', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
 
       expect(await screen.findByRole('menuitem', { name: 'Mastra' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Create factory from local folder' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Create/connect factory from GitHub' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Create Factory' })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /remove/i })).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
@@ -327,7 +405,11 @@ describe('Sidebar', () => {
     it('explains how factory Sessions are created when none exist', async () => {
       seedFactory({
         ...githubProject,
-        binding: { ...githubProject.binding, worktrees: [githubProject.binding.worktrees[0]!] },
+        binding: {
+          kind: 'factory',
+          factoryProjectId: 'fp-github-project-1',
+          repositories: [{ ...githubRepository, worktrees: [githubRepository.worktrees[0]!] }],
+        },
       });
       useAuthHandler();
       useGithubStatusHandler();

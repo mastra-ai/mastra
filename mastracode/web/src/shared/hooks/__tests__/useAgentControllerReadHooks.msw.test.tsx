@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
-import { useAgentControllerModels } from '../useAgentControllerModels';
+import { useAvailableModelsQuery } from '../useAvailableModels';
 import { useAgentControllerThreadMessages } from '../useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE, useAgentControllerThreads } from '../useAgentControllerThreads';
 
@@ -14,27 +14,19 @@ const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessio
 const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
 
 describe('agent-controller read hooks', () => {
-  it('filters models to providers with API keys before caching them', async () => {
+  it('loads the session-independent model catalog from the config endpoint', async () => {
     const onReadModels = vi.fn();
 
     server.use(
-      http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/models`, () => {
+      http.get(`${TEST_BASE_URL}/web/config/models`, () => {
         onReadModels();
         return HttpResponse.json({
-          models: [
-            { id: 'openai/gpt-4.1', label: 'GPT 4.1', provider: 'openai', hasApiKey: true },
-            {
-              id: 'anthropic/claude-sonnet-4-20250514',
-              label: 'Claude Sonnet 4',
-              provider: 'anthropic',
-              hasApiKey: false,
-            },
-          ],
+          models: [{ id: 'openai/gpt-4.1', provider: 'openai', modelName: 'gpt-4.1', hasApiKey: true }],
         });
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useAgentControllerModels(hookArgs));
+    const { result } = renderHookWithProviders(() => useAvailableModelsQuery());
 
     await waitFor(() => expect(result.current.data?.map(model => model.id)).toEqual(['openai/gpt-4.1']));
     expect(onReadModels).toHaveBeenCalledTimes(1);
@@ -54,7 +46,7 @@ describe('agent-controller read hooks', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useAgentControllerThreads({ ...hookArgs, projectPath: '/sandbox/mastra' }),
+      useAgentControllerThreads({ ...hookArgs, scope: '/sandbox/mastra' }),
     );
 
     await waitFor(() => expect(result.current.data?.[0]?.id).toBe('thread-one'));

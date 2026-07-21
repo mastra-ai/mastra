@@ -16,7 +16,6 @@ import type { EventHandlerContext } from './types.js';
 
 export function handleAgentStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.goalManager.startActiveTimer();
 
   // Refresh git branch async to avoid blocking the event loop
   getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
@@ -37,9 +36,6 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
 
 export function handleAgentEnd(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  // Stop the goal active-timer on normal completion too (not just abort/error),
-  // otherwise the elapsed-time display keeps counting while idle between turns.
-  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -142,7 +138,6 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
 
 export function handleAgentAborted(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -187,7 +182,6 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
 
 export function handleAgentError(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }

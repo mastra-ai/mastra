@@ -69,7 +69,7 @@ A goal step runs inside the agentic execution loop, right after `isTaskComplete`
 
 - **Not satisfied, budget remaining** → the loop continues; per-evaluation feedback is injected so the agent iterates.
 - **Satisfied** → the loop stops and the objective is marked `done`.
-- **Budget exhausted** (`runsUsed >= maxRuns`) → the loop stops but the objective stays `active`, so raising `maxRuns` later can resume it.
+- **Budget exhausted** (`runsUsed >= maxRuns`) → the loop stops and the objective is marked `paused`. Raise `maxRuns`, then resume the objective to continue.
 
 The step is a no-op for background-task, mid-tool-loop, and working-memory-only iterations — the same gating as `isTaskComplete`.
 
@@ -112,6 +112,8 @@ await worker.updateObjectiveOptions({ threadId, maxRuns: 100 })
 // Drop the objective.
 await worker.clearObjective({ threadId })
 ```
+
+Objective records include an optional `activeDurationMs` value for user interfaces that display active pursuit time. Mastra advances this value while an agent runs toward an active objective and checkpoints it when the run ends or waits for tool approval. Missing values represent zero, and the duration measures agent execution rather than the goal's wall-clock age.
 
 Per-objective values written by `setObjective` / `updateObjectiveOptions` take precedence over the agent's `goal` config, and that precedence is remembered in thread state. See the [`GoalEvaluationPayload` in the ChunkType reference](/reference/streaming/ChunkType) for the full goal chunk shape.
 

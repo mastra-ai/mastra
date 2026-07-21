@@ -11,10 +11,10 @@
  * app-table domains) and the vector store.
  */
 
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import type { WebAuthAdapter } from './auth-adapter.js';
 import type { FactoryIntegration } from './factory-integration.js';
 import type { GithubIntegration } from './github/integration.js';
 import type { LinearIntegration } from './linear/integration.js';
@@ -50,8 +50,8 @@ export interface WebRuntimeConfig {
   vector?: MastraVector;
   /** Browser-facing origin, normalized without a trailing slash. */
   publicUrl?: string;
-  /** Active web auth adapter, or `undefined` when auth is disabled. */
-  authAdapter?: WebAuthAdapter;
+  /** Active auth provider, or `undefined` when auth is disabled. */
+  authProvider?: IMastraAuthProvider;
   /** Active sandbox runtime, or `undefined` when sandboxes are disabled. */
   sandbox?: WebSandboxRuntime;
   /** Registered integrations (GitHub, Linear, third-party), keyed by their stable id. */
@@ -101,17 +101,17 @@ export function isRuntimeConfigSeeded(): boolean {
 }
 
 /**
- * Active web auth adapter seeded by the factory. `undefined` either because
- * auth is disabled (seeded without an adapter) or because the factory never
+ * Active auth provider seeded by the factory. `undefined` either because
+ * auth is disabled (seeded without a provider) or because the factory never
  * ran — callers that need the distinction check {@link isRuntimeConfigSeeded}.
  */
-export function getSeededAuthAdapter(): WebAuthAdapter | undefined {
-  return seeded?.authAdapter;
+export function getSeededAuthProvider(): IMastraAuthProvider | undefined {
+  return seeded?.authProvider;
 }
 
 /**
  * Sandbox runtime seeded by the factory. `undefined` when the factory was
- * configured without a `sandbox` slot (or never ran) — GitHub-backed repositories
+ * configured without a `sandbox` slot (or never ran) — GitHub-backed projects
  * stay off in that case.
  */
 export function getSeededSandbox(): WebSandboxRuntime | undefined {
@@ -132,9 +132,7 @@ export function getSeededIntegration(id: string): FactoryIntegration | undefined
  */
 export function getSeededGithubIntegration(): GithubIntegration | undefined {
   const integration = getSeededIntegration('github');
-  return integration instanceof Object && 'getInstallationOctokit' in integration
-    ? (integration as GithubIntegration)
-    : undefined;
+  return integration?.versionControl ? (integration as GithubIntegration) : undefined;
 }
 
 /**
@@ -144,9 +142,7 @@ export function getSeededGithubIntegration(): GithubIntegration | undefined {
  */
 export function getSeededLinearIntegration(): LinearIntegration | undefined {
   const integration = getSeededIntegration('linear');
-  return integration instanceof Object && 'listActiveIssues' in integration
-    ? (integration as LinearIntegration)
-    : undefined;
+  return integration?.intake ? (integration as LinearIntegration) : undefined;
 }
 
 /**

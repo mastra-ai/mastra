@@ -22,7 +22,7 @@ import {
   WorktreeError,
 } from './sandbox';
 import type { RepoMaterializeInfo } from './sandbox';
-import type { SourceControlProjectSandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
 
@@ -80,10 +80,10 @@ class FakeSandbox implements MaterializationSandbox {
   }
 }
 
-function makeRow(overrides: Partial<SourceControlProjectSandbox> = {}): SourceControlProjectSandbox {
+function makeRow(overrides: Partial<ProjectRepositorySandbox> = {}): ProjectRepositorySandbox {
   return {
     id: 'sbrow-1',
-    projectId: 'proj-1',
+    projectRepositoryId: 'project-repository-1',
     userId: 'user-1',
     sandboxId: null,
     sandboxWorkdir: '/workspace/hello',
@@ -98,26 +98,26 @@ function makeRepoInfo(overrides: Partial<RepoMaterializeInfo> = {}): RepoMateria
 }
 
 const storage = {
-  setSandboxId: vi.fn(async (_id: string, sandboxId: string) => {
+  setSandboxId: vi.fn(async ({ sandboxId }: { id: string; sandboxId: string }) => {
     dbUpdates.push({ sandboxId });
   }),
-  clearBinding: vi.fn(async () => {
+  clearBinding: vi.fn(async (_input: { id: string }) => {
     dbUpdates.push({ sandboxId: null });
   }),
-  markMaterialized: vi.fn(async () => {
+  markMaterialized: vi.fn(async (_input: { id: string }) => {
     dbUpdates.push({ materializedAt: new Date() });
   }),
 } as unknown as SourceControlStorageHandle['sandboxes'];
 
 function ensureProjectSandbox(
-  row: SourceControlProjectSandbox,
+  row: ProjectRepositorySandbox,
   onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[2],
 ) {
   return ensureProjectSandboxWithStorage(row, storage, onProgress);
 }
 
 function materializeRepo(
-  row: SourceControlProjectSandbox,
+  row: ProjectRepositorySandbox,
   repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,
