@@ -7,7 +7,10 @@ import { ChatLayout } from '../../ui/ChatLayout';
 
 import { OverlaysProvider, useOverlays } from '../../lib/overlays';
 import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import {
+  ActiveFactoryProvider,
+  useActiveFactoryContext,
+} from '../workspaces/context/ActiveFactoryProvider';
 import { useGithubStatusQuery } from '../../../../shared/hooks/useGithubStatus';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatOverlays } from './components/ChatOverlays';
@@ -54,7 +57,8 @@ function ChatShell() {
   const githubStatus = useGithubStatusQuery().data;
   const githubEnabled = !!githubStatus && (githubStatus.enabled || !!githubStatus.authRequired);
   const factorySetupRequired = factories.length === 0 && !factoriesPending;
-  const factoriesOpen = (overlays.isOpen('factories') || factorySetupRequired) && !overlays.isOpen('github');
+  const factoriesOpen =
+    (overlays.isOpen('factories') || factorySetupRequired) && !overlays.isOpen('github');
   const content = factoriesOpen ? (
     <ChatLayout
       sidebar={<Sidebar />}

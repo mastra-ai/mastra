@@ -8,7 +8,10 @@ import { renderedPaths } from '../workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
 import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
-import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
+import {
+  activeWorkspacePath,
+  findUserSessionByThreadId,
+} from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ComposerPanel } from './components/ComposerPanel';
