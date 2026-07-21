@@ -221,6 +221,9 @@ export class LibSQLStore extends MastraCompositeStore {
         ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
       });
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
+      // init() and close() await the original promise. Attach a handler now so a
+      // fast local PRAGMA failure isn't reported as unhandled before either runs.
+      void this.pragmasReady.catch(() => undefined);
     } else {
       this.client = config.client;
       this.isLocalDb = false;

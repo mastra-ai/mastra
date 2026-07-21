@@ -136,9 +136,7 @@ async function tuiMain(pipedInput?: string | null) {
     githubSignals: result.githubSignals,
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
-  tui.run().catch(error => {
-    handleFatalError(error);
-  });
+  const tuiRun = tui.run();
 
   if (settings.browser.enabled) {
     void loadBrowser()
@@ -149,6 +147,9 @@ async function tuiMain(pipedInput?: string | null) {
       })
       .catch(() => {});
   }
+
+  await tuiRun;
+  await asyncCleanup();
 }
 
 export const asyncCleanup = createTuiCleanup({

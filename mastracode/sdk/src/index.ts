@@ -1004,12 +1004,28 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   const base = await createMastraCodeAgentController(config);
   const { controller, sessionId, ownerId } = base;
 
-  await controller.init();
-  await controller.getMastra()?.startWorkers();
-  const session = await controller.createSession({ id: sessionId, ownerId });
-  await wireSessionConcerns(base, session);
+  try {
+    await controller.init();
+    await controller.getMastra()?.startWorkers();
+    const session = await controller.createSession({ id: sessionId, ownerId });
+    await wireSessionConcerns(base, session);
 
-  return { ...base, session };
+    return { ...base, session };
+  } catch (error) {
+    const stopWork: Array<() => Promise<unknown> | unknown> = [
+      () => controller.getMastra()?.stopWorkers(),
+      () => controller.stopIntervals(),
+      () => base.mcpManager?.disconnect(),
+      () => (base.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close?.(),
+    ];
+    await Promise.allSettled(stopWork.map(stop => Promise.resolve().then(stop)));
+    try {
+      await base.storageMaintenance.closeStorage?.();
+    } catch (closeError) {
+      throw new AggregateError([error, closeError], 'Mastra Code startup and storage cleanup failed');
+    }
+    throw error;
+  }
 }
 
 /** Result of {@link mountAgentControllerOnMastra}: shared handles plus the owning Mastra. */
