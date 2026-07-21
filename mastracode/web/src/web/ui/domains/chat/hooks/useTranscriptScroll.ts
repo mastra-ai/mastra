@@ -38,6 +38,13 @@ export function useTranscriptScroll(transcript: TranscriptState, threadId?: stri
   const anchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const canLoadMore = Boolean(loadMore?.hasMore) && !loadMore?.isLoading && Boolean(loadMore?.load);
 
+  // Don't request older history until the thread has finished its initial
+  // scroll-to-bottom. On mount the container starts at scrollTop 0 (the top),
+  // which would otherwise fire load-more immediately — and each grow re-runs the
+  // mount, producing a runaway fetch loop. This gate opens only once we've
+  // observed the transcript settled at the bottom for the current thread.
+  const loadMoreArmedRef = useRef(false);
+
   const setAttached = (attached: boolean) => {
     attachedRef.current = attached;
     setShowScrollDown(!attached);
@@ -55,7 +62,12 @@ export function useTranscriptScroll(transcript: TranscriptState, threadId?: stri
   // once the taller content lands. Guarded so a single scroll-to-top triggers at
   // most one in-flight fetch (anchor stays set until the prepend is consumed).
   const maybeLoadMore = useEffectEvent((el: HTMLDivElement) => {
+    if (!loadMoreArmedRef.current) return;
     if (!canLoadMore) return;
+    // Only when the container is actually scrollable and the user is near its
+    // top. A not-yet-laid-out container reports scrollHeight === clientHeight and
+    // scrollTop 0, which must not count as "at the top".
+    if (el.scrollHeight <= el.clientHeight) return;
     if (el.scrollTop > LOAD_MORE_THRESHOLD) return;
     if (anchorRef.current) return;
     anchorRef.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop };
@@ -67,8 +79,14 @@ export function useTranscriptScroll(transcript: TranscriptState, threadId?: stri
     if (!el) return;
     const onScroll = () => {
       const scrollTop = el.scrollTop;
-      if (nearBottom(el)) setAttached(true);
-      else if (scrollTop < lastScrollTopRef.current) setAttached(false);
+      if (nearBottom(el)) {
+        setAttached(true);
+        // Reaching the bottom means the initial scroll-to-bottom has settled;
+        // it's now safe to treat a scroll back to the top as an intentional
+        // request for older history. Require a genuinely scrollable container so
+        // an empty/unlaid-out mount (scrollHeight === clientHeight) doesn't arm.
+        if (el.scrollHeight > el.clientHeight) loadMoreArmedRef.current = true;
+      } else if (scrollTop < lastScrollTopRef.current) setAttached(false);
       lastScrollTopRef.current = scrollTop;
       maybeLoadMore(el);
     };
@@ -84,6 +102,9 @@ export function useTranscriptScroll(transcript: TranscriptState, threadId?: stri
 
   useEffect(() => {
     setAttached(true);
+    // Re-lock older-history loading until this thread settles at the bottom.
+    loadMoreArmedRef.current = false;
+    anchorRef.current = null;
     const raf = requestAnimationFrame(() => scrollToBottomOnThreadChange('auto'));
     return () => cancelAnimationFrame(raf);
   }, [threadId]);

@@ -110,8 +110,36 @@ describe('agent-controller read hooks', () => {
     // Grow the window: fetch newest 4 -> only 3 exist -> short page -> top reached.
     act(() => result.current.loadMore());
 
+    // The previous window stays on screen while the larger one loads (no blank
+    // skeleton / remount): data is never cleared to undefined during the grow.
+    expect(result.current.data).toBeDefined();
+    expect(result.current.isPending).toBe(false);
+
     await waitFor(() => expect(result.current.data?.map(m => m.id)).toEqual(['m1', 'm2', 'm3']));
     expect(result.current.hasMore).toBe(false);
     expect(seenLimits).toEqual([2, 4]);
+  });
+
+  it('does not carry a previous thread\'s messages when switching threads', async () => {
+    server.use(
+      http.get(`${sessionUrl}/threads/:threadId/messages`, ({ params }) => {
+        const id = params.threadId as string;
+        return HttpResponse.json({ messages: [{ id: `${id}-msg`, role: 'assistant', content: id }] });
+      }),
+    );
+
+    const { result, rerender } = renderHookWithProviders(
+      ({ threadId }: { threadId: string }) => useAgentControllerThreadMessages({ ...hookArgs, threadId }),
+      { initialProps: { threadId: 'thread-a' } },
+    );
+
+    await waitFor(() => expect(result.current.data?.[0]?.id).toBe('thread-a-msg'));
+
+    rerender({ threadId: 'thread-b' });
+
+    // Switching threads is a real pending state — the old thread's data must not
+    // leak in via placeholderData.
+    expect(result.current.data).toBeUndefined();
+    await waitFor(() => expect(result.current.data?.[0]?.id).toBe('thread-b-msg'));
   });
 });

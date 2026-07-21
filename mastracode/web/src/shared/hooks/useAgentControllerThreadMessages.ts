@@ -56,11 +56,26 @@ export function useAgentControllerThreadMessages({
     setLimit(initialLimit);
   }, [threadId, initialLimit]);
 
+  const baseKey = queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId);
+
   const query = useQuery({
-    queryKey: [...queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId), limit],
+    queryKey: [...baseKey, limit],
     queryFn: () => session!.listMessages(threadId!, limit),
     enabled: enabled && Boolean(session) && Boolean(threadId),
     refetchOnWindowFocus: false,
+    // Growing the limit changes the query key, which would otherwise flip the
+    // query back to `pending` and blank the transcript to a skeleton on every
+    // load-more. That blank also collapses the scroll container to the top,
+    // which re-triggers load-more in a runaway loop. Keeping the previous
+    // window's data on screen while the larger one fetches avoids the remount
+    // (only the newly revealed older messages get prepended). Scoped to the same
+    // thread by comparing the key prefix: switching threads is a real pending
+    // state, so we don't carry the previous thread's messages over.
+    placeholderData: (previous, previousQuery) => {
+      const previousKey = previousQuery?.queryKey as readonly unknown[] | undefined;
+      const sameThread = previousKey ? baseKey.every((part, i) => previousKey[i] === part) : false;
+      return sameThread ? previous : undefined;
+    },
   });
 
   const loadedCount = query.data?.length ?? 0;
