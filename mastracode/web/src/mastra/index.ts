@@ -26,11 +26,13 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
+import { WorkOS } from '@workos-inc/node';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { BetterAuthWebAuth } from '../web/auth-better-adapter.js';
 import type { WebAuthAdapter } from '../web/auth-adapter.js';
 import { WorkOSWebAuth } from '../web/auth-workos-adapter.js';
+import { WorkOSAuditIntegration } from '../web/audit/workos-integration.js';
 import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '../web/factory-integration.js';
 import { GithubIntegration } from '../web/github/integration.js';
@@ -88,6 +90,17 @@ if (workosConfigured) {
     signUpDisabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED === '1',
   });
 }
+
+// WorkOS audit export is an independent capability. Supplying its dedicated
+// API key enables mirroring + the Admin Portal route regardless of whether web
+// auth uses WorkOS, Better Auth, or is disabled.
+const workosAuditApiKey = process.env.WORKOS_AUDIT_API_KEY;
+const workosAudit = workosAuditApiKey
+  ? new WorkOSAuditIntegration({
+      client: new WorkOS(workosAuditApiKey),
+      returnUrl: `${(process.env.MASTRACODE_PUBLIC_URL ?? 'http://localhost:4111').replace(/\/+$/, '')}/factory/audit`,
+    })
+  : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, APP_DATABASE_URL, …) never leak
@@ -221,7 +234,7 @@ const linear = linearEnv
   ? new LinearIntegration({ clientId: linearEnv.LINEAR_CLIENT_ID, clientSecret: linearEnv.LINEAR_CLIENT_SECRET })
   : undefined;
 
-const integrations: FactoryIntegration[] = [github, linear].filter(i => i !== undefined);
+const integrations: FactoryIntegration[] = [github, linear, workosAudit].filter(i => i !== undefined);
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `APP_DATABASE_URL` set →

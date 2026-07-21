@@ -14,7 +14,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
  * picks one — yielding a real absolute path with no typing.
  *
  * This is a *body* component with no backdrop of its own: it's embedded inside
- * a host modal (see FactoriesModal) so project selection is a first-class,
+ * a host modal (see FactoriesModal) so Factory selection is a first-class,
  * centered flow rather than a sidebar popover.
  */
 
@@ -129,7 +129,7 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
             disabled={!listing || busy}
             onClick={() => listing && onPick(listing.path, basename(listing.path))}
           >
-            {busy ? 'Adding…' : 'Use this folder'}
+            {busy ? 'Creating…' : 'Create Factory'}
           </Button>
         </div>
       </div>

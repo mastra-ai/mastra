@@ -1,20 +1,19 @@
-import * as babel from '@babel/core';
+import { types as t } from '@babel/core';
+import type { NodePath, PluginObject, PluginPass } from '@babel/core';
 
-interface RemoveDeployerState extends babel.PluginPass {
+interface RemoveDeployerState extends PluginPass {
   hasReplaced?: boolean;
 }
 
-export function removeDeployer(): babel.PluginObject<RemoveDeployerState> {
-  const t = babel.types;
-
+export function removeDeployer(): PluginObject<RemoveDeployerState> {
   // Helper to remove deployer property from an object and clean up its binding
   function removeDeployerFromObject(
-    objectExpr: babel.types.ObjectExpression,
-    scope: { getBinding: (name: string) => { path?: babel.NodePath } | undefined },
-  ): babel.types.ObjectProperty | undefined {
+    objectExpr: t.ObjectExpression,
+    scope: { getBinding: (name: string) => { path?: NodePath } | undefined },
+  ): t.ObjectProperty | undefined {
     const deployerProp = objectExpr.properties.find(
       prop => t.isObjectProperty(prop) && t.isIdentifier(prop.key) && prop.key.name === 'deployer',
-    ) as babel.types.ObjectProperty | undefined;
+    ) as t.ObjectProperty | undefined;
 
     if (deployerProp) {
       objectExpr.properties = objectExpr.properties.filter(prop => prop !== deployerProp);
@@ -83,5 +82,5 @@ export function removeDeployer(): babel.PluginObject<RemoveDeployerState> {
         }
       },
     },
-  } as babel.PluginObject;
+  } as PluginObject<RemoveDeployerState>;
 }

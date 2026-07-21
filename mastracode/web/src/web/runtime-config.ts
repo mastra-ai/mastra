@@ -16,8 +16,6 @@ import type { MastraVector } from '@mastra/core/vector';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { WebAuthAdapter } from './auth-adapter.js';
 import type { FactoryIntegration } from './factory-integration.js';
-import type { GithubIntegration } from './github/integration.js';
-import type { LinearIntegration } from './linear/integration.js';
 import type { StateSigner } from './state-signing.js';
 
 /**
@@ -111,7 +109,7 @@ export function getSeededAuthAdapter(): WebAuthAdapter | undefined {
 
 /**
  * Sandbox runtime seeded by the factory. `undefined` when the factory was
- * configured without a `sandbox` slot (or never ran) — GitHub-backed repositories
+ * configured without a `sandbox` slot (or never ran) — GitHub-backed projects
  * stay off in that case.
  */
 export function getSeededSandbox(): WebSandboxRuntime | undefined {
@@ -121,32 +119,6 @@ export function getSeededSandbox(): WebSandboxRuntime | undefined {
 /** Look up a registered integration by its stable id. */
 export function getSeededIntegration(id: string): FactoryIntegration | undefined {
   return seeded?.integrations?.find(integration => integration.id === id);
-}
-
-/**
- * GitHub App integration seeded by the factory. Typed convenience over
- * {@link getSeededIntegration} for the sandbox fleet + session tooling, which
- * need GitHub-typed API methods. `undefined` when no GitHub integration was
- * registered (or the factory never ran) — GitHub-backed repositories stay off in
- * that case.
- */
-export function getSeededGithubIntegration(): GithubIntegration | undefined {
-  const integration = getSeededIntegration('github');
-  return integration instanceof Object && 'getInstallationOctokit' in integration
-    ? (integration as GithubIntegration)
-    : undefined;
-}
-
-/**
- * Linear integration seeded by the factory. Typed convenience over
- * {@link getSeededIntegration}. `undefined` when no Linear integration was
- * registered (or the factory never ran) — Linear intake stays off in that case.
- */
-export function getSeededLinearIntegration(): LinearIntegration | undefined {
-  const integration = getSeededIntegration('linear');
-  return integration instanceof Object && 'listActiveIssues' in integration
-    ? (integration as LinearIntegration)
-    : undefined;
 }
 
 /**

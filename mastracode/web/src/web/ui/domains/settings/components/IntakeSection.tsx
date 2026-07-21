@@ -11,7 +11,7 @@ import { connectLinear, isLinearReauthError } from '../../factory/services/linea
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
-import { isGithubFactory } from '../../workspaces/services/factories';
+import { isServerFactory } from '../../workspaces/services/factories';
 
 /**
  * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
@@ -102,7 +102,9 @@ export function IntakeSection() {
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
   const config = configQuery.data;
-  const githubProjects = (factoriesQuery.data ?? []).filter(isGithubFactory);
+  const linkedRepositories = (factoriesQuery.data ?? [])
+    .filter(isServerFactory)
+    .flatMap(factory => factory.binding.repositories);
 
   const heading = (
     <Txt variant="ui-lg" className="text-icon6 font-medium">
@@ -150,23 +152,23 @@ export function IntakeSection() {
         />
         {config.github.enabled && (
           <div className="flex flex-wrap gap-1.5 pl-1">
-            {githubProjects.length === 0 ? (
+            {linkedRepositories.length === 0 ? (
               <Txt as="span" variant="ui-xs" className="text-icon3">
-                No GitHub repositories yet — connect a repo from GitHub to add one.
+                No linked repositories yet — link a repository to a factory to add one.
               </Txt>
             ) : (
-              githubProjects.map(factory => (
+              linkedRepositories.map(repository => (
                 <SourceCheckbox
-                  key={factory.binding.githubProjectId}
-                  label={factory.name}
-                  checked={config.github.repositoryIds?.includes(factory.binding.githubProjectId) ?? false}
+                  key={repository.projectRepositoryId}
+                  label={repository.slug}
+                  checked={config.github.repositoryIds?.includes(repository.projectRepositoryId) ?? false}
                   disabled={busy}
                   onChange={() =>
                     update({
                       ...config,
                       github: {
                         ...config.github,
-                        repositoryIds: toggleId(config.github.repositoryIds, factory.binding.githubProjectId),
+                        repositoryIds: toggleId(config.github.repositoryIds, repository.projectRepositoryId),
                       },
                     })
                   }

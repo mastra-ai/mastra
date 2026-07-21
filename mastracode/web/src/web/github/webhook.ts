@@ -2,8 +2,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
-import type { IssueTriageRunInput, IssueTriageRunResult } from '../factory-integration';
 import type { GithubIntegration } from './integration';
+import type { GithubIssueTriageInput, GithubIssueTriageResult } from './issue-triage';
 import {
   listPullRequestSubscriptionsForWebhook,
   retirePullRequestSubscription,
@@ -11,13 +11,8 @@ import {
   type GithubWebhookPullRequestTarget,
 } from './subscriptions';
 
-/**
- * The triage-run hook types are part of the system-wide integration contract
- * (`../factory-integration.ts`); re-exported under the GitHub-prefixed names
- * existing consumers import from this module.
- */
-export type GithubIssueTriageRunInput = IssueTriageRunInput;
-export type GithubIssueTriageRunResult = IssueTriageRunResult;
+export type GithubIssueTriageRunInput = GithubIssueTriageInput;
+export type GithubIssueTriageRunResult = GithubIssueTriageResult;
 
 export interface GithubWebhookHandlerOptions {
   /** Integration providing webhook-secret verification + collaborator permission checks. */
@@ -331,8 +326,9 @@ async function resolveSubscriptionSession(
   let session = await controller.getSessionByResource(resourceId, scope);
   if (!session) {
     const tags = {
-      githubProjectId: subscription.data.projectId,
-      ...(scope ? { projectPath: scope } : {}),
+      factoryProjectId: resourceId,
+      projectRepositoryId: subscription.data.projectRepositoryId,
+      ...(scope ? { worktreePath: scope } : {}),
     };
     session = await controller.createSession({
       id: sessionId,

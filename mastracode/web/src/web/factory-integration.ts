@@ -21,38 +21,86 @@ import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
+import type { AuditEmitter } from './audit/domain.js';
+import type { AuditEventRow } from './storage/domains/audit/base.js';
 import type { StateSigner } from './state-signing.js';
 import type { IntegrationStorageHandle } from './storage/domains/integrations/base.js';
-import type { SourceControlStorageHandle } from './storage/domains/source-control/base.js';
+import type {
+  SourceControlInstallation,
+  SourceControlRepository,
+  SourceControlStorageHandle,
+} from './storage/domains/source-control/base.js';
 
-/**
- * Input for the system's issue-triage hook: a webhook (or manual Intake
- * action) asks the system to spin up a triage session for an issue. The
- * system side (web-surface) implements the hook; integrations invoke it.
- */
-export interface IssueTriageRunInput {
-  repository: string;
-  issueNumber: number;
-  issueTitle: string;
-  issueUrl: string;
-  labels: string[];
-  sender?: string;
-  installationId: number;
-  /** Active Factory resource id used by chat thread queries; projectPath remains the worktree scope. */
-  resourceId?: string;
-  projectPath?: string;
-  branch?: string;
+export interface IntakeSource {
+  id: string;
+  name: string;
+  type: string;
+  metadata?: Record<string, unknown>;
 }
 
-export interface IssueTriageRunResult {
-  threadId?: string;
-  projectPath?: string;
-  branch?: string;
+export interface IntakeItem {
+  source: {
+    type: string;
+    externalId: string;
+    url?: string;
+  };
+  sourceId: string;
+  title: string;
+  status?: string;
+  labels?: string[];
+  assignee?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
 }
 
-/** System hooks integrations may invoke (e.g. GitHub webhook → issue triage). */
+export interface IntakePage {
+  items: IntakeItem[];
+  nextCursor: string | null;
+}
+
+export interface IntakeIntegrationCapability {
+  listSources(args: { orgId: string; userId: string }): Promise<IntakeSource[]>;
+  listItems(args: { orgId: string; userId: string; sourceIds: string[]; cursor?: string }): Promise<IntakePage>;
+}
+
+export interface SourceControlInstallationInput {
+  externalId: string;
+  accountName?: string | null;
+  accountType?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SourceControlRepositoryInput {
+  externalId: string;
+  slug: string;
+  defaultBranch: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SourceControlRepositoryAccess {
+  cloneUrl: string;
+  authorization?: { scheme: 'bearer'; token: string };
+}
+
+export interface SourceControlIntegrationCapability {
+  initialize(args: { storage: SourceControlStorageHandle }): void;
+  registerInstallation(args: {
+    orgId: string;
+    userId: string;
+    installation: SourceControlInstallationInput;
+  }): Promise<SourceControlInstallation>;
+  registerRepositories(args: {
+    orgId: string;
+    installationId: string;
+    repositories: SourceControlRepositoryInput[];
+  }): Promise<SourceControlRepository[]>;
+  getRepositoryAccess(args: { orgId: string; repositoryId: string }): Promise<SourceControlRepositoryAccess>;
+}
+
+/** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
-  runIssueTriage?: (input: IssueTriageRunInput) => Promise<IssueTriageRunResult>;
+  emitAudit?: AuditEmitter['emit'];
 }
 
 /**
@@ -61,6 +109,14 @@ export interface IntegrationHooks {
  * tools into one dynamic tool set.
  */
 export type IntegrationTools = Extract<NonNullable<MastraCodeConfig['extraTools']>, Record<string, unknown>>;
+
+export interface IntegrationPostToolContext {
+  toolName: string;
+  input: unknown;
+  output?: unknown;
+  error?: unknown;
+  context: unknown;
+}
 
 /**
  * Everything the factory hands an integration when collecting its routes.
@@ -75,7 +131,7 @@ export interface IntegrationContext {
    * Shared OAuth state signer created by the factory. One signer per boot, so
    * every integration's OAuth flow signs and verifies with the same secret.
    */
-  stateSigner: StateSigner;
+  stateSigner?: StateSigner;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;
@@ -92,6 +148,10 @@ export interface IntegrationContext {
 export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
   readonly id: string;
+  /** Optional normalized external-work intake capability. */
+  readonly intake?: IntakeIntegrationCapability;
+  /** Optional provider-neutral source-control capability. */
+  readonly sourceControl?: SourceControlIntegrationCapability;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds
@@ -108,12 +168,23 @@ export interface FactoryIntegration {
    * Session-scoped tools (e.g. GitHub's PR subscribe/unsubscribe). Optional
    * capability, resolved synchronously per request.
    */
-  sessionTools?(requestContext: RequestContext): IntegrationTools;
+  sessionTools?(args: { requestContext: RequestContext }): IntegrationTools;
+  /**
+   * Optional provider-owned observer for successful or failed tool calls.
+   * The factory invokes every configured observer independently so one
+   * integration cannot prevent another from observing the same tool result.
+   */
+  postToolObserver?(args: { toolContext: IntegrationPostToolContext; requestContext?: RequestContext }): Promise<void>;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.
    */
   diagnostics(): Record<string, unknown>;
+  /**
+   * Optional best-effort destination for locally persisted audit events.
+   * Audit export remains independent of the configured web auth adapter.
+   */
+  audit?(args: { event: AuditEventRow }): Promise<void>;
   /**
    * True when the integration signs OAuth `state` and therefore needs a
    * replica-stable signer. The factory fails loud at boot when a registered

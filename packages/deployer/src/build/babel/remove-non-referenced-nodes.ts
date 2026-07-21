@@ -1,8 +1,7 @@
-import * as babel from '@babel/core';
+import { types as t } from '@babel/core';
+import type { PluginObject } from '@babel/core';
 
 export function removeNonReferencedNodes() {
-  const t = babel.types;
-
   return {
     name: 'remove-non-referenced-nodes',
     visitor: {
@@ -62,5 +61,5 @@ export function removeNonReferencedNodes() {
         );
       },
     },
-  } as babel.PluginObject;
+  } as PluginObject;
 }

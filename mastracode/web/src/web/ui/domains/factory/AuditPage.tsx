@@ -54,15 +54,15 @@ export function AuditPage() {
       title="Audit"
       description="Who did what, when — every board change, run start, worktree change, and git action."
     >
-      {project => <AuditContent githubProjectId={project.binding.githubProjectId} />}
+      {project => <AuditContent factoryProjectId={project.binding.factoryProjectId} />}
     </FactoryPageShell>
   );
 }
 
-function AuditContent({ githubProjectId }: { githubProjectId: string }) {
+function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [group, setGroup] = useState<GroupKey>('all');
   const actions = ACTION_GROUPS.find(entry => entry.key === group)?.actions;
-  const eventsQuery = useAuditEvents(githubProjectId, group, actions ? [...actions] : undefined);
+  const eventsQuery = useAuditEvents(factoryProjectId, group, actions ? [...actions] : undefined);
   const portalQuery = useAuditPortalLink(true);
 
   if (eventsQuery.isError) {

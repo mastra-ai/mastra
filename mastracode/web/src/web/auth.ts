@@ -1,4 +1,3 @@
-import type { MastraAuthWorkos } from '@mastra/auth-workos';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context, Hono } from 'hono';
@@ -116,23 +115,6 @@ export async function isOrganizationAdmin(c: Context, organizationId: string): P
   } catch {
     return false;
   }
-}
-
-/** True when the active adapter is WorkOS. Gates WorkOS-only capabilities. */
-export function isWorkOSAuth(): boolean {
-  return getActiveWebAuthAdapter()?.kind === 'workos';
-}
-
-/**
- * Shared WorkOS auth provider, exposed for features that need the raw WorkOS
- * client (audit-log export, Admin Portal links). Callers must gate on
- * {@link isWorkOSAuth} (or {@link isWebAuthEnabled} on WorkOS-only deploys)
- * first — throws when the active adapter is not WorkOS.
- */
-export function getWorkOSProvider(): MastraAuthWorkos {
-  const adapter = getActiveWebAuthAdapter();
-  if (adapter instanceof WorkOSWebAuth) return adapter.provider;
-  throw new Error('WorkOS provider requested but the active web auth adapter is not WorkOS');
 }
 
 /**

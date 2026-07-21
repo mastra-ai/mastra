@@ -12,7 +12,9 @@ import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shar
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import type { GithubFactory } from '../workspaces/services/factories';
+import { ConnectRepositoriesPanel } from '../workspaces';
+import type { FactoryRepository, ServerFactory } from '../workspaces/services/factories';
+import { selectedRepository } from '../workspaces/services/factories';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
@@ -403,9 +405,27 @@ export function BoardPage() {
   );
 }
 
-function Board({ factory }: { factory: GithubFactory }) {
-  const githubProjectId = factory.binding.githubProjectId;
-  const items = useWorkItemsQuery(githubProjectId);
+function Board({ factory }: { factory: ServerFactory }) {
+  const repository = selectedRepository(factory);
+
+  // A Factory with no linked repositories is a valid state: the Board exists,
+  // it just has nothing to intake yet. Offer the connect flow inline.
+  if (!repository) {
+    return (
+      <div className="flex max-w-xl flex-col gap-3">
+        <Notice variant="info">Connect a repository to start intake. Issues and pull requests will appear here.</Notice>
+        <ConnectRepositoriesPanel factory={factory} />
+      </div>
+    );
+  }
+
+  return <BoardContent factory={factory} repository={repository} />;
+}
+
+function BoardContent({ factory, repository }: { factory: ServerFactory; repository: FactoryRepository }) {
+  const projectRepositoryId = repository.projectRepositoryId;
+  const factoryProjectId = factory.binding.factoryProjectId;
+  const items = useWorkItemsQuery(factoryProjectId);
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
 
@@ -414,7 +434,7 @@ function Board({ factory }: { factory: GithubFactory }) {
   // in Intake and only move once the Factory acts on them.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
-  const githubSelected = config ? (config.github.repositoryIds?.includes(githubProjectId) ?? false) : true;
+  const githubSelected = config ? (config.github.repositoryIds?.includes(projectRepositoryId) ?? false) : true;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
   const linearReady =
@@ -428,7 +448,7 @@ function Board({ factory }: { factory: GithubFactory }) {
     'github-prs' as const,
     ...(linearReady ? (['linear'] as const) : []),
   ];
-  const newIssueUrl = config && githubIntakeActive ? githubNewIssueUrl(factory.name) : undefined;
+  const newIssueUrl = config && githubIntakeActive ? githubNewIssueUrl(repository.slug) : undefined;
   const [intakeSource, setIntakeSource] = useState<IntakeSource>('github');
   const showIntakeSourceSwitch = availableIntakeSources.length > 1;
   const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
@@ -436,16 +456,16 @@ function Board({ factory }: { factory: GithubFactory }) {
     : (availableIntakeSources[0] ?? null);
 
   // Only the active intake feed fetches; the other feeds load on switch.
-  const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? githubProjectId : undefined);
-  const triageIssues = useProjectIssuesQuery(githubProjectId, AUTO_TRIAGED_LABEL);
-  const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? githubProjectId : undefined);
+  const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? projectRepositoryId : undefined);
+  const triageIssues = useProjectIssuesQuery(projectRepositoryId, AUTO_TRIAGED_LABEL);
+  const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? projectRepositoryId : undefined);
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
-  const upsert = useUpsertWorkItemMutation(githubProjectId);
-  const update = useUpdateWorkItemMutation(githubProjectId);
-  const remove = useDeleteWorkItemMutation(githubProjectId);
+  const upsert = useUpsertWorkItemMutation(factoryProjectId);
+  const update = useUpdateWorkItemMutation(factoryProjectId);
+  const remove = useDeleteWorkItemMutation(factoryProjectId);
   const { start, pendingRuns, enabled: runEnabled } = useStartFactoryRun();
-  const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(githubProjectId);
+  const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(projectRepositoryId, factoryProjectId);
   const navigate = useNavigate();
   const boardContainerRef = useRef<HTMLDivElement>(null);
   const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());

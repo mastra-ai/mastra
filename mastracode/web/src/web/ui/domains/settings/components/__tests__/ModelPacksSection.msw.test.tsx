@@ -1,5 +1,5 @@
 import type { AgentControllerAvailableModel } from '@mastra/client-js';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -22,6 +22,14 @@ const models: AgentControllerAvailableModel[] = [
 
 function packsResponse(packs: ModelPackInfo[], activePackId: string | null = null) {
   return HttpResponse.json({ packs, activePackId });
+}
+
+/** Open a searchable combobox and pick an option (Base UI selects on pointer events). */
+async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement, name: RegExp) {
+  await user.click(trigger);
+  const option = await screen.findByRole('option', { name });
+  fireEvent.pointerDown(option, { pointerType: 'mouse' });
+  fireEvent.click(option, { detail: 1 });
 }
 
 const builtinPack: ModelPackInfo = {
@@ -86,7 +94,7 @@ describe('ModelPacksSection', () => {
   });
 
   describe('when a pack is activated', () => {
-    it('POSTs the resourceId and refetches so the pack shows active', async () => {
+    it('POSTs the resourceId and session scope and refetches so the pack shows active', async () => {
       const packs: ModelPackInfo[] = [builtinPack];
       let activateBody: unknown;
       server.use(
@@ -99,12 +107,14 @@ describe('ModelPacksSection', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
+      renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} scope="/tmp/worktree" models={models} />);
 
       const row = (await screen.findByText('Builtin Pack')).closest('[role="listitem"]') as HTMLElement;
       await user.click(within(row).getByRole('button', { name: 'Activate' }));
 
-      await waitFor(() => expect(activateBody).toEqual({ resourceId: RESOURCE_ID }));
+      // The session registers under (resourceId, scope), so activation must
+      // forward both or the server-side lookup misses.
+      await waitFor(() => expect(activateBody).toEqual({ resourceId: RESOURCE_ID, scope: '/tmp/worktree' }));
       await waitFor(() => expect(within(row).getByText('Active')).toBeInTheDocument());
     });
   });
@@ -135,9 +145,9 @@ describe('ModelPacksSection', () => {
       await user.click(await screen.findByRole('button', { name: 'New pack' }));
       await user.type(screen.getByPlaceholderText('e.g. my-pack'), 'My Pack');
       const selects = screen.getAllByRole('combobox');
-      await user.selectOptions(selects[0]!, 'openai/gpt-x');
-      await user.selectOptions(selects[1]!, 'anthropic/claude-x');
-      await user.selectOptions(selects[2]!, 'openai/gpt-x');
+      await pickOption(user, selects[0]!, /openai\/gpt-x/);
+      await pickOption(user, selects[1]!, /anthropic\/claude-x/);
+      await pickOption(user, selects[2]!, /openai\/gpt-x/);
       await user.click(screen.getByRole('button', { name: 'Add' }));
 
       await waitFor(() =>

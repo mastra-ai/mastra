@@ -3,14 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WebAuthAdapter } from './auth-adapter.js';
 import { WorkOSWebAuth } from './auth-workos-adapter.js';
-import {
-  buildAuthRoutes,
-  getWorkOSProvider,
-  isWebAuthEnabled,
-  isWorkOSAuth,
-  mountWebAuth,
-  webAuthTenant,
-} from './auth.js';
+import { buildAuthRoutes, isWebAuthEnabled, mountWebAuth, webAuthTenant } from './auth.js';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config.js';
 
 /**
@@ -68,7 +61,6 @@ describe('active adapter resolution', () => {
   it('a seeded adapter enables auth regardless of env', () => {
     seedRuntimeConfig({ authAdapter: fakeAdapter() });
     expect(isWebAuthEnabled()).toBe(true);
-    expect(isWorkOSAuth()).toBe(false);
   });
 
   it('seeding without an adapter disables auth even when WORKOS env vars are set', () => {
@@ -76,26 +68,12 @@ describe('active adapter resolution', () => {
     process.env.WORKOS_CLIENT_ID = 'client_test';
     seedRuntimeConfig({});
     expect(isWebAuthEnabled()).toBe(false);
-    expect(isWorkOSAuth()).toBe(false);
   });
 
   it('falls back to env-implied WorkOS when the factory never seeded (back-compat)', () => {
     process.env.WORKOS_API_KEY = 'sk_test';
     process.env.WORKOS_CLIENT_ID = 'client_test';
     expect(isWebAuthEnabled()).toBe(true);
-    expect(isWorkOSAuth()).toBe(true);
-  });
-
-  it('a seeded WorkOS adapter reports isWorkOSAuth and exposes its provider', () => {
-    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
-    seedRuntimeConfig({ authAdapter: adapter });
-    expect(isWorkOSAuth()).toBe(true);
-    expect(getWorkOSProvider()).toBe(adapter.provider);
-  });
-
-  it('getWorkOSProvider throws when the active adapter is not WorkOS', () => {
-    seedRuntimeConfig({ authAdapter: fakeAdapter() });
-    expect(() => getWorkOSProvider()).toThrow(/not WorkOS/);
   });
 });
 
