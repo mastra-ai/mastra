@@ -99,6 +99,27 @@ const githubStub = {
   ),
   // A fresh token string per call so the scenario can prove per-op minting.
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
+  versionControl: {
+    createPullRequest: async (input: import('../factory-integration').CreatePullRequestInput) => {
+      const result = await createPullRequest(input);
+      return {
+        id: '1',
+        title: input.title,
+        url: result.url,
+        author: 'octo',
+        body: input.body ?? null,
+        state: 'open' as const,
+        draft: false,
+        merged: false,
+        mergeable: null,
+        baseBranch: input.baseBranch,
+        headBranch: input.headBranch,
+        headSha: 'abc123',
+        createdAt: '2026-07-21T00:00:00Z',
+        updatedAt: '2026-07-21T00:00:00Z',
+      };
+    },
+  },
 };
 
 // Deterministic state signer stub (replaces the old signState/verifyState mocks).
@@ -408,7 +429,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     const pushToken = pushCall[3] as string;
     expect(pushToken).toMatch(/^install-token-/);
 
-    // 6. Open a PR → another fresh token is minted (per-op, not reused).
+    // 6. Open a PR through VersionControl; only the preceding git push needs a sandbox token.
     const mintBeforePr = mint.mock.calls.length;
     const prRes = await postJson(app, `/web/github/repositories/${projectId}/pr`, {
       branch: 'feat/x',
@@ -420,11 +441,15 @@ describe('S1: full write-back journey through the real route handlers', () => {
     });
     expect(prRes.status).toBe(200);
     expect(await prRes.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
-    expect(mint.mock.calls.length).toBe(mintBeforePr + 1);
-    const prToken = (createPullRequest.mock.calls[0] as unknown as any[])[2].token as string;
-    expect(prToken).toMatch(/^install-token-/);
-    // The push and PR tokens are distinct mints (never reused across ops).
-    expect(prToken).not.toBe(pushToken);
+    expect(mint.mock.calls.length).toBe(mintBeforePr);
+    expect(createPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'octo/hello',
+        baseBranch: 'main',
+        headBranch: 'feat/x',
+      }),
+    );
     expect(subscribeToPullRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         projectId: projectId,

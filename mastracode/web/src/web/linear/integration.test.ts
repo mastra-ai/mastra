@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LinearIntegration, type LinearIssue, type LinearIssueDetail } from './integration';
 
@@ -23,6 +23,10 @@ const issue: LinearIssue = {
 
 const connection = { type: 'oauth' as const, accessToken: 'linear-token' };
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('LinearIntegration capability surface', () => {
   it('normalizes Linear issues through the shared Intake contract', async () => {
     const linear = integration();
@@ -31,7 +35,12 @@ describe('LinearIntegration capability surface', () => {
       .mockResolvedValue({ issues: [issue], nextCursor: 'cursor-2' });
 
     await expect(
-      linear.intake.listIssues({ connection, sourceIds: ['project-1'], cursor: 'cursor-1' }),
+      linear.intake.listIssues({
+        connection,
+        sourceIds: ['project-1'],
+        cursor: 'cursor-1',
+        labels: ['bug', 'urgent'],
+      }),
     ).resolves.toEqual({
       issues: [
         expect.objectContaining({
@@ -44,7 +53,28 @@ describe('LinearIntegration capability surface', () => {
       ],
       nextCursor: 'cursor-2',
     });
-    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', 'cursor-1', ['project-1']);
+    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', 'cursor-1', ['project-1'], ['bug', 'urgent']);
+  });
+
+  it('passes label filters to Linear GraphQL', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const linear = integration();
+
+    await linear.listActiveIssues('linear-token', 'cursor-1', ['project-1'], ['bug', 'urgent']);
+
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      query: string;
+      variables: Record<string, unknown>;
+    };
+    expect(request.query).toContain('labels: { name: { in: $labels } }');
+    expect(request.variables).toMatchObject({ labels: ['bug', 'urgent'] });
   });
 
   it('fetches issue details and creates comments through the shared Intake contract', async () => {

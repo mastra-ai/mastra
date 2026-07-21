@@ -39,13 +39,19 @@ import type {
   IntegrationContext,
   IntegrationTools,
   ListIntakeIssuesInput,
-  ListVersionControlPullRequestsInput,
   VersionControl,
-  VersionControlPullRequestPage,
+  PullRequestComment,
+  PullRequest,
+  Review,
+  ReviewComment,
 } from '../factory-integration.js';
 import { buildGithubRoutes } from './routes.js';
 import { createGithubSubscriptionTools } from './session-subscriptions.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
+
+type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
+  ? TInput
+  : never;
 
 /**
  * Normalize a PEM private key supplied via env. Env tooling tends to mangle
@@ -106,23 +112,6 @@ export interface ListRepoOpenIssuesOptions {
   label?: string;
 }
 
-export interface PullRequestSummary {
-  number: number;
-  title: string;
-  url: string;
-  author: string | null;
-  baseBranch: string;
-  headBranch: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PullRequestPage {
-  pullRequests: PullRequestSummary[];
-  /** Next page number to request, or `null` when this was the last page. */
-  nextPage: number | null;
-}
-
 export interface GithubIntegrationConfig {
   /** GitHub App id (the numeric id, as a string). */
   appId: string;
@@ -157,7 +146,30 @@ export class GithubIntegration implements FactoryIntegration {
     createComment: input => this.#createIntakeComment(input),
   };
   readonly versionControl: VersionControl = {
-    listPullRequests: input => this.#listVersionControlPullRequests(input),
+    listPullRequests: input => this.#listPullRequests(input),
+    getPullRequest: input => this.#getPullRequest(input),
+    createPullRequest: input => this.#createPullRequest(input),
+    updatePullRequest: input => this.#updatePullRequest(input),
+    closePullRequest: input => this.#closePullRequest(input),
+    mergePullRequest: input => this.#mergePullRequest(input),
+    listComments: input => this.#listComments(input),
+    createComment: input => this.#createComment(input),
+    updateComment: input => this.#updateComment(input),
+    deleteComment: input => this.#deleteComment(input),
+    listReviews: input => this.#listReviews(input),
+    getReview: input => this.#getReview(input),
+    createReview: input => this.#createReview(input),
+    updateReview: input => this.#updateReview(input),
+    submitReview: input => this.#submitReview(input),
+    dismissReview: input => this.#dismissReview(input),
+    deletePendingReview: input => this.#deletePendingReview(input),
+    listReviewComments: input => this.#listReviewComments(input),
+    createReviewComment: input => this.#createReviewComment(input),
+    updateReviewComment: input => this.#updateReviewComment(input),
+    deleteReviewComment: input => this.#deleteReviewComment(input),
+    listRequestedReviewers: input => this.#listRequestedReviewers(input),
+    requestReviewers: input => this.#requestReviewers(input),
+    removeRequestedReviewers: input => this.#removeReviewers(input),
   };
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
@@ -342,7 +354,10 @@ export class GithubIntegration implements FactoryIntegration {
     const installationId = getGithubInstallationId(input.connection);
     const repoFullName = getSingleSourceId(input.sourceIds, 'GitHub Intake requires exactly one repository source.');
     const page = parsePositiveCursor(input.cursor);
-    const result = await this.listRepoOpenIssues(installationId, repoFullName, page);
+    const labels = normalizeLabels(input.labels);
+    const result = await this.listRepoOpenIssues(installationId, repoFullName, page, {
+      label: labels.length > 0 ? labels.join(',') : undefined,
+    });
     return {
       issues: result.issues.map(issue => ({
         id: String(issue.number),
@@ -431,25 +446,304 @@ export class GithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #listVersionControlPullRequests(
-    input: ListVersionControlPullRequestsInput,
-  ): Promise<VersionControlPullRequestPage> {
-    const installationId = getGithubInstallationId(input.connection);
+  #repositoryClient(connection: IntegrationConnection, sourceId: string) {
+    const installationId = getGithubInstallationId(connection);
+    const parts = splitRepoFullName(sourceId);
+    if (!parts) throw new Error('GitHub pull requests require an owner/repository source.');
+    return { octokit: this.getInstallationOctokit(installationId), parts };
+  }
+
+  async #listPullRequests(input: InputOf<'listPullRequests'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
     const page = parsePositiveCursor(input.cursor);
-    const result = await this.listRepoOpenPullRequests(installationId, input.sourceId, page);
+    const response = await octokit.pulls.list({
+      ...parts,
+      state: input.state ?? 'open',
+      per_page: LIST_PAGE_SIZE,
+      page,
+    });
+    const pullRequests = response.data
+      .filter(pr => input.includeDrafts !== false || !pr.draft)
+      .map(pr => parsePullRequest(pr));
     return {
-      pullRequests: result.pullRequests.map(pr => ({
-        id: String(pr.number),
-        title: pr.title,
-        url: pr.url,
-        author: pr.author,
-        baseBranch: pr.baseBranch,
-        headBranch: pr.headBranch,
-        createdAt: pr.createdAt,
-        updatedAt: pr.updatedAt,
-      })),
-      nextCursor: result.nextPage === null ? null : String(result.nextPage),
+      pullRequests,
+      nextCursor: response.data.length === LIST_PAGE_SIZE ? String(page + 1) : null,
     };
+  }
+
+  async #getPullRequest(input: InputOf<'getPullRequest'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const pullNumber = requirePullRequestNumber(input.pullRequestId);
+    try {
+      const { data } = await octokit.pulls.get({ ...parts, pull_number: pullNumber });
+      return parsePullRequest(data);
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  }
+
+  async #createPullRequest(input: InputOf<'createPullRequest'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.create({
+      ...parts,
+      title: input.title,
+      body: input.body,
+      base: input.baseBranch,
+      head: input.headBranch,
+      draft: input.draft,
+    });
+    return parsePullRequest(data);
+  }
+
+  async #updatePullRequest(input: InputOf<'updatePullRequest'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.update({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      title: input.title,
+      body: input.body === null ? '' : input.body,
+      base: input.baseBranch,
+      state: input.state,
+    });
+    return parsePullRequest(data);
+  }
+
+  async #closePullRequest(input: InputOf<'closePullRequest'>) {
+    return this.#updatePullRequest({ ...input, state: 'closed' });
+  }
+
+  async #mergePullRequest(input: InputOf<'mergePullRequest'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.merge({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      commit_title: input.commitTitle,
+      commit_message: input.commitMessage,
+      merge_method: input.method,
+    });
+    return { merged: data.merged, message: data.message, sha: data.sha ?? null };
+  }
+
+  async #listComments(input: InputOf<'listComments'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const page = parsePositiveCursor(input.cursor);
+    const response = await octokit.issues.listComments({
+      ...parts,
+      issue_number: requirePullRequestNumber(input.pullRequestId),
+      per_page: LIST_PAGE_SIZE,
+      page,
+    });
+    return {
+      comments: response.data.map(comment => parsePullRequestComment(comment)),
+      nextCursor: response.data.length === LIST_PAGE_SIZE ? String(page + 1) : null,
+    };
+  }
+
+  async #createComment(input: InputOf<'createComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.issues.createComment({
+      ...parts,
+      issue_number: requirePullRequestNumber(input.pullRequestId),
+      body: input.body,
+    });
+    return parsePullRequestComment(data);
+  }
+
+  async #updateComment(input: InputOf<'updateComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.issues.updateComment({
+      ...parts,
+      comment_id: requirePositiveId(input.commentId, 'comment'),
+      body: input.body,
+    });
+    return parsePullRequestComment(data);
+  }
+
+  async #deleteComment(input: InputOf<'deleteComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    await octokit.issues.deleteComment({ ...parts, comment_id: requirePositiveId(input.commentId, 'comment') });
+  }
+
+  async #listReviews(input: InputOf<'listReviews'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const page = parsePositiveCursor(input.cursor);
+    const response = await octokit.pulls.listReviews({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      per_page: LIST_PAGE_SIZE,
+      page,
+    });
+    return {
+      reviews: response.data.map(review => parseReview(review)),
+      nextCursor: response.data.length === LIST_PAGE_SIZE ? String(page + 1) : null,
+    };
+  }
+
+  async #getReview(input: InputOf<'getReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    try {
+      const { data } = await octokit.pulls.getReview({
+        ...parts,
+        pull_number: requirePullRequestNumber(input.pullRequestId),
+        review_id: requirePositiveId(input.reviewId, 'review'),
+      });
+      return parseReview(data);
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  }
+
+  async #createReview(input: InputOf<'createReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.createReview({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      body: input.body,
+      commit_id: input.commitId,
+      event: input.event ? reviewEventToGithub(input.event) : undefined,
+    });
+    return parseReview(data);
+  }
+
+  async #updateReview(input: InputOf<'updateReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.updateReview({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      review_id: requirePositiveId(input.reviewId, 'review'),
+      body: input.body,
+    });
+    return parseReview(data);
+  }
+
+  async #submitReview(input: InputOf<'submitReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.submitReview({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      review_id: requirePositiveId(input.reviewId, 'review'),
+      body: input.body,
+      event: reviewEventToGithub(input.event),
+    });
+    return parseReview(data);
+  }
+
+  async #dismissReview(input: InputOf<'dismissReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.dismissReview({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      review_id: requirePositiveId(input.reviewId, 'review'),
+      message: input.message,
+    });
+    return parseReview(data);
+  }
+
+  async #deletePendingReview(input: InputOf<'deletePendingReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    await octokit.pulls.deletePendingReview({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      review_id: requirePositiveId(input.reviewId, 'review'),
+    });
+  }
+
+  async #listReviewComments(input: InputOf<'listReviewComments'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const page = parsePositiveCursor(input.cursor);
+    const response = await octokit.pulls.listReviewComments({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      per_page: LIST_PAGE_SIZE,
+      page,
+    });
+    return {
+      comments: response.data.map(comment => parseReviewComment(comment)),
+      nextCursor: response.data.length === LIST_PAGE_SIZE ? String(page + 1) : null,
+    };
+  }
+
+  async #createReviewComment(input: InputOf<'createReviewComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const pullNumber = requirePullRequestNumber(input.pullRequestId);
+    if (input.replyToId) {
+      const { data } = await octokit.pulls.createReplyForReviewComment({
+        ...parts,
+        pull_number: pullNumber,
+        comment_id: requirePositiveId(input.replyToId, 'review comment'),
+        body: input.body,
+      });
+      return parseReviewComment(data);
+    }
+    if (!input.commitId || !input.path || input.line === undefined || !input.side) {
+      throw new Error('A review comment requires commitId, path, line, and side unless it is a reply.');
+    }
+    if ((input.startLine === undefined) !== (input.startSide === undefined)) {
+      throw new Error('A multi-line review comment requires both startLine and startSide.');
+    }
+    const { data } = await octokit.pulls.createReviewComment({
+      ...parts,
+      pull_number: pullNumber,
+      body: input.body,
+      commit_id: input.commitId,
+      path: input.path,
+      line: input.line,
+      side: input.side.toUpperCase() as 'LEFT' | 'RIGHT',
+      start_line: input.startLine,
+      start_side: input.startSide?.toUpperCase() as 'LEFT' | 'RIGHT' | undefined,
+    });
+    return parseReviewComment(data);
+  }
+
+  async #updateReviewComment(input: InputOf<'updateReviewComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.updateReviewComment({
+      ...parts,
+      comment_id: requirePositiveId(input.commentId, 'review comment'),
+      body: input.body,
+    });
+    return parseReviewComment(data);
+  }
+
+  async #deleteReviewComment(input: InputOf<'deleteReviewComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    await octokit.pulls.deleteReviewComment({
+      ...parts,
+      comment_id: requirePositiveId(input.commentId, 'review comment'),
+    });
+  }
+
+  async #listRequestedReviewers(input: InputOf<'listRequestedReviewers'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.listRequestedReviewers({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+    });
+    return parseRequestedReviewers(data);
+  }
+
+  async #requestReviewers(input: InputOf<'requestReviewers'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.requestReviewers({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      reviewers: input.users ?? [],
+      team_reviewers: input.teams ?? [],
+    });
+    return parseRequestedReviewers(data);
+  }
+
+  async #removeReviewers(input: InputOf<'removeRequestedReviewers'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.removeRequestedReviewers({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      reviewers: input.users ?? [],
+      team_reviewers: input.teams ?? [],
+    });
+    return parseRequestedReviewers(data);
   }
 
   /** Add labels to an issue (deduplicated; no-op on empty/malformed input). */
@@ -508,37 +802,6 @@ export class GithubIntegration implements FactoryIntegration {
         updatedAt: issue.updated_at,
       }));
     return { issues, nextPage: response.data.length === LIST_PAGE_SIZE ? page + 1 : null };
-  }
-
-  /**
-   * List one page of a repo's open, non-draft pull requests through an
-   * installation token. Draft filtering can make a non-final page shorter than
-   * the page size — `nextPage` is derived from the raw response length.
-   */
-  async listRepoOpenPullRequests(installationId: number, repoFullName: string, page: number): Promise<PullRequestPage> {
-    const parts = splitRepoFullName(repoFullName);
-    if (!parts) return { pullRequests: [], nextPage: null };
-    const octokit = this.getInstallationOctokit(installationId);
-    const response = await octokit.pulls.list({
-      owner: parts.owner,
-      repo: parts.repo,
-      state: 'open',
-      per_page: LIST_PAGE_SIZE,
-      page,
-    });
-    const pullRequests = response.data
-      .filter(pr => !pr.draft)
-      .map(pr => ({
-        number: pr.number,
-        title: pr.title,
-        url: pr.html_url,
-        author: pr.user?.login ?? null,
-        baseBranch: pr.base.ref,
-        headBranch: pr.head.ref,
-        createdAt: pr.created_at,
-        updatedAt: pr.updated_at,
-      }));
-    return { pullRequests, nextPage: response.data.length === LIST_PAGE_SIZE ? page + 1 : null };
   }
 
   /**
@@ -622,6 +885,142 @@ export class GithubIntegration implements FactoryIntegration {
   }
 }
 
+interface GithubPullRequestData {
+  number: number;
+  title: string;
+  html_url: string;
+  user: { login?: string } | null;
+  body?: string | null;
+  state: string;
+  draft?: boolean | null;
+  merged?: boolean;
+  merged_at?: string | null;
+  mergeable?: boolean | null;
+  base: { ref: string };
+  head: { ref: string; sha: string };
+  created_at: string;
+  updated_at: string;
+}
+
+interface GithubCommentData {
+  id: number;
+  html_url: string;
+  user: { login?: string } | null;
+  body?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface GithubReviewData {
+  id: number;
+  html_url?: string;
+  user: { login?: string } | null;
+  body?: string | null;
+  state: string;
+  commit_id?: string | null;
+  submitted_at?: string | null;
+}
+
+interface GithubReviewCommentData extends GithubCommentData {
+  path: string;
+  line?: number | null;
+  side?: string | null;
+  commit_id: string;
+  in_reply_to_id?: number | null;
+}
+
+function parsePullRequest(pr: GithubPullRequestData): PullRequest {
+  return {
+    id: String(pr.number),
+    title: pr.title,
+    url: pr.html_url,
+    author: pr.user?.login ?? null,
+    body: pr.body?.trim() ? pr.body : null,
+    state: pr.state === 'closed' ? 'closed' : 'open',
+    draft: pr.draft ?? false,
+    merged: pr.merged ?? Boolean(pr.merged_at),
+    mergeable: typeof pr.mergeable === 'boolean' ? pr.mergeable : null,
+    baseBranch: pr.base.ref,
+    headBranch: pr.head.ref,
+    headSha: pr.head.sha,
+    createdAt: pr.created_at,
+    updatedAt: pr.updated_at,
+  };
+}
+
+function parsePullRequestComment(comment: GithubCommentData): PullRequestComment {
+  return {
+    id: String(comment.id),
+    url: comment.html_url,
+    author: comment.user?.login ?? null,
+    body: comment.body ?? '',
+    createdAt: comment.created_at,
+    updatedAt: comment.updated_at,
+  };
+}
+
+function parseReview(review: GithubReviewData): Review {
+  return {
+    id: String(review.id),
+    url: review.html_url ?? null,
+    author: review.user?.login ?? null,
+    body: review.body?.trim() ? review.body : null,
+    state: parseReviewState(review.state),
+    commitId: review.commit_id ?? null,
+    submittedAt: review.submitted_at ?? null,
+  };
+}
+
+function parseReviewComment(comment: GithubReviewCommentData): ReviewComment {
+  const parsed = parsePullRequestComment(comment);
+  const side = comment.side?.toLowerCase();
+  return {
+    ...parsed,
+    path: comment.path,
+    line: comment.line ?? null,
+    side: side === 'left' || side === 'right' ? side : null,
+    commitId: comment.commit_id,
+    replyToId: comment.in_reply_to_id ? String(comment.in_reply_to_id) : null,
+  };
+}
+
+function parseRequestedReviewers(data: {
+  users?: Array<{ login?: string }> | null;
+  teams?: Array<{ slug?: string }> | null;
+  requested_reviewers?: Array<{ login?: string }> | null;
+  requested_teams?: Array<{ slug?: string }> | null;
+}) {
+  return {
+    users: (data.users ?? data.requested_reviewers ?? []).flatMap(user => (user.login ? [user.login] : [])),
+    teams: (data.teams ?? data.requested_teams ?? []).flatMap(team => (team.slug ? [team.slug] : [])),
+  };
+}
+
+function parseReviewState(state: string): Review['state'] {
+  if (state === 'PENDING') return 'pending';
+  if (state === 'COMMENTED') return 'commented';
+  if (state === 'APPROVED') return 'approved';
+  if (state === 'CHANGES_REQUESTED') return 'changes-requested';
+  if (state === 'DISMISSED') return 'dismissed';
+  throw new Error(`Unsupported GitHub review state: ${state}`);
+}
+
+function reviewEventToGithub(event: Exclude<InputOf<'createReview'>['event'], undefined>) {
+  if (event === 'approve') return 'APPROVE' as const;
+  if (event === 'request-changes') return 'REQUEST_CHANGES' as const;
+  return 'COMMENT' as const;
+}
+
+function requirePullRequestNumber(value: string): number {
+  return requirePositiveId(value, 'pull request');
+}
+
+function requirePositiveId(value: string, resource: string): number {
+  const parsed = parsePositiveInteger(value);
+  if (parsed === null) throw new Error(`GitHub ${resource} id must be a positive integer.`);
+  return parsed;
+}
+
 function getGithubInstallationId(connection: IntegrationConnection): number {
   if (connection.type !== 'app-installation') {
     throw new Error('GitHub capabilities require an app-installation connection.');
@@ -632,6 +1031,10 @@ function getGithubInstallationId(connection: IntegrationConnection): number {
 function getSingleSourceId(sourceIds: string[], message: string): string {
   if (sourceIds.length !== 1) throw new Error(message);
   return sourceIds[0]!;
+}
+
+function normalizeLabels(labels: string[] | undefined): string[] {
+  return [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
 }
 
 function requireSourceId(sourceId: string | undefined, message: string): string {

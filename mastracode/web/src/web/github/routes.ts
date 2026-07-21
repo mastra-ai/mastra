@@ -51,7 +51,6 @@ import type { MaterializationSandbox, PrepareProgress, ProgressFn } from '../san
 import {
   commitAll,
   computeWorktreePath,
-  createPullRequest,
   ensureProjectSandbox,
   ensureWorktree,
   isValidGitRef as isValidGitRefSandbox,
@@ -706,21 +705,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const label = parseIssueLabelFilter(c.req.query('label'));
         if (label === null) return c.json({ error: 'invalid_label' }, 400);
         try {
-          if (label) {
-            const { issues, nextPage } = await github.listRepoOpenIssues(
-              Number(loaded.project.installationExternalId),
-              loaded.project.repositorySlug,
-              page,
-              { label },
-            );
-            return c.json({ issues, nextPage });
-          }
           const { issues, nextCursor } = await github.intake.listIssues({
             connection: {
               type: 'app-installation',
               installationId: Number(loaded.project.installationExternalId),
             },
             sourceIds: [loaded.project.repositorySlug],
+            labels: label ? [label] : undefined,
             cursor: String(page),
           });
           return c.json({
@@ -829,6 +820,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
               installationId: Number(loaded.project.installationExternalId),
             },
             sourceId: loaded.project.repositorySlug,
+            includeDrafts: false,
             cursor: String(page),
           });
           return c.json({
@@ -1347,7 +1339,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
       },
     }),
 
-    // ── Open a pull request via the gh CLI ──────────────────────────────────
+    // ── Open a pull request through the version-control capability ─────────
     registerApiRoute('/web/github/repositories/:id/pr', {
       method: 'POST',
       requiresAuth: false,
@@ -1399,9 +1391,17 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
 
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
-            const sandbox = await resolveProjectSandbox(sandboxRow);
-            const token = await github.mintInstallationToken(Number(project.installationExternalId));
-            const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
+            const result = await github.versionControl.createPullRequest({
+              connection: {
+                type: 'app-installation',
+                installationId: Number(project.installationExternalId),
+              },
+              sourceId: project.repositorySlug,
+              baseBranch: base,
+              headBranch: head,
+              title,
+              body: prBody,
+            });
             await emitAudit(loose(c), {
               action: 'factory.git.pr_opened',
               projectId: project.id,
@@ -1444,7 +1444,10 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
             return c.json({ url: result.url });
           });
         } catch (err) {
-          return gitErrorResponse(loose(c), err);
+          return c.json(
+            { error: 'github_pr_create_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
         }
       },
     }),

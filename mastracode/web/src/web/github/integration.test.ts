@@ -23,6 +23,35 @@ function validConfig() {
   };
 }
 
+function pullRequestData() {
+  return {
+    number: 34,
+    title: 'Ship intake',
+    html_url: 'https://github.com/acme/app/pull/34',
+    user: { login: 'ada' },
+    body: 'Ready to ship',
+    state: 'open',
+    base: { ref: 'main' },
+    head: { ref: 'feat/intake', sha: 'abc123' },
+    draft: false,
+    merged: false,
+    mergeable: true,
+    created_at: '2026-07-01T00:00:00Z',
+    updated_at: '2026-07-02T00:00:00Z',
+  };
+}
+
+function commentData() {
+  return {
+    id: 91,
+    html_url: 'https://github.com/acme/app/pull/34#issuecomment-91',
+    user: { login: 'grace' },
+    body: 'Looks good',
+    created_at: '2026-07-03T00:00:00Z',
+    updated_at: '2026-07-03T00:00:00Z',
+  };
+}
+
 describe('normalizePrivateKey', () => {
   it('passes a proper multi-line PEM through unchanged', () => {
     expect(normalizePrivateKey(pem)).toBe(pem);
@@ -93,6 +122,7 @@ describe('GithubIntegration capability surface', () => {
       github.intake.listIssues({
         connection: { type: 'app-installation', installationId: 7 },
         sourceIds: ['acme/app'],
+        labels: ['bug', 'urgent'],
       }),
     ).resolves.toEqual({
       issues: [
@@ -107,6 +137,7 @@ describe('GithubIntegration capability surface', () => {
       ],
       nextCursor: null,
     });
+    expect(listForRepo).toHaveBeenCalledWith(expect.objectContaining({ labels: 'bug,urgent' }));
   });
 
   it('fetches issue details and creates comments through the shared Intake contract', async () => {
@@ -149,21 +180,7 @@ describe('GithubIntegration capability surface', () => {
 
   it('normalizes pull requests through the shared VersionControl contract', async () => {
     const github = new GithubIntegration(validConfig());
-    const list = vi.fn(async () => ({
-      data: [
-        {
-          number: 34,
-          title: 'Ship intake',
-          html_url: 'https://github.com/acme/app/pull/34',
-          user: { login: 'ada' },
-          base: { ref: 'main' },
-          head: { ref: 'feat/intake' },
-          draft: false,
-          created_at: '2026-07-01T00:00:00Z',
-          updated_at: '2026-07-02T00:00:00Z',
-        },
-      ],
-    }));
+    const list = vi.fn(async () => ({ data: [pullRequestData()] }));
     vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { list } } as any);
 
     await expect(
@@ -172,9 +189,155 @@ describe('GithubIntegration capability surface', () => {
         sourceId: 'acme/app',
       }),
     ).resolves.toEqual({
-      pullRequests: [expect.objectContaining({ id: '34', baseBranch: 'main', headBranch: 'feat/intake' })],
+      pullRequests: [
+        expect.objectContaining({ id: '34', baseBranch: 'main', headBranch: 'feat/intake', headSha: 'abc123' }),
+      ],
       nextCursor: null,
     });
+  });
+
+  it('implements the full pull-request lifecycle through VersionControl', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn(async () => ({ data: pullRequestData() }));
+    const create = vi.fn(async () => ({ data: pullRequestData() }));
+    const update = vi.fn(async () => ({ data: pullRequestData() }));
+    const merge = vi.fn(async () => ({ data: { merged: true, message: 'merged', sha: 'merge-sha' } }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { get, create, update, merge } } as any);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+    const ref = { connection, sourceId: 'acme/app', pullRequestId: '34' };
+
+    await expect(github.versionControl.getPullRequest(ref)).resolves.toMatchObject({ id: '34', state: 'open' });
+    await expect(
+      github.versionControl.createPullRequest({
+        connection,
+        sourceId: 'acme/app',
+        title: 'Ship intake',
+        body: 'Ready to ship',
+        baseBranch: 'main',
+        headBranch: 'feat/intake',
+        draft: true,
+      }),
+    ).resolves.toMatchObject({ id: '34' });
+    await github.versionControl.updatePullRequest({ ...ref, title: 'Ship all intake', body: null });
+    await github.versionControl.closePullRequest(ref);
+    await expect(github.versionControl.mergePullRequest({ ...ref, method: 'squash' })).resolves.toEqual({
+      merged: true,
+      message: 'merged',
+      sha: 'merge-sha',
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ owner: 'acme', repo: 'app', base: 'main', head: 'feat/intake', draft: true }),
+    );
+    expect(update).toHaveBeenNthCalledWith(1, expect.objectContaining({ pull_number: 34, body: '' }));
+    expect(update).toHaveBeenNthCalledWith(2, expect.objectContaining({ pull_number: 34, state: 'closed' }));
+    expect(merge).toHaveBeenCalledWith(expect.objectContaining({ pull_number: 34, merge_method: 'squash' }));
+  });
+
+  it('implements conversation and inline review comment CRUD through VersionControl', async () => {
+    const github = new GithubIntegration(validConfig());
+    const issueComment = commentData();
+    const reviewComment = { ...commentData(), path: 'src/app.ts', line: 12, side: 'RIGHT', commit_id: 'abc123' };
+    const issues = {
+      listComments: vi.fn(async () => ({ data: [issueComment] })),
+      createComment: vi.fn(async () => ({ data: issueComment })),
+      updateComment: vi.fn(async () => ({ data: issueComment })),
+      deleteComment: vi.fn(async () => undefined),
+    };
+    const pulls = {
+      listReviewComments: vi.fn(async () => ({ data: [reviewComment] })),
+      createReviewComment: vi.fn(async () => ({ data: reviewComment })),
+      createReplyForReviewComment: vi.fn(async () => ({ data: { ...reviewComment, in_reply_to_id: 91 } })),
+      updateReviewComment: vi.fn(async () => ({ data: reviewComment })),
+      deleteReviewComment: vi.fn(async () => undefined),
+    };
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues, pulls } as any);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+    const ref = { connection, sourceId: 'acme/app', pullRequestId: '34' };
+
+    await expect(github.versionControl.listComments(ref)).resolves.toMatchObject({ comments: [{ id: '91' }] });
+    await github.versionControl.createComment({ ...ref, body: 'Looks good' });
+    await github.versionControl.updateComment({ connection, sourceId: 'acme/app', commentId: '91', body: 'Updated' });
+    await github.versionControl.deleteComment({ connection, sourceId: 'acme/app', commentId: '91' });
+    await expect(github.versionControl.listReviewComments(ref)).resolves.toMatchObject({
+      comments: [{ id: '91', path: 'src/app.ts', line: 12, side: 'right' }],
+    });
+    await github.versionControl.createReviewComment({
+      ...ref,
+      body: 'Fix this',
+      commitId: 'abc123',
+      path: 'src/app.ts',
+      line: 12,
+      side: 'right',
+    });
+    await github.versionControl.createReviewComment({ ...ref, body: 'Agreed', replyToId: '91' });
+    await github.versionControl.updateReviewComment({
+      connection,
+      sourceId: 'acme/app',
+      commentId: '91',
+      body: 'Updated',
+    });
+    await github.versionControl.deleteReviewComment({ connection, sourceId: 'acme/app', commentId: '91' });
+
+    expect(pulls.createReviewComment).toHaveBeenCalledWith(
+      expect.objectContaining({ pull_number: 34, commit_id: 'abc123', path: 'src/app.ts', line: 12, side: 'RIGHT' }),
+    );
+    expect(pulls.createReplyForReviewComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 91 }));
+  });
+
+  it('implements reviews and reviewer requests through VersionControl', async () => {
+    const github = new GithubIntegration(validConfig());
+    const review = {
+      id: 55,
+      html_url: 'https://github.com/acme/app/pull/34#pullrequestreview-55',
+      user: { login: 'grace' },
+      body: 'Approved',
+      state: 'APPROVED',
+      commit_id: 'abc123',
+      submitted_at: '2026-07-03T00:00:00Z',
+    };
+    const pulls = {
+      listReviews: vi.fn(async () => ({ data: [review] })),
+      getReview: vi.fn(async () => ({ data: review })),
+      createReview: vi.fn(async () => ({ data: review })),
+      updateReview: vi.fn(async () => ({ data: { ...review, state: 'PENDING' } })),
+      submitReview: vi.fn(async () => ({ data: review })),
+      dismissReview: vi.fn(async () => ({ data: { ...review, state: 'DISMISSED' } })),
+      deletePendingReview: vi.fn(async () => undefined),
+      listRequestedReviewers: vi.fn(async () => ({ data: { users: [{ login: 'grace' }], teams: [{ slug: 'core' }] } })),
+      requestReviewers: vi.fn(async () => ({
+        data: { requested_reviewers: [{ login: 'grace' }], requested_teams: [{ slug: 'core' }] },
+      })),
+      removeRequestedReviewers: vi.fn(async () => ({ data: { requested_reviewers: [], requested_teams: [] } })),
+    };
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls } as any);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+    const ref = { connection, sourceId: 'acme/app', pullRequestId: '34' };
+
+    await expect(github.versionControl.listReviews(ref)).resolves.toMatchObject({ reviews: [{ state: 'approved' }] });
+    await expect(github.versionControl.getReview({ ...ref, reviewId: '55' })).resolves.toMatchObject({ id: '55' });
+    await github.versionControl.createReview({ ...ref, body: 'Approved', event: 'approve' });
+    await github.versionControl.updateReview({ ...ref, reviewId: '55', body: 'Pending update' });
+    await github.versionControl.submitReview({ ...ref, reviewId: '55', body: 'Approved', event: 'approve' });
+    await github.versionControl.dismissReview({ ...ref, reviewId: '55', message: 'Superseded' });
+    await github.versionControl.deletePendingReview({ ...ref, reviewId: '55' });
+    await expect(github.versionControl.listRequestedReviewers(ref)).resolves.toEqual({
+      users: ['grace'],
+      teams: ['core'],
+    });
+    await expect(
+      github.versionControl.requestReviewers({ ...ref, users: ['grace'], teams: ['core'] }),
+    ).resolves.toEqual({
+      users: ['grace'],
+      teams: ['core'],
+    });
+    await expect(github.versionControl.removeRequestedReviewers({ ...ref, users: ['grace'] })).resolves.toEqual({
+      users: [],
+      teams: [],
+    });
+
+    expect(pulls.createReview).toHaveBeenCalledWith(expect.objectContaining({ event: 'APPROVE' }));
+    expect(pulls.dismissReview).toHaveBeenCalledWith(expect.objectContaining({ review_id: 55 }));
   });
 });
 

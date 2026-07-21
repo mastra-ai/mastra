@@ -268,7 +268,7 @@ const githubStub = {
         input.connection.installationId,
         input.sourceIds[0]!,
         Number(input.cursor ?? '1'),
-        { label: undefined },
+        { label: input.labels?.join(',') },
       );
       return {
         issues: result.issues.map(issue => ({
@@ -292,7 +292,7 @@ const githubStub = {
     },
   },
   versionControl: {
-    listPullRequests: async (input: import('../factory-integration').ListVersionControlPullRequestsInput) => {
+    listPullRequests: async (input: import('../factory-integration').ListPullRequestsInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenPullRequests(
         input.connection.installationId,
@@ -302,6 +302,25 @@ const githubStub = {
       return {
         pullRequests: result.pullRequests.map(pr => ({ ...pr, id: String(pr.number) })),
         nextCursor: result.nextPage === null ? null : String(result.nextPage),
+      };
+    },
+    createPullRequest: async (input: import('../factory-integration').CreatePullRequestInput) => {
+      const result = await createPullRequest(input);
+      return {
+        id: '1',
+        title: input.title,
+        url: result.url,
+        author: 'octo',
+        body: input.body ?? null,
+        state: 'open' as const,
+        draft: input.draft ?? false,
+        merged: false,
+        mergeable: null,
+        baseBranch: input.baseBranch,
+        headBranch: input.headBranch,
+        headSha: 'abc123',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
       };
     },
   },
@@ -2054,8 +2073,25 @@ describe('pr route', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
     expect(createPullRequest).toHaveBeenCalledOnce();
-    const opts = (createPullRequest.mock.calls[0] as unknown as any[])[2];
-    expect(opts).toMatchObject({ token: 'install-token', base: 'main', head: 'feat/x', title: 'My PR' });
+    expect(createPullRequest).toHaveBeenCalledWith({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'octo/hello',
+      baseBranch: 'main',
+      headBranch: 'feat/x',
+      title: 'My PR',
+      body: 'Adds a thing',
+    });
+  });
+
+  it('returns 502 when the version-control provider rejects PR creation', async () => {
+    seedMaterializedProject();
+    createPullRequest.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/pr', {
+      branch: 'feat/x',
+      title: 'My PR',
+    });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: 'github_pr_create_failed', message: 'GitHub unavailable' });
   });
 });
 

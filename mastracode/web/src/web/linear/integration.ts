@@ -337,7 +337,7 @@ export class LinearIntegration implements FactoryIntegration {
 
   async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
     const accessToken = getLinearAccessToken(input.connection);
-    const result = await this.listActiveIssues(accessToken, input.cursor, input.sourceIds);
+    const result = await this.listActiveIssues(accessToken, input.cursor, input.sourceIds, input.labels);
     return {
       issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
       nextCursor: result.nextCursor,
@@ -390,17 +390,25 @@ export class LinearIntegration implements FactoryIntegration {
    * first. When `projectIds` is provided, only issues from those projects are
    * returned.
    */
-  async listActiveIssues(accessToken: string, after?: string, projectIds?: string[]): Promise<LinearIssuePage> {
+  async listActiveIssues(
+    accessToken: string,
+    after?: string,
+    projectIds?: string[],
+    labels?: string[],
+  ): Promise<LinearIssuePage> {
+    const normalizedLabels = [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
     const projectFilter = projectIds?.length ? ', project: { id: { in: $projectIds } }' : '';
     const projectVar = projectIds?.length ? ', $projectIds: [ID!]' : '';
+    const labelFilter = normalizedLabels.length > 0 ? ', labels: { name: { in: $labels } }' : '';
+    const labelVar = normalizedLabels.length > 0 ? ', $labels: [String!]' : '';
     const data = await linearGraphql<IssuesQueryData>(
       accessToken,
-      `query Intake($first: Int!, $after: String${projectVar}) {
+      `query Intake($first: Int!, $after: String${projectVar}${labelVar}) {
         issues(
           first: $first
           after: $after
           orderBy: updatedAt
-          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter} }
+          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter}${labelFilter} }
         ) {
           nodes {
             id
@@ -422,6 +430,7 @@ export class LinearIntegration implements FactoryIntegration {
         first: LINEAR_ISSUES_PAGE_SIZE,
         after: after ?? null,
         ...(projectIds?.length ? { projectIds } : {}),
+        ...(normalizedLabels.length > 0 ? { labels: normalizedLabels } : {}),
       },
     );
     const { nodes, pageInfo } = data.issues;
