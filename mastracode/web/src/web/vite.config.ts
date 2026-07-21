@@ -16,8 +16,11 @@ const apiTarget = process.env.MASTRACODE_API_TARGET ?? 'http://localhost:4111';
 const uiPort = Number(process.env.MASTRACODE_UI_PORT ?? 5173);
 
 /**
- * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html, from
- * the same WORKOS env vars the server reads (`isWebAuthEnabled()` in auth.ts).
+ * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html.
+ * Mirrors the server's default: auth is on unless MASTRACODE_AUTH_DISABLED=1,
+ * because MastraFactory installs MastraAuthStudio by default when no explicit
+ * provider is passed. Legacy WorkOS/better-auth branches also flip auth on when
+ * their env vars are present so those paths keep working.
  * `web:dev` only passes the package-root `.env` to the API server, so the
  * plugin loads that file itself via `loadEnv`. Production builds are untouched
  * (`apply: 'serve'`) — the statically hosted SPA has no flag and falls back to
@@ -29,7 +32,8 @@ function runtimeConfigPlugin(mode: string): Plugin {
     apply: 'serve',
     transformIndexHtml() {
       const env = { ...loadEnv(mode, resolve(here, '../..'), ''), ...process.env };
-      const authEnabled = Boolean(env.WORKOS_API_KEY && env.WORKOS_CLIENT_ID);
+      const authDisabled = env.MASTRACODE_AUTH_DISABLED === '1';
+      const authEnabled = !authDisabled;
       return [
         {
           tag: 'script',

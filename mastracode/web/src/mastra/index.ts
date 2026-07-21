@@ -28,9 +28,6 @@ import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
-import { MastraAuthWorkos } from '@mastra/auth-workos';
-import type { IMastraAuthProvider } from '@mastra/core/server';
 import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '../web/factory-integration.js';
 import { GithubIntegration } from '../web/github/integration.js';
@@ -69,33 +66,12 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-// Web auth, by env precedence (any custom `MastraAuthProvider` works here too):
-//   1. WORKOS_API_KEY + WORKOS_CLIENT_ID → WorkOS AuthKit (hosted login). The
-//      WorkOS SDK reads its own credentials; the redirect URI falls back to
-//      `<publicUrl>/auth/callback` inside the provider's init().
-//   2. BETTER_AUTH_SECRET → self-hosted better-auth (email/password on the
-//      configured factory storage — no external identity vendor in the availability path).
-//      MASTRACODE_AUTH_SIGNUP_DISABLED=1 turns off public sign-up.
-//   3. MASTRACODE_AUTH_DISABLED=1 → boot with no auth provider (open server,
-//      bare local dev). Skips the factory's default of MastraAuthStudio.
-//   4. None of the above → the factory defaults to `MastraAuthStudio`, which
-//      proxies identity to the shared Mastra platform API. `MastraAuthStudio`
-//      itself reads `MASTRA_SHARED_API_URL`, `MASTRA_ORGANIZATION_ID`, and
-//      `MASTRA_COOKIE_DOMAIN` from env.
-const workosConfigured = Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
-const betterAuthSecret = process.env.BETTER_AUTH_SECRET;
-const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
-let auth: IMastraAuthProvider | null | undefined;
-if (workosConfigured) {
-  auth = new MastraAuthWorkos({ redirectUri: process.env.WORKOS_REDIRECT_URI, fetchMemberships: true });
-} else if (betterAuthSecret) {
-  auth = new MastraAuthBetterAuth({
-    secret: betterAuthSecret,
-    signUpEnabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED !== '1',
-  });
-} else if (authDisabled) {
-  auth = null;
-}
+// Web auth: MastraFactory installs `MastraAuthStudio` by default (identity
+// proxied to the shared Mastra platform API — reads `MASTRA_SHARED_API_URL`,
+// `MASTRA_ORGANIZATION_ID`, and `MASTRA_COOKIE_DOMAIN` from env). Set
+// `MASTRACODE_AUTH_DISABLED=1` to boot with no auth provider (open server,
+// bare local dev).
+const auth = process.env.MASTRACODE_AUTH_DISABLED === '1' ? null : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, APP_DATABASE_URL, …) never leak
