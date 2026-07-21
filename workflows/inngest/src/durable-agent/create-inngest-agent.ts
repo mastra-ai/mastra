@@ -261,6 +261,12 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
 export interface InngestAgentResumeOptions<OUTPUT = undefined> {
   threadId?: string;
   resourceId?: string;
+  /**
+   * Runtime context for the resumed segment. Merged over the persisted snapshot's requestContext
+   * (caller-provided values win), mirroring core's DurableAgent.resume(). Omit to restore the
+   * context the run suspended with.
+   */
+  requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
@@ -982,6 +988,24 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
           const steps = suspendedStepIds.length > 0 ? suspendedStepIds : [];
 
+          // Restore requestContext from the snapshot, letting any caller-provided context win
+          // (parity with core's resume, which merges caller over snapshot). Without this the
+          // resumed run rehydrates an empty context and context-scoped tools misbehave.
+          const callerRequestContext = resumeOptions?.requestContext;
+          const callerRequestContextObj =
+            callerRequestContext && typeof callerRequestContext.toJSON === 'function'
+              ? callerRequestContext.toJSON()
+              : {};
+
+          // Continue the original trace instead of minting a new root span: forward the persisted
+          // tracingContext as tracingOptions, which the workflow handler threads into its
+          // `span.start` step. traceId keeps the resumed turn in the same trace; parentSpanId nests
+          // it under the span the run suspended at.
+          const persistedTracingContext = snapshot?.tracingContext;
+          const resumeTracingOptions = persistedTracingContext?.traceId
+            ? { traceId: persistedTracingContext.traceId, parentSpanId: persistedTracingContext.spanId }
+            : undefined;
+
           await inngest.send({
             name: eventName,
             data: {
@@ -989,7 +1013,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
               initialState: snapshot?.value ?? {},
               runId,
               resourceId: resumeOptions?.resourceId,
-              requestContext: snapshot?.requestContext ?? {},
+              requestContext: { ...(snapshot?.requestContext ?? {}), ...callerRequestContextObj },
+              tracingOptions: resumeTracingOptions,
               stepResults: snapshot?.context,
               resume: {
                 steps,

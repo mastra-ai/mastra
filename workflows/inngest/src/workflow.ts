@@ -509,6 +509,15 @@ export class InngestWorkflow<
                     serializedStepGraph: this.serializedStepGraph,
                     suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
                     waitingPaths: {},
+                    // Persist requestContext and tracingContext so they can be restored on resume
+                    // (matches core's persistStepUpdate in workflows/handlers/entry.ts). Without
+                    // requestContext, resumed runs rehydrate an empty context; without
+                    // tracingContext, the resumed run mints a fresh root span in a new trace instead
+                    // of continuing the original.
+                    requestContext: requestContext.toJSON(),
+                    tracingContext: workflowSpanData
+                      ? { traceId: workflowSpanData.traceId, spanId: workflowSpanData.id }
+                      : undefined,
                     resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
                     result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
                     error: result.status === 'failed' ? result.error : undefined,
