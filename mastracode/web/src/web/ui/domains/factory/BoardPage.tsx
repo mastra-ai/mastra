@@ -12,7 +12,7 @@ import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shar
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import type { ServerFactory } from '../workspaces/services/factories';
+import { selectedRepository, type ServerFactory } from '../workspaces/services/factories';
 import { projectPath } from '../../lib/projectRoutes';
 import { useProjectRoute } from '../../lib/useProjectRoute';
 import { FactoryItemActions } from './components/FactoryItemActions';
@@ -367,6 +367,8 @@ export function BoardPage() {
 
 function Board({ factory }: { factory: ServerFactory }) {
   const factoryProjectId = factory.binding.factoryProjectId;
+  const repository = selectedRepository(factory);
+  const projectRepositoryId = repository?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryProjectId);
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
@@ -376,7 +378,11 @@ function Board({ factory }: { factory: ServerFactory }) {
   // in Intake and only move once the Factory acts on them.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
-  const githubSelected = config ? (config.github.repositoryIds?.includes(factoryProjectId) ?? false) : true;
+  const githubSelected = projectRepositoryId
+    ? config
+      ? (config.github.repositoryIds?.includes(projectRepositoryId) ?? false)
+      : true
+    : false;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
   const linearReady =
@@ -387,10 +393,10 @@ function Board({ factory }: { factory: ServerFactory }) {
   const githubIntakeActive = githubEnabled && githubSelected;
   const availableIntakeSources: IntakeSource[] = [
     ...(githubIntakeActive ? (['github'] as const) : []),
-    'github-prs' as const,
+    ...(projectRepositoryId ? (['github-prs'] as const) : []),
     ...(linearReady ? (['linear'] as const) : []),
   ];
-  const newIssueUrl = config && githubIntakeActive ? githubNewIssueUrl(factory.name) : undefined;
+  const newIssueUrl = config && githubIntakeActive && repository ? githubNewIssueUrl(repository.slug) : undefined;
   const [intakeSource, setIntakeSource] = useState<IntakeSource>('github');
   const showIntakeSourceSwitch = availableIntakeSources.length > 1;
   const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
@@ -398,16 +404,16 @@ function Board({ factory }: { factory: ServerFactory }) {
     : (availableIntakeSources[0] ?? null);
 
   // Only the active intake feed fetches; the other feeds load on switch.
-  const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? factoryProjectId : undefined);
-  const triageIssues = useProjectIssuesQuery(factoryProjectId, AUTO_TRIAGED_LABEL);
-  const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? factoryProjectId : undefined);
+  const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? projectRepositoryId : undefined);
+  const triageIssues = useProjectIssuesQuery(projectRepositoryId, AUTO_TRIAGED_LABEL);
+  const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? projectRepositoryId : undefined);
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const { start, pendingRuns, enabled: runEnabled } = useStartFactoryRun();
-  const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(factoryProjectId);
+  const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(projectRepositoryId, factoryProjectId);
   const navigate = useNavigate();
   const boardContainerRef = useRef<HTMLDivElement>(null);
   const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());

@@ -18,7 +18,7 @@ import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { loginUrl, redirectToLogin } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
-import type { Factory } from '../domains/workspaces';
+import { isServerFactory, type Factory } from '../domains/workspaces';
 import { createAppRoutes } from '../router';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
@@ -107,7 +107,14 @@ const AUTHENTICATED = () =>
 function renderRoutes(
   initialEntry: string,
   authMe: () => Response | Promise<Response>,
-  options?: { project?: Factory | null; workItemCount?: number; workItemsReady?: Promise<void>; workItemsError?: boolean },
+  options?: {
+    project?: Factory | null;
+    projectsReady?: Promise<void>;
+    workItemCount?: number;
+    workItemsReady?: Promise<void>;
+    workItemsError?: boolean;
+    onWorkItemsRequest?: () => void;
+  },
 ) {
   seedFactory(options?.project);
   useAgentControllerHandlers();
@@ -117,17 +124,24 @@ function renderRoutes(
       HttpResponse.json({ enabled: false, connected: false, installations: [], reason: 'missing_config' }),
     ),
   );
-  if (options?.project?.binding.kind === 'factory') {
+  if (options?.project && isServerFactory(options.project)) {
+    const project = options.project;
+    const factoryProjectId = project.binding.factoryProjectId;
     const workItems = Array.from({ length: options.workItemCount ?? 0 }, (_, index) => ({ id: `work-${index}` }));
     server.use(
-      http.get(
-        `${TEST_BASE_URL}/web/factory/projects/${options.project.binding.factoryProjectId}/work-items`,
-        async () => {
-          await options.workItemsReady;
-          if (options.workItemsError) return HttpResponse.json({ error: 'Factory unavailable' }, { status: 500 });
-          return HttpResponse.json({ workItems });
-        },
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, async () => {
+        await options.projectsReady;
+        return HttpResponse.json({ projects: [{ id: factoryProjectId, name: project.name }] });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
       ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, async () => {
+        options.onWorkItemsRequest?.();
+        await options.workItemsReady;
+        if (options.workItemsError) return HttpResponse.json({ error: 'Factory unavailable' }, { status: 500 });
+        return HttpResponse.json({ workItems });
+      }),
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
         HttpResponse.json({ enabled: true, connected: false, installations: [] }),
       ),
