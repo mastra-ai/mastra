@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
-import type { ListStoredWorkflowsResponse, StoredWorkflowDefinition, UpsertStoredWorkflowParams } from '../types';
+import type {
+  ListStoredWorkflowsResponse,
+  StoredWorkflowDefinition,
+  UpsertStoredWorkflowParams,
+  WorkflowBuilderSettingsResponse,
+} from '../types';
 
 const fetchMock = vi.fn();
 
@@ -32,6 +37,20 @@ describe('StoredWorkflow resource', () => {
   beforeEach(() => {
     fetchMock.mockReset();
     client = new MastraClient({ baseUrl: 'http://localhost:4111', fetch: fetchMock });
+  });
+
+  it('gets workflow builder settings', async () => {
+    const response: WorkflowBuilderSettingsResponse = {
+      enabled: true,
+      modelPolicy: { active: true, pickerVisible: false },
+    };
+    respond(response);
+
+    await expect(client.getWorkflowBuilderSettings()).resolves.toEqual(response);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:4111/api/editor/workflow-builder/settings',
+      expect.any(Object),
+    );
   });
 
   it('lists stored workflows with filters', async () => {
