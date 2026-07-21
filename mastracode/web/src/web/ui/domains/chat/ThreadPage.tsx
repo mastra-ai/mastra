@@ -3,22 +3,18 @@ import { useLocation, useParams } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
-import { ChatLayout } from '../../ui';
+import { ChatLayout } from '../../ui/ChatLayout';
 import {
   FactorySessionContextPanel,
   type FactorySessionContextTab,
 } from '../factory/components/FactorySessionContextPanel';
-import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
-import {
-  activeWorkspacePath,
-  EmptyFactoryState,
-  findUserSessionByThreadId,
-  isGithubFactory,
-  useActiveFactoryContext,
-} from '../workspaces';
+import { renderedPaths } from '../workspace-viewer/config';
+import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
+import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { activeWorkspacePath, findUserSessionByThreadId, isGithubFactory } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
-import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useChatSessionContext } from './context/useChatSessionContext';
@@ -145,7 +141,6 @@ export function ThreadPage() {
           ) : (
             <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
           )}
-          <ChatOverlays />
         </ChatSessionBoundary>
       }
     />

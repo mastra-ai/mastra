@@ -2058,7 +2058,6 @@ export type ProviderModelsMap = {
     'gpt-5.6-terra',
     'grok-4.5',
     'grok-build-0.1',
-    'hy3-free',
     'kimi-k2.5',
     'kimi-k2.6',
     'kimi-k2.7-code',

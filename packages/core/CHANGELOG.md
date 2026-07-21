@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.52.0-alpha.9
+
+### Minor Changes
+
+- The 'workers' option on the Mastra class now merges with the default workers instead of replacing them. Passing custom workers (e.g. a polling worker for an integration) no longer silently drops the built-in orchestration and background-task workers — a custom worker only replaces a default when it shares its name, and 'workers: false' still disables all workers. ([#19766](https://github.com/mastra-ai/mastra/pull/19766))
+
+  ```ts
+  const mastra = new Mastra({
+    // before: only myPoller ran — orchestration was dropped
+    // after: myPoller runs alongside the default workers
+    workers: [myPoller],
+  });
+  ```
+
+### Patch Changes
+
+- Fixed goal judges changing the parent agent's observational-memory model state. ([#19710](https://github.com/mastra-ai/mastra/pull/19710))
+
 ## 1.52.0-alpha.8
 
 ### Minor Changes

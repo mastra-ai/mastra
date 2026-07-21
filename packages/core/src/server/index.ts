@@ -20,8 +20,28 @@ export type {
   StudioConfig,
   Middleware,
 } from './types';
-export { MastraAuthProvider } from './auth';
-export type { IMastraAuthProvider, MastraAuthProviderOptions } from './auth';
+export {
+  MastraAuthProvider,
+  isSSOProvider,
+  isSessionProvider,
+  isUserProvider,
+  isCredentialsProvider,
+  isOrganizationsProvider,
+  isAuthHttpHandler,
+  hasAuthInit,
+} from './auth';
+export type {
+  IMastraAuthProvider,
+  MastraAuthProviderOptions,
+  AuthInitContext,
+  IAuthHttpHandler,
+  IAuthInit,
+  ICredentialsProvider,
+  IOrganizationsProvider,
+  ISessionProvider,
+  ISSOProvider,
+  IUserProvider,
+} from './auth';
 export type { HonoRequestLike, MastraAuthRequest } from './request-types';
 export { getRequestHeader, getWebRequest } from './request-types';
 export { CompositeAuth } from './composite-auth';
