@@ -125,7 +125,6 @@ async function createSetup({
   tools,
   toolDisplay,
   stateSchema,
-  resolveSessionProjectPath,
   agentMemory,
 }: {
   responseText?: string;
@@ -133,7 +132,6 @@ async function createSetup({
   tools?: Record<string, any>;
   toolDisplay?: 'text';
   stateSchema?: z.ZodTypeAny;
-  resolveSessionProjectPath?: (args: { resourceId: string }) => string | undefined | Promise<string | undefined>;
   /** Memory for the mode agent — required for signal persistence assertions. */
   agentMemory?: MockMemory;
 } = {}) {
@@ -155,7 +153,6 @@ async function createSetup({
     defaultModeId: 'build',
     channels: {
       adapters: { discord: toolDisplay ? { adapter, toolDisplay } : adapter },
-      ...(resolveSessionProjectPath ? { resolveSessionProjectPath } : {}),
     },
     ...(stateSchema ? { stateSchema } : {}),
   });
@@ -394,51 +391,6 @@ describe('AgentControllerChannels', () => {
     expect(routes[0]!.path).toBe('/api/agent-controllers/ctrl-1/channels/discord/webhook');
     expect(routes[0]!.method).toBe('POST');
   }, 30_000);
-
-  describe('per-session workspace isolation (resolveSessionProjectPath)', () => {
-    it('seeds a distinct projectPath per thread when the hook returns a truthy path', async () => {
-      const resolveSessionProjectPath = vi.fn(({ resourceId }: { resourceId: string }) => `/scratch/${resourceId}`);
-      const { adapter, controller, mastra, channels } = await createSetup({ resolveSessionProjectPath });
-
-      const threadA = createChatThread(adapter, 'chan-1:t-a');
-      const threadB = createChatThread(adapter, 'chan-1:t-b');
-      await (channels as any).processChatMessage(threadA, createMessage('m-a', 'hi a'), mastra);
-      await (channels as any).processChatMessage(threadB, createMessage('m-b', 'hi b'), mastra);
-
-      const sessionA = (await controller.getSessionByResource('channel:chan-1:t-a'))!;
-      const sessionB = (await controller.getSessionByResource('channel:chan-1:t-b'))!;
-      const pathA = (sessionA.state.get() as any).projectPath;
-      const pathB = (sessionB.state.get() as any).projectPath;
-
-      // Each session's workspace is keyed to its own resourceId, and matches the hook output.
-      expect(pathA).toBe('/scratch/channel:chan-1:t-a');
-      expect(pathB).toBe('/scratch/channel:chan-1:t-b');
-      expect(pathA).not.toBe(pathB);
-      expect(resolveSessionProjectPath).toHaveBeenCalledWith({ resourceId: 'channel:chan-1:t-a' });
-      expect(resolveSessionProjectPath).toHaveBeenCalledWith({ resourceId: 'channel:chan-1:t-b' });
-    }, 30_000);
-
-    it('seeds no projectPath tag when no hook is configured (behavior unchanged)', async () => {
-      const { adapter, controller, mastra, channels } = await createSetup();
-      const chatThread = createChatThread(adapter, 'chan-1:t-nohook');
-      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hi'), mastra);
-
-      const session = (await controller.getSessionByResource('channel:chan-1:t-nohook'))!;
-      expect((session.state.get() as any).projectPath).toBeUndefined();
-    }, 30_000);
-
-    it('seeds no projectPath tag when the hook returns undefined (truthy-only guard)', async () => {
-      const resolveSessionProjectPath = vi.fn(() => undefined);
-      const { adapter, controller, mastra, channels } = await createSetup({ resolveSessionProjectPath });
-
-      const chatThread = createChatThread(adapter, 'chan-1:t-optout');
-      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hi'), mastra);
-
-      const session = (await controller.getSessionByResource('channel:chan-1:t-optout'))!;
-      expect(resolveSessionProjectPath).toHaveBeenCalledWith({ resourceId: 'channel:chan-1:t-optout' });
-      expect((session.state.get() as any).projectPath).toBeUndefined();
-    }, 30_000);
-  });
 
   describe('instance-based channel resolution', () => {
     it('attaches the controller channels onto the backing agent instance (not the request context)', async () => {

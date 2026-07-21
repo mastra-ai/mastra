@@ -220,22 +220,12 @@ export class AgentControllerChannels extends AgentChannels {
   protected async getSessionForThread(thread: Pick<StorageThreadType, 'id' | 'resourceId'>): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
-    // Let the application isolate this session's workspace in a per-session
-    // directory. Only seed the `projectPath` tag when the hook returns a truthy
-    // value — a falsy/absent result means "opt out", so the session keeps the
-    // controller's default `projectPath` (seeding `{ projectPath: undefined }`
-    // would clobber the default via the `{ ...initialState, ...tags }` merge).
     // `createSession` is get-or-create keyed by resourceId, so follow-up messages
-    // on the same thread reuse the cached session and this tag is only applied on
-    // first creation — giving each thread a stable directory.
-    const sessionProjectPath = await this.channelConfig.resolveSessionProjectPath?.({
-      resourceId: channelResourceId,
-    });
+    // on the same thread reuse the cached session bound to this thread.
     const session = await controller.createSession({
       resourceId: channelResourceId,
       id: channelResourceId,
       ownerId: controller.id,
-      ...(sessionProjectPath ? { tags: { projectPath: sessionProjectPath } } : {}),
     });
     // Bind the mapped thread. Guard is mandatory: `switch` aborts any active
     // run, so never re-switch when the session is already on this thread.

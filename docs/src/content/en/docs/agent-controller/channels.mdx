@@ -88,12 +88,6 @@ By default the session key derives from the platform and the external thread ID 
 
 Avoid mapping multiple active chat threads to one session. A session works on one Mastra thread at a time, and a message arriving from a different chat thread rebinds the session to that thread, which cancels any run still in flight on the previous one.
 
-### Per-session workspace
-
-The `resolveSessionProjectPath` hook is experimental — its shape may change in a later release.
-
-When the host application supplies a `resolveSessionProjectPath` hook, each chat thread's session runs in its own isolated workspace directory keyed by the session's resource ID. The first message in a thread creates the directory; later messages in that thread reuse it, and two different chat threads get two different directories. Without the hook, sessions fall back to the controller's default workspace. This keeps a session started from one chat thread from running in — or mutating — the workspace of another.
-
 ## Tool approvals
 
 Tools that require approval render as interactive cards with Approve and Deny buttons, the same as [agent channel tool approvals](/docs/capabilities/channels/overview#tool-approval). The controller run pauses at the session's approval gate until a user acts on the card, then resumes and streams the continuation back to the thread.

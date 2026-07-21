@@ -1,7 +1,7 @@
 /**
- * LIVE PROOF for the controller-channels instance-injection redesign.
+ * Regression test for the controller-channels instance-injection render-key clear.
  *
- * This is a driver-level demo that exercises the *actual risk path* the Phase 2
+ * This is a driver-level test that exercises the *actual risk path* the
  * render-key clear defends: a forked subagent runs on the channel-bearing parent
  * agent instance (subagentToRun = parentAgent), inherits the parent request
  * context verbatim (including CHAT_CHANNEL_RENDER_CONTEXT_KEY, set exactly as the
@@ -29,9 +29,9 @@
  *
  * Run:
  *   NO_COLOR=1 pnpm --filter ./packages/core exec vitest run \
- *     src/channels/__tests__/controller-channels-instance-injection.proof.test.ts --reporter=dot
+ *     src/channels/__tests__/controller-channels-instance-injection.test.ts --reporter=dot
  *
- * GREEN = fork silent (render key cleared). If you delete the render-key clear in
+ * PASS = fork silent (render key cleared). If you delete the render-key clear in
  * packages/core/src/agent-controller/tools.ts, claim (b) FAILS (fork renders) —
  * that is the RED that proves the clear is load-bearing.
  */
@@ -109,7 +109,7 @@ function createTextModel(text: string) {
   });
 }
 
-describe('PROOF: controller-channels instance injection', () => {
+describe('controller-channels instance injection: forked-subagent render-key clear', () => {
   it('renders a parent-agent channel run but the forked subagent on the parent agent stays silent', async () => {
     const adapter = createMockAdapter('discord');
     const store = new InMemoryStore();
@@ -176,8 +176,15 @@ describe('PROOF: controller-channels instance injection', () => {
       fallbackModelId: 'openai/gpt-4o',
       getParentAgent: () => parentAgent,
       getParentModelId: () => 'openai/gpt-4o',
-      cloneThreadForFork: async ({ sourceThreadId, resourceId, title }) =>
-        memory.cloneThread({ sourceThreadId, resourceId, title }).then(r => r.thread),
+      cloneThreadForFork: async ({
+        sourceThreadId,
+        resourceId,
+        title,
+      }: {
+        sourceThreadId: string;
+        resourceId: string;
+        title?: string;
+      }) => memory.cloneThread({ sourceThreadId, resourceId, title }).then(r => r.thread),
     } as any);
 
     // The parent run's request context, carrying the render key (as inherited by a

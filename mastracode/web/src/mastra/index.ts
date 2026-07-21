@@ -38,7 +38,6 @@ import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '../web/factory-integration.js';
 import { GithubIntegration } from '../web/github/integration.js';
 import { LinearIntegration } from '../web/linear/integration.js';
-import { resolveChannelSessionProjectPath } from './channel-session-workspace.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -357,10 +356,6 @@ export const mastra = new Mastra({
     slack: new SlackProvider({
       refreshToken: process.env.SLACK_APP_REFRESH_TOKEN,
       baseUrl: process.env.MASTRACODE_PUBLIC_URL,
-      // Isolate each channel session in its own scratch directory keyed by the
-      // channel resourceId, so a Slack-triggered agent never runs in the
-      // web-server cwd and two threads don't collide on one workspace.
-      resolveSessionProjectPath: resolveChannelSessionProjectPath,
       handlers: {
         onSubscribedMessage: async (thread, message, defaultHandler) => {
           // `aside` as its own leading word lets humans talk in a subscribed

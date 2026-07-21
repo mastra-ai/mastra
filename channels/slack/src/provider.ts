@@ -775,8 +775,7 @@ export class SlackProvider implements ChannelProvider {
    * clobber options preserved from an existing `AgentChannels`.
    */
   #forwardedChannelOptions() {
-    const { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions, resolveSessionProjectPath } =
-      this.#channelConfig;
+    const { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions } = this.#channelConfig;
     const candidate = {
       handlers,
       inlineMedia,
@@ -785,7 +784,6 @@ export class SlackProvider implements ChannelProvider {
       threadContext,
       tools,
       chatOptions,
-      resolveSessionProjectPath,
     };
     return Object.fromEntries(Object.entries(candidate).filter(([, value]) => value !== undefined));
   }

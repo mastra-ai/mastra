@@ -322,26 +322,6 @@ export interface ResolveResourceIdContext {
  */
 export type ResolveResourceId = (ctx: ResolveResourceIdContext) => string | Promise<string>;
 
-/** Context passed to {@link ChannelConfig.resolveSessionProjectPath}. */
-export interface ResolveSessionProjectPathContext {
-  /** The channel thread's memory `resourceId` — stable per chat thread. */
-  resourceId: string;
-}
-
-/**
- * Resolve a per-session workspace `projectPath` for a controller channel session
- * before it's created. Only consulted by {@link AgentControllerChannels}; agent-side
- * channels ignore it. Return a truthy path to isolate the session's workspace in that
- * directory; return `undefined`/empty to leave the controller's default `projectPath`
- * untouched.
- *
- * @experimental This hook's shape may change — a later release may resolve the
- * session workspace from the session/thread id directly instead of this hook.
- */
-export type ResolveSessionProjectPath = (
-  ctx: ResolveSessionProjectPathContext,
-) => string | undefined | Promise<string | undefined>;
-
 /** Handler overrides for built-in channel event handlers. */
 export interface ChannelHandlers {
   /**
@@ -527,33 +507,6 @@ export interface ChannelConfig {
    * ```
    */
   resolveResourceId?: ResolveResourceId;
-
-  /**
-   * Resolve a per-session workspace `projectPath` for a controller channel session
-   * before it's created. Only consulted by {@link AgentControllerChannels}; agent-side
-   * channels ignore it.
-   *
-   * When it returns a truthy path, that path is seeded as the session's `projectPath`
-   * tag, isolating the session's workspace/sandbox in that directory. When it returns
-   * `undefined`/empty (or is not set), the session inherits the controller's default
-   * `projectPath` — behavior is unchanged.
-   *
-   * The channel layer only supplies the `resourceId`; where the directory lives (and
-   * creating it) is the application's concern.
-   *
-   * @example
-   * ```ts
-   * resolveSessionProjectPath: async ({ resourceId }) => {
-   *   const dir = path.join(sandboxRoot, '.mc-sessions', hash(resourceId));
-   *   await fs.mkdir(dir, { recursive: true });
-   *   return dir;
-   * }
-   * ```
-   *
-   * @experimental This hook's shape may change — a later release may resolve the
-   * session workspace from the session/thread id directly instead of this hook.
-   */
-  resolveSessionProjectPath?: ResolveSessionProjectPath;
 
   /**
    * Keep the serverless invocation alive while background work (agent stream → platform)
