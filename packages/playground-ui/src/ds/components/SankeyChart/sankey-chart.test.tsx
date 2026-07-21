@@ -170,8 +170,8 @@ describe('SankeyChart', () => {
       expect(screen.getByRole('tooltip', { name: tooltipLabel }).textContent).toContain(description);
     });
 
-    it('keeps the description visible when the pointer leaves a focused node', async () => {
-      renderDescribedNode();
+    it('keeps the description and ribbons active when the pointer leaves a focused node', async () => {
+      const { container } = renderDescribedNode();
       const node = await screen.findByLabelText(nodeLabel);
       fireEvent.focus(node);
       fireEvent.mouseEnter(node);
@@ -179,10 +179,11 @@ describe('SankeyChart', () => {
       fireEvent.mouseLeave(node);
 
       expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
+      expect(container.querySelector('svg path[fill-opacity]')?.getAttribute('fill-opacity')).toBe('0.75');
     });
 
-    it('keeps the description visible when a hovered node loses focus', async () => {
-      renderDescribedNode();
+    it('keeps the description and ribbons active when a hovered node loses focus', async () => {
+      const { container } = renderDescribedNode();
       const node = await screen.findByLabelText(nodeLabel);
       fireEvent.mouseEnter(node);
       fireEvent.focus(node);
@@ -190,6 +191,7 @@ describe('SankeyChart', () => {
       fireEvent.blur(node);
 
       expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
+      expect(container.querySelector('svg path[fill-opacity]')?.getAttribute('fill-opacity')).toBe('0.75');
     });
   });
 

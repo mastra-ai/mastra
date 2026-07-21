@@ -187,7 +187,7 @@ function SankeyNode({
           showTooltipAt(event.currentTarget);
         }}
         onBlur={() => {
-          onHoverChange(undefined);
+          if (!isHovered) onHoverChange(undefined);
           setIsFocused(false);
         }}
         onMouseEnter={event => {
@@ -196,7 +196,7 @@ function SankeyNode({
           showTooltipAt(event.currentTarget);
         }}
         onMouseLeave={() => {
-          onHoverChange(undefined);
+          if (!isFocused) onHoverChange(undefined);
           setIsHovered(false);
         }}
         tabIndex={0}
