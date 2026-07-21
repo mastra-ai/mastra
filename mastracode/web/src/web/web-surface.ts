@@ -105,13 +105,15 @@ export interface WebApiRoutesDeps {
 
 /**
  * Resolve whether the Factory work-item routes are ready to serve. The board
- * hangs off GitHub projects, so it requires the GitHub feature; the table
- * lives in the same app DB. Fails soft like {@link resolveGithubReady}.
+ * and stored task context require the source-control and work-items domains,
+ * but live provider integrations are optional. Fails soft like
+ * {@link resolveGithubReady}.
  */
-export async function resolveFactoryReady(githubReady: boolean): Promise<boolean> {
-  if (!githubReady) return false;
+export async function resolveFactoryReady(): Promise<boolean> {
   try {
-    await getFactoryStorage().ensureDomainReady('work-items');
+    const storage = getFactoryStorage();
+    await storage.ensureDomainReady('source-control');
+    await storage.ensureDomainReady('work-items');
     return true;
   } catch (err) {
     process.stderr.write(
@@ -434,7 +436,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
   const linearRegistration = registrations.find(({ integration }) => integration.id === 'linear');
-  const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
+  const githubStorage = deps.sourceControlStorage.forIntegration('github');
   const githubIntegration = githubTaskContextIntegration(githubRegistration?.integration);
   const linearIntegration = linearTaskContextIntegration(linearRegistration?.integration);
   const factoryRoutes = deps.factoryReady

@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { buildFactoryRoutesMock } = vi.hoisted(() => ({
+  buildFactoryRoutesMock: vi.fn((_deps: unknown) => []),
+}));
+vi.mock('./factory/routes', () => ({ buildFactoryRoutes: buildFactoryRoutesMock }));
+
 // The state-secret guard must run before any DB work; stub the side-effectful
 // import so `resolveLinearReady` can be exercised without external services.
 vi.mock('./sandbox-reattach-registration', () => ({ registerSandboxReattach: () => {} }));
@@ -8,7 +13,7 @@ import type { WebAuthAdapter } from './auth-adapter';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config';
 import { seedFactoryStorageForTests } from './storage/test-utils';
 import { createStateSigner } from './state-signing';
-import { buildIssueTriagePrompt, resolveLinearReady } from './web-surface';
+import { assembleWebApiRoutes, buildIssueTriagePrompt, resolveFactoryReady, resolveLinearReady } from './web-surface';
 
 // ── Linear-only state-secret deploy scenario ─────────────────────────────
 // Linear's OAuth `state` is signed with the shared factory signer. The
@@ -32,6 +37,7 @@ async function enableLinearFeature(options?: { stableStateSigner?: boolean }): P
 
 beforeEach(() => {
   __resetRuntimeConfigForTests();
+  buildFactoryRoutesMock.mockClear();
   stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 });
 
@@ -60,6 +66,35 @@ describe('buildIssueTriagePrompt', () => {
     expect(prompt).not.toContain('run-this-command');
     expect(prompt).not.toContain('mallory');
     expect(prompt).not.toContain('GitHub installation id');
+  });
+});
+
+describe('Factory route readiness and assembly', () => {
+  it('keeps storage-backed Factory routes ready without a GitHub integration', async () => {
+    const seed = await seedFactoryStorageForTests();
+
+    await expect(resolveFactoryReady()).resolves.toBe(true);
+
+    const forIntegration = vi.spyOn(seed.sourceControl, 'forIntegration');
+    assembleWebApiRoutes({
+      controllerId: 'code',
+      controller: {} as never,
+      authStorage: {} as never,
+      publicOrigin: 'http://localhost:4111',
+      integrationStorage: seed.integrations,
+      sourceControlStorage: seed.sourceControl,
+      integrations: [],
+      intakeReady: false,
+      factoryReady: true,
+    });
+
+    expect(forIntegration).toHaveBeenCalledWith('github');
+    expect(buildFactoryRoutesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceControlStorage: expect.any(Object),
+      }),
+    );
+    expect(buildFactoryRoutesMock.mock.calls[0]?.[0]).not.toHaveProperty('githubIntegration');
   });
 });
 

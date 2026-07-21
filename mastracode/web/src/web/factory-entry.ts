@@ -311,8 +311,9 @@ export class MastraFactory {
     // Intake source configuration (Settings › Intake) — needs at least one source.
     const intakeReady = await resolveIntakeReady(githubReady || linearReady);
 
-    // Factory work-item board — hangs off GitHub projects, same fail-soft pattern.
-    const factoryReady = await resolveFactoryReady(githubReady);
+    // Factory work-item board and stored task context — storage-backed even
+    // when live provider integrations are unavailable.
+    const factoryReady = await resolveFactoryReady();
 
     // Per-integration readiness. The built-ins keep their composite gates
     // (auth + app DB + signer stability); custom integrations are ready when
