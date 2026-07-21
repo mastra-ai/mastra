@@ -263,14 +263,13 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   const selectSnapshot = (index: number) => setSelectedSnapshotId(snapshots[index]?.snapshotId);
 
   const nextSnapshotId = snapshots[(selectedSnapshotIndex + 1) % snapshots.length]?.snapshotId;
+  const flowQuery = useThemeFlow(entityId, entityType, signalNames, snapshot?.snapshotId);
 
   useEffect(() => {
-    if (!isPlaying || snapshots.length < 2) return;
-    const timer = window.setInterval(() => setSelectedSnapshotId(nextSnapshotId), 900);
-    return () => window.clearInterval(timer);
-  }, [isPlaying, nextSnapshotId, snapshots.length]);
-
-  const flowQuery = useThemeFlow(entityId, entityType, signalNames, snapshot?.snapshotId);
+    if (!isPlaying || snapshots.length < 2 || flowQuery.isFetching) return;
+    const timer = window.setTimeout(() => setSelectedSnapshotId(nextSnapshotId), 900);
+    return () => window.clearTimeout(timer);
+  }, [flowQuery.isFetching, isPlaying, nextSnapshotId, snapshots.length]);
 
   if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
 
@@ -325,6 +324,10 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
         <p className="mt-1.5 text-sm leading-5 text-neutral3">
           Signals group recurring patterns across traces so you can see how goals, outcomes, behaviors, and sentiment
           connect.
+        </p>
+        <p className="mt-2 font-mono text-xs text-neutral4">
+          {entityId} · Snapshot {flow.snapshot.ordinal} of {flow.snapshot.total} ·{' '}
+          {formatSnapshotWindow(flow.snapshot.startedAt, flow.snapshot.endedAt)}
         </p>
         <ul aria-label="Signal analysis metrics" className="mt-3 flex flex-wrap gap-2">
           <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">

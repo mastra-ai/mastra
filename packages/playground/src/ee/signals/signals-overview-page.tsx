@@ -25,12 +25,12 @@ function AgentSelector({
   onEntityChange: (entityId: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 pt-4 lg:px-6 lg:pt-6">
+    <div className="flex min-w-0 flex-wrap items-center gap-3 px-4 pt-4 lg:px-6 lg:pt-6">
       <label className="text-xs font-medium text-neutral4" htmlFor="signals-agent-selector">
         Agent
       </label>
       <Select value={selectedEntityId} onValueChange={onEntityChange}>
-        <SelectTrigger className="w-64" id="signals-agent-selector" size="sm">
+        <SelectTrigger className="min-w-0 flex-1 sm:w-64 sm:flex-none" id="signals-agent-selector" size="sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

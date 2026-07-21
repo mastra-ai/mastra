@@ -191,6 +191,7 @@ export const fourStageThemeFlowResponse: ThemeFlowResponse = {
           kind: 'theme',
           themeId: 'theme-goal-support',
           label: 'Resolve support request',
+          description: 'The user wants help resolving a support issue.',
           traceCount: 22,
           stageShare: 0.44,
         },

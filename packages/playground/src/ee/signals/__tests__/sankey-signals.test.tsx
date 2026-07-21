@@ -196,6 +196,13 @@ describe('SankeySignals', () => {
       expect(screen.queryByRole('link', { name: 'Signals documentation' })).toBeNull();
     });
 
+    it('shows entity, snapshot ordinal, and window in the analysis header', async () => {
+      renderSankeySignals();
+
+      const header = await screen.findByTestId('signals-page-header');
+      expect(within(header).getByText('support-agent · Snapshot 4 of 4 · Jul 1–8, 2026')).not.toBeNull();
+    });
+
     it('shows exactly three metrics derived from the loaded flow', async () => {
       renderSankeySignals();
 
@@ -212,6 +219,19 @@ describe('SankeySignals', () => {
       expect(await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
       expect(screen.queryByRole('group', { name: 'Snapshot' })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Play snapshots' })).toBeNull();
+    });
+
+    it('carries a theme description into the chart node label', () => {
+      const { columns, records } = themeFlowToSankeyData(fourStageThemeFlowResponse);
+
+      const record = records[0];
+      const column = columns[0];
+      expect(record).toBeDefined();
+      expect(column).toBeDefined();
+      if (!record || !column) throw new Error('Expected a signal flow record and column');
+      expect(getSignalRecordNodeLabel(record, column)).toBe(
+        'Resolve support request\nThe user wants help resolving a support issue.',
+      );
     });
 
     it('delegates the signal column headings to the Sankey chart', async () => {

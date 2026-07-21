@@ -142,11 +142,13 @@ function SankeyNode({
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
   const displayLabel = label ?? name;
-  const visibleLabel = truncateNodeLabel(displayLabel);
+  const visibleDisplayLabel = displayLabel.split('\n', 1)[0] ?? displayLabel;
+  const accessibleLabel = displayLabel.replaceAll('\n', '. ');
+  const visibleLabel = truncateNodeLabel(visibleDisplayLabel);
   const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
-  const isTruncated = visibleLabel !== displayLabel;
+  const isTruncated = visibleLabel !== visibleDisplayLabel;
   const textAnchor = isTruncated && isFirstColumn ? 'start' : isTruncated && isLastColumn ? 'end' : 'middle';
   const labelX = isTruncated && isFirstColumn ? x : isTruncated && isLastColumn ? x + width : x + width / 2;
   const columnLabelX = x + width / 2;
@@ -154,7 +156,7 @@ function SankeyNode({
 
   return (
     <g
-      aria-label={`${displayLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
+      aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
       className="outline-none focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
       onFocus={() => onHoverChange(name)}
       onBlur={() => onHoverChange(undefined)}

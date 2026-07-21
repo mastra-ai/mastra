@@ -7,7 +7,9 @@ export function getSignalRecordNodeId(record: SankeyChartRecord, column: SankeyC
 }
 
 export function getSignalRecordNodeLabel(record: SankeyChartRecord, column: SankeyChartColumn) {
-  return String(record[`${column.id}Label`]);
+  const label = String(record[`${column.id}Label`]);
+  const description = record[`${column.id}Description`];
+  return typeof description === 'string' && description.trim() ? `${label}\n${description}` : label;
 }
 
 export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
@@ -33,8 +35,10 @@ export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
     records.push({
       [source.signalName]: source.node.nodeId,
       [`${source.signalName}Label`]: source.node.label,
+      [`${source.signalName}Description`]: source.node.description,
       [target.signalName]: target.node.nodeId,
       [`${target.signalName}Label`]: target.node.label,
+      [`${target.signalName}Description`]: target.node.description,
       traceCount: link.traceCount,
     });
   }

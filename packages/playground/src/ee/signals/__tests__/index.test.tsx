@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import SignalsOverviewPage from '..';
+import { mainNav } from '../../../lib/nav/nav-items';
 import {
   billingThemeSnapshotsResponse,
   emptyThemeEntitiesResponse,
@@ -128,6 +129,18 @@ describe('Signals page', () => {
       renderSignalsPage();
 
       expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+    });
+
+    it('keeps exactly one Signals documentation action across the shell and page', async () => {
+      renderSignalsPage();
+      await screen.findByRole('region', { name: 'Signal theme flow' });
+      const shellDocumentationLinks = mainNav
+        .flatMap(section => section.items)
+        .filter(item => item.url === '/signals' && item.docs?.label === 'Signals documentation');
+
+      expect(
+        shellDocumentationLinks.length + screen.queryAllByRole('link', { name: 'Signals documentation' }).length,
+      ).toBe(1);
     });
 
     it('keeps the single agent visible in the selector', async () => {

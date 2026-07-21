@@ -126,6 +126,28 @@ describe('SankeyChart', () => {
     });
   });
 
+  describe('when a node label includes a description', () => {
+    it('keeps the visible label concise and exposes the description on hover and focus', async () => {
+      const fullLabel = 'Search\nLooks up relevant knowledge before responding.';
+      const { container } = render(
+        <Sankey
+          data={[{ channel: 'channel-one', channelLabel: fullLabel, region: 'eu', regionLabel: 'Europe' }]}
+          columns={columns.slice(0, 2)}
+          getRecordNodeId={(record, column) => String(record[column.id])}
+          getRecordNodeLabel={(record, column) => String(record[`${column.id}Label`])}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+
+      await screen.findByText('Search', { selector: 'text' });
+      expect(
+        screen.getByLabelText('Search. Looks up relevant knowledge before responding.: 1 trace (100%)'),
+      ).not.toBeNull();
+      expect([...container.querySelectorAll('svg title')].map(title => title.textContent)).toContain(fullLabel);
+    });
+  });
+
   describe('when a node has a long display label', () => {
     it('truncates the visible text and preserves the full accessible label', async () => {
       const longLabel = 'Adding a transcript to a workspace with a very descriptive name';
