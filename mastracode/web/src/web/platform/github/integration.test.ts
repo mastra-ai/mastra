@@ -1,10 +1,12 @@
 import { RequestContext } from '@mastra/core/request-context';
+import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntegrationContext } from '@mastra/factory/integrations/base';
 
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../../runtime-config.js';
 import { seedFactoryStorageForTests } from '../../storage/test-utils.js';
+import { mountApiRoutes } from '../../test-utils.js';
 import { PlatformGithubIntegration } from './integration.js';
 
 const config = {
@@ -447,7 +449,7 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('exposes platform-backed routes and session tools without local OAuth or webhook routes', async () => {
+  it('exposes platform-backed routes and session tools without local callback or webhook routes', async () => {
     const seed = await seedFactoryStorageForTests();
     const integration = createIntegration();
     seedRuntimeConfig({
@@ -474,6 +476,7 @@ describe('PlatformGithubIntegration', () => {
     expect(routes.map(route => route.path)).toEqual(
       expect.arrayContaining([
         '/web/github/status',
+        '/auth/github/connect',
         '/web/github/subscriptions',
         '/web/github/repos',
         '/web/github/projects/:id/issues',
@@ -481,7 +484,7 @@ describe('PlatformGithubIntegration', () => {
         '/web/github/projects/:id/pr',
       ]),
     );
-    expect(routes.some(route => route.path.startsWith('/auth/github/'))).toBe(false);
+    expect(routes.some(route => route.path === '/auth/github/callback')).toBe(false);
     expect(routes.some(route => route.path === '/web/github/webhook')).toBe(false);
     const requestContext = new RequestContext();
     requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
@@ -503,6 +506,66 @@ describe('PlatformGithubIntegration', () => {
       polling: { enabled: true },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
+  });
+
+  it('uses platform installations for status and platform install URL for connect redirects', async () => {
+    const seed = await seedFactoryStorageForTests();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        json({
+          installations: [
+            {
+              installationId: 7,
+              accountLogin: 'acme',
+              accountType: 'Organization',
+              suspendedAt: null,
+              usable: true,
+            },
+          ],
+          pendingRequests: [],
+        }),
+      )
+      .mockResolvedValueOnce(json({ url: 'https://github.com/apps/mastra/installations/new?state=platform-state' }));
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+    await expect(status.json()).resolves.toMatchObject({
+      enabled: true,
+      connected: true,
+      installations: [{ installationId: 7, accountLogin: 'acme', accountType: 'Organization' }],
+      reason: 'ready',
+    });
+    await expect(context.storage.sourceControl.installations.list({ orgId: 'org-1' })).resolves.toEqual([
+      expect.objectContaining({ externalId: '7', accountName: 'acme' }),
+    ]);
+
+    const connect = await app.request('/auth/github/connect');
+    expect(connect.status).toBe(302);
+    expect(connect.headers.get('location')).toBe('https://github.com/apps/mastra/installations/new?state=platform-state');
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://platform.example.com/v1/server/github-app/install-url?action=install',
+      expect.anything(),
+    );
   });
 
   it('defaults the Platform base URL and requires the access token environment variable', () => {

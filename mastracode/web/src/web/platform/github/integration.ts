@@ -1,7 +1,12 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
 import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
-import type { SourceControlStorageHandle } from '@mastra/factory/storage/domains/source-control/base';
+import type {
+  SourceControlInstallation,
+  SourceControlStorageHandle,
+} from '@mastra/factory/storage/domains/source-control/base';
+import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '@mastra/factory/capabilities/connection';
 import type { Intake, IntakeIssue, IntakeIssueDetail } from '@mastra/factory/capabilities/intake';
@@ -33,8 +38,10 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
 
 import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
+import { ensureWebAuthUser, webAuthTenant } from '../../auth.js';
 import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
 import { buildGithubRoutes } from '../../github/routes.js';
+import { isSandboxEnabled } from '../../sandbox/fleet.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -44,6 +51,14 @@ import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { PlatformGithubEventWorker, type PlatformGithubEventStorage } from './event-worker.js';
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
+
+type PlatformGithubInstallation = {
+  installationId: number;
+  accountLogin: string;
+  accountType: string;
+  suspendedAt: string | null;
+  usable: boolean;
+};
 
 type GithubIssue = {
   number: number;
@@ -104,6 +119,10 @@ type GithubReviewComment = GithubComment & {
 
 const PAGE_SIZE = 30;
 const API_PREFIX = '/v1/server';
+
+function loose(c: unknown): Context {
+  return c as Context;
+}
 
 export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
@@ -333,14 +352,102 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
-    return buildGithubRoutes({
-      github: this as unknown as GithubIntegration,
-      stateSigner: ctx.stateSigner,
-      baseUrl: ctx.baseUrl,
-      controller: ctx.controller,
-      projects: ctx.storage.projects,
-      emitAudit: ctx.hooks?.emitAudit,
-    }).filter(route => !route.path.startsWith('/auth/github/') && route.path !== '/web/github/webhook');
+    return [
+      this.#statusRoute(),
+      this.#connectRoute(),
+      ...buildGithubRoutes({
+        github: this as unknown as GithubIntegration,
+        stateSigner: ctx.stateSigner,
+        baseUrl: ctx.baseUrl,
+        controller: ctx.controller,
+        projects: ctx.storage.projects,
+        emitAudit: ctx.hooks?.emitAudit,
+      }).filter(
+        route =>
+          route.path !== '/web/github/status' &&
+          route.path !== '/web/github/webhook' &&
+          !route.path.startsWith('/auth/github/'),
+      ),
+    ];
+  }
+
+  #statusRoute(): ApiRoute {
+    return registerApiRoute('/web/github/status', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        await ensureWebAuthUser(loose(c));
+        const tenant = webAuthTenant(loose(c));
+        if (!tenant) return c.json({ error: 'unauthorized', reason: 'auth_required' }, 401);
+        if (!tenant.orgId) {
+          return c.json({
+            enabled: true,
+            sandboxEnabled: isSandboxEnabled(),
+            organizationRequired: true,
+            connected: false,
+            installations: [],
+            reason: 'organization_required',
+            diagnostics: this.diagnostics(),
+          });
+        }
+
+        const installations = await this.#syncInstallations(tenant.orgId, tenant.userId);
+        return c.json({
+          enabled: true,
+          sandboxEnabled: isSandboxEnabled(),
+          connected: installations.length > 0,
+          installations: installations.map(installation => ({
+            installationId: Number(installation.externalId),
+            accountLogin: installation.accountName,
+            accountType: installation.accountType,
+          })),
+          reason: installations.length > 0 ? 'ready' : 'not_connected',
+          diagnostics: this.diagnostics(),
+        });
+      },
+    });
+  }
+
+  #connectRoute(): ApiRoute {
+    return registerApiRoute('/auth/github/connect', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        await ensureWebAuthUser(loose(c));
+        const tenant = webAuthTenant(loose(c));
+        if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
+
+        const query = new URLSearchParams({ action: 'install' });
+        const { url } = await this.#client.request<{ url: string }>(
+          'GET',
+          `${API_PREFIX}/github-app/install-url?${query}`,
+        );
+        return c.redirect(url);
+      },
+    });
+  }
+
+  async #syncInstallations(orgId: string, userId: string): Promise<SourceControlInstallation[]> {
+    const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
+      'GET',
+      `${API_PREFIX}/github-app/installations`,
+    );
+    const usableInstallations = result.installations.filter(
+      installation => installation.usable && !installation.suspendedAt,
+    );
+    return Promise.all(
+      usableInstallations.map(installation =>
+        this.versionControl.registerInstallation({
+          orgId,
+          userId,
+          installation: {
+            externalId: String(installation.installationId),
+            accountName: installation.accountLogin,
+            accountType: installation.accountType,
+          },
+        }),
+      ),
+    );
   }
 
   workers(ctx: IntegrationContext): PlatformGithubEventWorker[] {
