@@ -11,6 +11,7 @@ import {
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
+  runDurableScorers,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -434,6 +435,31 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           return finalOutput;
         },
         { id: 'map-final-output' },
+      )
+      // Execute scorers (fire-and-forget, doesn't affect main result). Shared with
+      // core's createDurableAgenticWorkflow — scorers are serialized by name and
+      // resolved from the Mastra instance, so this is cross-process safe. This step
+      // was missing from the Inngest engine entirely: runs finished without ever
+      // executing the agent's scorers.
+      .map(
+        async params => {
+          const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
+          const finalOutput = inputData as { messageListState: DurableAgenticWorkflowInput['messageListState'] };
+          const initData = getInitData() as DurableAgenticWorkflowInput;
+
+          await runDurableScorers({
+            initData,
+            finalMessageListState: finalOutput.messageListState,
+            mastra,
+            requestContext,
+            tracingContext,
+            agentSpanData: initData.agentSpanData as ExportedSpan<SpanType.AGENT_RUN> | undefined,
+            logger: mastra?.getLogger?.(),
+          });
+
+          return finalOutput;
+        },
+        { id: 'execute-scorers' },
       )
       .commit()
   );
