@@ -3486,6 +3486,21 @@ export class Agent<
     return userMessages.at(-1);
   }
 
+  /**
+   * Restrict UI messages to those that belong to the given thread. Memory can
+   * load messages from other threads of the same resource into the message list
+   * (resource-scoped recall); those must not influence the generated title.
+   */
+  filterUiMessagesByThread<T extends { id: string }>(messageList: MessageList, threadId: string, uiMessages: T[]): T[] {
+    const threadMessageIds = new Set(
+      messageList.get.all
+        .db()
+        .filter(m => !m.threadId || m.threadId === threadId)
+        .map(m => m.id),
+    );
+    return uiMessages.filter(m => threadMessageIds.has(m.id));
+  }
+
   async genTitle(
     userMessage: string | MessageInput | undefined,
     requestContext: RequestContext,
@@ -7181,7 +7196,8 @@ export class Agent<
         const requiredMessages = minMessages ?? 1;
 
         if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
-          const userMessage = this.getMostRecentUserMessage(uiMessages);
+          const threadUiMessages = this.filterUiMessagesByThread(messageList, thread.id, uiMessages);
+          const userMessage = this.getMostRecentUserMessage(threadUiMessages);
 
           if (userMessage) {
             void this.genTitle(
@@ -7190,7 +7206,7 @@ export class Agent<
               observabilityContext,
               titleModel,
               titleInstructions,
-              uiMessages,
+              threadUiMessages,
             )
               .then(async title => {
                 if (title) {
