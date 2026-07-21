@@ -29,16 +29,13 @@ export const storageDeleteModeScenario: McE2eScenario = {
   testName: 'uses DELETE journal mode for local main and vector databases',
   async prepare({ appDataDir, dbPath }) {
     const vectorPath = join(appDataDir, 'mastra-vectors.db');
-    const { LibSQLStore } = await import('@mastra/libsql');
-    for (const [id, file] of [
-      ['seed-main', dbPath],
-      ['seed-vector', vectorPath],
-    ] as const) {
-      const store = new LibSQLStore({ id, url: `file:${file}` });
-      await store.init();
+    const { DatabaseSync } = await import('node:sqlite');
+    for (const file of [dbPath, vectorPath]) {
+      const database = new DatabaseSync(file);
+      database.exec('PRAGMA journal_mode=WAL; CREATE TABLE seed (id INTEGER PRIMARY KEY);');
       // Preserve the WAL header to model a database left by an older Mastra Code
       // process. The product path under test owns the safe transition to DELETE.
-      (store as unknown as { client: { close: () => void } }).client.close();
+      database.close();
       if (readJournalHeader(file) !== 'wal') throw new Error(`Failed to seed WAL database: ${file}`);
     }
   },
