@@ -14,16 +14,16 @@ import type {
 } from '@mastra/factory/capabilities/version-control';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
 
-import { PlatformApiClient, PlatformApiError, type PlatformApiClientConfig } from '../../platform/api-client.js';
-import { PlatformGithubEventWorker, type PlatformGithubEventStorage } from './event-worker.js';
-import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../integration.js';
-import { buildGithubRoutes } from '../routes.js';
+import { PlatformApiClient, PlatformApiError, type PlatformApiClientConfig } from '../api-client.js';
+import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
+import { buildGithubRoutes } from '../../github/routes.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
-} from '../session-subscriptions.js';
-import type { GithubSubscriptionStorage } from '../subscriptions.js';
+} from '../../github/session-subscriptions.js';
+import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
+import { PlatformGithubEventWorker, type PlatformGithubEventStorage } from './event-worker.js';
 
 type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
   ? TInput

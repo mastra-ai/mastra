@@ -2,10 +2,10 @@ import type { LeaseProvider } from '@mastra/core/events';
 import type { WorkerDeps } from '@mastra/core/worker';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PlatformApiClient } from '../../platform/api-client.js';
+import type { GithubWebhookDispatchIntegration } from '../../github/webhook.js';
+import { dispatchGithubWebhook } from '../../github/webhook.js';
+import { PlatformApiClient } from '../api-client.js';
 import { PlatformGithubEventWorker, type PlatformGithubEventStorage } from './event-worker.js';
-import type { GithubWebhookDispatchIntegration } from '../webhook.js';
-import { dispatchGithubWebhook } from '../webhook.js';
 
 const baseUrl = 'https://platform.example.com';
 const accessToken = 'platform-token';
