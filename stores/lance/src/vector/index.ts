@@ -736,6 +736,20 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         return;
       }
 
+      const expectedIndexType = indexConfig.type === 'ivfflat' ? 'IvfPq' : 'IvfHnswPq';
+      const existingIndex = (await table.listIndices()).find(
+        index => index.columns.includes(columnToIndex) && index.indexType === expectedIndexType,
+      );
+      if (existingIndex) {
+        const existingStats = await table.indexStats(existingIndex.name);
+        if (existingStats && this.lanceMetricToMastra(existingStats.distanceType) === metric) {
+          this.logger.debug(
+            `Vector index ${existingIndex.name} already exists on ${resolvedTableName}.${columnToIndex}; skipping rebuild.`,
+          );
+          return;
+        }
+      }
+
       if (indexConfig.type === 'ivfflat') {
         await table.createIndex(columnToIndex, {
           config: Index.ivfPq({

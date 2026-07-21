@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { LanceVectorStore } from './index';
 
 describe('Lance vector store tests', () => {
@@ -76,6 +76,31 @@ describe('Lance vector store tests', () => {
         const stats = await vectorDB.describeIndex({ indexName: indexOnColumn + '_idx' });
 
         expect(stats?.metric).toBe('euclidean');
+      });
+
+      it('does not rebuild an existing index', async () => {
+        const createIndexParams = {
+          indexConfig: { type: 'hnsw' as const },
+          indexName: indexOnColumn,
+          dimension: 3,
+          metric: 'euclidean' as const,
+          tableName: testTableName,
+        };
+        await vectorDB.createIndex(createIndexParams);
+
+        const lanceClient = (
+          vectorDB as unknown as {
+            lanceClient: { openTable: (name: string) => Promise<{ createIndex: (...args: never[]) => Promise<void> }> };
+          }
+        ).lanceClient;
+        const table = await lanceClient.openTable(testTableName);
+        const createIndex = vi.spyOn(table, 'createIndex');
+        const openTable = vi.spyOn(lanceClient, 'openTable').mockResolvedValue(table);
+
+        await vectorDB.createIndex(createIndexParams);
+
+        expect(createIndex).not.toHaveBeenCalled();
+        openTable.mockRestore();
       });
 
       it('should default tableName to indexName when tableName is not provided', async () => {
