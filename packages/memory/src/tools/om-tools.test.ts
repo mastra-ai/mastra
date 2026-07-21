@@ -1134,6 +1134,93 @@ describe('om-tools', () => {
       expect(result.text).toContain('export function main()');
     });
 
+    it('should continue an oversized part from charOffset', async () => {
+      const fullText = Array.from({ length: 120 }, (_, index) => `segment-${index.toString().padStart(3, '0')}`).join(
+        ' ',
+      );
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-large-part',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: fullText }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+
+      const firstChunk = await recallPart({
+        memory: memory as any,
+        threadId,
+        cursor: 'msg-large-part',
+        partIndex: 0,
+        maxTokens: 12,
+      });
+
+      expect(firstChunk.truncated).toBe(true);
+      expect(firstChunk.charOffset).toBe(0);
+      expect(firstChunk.nextCharOffset).toBeGreaterThan(0);
+      expect(firstChunk.note).toContain('charOffset=');
+      expect(firstChunk.text).not.toContain('To continue');
+
+      const secondChunk = await recallPart({
+        memory: memory as any,
+        threadId,
+        cursor: 'msg-large-part',
+        partIndex: 0,
+        charOffset: firstChunk.nextCharOffset,
+        maxTokens: 12,
+      });
+
+      expect(secondChunk.charOffset).toBe(firstChunk.nextCharOffset);
+      expect(secondChunk.text).not.toBe(firstChunk.text);
+      expect(fullText).toContain(firstChunk.text);
+      expect(fullText).toContain(secondChunk.text);
+    });
+
+    it('should reproduce the original oversized part when chunks are concatenated', async () => {
+      const fullText = Array.from({ length: 45 }, (_, index) => `chunk-${index.toString().padStart(3, '0')}`).join(' ');
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-exact-chunks',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: fullText }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+
+      const chunks: string[] = [];
+      let nextCharOffset: number | undefined = 0;
+
+      while (nextCharOffset !== undefined) {
+        const result = await recallPart({
+          memory: memory as any,
+          threadId,
+          cursor: 'msg-exact-chunks',
+          partIndex: 0,
+          charOffset: nextCharOffset,
+          maxTokens: 10,
+        });
+
+        chunks.push(result.text);
+        nextCharOffset = result.nextCharOffset;
+      }
+
+      expect(chunks.join('')).toBe(fullText);
+    });
+
     it('should fall forward to the first part of the next visible message when partIndex overflows', async () => {
       await memory.saveMessages({
         messages: [
