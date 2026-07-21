@@ -11,7 +11,8 @@ function runDetection(code: string): Set<string> {
     transformSync(code, {
       filename: 'test.tsx',
       presets: [require.resolve('@babel/preset-typescript')],
-      plugins: [[require.resolve('@babel/plugin-syntax-jsx')], detectPinoTransports(transports)],
+      plugins: [() => detectPinoTransports(transports)],
+      parserOpts: { plugins: ['jsx'] },
       configFile: false,
       babelrc: false,
     });

@@ -2,11 +2,11 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import type { WebAuthAdapter } from './auth-adapter.js';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { buildConfigRoutes, listProviders } from './config-routes.js';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config.js';
-import { seedInMemoryFactoryStoreForTests } from './storage/test-utils.js';
-import type { InMemoryFactoryStoreSeed } from './storage/test-utils.js';
+import { seedFactoryStorageForTests } from './storage/test-utils.js';
+import type { FactoryStorageTestSeed } from './storage/test-utils.js';
 import { mountApiRoutes } from './test-utils.js';
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {
@@ -155,16 +155,15 @@ describe('listProviders', () => {
 // ── Scoped API key routes (tenant mode) ─────────────────────────────────
 
 describe('provider key routes with a tenant', () => {
-  let seed: InMemoryFactoryStoreSeed;
+  let seed: FactoryStorageTestSeed;
   const isOrganizationAdmin = vi.fn(async () => true);
-  const authAdapter: WebAuthAdapter = {
-    kind: 'test',
-    authenticate: vi.fn(async () => null),
-    ensureOrg: vi.fn(async user => user.organizationId),
+  const authProvider = {
+    name: 'test',
+    authenticateToken: vi.fn(async () => null),
+    authorizeUser: vi.fn(async () => true),
+    ensureOrganization: vi.fn(async () => undefined),
     isOrganizationAdmin,
-    publicRoutes: () => [],
-    sessionClearCookie: () => '',
-  };
+  } as unknown as IMastraAuthProvider;
 
   const controller = makeAgentController([
     { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
@@ -184,9 +183,9 @@ describe('provider key routes with a tenant', () => {
   const userB = { workosId: 'user-b', organizationId: 'org1' };
 
   beforeEach(async () => {
-    seed = await seedInMemoryFactoryStoreForTests();
+    seed = await seedFactoryStorageForTests();
     isOrganizationAdmin.mockResolvedValue(true);
-    seedRuntimeConfig({ factoryStore: seed.factoryStore, authAdapter });
+    seedRuntimeConfig({ storage: seed.storage, authProvider });
   });
 
   afterEach(() => {
@@ -217,7 +216,7 @@ describe('provider key routes with a tenant', () => {
     const res = await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
     expect(res.status).toBe(200);
     expect((await res.json()).provider?.source).toBe('stored-org');
-    expect(isOrganizationAdmin).toHaveBeenCalledWith(userA, 'org1');
+    expect(isOrganizationAdmin).toHaveBeenCalledWith('org1', 'user-a');
 
     const resolvedForB = await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic');
     expect(resolvedForB).toMatchObject({ scope: 'org', credential: { key: 'sk-shared' } });

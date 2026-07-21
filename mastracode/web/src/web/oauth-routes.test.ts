@@ -37,11 +37,11 @@ vi.mock('@mastra/code-sdk/auth/providers/github-copilot', async importOriginal =
 }));
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import type { WebAuthAdapter } from './auth-adapter';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { buildOAuthRoutes } from './oauth-routes';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config';
-import { seedInMemoryFactoryStoreForTests } from './storage/test-utils';
-import type { InMemoryFactoryStoreSeed } from './storage/test-utils';
+import { seedFactoryStorageForTests } from './storage/test-utils';
+import type { FactoryStorageTestSeed } from './storage/test-utils';
 import { mountApiRoutes } from './test-utils';
 
 // ── Test harness ─────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ function makeAuthStorage() {
 }
 
 let authStorage: ReturnType<typeof makeAuthStorage>;
-let seed: InMemoryFactoryStoreSeed;
+let seed: FactoryStorageTestSeed;
 
 function buildApp(user: { workosId: string; organizationId?: string } | null) {
   const app = new Hono();
@@ -81,7 +81,7 @@ const ANTHROPIC_CREDS = { refresh: 'r-1', access: 'a-1', expires: Date.now() + 3
 const CODEX_CREDS = { refresh: 'r-2', access: 'a-2', expires: Date.now() + 3_600_000 };
 
 beforeEach(async () => {
-  seed = await seedInMemoryFactoryStoreForTests();
+  seed = await seedFactoryStorageForTests();
   authStorage = makeAuthStorage();
   startAnthropicLogin.mockResolvedValue({ url: 'https://claude.ai/oauth/authorize?state=s', verifier: 'v-1' });
   completeAnthropicLogin.mockResolvedValue(ANTHROPIC_CREDS);
@@ -329,18 +329,20 @@ describe('gating', () => {
     expect(res.status).toBe(404);
   });
 
-  it('401s unauthenticated requests when an auth adapter is active', async () => {
+  it('401s unauthenticated requests when an auth provider is active', async () => {
     seedRuntimeConfig({
-      factoryStore: seed.factoryStore,
-      authAdapter: { kind: 'test', authenticate: async () => null } as unknown as WebAuthAdapter,
+      storage: seed.storage,
+      authProvider: { name: 'test', authenticateToken: async () => null } as unknown as IMastraAuthProvider,
     });
     const res = await post(buildApp(null), '/web/config/providers/anthropic/oauth/start');
     expect(res.status).toBe(401);
   });
 
   it('503s tenant writes when the credentials domain is unavailable', async () => {
-    // Auth adapter active + user present, but no factory store at all.
-    seedRuntimeConfig({ authAdapter: { kind: 'test', authenticate: async () => null } as unknown as WebAuthAdapter });
+    // Auth provider active + user present, but no factory store at all.
+    seedRuntimeConfig({
+      authProvider: { name: 'test', authenticateToken: async () => null } as unknown as IMastraAuthProvider,
+    });
     const res = await post(buildApp(userA), '/web/config/providers/anthropic/oauth/start');
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe('credentials_unavailable');
