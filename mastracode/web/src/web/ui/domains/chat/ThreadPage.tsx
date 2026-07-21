@@ -3,17 +3,17 @@ import { useLocation, useParams } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
-import { ChatLayout } from '../../ui';
-import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
+import { ChatLayout } from '../../ui/ChatLayout';
+import { renderedPaths } from '../workspace-viewer/config';
+import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
+import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import {
   activeWorkspacePath,
-  EmptyFactoryState,
   findUserSessionByThreadId,
-  useActiveFactoryContext,
-} from '../workspaces';
+} from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
-import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
@@ -65,7 +65,6 @@ export function ThreadPage() {
           ) : (
             <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
           )}
-          <ChatOverlays />
         </ChatSessionBoundary>
       }
     />

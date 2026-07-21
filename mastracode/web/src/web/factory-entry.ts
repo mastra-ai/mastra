@@ -25,8 +25,9 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { hasAuthInit } from '@mastra/core/server';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { observeAgentGitAction } from './audit/agent-audit.js';
-import type { WebAuthAdapter } from './auth-adapter.js';
 import { buildAuthRoutes, createWebAuthGate } from './auth.js';
 import type { FactoryIntegration, IntegrationTools } from './factory-integration.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
@@ -61,12 +62,13 @@ export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
 export interface MastraFactoryConfig {
   /**
-   * Web auth adapter instance — `WorkOSWebAuth`, `BetterAuthWebAuth`, or any
-   * custom `WebAuthAdapter` implementation. Whatever instance is passed is the
-   * active provider; the factory never selects or constructs one itself.
+   * Auth provider instance — `MastraAuthWorkos` (`@mastra/auth-workos`),
+   * `MastraAuthBetterAuth` (`@mastra/auth-better-auth`), or any custom
+   * `MastraAuthProvider`. Whatever instance is passed is the active provider;
+   * the factory never selects or constructs one itself.
    * Omitted → auth disabled (open server, local-dev behavior).
    */
-  auth?: WebAuthAdapter;
+  auth?: IMastraAuthProvider;
   /**
    * REQUIRED. Factory storage backend powering BOTH agent storage (threads,
    * messages, memory, OM — via `getMastraStorage()`) and the app tables
@@ -272,7 +274,7 @@ export class MastraFactory {
       vector,
       integrations,
       publicUrl: publicOrigin,
-      authAdapter: auth,
+      authProvider: auth,
       stateSigner,
       sandbox: machine
         ? {
@@ -283,11 +285,14 @@ export class MastraFactory {
         : undefined,
     });
 
-    // One-time adapter initialization with factory-level context (e.g.
+    // One-time provider initialization with factory-level context (e.g.
     // better-auth builds its default instance on the backend's auth
-    // database). Failures surface here, at prepare() — a misconfigured
-    // adapter must not boot.
-    await auth?.init?.({ storage, publicUrl: publicOrigin, allowedOrigins });
+    // database, WorkOS derives its redirect URI from the public URL).
+    // Failures surface here, at prepare() — a misconfigured provider must
+    // not boot.
+    if (auth && hasAuthInit(auth)) {
+      await auth.init({ database: storage.authDatabase?.(), publicUrl: publicOrigin, allowedOrigins });
+    }
 
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.

@@ -62,6 +62,10 @@ if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
 
+if (!Element.prototype.getAnimations) {
+  Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] });
+}
+
 // jsdom has no PointerEvent constructor; Base UI's Switch builds one on click.
 if (!window.PointerEvent) {
   window.PointerEvent = class PointerEvent extends MouseEvent {
