@@ -10,16 +10,16 @@
  */
 
 import type { QueueHealthConfig } from '../../../storage/domains/queue-health/base';
-import type { WorkItemRow, WorkItemStageEntry } from '../../../storage/domains/work-items/base';
+import type { WorkItem, WorkItemStageEntry } from './services/workItems';
 import { BOARD_STAGES } from './stages';
 
 /**
- * The row shape the aggregation reads. The server-side `WorkItemRow` stamps
- * `createdAt` as a `Date`, but the client list endpoint serializes it to an
- * ISO string — accepting both keeps the function usable from the wire type
- * without a mapping layer. Everything else matches `WorkItemRow`.
+ * The row shape the aggregation reads. The client list endpoint serializes
+ * `createdAt` to an ISO string, but accepting a `Date` too keeps the function
+ * usable from server-shaped rows without a mapping layer. Everything else
+ * matches the wire `WorkItem`.
  */
-export type QueueHealthWorkItem = Omit<WorkItemRow, 'createdAt' | 'updatedAt'> & {
+export type QueueHealthWorkItem = Omit<WorkItem, 'createdAt' | 'updatedAt'> & {
   createdAt: Date | string;
   updatedAt: Date | string;
 };
