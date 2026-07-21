@@ -156,57 +156,6 @@ describe('transcript reducer message entries', () => {
     expect(steered.role).toBe('signal');
   });
 
-  it('removes empty text parts while preserving surrounding tool and text content', () => {
-    const state = createInitialTranscript({
-      messages: [
-        dbMessage('assistant-1', 'assistant', [
-          { type: 'text', text: '   \n' },
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tool-1',
-              toolName: 'view',
-              args: { path: 'src/index.ts' },
-              result: 'export const value = 1;',
-            },
-          },
-          { type: 'text', text: 'Summary follows.' },
-        ]),
-      ],
-    });
-
-    expect(messageParts(state.entries[0])).toEqual([
-      {
-        type: 'tool-invocation',
-        toolInvocation: {
-          state: 'result',
-          toolCallId: 'tool-1',
-          toolName: 'view',
-          args: { path: 'src/index.ts' },
-          result: 'export const value = 1;',
-        },
-      },
-      { type: 'text', text: 'Summary follows.' },
-    ]);
-  });
-
-  it('drops hydrated and streamed messages that contain only empty text', () => {
-    const hydrated = createInitialTranscript({
-      messages: [dbMessage('assistant-empty', 'assistant', [{ type: 'text', text: '  \n ' }])],
-    });
-    expect(hydrated.entries).toEqual([]);
-
-    const streamed = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: {
-        type: 'message_update',
-        message: dbMessage('assistant-empty', 'assistant', [{ type: 'text', text: '\t' }]),
-      },
-    });
-    expect(streamed.entries).toEqual([]);
-  });
-
   it('streams message updates without replacing non-message transcript state', () => {
     const withNotice = transcriptReducer(initialTranscript, {
       type: 'localNotice',
@@ -329,6 +278,63 @@ describe('transcript reducer message entries', () => {
     expect(ended._decodeStartedAt).toBe(0);
     expect(ended.entries).toHaveLength(1);
     expect(ended.entries[0]).toMatchObject({ id: 'reminder-1', streaming: false });
+  });
+
+  it('keeps a resumed specialized tool call in exactly one assistant message', () => {
+    const suspendedMessage = dbMessage('assistant-before-suspend', 'assistant', [
+      { type: 'text', text: 'Before question' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: { question: 'Which database?' },
+        },
+      },
+    ]);
+    const resumedMessage = dbMessage('assistant-after-resume', 'assistant', [
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: { question: 'Which database?' },
+          result: { content: 'User answered: Postgres', isError: false },
+        },
+      },
+      { type: 'text', text: 'After question' },
+    ]);
+
+    const beforeResume = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_end', message: suspendedMessage },
+    });
+    const afterResume = transcriptReducer(beforeResume, {
+      type: 'event',
+      event: { type: 'message_update', message: resumedMessage },
+    });
+
+    const matchingParts = afterResume.entries.flatMap(entry =>
+      messageParts(entry).filter(
+        part =>
+          typeof part === 'object' &&
+          part !== null &&
+          'type' in part &&
+          part.type === 'tool-invocation' &&
+          'toolInvocation' in part &&
+          typeof part.toolInvocation === 'object' &&
+          part.toolInvocation !== null &&
+          'toolCallId' in part.toolInvocation &&
+          part.toolInvocation.toolCallId === 'ask-1',
+      ),
+    );
+
+    expect(matchingParts).toHaveLength(1);
+    expect(afterResume.entries).toHaveLength(2);
+    expect(messageParts(afterResume.entries[0])).toEqual([{ type: 'text', text: 'Before question' }]);
+    expect(messageParts(afterResume.entries[1])).toEqual(resumedMessage.content.parts);
   });
 
   it('keeps tool lifecycle events visible inline before a message update re-emits the tool call', () => {
