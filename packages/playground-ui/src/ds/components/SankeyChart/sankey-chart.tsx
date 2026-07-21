@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
 import { getSankeyChartCurveSelection } from './sankey-chart-utils';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
@@ -147,7 +148,14 @@ function SankeyNode({
   const description = descriptionIndex >= 0 ? displayLabel.slice(descriptionIndex + 1) : undefined;
   const accessibleLabel = displayLabel.replaceAll('\n', '. ');
   const visibleLabel = truncateNodeLabel(visibleDisplayLabel);
-  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+  const tooltipId = useId();
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState<{
+    left: number;
+    top: number;
+    placement: 'above' | 'below';
+  }>();
   const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
@@ -156,69 +164,86 @@ function SankeyNode({
   const labelX = isTruncated && isFirstColumn ? x : isTruncated && isLastColumn ? x + width : x + width / 2;
   const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
-  const tooltipWidth = 240;
-  const tooltipX = isFirstColumn ? x : isLastColumn ? x + width - tooltipWidth : x + width / 2 - tooltipWidth / 2;
-  const tooltipY = y > 84 ? y - 76 : y + height + 8;
+  const isTooltipVisible = Boolean(description && tooltipPosition && (isHovered || isFocused));
+  const showTooltipAt = (target: SVGGElement) => {
+    const rect = target.getBoundingClientRect();
+    const placement = rect.top < 120 ? 'below' : 'above';
+    setTooltipPosition({
+      left: Math.min(Math.max(rect.left, 16), Math.max(window.innerWidth - 336, 16)),
+      top: placement === 'above' ? rect.top - 8 : rect.bottom + 8,
+      placement,
+    });
+  };
 
   return (
-    <g
-      aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
-      className="outline-none focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
-      onFocus={() => {
-        onHoverChange(name);
-        setIsTooltipVisible(true);
-      }}
-      onBlur={() => {
-        onHoverChange(undefined);
-        setIsTooltipVisible(false);
-      }}
-      onMouseEnter={() => {
-        onHoverChange(name);
-        setIsTooltipVisible(true);
-      }}
-      onMouseLeave={() => {
-        onHoverChange(undefined);
-        setIsTooltipVisible(false);
-      }}
-      tabIndex={0}
-    >
-      <title>{displayLabel}</title>
-      {showColumnLabel && columnLabel ? (
-        <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
-          {columnLabel}
-        </text>
-      ) : null}
-      <rect x={x} y={y} width={width} height={height} rx={3} fill={nodeColor(hue)} />
-      <text
-        x={labelX}
-        y={y - 24}
-        textAnchor={textAnchor}
-        fill={Colors.neutral5}
-        fontSize={11}
-        fontFamily="var(--font-mono)"
+    <>
+      <g
+        aria-describedby={description ? tooltipId : undefined}
+        aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
+        className="outline-none focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
+        onFocus={event => {
+          onHoverChange(name);
+          setIsFocused(true);
+          showTooltipAt(event.currentTarget);
+        }}
+        onBlur={() => {
+          onHoverChange(undefined);
+          setIsFocused(false);
+        }}
+        onMouseEnter={event => {
+          onHoverChange(name);
+          setIsHovered(true);
+          showTooltipAt(event.currentTarget);
+        }}
+        onMouseLeave={() => {
+          onHoverChange(undefined);
+          setIsHovered(false);
+        }}
+        tabIndex={0}
       >
-        {visibleLabel}
-      </text>
-      <text x={labelX} y={y - 8} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={9.5}>
-        {value} ({percentage}%)
-      </text>
-      {description && isTooltipVisible ? (
-        <foreignObject
-          aria-label={`${visibleDisplayLabel}: ${description}`}
-          height={68}
-          pointerEvents="none"
-          role="tooltip"
-          width={tooltipWidth}
-          x={tooltipX}
-          y={tooltipY}
+        <title>{displayLabel}</title>
+        {showColumnLabel && columnLabel ? (
+          <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
+            {columnLabel}
+          </text>
+        ) : null}
+        <rect x={x} y={y} width={width} height={height} rx={3} fill={nodeColor(hue)} />
+        <text
+          x={labelX}
+          y={y - 24}
+          textAnchor={textAnchor}
+          fill={Colors.neutral5}
+          fontSize={11}
+          fontFamily="var(--font-mono)"
         >
-          <div className="rounded-md border border-border1 bg-surface5 p-2 text-xs leading-4 text-neutral6 shadow-elevated">
-            <div className="font-medium">{visibleDisplayLabel}</div>
-            <div className="text-neutral4">{description}</div>
-          </div>
-        </foreignObject>
-      ) : null}
-    </g>
+          {visibleLabel}
+        </text>
+        <text x={labelX} y={y - 8} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={9.5}>
+          {value} ({percentage}%)
+        </text>
+      </g>
+      {description && isTooltipVisible && tooltipPosition
+        ? createPortal(
+            <div
+              aria-label={`${visibleDisplayLabel}: ${description}`}
+              className="pointer-events-none fixed z-50 rounded-md border border-border1 bg-surface5 p-2 text-xs leading-4 text-neutral6 shadow-elevated"
+              id={tooltipId}
+              role="tooltip"
+              style={{
+                left: tooltipPosition.left,
+                maxWidth: 'min(20rem, calc(100vw - 2rem))',
+                top: tooltipPosition.top,
+                transform: tooltipPosition.placement === 'above' ? 'translateY(-100%)' : undefined,
+                width: 'max-content',
+              }}
+            >
+              <div className="font-medium">{visibleDisplayLabel}</div>
+              <div className="whitespace-pre-wrap text-neutral4">{description}</div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 

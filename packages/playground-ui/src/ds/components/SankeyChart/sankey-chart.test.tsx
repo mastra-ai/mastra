@@ -127,8 +127,10 @@ describe('SankeyChart', () => {
   });
 
   describe('when a node label includes a description', () => {
-    const nodeLabel = 'Search. Looks up relevant knowledge before responding.: 1 trace (100%)';
-    const tooltipLabel = 'Search: Looks up relevant knowledge before responding.';
+    const description =
+      'Looks up relevant knowledge before responding, including all supporting context needed to explain a long theme description without clipping it.';
+    const nodeLabel = `Search. ${description}: 1 trace (100%)`;
+    const tooltipLabel = `Search: ${description}`;
 
     function renderDescribedNode() {
       return render(
@@ -136,7 +138,7 @@ describe('SankeyChart', () => {
           data={[
             {
               channel: 'channel-one',
-              channelLabel: 'Search\nLooks up relevant knowledge before responding.',
+              channelLabel: `Search\n${description}`,
               region: 'eu',
               regionLabel: 'Europe',
             },
@@ -164,6 +166,28 @@ describe('SankeyChart', () => {
       const node = await screen.findByLabelText(nodeLabel);
 
       fireEvent.mouseEnter(node);
+
+      expect(screen.getByRole('tooltip', { name: tooltipLabel }).textContent).toContain(description);
+    });
+
+    it('keeps the description visible when the pointer leaves a focused node', async () => {
+      renderDescribedNode();
+      const node = await screen.findByLabelText(nodeLabel);
+      fireEvent.focus(node);
+      fireEvent.mouseEnter(node);
+
+      fireEvent.mouseLeave(node);
+
+      expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
+    });
+
+    it('keeps the description visible when a hovered node loses focus', async () => {
+      renderDescribedNode();
+      const node = await screen.findByLabelText(nodeLabel);
+      fireEvent.mouseEnter(node);
+      fireEvent.focus(node);
+
+      fireEvent.blur(node);
 
       expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
     });
