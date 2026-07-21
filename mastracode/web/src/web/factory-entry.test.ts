@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { MastraWorker } from '@mastra/core/worker';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
@@ -115,6 +116,7 @@ describe('MastraFactory.prepare', () => {
       'audit',
       'work-items',
       'model-credentials',
+      'queue-health',
       'integrations',
       'source-control',
     ]);
@@ -366,6 +368,41 @@ describe('MastraFactory.prepare integrations', () => {
     github.webhookSecret = 'hook-secret';
     await prepareFactory({ storage: fakeStorage(), integrations: [github] });
     expect(getSeededStateSigner()?.stable).toBe(true);
+  });
+
+  it("folds a ready integration's workers into the returned Mastra args", async () => {
+    const worker = { name: 'custom-poller' } as unknown as MastraWorker;
+    const workers = vi.fn((_ctx: IntegrationContext) => [worker]);
+    const factory = new MastraFactory({
+      storage: fakeStorage(),
+      integrations: [fakeIntegration({ id: 'custom', workers })],
+    });
+    const args = await factory.prepare();
+    expect(args.workers).toEqual([worker]);
+    // The workers factory gets the same integration context shape as routes().
+    const ctx = workers.mock.calls[0]![0];
+    expect(ctx.stateSigner).toBe(getSeededStateSigner());
+    expect(ctx.storage.generic).toBeDefined();
+    expect(ctx.storage.sourceControl).toBeDefined();
+  });
+
+  it('does not collect workers from integrations that are not ready', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
+    const workers = vi.fn(() => [{ name: 'custom-poller' } as unknown as MastraWorker]);
+    const factory = new MastraFactory({
+      storage,
+      integrations: [fakeIntegration({ id: 'custom', workers })],
+    });
+    const args = await factory.prepare();
+    expect(workers).not.toHaveBeenCalled();
+    expect(args).not.toHaveProperty('workers');
+  });
+
+  it('omits the workers option when no integration contributes workers', async () => {
+    const factory = new MastraFactory({ storage: fakeStorage(), integrations: [fakeIntegration({ id: 'custom' })] });
+    const args = await factory.prepare();
+    expect(args).not.toHaveProperty('workers');
   });
 });
 

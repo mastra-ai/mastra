@@ -13,6 +13,7 @@ import { AuditStorage } from './domains/audit/base';
 import { ModelCredentialsStorage } from './domains/credentials/base';
 import { IntakeStorage } from './domains/intake/base';
 import { IntegrationStorage } from './domains/integrations/base';
+import { QueueHealthStorage } from './domains/queue-health/base';
 import { SourceControlStorage } from './domains/source-control/base';
 import { WorkItemsStorage } from './domains/work-items/base';
 
@@ -24,6 +25,7 @@ export interface FactoryStorageTestSeed {
   credentials: ModelCredentialsStorage;
   integrations: IntegrationStorage;
   sourceControl: SourceControlStorage;
+  queueHealth: QueueHealthStorage;
 }
 
 /**
@@ -39,8 +41,9 @@ export async function seedFactoryStorageForTests(): Promise<FactoryStorageTestSe
   const credentials = storage.registerDomain(new ModelCredentialsStorage());
   const integrations = storage.registerDomain(new IntegrationStorage());
   const sourceControl = storage.registerDomain(new SourceControlStorage());
+  const queueHealth = storage.registerDomain(new QueueHealthStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   seedRuntimeConfig({ storage });
-  return { storage, intake, audit, workItems, credentials, integrations, sourceControl };
+  return { storage, intake, audit, workItems, credentials, integrations, sourceControl, queueHealth };
 }
