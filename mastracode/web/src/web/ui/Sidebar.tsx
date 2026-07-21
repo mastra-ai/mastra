@@ -1,3 +1,4 @@
+import { useRouteFactory } from '../../shared/hooks/useRouteFactory';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';

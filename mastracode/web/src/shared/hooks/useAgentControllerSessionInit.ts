@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
+import type { FactorySessionState } from '../../web/ui/domains/chat/context/ChatSessionContext';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,
@@ -10,7 +11,7 @@ interface UseAgentControllerSessionInitArgs {
   agentControllerId: string;
   resourceId: string;
   projectPath?: string;
-  projectState?: Record<string, unknown>;
+  factorySessionState?: FactorySessionState;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -19,7 +20,7 @@ export function useAgentControllerSessionInit({
   agentControllerId,
   resourceId,
   projectPath,
-  projectState,
+  factorySessionState,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerSessionInitArgs) {
@@ -35,14 +36,14 @@ export function useAgentControllerSessionInit({
     queryKey: [
       ...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath),
       'init',
-      projectState,
+      factorySessionState,
     ],
     queryFn: async () => {
       const activeSession = requireAgentControllerSession(session);
       const created = await activeSession.create({ tags: projectPath ? { projectPath } : undefined });
       if (projectPath) {
         try {
-          await activeSession.setState({ projectPath, ...projectState });
+          await activeSession.setState({ projectPath, ...factorySessionState });
         } catch {
           // Continue connecting; session.state() remains the source of truth.
         }

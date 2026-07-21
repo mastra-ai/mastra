@@ -1,27 +1,23 @@
+import { useRouteFactory } from '../../../../../shared/hooks/useRouteFactory';
 import { useOverlays } from '../../../lib/overlays';
-import { SettingsPanel } from '../../settings/components/SettingsPanel';
-import { GithubConnectModal } from '../../workspaces/components/GithubConnectModal';
-import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
-import { useGithubStatusQuery } from '../../../../../shared/hooks/useGithubStatus';
+import { SettingsPanel } from '../../settings';
+import { FactoriesModal } from '../../workspaces';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 
 /** Mounts the active chat overlays. Each overlay owns its provider-backed behavior. */
 export function ChatOverlays() {
   const overlays = useOverlays();
-  const { selectFactory } = useActiveFactoryContext();
-  const githubStatus = useGithubStatusQuery().data;
+  const { factories, factoriesPending } = useRouteFactory();
+
+  // Wait for backend hydration before treating an empty local cache as
+  // first-run state.
+  const factoriesOpen = overlays.isOpen('factories') || (factories.length === 0 && !factoriesPending);
+
   return (
     <>
       {overlays.isOpen('settings') && <SettingsPanel onClose={() => overlays.close('settings')} />}
       {overlays.isOpen('shortcuts') && <ShortcutsOverlay />}
-
-      {overlays.isOpen('github') && githubStatus && (
-        <GithubConnectModal
-          status={githubStatus}
-          onFactoryCreated={factory => void selectFactory(factory)}
-          onClose={() => overlays.close('github')}
-        />
-      )}
+      {factoriesOpen && <FactoriesModal />}
     </>
   );
 }

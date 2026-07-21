@@ -12,7 +12,7 @@ import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shar
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import type { GithubFactory } from '../workspaces/services/factories';
+import type { ServerFactory } from '../workspaces/services/factories';
 import { projectPath } from '../../lib/projectRoutes';
 import { useProjectRoute } from '../../lib/useProjectRoute';
 import { FactoryItemActions } from './components/FactoryItemActions';
@@ -365,9 +365,9 @@ export function BoardPage() {
   );
 }
 
-function Board({ factory }: { factory: GithubFactory }) {
-  const githubProjectId = factory.binding.githubProjectId;
-  const items = useWorkItemsQuery(githubProjectId);
+function Board({ factory }: { factory: ServerFactory }) {
+  const factoryProjectId = factory.binding.factoryProjectId;
+  const items = useWorkItemsQuery(factoryProjectId);
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
 
@@ -376,7 +376,7 @@ function Board({ factory }: { factory: GithubFactory }) {
   // in Intake and only move once the Factory acts on them.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
-  const githubSelected = config ? (config.github.repositoryIds?.includes(githubProjectId) ?? false) : true;
+  const githubSelected = config ? (config.github.repositoryIds?.includes(factoryProjectId) ?? false) : true;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
   const linearReady =
@@ -398,16 +398,16 @@ function Board({ factory }: { factory: GithubFactory }) {
     : (availableIntakeSources[0] ?? null);
 
   // Only the active intake feed fetches; the other feeds load on switch.
-  const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? githubProjectId : undefined);
-  const triageIssues = useProjectIssuesQuery(githubProjectId, AUTO_TRIAGED_LABEL);
-  const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? githubProjectId : undefined);
+  const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? factoryProjectId : undefined);
+  const triageIssues = useProjectIssuesQuery(factoryProjectId, AUTO_TRIAGED_LABEL);
+  const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? factoryProjectId : undefined);
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
-  const upsert = useUpsertWorkItemMutation(githubProjectId);
-  const update = useUpdateWorkItemMutation(githubProjectId);
-  const remove = useDeleteWorkItemMutation(githubProjectId);
+  const upsert = useUpsertWorkItemMutation(factoryProjectId);
+  const update = useUpdateWorkItemMutation(factoryProjectId);
+  const remove = useDeleteWorkItemMutation(factoryProjectId);
   const { start, pendingRuns, enabled: runEnabled } = useStartFactoryRun();
-  const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(githubProjectId);
+  const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(factoryProjectId);
   const navigate = useNavigate();
   const boardContainerRef = useRef<HTMLDivElement>(null);
   const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());

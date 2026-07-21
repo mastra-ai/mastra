@@ -1,6 +1,7 @@
+import { useRouteFactory } from '../../../../../../shared/hooks/useRouteFactory';
 import { useParams } from 'react-router';
 
-import { isGithubFactory, useActiveFactoryContext } from '../../../workspaces';
+import { selectedRepository } from '../../../workspaces';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { ActiveModel } from './ActiveModel';
@@ -18,11 +19,10 @@ import { RuntimeActivity } from './RuntimeActivity';
  */
 export function StatusLine() {
   const { threadId } = useParams<{ threadId: string }>();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory } = useRouteFactory();
   const { baseUrl, resourceId, projectPath } = useChatSessionContext();
   const { transcript, busy } = useChatTranscript();
-  const githubProjectId =
-    activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined;
+  const projectRepositoryId = activeFactory ? selectedRepository(activeFactory)?.projectRepositoryId : undefined;
 
   return (
     <div
@@ -41,7 +41,7 @@ export function StatusLine() {
         baseUrl={baseUrl}
         resourceId={resourceId}
         projectPath={projectPath}
-        githubProjectId={githubProjectId}
+        projectRepositoryId={projectRepositoryId}
         threadId={threadId}
         transcriptEntries={transcript.entries}
         busy={busy}

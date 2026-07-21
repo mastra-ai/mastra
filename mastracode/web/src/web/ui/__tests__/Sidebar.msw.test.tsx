@@ -12,7 +12,7 @@ import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSideba
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
-import { MemoryRouter, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../domains/chat/context/ChatSessionTestProvider';
@@ -21,8 +21,8 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/rende
 import { redirectToLogout } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
 import type { Factory } from '../domains/workspaces';
-import { ActiveFactoryProvider } from '../domains/workspaces';
 import { OverlaysProvider } from '../lib/overlays';
+import { ProjectRouteProvider } from '../lib/ProjectRouteContext';
 import { DashboardSidebar, LocalSidebar } from '../Sidebar';
 import { ToastProvider } from '../ui';
 
@@ -59,21 +59,27 @@ const secondLocalProject: Factory = {
   },
 };
 
+const githubRepository = {
+  projectRepositoryId: 'pr-mastra-1',
+  slug: 'mastra-ai/mastra',
+  gitBranch: 'main',
+  sandboxWorkdir: '/sandbox/mastra',
+  selectedWorktreePath: '/sandbox/mastra',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+};
+
 const githubProject: Factory = {
   id: 'p-github',
   name: 'Mastra',
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: 'gh-project-1',
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra',
-    worktrees: [
-      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-    ],
+    kind: 'factory',
+    factoryProjectId: 'fp-github-project-1',
+    repositories: [githubRepository],
   },
 };
 
@@ -207,22 +213,31 @@ function renderSidebar() {
   const factories = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];
   const activeFactoryId = localStorage.getItem('mastracode-active-factory');
   const activeFactory = factories.find(factory => factory.id === activeFactoryId);
-  const sidebar = activeFactory?.binding.kind === 'github' ? <DashboardSidebar /> : <LocalSidebar />;
+  const namespace = activeFactory?.binding.kind === 'factory' ? 'dashboard' : 'local';
+  const projectId = activeFactory?.id ?? 'project-test';
+  const sidebar = namespace === 'dashboard' ? <DashboardSidebar /> : <LocalSidebar />;
 
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/chat']}>
-      <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
-        <ToastProvider>
-          <ActiveFactoryProvider>
-            <ChatSessionProvider>
-              <OverlaysProvider>
-                {sidebar}
-                <LocationProbe />
-              </OverlaysProvider>
-            </ChatSessionProvider>
-          </ActiveFactoryProvider>
-        </ToastProvider>
-      </MainSidebarProvider>
+    <MemoryRouter initialEntries={[`/${namespace}/${projectId}/new`]}>
+      <Routes>
+        <Route
+          path={`/${namespace}/:projectId/*`}
+          element={
+            <ProjectRouteProvider namespace={namespace}>
+              <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
+                <ToastProvider>
+                  <ChatSessionProvider>
+                    <OverlaysProvider>
+                      {sidebar}
+                      <LocationProbe />
+                    </OverlaysProvider>
+                  </ChatSessionProvider>
+                </ToastProvider>
+              </MainSidebarProvider>
+            </ProjectRouteProvider>
+          }
+        />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -297,13 +312,15 @@ describe('Sidebar', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
 
       expect(await screen.findByRole('menuitem', { name: 'Mastra' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Create factory from local folder' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Create/connect factory from GitHub' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Create Factory' })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /remove/i })).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
 
-      await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBe(secondLocalProject.id));
+      await waitFor(() =>
+        expect(screen.getByTestId('location')).toHaveTextContent(`/local/${secondLocalProject.id}/new`),
+      );
+      expect(localStorage.getItem('mastracode-active-factory')).toBe(project.id);
       expect(await screen.findByText('Beta')).toBeInTheDocument();
     });
   });
@@ -332,7 +349,11 @@ describe('Sidebar', () => {
     it('explains how factory Sessions are created when none exist', async () => {
       seedFactory({
         ...githubProject,
-        binding: { ...githubProject.binding, worktrees: [githubProject.binding.worktrees[0]!] },
+        binding: {
+          kind: 'factory',
+          factoryProjectId: 'fp-github-project-1',
+          repositories: [{ ...githubRepository, worktrees: [githubRepository.worktrees[0]!] }],
+        },
       });
       useAuthHandler();
       useGithubStatusHandler();

@@ -1,3 +1,4 @@
+import { useRouteFactory } from '../../shared/hooks/useRouteFactory';
 import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
@@ -15,10 +16,9 @@ import {
   ThreadPageKickoffTimeoutError,
 } from '../../web/ui/domains/chat/services/threadPageReadiness';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
-import { useActiveFactoryContext } from '../../web/ui/domains/workspaces/context/ActiveFactoryProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
 import type { Factory } from '../../web/ui/domains/workspaces/services/factories';
-import { isGithubFactory } from '../../web/ui/domains/workspaces/services/factories';
+import { isServerFactory } from '../../web/ui/domains/workspaces/services/factories';
 import { createWorkItem, updateWorkItem } from '../../web/ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../../web/ui/domains/factory/services/workItems';
 import { projectPath as projectRoutePath } from '../../web/ui/lib/projectRoutes';
@@ -99,7 +99,7 @@ export interface StartFactoryRunInput {
  * independent and never abort each other.
  */
 export function useStartFactoryRun() {
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const { activeFactory, resourceId, sessionEnabled } = useRouteFactory();
   const { baseUrl } = useApiConfig();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -191,9 +191,9 @@ export function useStartFactoryRun() {
       // (worktree + session + thread + prompt) already succeeded, so a filing
       // failure must not reject the mutation and strand the user off the
       // thread that is actively running.
-      const githubProjectId =
-        activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined;
-      if (workItem && githubProjectId) {
+      const factoryProjectId =
+        activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
+      if (workItem && factoryProjectId) {
         try {
           // One thread per item: stamp the run's ref onto every role the card
           // tracks so all refs share this threadId.
@@ -203,7 +203,7 @@ export function useStartFactoryRun() {
           if (workItem.id) {
             await updateWorkItem(baseUrl, workItem.id, { stages: workItem.stages, sessions });
           } else {
-            await createWorkItem(baseUrl, githubProjectId, {
+            await createWorkItem(baseUrl, factoryProjectId, {
               source: workItem.source,
               sourceKey: workItem.sourceKey,
               title: workItem.title,
@@ -213,7 +213,7 @@ export function useStartFactoryRun() {
               metadata: workItem.metadata,
             });
           }
-          void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
         } catch (err) {
           console.error('Failed to file the board card for this run', err);
         }

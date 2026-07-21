@@ -1,10 +1,10 @@
 import type { Factory } from '../domains/workspaces';
-import { isGithubFactory } from '../domains/workspaces';
+import { isServerFactory } from '../domains/workspaces';
 
 export type ProjectNamespace = 'local' | 'dashboard';
 
 export function factoryNamespace(factory: Factory): ProjectNamespace {
-  return isGithubFactory(factory) ? 'dashboard' : 'local';
+  return isServerFactory(factory) ? 'dashboard' : 'local';
 }
 
 export function projectRoot(factory: Factory): string {
@@ -12,7 +12,7 @@ export function projectRoot(factory: Factory): string {
 }
 
 export function projectEntry(factory: Factory): string {
-  return `${projectRoot(factory)}/${isGithubFactory(factory) ? 'factory/board' : 'new'}`;
+  return `${projectRoot(factory)}/${isServerFactory(factory) ? 'factory/board' : 'new'}`;
 }
 
 export function projectPath(factory: Factory, path: string): string {

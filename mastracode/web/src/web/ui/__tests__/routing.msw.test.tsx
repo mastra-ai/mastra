@@ -117,11 +117,11 @@ function renderRoutes(
       HttpResponse.json({ enabled: false, connected: false, installations: [], reason: 'missing_config' }),
     ),
   );
-  if (options?.project?.binding.kind === 'github') {
+  if (options?.project?.binding.kind === 'factory') {
     const workItems = Array.from({ length: options.workItemCount ?? 0 }, (_, index) => ({ id: `work-${index}` }));
     server.use(
       http.get(
-        `${TEST_BASE_URL}/web/factory/repositories/${options.project.binding.githubProjectId}/work-items`,
+        `${TEST_BASE_URL}/web/factory/projects/${options.project.binding.factoryProjectId}/work-items`,
         async () => {
           await options.workItemsReady;
           if (options.workItemsError) return HttpResponse.json({ error: 'Factory unavailable' }, { status: 500 });
@@ -214,7 +214,7 @@ describe('MastraCode web routing', () => {
       name: 'mastra-ai/mastra',
       resourceId: RESOURCE_ID,
       createdAt: 1,
-      binding: { kind: 'github', githubProjectId: 'github-project-id', worktrees: [] },
+      binding: { kind: 'factory', factoryProjectId: 'github-project-id', repositories: [] },
     };
     const { router } = renderRoutes('/local/github-project/new', AUTH_DISABLED, { project });
 
@@ -230,9 +230,9 @@ describe('MastraCode web routing', () => {
       resourceId: RESOURCE_ID,
       createdAt: 1,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-project-id',
-        worktrees: [],
+        kind: 'factory',
+        factoryProjectId: 'github-project-id',
+        repositories: [],
       },
     };
     const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
@@ -248,9 +248,9 @@ describe('MastraCode web routing', () => {
       resourceId: RESOURCE_ID,
       createdAt: 1,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-project-id',
-        worktrees: [],
+        kind: 'factory',
+        factoryProjectId: 'github-project-id',
+        repositories: [],
       },
     };
     let resolveWorkItems!: () => void;
@@ -272,9 +272,9 @@ describe('MastraCode web routing', () => {
       resourceId: RESOURCE_ID,
       createdAt: 1,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-project-id',
-        worktrees: [],
+        kind: 'factory',
+        factoryProjectId: 'github-project-id',
+        repositories: [],
       },
     };
     const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemsError: true });
@@ -290,9 +290,9 @@ describe('MastraCode web routing', () => {
       resourceId: RESOURCE_ID,
       createdAt: 1,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-project-id',
-        worktrees: [],
+        kind: 'factory',
+        factoryProjectId: 'github-project-id',
+        repositories: [],
       },
     };
     const { router } = renderRoutes('/', AUTHENTICATED, { project });

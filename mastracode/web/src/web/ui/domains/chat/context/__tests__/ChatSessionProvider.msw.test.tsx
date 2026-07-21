@@ -15,6 +15,7 @@ import type {
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { Profiler } from 'react';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -24,7 +25,6 @@ import { ChatSessionTestProvider as ChatSessionProvider } from '../ChatSessionTe
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../../../workspaces';
 import { ChatMessageList } from '../../components/ChatMessageList';
 import { ModesSelection } from '../../components/StatusLine/ModesSelection';
 import { ChatMessageBoundary } from '../ChatSessionProvider';
@@ -84,24 +84,36 @@ const nextProject: Factory = {
   },
 };
 
+const githubRepository = {
+  projectRepositoryId: 'project-repository-id',
+  slug: 'mastra-ai/mastracode-github-test',
+  worktrees: [],
+};
+
 const githubProject: Factory = {
   id: 'github-project-test',
   name: 'MastraCode GitHub Test',
   resourceId: RESOURCE_ID,
   createdAt: 3,
   binding: {
-    kind: 'github',
-    githubProjectId: 'github-project-id',
-    worktrees: [],
+    kind: 'factory',
+    factoryProjectId: 'factory-project-id',
+    repositories: [githubRepository],
   },
 };
 
 const githubProjectWithWorktree: Factory = {
   ...githubProject,
   binding: {
-    ...githubProject.binding,
-    worktrees: [{ branch: 'feature/test', baseBranch: 'main', worktreePath: '/tmp/mastracode-github-test' }],
-    selectedWorktreePath: '/tmp/mastracode-github-test',
+    kind: 'factory',
+    factoryProjectId: 'factory-project-id',
+    repositories: [
+      {
+        ...githubRepository,
+        worktrees: [{ branch: 'feature/test', baseBranch: 'main', worktreePath: '/tmp/mastracode-github-test' }],
+        selectedWorktreePath: '/tmp/mastracode-github-test',
+      },
+    ],
   },
 };
 
@@ -180,10 +192,10 @@ function useAgentControllerHandlers(
 }
 
 function Probe() {
+  const navigate = useNavigate();
   const { status, threadId } = useChatConnection();
   const { transcript, busy, showWorkingIndicator, localUser } = useChatTranscript();
   const { usage, followUpCount, omPhase, goal } = useChatRuntime();
-  const { selectFactory } = useActiveFactoryContext();
   const messageText = transcript.entries
     .filter(entry => entry.kind === 'message')
     .flatMap(entry => entry.message.content.parts)
@@ -205,7 +217,7 @@ function Probe() {
       <span data-testid="om-phase">{omPhase}</span>
       <span data-testid="goal-objective">{goal?.objective ?? '(none)'}</span>
       <button onClick={() => localUser('Hello')}>send local message</button>
-      <button onClick={() => void selectFactory(nextProject)}>switch factory</button>
+      <button onClick={() => navigate('/local/project-next/new')}>switch factory</button>
     </div>
   );
 }
@@ -287,30 +299,45 @@ function SessionContextProbe() {
 }
 
 function ProbeSession({ threadId, children }: { threadId?: string; children?: ReactNode }) {
+  return <ChatSessionProvider threadId={threadId}>{children ?? <Probe />}</ChatSessionProvider>;
+}
+
+function RouteHarness({ children }: { children: ReactNode }) {
+  const factoryId = localStorage.getItem('mastracode-active-factory') ?? project.id;
   return (
-    <ActiveFactoryProvider>
-      <ChatSessionProvider threadId={threadId}>{children ?? <Probe />}</ChatSessionProvider>
-    </ActiveFactoryProvider>
+    <MemoryRouter initialEntries={[`/local/${factoryId}/new`]}>
+      <Routes>
+        <Route path="/local/:projectId/*" element={children} />
+      </Routes>
+    </MemoryRouter>
   );
 }
 
 function renderProbe(threadId?: string) {
-  return renderWithProviders(<ProbeSession threadId={threadId} />);
+  return renderWithProviders(
+    <RouteHarness>
+      <ProbeSession threadId={threadId} />
+    </RouteHarness>,
+  );
 }
 
 function renderFocusedProbe(children: ReactNode, threadId?: string) {
-  return renderWithProviders(<ProbeSession threadId={threadId}>{children}</ProbeSession>);
+  return renderWithProviders(
+    <RouteHarness>
+      <ProbeSession threadId={threadId}>{children}</ProbeSession>
+    </RouteHarness>,
+  );
 }
 
 function renderMessageList(threadId?: string) {
   return renderWithProviders(
-    <ActiveFactoryProvider>
+    <RouteHarness>
       <ChatSessionProvider threadId={threadId}>
         <ChatMessageBoundary>
           <ChatMessageList />
         </ChatMessageBoundary>
       </ChatSessionProvider>
-    </ActiveFactoryProvider>,
+    </RouteHarness>,
   );
 }
 
@@ -626,7 +653,11 @@ describe('ChatSessionProvider', () => {
       const { rerender } = renderProbe('thread-one');
 
       await waitFor(() => expect(screen.getByTestId('message-text')).toHaveTextContent('Thread one text'));
-      rerender(<ProbeSession threadId="thread-two" />);
+      rerender(
+        <RouteHarness>
+          <ProbeSession threadId="thread-two" />
+        </RouteHarness>,
+      );
 
       await waitFor(() => expect(screen.getByTestId('message-text')).toHaveTextContent('Thread two text'));
       expect(screen.getByTestId('message-text')).not.toHaveTextContent('Thread one text');
@@ -689,7 +720,7 @@ describe('ChatSessionProvider', () => {
       await waitFor(() => expect(requests).toContain('create'));
     });
 
-    it('binds a GitHub project session with the githubProjectId in session state', async () => {
+    it('binds a GitHub Factory session with Factory project and repository identities', async () => {
       const requests: string[] = [];
       seedFactory([githubProjectWithWorktree], githubProjectWithWorktree);
       useAgentControllerHandlers([], requests);
@@ -698,7 +729,7 @@ describe('ChatSessionProvider', () => {
 
       await waitFor(() =>
         expect(requests).toContain(
-          'setState:{"state":{"projectPath":"/tmp/mastracode-github-test","githubProjectId":"github-project-id"}}',
+          'setState:{"state":{"projectPath":"/tmp/mastracode-github-test","factoryProjectId":"factory-project-id","projectRepositoryId":"project-repository-id"}}',
         ),
       );
     });
@@ -1002,6 +1033,12 @@ describe('ChatSessionProvider', () => {
   });
 
   it('given no provider, when a focused chat consumer renders, then it throws a descriptive error', () => {
-    expect(() => render(<Probe />)).toThrow('useChatConnection must be used within a ChatSessionProvider');
+    expect(() =>
+      render(
+        <MemoryRouter>
+          <Probe />
+        </MemoryRouter>,
+      ),
+    ).toThrow('useChatConnection must be used within a ChatSessionProvider');
   });
 });

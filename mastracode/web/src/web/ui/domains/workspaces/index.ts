@@ -1,13 +1,10 @@
 export { DirectoryBrowser } from './components/DirectoryPicker';
 export { EmptyFactoryState } from './components/EmptyFactoryState';
-export { GithubConnectModal } from './components/GithubConnectModal';
-export { FactoriesPanel } from './components/FactoriesPanel';
+export { ConnectRepositoriesPanel } from './components/ConnectRepositoriesPanel';
+export { FactoriesModal } from './components/FactoriesModal';
 export { FactorySwitcher } from './components/FactorySwitcher';
 export { UserSessionsSection } from './components/UserSessionsSection';
 export { WorkspacesSection } from './components/WorkspacesSection';
-export { useActiveFactory } from '../../../../shared/hooks/useActiveFactory';
-export { ActiveFactoryProvider, useActiveFactoryContext } from './context/ActiveFactoryProvider';
-export type { ActiveFactoryApi } from './context/ActiveFactoryProvider';
 export * from '../../../../shared/hooks/useEnsureRepoMaterialized';
 export * from '../../../../shared/hooks/useGithubGitOps';
 export * from '../../../../shared/hooks/useGithubRepos';

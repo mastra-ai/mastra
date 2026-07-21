@@ -9,7 +9,6 @@ import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/Ch
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider } from '../../../workspaces';
 import { ChatCommandsProvider, useChatCommands } from '../../context/ChatCommandsProvider';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { SLASH_COMMANDS } from '../../services/commands';
@@ -127,12 +126,11 @@ function PaletteCommandProbe() {
 
 function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+    <MemoryRouter initialEntries={[`/local/project-test/threads/${THREAD_ID}`]}>
       <Routes>
         <Route
-          path="/threads/:threadId"
+          path="/local/:projectId/threads/:threadId"
           element={
-            <ActiveFactoryProvider>
               <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatCommandsProvider>
                   <Composer {...props} />
@@ -140,7 +138,6 @@ function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = 
                   <NoticeProbe />
                 </ChatCommandsProvider>
               </ChatSessionProvider>
-            </ActiveFactoryProvider>
           }
         />
       </Routes>

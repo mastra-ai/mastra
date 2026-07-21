@@ -21,16 +21,17 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import { queryKeys } from '../../../../../../shared/api/keys';
 import { ToastProvider } from '../../../../ui';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
-import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
-import type { Factory, GithubFactory } from '../../services/factories';
-import { isGithubFactory, loadFactories, saveFactories } from '../../services/factories';
+import type { Factory } from '../../services/factories';
+import { isServerFactory, loadFactories, saveFactories } from '../../services/factories';
 import { playDoneSound } from '../../../settings/services/doneSound';
 import { WorkspacesSection } from '../WorkspacesSection';
 
-function storedGithubFactory(): GithubFactory {
+function storedRepository() {
   const factory = loadFactories()[0];
-  if (!factory || !isGithubFactory(factory)) throw new Error('expected github factory');
-  return factory;
+  if (!factory || !isServerFactory(factory)) throw new Error('expected server factory');
+  const repository = factory.binding.repositories[0];
+  if (!repository) throw new Error('expected linked repository');
+  return repository;
 }
 
 // The completion sound synthesizes audio via AudioContext, which jsdom
@@ -41,7 +42,7 @@ vi.mock('../../../settings/services/doneSound', async importOriginal => ({
 }));
 
 const ORIGIN = TEST_BASE_URL;
-const GITHUB_PROJECT_ID = 'github-project-1';
+const PROJECT_REPOSITORY_ID = 'github-project-1';
 const API = `${ORIGIN}/api/agent-controller/code`;
 
 const githubProject: Factory = {
@@ -50,22 +51,28 @@ const githubProject: Factory = {
   resourceId: 'resource-gh',
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: GITHUB_PROJECT_ID,
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra-worktrees/feat-api',
-    worktrees: [
-      // Legacy repo-root entry persisted by older builds — never a workspace.
-      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-      { branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api', baseBranch: 'main' },
-      // Personal user session — listed by the User Sessions section instead.
+    kind: 'factory',
+    factoryProjectId: 'fp-github-project-1',
+    repositories: [
       {
-        branch: 'user/alice-notes',
-        worktreePath: '/sandbox/mastra-worktrees/user-alice-notes',
-        baseBranch: 'main',
-        threadId: 'thread-user',
+        projectRepositoryId: PROJECT_REPOSITORY_ID,
+        slug: 'mastra-ai/mastra',
+        gitBranch: 'main',
+        sandboxWorkdir: '/sandbox/mastra',
+        selectedWorktreePath: '/sandbox/mastra-worktrees/feat-api',
+        worktrees: [
+          // Legacy repo-root entry persisted by older builds — never a workspace.
+          { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+          { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+          { branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api', baseBranch: 'main' },
+          // Personal user session — listed by the User Sessions section instead.
+          {
+            branch: 'user/alice-notes',
+            worktreePath: '/sandbox/mastra-worktrees/user-alice-notes',
+            baseBranch: 'main',
+            threadId: 'thread-user',
+          },
+        ],
       },
     ],
   },
@@ -144,12 +151,10 @@ function renderSection(initialPath = '/') {
   return renderWithProviders(
     <MemoryRouter initialEntries={[initialPath]}>
       <ToastProvider>
-        <ActiveFactoryProvider>
           <ChatSessionConfigProvider>
             <WorkspacesSection defaultOpen />
             <LocationProbe />
           </ChatSessionConfigProvider>
-        </ActiveFactoryProvider>
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -337,9 +342,7 @@ describe('WorkspacesSection', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() =>
-      expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'),
-    );
+    await waitFor(() => expect(storedRepository().selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
     // Let the open-thread flow settle so its requests can't leak into later tests.
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
   });
@@ -466,7 +469,7 @@ describe('WorkspacesSection', () => {
 
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
     // No re-select happened — the workspace selection is unchanged.
-    expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
+    expect(storedRepository().selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
   });
 
   it('offers no ad-hoc workspace creation — factory sessions come from board runs', async () => {
@@ -512,7 +515,7 @@ describe('WorkspacesSection', () => {
         deletedThreads.push(String(params.threadId));
         return HttpResponse.json({ ok: true });
       }),
-      http.post(`${ORIGIN}/web/github/repositories/${GITHUB_PROJECT_ID}/worktree/delete`, async ({ request }) => {
+      http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree/delete`, async ({ request }) => {
         deletedBranch = ((await request.json()) as { branch: string }).branch;
         return HttpResponse.json({
           removed: true,
@@ -535,11 +538,8 @@ describe('WorkspacesSection', () => {
     expect(deletedThreads).toEqual(['thread-doomed']);
     // The user-session worktree survives; the legacy repo-root entry is
     // dropped for good when the worktree list is rewritten.
-    expect(storedGithubFactory().binding.worktrees.map(worktree => worktree.branch)).toEqual([
-      'feat-api',
-      'user/alice-notes',
-    ]);
-    expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
+    expect(storedRepository().worktrees.map(worktree => worktree.branch)).toEqual(['feat-api', 'user/alice-notes']);
+    expect(storedRepository().selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
   });
 
   it('keeps the worktree when the delete confirmation is cancelled', async () => {
@@ -547,7 +547,7 @@ describe('WorkspacesSection', () => {
     useAgentControllerHandlers();
     let deleteCalled = false;
     server.use(
-      http.post(`${ORIGIN}/web/github/repositories/${GITHUB_PROJECT_ID}/worktree/delete`, () => {
+      http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree/delete`, () => {
         deleteCalled = true;
         return HttpResponse.json({
           removed: true,
@@ -567,7 +567,7 @@ describe('WorkspacesSection', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete workspace?' })).not.toBeInTheDocument());
     expect(deleteCalled).toBe(false);
     expect(screen.getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
-    expect(storedGithubFactory().binding.worktrees.map(worktree => worktree.branch)).toEqual([
+    expect(storedRepository().worktrees.map(worktree => worktree.branch)).toEqual([
       'feat-ui',
       'feat-api',
       'user/alice-notes',

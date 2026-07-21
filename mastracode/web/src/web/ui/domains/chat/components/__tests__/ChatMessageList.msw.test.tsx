@@ -17,7 +17,6 @@ import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/Ch
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider } from '../../../workspaces';
 import { ChatMessageList } from '../ChatMessageList';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -94,16 +93,14 @@ function renderMessageList() {
   // Mounted on the thread's own page: /chat is the draft composer and hides
   // the bound thread's transcript.
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+    <MemoryRouter initialEntries={[`/local/project-test/threads/${THREAD_ID}`]}>
       <Routes>
         <Route
-          path="/threads/:threadId"
+          path="/local/:projectId/threads/:threadId"
           element={
-            <ActiveFactoryProvider>
               <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatMessageList />
               </ChatSessionProvider>
-            </ActiveFactoryProvider>
           }
         />
       </Routes>

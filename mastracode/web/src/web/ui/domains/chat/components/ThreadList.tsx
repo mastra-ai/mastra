@@ -1,3 +1,4 @@
+import { useRouteFactory } from '../../../../../shared/hooks/useRouteFactory';
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -12,7 +13,7 @@ import { relativeTime } from '../../../../../shared/lib/date';
 import { useOverlays } from '../../../lib/overlays';
 import { useProjectRoute } from '../../../lib/useProjectRoute';
 import { useToast } from '../../../ui';
-import { isGithubFactory, useActiveFactoryContext } from '../../workspaces';
+import { isServerFactory } from '../../workspaces';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import {
   useCloneAgentControllerThreadMutation,
@@ -23,7 +24,7 @@ import { useAgentControllerThreads } from '../../../../../shared/hooks/useAgentC
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 export function ThreadList() {
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory } = useRouteFactory();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
 
@@ -43,7 +44,7 @@ export function ThreadList() {
   // "Threads" header/count, no rename/clone/delete actions, and no way to
   // create more threads. Every GitHub chat target is a worktree (the repo
   // root is not a workspace), so any GitHub project path is read-only here.
-  const readOnly = isGithubFactory(activeFactory) && Boolean(projectPath);
+  const readOnly = isServerFactory(activeFactory) && Boolean(projectPath);
 
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;

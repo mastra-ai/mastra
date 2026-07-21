@@ -1,3 +1,4 @@
+import { useRouteFactory } from '../../../../../shared/hooks/useRouteFactory';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChartLine, Inbox, LayoutDashboard, ScrollText, SquareKanban, SearchCheck } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
@@ -5,7 +6,7 @@ import { NavLink } from 'react-router';
 
 import { useOverlays } from '../../../lib/overlays';
 import { projectPath } from '../../../lib/projectRoutes';
-import { isGithubFactory, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
+import { isServerFactory, useGithubStatusQuery } from '../../workspaces';
 
 /**
  * The Factory menu: Board navigation plus whatever the caller nests under it
@@ -15,8 +16,8 @@ import { isGithubFactory, useActiveFactoryContext, useGithubStatusQuery } from '
  * work off the factory's own worktrees.
  */
 export function FactorySection({ children }: { children?: ReactNode }) {
-  const { activeFactory } = useActiveFactoryContext();
-  const isGithub = activeFactory ? isGithubFactory(activeFactory) : false;
+  const { activeFactory } = useRouteFactory();
+  const isGithub = activeFactory ? isServerFactory(activeFactory) : false;
   const { data: status } = useGithubStatusQuery(isGithub);
 
   if (!isGithub) return null;

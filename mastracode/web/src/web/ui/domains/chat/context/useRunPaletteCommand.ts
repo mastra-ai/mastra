@@ -1,7 +1,7 @@
+import { useRouteFactory } from '../../../../../shared/hooks/useRouteFactory';
 import type { ToolCategory } from '@mastra/client-js';
 import type { Dispatch, SetStateAction } from 'react';
 
-import { useActiveFactoryContext } from '../../workspaces';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -25,7 +25,7 @@ import { useChatTranscript } from './useChatTranscript';
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
 export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAction<string | undefined>>) {
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory } = useRouteFactory();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { activeModeId } = useChatModes();

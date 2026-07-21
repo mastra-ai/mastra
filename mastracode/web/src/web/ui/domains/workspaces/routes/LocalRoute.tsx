@@ -2,15 +2,15 @@ import { useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
 import { Chat } from '../../chat/Chat';
-import { isGithubFactory } from '../services/factories';
+import { isServerFactory } from '../services/factories';
 
 export function LocalRoute() {
   const { projectId } = useParams();
   const factories = useFactoriesQuery();
   const factory = factories.data.find(item => item.id === projectId);
 
-  if (!factory || isGithubFactory(factory)) return <ProjectNotFound />;
-  return <Chat factoryId={factory.id} namespace="local" />;
+  if (!factory || isServerFactory(factory)) return <ProjectNotFound />;
+  return <Chat namespace="local" />;
 }
 
 function ProjectNotFound() {

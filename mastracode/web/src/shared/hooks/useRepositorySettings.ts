@@ -7,15 +7,15 @@ import type { RepositorySettings } from '../../web/ui/domains/workspaces/service
 
 /**
  * Per-repository settings (worktree setup command) through the shared React Query
- * cache. Gated on a `githubProjectId` — local factories have no server-side
+ * cache. Gated on a `factoryProjectId` — local factories have no server-side
  * settings, so the query stays idle for them.
  */
-export function useRepositorySettingsQuery(githubProjectId: string | undefined) {
+export function useRepositorySettingsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.githubRepositorySettings(githubProjectId),
-    queryFn: () => fetchRepositorySettings(baseUrl, githubProjectId!),
-    enabled: Boolean(githubProjectId),
+    queryKey: queryKeys.githubRepositorySettings(factoryProjectId),
+    queryFn: () => fetchRepositorySettings(baseUrl, factoryProjectId!),
+    enabled: Boolean(factoryProjectId),
   });
 }
 
@@ -24,10 +24,10 @@ export function useSaveRepositorySettingsMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ githubProjectId, settings }: { githubProjectId: string; settings: RepositorySettings }) =>
-      saveRepositorySettings(baseUrl, githubProjectId, settings),
-    onSuccess: (saved, { githubProjectId }) => {
-      queryClient.setQueryData(queryKeys.githubRepositorySettings(githubProjectId), saved);
+    mutationFn: ({ projectRepositoryId, settings }: { projectRepositoryId: string; settings: RepositorySettings }) =>
+      saveRepositorySettings(baseUrl, projectRepositoryId, settings),
+    onSuccess: (saved, { projectRepositoryId }) => {
+      queryClient.setQueryData(queryKeys.githubRepositorySettings(projectRepositoryId), saved);
     },
   });
 }

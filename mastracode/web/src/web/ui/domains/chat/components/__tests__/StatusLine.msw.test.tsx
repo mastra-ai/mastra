@@ -17,7 +17,6 @@ import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/Ch
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider } from '../../../workspaces';
 import { StatusLine } from '../StatusLine';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -38,12 +37,18 @@ function seedFactory(source: 'local' | 'github' = 'local') {
           resourceId: RESOURCE_ID,
           createdAt: 1,
           binding: {
-            kind: 'github',
-            githubProjectId: 'github-project-test',
-            gitBranch: 'main',
-            sandboxWorkdir: '/tmp/mastracode-test',
-            selectedWorktreePath: '/tmp/mastracode-test-worktree',
-            worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
+            kind: 'factory',
+            factoryProjectId: 'fp-test',
+            repositories: [
+              {
+                projectRepositoryId: 'pr-test',
+                slug: 'octo/hello',
+                gitBranch: 'main',
+                sandboxWorkdir: '/tmp/mastracode-test',
+                selectedWorktreePath: '/tmp/mastracode-test-worktree',
+                worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
+              },
+            ],
           },
         }
       : {
@@ -144,16 +149,14 @@ function omProgress(overrides: Partial<AgentControllerOMProgress> = {}): AgentCo
 
 function renderStatusLine() {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+    <MemoryRouter initialEntries={[`/local/project-test/threads/${THREAD_ID}`]}>
       <Routes>
         <Route
-          path="/threads/:threadId"
+          path="/local/:projectId/threads/:threadId"
           element={
-            <ActiveFactoryProvider>
               <ChatSessionProvider>
                 <StatusLine />
               </ChatSessionProvider>
-            </ActiveFactoryProvider>
           }
         />
       </Routes>

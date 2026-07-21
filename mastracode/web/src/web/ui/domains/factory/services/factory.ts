@@ -1,8 +1,8 @@
 /**
  * Browser-side helpers for the Factory pages (Intake / Review).
  *
- * Reads a GitHub project's open issues and open (non-draft) pull requests
- * through the server's `/web/github/repositories/:id/*` routes, which are behind
+ * Reads a linked repository's open issues and open (non-draft) pull requests
+ * through the server's `/web/github/projects/:projectRepositoryId/*` routes, which are behind
  * the WorkOS auth gate and scoped to the caller's organization. Tokens never
  * reach the browser — the server talks to GitHub with its installation token.
  */
@@ -43,7 +43,7 @@ export interface GithubPullRequestPage {
 /** GET helper for the read-only per-repository GitHub endpoints. */
 async function getRepositoryResource<T>(
   baseUrl: string,
-  githubProjectId: string,
+  factoryProjectId: string,
   resource: string,
   page: number,
   params?: Record<string, string | undefined>,
@@ -52,7 +52,7 @@ async function getRepositoryResource<T>(
   for (const [key, value] of Object.entries(params ?? {})) {
     if (value !== undefined) search.set(key, value);
   }
-  const url = `${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/${resource}?${search}`;
+  const url = `${baseUrl}/web/github/projects/${encodeURIComponent(factoryProjectId)}/${resource}?${search}`;
   const res = await fetch(url, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
@@ -74,11 +74,11 @@ async function getRepositoryResource<T>(
 /** List one page of a connected repository's open GitHub issues (PRs excluded server-side). */
 export async function listRepositoryIssues(
   baseUrl: string,
-  githubProjectId: string,
+  factoryProjectId: string,
   page: number,
   label?: string,
 ): Promise<GithubIssuePage> {
-  return getRepositoryResource<GithubIssuePage>(baseUrl, githubProjectId, 'issues', page, { label });
+  return getRepositoryResource<GithubIssuePage>(baseUrl, factoryProjectId, 'issues', page, { label });
 }
 
 export interface StartIssueTriageResult {
@@ -89,11 +89,11 @@ export interface StartIssueTriageResult {
 /** Start issue triage through the same server-side run seam used by GitHub webhooks. */
 export async function startRepositoryIssueTriage(
   baseUrl: string,
-  githubProjectId: string,
+  factoryProjectId: string,
   issue: GithubIssue,
 ): Promise<StartIssueTriageResult> {
   const res = await fetch(
-    `${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/issues/${issue.number}/triage`,
+    `${baseUrl}/web/github/projects/${encodeURIComponent(factoryProjectId)}/issues/${issue.number}/triage`,
     {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -122,8 +122,8 @@ export async function startRepositoryIssueTriage(
 /** List one page of a connected repository's open pull requests (drafts excluded server-side). */
 export async function listRepositoryPullRequests(
   baseUrl: string,
-  githubProjectId: string,
+  factoryProjectId: string,
   page: number,
 ): Promise<GithubPullRequestPage> {
-  return getRepositoryResource<GithubPullRequestPage>(baseUrl, githubProjectId, 'prs', page);
+  return getRepositoryResource<GithubPullRequestPage>(baseUrl, factoryProjectId, 'prs', page);
 }

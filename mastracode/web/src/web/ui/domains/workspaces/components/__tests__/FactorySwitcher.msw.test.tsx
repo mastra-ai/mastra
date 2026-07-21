@@ -8,11 +8,10 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
-import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
 import type { Factory } from '../../services/factories';
 import { FactorySwitcher } from '../FactorySwitcher';
 
@@ -50,12 +49,17 @@ function OverlayProbe() {
 function renderSwitcher() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/local/project-test/new']}>
-      <ActiveFactoryProvider>
-        <OverlaysProvider>
-          <FactorySwitcher />
-          <OverlayProbe />
-        </OverlaysProvider>
-      </ActiveFactoryProvider>
+      <Routes>
+        <Route
+          path="/local/:projectId/*"
+          element={
+            <OverlaysProvider>
+              <FactorySwitcher />
+              <OverlayProbe />
+            </OverlaysProvider>
+          }
+        />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -85,12 +89,12 @@ describe('FactorySwitcher', () => {
     expect(screen.getByTestId('projects-open')).toHaveTextContent('no');
   });
 
-  it('when Create factory from local folder is selected, then the factories overlay opens', async () => {
+  it('when Create Factory is selected, then the factories overlay opens', async () => {
     seedFactory();
     renderSwitcher();
 
     await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Create factory from local folder' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
 
     expect(screen.getByTestId('projects-open')).toHaveTextContent('yes');
   });

@@ -2,33 +2,26 @@ import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSideba
 import type { ReactNode } from 'react';
 import { Outlet, useLocation, useParams } from 'react-router';
 
-import { useGithubStatusQuery } from '../../../../shared/hooks/useGithubStatus';
-import { OverlaysProvider, useOverlays } from '../../lib/overlays';
+import { OverlaysProvider } from '../../lib/overlays';
 import { ProjectRouteProvider } from '../../lib/ProjectRouteContext';
-import { ChatLayout } from '../../ui/ChatLayout';
-import { ActiveFactoryProvider } from '../workspaces/context/ActiveFactoryProvider';
-import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 
 interface ChatProps {
-  factoryId: string;
   namespace: 'local' | 'dashboard';
 }
 
-export function Chat({ factoryId, namespace }: ChatProps) {
+export function Chat({ namespace }: ChatProps) {
   return (
     <MainSidebarProvider storageKey="mastracode-sidebar" mobileBreakpoint={768}>
-      <ActiveFactoryProvider factoryId={factoryId}>
-        <ProjectRouteProvider namespace={namespace}>
-          <ChatSessionRouteProvider>
-            <OverlaysProvider>
-              <ChatShell />
-            </OverlaysProvider>
-          </ChatSessionRouteProvider>
-        </ProjectRouteProvider>
-      </ActiveFactoryProvider>
+      <ProjectRouteProvider namespace={namespace}>
+        <ChatSessionRouteProvider>
+          <OverlaysProvider>
+            <ChatShell />
+          </OverlaysProvider>
+        </ChatSessionRouteProvider>
+      </ProjectRouteProvider>
     </MainSidebarProvider>
   );
 }
@@ -46,25 +39,9 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 }
 
 function ChatShell() {
-  const overlays = useOverlays();
-  const githubStatus = useGithubStatusQuery();
-  const factoryPanel = overlays.isOpen('factories') ? (
-    <FactoriesPanel
-      onOpenGithub={
-        githubStatus.data
-          ? () => {
-              overlays.close('factories');
-              overlays.open('github');
-            }
-          : undefined
-      }
-      onClose={() => overlays.close('factories')}
-    />
-  ) : undefined;
-
   return (
     <>
-      <ChatLayout main={factoryPanel ?? <Outlet />} />
+      <Outlet />
       <ChatOverlays />
     </>
   );

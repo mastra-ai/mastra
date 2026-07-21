@@ -20,18 +20,18 @@ type IntakeSource = 'github' | 'github-prs' | 'linear';
 export function IntakeBoardPage() {
   return (
     <FactoryPageShell title="Intake" description="Browse and file incoming issues and pull requests.">
-      {factory => <IntakeBoard githubProjectId={factory.binding.githubProjectId} />}
+      {factory => <IntakeBoard factoryProjectId={factory.binding.factoryProjectId} />}
     </FactoryPageShell>
   );
 }
 
-function IntakeBoard({ githubProjectId }: { githubProjectId: string }) {
+function IntakeBoard({ factoryProjectId }: { factoryProjectId: string }) {
   const config = useIntakeConfigQuery();
   const linearStatus = useLinearStatusQuery();
-  const items = useWorkItemsQuery(githubProjectId);
+  const items = useWorkItemsQuery(factoryProjectId);
   const [source, setSource] = useState<IntakeSource>('github');
   const githubEnabled = config.data?.github.enabled ?? false;
-  const githubSelected = config.data?.github.repositoryIds?.includes(githubProjectId) ?? false;
+  const githubSelected = config.data?.github.repositoryIds?.includes(factoryProjectId) ?? false;
   const linearEnabled = Boolean(
     config.data?.linear.enabled &&
       config.data.linear.projectIds?.length &&
@@ -44,11 +44,11 @@ function IntakeBoard({ githubProjectId }: { githubProjectId: string }) {
     ...(linearEnabled ? (['linear'] as const) : []),
   ];
   const activeSource = available.includes(source) ? source : available[0];
-  const issues = useProjectIssuesQuery(activeSource === 'github' ? githubProjectId : undefined);
-  const pulls = useProjectPullRequestsQuery(activeSource === 'github-prs' ? githubProjectId : undefined);
+  const issues = useProjectIssuesQuery(activeSource === 'github' ? factoryProjectId : undefined);
+  const pulls = useProjectPullRequestsQuery(activeSource === 'github-prs' ? factoryProjectId : undefined);
   const linear = useLinearIssuesQuery(activeSource === 'linear');
-  const upsert = useUpsertWorkItemMutation(githubProjectId);
-  const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(githubProjectId);
+  const upsert = useUpsertWorkItemMutation(factoryProjectId);
+  const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(factoryProjectId);
 
   if (config.isPending || linearStatus.isPending || items.isPending) return <p role="status">Loading Intake board</p>;
   const activeQuery = activeSource === 'github' ? issues : activeSource === 'github-prs' ? pulls : linear;

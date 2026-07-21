@@ -41,12 +41,18 @@ const githubProject: Factory = {
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: GITHUB_PROJECT_ID,
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: WORKTREE,
-    worktrees: [{ branch: 'feat/overview', worktreePath: WORKTREE, baseBranch: 'main' }],
+    kind: 'factory',
+    factoryProjectId: GITHUB_PROJECT_ID,
+    repositories: [
+      {
+        projectRepositoryId: 'project-repository-1',
+        slug: 'mastra-ai/mastra',
+        gitBranch: 'main',
+        sandboxWorkdir: '/sandbox/mastra',
+        selectedWorktreePath: WORKTREE,
+        worktrees: [{ branch: 'feat/overview', worktreePath: WORKTREE, baseBranch: 'main' }],
+      },
+    ],
   },
 };
 
@@ -72,7 +78,7 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
   return {
     orgId: 'org-1',
     createdBy: 'user-1',
-    githubProjectId: GITHUB_PROJECT_ID,
+    factoryProjectId: GITHUB_PROJECT_ID,
     source: 'manual',
     sourceKey: null,
     url: null,
@@ -168,7 +174,7 @@ function renderAt(initialEntry: string, project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const scopedEntry = `/${project.binding.kind === 'github' ? 'dashboard' : 'local'}/${project.id}${initialEntry}`;
+  const scopedEntry = `/${project.binding.kind === 'factory' ? 'dashboard' : 'local'}/${project.id}${initialEntry}`;
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [scopedEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };

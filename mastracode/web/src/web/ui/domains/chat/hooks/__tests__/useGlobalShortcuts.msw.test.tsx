@@ -11,14 +11,15 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { OverlayName } from '../../../../lib/overlays';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
+import { ProjectRouteProvider } from '../../../../lib/ProjectRouteContext';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider } from '../../../workspaces';
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { useGlobalShortcuts } from '../useGlobalShortcuts';
@@ -111,14 +112,24 @@ function Probe() {
 }
 
 function renderProbe(threadId?: string) {
+  const path = threadId ? `/local/project-test/threads/${threadId}` : '/local/project-test/new';
   return renderWithProviders(
-    <ActiveFactoryProvider>
-      <ChatSessionProvider threadId={threadId}>
-        <OverlaysProvider>
-          <Probe />
-        </OverlaysProvider>
-      </ChatSessionProvider>
-    </ActiveFactoryProvider>,
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route
+          path="/local/:projectId/*"
+          element={
+            <ProjectRouteProvider namespace="local">
+              <ChatSessionProvider threadId={threadId}>
+                <OverlaysProvider>
+                  <Probe />
+                </OverlaysProvider>
+              </ChatSessionProvider>
+            </ProjectRouteProvider>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 

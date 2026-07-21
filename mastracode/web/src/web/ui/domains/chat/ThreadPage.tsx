@@ -1,3 +1,4 @@
+import { useRouteFactory } from '../../../../shared/hooks/useRouteFactory';
 import { useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 
@@ -9,7 +10,6 @@ import {
   activeWorkspacePath,
   EmptyFactoryState,
   findUserSessionByThreadId,
-  useActiveFactoryContext,
 } from '../workspaces';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ComposerPanel } from './components/ComposerPanel';
@@ -23,7 +23,7 @@ const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
   const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory } = useRouteFactory();
   const { threadId } = useParams();
   const location = useLocation();
   const projectRoute = useProjectRoute();

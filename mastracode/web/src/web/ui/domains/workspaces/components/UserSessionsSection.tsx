@@ -1,3 +1,4 @@
+import { useRouteFactory } from '../../../../../shared/hooks/useRouteFactory';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
@@ -15,16 +16,16 @@ import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { userSessionResourceId } from '../../auth/services/auth';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { useProjectRoute } from '../../../lib/useProjectRoute';
 import { useWorkspaceActivity } from '../../../../../shared/hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import { createWorktree, deleteWorktree } from '../services/github';
 import type { Factory, Worktree } from '../services/factories';
 import {
-  isGithubFactory,
+  isServerFactory,
   loadFactories,
   removeWorktree,
+  selectedRepository,
   upsertWorktree,
   USER_SESSION_BRANCH_PREFIX,
   userSessionWorktrees,
@@ -53,7 +54,7 @@ function sessionLabel(worktree: Worktree): string {
  */
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory } = useRouteFactory();
   const auth = useWebAuth();
   const navigate = useNavigate();
   const projectRoute = useProjectRoute();
@@ -64,7 +65,9 @@ export function UserSessionsSection() {
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
 
-  const isGithub = activeFactory ? isGithubFactory(activeFactory) : false;
+  const isServer = activeFactory ? isServerFactory(activeFactory) : false;
+  const hasRepository = activeFactory ? !!selectedRepository(activeFactory) : false;
+  const sessionsEnabled = isServer && hasRepository;
   const userResourceId = userSessionResourceId(auth.data);
 
   const sessionsQuery = useQuery({
@@ -73,8 +76,9 @@ export function UserSessionsSection() {
       if (!activeFactory) throw new Error('User sessions require an active factory');
       return userSessionWorktrees(latestFactory(activeFactory));
     },
-    enabled: isGithub,
-    initialData: isGithub && activeFactory ? () => userSessionWorktrees(latestFactory(activeFactory)) : undefined,
+    enabled: sessionsEnabled,
+    initialData:
+      sessionsEnabled && activeFactory ? () => userSessionWorktrees(latestFactory(activeFactory)) : undefined,
   });
   const worktrees = sessionsQuery.data ?? [];
 
@@ -84,7 +88,7 @@ export function UserSessionsSection() {
     projectPath: worktrees[0]?.worktreePath,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: isGithub && !auth.isPending && worktrees.length > 0,
+    enabled: sessionsEnabled && !auth.isPending && worktrees.length > 0,
   });
   const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
 
@@ -107,14 +111,16 @@ export function UserSessionsSection() {
 
   const createSession = useMutation({
     mutationFn: async (rawName: string) => {
-      if (!activeFactory || !isGithubFactory(activeFactory)) throw new Error('No GitHub factory selected');
+      if (!activeFactory || !isServerFactory(activeFactory)) throw new Error('No server-backed factory selected');
+      const repository = selectedRepository(activeFactory);
+      if (!repository) throw new Error('Link a repository to this factory first');
       const slug = rawName.trim().toLowerCase().replace(/\s+/g, '-');
       if (!slug) throw new Error('Session name is required');
       // A fresh worktree branched from the repo's HEAD (server defaults the
       // base branch), owned by this user.
       const result = await createWorktree(
         baseUrl,
-        activeFactory.binding.githubProjectId,
+        repository.projectRepositoryId,
         `${USER_SESSION_BRANCH_PREFIX}${slug}`,
       );
       const chatSession = userSessionFor(result.worktreePath);
@@ -143,8 +149,10 @@ export function UserSessionsSection() {
 
   const deleteSession = useMutation({
     mutationFn: async (worktree: Worktree) => {
-      if (!activeFactory || !isGithubFactory(activeFactory)) throw new Error('No GitHub factory selected');
-      await deleteWorktree(baseUrl, activeFactory.binding.githubProjectId, worktree.branch);
+      if (!activeFactory || !isServerFactory(activeFactory)) throw new Error('No server-backed factory selected');
+      const repository = selectedRepository(activeFactory);
+      if (!repository) throw new Error('Link a repository to this factory first');
+      await deleteWorktree(baseUrl, repository.projectRepositoryId, worktree.branch);
       // Cascade: delete the user's threads scoped to this worktree. Re-list
       // between rounds (page-size cap); bail after a sane number of rounds.
       const chatSession = userSessionFor(worktree.worktreePath);
@@ -170,7 +178,7 @@ export function UserSessionsSection() {
     },
   });
 
-  if (!isGithub) return null;
+  if (!sessionsEnabled) return null;
 
   const pending = createSession.isPending || deleteSession.isPending;
 

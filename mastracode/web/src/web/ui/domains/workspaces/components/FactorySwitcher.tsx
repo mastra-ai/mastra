@@ -1,23 +1,20 @@
+import { useRouteFactory } from '../../../../../shared/hooks/useRouteFactory';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, ChevronsUpDown, Folder, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
-import { useGithubStatusQuery } from '../../../../../shared/hooks/useGithubStatus';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useOverlays } from '../../../lib/overlays';
 import { GithubIcon } from '../../../ui/icons';
 import { projectEntry } from '../../../lib/projectRoutes';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
-import { isGithubFactory } from '../services/factories';
+import { isServerFactory } from '../services/factories';
 
 /** Inline factory selection with dedicated actions for adding local and GitHub factories. */
 export function FactorySwitcher() {
-  const { factories, activeFactory, selectFactory } = useActiveFactoryContext();
+  const { factories, activeFactory } = useRouteFactory();
   const navigate = useNavigate();
   const overlays = useOverlays();
-  const githubStatus = useGithubStatusQuery().data;
-  const githubEnabled = !!githubStatus && (githubStatus.enabled || !!githubStatus.authRequired);
 
   return (
     <DropdownMenu>
@@ -40,8 +37,8 @@ export function FactorySwitcher() {
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => (
-          <DropdownMenu.Item key={factory.id} onSelect={() => { void selectFactory(factory); void navigate(projectEntry(factory)); }}>
-            {isGithubFactory(factory) ? <GithubIcon /> : <Folder />}
+          <DropdownMenu.Item key={factory.id} onSelect={() => void navigate(projectEntry(factory))}>
+            {isServerFactory(factory) ? <GithubIcon /> : <Folder />}
             <span className="min-w-0 flex-1 truncate">{factory.name}</span>
             {factory.id === activeFactory?.id && <Check aria-label="Active factory" />}
           </DropdownMenu.Item>
@@ -49,14 +46,8 @@ export function FactorySwitcher() {
         {factories.length > 0 && <DropdownMenu.Separator />}
         <DropdownMenu.Item onSelect={() => overlays.open('factories')}>
           <FolderOpen />
-          <span>Create factory from local folder</span>
+          <span>Create Factory</span>
         </DropdownMenu.Item>
-        {githubEnabled && (
-          <DropdownMenu.Item onSelect={() => overlays.open('github')}>
-            <GithubIcon />
-            <span>Create/connect factory from GitHub</span>
-          </DropdownMenu.Item>
-        )}
       </DropdownMenu.Content>
     </DropdownMenu>
   );

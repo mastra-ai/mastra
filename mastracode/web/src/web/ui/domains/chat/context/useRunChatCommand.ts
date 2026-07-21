@@ -1,6 +1,6 @@
+import { useRouteFactory } from '../../../../../shared/hooks/useRouteFactory';
 import type { ToolCategory } from '@mastra/client-js';
 
-import { useActiveFactoryContext } from '../../workspaces';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -21,7 +21,7 @@ import { useChatTranscript } from './useChatTranscript';
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
 export function useRunChatCommand() {
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory } = useRouteFactory();
   const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { busy, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();

@@ -36,12 +36,18 @@ const githubProject: Factory = {
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: GITHUB_PROJECT_ID,
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra/worktrees/main',
-    worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra/worktrees/main', baseBranch: 'main' }],
+    kind: 'factory',
+    factoryProjectId: GITHUB_PROJECT_ID,
+    repositories: [
+      {
+        projectRepositoryId: 'project-repository-1',
+        slug: 'mastra-ai/mastra',
+        gitBranch: 'main',
+        sandboxWorkdir: '/sandbox/mastra',
+        selectedWorktreePath: '/sandbox/mastra/worktrees/main',
+        worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra/worktrees/main', baseBranch: 'main' }],
+      },
+    ],
   },
 };
 
@@ -212,7 +218,7 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
   return {
     orgId: 'org-1',
     createdBy: 'user-1',
-    githubProjectId: GITHUB_PROJECT_ID,
+    factoryProjectId: GITHUB_PROJECT_ID,
     source: 'manual',
     sourceKey: null,
     url: null,
@@ -343,7 +349,7 @@ function renderAt(
   seedActiveFactory(project);
   useAppHandlers(githubStatus, options);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const scopedEntry = `/${project.binding.kind === 'github' ? 'dashboard' : 'local'}/${project.id}${initialEntry}`;
+  const scopedEntry = `/${project.binding.kind === 'factory' ? 'dashboard' : 'local'}/${project.id}${initialEntry}`;
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [scopedEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
@@ -812,11 +818,17 @@ describe('Factory Board — persisted cards', () => {
   const projectWithIssueWorktree: Factory = {
     ...githubProject,
     binding: {
-      ...githubProject.binding,
-      worktrees: [
-        ...githubProject.binding.worktrees,
-        { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
-      ],
+      kind: 'factory',
+      factoryProjectId: GITHUB_PROJECT_ID,
+      repositories: githubProject.binding.kind === 'factory'
+        ? githubProject.binding.repositories.map(repository => ({
+            ...repository,
+            worktrees: [
+              ...repository.worktrees,
+              { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
+            ],
+          }))
+        : [],
     },
   };
   const issueWorkSession = {
@@ -957,9 +969,9 @@ describe('Factory Board — persisted cards', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard/project-gh/threads/thread-work'));
     const stored = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];
-    expect(stored[0]?.binding.kind === 'github' ? stored[0].binding.selectedWorktreePath : undefined).toBe(
-      issueWorktreePath,
-    );
+    expect(
+      stored[0]?.binding.kind === 'factory' ? stored[0].binding.repositories[0]?.selectedWorktreePath : undefined,
+    ).toBe(issueWorktreePath);
     expect(sideEffects).toEqual([]);
   });
 
@@ -1990,11 +2002,17 @@ describe('Factory Board — open session from the card title', () => {
   const projectWithIssueWorktree: Factory = {
     ...githubProject,
     binding: {
-      ...githubProject.binding,
-      worktrees: [
-        ...githubProject.binding.worktrees,
-        { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
-      ],
+      kind: 'factory',
+      factoryProjectId: GITHUB_PROJECT_ID,
+      repositories: githubProject.binding.kind === 'factory'
+        ? githubProject.binding.repositories.map(repository => ({
+            ...repository,
+            worktrees: [
+              ...repository.worktrees,
+              { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
+            ],
+          }))
+        : [],
     },
   };
 

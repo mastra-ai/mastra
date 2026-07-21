@@ -1,3 +1,4 @@
+import { useRouteFactory } from '../../../../shared/hooks/useRouteFactory';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
@@ -11,7 +12,7 @@ import { useWorkspaceActivity } from '../../../../shared/hooks/useWorkspaceActiv
 import { deriveProjectPath, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { formatDuration, relativeTime } from '../../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import { isGithubFactory, useActiveFactoryContext } from '../workspaces';
+import { isServerFactory } from '../workspaces';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import type { FactoryMetrics } from './services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from './stages';
@@ -45,14 +46,14 @@ export function MetricsPage() {
       title="Metrics"
       description="Flow health for this project's factory: throughput, where work stalls, and what's aging."
     >
-      {project => <MetricsContent githubProjectId={project.binding.githubProjectId} />}
+      {project => <MetricsContent factoryProjectId={project.binding.factoryProjectId} />}
     </FactoryPageShell>
   );
 }
 
-function MetricsContent({ githubProjectId }: { githubProjectId: string }) {
+function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [days, setDays] = useState<WindowDays>(30);
-  const metricsQuery = useFactoryMetrics(githubProjectId, days);
+  const metricsQuery = useFactoryMetrics(factoryProjectId, days);
   const agentsRunning = useAgentsRunningCount();
 
   if (metricsQuery.isError) {
@@ -122,7 +123,7 @@ function MetricsContent({ githubProjectId }: { githubProjectId: string }) {
 /** Live count of worktrees with an agent run in flight (sidebar dot source). */
 function useAgentsRunningCount(): number {
   const { baseUrl } = useApiConfig();
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const { activeFactory, resourceId, sessionEnabled } = useRouteFactory();
   const workspaces = useWorkspacesQuery(activeFactory);
   const worktrees = workspaces.data?.worktrees ?? [];
   const projectPath = deriveProjectPath(activeFactory) || undefined;
@@ -132,7 +133,7 @@ function useAgentsRunningCount(): number {
     projectPath,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isGithubFactory(activeFactory) && projectPath),
+    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory) && projectPath),
   });
   return Object.values(runningByPath).filter(Boolean).length;
 }

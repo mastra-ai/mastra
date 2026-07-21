@@ -2,15 +2,15 @@ import { useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
 import { Chat } from '../../chat/Chat';
-import { isGithubFactory } from '../../workspaces/services/factories';
+import { isServerFactory } from '../../workspaces/services/factories';
 
 export function DashboardRoute() {
   const { projectId } = useParams();
   const factories = useFactoriesQuery();
   const factory = factories.data.find(item => item.id === projectId);
 
-  if (!factory || !isGithubFactory(factory)) return <ProjectNotFound />;
-  return <Chat factoryId={factory.id} namespace="dashboard" />;
+  if (!factory || !isServerFactory(factory)) return <ProjectNotFound />;
+  return <Chat namespace="dashboard" />;
 }
 
 function ProjectNotFound() {

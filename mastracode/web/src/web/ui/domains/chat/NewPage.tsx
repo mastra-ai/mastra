@@ -1,3 +1,4 @@
+import { useRouteFactory } from '../../../../shared/hooks/useRouteFactory';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useLocation } from 'react-router';
@@ -5,7 +6,7 @@ import { useLocation } from 'react-router';
 import { useOverlays } from '../../lib/overlays';
 import { FolderIcon } from '../../ui';
 import type { Factory } from '../workspaces';
-import { EmptyFactoryState, useActiveFactoryContext } from '../workspaces';
+import { EmptyFactoryState, isServerFactory, selectedRepository } from '../workspaces';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
@@ -17,7 +18,7 @@ const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
   const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory } = useRouteFactory();
 
   return (
     <ChatSessionBoundary>
@@ -81,14 +82,17 @@ function BrandLockup() {
 
 function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
   const projectPath = deriveProjectPath(activeFactory);
+  const gitBranch = isServerFactory(activeFactory)
+    ? selectedRepository(activeFactory)?.gitBranch
+    : activeFactory.binding.gitBranch;
   return (
     <p className="m-0 flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
       <FolderIcon size={13} className="shrink-0 text-icon2" />
       <span className="shrink-0 font-medium">{activeFactory.name}</span>
-      {activeFactory.binding.gitBranch && (
+      {gitBranch && (
         <>
           <span className="shrink-0 text-icon2">·</span>
-          <span className="shrink-0">{activeFactory.binding.gitBranch}</span>
+          <span className="shrink-0">{gitBranch}</span>
         </>
       )}
       {projectPath && (

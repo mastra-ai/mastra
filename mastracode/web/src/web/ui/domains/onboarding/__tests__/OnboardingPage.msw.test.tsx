@@ -41,7 +41,7 @@ describe('OnboardingPage', () => {
 
     renderOnboarding();
 
-    expect(await screen.findByRole('dialog', { name: 'Connect GitHub' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Create your Factory' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Skip and setup local project' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Set up a local project' })).not.toBeInTheDocument();
   });
@@ -86,7 +86,7 @@ describe('OnboardingPage', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/local\/[^/]+\/new$/));
     const factoryId = router.state.location.pathname.split('/')[2];
-    expect(localStorage.getItem('mastracode-active-factory')).toBe(factoryId);
+    expect(localStorage.getItem('mastracode-active-factory')).toBeNull();
     expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([
       expect.objectContaining({
         id: factoryId,

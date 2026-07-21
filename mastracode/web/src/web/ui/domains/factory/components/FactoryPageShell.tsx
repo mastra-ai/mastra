@@ -1,16 +1,17 @@
+import { useRouteFactory } from '../../../../../shared/hooks/useRouteFactory';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 
 import { useOverlays } from '../../../lib/overlays';
-import { EmptyFactoryState, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
-import type { GithubFactory } from '../../workspaces';
-import { isGithubFactory } from '../../workspaces';
+import { EmptyFactoryState, useGithubStatusQuery } from '../../workspaces';
+import type { ServerFactory } from '../../workspaces';
+import { isServerFactory } from '../../workspaces';
 
 interface FactoryPageShellProps {
   title: string;
   description: string;
   /** Renders the page body once a GitHub-backed factory is active. */
-  children: (factory: GithubFactory) => ReactNode;
+  children: (factory: ServerFactory) => ReactNode;
 }
 
 /**
@@ -21,8 +22,8 @@ interface FactoryPageShellProps {
  */
 export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
   const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
-  const githubFactory = activeFactory && isGithubFactory(activeFactory) ? activeFactory : undefined;
+  const { activeFactory } = useRouteFactory();
+  const githubFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
   const status = useGithubStatusQuery(Boolean(githubFactory));
 
   return (

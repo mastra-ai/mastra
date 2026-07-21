@@ -11,15 +11,15 @@ import { FactoryPageShell } from './components/FactoryPageShell';
 export function ReviewBoardPage() {
   return (
     <FactoryPageShell title="Review" description="Review active work and open pull requests before completion.">
-      {factory => <ReviewBoard githubProjectId={factory.binding.githubProjectId} />}
+      {factory => <ReviewBoard factoryProjectId={factory.binding.factoryProjectId} />}
     </FactoryPageShell>
   );
 }
 
-function ReviewBoard({ githubProjectId }: { githubProjectId: string }) {
-  const items = useWorkItemsQuery(githubProjectId);
-  const pulls = useProjectPullRequestsQuery(githubProjectId);
-  const update = useUpdateWorkItemMutation(githubProjectId);
+function ReviewBoard({ factoryProjectId }: { factoryProjectId: string }) {
+  const items = useWorkItemsQuery(factoryProjectId);
+  const pulls = useProjectPullRequestsQuery(factoryProjectId);
+  const update = useUpdateWorkItemMutation(factoryProjectId);
 
   if (items.isPending || pulls.isPending) return <p role="status">Loading Review board</p>;
   if (items.isError || pulls.isError) {

@@ -1,10 +1,10 @@
-import { useActiveFactoryContext } from '../../../workspaces';
+import { useRouteFactory } from '../../../../../../shared/hooks/useRouteFactory';
 import { GoalPanel } from '../GoalPanel';
 import { ConnectionNotice } from './ConnectionNotice';
 import { TranscriptPanel } from './TranscriptPanel';
 
 export function ChatMessageList() {
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory } = useRouteFactory();
 
   if (!activeFactory) return null;
 

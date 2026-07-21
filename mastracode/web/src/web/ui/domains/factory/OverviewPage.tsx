@@ -1,3 +1,4 @@
+import { useRouteFactory } from '../../../../shared/hooks/useRouteFactory';
 /**
  * The Factory Overview — the factory's main landing page. Its centerpiece is
  * the queue-health chart: one bar per stage segmented by work-item age, with a
@@ -18,7 +19,7 @@ import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
 import { useWorkspaceActivity } from '../../../../shared/hooks/useWorkspaceActivity';
 import { deriveProjectPath, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import { isGithubFactory, useActiveFactoryContext } from '../workspaces';
+import { isServerFactory } from '../workspaces';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import type { QueueHealthSelection } from './components/QueueHealthChart';
 import { QueueHealthChart, formatAgeSeconds } from './components/QueueHealthChart';
@@ -39,14 +40,14 @@ export function OverviewPage() {
       title="Overview"
       description="The factory at a glance: how much work is in each stage, how old it is, and what's actively running."
     >
-      {project => <OverviewContent githubProjectId={project.binding.githubProjectId} />}
+      {project => <OverviewContent factoryProjectId={project.binding.factoryProjectId} />}
     </FactoryPageShell>
   );
 }
 
-function OverviewContent({ githubProjectId }: { githubProjectId: string }) {
-  const workItemsQuery = useWorkItemsQuery(githubProjectId);
-  const thresholdsQuery = useQueueHealthThresholds(githubProjectId);
+function OverviewContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
+  const workItemsQuery = useWorkItemsQuery(factoryProjectId);
+  const thresholdsQuery = useQueueHealthThresholds(factoryProjectId);
   const activePaths = useActivePaths();
   const [selected, setSelected] = useState<QueueHealthSelection | null>(null);
 
@@ -92,7 +93,7 @@ function OverviewContent({ githubProjectId }: { githubProjectId: string }) {
 /** Set of worktree paths with an agent run in flight (the sidebar dot source). */
 function useActivePaths(): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const { activeFactory, resourceId, sessionEnabled } = useRouteFactory();
   const workspaces = useWorkspacesQuery(activeFactory);
   const worktrees = workspaces.data?.worktrees ?? [];
   const projectPath = deriveProjectPath(activeFactory) || undefined;
@@ -102,7 +103,7 @@ function useActivePaths(): ReadonlySet<string> {
     projectPath,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isGithubFactory(activeFactory) && projectPath),
+    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory) && projectPath),
   });
   return useMemo(() => new Set(Object.keys(runningByPath).filter(path => runningByPath[path])), [runningByPath]);
 }
