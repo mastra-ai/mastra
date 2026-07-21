@@ -3556,3 +3556,157 @@ describe('InternalMastraMCPClient - transport cleanup on close (issue #16693)', 
     await new Promise(resolve => setTimeout(resolve, 0));
   });
 });
+
+describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', () => {
+  // Minimal streamable-HTTP-only server: GET (legacy SSE) always returns 405.
+  // While `failing` is true, POSTs return 404 — like a load balancer with no
+  // healthy backend during a redeploy.
+  let httpServer: HttpServer;
+  let baseUrl: URL;
+  let failing = false;
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    failing = false;
+    httpServer = createServer(async (req, res) => {
+      if (failing || req.method === 'GET') {
+        res.writeHead(req.method === 'GET' ? 405 : 404).end();
+        return;
+      }
+      if (req.method === 'DELETE') {
+        res.writeHead(200).end();
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      let body: any;
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      } catch {
+        res.writeHead(400).end();
+        return;
+      }
+      const reply = (result: unknown) => {
+        res
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ jsonrpc: '2.0', id: body.id, result }));
+      };
+      if (body?.method === 'initialize') {
+        reply({
+          protocolVersion: body.params?.protocolVersion ?? '2025-03-26',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'wedge-repro-server', version: '0.0.1' },
+        });
+      } else if (body?.id === undefined) {
+        res.writeHead(202).end();
+      } else if (body.method === 'tools/list') {
+        reply({ tools: [{ name: 'ping', description: 'ping', inputSchema: { type: 'object', properties: {} } }] });
+      } else if (body.method === 'tools/call') {
+        reply({ content: [{ type: 'text', text: 'pong' }] });
+      } else {
+        reply({});
+      }
+    });
+    baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    httpServer.closeAllConnections();
+    await new Promise<void>(resolve => httpServer.close(() => resolve()));
+  });
+
+  it('connect() succeeds after an earlier connect attempt failed during the SSE fallback', async () => {
+    // First-ever connect during the outage: streamable init POST gets 404, the
+    // SSE fallback GET gets 405 so SSEClientTransport.start() throws. The SDK
+    // leaves that never-started transport attached to its Client.
+    failing = true;
+    client = new InternalMastraMCPClient({
+      name: 'wedge-fresh-connect',
+      server: { url: baseUrl },
+    });
+    await expect(client.connect()).rejects.toThrow();
+
+    // Server healthy again. Before the fix this threw "Already connected to a
+    // transport" (surfaced as "Could not connect to server with any available
+    // HTTP transport") forever.
+    failing = false;
+    await client.connect();
+    const tools = await client.tools();
+    expect(Object.keys(tools)).toContain('ping');
+  }, 20000);
+
+  it('forceReconnect() recovers once the server is healthy after a failed reconnect', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'wedge-force-reconnect',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+    expect(Object.keys(await client.tools())).toContain('ping');
+
+    // Reconnect attempt during the outage fails and used to poison the SDK client.
+    failing = true;
+    httpServer.closeAllConnections();
+    await expect(client.forceReconnect()).rejects.toThrow();
+
+    failing = false;
+    await client.forceReconnect();
+    expect(Object.keys(await client.tools())).toContain('ping');
+  }, 20000);
+
+  it('prevents a closed transport from clearing a replacement connection', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'wedge-stale-onclose',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+
+    const staleTransport = (client as any).transport;
+    const staleConnectionOnClose = (client as any).client.onclose;
+
+    await client.forceReconnect();
+
+    const replacementTransport = (client as any).transport;
+    const replacementConnection = (client as any).isConnected;
+    expect(replacementTransport).not.toBe(staleTransport);
+    expect(staleTransport.onclose).toBeUndefined();
+    expect(staleTransport.onerror).toBeUndefined();
+    expect(staleTransport.onmessage).toBeUndefined();
+
+    // A previously installed Mastra close wrapper may still be referenced by
+    // caller code. It must not reset state belonging to the replacement.
+    staleConnectionOnClose();
+    expect((client as any).transport).toBe(replacementTransport);
+    expect((client as any).isConnected).toBe(replacementConnection);
+  });
+
+  it('a tool instance handed out before the outage works again after the server heals', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'wedge-old-tool',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    expect(await tools['ping'].execute!({ context: {} })).toMatchObject({
+      content: [{ type: 'text', text: 'pong' }],
+    });
+
+    // Outage drops the connection mid-flight; the tool wrapper's retry calls
+    // forceReconnect, which fails while the server is still down.
+    failing = true;
+    httpServer.closeAllConnections();
+    await expect(tools['ping'].execute!({ context: {} })).rejects.toThrow();
+
+    // Once healthy, the same tool instance must recover on its retry path
+    // instead of failing with "Not connected" forever.
+    failing = false;
+    expect(await tools['ping'].execute!({ context: {} })).toMatchObject({
+      content: [{ type: 'text', text: 'pong' }],
+    });
+  }, 20000);
+});
