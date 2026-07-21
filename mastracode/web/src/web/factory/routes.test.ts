@@ -429,6 +429,24 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 
+  it.each(['', 'not-a-uuid', 'x'.repeat(65), 42])(
+    'rejects an explicitly supplied invalid work item identity: %o',
+    async id => {
+      const prepare = vi.fn();
+      const app = buildApp(orgUser, { prepare });
+      const body = startBody();
+
+      const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...body, workItem: { ...body.workItem, id } }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(prepare).not.toHaveBeenCalled();
+    },
+  );
+
   it('refuses non-Intake creation before the coordinator can bypass transition authority', async () => {
     const prepare = vi.fn();
     const app = buildApp(orgUser, { prepare });

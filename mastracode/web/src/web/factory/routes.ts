@@ -223,6 +223,7 @@ function parseStartBody(
   const role = boundedText(body.workItem.role, 32);
   const id = body.workItem.id === undefined ? undefined : boundedText(body.workItem.id, 64);
   const kickoffMessage = body.kickoffMessage === null ? null : boundedText(body.kickoffMessage, 16_384);
+  if (body.workItem.id !== undefined && (!id || !UUID_RE.test(id))) return null;
   if (
     !input ||
     !resourceId ||
@@ -237,7 +238,6 @@ function parseStartBody(
   ) {
     return null;
   }
-  if (id && !UUID_RE.test(id)) return null;
   const threadTags = plainObject(body.threadTags)
     ? Object.fromEntries(
         Object.entries(body.threadTags)

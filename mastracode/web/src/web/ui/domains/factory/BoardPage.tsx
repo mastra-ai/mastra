@@ -731,7 +731,7 @@ function BoardContent({
                         // would make them look live again and hide the card's
                         // run actions even though no run happened.
                         role: 'chat',
-                        stages: item.stages,
+                        stages: [stage.id],
                         source: item.source,
                         sourceKey: item.sourceKey,
                         title: item.title,

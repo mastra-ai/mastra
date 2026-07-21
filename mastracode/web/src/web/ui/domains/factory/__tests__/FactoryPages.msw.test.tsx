@@ -912,7 +912,7 @@ describe('Factory item actions', () => {
 });
 
 describe('Factory Board — persisted cards', () => {
-  it('given a work item in multiple stages, when the Board renders, then it shows a card in each column with a chip for the other stage', async () => {
+  it('given a work item in multiple stages, when its title opens a session, then it targets the clicked column', async () => {
     useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -924,6 +924,7 @@ describe('Factory Board — persisted cards', () => {
         }),
       ],
     });
+    const captured = useFactoryRunHandlers('item-wi-1');
     renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
@@ -934,6 +935,15 @@ describe('Factory Board — persisted cards', () => {
     // Each card chips the item's other stage.
     expect(within(executeCard).getByText('Review')).toBeInTheDocument();
     expect(within(reviewCard).getByText('Building')).toBeInTheDocument();
+
+    await userEvent.click(within(executeCard).getByRole('button', { name: 'Issue: Parallel effort' }));
+    await waitFor(() =>
+      expect(captured.starts).toContainEqual({
+        kickoffMessage: null,
+        destinationStage: 'execute',
+        workItem: expect.objectContaining({ id: 'wi-1', role: 'chat' }),
+      }),
+    );
   });
 
   it('given related issue and PR items, when switching workflows, then each stays on its own board with a reciprocal relation marker', async () => {
