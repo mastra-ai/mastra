@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import { MastraBase } from '@mastra/core/base';
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
@@ -9,11 +7,18 @@ import {
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type { StorageColumn, StorageResourceType, TABLE_NAMES, UpdateWorkflowStateOptions } from '@mastra/core/storage';
+import type { StorageColumn, StorageResourceType, UpdateWorkflowStateOptions } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import { ConvexAdminClient } from '../client';
-import type { EqualityFilter, IndexHint, SerializedOMChunk, SerializedOMCurrentRecord } from '../types';
+import { TABLE_OBSERVATIONAL_MEMORY } from '../types';
+import type {
+  ConvexStorageTable,
+  EqualityFilter,
+  IndexHint,
+  SerializedOMChunk,
+  SerializedOMCurrentRecord,
+} from '../types';
 
 // Must not exceed the server-side loadMany id cap in server/storage.ts.
 const LOAD_MANY_REQUEST_BATCH_SIZE = 10;
@@ -69,7 +74,7 @@ export class ConvexDB extends MastraBase {
     tableName,
     schema: _schema,
   }: {
-    tableName: TABLE_NAMES | string;
+    tableName: ConvexStorageTable;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     // No-op for Convex; schema is managed server-side via schema.ts
@@ -81,7 +86,7 @@ export class ConvexDB extends MastraBase {
     schema: _schema,
     ifNotExists: _ifNotExists,
   }: {
-    tableName: TABLE_NAMES | string;
+    tableName: ConvexStorageTable;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
@@ -89,7 +94,7 @@ export class ConvexDB extends MastraBase {
     this.logger.debug(`ConvexDB: alterTable called for ${tableName} (schema managed server-side)`);
   }
 
-  async clearTable({ tableName }: { tableName: TABLE_NAMES | string }): Promise<void> {
+  async clearTable({ tableName }: { tableName: ConvexStorageTable }): Promise<void> {
     // Delete in batches since each mutation can only delete a small number of docs
     // to stay within Convex's 1-second mutation timeout.
     let hasMore = true;
@@ -102,7 +107,7 @@ export class ConvexDB extends MastraBase {
     }
   }
 
-  async dropTable({ tableName }: { tableName: TABLE_NAMES | string }): Promise<void> {
+  async dropTable({ tableName }: { tableName: ConvexStorageTable }): Promise<void> {
     // Delete in batches since each mutation can only delete a small number of docs
     // to stay within Convex's 1-second mutation timeout.
     let hasMore = true;
@@ -115,7 +120,7 @@ export class ConvexDB extends MastraBase {
     }
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES | string; record: Record<string, any> }): Promise<void> {
+  async insert({ tableName, record }: { tableName: ConvexStorageTable; record: Record<string, any> }): Promise<void> {
     await this.client.callStorage({
       op: 'insert',
       tableName,
@@ -127,7 +132,7 @@ export class ConvexDB extends MastraBase {
     tableName,
     records,
   }: {
-    tableName: TABLE_NAMES | string;
+    tableName: ConvexStorageTable;
     records: Record<string, any>[];
   }): Promise<void> {
     if (records.length === 0) return;
@@ -144,7 +149,7 @@ export class ConvexDB extends MastraBase {
     id,
     record,
   }: {
-    tableName: TABLE_NAMES | string;
+    tableName: ConvexStorageTable;
     id: string;
     record: Record<string, any>;
   }): Promise<boolean> {
@@ -201,13 +206,7 @@ export class ConvexDB extends MastraBase {
     });
   }
 
-  async load<R>({
-    tableName,
-    keys,
-  }: {
-    tableName: TABLE_NAMES | string;
-    keys: Record<string, any>;
-  }): Promise<R | null> {
+  async load<R>({ tableName, keys }: { tableName: ConvexStorageTable; keys: Record<string, any> }): Promise<R | null> {
     const result = await this.client.callStorage<R | null>({
       op: 'load',
       tableName,
@@ -217,7 +216,7 @@ export class ConvexDB extends MastraBase {
     return result;
   }
 
-  async loadMany<R>(tableName: TABLE_NAMES | string, ids: string[]): Promise<R[]> {
+  async loadMany<R>(tableName: ConvexStorageTable, ids: string[]): Promise<R[]> {
     const uniqueIds = [...new Set(ids)];
     if (uniqueIds.length === 0) return [];
 
@@ -235,7 +234,7 @@ export class ConvexDB extends MastraBase {
   }
 
   public async queryTable<R>(
-    tableName: TABLE_NAMES | string,
+    tableName: ConvexStorageTable,
     filters?: EqualityFilter[],
     indexHint?: IndexHint,
     limit?: number,
@@ -249,7 +248,7 @@ export class ConvexDB extends MastraBase {
     });
   }
 
-  public async deleteMany(tableName: TABLE_NAMES | string, ids: string[]): Promise<void> {
+  public async deleteMany(tableName: ConvexStorageTable, ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await this.client.callStorage({
       op: 'deleteMany',
@@ -409,117 +408,114 @@ export class ConvexDB extends MastraBase {
 
   // ============================================
   // Observational Memory Operations
+  // These always target TABLE_OBSERVATIONAL_MEMORY — the server rejects
+  // om* operations against any other table.
   // ============================================
 
-  public async omGetLatest<R>(tableName: string, lookupKey: string): Promise<R | null> {
+  public async omGetLatest<R>(lookupKey: string): Promise<R | null> {
     return this.client.callStorage<R | null>({
       op: 'omGetLatest',
-      tableName,
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
       lookupKey,
     });
   }
 
-  public async omGetHistory<R>(
-    tableName: string,
-    args: { lookupKey: string; limit: number; from?: string; to?: string; offset?: number },
-  ): Promise<R[]> {
+  public async omGetHistory<R>(args: {
+    lookupKey: string;
+    limit: number;
+    from?: string;
+    to?: string;
+    offset?: number;
+  }): Promise<R[]> {
     return this.client.callStorage<R[]>({
       op: 'omGetHistory',
-      tableName,
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,
     });
   }
 
-  public async omUpdateActive(
-    tableName: string,
-    args: {
-      id: string;
-      observations: string;
-      tokenCount: number;
-      lastObservedAt: string;
-      observedMessageIds: string[] | null;
-      updatedAt: string;
-    },
-  ): Promise<void> {
+  public async omUpdateActive(args: {
+    id: string;
+    observations: string;
+    tokenCount: number;
+    lastObservedAt: string;
+    observedMessageIds: string[] | null;
+    updatedAt: string;
+  }): Promise<void> {
     await this.client.callStorage({
       op: 'omUpdateActive',
-      tableName,
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,
     });
   }
 
-  public async omAppendBufferedChunk(
-    tableName: string,
-    args: { id: string; chunk: SerializedOMChunk; lastBufferedAtTime?: string; updatedAt: string },
-  ): Promise<void> {
+  public async omAppendBufferedChunk(args: {
+    id: string;
+    chunk: SerializedOMChunk;
+    lastBufferedAtTime?: string;
+    updatedAt: string;
+  }): Promise<void> {
     await this.client.callStorage({
       op: 'omAppendBufferedChunk',
-      tableName,
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,
     });
   }
 
-  public async omSwapBuffered<R>(
-    tableName: string,
-    args: {
-      id: string;
-      activationRatio: number;
-      messageTokensThreshold: number;
-      currentPendingTokens: number;
-      forceMaxActivation?: boolean;
-      lastObservedAt?: string;
-      bufferedChunks?: SerializedOMChunk[];
-      now: string;
-    },
-  ): Promise<R> {
+  public async omSwapBuffered<R>(args: {
+    id: string;
+    activationRatio: number;
+    messageTokensThreshold: number;
+    currentPendingTokens: number;
+    forceMaxActivation?: boolean;
+    lastObservedAt?: string;
+    bufferedChunks?: SerializedOMChunk[];
+    now: string;
+  }): Promise<R> {
     return this.client.callStorage<R>({
       op: 'omSwapBuffered',
-      tableName,
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,
     });
   }
 
-  public async omUpdateBufferedReflection(
-    tableName: string,
-    args: {
-      id: string;
-      reflection: string;
-      tokenCount: number;
-      inputTokenCount: number;
-      reflectedObservationLineCount: number;
-      updatedAt: string;
-    },
-  ): Promise<void> {
+  public async omUpdateBufferedReflection(args: {
+    id: string;
+    reflection: string;
+    tokenCount: number;
+    inputTokenCount: number;
+    reflectedObservationLineCount: number;
+    updatedAt: string;
+  }): Promise<void> {
     await this.client.callStorage({
       op: 'omUpdateBufferedReflection',
-      tableName,
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,
     });
   }
 
-  public async omSwapBufferedReflection<R>(
-    tableName: string,
-    args: { currentRecord: SerializedOMCurrentRecord; newId: string; tokenCount: number; now: string },
-  ): Promise<R> {
+  public async omSwapBufferedReflection<R>(args: {
+    currentRecord: SerializedOMCurrentRecord;
+    newId: string;
+    tokenCount: number;
+    now: string;
+  }): Promise<R> {
     return this.client.callStorage<R>({
       op: 'omSwapBufferedReflection',
-      tableName,
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,
     });
   }
 
-  public async omUpdateConfig(
-    tableName: string,
-    args: { id: string; config: string; updatedAt: string },
-  ): Promise<void> {
+  public async omUpdateConfig(args: { id: string; config: string; updatedAt: string }): Promise<void> {
     await this.client.callStorage({
       op: 'omUpdateConfig',
-      tableName,
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,
     });
   }
 
-  private normalizeRecord(tableName: TABLE_NAMES | string, record: Record<string, any>): Record<string, any> {
+  private normalizeRecord(tableName: ConvexStorageTable, record: Record<string, any>): Record<string, any> {
     const normalized: Record<string, any> = { ...record };
 
     if (tableName === TABLE_WORKFLOW_SNAPSHOT && !normalized.id) {

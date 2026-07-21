@@ -3,7 +3,9 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, Plus } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Check, Hammer, Map, Plus, Zap } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -30,11 +32,44 @@ const EMPTY_DRAFT: DraftPack = { name: '', build: '', plan: '', fast: '' };
 const SELECT_CLASS =
   'h-form-default w-full rounded-full border border-border1 bg-surface-overlay-soft px-3 text-ui-md text-neutral6 outline-hidden focus-visible:border-neutral5/50';
 
+interface ModelAssignmentProps {
+  description: string;
+  icon: LucideIcon;
+  label: string;
+  model: string;
+}
+
+function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignmentProps) {
+  return (
+    <span className="flex min-w-0 max-w-full items-center gap-0.5">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              aria-label={`${label}: ${description}`}
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-md outline-hidden focus-visible:ring-2 focus-visible:ring-accent1"
+              tabIndex={0}
+            >
+              <Icon aria-hidden size={12} className="text-icon3" />
+            </span>
+          }
+        />
+        <TooltipContent>
+          {label}: {description}
+        </TooltipContent>
+      </Tooltip>
+      <Txt as="span" variant="ui-xs" className="truncate text-icon3">
+        {model || '—'}
+      </Txt>
+    </span>
+  );
+}
+
 /**
  * Model packs. Mirrors the TUI's `/models-pack` command: a pack assigns a model
  * to each mode (build / plan / fast). Built-in packs are gated by provider
  * access; custom packs are user-defined. Activating a pack seeds the current
- * session's per-mode models — so it needs the active project's resourceId.
+ * session's per-mode models — so it needs the active factory's resourceId.
  */
 export function ModelPacksSection({
   resourceId,
@@ -59,7 +94,7 @@ export function ModelPacksSection({
 
   const activate = async (id: string) => {
     if (!resourceId) {
-      setDraftError('Open a project first to activate a pack.');
+      setDraftError('Open a factory first to activate a pack.');
       return;
     }
     setDraftError(null);
@@ -124,7 +159,7 @@ export function ModelPacksSection({
 
       {!resourceId && (
         <Txt as="p" variant="ui-sm" className="text-icon3">
-          Open a project to activate a pack on its session.
+          Open a factory to activate a pack on its session.
         </Txt>
       )}
       {error && (
@@ -183,9 +218,9 @@ export function ModelPacksSection({
           No model packs available. Configure provider keys or add a custom pack.
         </Txt>
       ) : (
-        <ul role="list" className="flex flex-col divide-y divide-border1">
+        <ul className="flex flex-col gap-1">
           {packs.map(p => (
-            <li key={p.id} role="listitem" className="flex items-center justify-between gap-3 py-2">
+            <li key={p.id} className="flex items-center justify-between gap-3 py-2">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
                   {p.active && <Check size={13} className="text-accent1 shrink-0" />}
@@ -199,9 +234,26 @@ export function ModelPacksSection({
                     </Badge>
                   )}
                 </div>
-                <Txt as="span" variant="ui-xs" className="text-icon3">
-                  build: {p.models.build || '—'} · plan: {p.models.plan || '—'} · fast: {p.models.fast || '—'}
-                </Txt>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                  <ModelAssignment
+                    icon={Hammer}
+                    label="Build"
+                    description="Implementation with full tool access"
+                    model={p.models.build}
+                  />
+                  <ModelAssignment
+                    icon={Map}
+                    label="Plan"
+                    description="Read-only analysis and planning"
+                    model={p.models.plan}
+                  />
+                  <ModelAssignment
+                    icon={Zap}
+                    label="Fast"
+                    description="Quick answers and small edits"
+                    model={p.models.fast}
+                  />
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {!p.active && (

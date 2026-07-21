@@ -1,4 +1,4 @@
-import { readdir, realpath, stat } from 'node:fs/promises';
+import { lstat, open, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
@@ -37,6 +37,52 @@ export interface DirectoryListing {
   entries: DirectoryEntry[];
 }
 
+export interface WorkspaceRenderedEntry {
+  name: string;
+  /** Path relative to the configured rendered root. */
+  path: string;
+  type: 'file' | 'directory';
+  size: number;
+  updatedAt: string;
+}
+
+export interface WorkspaceRenderedListing {
+  /** The confined workspace/project root. */
+  workspacePath: string;
+  /** Configured workspace-relative rendered root, e.g. `.artifacts`. */
+  root: string;
+  /** The confined absolute path for the rendered root. */
+  rootPath: string;
+  entries: WorkspaceRenderedEntry[];
+}
+
+export interface WorkspaceFile {
+  /** The confined workspace/project root. */
+  workspacePath: string;
+  /** Workspace-relative file path. */
+  path: string;
+  name: string;
+  size: number;
+  updatedAt: string;
+  contentType: 'text' | 'unsupported';
+  content?: string;
+  truncated?: boolean;
+}
+
+export type ArtifactEntry = WorkspaceRenderedEntry;
+
+export interface ArtifactListing {
+  /** The confined workspace/project root. */
+  rootPath: string;
+  /** The workspace artifact directory. */
+  artifactsPath: string;
+  entries: ArtifactEntry[];
+}
+
+const MAX_TEXT_FILE_BYTES = 512 * 1024;
+const TEXT_DECODER = new TextDecoder('utf-8', { fatal: true });
+const APPROVED_RENDERED_ROOTS = new Set(['.artifacts']);
+
 /** Resolve the browsable root, defaulting to the user's home directory. */
 export function resolveFsRoot(root?: string): string {
   return resolve(root && root.trim() ? root : homedir());
@@ -47,6 +93,14 @@ function isWithinRoot(candidate: string, root: string): boolean {
   if (candidate === root) return true;
   const rootWithSep = root.endsWith(sep) ? root : root + sep;
   return candidate.startsWith(rootWithSep);
+}
+
+async function realOrResolved(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    return path;
+  }
 }
 
 /**
@@ -64,6 +118,48 @@ async function realPathWithinRoot(candidate: string, root: string): Promise<stri
   }
 }
 
+function assertRelativePath(path: string, label: string): string {
+  const trimmed = path.trim();
+  if (!trimmed) throw new Error(`Missing required query param: ${label}`);
+  if (isAbsolute(trimmed)) throw new Error(`${label} must be relative`);
+  if (trimmed.split(/[\\/]+/).includes('..')) throw new Error(`${label} escapes workspace`);
+  const normalized = resolve('/', trimmed).slice(1);
+  if (!normalized || normalized === '..' || normalized.startsWith(`..${sep}`))
+    throw new Error(`${label} escapes workspace`);
+  return normalized;
+}
+
+function assertApprovedRenderedRoot(renderedRoot: string): string {
+  const safeRoot = assertRelativePath(renderedRoot, 'root');
+  if (!APPROVED_RENDERED_ROOTS.has(safeRoot)) throw new Error('Root is not approved for rendered workspace access');
+  return safeRoot;
+}
+
+async function confinedWorkspacePath(
+  root: string,
+  workspacePath: string,
+): Promise<{ resolvedRoot: string; workspace: string }> {
+  const resolvedRoot = await realOrResolved(resolveFsRoot(root));
+  const candidate = isAbsolute(workspacePath) ? resolve(workspacePath) : resolve(resolvedRoot, workspacePath);
+  const workspace = await realPathWithinRoot(candidate, resolvedRoot);
+  if (!workspace) throw new Error('Path is outside the browsable root');
+  return { resolvedRoot, workspace };
+}
+
+async function confinedWorkspaceRelativePath(
+  root: string,
+  workspacePath: string,
+  relativePath: string,
+): Promise<{ workspace: string; path: string; relativePath: string }> {
+  const safeRelativePath = assertRelativePath(relativePath, 'path');
+  const { workspace } = await confinedWorkspacePath(root, workspacePath);
+  const candidate = resolve(workspace, safeRelativePath);
+  if (!isWithinRoot(candidate, workspace)) throw new Error('Path escapes workspace');
+  const confinedPath = await realPathWithinRoot(candidate, workspace);
+  if (!confinedPath) throw new Error('Path is outside the workspace');
+  return { workspace, path: confinedPath, relativePath: safeRelativePath };
+}
+
 /**
  * List the directories inside `requestedPath`, confined to `root`. An absent or
  * out-of-root path is clamped to the root, so the worst a malicious client can
@@ -72,7 +168,7 @@ async function realPathWithinRoot(candidate: string, root: string): Promise<stri
 export async function listDirectory(root: string, requestedPath?: string): Promise<DirectoryListing> {
   // Resolve the root through symlinks so all confinement checks compare real
   // paths; a symlink that escapes the root is then reliably detectable.
-  const resolvedRoot = (await realPathWithinRoot(resolveFsRoot(root), resolveFsRoot(root))) ?? resolveFsRoot(root);
+  const resolvedRoot = await realOrResolved(resolveFsRoot(root));
 
   let target = resolvedRoot;
   if (requestedPath && requestedPath.trim()) {
@@ -110,7 +206,121 @@ export async function listDirectory(root: string, requestedPath?: string): Promi
   return { root: resolvedRoot, path: target, parent, entries };
 }
 
-export interface ResolvedProject {
+async function listRenderedEntries(rootPath: string, currentPath = rootPath): Promise<WorkspaceRenderedEntry[]> {
+  const dirents = await readdir(currentPath, { withFileTypes: true });
+  const entries: WorkspaceRenderedEntry[] = [];
+
+  for (const dirent of dirents) {
+    const entryPath = join(currentPath, dirent.name);
+    const info = await lstat(entryPath);
+    const relativePath = entryPath.slice(rootPath.length + 1);
+
+    if (info.isDirectory()) {
+      entries.push({
+        name: dirent.name,
+        path: relativePath,
+        type: 'directory',
+        size: info.size,
+        updatedAt: info.mtime.toISOString(),
+      });
+      entries.push(...(await listRenderedEntries(rootPath, entryPath)));
+      continue;
+    }
+
+    if (info.isFile()) {
+      entries.push({
+        name: dirent.name,
+        path: relativePath,
+        type: 'file',
+        size: info.size,
+        updatedAt: info.mtime.toISOString(),
+      });
+    }
+  }
+
+  return entries.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+export async function listWorkspaceRenderedPath(
+  root: string,
+  workspacePath: string,
+  renderedRoot: string,
+): Promise<WorkspaceRenderedListing> {
+  const safeRoot = assertApprovedRenderedRoot(renderedRoot);
+  const { workspace } = await confinedWorkspacePath(root, workspacePath);
+  const renderedPath = resolve(workspace, safeRoot);
+  if (!isWithinRoot(renderedPath, workspace)) throw new Error('Root escapes workspace');
+
+  const confinedRootPath = await realPathWithinRoot(renderedPath, workspace);
+  if (!confinedRootPath) return { workspacePath: workspace, root: safeRoot, rootPath: renderedPath, entries: [] };
+
+  const info = await stat(confinedRootPath);
+  if (!info.isDirectory()) return { workspacePath: workspace, root: safeRoot, rootPath: confinedRootPath, entries: [] };
+
+  return {
+    workspacePath: workspace,
+    root: safeRoot,
+    rootPath: confinedRootPath,
+    entries: await listRenderedEntries(confinedRootPath),
+  };
+}
+
+export async function readWorkspaceFile(root: string, workspacePath: string, path: string): Promise<WorkspaceFile> {
+  const safePath = assertRelativePath(path, 'path');
+  const relativeRoot = safePath.split('/')[0] ?? '';
+  assertApprovedRenderedRoot(relativeRoot);
+  const {
+    workspace,
+    path: confinedPath,
+    relativePath,
+  } = await confinedWorkspaceRelativePath(root, workspacePath, path);
+  const info = await lstat(confinedPath);
+  if (info.isDirectory()) throw new Error('Path is a directory');
+  if (!info.isFile()) throw new Error('Unsupported file type');
+
+  const bytesToRead = Math.min(info.size, MAX_TEXT_FILE_BYTES);
+  const contentBuffer = Buffer.alloc(bytesToRead);
+  const handle = await open(confinedPath, 'r');
+  try {
+    await handle.read(contentBuffer, 0, bytesToRead, 0);
+  } finally {
+    await handle.close();
+  }
+
+  try {
+    const content = TEXT_DECODER.decode(contentBuffer);
+    return {
+      workspacePath: workspace,
+      path: relativePath,
+      name: relativePath.split('/').pop() ?? relativePath,
+      size: info.size,
+      updatedAt: info.mtime.toISOString(),
+      contentType: 'text',
+      content,
+      truncated: info.size > MAX_TEXT_FILE_BYTES,
+    };
+  } catch {
+    return {
+      workspacePath: workspace,
+      path: relativePath,
+      name: relativePath.split('/').pop() ?? relativePath,
+      size: info.size,
+      updatedAt: info.mtime.toISOString(),
+      contentType: 'unsupported',
+    };
+  }
+}
+
+export async function listArtifacts(root: string, workspacePath: string): Promise<ArtifactListing> {
+  const listing = await listWorkspaceRenderedPath(root, workspacePath, '.artifacts');
+  return {
+    rootPath: listing.workspacePath,
+    artifactsPath: listing.rootPath,
+    entries: listing.entries,
+  };
+}
+
+export interface ResolvedCodebase {
   /**
    * The resourceId the TUI would use for this path — derived identically so a
    * project opened in the terminal and in the web app resolve to the SAME
@@ -130,7 +340,7 @@ export interface ResolvedProject {
  * shared continuity point — start in the TUI, continue on the web, same path
  * → same resourceId → same session.
  */
-export function resolveProject(projectPath: string): ResolvedProject {
+export function resolveCodebase(projectPath: string): ResolvedCodebase {
   const info = detectProject(projectPath);
   const override = getResourceIdOverride(info.rootPath);
   return {
@@ -145,7 +355,7 @@ export function resolveProject(projectPath: string): ResolvedProject {
 /**
  * Build the web filesystem routes as Mastra `apiRoutes`:
  *   - `GET /web/fs/list?path=...`        — browse directories (confined to root)
- *   - `GET /web/project/resolve?path=...` — TUI-compatible project resourceId
+ *   - `GET /web/codebase/resolve?path=...` — TUI-compatible codebase resourceId
  */
 export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
   const root = resolveFsRoot(options.root);
@@ -165,7 +375,70 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         }
       },
     }),
-    registerApiRoute('/web/project/resolve', {
+    registerApiRoute('/web/artifacts/list', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const path = c.req.query('path');
+        if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        try {
+          return c.json(await listArtifacts(root, path));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status = message === 'Path is outside the browsable root' ? 403 : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/rendered/list', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        const renderedRoot = c.req.query('root');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        if (!renderedRoot) return c.json({ error: 'Missing required query param: root' }, 400);
+        try {
+          return c.json(await listWorkspaceRenderedPath(root, workspacePath, renderedRoot));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status =
+            message.includes('outside') ||
+            message.includes('relative') ||
+            message.includes('escapes') ||
+            message.includes('not approved')
+              ? 403
+              : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/file', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        const path = c.req.query('path');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        try {
+          return c.json(await readWorkspaceFile(root, workspacePath, path));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status =
+            message.includes('outside') ||
+            message.includes('relative') ||
+            message.includes('escapes') ||
+            message.includes('not approved')
+              ? 403
+              : message.includes('directory')
+                ? 400
+                : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/codebase/resolve', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
@@ -178,7 +451,7 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         const confined = await realPathWithinRoot(isAbsolute(path) ? resolve(path) : resolve(root, path), root);
         if (!confined) return c.json({ error: 'Path is outside the browsable root' }, 403);
         try {
-          return c.json(resolveProject(confined));
+          return c.json(resolveCodebase(confined));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return c.json({ error: message }, 500);

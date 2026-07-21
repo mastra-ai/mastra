@@ -76,24 +76,18 @@ Create separate test cases for different evaluation scenarios:
 
 ```typescript title="src/mastra/agents/weather-agent.test.ts"
 describe('Weather Agent Tests', () => {
-  const locationScorer = createScorer({
-    /* ... */
-  })
+  const locationScorer = createScorer({/* ... */})
 
   it('should handle location disambiguation', async () => {
     const result = await runEvals({
       data: [
         {
           input: 'weather in Berlin',
-          groundTruth: {
-            /* ... */
-          },
+          groundTruth: {/* ... */},
         },
         {
           input: 'weather in Berlin, Maryland',
-          groundTruth: {
-            /* ... */
-          },
+          groundTruth: {/* ... */},
         },
       ],
       target: weatherAgent,

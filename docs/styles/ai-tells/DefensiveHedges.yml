@@ -1,0 +1,63 @@
+---
+extends: existence
+message: "AI defensive hedge: '%s'. State your point directly without pre-defending it."
+level: error
+nonword: true
+tokens:
+  # "This is more of X than Y, but..." pattern
+  - '[Tt]his is more of [^,]+ than [^,]+, but [^.!?]+'
+  - "[Ii]t'?s more of [^,]+ than [^,]+, but [^.!?]+"
+
+  # "Not the most X, but..." pattern
+  - "[Ii]t'?s not the most [^,]+, but [^.!?]+"
+  - "[Tt]his isn'?t the most [^,]+, but [^.!?]+"
+
+  # "May seem/might seem X, but..." pattern
+  - '[Tt]his may seem [^,]+, but [^.!?]+'
+  - '[Tt]his might seem [^,]+, but [^.!?]+'
+  - '[Ii]t may seem [^,]+, but [^.!?]+'
+  - '[Ii]t might seem [^,]+, but [^.!?]+'
+
+  # "Might sound X, but..." pattern
+  - '[Tt]his might sound [^,]+, but [^.!?]+'
+  - '[Ii]t might sound [^,]+, but [^.!?]+'
+  - '[Tt]hat might sound [^,]+, but [^.!?]+'
+
+  # "Admittedly/Granted" openers
+  - 'Admittedly, [^,]+, but [^.!?]+'
+  - 'Granted, [^,]+, but [^.!?]+'
+
+  # "To be fair" pattern
+  - 'To be fair, [^,]+, but [^.!?]+'
+  - 'To be honest, [^,]+, but [^.!?]+'
+
+  # "While this might/may appear" pattern
+  - 'While this might appear [^,]+, [^.!?]+'
+  - 'While this may appear [^,]+, [^.!?]+'
+  - 'While it might appear [^,]+, [^.!?]+'
+  - 'While it may appear [^,]+, [^.!?]+'
+
+  # "Not meant to be X, but..." pattern
+  - "[Tt]his isn'?t meant to be [^,]+, but [^.!?]+"
+  - "[Ii]t'?s not meant to be [^,]+, but [^.!?]+"
+
+  # "On the surface X, but..." pattern
+  - 'On the surface, [^,]+, but [^.!?]+'
+  - 'On the surface this [^,]+, but [^.!?]+'
+
+  # "At first glance" pattern
+  - 'At first glance, [^,]+, but [^.!?]+'
+  - 'At first glance this [^,]+, but [^.!?]+'
+
+  # "I know this seems/sounds" pattern
+  - 'I know this seems [^,]+, but [^.!?]+'
+  - 'I know this sounds [^,]+, but [^.!?]+'
+  - 'I know it seems [^,]+, but [^.!?]+'
+  - 'I know it sounds [^,]+, but [^.!?]+'
+
+  # "While X, Y" hedged openers (preemptive concession)
+  - 'While [^,]+ can [^,]+, [^.!?]+'
+  - 'While [^,]+ is [^,]+, [^.!?]+'
+  - 'While [^,]+ are [^,]+, [^.!?]+'
+  - 'While [^,]+ may [^,]+, [^.!?]+'
+  - 'Although [^,]+, [^.!?]+'

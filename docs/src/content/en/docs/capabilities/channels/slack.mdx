@@ -5,6 +5,9 @@ packages:
   - "@mastra/core"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Slack
 
 Add your agent to Slack so people can message it in shared channel threads or direct messages. When someone sends a message, Mastra runs your agent through the normal agent pipeline and streams the response back to Slack. The Slack adapter handles Slack AI indicators and interactive cards for you.
@@ -38,7 +41,7 @@ export const yourAgent = new Agent({
 
 ## Create a Slack app
 
-To connect your agent, create a Slack app in the workspace where you want it to run. The Slack app controls how your agent appears in Slack, what it can do, and which events it receives.
+To connect your agent, create a Slack app in the workspace where you want it to run. The Slack app controls your agent's display in Slack, its capabilities, and the events it receives.
 
 This guide uses a [manifest](https://docs.slack.dev/app-manifests/configuring-apps-with-app-manifests/#creating_manifests): a configuration file that creates the Slack app settings for you. This is the fastest path when you are adding your agent to your own workspace. It doesn't cover the platform OAuth flow where other workspaces install your agent.
 
@@ -48,53 +51,107 @@ Create the Slack app from a manifest:
 1. Select **Create an app**.
 1. Select **From a manifest**.
 1. Choose the workspace where the agent should run.
-1. Paste this manifest, then select **Create**:
+1. Paste this manifest, then select **Create**. Slack accepts JSON or YAML, so use whichever tab matches the format shown in the app creation modal:
 
-```yaml
-display_information:
-  name: mastra-agent
-features:
-  app_home:
-    home_tab_enabled: false
-    messages_tab_enabled: true
-    messages_tab_read_only_enabled: false
-  bot_user:
-    display_name: mastra-agent
-    always_online: true
-oauth_config:
-  scopes:
-    bot:
-      - im:write
-      - app_mentions:read
-      - channels:history
-      - channels:read
-      - chat:write
-      - users:read
-      - im:read
-      - im:history
-  pkce_enabled: false
-settings:
-  event_subscriptions:
-    request_url: https://<YOUR-PUBLIC-URL>/api/agents/<YOUR-AGENT-ID>/channels/slack/webhook
-    bot_events:
-      - app_mention
-      - message.channels
-      - message.im
-  interactivity:
-    is_enabled: true
-    request_url: https://<YOUR-PUBLIC-URL>/api/agents/<YOUR-AGENT-ID>/channels/slack/webhook
-  org_deploy_enabled: false
-  socket_mode_enabled: false
-  token_rotation_enabled: false
-  is_mcp_enabled: false
-```
+<Tabs>
+  <TabItem value="json" label="JSON">
+    ```json
+    {
+      "display_information": {
+        "name": "mastra-agent"
+      },
+      "features": {
+        "app_home": {
+          "home_tab_enabled": false,
+          "messages_tab_enabled": true,
+          "messages_tab_read_only_enabled": false
+        },
+        "bot_user": {
+          "display_name": "mastra-agent",
+          "always_online": true
+        }
+      },
+      "oauth_config": {
+        "scopes": {
+          "bot": [
+            "im:write",
+            "app_mentions:read",
+            "channels:history",
+            "channels:read",
+            "chat:write",
+            "users:read",
+            "im:read",
+            "im:history"
+          ]
+        },
+        "pkce_enabled": false
+      },
+      "settings": {
+        "event_subscriptions": {
+          "request_url": "https://<YOUR-PUBLIC-URL>/api/agents/<YOUR-AGENT-ID>/channels/slack/webhook",
+          "bot_events": ["app_mention", "message.channels", "message.im"]
+        },
+        "interactivity": {
+          "is_enabled": true,
+          "request_url": "https://<YOUR-PUBLIC-URL>/api/agents/<YOUR-AGENT-ID>/channels/slack/webhook"
+        },
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false,
+        "is_mcp_enabled": false
+      }
+    }
+    ```
+  </TabItem>
+
+  <TabItem value="yaml" label="YAML">
+    ```yaml
+    display_information:
+      name: mastra-agent
+    features:
+      app_home:
+        home_tab_enabled: false
+        messages_tab_enabled: true
+        messages_tab_read_only_enabled: false
+      bot_user:
+        display_name: mastra-agent
+        always_online: true
+    oauth_config:
+      scopes:
+        bot:
+          - im:write
+          - app_mentions:read
+          - channels:history
+          - channels:read
+          - chat:write
+          - users:read
+          - im:read
+          - im:history
+      pkce_enabled: false
+    settings:
+      event_subscriptions:
+        request_url: https://<YOUR-PUBLIC-URL>/api/agents/<YOUR-AGENT-ID>/channels/slack/webhook
+        bot_events:
+          - app_mention
+          - message.channels
+          - message.im
+      interactivity:
+        is_enabled: true
+        request_url: https://<YOUR-PUBLIC-URL>/api/agents/<YOUR-AGENT-ID>/channels/slack/webhook
+      org_deploy_enabled: false
+      socket_mode_enabled: false
+      token_rotation_enabled: false
+      is_mcp_enabled: false
+    ```
+  </TabItem>
+</Tabs>
 
 This manifest configures:
 
 - `display_information.name` and `features.bot_user.display_name`: Set your agent's name in Slack. You can update it at any time; remember to reinstall the app after changing names or permissions.
 - `app_home.messages_tab_enabled` and `app_home.messages_tab_read_only_enabled`: Enable direct messages from the Slack app's **Messages** tab.
 - `always_online`: Shows the Slack bot user as always available.
-- `oauth_config.scopes.bot`: Grants the bot permission to post messages, read channel messages where it is present, read mentions, read and write direct messages, and look up users.
+- `oauth_config.scopes.bot`: Grants the bot permission to post messages, read channel messages where it's present, read mentions, read and write direct messages, and look up users.
 - `event_subscriptions`: Tells Slack which message events to send to the webhook.
 - `interactivity`: Enables interactive cards and tells Slack where to send card actions.
 
@@ -176,11 +233,69 @@ Mention the bot in the channel:
 
 The agent responds in the thread. Response content depends on the model, instructions, memory, and tools configured on the agent.
 
+## Authentication
+
+The Slack adapter has no built-in user allowlist. Once the app is installed, anyone in the workspace can talk to the agent by sending it a direct message or mentioning it in a channel where it's a member. Slack verifies each request with the signing secret, and Mastra runs the agent for every valid message the webhook receives.
+
+The main mechanism for controlling access is channel membership. The bot only receives events from direct messages and from channels it has been invited to, so the set of channels the bot belongs to defines who can reach it. Keep the bot out of channels where it shouldn't respond, and remove it from a channel to cut off access.
+
+For finer control, gate on the sender's identity. Every request carries the sender's Slack user ID in the channel [request context](#request-context), so you can allow or deny specific users in an input processor or tool before the agent acts.
+
+### Server authentication
+
+The Slack webhook route is exempt from Mastra's [server authentication](/docs/server/auth). Slack can't send a bearer token, so Mastra registers the channel webhook as a public route and verifies each request with the Slack signing secret instead. This holds even when you enable a provider like [`MastraAuthSimple`](/docs/server/auth/simple-auth): the rest of your API stays protected, but the webhook route relies on the signing secret rather than your server auth. Keep `SLACK_SIGNING_SECRET` set so the adapter can reject requests that Slack didn't sign.
+
+### External channels
+
+Shared channels ([Slack Connect](https://slack.com/connect)) let people from other workspaces join a conversation. If a workspace member adds the bot to a shared channel, everyone in that channel can talk to the agent, including external members outside your organization. Anyone who can reach the agent can also reach the tools and data it has access to.
+
+Treat adding the bot to a shared or external channel as granting those participants access to the agent. Before you do, confirm the agent's tools and data are safe to expose to outside members, and gate on the sender's user ID when you need to restrict who the agent responds to.
+
+## Request context
+
+On every message, Mastra places a channel context object on the [request context](/docs/server/request-context) under the `channel` key. It carries the sender's Slack display name and user ID, the bot's own identity, and details about where the message came from. Read it from an input processor or a tool to identify the user or branch on the conversation type:
+
+```typescript title="src/mastra/tools/whoami.ts"
+import { createTool } from '@mastra/core/tools'
+import type { ChannelContext } from '@mastra/core/channels'
+import { z } from 'zod'
+
+export const whoami = createTool({
+  id: 'whoami',
+  description: 'Return the Slack identity of the current user',
+  inputSchema: z.object({}),
+  execute: async (_input, context) => {
+    const channel = context?.requestContext?.get('channel') as ChannelContext | undefined
+
+    return {
+      platform: channel?.platform,
+      userId: channel?.userId,
+      userName: channel?.userName,
+      isDM: channel?.isDM,
+    }
+  },
+})
+```
+
+The channel context includes:
+
+- `botMention`, `botUserId`, and `botUserName`: The bot's own identity on Slack.
+- `channelId` and `threadId`: The Slack channel and thread the message arrived on.
+- `isDM`: Whether the message is a direct message.
+- `platform`: The platform identifier, `slack` for this adapter.
+- `userId` and `userName`: The sender's Slack user ID and display name.
+
+Mastra also turns this context into a short system message. The agent learns the platform and its own identity, plus whether the conversation is a direct message or a public channel. See [thread context](/docs/capabilities/channels/overview#thread-context) in the channels overview for how to change that behavior.
+
 ## Production deployment
 
 When you deploy the Mastra server, update both request URLs in the Slack app settings to the production webhook URL. The tunnel URL used for local development is temporary and changes when the tunnel restarts.
 
 Channels on serverless platforms may need `waitUntil` and shared pub/sub configuration so background responses and thread leases work across short-lived instances. See [serverless deployment](/docs/capabilities/channels/overview#serverless-deployment) in the channels overview.
+
+### Idle servers
+
+Platform servers scale down to idle when they aren't receiving traffic, and that's fine for Slack. The next event, such as a mention or direct message, wakes the server by delivering its webhook request, and the server resumes handling requests. The first response after the server has been idle can take a little longer while it starts up, which is expected. Slack expects a `200` acknowledgement within 3 seconds and retries the event up to three times when delivery fails or times out, so a very slow cold start may take a retry before the agent responds. Subsequent messages respond at normal speed while the server stays warm.
 
 ## Related
 

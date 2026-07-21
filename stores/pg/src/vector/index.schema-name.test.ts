@@ -58,6 +58,7 @@ vi.mock('pg', () => {
     public options: any;
     public connect = vi.fn(async () => mockClient);
     public end = vi.fn(async () => {});
+    public on = vi.fn().mockReturnThis();
 
     constructor(options: any) {
       this.options = options;

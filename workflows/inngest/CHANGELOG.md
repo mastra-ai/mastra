@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 1.8.3-alpha.0
+
+### Patch Changes
+
+- Fixed Inngest TypeScript build failures for workflows whose steps use typed request context. ([#19225](https://github.com/mastra-ai/mastra/pull/19225))
+
+- Updated dependencies [[`b7e79c3`](https://github.com/mastra-ai/mastra/commit/b7e79c3c02ac5cd415db34ba0975ceafc1464333), [`b75d749`](https://github.com/mastra-ai/mastra/commit/b75d749621ff5d17e86bcb4ee809d301fb4f7cf3), [`a8799bb`](https://github.com/mastra-ai/mastra/commit/a8799bb8e44f4a60d01e4e2acd3448ff80bf14f8)]:
+  - @mastra/core@1.52.0-alpha.7
+
 ## 1.8.2
 
 ### Patch Changes

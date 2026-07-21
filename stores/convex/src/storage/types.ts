@@ -1,13 +1,28 @@
 import type { TABLE_NAMES } from '@mastra/core/storage';
 
+/**
+ * Observational memory table name. Defined locally (not value-imported from
+ * core) following the mongodb/pg convention: core exports the constant, but
+ * OM is optional and the constant is absent from older cores in the peer range.
+ */
+export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
+
+/**
+ * Table names accepted by ConvexDB: core storage tables plus the Convex OM
+ * table, which is intentionally excluded from core's TABLE_NAMES union
+ * because observational memory is an optional, per-adapter capability.
+ * Kept as a closed union (never `| string`) so table-name typos stay
+ * compile-time errors instead of routing to the mastra_documents fallback.
+ */
+export type ConvexStorageTable = TABLE_NAMES | typeof TABLE_OBSERVATIONAL_MEMORY;
+
 export type EqualityFilter = {
   field: string;
   value: string | number | boolean | null;
 };
 
 export type IndexHint =
-  | { index: 'by_workflow'; workflowName: string }
-  | { index: 'by_workflow_run'; workflowName: string; runId: string };
+  { index: 'by_workflow'; workflowName: string } | { index: 'by_workflow_run'; workflowName: string; runId: string };
 
 /**
  * A buffered observation chunk in wire/storage format: Date fields are ISO

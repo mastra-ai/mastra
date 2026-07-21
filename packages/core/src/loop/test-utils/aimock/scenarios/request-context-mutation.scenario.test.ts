@@ -2,17 +2,9 @@
  * AIMock Scenario: RequestContext Mutation Behavior
  *
  * Documents how requestContext mutations made by tools behave across
- * tool executions within the same agent run.
- *
- * Behavior varies by engine:
- * - normal, durable, fs: Tools share the same RequestContext reference,
- *   so mutations persist between tool calls.
- * - evented: RequestContext is serialized/deserialized between workflow
- *   steps, so each step receives a fresh copy and mutations are isolated.
- *
- * Asserts:
- * - Mutation visibility is engine-dependent
- * - Each engine's behavior is consistent and documented
+ * tool executions within the same agent run. Tools share the same
+ * RequestContext reference across engines, so mutations persist between
+ * tool calls.
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
@@ -25,11 +17,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 describeForAllEngines('AIMock loop scenario: requestContext mutation behavior', engine => {
   const getMock = useLoopScenarioAimock();
 
-  // The evented engine serializes requestContext between steps,
-  // so mutations are isolated. All other engines share the reference.
-  const mutationsPersist = engine !== 'evented';
-
-  it('tool mutations are visible to subsequent tool calls based on engine semantics', async () => {
+  it('tool mutations are visible to subsequent tool calls', async () => {
     const step1Values: string[] = [];
     const step2Values: string[] = [];
 
@@ -84,20 +72,14 @@ describeForAllEngines('AIMock loop scenario: requestContext mutation behavior', 
     // Step 1: mutate tool always sees the initial value
     expect(step1Values).toEqual(['initial']);
 
-    if (mutationsPersist) {
-      // normal/durable/fs: shared reference — read tool sees the mutated value
-      expect(step2Values).toEqual(['step1-value']);
-      expect(requestContext.get('counter')).toBe('step1-value');
-    } else {
-      // evented: serialized between steps — read tool sees the original value
-      expect(step2Values).toEqual(['initial']);
-      expect(requestContext.get('counter')).toBe('initial');
-    }
+    // Shared reference — read tool sees the mutated value
+    expect(step2Values).toEqual(['step1-value']);
+    expect(requestContext.get('counter')).toBe('step1-value');
 
     expect(requests).toHaveLength(3);
   });
 
-  it('sequential tool calls see mutations based on engine semantics', async () => {
+  it('sequential tool calls see accumulated mutations', async () => {
     const mutations: string[] = [];
 
     const incrementTool = createTool({
@@ -141,14 +123,8 @@ describeForAllEngines('AIMock loop scenario: requestContext mutation behavior', 
       },
     });
 
-    if (mutationsPersist) {
-      // normal/durable/fs: mutations accumulate (shared reference)
-      expect(mutations).toEqual(['saw:0,set:1', 'saw:1,set:2', 'saw:2,set:3']);
-      expect(requestContext.get('count')).toBe('3');
-    } else {
-      // evented: each call starts fresh (serialized between steps)
-      expect(mutations).toEqual(['saw:0,set:1', 'saw:0,set:1', 'saw:0,set:1']);
-      expect(requestContext.get('count')).toBe('0');
-    }
+    // Mutations accumulate (shared reference)
+    expect(mutations).toEqual(['saw:0,set:1', 'saw:1,set:2', 'saw:2,set:3']);
+    expect(requestContext.get('count')).toBe('3');
   });
 });

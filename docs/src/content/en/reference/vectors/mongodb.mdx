@@ -115,6 +115,13 @@ Creates a new vector index (collection) in MongoDB.
     defaultValue: 'cosine',
     description: 'Distance metric for similarity search',
   },
+  {
+    name: 'filterFields',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Metadata field names to declare as filter fields in the Atlas vectorSearch index (registered as `metadata.<field>`). Queries that filter only on declared fields are pushed directly into `$vectorSearch` instead of pre-filtering candidate `_id`s, avoiding the 16 MB BSON limit on large result sets. Filters that reference an undeclared field, or use an operator `$vectorSearch` does not support, fall back to the pre-filter automatically.',
+  },
 ]}
 />
 

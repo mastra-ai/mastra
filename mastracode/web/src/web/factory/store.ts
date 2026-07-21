@@ -1,19 +1,36 @@
 /**
- * Validation + persistence for Factory work items (the kanban board records).
+ * Validation + persistence wrappers for Factory work items (the kanban board
+ * records).
  *
  * Validation mirrors `../intake/store` — untrusted route bodies are parsed
- * into bounded, sanitized shapes or rejected wholesale. Stage history is
- * appended exclusively here (server-side) on every stage transition so it can
- * never drift from `stages`.
+ * into bounded, sanitized shapes or rejected wholesale. Persistence is
+ * delegated to the `work-items` domain registered on the seeded
+ * `FactoryStorage` (see `../storage/domains/work-items`); stage
+ * history is appended exclusively there (server-side) on every stage
+ * transition so it can never drift from `stages`.
  */
 
-import { and, eq } from 'drizzle-orm';
-import type { SQL } from 'drizzle-orm';
+import { getFactoryStorage } from '../runtime-config';
+import { getWorkItemsStorage } from '../storage/domains';
+import type {
+  CreateWorkItemInput,
+  UpdateWorkItemInput,
+  UpsertWorkItemResult,
+  WorkItemPriorState,
+  WorkItemRow,
+  WorkItemSessionInput,
+  WorkItemSource,
+} from '../storage/domains/work-items/base';
 
-import { getAppDb } from '../github/db';
-import type { AppDb } from '../github/db';
-import { workItems } from './schema';
-import type { WorkItemRow, WorkItemSessionRef, WorkItemSource, WorkItemStageEntry } from './schema';
+export type {
+  CreateWorkItemInput,
+  UpdateWorkItemInput,
+  UpsertWorkItemResult,
+  WorkItemPriorState,
+  WorkItemRow,
+  WorkItemSessionInput,
+  WorkItemSource,
+};
 
 const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['github-issue', 'github-pr', 'linear-issue', 'manual'];
 
@@ -26,31 +43,6 @@ const MAX_SESSION_ROLES = 8;
 const MAX_ROLE_LENGTH = 32;
 const MAX_SESSION_FIELD_LENGTH = 1024;
 const MAX_METADATA_JSON_LENGTH = 16_384;
-
-/** Session ref as accepted from clients — `startedBy` is stamped server-side. */
-export interface WorkItemSessionInput {
-  projectPath: string;
-  branch: string;
-  threadId: string;
-}
-
-export interface CreateWorkItemInput {
-  source: WorkItemSource;
-  sourceKey: string | null;
-  title: string;
-  url: string | null;
-  stages: string[];
-  sessions: Record<string, WorkItemSessionInput>;
-  metadata: Record<string, unknown>;
-}
-
-export interface UpdateWorkItemInput {
-  title?: string;
-  url?: string | null;
-  stages?: string[];
-  sessions?: Record<string, WorkItemSessionInput>;
-  metadata?: Record<string, unknown>;
-}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -173,173 +165,47 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   return patch;
 }
 
-/**
- * Diff `oldStages` → `newStages` and return the updated history: exited stages
- * get `exitedAt` stamped on their open entry, entered stages get a new entry.
- */
-function applyStageTransition(
-  history: WorkItemStageEntry[],
-  oldStages: string[],
-  newStages: string[],
-  by: string,
-  now: Date,
-): WorkItemStageEntry[] {
-  const timestamp = now.toISOString();
-  const next = history.map(entry => ({ ...entry }));
-  for (const stage of oldStages) {
-    if (newStages.includes(stage)) continue;
-    // Close the most recent open entry for the exited stage.
-    for (let i = next.length - 1; i >= 0; i--) {
-      const entry = next[i]!;
-      if (entry.stage === stage && entry.exitedAt === undefined) {
-        entry.exitedAt = timestamp;
-        break;
-      }
-    }
-  }
-  for (const stage of newStages) {
-    if (oldStages.includes(stage)) continue;
-    next.push({ stage, enteredAt: timestamp, by });
-  }
-  return next;
-}
-
-/** Stamp `startedBy` onto client-supplied session refs. */
-function stampSessions(sessions: Record<string, WorkItemSessionInput>, by: string): Record<string, WorkItemSessionRef> {
-  const stamped: Record<string, WorkItemSessionRef> = {};
-  for (const [role, ref] of Object.entries(sessions)) {
-    stamped[role] = { ...ref, startedBy: by };
-  }
-  return stamped;
+async function workItemsDomain() {
+  const storage = getFactoryStorage();
+  await storage.ensureDomainReady('work-items');
+  return getWorkItemsStorage();
 }
 
 /** List the org's work items for a project, newest first. */
 export async function listWorkItems(orgId: string, githubProjectId: string): Promise<WorkItemRow[]> {
-  const rows = await getAppDb()
-    .select()
-    .from(workItems)
-    .where(and(eq(workItems.orgId, orgId), eq(workItems.githubProjectId, githubProjectId)));
-  return rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  return (await workItemsDomain()).list(orgId, githubProjectId);
 }
 
 /**
  * Create a work item, reusing the existing record when `sourceKey` already has
  * one for the project (acting twice on the same issue must not duplicate the
- * card). On reuse the provided stages replace the current ones (with the
- * transition recorded in history) and sessions/metadata are merged in.
+ * card). See {@link WorkItemsStorage.upsert} for the reuse semantics.
  */
 export async function upsertWorkItem(params: {
   orgId: string;
   userId: string;
   githubProjectId: string;
   input: CreateWorkItemInput;
-}): Promise<WorkItemRow> {
-  const { orgId, userId, githubProjectId, input } = params;
-  const now = new Date();
-
-  const reuseExisting = (): Promise<WorkItemRow | null> => {
-    if (input.sourceKey === null) return Promise.resolve(null);
-    return getAppDb().transaction(tx =>
-      applyUpdateLocked(
-        tx,
-        and(eq(workItems.githubProjectId, githubProjectId), eq(workItems.sourceKey, input.sourceKey!)),
-        input,
-        userId,
-        now,
-      ),
-    );
-  };
-
-  const reused = await reuseExisting();
-  if (reused) return reused;
-
-  const row = {
-    orgId,
-    createdBy: userId,
-    githubProjectId,
-    source: input.source,
-    sourceKey: input.sourceKey,
-    title: input.title,
-    url: input.url,
-    stages: input.stages,
-    stageHistory: applyStageTransition([], [], input.stages, userId, now),
-    sessions: stampSessions(input.sessions, userId),
-    metadata: input.metadata,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  try {
-    const [inserted] = await getAppDb().insert(workItems).values(row).returning();
-    return inserted!;
-  } catch (err) {
-    // Concurrent create for the same sourceKey: the partial unique index won
-    // the race — fall back to updating the row it protected.
-    const fallback = await reuseExisting();
-    if (fallback) return fallback;
-    throw err;
-  }
-}
-
-/** The transaction client drizzle hands to `db.transaction` callbacks. */
-type DbTx = Parameters<Parameters<AppDb['transaction']>[0]>[0];
-
-/**
- * Shared update path for upsert-reuse and PATCH: stage diff + merges. Must run
- * inside a transaction — the row is read with `FOR UPDATE` so concurrent
- * read-modify-writes of `stageHistory`/`sessions`/`metadata` serialize instead
- * of silently dropping each other's merges. Returns `null` when no row
- * matches `where`.
- */
-async function applyUpdateLocked(
-  tx: DbTx,
-  where: SQL | undefined,
-  patch: UpdateWorkItemInput,
-  userId: string,
-  now: Date,
-): Promise<WorkItemRow | null> {
-  const [existing] = await tx.select().from(workItems).where(where).for('update');
-  if (!existing) return null;
-  const set: Partial<WorkItemRow> = { updatedAt: now };
-  if (patch.title !== undefined) set.title = patch.title;
-  if (patch.url !== undefined) set.url = patch.url;
-  if (patch.stages !== undefined) {
-    set.stages = patch.stages;
-    set.stageHistory = applyStageTransition(existing.stageHistory, existing.stages, patch.stages, userId, now);
-  }
-  if (patch.sessions !== undefined && Object.keys(patch.sessions).length > 0) {
-    set.sessions = { ...existing.sessions, ...stampSessions(patch.sessions, userId) };
-  }
-  if (patch.metadata !== undefined && Object.keys(patch.metadata).length > 0) {
-    set.metadata = { ...existing.metadata, ...patch.metadata };
-  }
-  const [updated] = await tx.update(workItems).set(set).where(eq(workItems.id, existing.id)).returning();
-  return updated ?? { ...existing, ...set };
+}): Promise<UpsertWorkItemResult> {
+  return (await workItemsDomain()).upsert(params);
 }
 
 /**
  * Patch an org's work item: stage changes are diffed into history, sessions
- * and metadata are merged. Returns `null` when the item doesn't exist in the
- * caller's org.
+ * and metadata are merged. Returns the updated row plus the pre-patch stages
+ * and session roles (for audit diffing), or `null` when the item doesn't
+ * exist in the caller's org.
  */
 export async function updateWorkItem(
   orgId: string,
   id: string,
   userId: string,
   patch: UpdateWorkItemInput,
-): Promise<WorkItemRow | null> {
-  return getAppDb().transaction(tx =>
-    applyUpdateLocked(tx, and(eq(workItems.id, id), eq(workItems.orgId, orgId)), patch, userId, new Date()),
-  );
+): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
+  return (await workItemsDomain()).update(orgId, id, userId, patch);
 }
 
-/** Delete an org's work item. Returns `false` when it doesn't exist in the org. */
-export async function deleteWorkItem(orgId: string, id: string): Promise<boolean> {
-  const [existing] = await getAppDb()
-    .select()
-    .from(workItems)
-    .where(and(eq(workItems.id, id), eq(workItems.orgId, orgId)));
-  if (!existing) return false;
-  await getAppDb().delete(workItems).where(eq(workItems.id, id));
-  return true;
+/** Delete an org's work item. Returns the row actually deleted, or `null` when it doesn't exist in the org. */
+export async function deleteWorkItem(orgId: string, id: string): Promise<WorkItemRow | null> {
+  return (await workItemsDomain()).delete(orgId, id);
 }

@@ -122,10 +122,7 @@ export interface PoolInstanceConfig extends PostgresBaseConfig {
  * - Cloud SQL connector config: `{ id, stream, ... }` (via pg.ClientConfig)
  */
 export type PostgresStoreConfig =
-  | PoolInstanceConfig
-  | ConnectionStringConfig
-  | HostConfig
-  | (PostgresBaseConfig & ClientConfig);
+  PoolInstanceConfig | ConnectionStringConfig | HostConfig | (PostgresBaseConfig & ClientConfig);
 
 /**
  * PostgreSQL configuration for PgVector (uses pg with ConnectionOptions)

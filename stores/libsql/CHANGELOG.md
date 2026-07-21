@@ -1,5 +1,32 @@
 # @mastra/libsql
 
+## 1.17.0-alpha.1
+
+### Minor Changes
+
+- Added LibSQLFactoryStorage for persisting Mastra agent state and lifecycle-managed application domains through one LibSQL connection. ([#19681](https://github.com/mastra-ai/mastra/pull/19681))
+
+  ```ts
+  import { LibSQLFactoryStorage } from '@mastra/libsql';
+
+  const storage = new LibSQLFactoryStorage({ url: 'file:mastra.db' });
+  await storage.init();
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`6b1bf3b`](https://github.com/mastra-ai/mastra/commit/6b1bf3b9494bd51aa8f654c68c9355d6046fa2a1), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9)]:
+  - @mastra/core@1.52.0-alpha.8
+
+## 1.16.1-alpha.0
+
+### Patch Changes
+
+- Fixed an uncaught `RangeError: Maximum call stack size exceeded` when writing deeply-nested values (such as a long chained `Error.cause`) to LibSQL storage. `safeStringify` now caps its recursion depth and substitutes a `"[Max depth exceeded]"` sentinel instead of overflowing the stack. ([#19610](https://github.com/mastra-ai/mastra/pull/19610))
+
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/core@1.52.0-alpha.5
+
 ## 1.16.0
 
 ### Minor Changes
@@ -917,9 +944,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({
@@ -947,9 +972,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({

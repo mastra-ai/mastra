@@ -36,7 +36,7 @@
     "@mastra/core": "workspace:*",
     "@types/node": "^22.20.1",
     "tsup": "^8.5.1",
-    "typescript": "^5.8.2",
+    "typescript": "catalog:",
     "vitest": "^4.1.10",
     "zod": "catalog:"
   },

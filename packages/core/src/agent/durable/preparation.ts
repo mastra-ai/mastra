@@ -157,6 +157,8 @@ export interface PreparationOptions<OUTPUT = undefined> {
   messages: MessageListInput;
   /** Execution options */
   options?: AgentExecutionOptions<OUTPUT>;
+  /** Whether execution options already include the agent defaults. */
+  optionsAreResolved?: boolean;
   /** Run ID (will be generated if not provided) */
   runId?: string;
   /** Request context */
@@ -203,6 +205,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     agent,
     messages,
     options: rawExecOptions,
+    optionsAreResolved = false,
     runId: providedRunId,
     requestContext: providedRequestContext,
     logger,
@@ -237,11 +240,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
-  const defaultOptions = await typedAgent.getDefaultOptions({ requestContext });
-  const execOptions = deepMerge(
-    (defaultOptions ?? {}) as Record<string, unknown>,
-    (rawExecOptions ?? {}) as Record<string, unknown>,
-  ) as AgentExecutionOptions<OUTPUT>;
+  const execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
+    ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
+    : (deepMerge(
+        ((await typedAgent.getDefaultOptions({ requestContext })) ?? {}) as Record<string, unknown>,
+        (rawExecOptions ?? {}) as Record<string, unknown>,
+      ) as AgentExecutionOptions<OUTPUT>);
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;

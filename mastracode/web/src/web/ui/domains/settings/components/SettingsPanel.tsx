@@ -1,28 +1,30 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
-import { Brain, Key, Layers, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
+import { Brain, FolderKanban, Key, Layers, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { useToast } from '../../../ui';
-import { useChatModels } from '../../chat/context/useChatModels';
+import { useToast } from '../../../ui/toast';
+
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { useAgentControllerModels } from '../../chat/hooks/useAgentControllerModels';
-import { useAgentControllerSettings } from '../../chat/hooks/useAgentControllerSettings';
-import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
+import { useAgentControllerModels } from '../../../../../shared/hooks/useAgentControllerModels';
+import { useAgentControllerSettings } from '../../../../../shared/hooks/useAgentControllerSettings';
+import { useSetAgentControllerStateMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
-import { ProjectSetupSection } from './ProjectSetupSection';
+import { FactorySetupSection } from './FactorySetupSection';
+import { FactoriesSection } from './FactoriesSection';
 import { OMSection } from './OMSection';
 import { ProvidersSection } from './ProvidersSection';
 import { BehaviorTab, GeneralTab, ModelTab } from './SettingsPanel.parts';
 
-type Tab = 'general' | 'model' | 'packs' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
+type Tab = 'general' | 'factories' | 'model' | 'packs' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -30,6 +32,7 @@ interface SettingsPanelProps {
 
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: 'general', label: 'General', icon: Palette },
+  { id: 'factories', label: 'Factories', icon: FolderKanban },
   { id: 'model', label: 'Model', icon: Search },
   { id: 'packs', label: 'Packs', icon: Layers },
   { id: 'memory', label: 'Memory', icon: Brain },
@@ -39,17 +42,14 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
 ];
 
 /**
- * Preferences modal. A two-pane layout (nav rail + one scrollable content pane)
- * keeps long sections — the model catalog and the provider list — reachable
- * without nested scroll fighting. Mirrors the TUI `/settings` surface: theme,
- * density, model, thinking level, auto-approve, notifications, smart editing,
- * and provider/API-key management.
+ * Preferences modal. A two-pane layout keeps each settings section reachable
+ * in one scrolling content pane; dense provider results use a bounded,
+ * virtualized list within that pane.
  */
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [tab, setTab] = useState<Tab>('general');
   const { theme, setTheme } = useTheme();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { activeModelId, setModel } = useChatModels();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
   const { toast } = useToast();
   const hookArgs = {
@@ -66,9 +66,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const settings = settingsQuery.data ?? null;
   const sessionResourceId = sessionEnabled ? resourceId : undefined;
 
-  const onModelChange = (modelId: string) => {
-    void setModel(modelId).then(() => toast('Model updated', 'success'));
-  };
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
     void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'));
   };
@@ -90,20 +87,17 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             ))}
           </TabList>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
+          <ScrollArea className="min-h-0 flex-1" viewPortClassName="px-5 pb-5">
             <TabContent value="general">
               <GeneralTab theme={theme} onThemeChange={setTheme} />
-              <ProjectSetupSection />
+              <FactorySetupSection />
               <IntakeSection />
             </TabContent>
+            <TabContent value="factories">
+              <FactoriesSection />
+            </TabContent>
             <TabContent value="model">
-              <ModelTab
-                models={models}
-                currentModelId={activeModelId ?? null}
-                settings={settings}
-                onModelChange={onModelChange}
-                onBehaviorChange={onBehaviorChange}
-              />
+              <ModelTab settings={settings} onBehaviorChange={onBehaviorChange} />
             </TabContent>
             <TabContent value="packs">
               <ModelPacksSection resourceId={sessionResourceId} models={models} />
@@ -126,7 +120,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             <TabContent value="custom-providers">
               <CustomProvidersSection />
             </TabContent>
-          </div>
+          </ScrollArea>
         </Tabs>
       </DialogContent>
     </Dialog>

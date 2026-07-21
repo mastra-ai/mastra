@@ -1,17 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
+import type { ParserPlugin } from '@babel/parser';
 import * as t from '@babel/types';
 
-export const parserPlugins = [
-  'typescript',
-  'jsx',
-  'classProperties',
-  'classPrivateProperties',
-  'classPrivateMethods',
-  'topLevelAwait',
-  'importAttributes',
-  'decorators-legacy',
-] as const;
+export const parserPlugins = ['typescript', 'jsx', 'decorators-legacy'] satisfies ParserPlugin[];
 export function parseModule(filePath: string, sourceText?: string): t.File {
   if (!sourceText) {
     sourceText = readFileSync(filePath, 'utf8');
@@ -19,7 +11,7 @@ export function parseModule(filePath: string, sourceText?: string): t.File {
 
   return parse(sourceText, {
     sourceType: 'module',
-    plugins: parserPlugins as any,
+    plugins: parserPlugins,
     sourceFilename: filePath,
   });
 }
@@ -363,7 +355,7 @@ export function shouldCountIdentifierAsReference(parent: t.Node | null, key: str
     return false;
   }
 
-  if (t.isTSPropertySignature(parent) || t.isTSMethodSignature(parent) || t.isTSExpressionWithTypeArguments(parent)) {
+  if (t.isTSPropertySignature(parent) || t.isTSMethodSignature(parent) || t.isTSInterfaceHeritage(parent)) {
     return false;
   }
 
