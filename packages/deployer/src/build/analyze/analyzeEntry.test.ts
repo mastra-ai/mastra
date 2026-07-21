@@ -1,9 +1,10 @@
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
-import { readFile } from 'fs-extra';
+import { ensureDir, readFile, remove, writeFile } from 'fs-extra';
 import { rollup } from 'rollup';
 import type * as RollupModule from 'rollup';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { analyzeEntry } from './analyzeEntry';
 
@@ -381,5 +382,101 @@ describe('analyzeEntry', () => {
     // Virtual files have no stable path — each call creates a new Rollup instance
     expect(rollup).toHaveBeenCalledTimes(2);
     expect(analyzeCache.size).toBe(0);
+  });
+
+  // The transitive walk registers every transitive workspace dep as a root `export * from`
+  // virtual module. For a package that only declares subpath exports (no "."), that root cannot
+  // be resolved and the deployer's alias-optimized-deps plugin throws `Missing "." specifier`
+  // under `externals: true` / dev. The walk now skips fabricating a root for such packages.
+  describe('subpath-only transitive workspace packages', () => {
+    let tmpRoot: string;
+    let counter = 0;
+
+    beforeEach(() => {
+      tmpRoot = join(tmpdir(), `analyzeEntry-subpath-${Date.now()}-${counter++}`);
+    });
+
+    afterEach(async () => {
+      await remove(tmpRoot);
+    });
+
+    async function writePkg(dir: string, pkg: Record<string, unknown>) {
+      await ensureDir(dir);
+      await writeFile(join(dir, 'package.json'), JSON.stringify(pkg));
+    }
+
+    function makeWorkspaceMap(parentDir: string, leafDir: string) {
+      return new Map<string, WorkspacePackageInfo>([
+        ['@scope/parent', { location: parentDir, dependencies: { '@scope/leaf': 'workspace:*' }, version: '1.0.0' }],
+        ['@scope/leaf', { location: leafDir, dependencies: {}, version: '1.0.0' }],
+      ]);
+    }
+
+    const entry = `import { thing } from '@scope/parent'; export const x = thing;`;
+
+    it('skips the synthetic root for a subpath-only leaf that nothing imports at its root', async () => {
+      const parentDir = join(tmpRoot, 'packages', 'parent');
+      const leafDir = join(tmpRoot, 'packages', 'leaf');
+      await writePkg(parentDir, { name: '@scope/parent', version: '1.0.0', type: 'module', main: 'src/index.ts' });
+      await writePkg(leafDir, {
+        name: '@scope/leaf',
+        version: '1.0.0',
+        type: 'module',
+        // Only subpath exports, no "." — cannot be imported at its root.
+        exports: { './sub/*': './src/*.ts' },
+      });
+
+      const result = await analyzeEntry({ entry, isVirtualFile: true }, '', {
+        shouldCheckTransitiveDependencies: true,
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: makeWorkspaceMap(parentDir, leafDir),
+        projectRoot: tmpRoot,
+      });
+
+      // The parent is imported at its root and tracked as a workspace dep...
+      expect(result.dependencies.get('@scope/parent')?.isWorkspace).toBe(true);
+      // ...but the subpath-only leaf's fabricated root is skipped.
+      expect(result.dependencies.has('@scope/leaf')).toBe(false);
+    });
+
+    it('still registers the transitive root when the leaf has a "." export', async () => {
+      const parentDir = join(tmpRoot, 'packages', 'parent');
+      const leafDir = join(tmpRoot, 'packages', 'leaf');
+      await writePkg(parentDir, { name: '@scope/parent', version: '1.0.0', type: 'module', main: 'src/index.ts' });
+      await writePkg(leafDir, {
+        name: '@scope/leaf',
+        version: '1.0.0',
+        type: 'module',
+        exports: { '.': './src/index.ts', './sub/*': './src/*.ts' },
+      });
+
+      const result = await analyzeEntry({ entry, isVirtualFile: true }, '', {
+        shouldCheckTransitiveDependencies: true,
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: makeWorkspaceMap(parentDir, leafDir),
+        projectRoot: tmpRoot,
+      });
+
+      expect(result.dependencies.get('@scope/leaf')?.exports).toEqual(['*']);
+    });
+
+    it('still registers the transitive root when the leaf has no exports map (main/index fallback)', async () => {
+      const parentDir = join(tmpRoot, 'packages', 'parent');
+      const leafDir = join(tmpRoot, 'packages', 'leaf');
+      await writePkg(parentDir, { name: '@scope/parent', version: '1.0.0', type: 'module', main: 'src/index.ts' });
+      await writePkg(leafDir, { name: '@scope/leaf', version: '1.0.0', type: 'module', main: 'src/index.ts' });
+
+      const result = await analyzeEntry({ entry, isVirtualFile: true }, '', {
+        shouldCheckTransitiveDependencies: true,
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: makeWorkspaceMap(parentDir, leafDir),
+        projectRoot: tmpRoot,
+      });
+
+      expect(result.dependencies.get('@scope/leaf')?.exports).toEqual(['*']);
+    });
   });
 });

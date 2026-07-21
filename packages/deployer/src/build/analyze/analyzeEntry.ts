@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
@@ -14,6 +16,42 @@ import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
 import { getPackageName, isBareModuleSpecifier, slash } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
+
+const workspaceRootEntryCache = new Map<string, boolean>();
+
+/**
+ * True if a workspace package can be imported at its root (`import '<pkg>'`).
+ * A package with an `exports` map that declares only subpaths (no ".") cannot be imported at
+ * its root, so fabricating a synthetic `export * from '<pkg>'` for it makes the deployer's
+ * alias-optimized-deps resolver throw `Missing "." specifier`. Permissive by default: only
+ * returns false when we are certain there is no root entry.
+ */
+function workspacePackageHasRootEntry(location: string): boolean {
+  const cached = workspaceRootEntryCache.get(location);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  let hasRoot = true;
+  try {
+    const pkgJson = JSON.parse(readFileSync(join(location, 'package.json'), 'utf-8'));
+    const exp = pkgJson.exports;
+    // exp == null   -> no map, main/index fallback applies -> has root
+    // typeof string -> string sugar IS the root            -> has root
+    if (exp != null && typeof exp === 'object' && !Array.isArray(exp)) {
+      const keys = Object.keys(exp);
+      const hasSubpathKeys = keys.some(k => k.startsWith('./'));
+      // A conditions-only object (no "./..." keys) represents the root itself.
+      // Once there are subpath keys, the root resolves only if "." is present.
+      hasRoot = hasSubpathKeys ? keys.includes('.') : true;
+    }
+  } catch {
+    hasRoot = true;
+  }
+
+  workspaceRootEntryCache.set(location, hasRoot);
+  return hasRoot;
+}
 
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.
@@ -164,6 +202,17 @@ async function captureDependenciesToOptimize(
             ...existingMeta,
             exports: existingMeta.exports.includes('*') ? existingMeta.exports : [...existingMeta.exports, '*'],
           });
+          continue;
+        }
+
+        if (!workspacePackageHasRootEntry(innerWorkspaceInfo.location)) {
+          // Subpath-only workspace package: it cannot be imported at its root, so a synthetic
+          // `export * from '<pkg>'` would make the resolver throw under `externals: true` / dev.
+          // The subpaths that ARE imported are captured independently from `output.importedBindings`,
+          // so skipping the fabricated root drops nothing.
+          logger.debug(
+            `Skipping synthetic root export for workspace package "${innerDep}" - it declares only subpath exports.`,
+          );
           continue;
         }
 
