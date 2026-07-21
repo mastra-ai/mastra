@@ -172,7 +172,10 @@ export function buildFactoryRoutes(deps: FactoryRoutesDeps = {}): ApiRoute[] {
         const linked = await findWorkItemByThreadId(resolved.orgId, resolved.projectId, threadId);
         if (linked.status === 'none') return c.json({ context: null });
         if (linked.status === 'ambiguous') {
-          return c.json({ error: 'ambiguous_thread_context', message: 'Multiple work items reference this thread.' }, 409);
+          return c.json(
+            { error: 'ambiguous_thread_context', message: 'Multiple work items reference this thread.' },
+            409,
+          );
         }
         const context = await loadFactoryThreadTaskContext({
           orgId: resolved.orgId,

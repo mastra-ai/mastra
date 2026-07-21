@@ -82,7 +82,14 @@ describe('ChatLayout', () => {
       if (!panelFrame) throw new Error('Right panel frame was not rendered');
       expect(panelFrame).toHaveStyle({ width: '320px' });
 
-      rerender(<ChatLayout sidebar={<div />} content={<div />} rightPanel={<div>right-panel-content</div>} rightPanelExpanded />);
+      rerender(
+        <ChatLayout
+          sidebar={<div />}
+          content={<div />}
+          rightPanel={<div>right-panel-content</div>}
+          rightPanelExpanded
+        />,
+      );
 
       expect(panelFrame).toHaveStyle({ width: '720px' });
     });

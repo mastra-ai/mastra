@@ -110,9 +110,7 @@ describe('LinearIntegration.fetchIssueContext', () => {
     vi.stubGlobal('fetch', fetchMock);
     const linear = integration();
 
-    await expect(linear.fetchIssueContext('access-token', 'ENG-42')).rejects.toBeInstanceOf(
-      LinearProviderRequestError,
-    );
+    await expect(linear.fetchIssueContext('access-token', 'ENG-42')).rejects.toBeInstanceOf(LinearProviderRequestError);
     const httpError = await linear.fetchIssueContext('access-token', 'ENG-42').catch(error => error);
     expect(httpError).toBeInstanceOf(LinearProviderRequestError);
     expect(httpError).toMatchObject({ status: 503 });

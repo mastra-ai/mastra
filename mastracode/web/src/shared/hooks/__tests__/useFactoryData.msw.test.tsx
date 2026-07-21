@@ -207,9 +207,7 @@ describe('useFactoryThreadTaskContextQuery', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() =>
-      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, true),
-    );
+    const { result } = renderHookWithProviders(() => useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, true));
 
     await waitFor(() => expect(result.current.data?.task.title).toBe('Live task'));
     expect(credentials).toEqual(['include']);
@@ -245,9 +243,7 @@ describe('useFactoryThreadTaskContextQuery', () => {
       }),
     );
 
-    const { unmount } = renderHookWithProviders(() =>
-      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, true),
-    );
+    const { unmount } = renderHookWithProviders(() => useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, true));
     await started.promise;
 
     unmount();
@@ -263,9 +259,7 @@ describe('useFactoryThreadTaskContextQuery', () => {
         return HttpResponse.json({ context: taskContext(`Task version ${requestCount}`) });
       }),
     );
-    const { result } = renderHookWithProviders(() =>
-      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, true),
-    );
+    const { result } = renderHookWithProviders(() => useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, true));
     await waitFor(() => expect(result.current.data?.task.title).toBe('Task version 1'));
 
     await act(async () => {
@@ -284,9 +278,7 @@ describe('useFactoryThreadTaskContextQuery', () => {
         return HttpResponse.json({ context: taskContext('Stable task') });
       }),
     );
-    const { result } = renderHookWithProviders(() =>
-      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, true),
-    );
+    const { result } = renderHookWithProviders(() => useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, true));
     await waitFor(() => expect(result.current.data?.task.title).toBe('Stable task'));
     expect(hit).toHaveBeenCalledTimes(1);
 

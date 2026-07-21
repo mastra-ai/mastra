@@ -104,33 +104,29 @@ export function ThreadPage() {
       ? false
       : workspaceViewerExpanded;
 
-  const rightPanel = factoryEligible
-    ? currentLifecycleKey && workspacePath && githubProjectId && threadId && workspaceViewerVisible
-      ? (
-          <FactorySessionContextPanel
-            githubProjectId={githubProjectId}
-            threadId={threadId}
-            workspacePath={workspacePath}
-            activeTab={activeFactoryTab}
-            onTabChange={changeFactoryTab}
-            expanded={rightPanelExpanded}
-            onExpandedChange={setWorkspaceViewerExpanded}
-            onCollapse={collapseRightPanel}
-          />
-        )
-      : undefined
-    : workspacePath && workspaceViewerVisible
-      ? (
-          <WorkspaceViewerPanel
-            workspacePath={workspacePath}
-            renderedPaths={renderedPaths}
-            title="Workspace files"
-            context={workspaceFactory?.name}
-            onExpandedChange={setWorkspaceViewerExpanded}
-            onCollapse={collapseRightPanel}
-          />
-        )
-      : undefined;
+  const rightPanel = factoryEligible ? (
+    currentLifecycleKey && workspacePath && githubProjectId && threadId && workspaceViewerVisible ? (
+      <FactorySessionContextPanel
+        githubProjectId={githubProjectId}
+        threadId={threadId}
+        workspacePath={workspacePath}
+        activeTab={activeFactoryTab}
+        onTabChange={changeFactoryTab}
+        expanded={rightPanelExpanded}
+        onExpandedChange={setWorkspaceViewerExpanded}
+        onCollapse={collapseRightPanel}
+      />
+    ) : undefined
+  ) : workspacePath && workspaceViewerVisible ? (
+    <WorkspaceViewerPanel
+      workspacePath={workspacePath}
+      renderedPaths={renderedPaths}
+      title="Workspace files"
+      context={workspaceFactory?.name}
+      onExpandedChange={setWorkspaceViewerExpanded}
+      onCollapse={collapseRightPanel}
+    />
+  ) : undefined;
 
   return (
     <ChatLayout

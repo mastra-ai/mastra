@@ -7,10 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { FactoryThreadTaskContext } from '../../../../../../shared/api/types';
-import {
-  FactorySessionContextPanel,
-  type FactorySessionContextTab,
-} from '../FactorySessionContextPanel';
+import { FactorySessionContextPanel, type FactorySessionContextTab } from '../FactorySessionContextPanel';
 
 const PROJECT_ID = 'github-project-1';
 const THREAD_ID = 'factory-thread-1';

@@ -112,9 +112,7 @@ export type UpsertWorkItemResult =
 
 /** Scoped reverse lookup result for the work item linked to one thread. */
 export type FindWorkItemByThreadIdResult =
-  | { status: 'none' }
-  | { status: 'match'; item: WorkItemRow }
-  | { status: 'ambiguous' };
+  { status: 'none' } | { status: 'match'; item: WorkItemRow } | { status: 'ambiguous' };
 
 /**
  * Diff `oldStages` → `newStages` and return the updated history: exited stages

@@ -31,13 +31,7 @@ export interface FactoryThreadTaskContext {
   };
   resolution: {
     mode: 'live' | 'stored';
-    reason?:
-      | 'manual'
-      | 'not-found'
-      | 'not-connected'
-      | 'reauth-required'
-      | 'provider-unavailable'
-      | 'invalid-source';
+    reason?: 'manual' | 'not-found' | 'not-connected' | 'reauth-required' | 'provider-unavailable' | 'invalid-source';
   };
 }
 

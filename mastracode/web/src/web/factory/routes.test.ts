@@ -193,11 +193,13 @@ describe('GET /web/factory/repositories/:id/threads/:threadId/context', () => {
     );
   }
 
-  async function connectLinear(overrides: {
-    accessToken?: string;
-    refreshToken?: string | null;
-    expiresAt?: Date | null;
-  } = {}) {
+  async function connectLinear(
+    overrides: {
+      accessToken?: string;
+      refreshToken?: string | null;
+      expiresAt?: Date | null;
+    } = {},
+  ) {
     await upsertLinearConnection({
       orgId: 'org1',
       userId: 'u1',
@@ -542,9 +544,7 @@ describe('GET /web/factory/repositories/:id/threads/:threadId/context', () => {
 
   it('retains tenant, repository, input, and work-item storage failures as route errors', async () => {
     const wrongOrg = await seedProject('other-org');
-    const crossOrg = await buildApp(orgUser).request(
-      `/web/factory/repositories/${PROJECT_ID}/threads/thread/context`,
-    );
+    const crossOrg = await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/threads/thread/context`);
     expect(wrongOrg).toBeUndefined();
     expect(crossOrg.status).toBe(404);
 

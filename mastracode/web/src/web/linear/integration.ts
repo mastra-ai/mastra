@@ -274,10 +274,9 @@ async function linearGraphql<T>(accessToken: string, query: string, variables?: 
     } catch {
       // Non-JSON error body; fall back to the status code alone.
     }
-    throw new LinearProviderRequestError(
-      `Linear API request failed (${res.status})${detail ? `: ${detail}` : ''}`,
-      { status: res.status },
-    );
+    throw new LinearProviderRequestError(`Linear API request failed (${res.status})${detail ? `: ${detail}` : ''}`, {
+      status: res.status,
+    });
   }
 
   let body: { data?: T; errors?: Array<{ message?: string }> };
@@ -504,9 +503,7 @@ export class LinearIntegration implements FactoryIntegration {
     }
     const issue = data.issue;
     if (!issue) return null;
-    const description = issue.description?.trim()
-      ? issue.description.slice(0, TASK_DESCRIPTION_MAX_LENGTH)
-      : undefined;
+    const description = issue.description?.trim() ? issue.description.slice(0, TASK_DESCRIPTION_MAX_LENGTH) : undefined;
     const url = boundedTaskUrl(issue.url);
     return {
       identifier: issue.identifier.slice(0, TASK_IDENTIFIER_MAX_LENGTH),

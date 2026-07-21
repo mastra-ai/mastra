@@ -164,15 +164,20 @@ function FactoryTaskDetails({
           </div>
           <h2 className="break-words text-lg font-semibold text-neutral5">{task.title}</h2>
         </div>
-        <Button type="button" size="icon-sm" variant="ghost" onClick={onRefresh} disabled={refreshing} tooltip="Refresh task">
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          onClick={onRefresh}
+          disabled={refreshing}
+          tooltip="Refresh task"
+        >
           <RefreshCw className={refreshing ? 'motion-safe:animate-spin' : undefined} />
         </Button>
       </div>
 
       {resolution.mode === 'stored' ? (
-        <Notice variant="warning">
-          {STORED_REASON_MESSAGES[resolution.reason ?? 'provider-unavailable']}
-        </Notice>
+        <Notice variant="warning">{STORED_REASON_MESSAGES[resolution.reason ?? 'provider-unavailable']}</Notice>
       ) : null}
 
       {task.description ? (
@@ -181,12 +186,8 @@ function FactoryTaskDetails({
         </section>
       ) : null}
 
-      {task.labels.length > 0 ? (
-        <TaskBadgeGroup label="Labels" values={task.labels} />
-      ) : null}
-      {task.assignees.length > 0 ? (
-        <TaskBadgeGroup label="Assignees" values={task.assignees} />
-      ) : null}
+      {task.labels.length > 0 ? <TaskBadgeGroup label="Labels" values={task.labels} /> : null}
+      {task.assignees.length > 0 ? <TaskBadgeGroup label="Assignees" values={task.assignees} /> : null}
 
       {url ? (
         <div>
