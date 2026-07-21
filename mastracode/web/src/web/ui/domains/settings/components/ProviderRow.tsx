@@ -107,7 +107,7 @@ export function ProviderRow({
   };
 
   return (
-    <li role="listitem" className="flex flex-col gap-2 py-2">
+    <li className="flex flex-col gap-2 py-2">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {provider.source !== 'none' && <Check size={13} className="shrink-0 text-accent1" />}
