@@ -4,7 +4,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraFactory } from '../../factory-entry.js';
-import { subscribeToPullRequest } from '../../github/subscriptions.js';
+import { subscribeToPullRequest } from '@mastra/factory/integrations/github/subscriptions';
 import { __resetRuntimeConfigForTests } from '../../runtime-config.js';
 import { PlatformGithubIntegration } from './integration.js';
 

@@ -5,13 +5,17 @@ import { isLeaseProvider, NoopLeaseProvider, type LeaseProvider, type PubSub } f
 import { MastraWorker, type WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
 
-import { dispatchGithubWebhook, type GithubWebhookNotification, type ParsedGithubWebhook } from '../../github/webhook.js';
-import type { GithubRepositoryPermission } from '../../github/integration.js';
+import {
+  dispatchGithubWebhook,
+  type GithubWebhookNotification,
+  type ParsedGithubWebhook,
+} from '@mastra/factory/integrations/github/webhook';
+import type { GithubRepositoryPermission } from '@mastra/factory/integrations/github/integration';
 import {
   listPullRequestSubscriptionsForWebhook,
   retirePullRequestSubscription,
   type GithubSubscriptionStorage,
-} from '../../github/subscriptions.js';
+} from '@mastra/factory/integrations/github/subscriptions';
 import { PlatformApiClient, PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/github-app';
@@ -292,7 +296,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
           controller: this.#controller,
           listSubscriptions: (target, options) =>
             listPullRequestSubscriptionsForWebhook(target, options, this.#github.integrationStorage),
-          retireSubscription: (id, status) => retirePullRequestSubscription(id, status, this.#github.integrationStorage),
+          retireSubscription: (id, status) =>
+            retirePullRequestSubscription(id, status, this.#github.integrationStorage),
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
           onTargetError: (subscription, error) => {
             this.deps?.logger.warn('Platform GitHub event delivery failed for a subscription', {

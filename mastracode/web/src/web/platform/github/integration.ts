@@ -38,16 +38,18 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
 
 import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
-import { ensureWebAuthUser, webAuthTenant } from '../../auth.js';
-import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
-import { buildGithubRoutes } from '../../github/routes.js';
-import { isSandboxEnabled } from '../../sandbox/fleet.js';
+import type {
+  GithubIntegration,
+  GithubRepositoryPermission,
+  RepoSummary,
+} from '@mastra/factory/integrations/github/integration';
+import { buildGithubRoutes } from '@mastra/factory/integrations/github/routes';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
-} from '../../github/session-subscriptions.js';
-import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
+} from '@mastra/factory/integrations/github/session-subscriptions';
+import type { GithubSubscriptionStorage } from '@mastra/factory/integrations/github/subscriptions';
 import { PlatformGithubEventWorker, type PlatformGithubEventStorage } from './event-worker.js';
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
@@ -353,9 +355,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   routes(ctx: IntegrationContext): ApiRoute[] {
     return [
-      this.#statusRoute(),
-      this.#connectRoute(),
+      this.#statusRoute(ctx),
+      this.#connectRoute(ctx),
       ...buildGithubRoutes({
+        auth: ctx.auth,
+        fleet: ctx.fleet,
+        storage: ctx.factoryStorage,
         github: this as unknown as GithubIntegration,
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
@@ -371,18 +376,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     ];
   }
 
-  #statusRoute(): ApiRoute {
+  #statusRoute(ctx: IntegrationContext): ApiRoute {
     return registerApiRoute('/web/github/status', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        await ensureWebAuthUser(loose(c));
-        const tenant = webAuthTenant(loose(c));
+        await ctx.auth.ensureUser(loose(c));
+        const tenant = ctx.auth.tenant(loose(c));
         if (!tenant) return c.json({ error: 'unauthorized', reason: 'auth_required' }, 401);
         if (!tenant.orgId) {
           return c.json({
             enabled: true,
-            sandboxEnabled: isSandboxEnabled(),
+            sandboxEnabled: ctx.fleet.enabled,
             organizationRequired: true,
             connected: false,
             installations: [],
@@ -394,7 +399,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         const installations = await this.#syncInstallations(tenant.orgId, tenant.userId);
         return c.json({
           enabled: true,
-          sandboxEnabled: isSandboxEnabled(),
+          sandboxEnabled: ctx.fleet.enabled,
           connected: installations.length > 0,
           installations: installations.map(installation => ({
             installationId: Number(installation.externalId),
@@ -408,13 +413,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     });
   }
 
-  #connectRoute(): ApiRoute {
+  #connectRoute(ctx: IntegrationContext): ApiRoute {
     return registerApiRoute('/auth/github/connect', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        await ensureWebAuthUser(loose(c));
-        const tenant = webAuthTenant(loose(c));
+        await ctx.auth.ensureUser(loose(c));
+        const tenant = ctx.auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
         const query = new URLSearchParams({ action: 'install' });

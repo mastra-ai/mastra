@@ -14,6 +14,15 @@ const config = {
   accessToken: 'platform-token',
 };
 
+function fakeAuth(tenant: { orgId?: string; userId: string } | undefined = { orgId: 'org-1', userId: 'user-1' }) {
+  return {
+    enabled: () => true,
+    ensureUser: vi.fn(async () => ({ workosId: tenant?.userId ?? 'user-1', organizationId: tenant?.orgId })),
+    tenant: () => tenant,
+    isOrganizationAdmin: vi.fn(async () => true),
+  };
+}
+
 const actor = { login: 'ada', avatarUrl: null, htmlUrl: 'https://github.com/ada' };
 const issue = {
   number: 12,
@@ -459,6 +468,8 @@ describe('PlatformGithubIntegration', () => {
       stateSigner: { stable: true } as never,
     });
     const context = {
+      auth: fakeAuth(),
+      fleet: { enabled: true },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),
@@ -529,6 +540,8 @@ describe('PlatformGithubIntegration', () => {
       .mockResolvedValueOnce(json({ url: 'https://github.com/apps/mastra/installations/new?state=platform-state' }));
     const integration = createIntegration(fetchImpl);
     const context = {
+      auth: fakeAuth(),
+      fleet: { enabled: true },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),
@@ -560,7 +573,9 @@ describe('PlatformGithubIntegration', () => {
 
     const connect = await app.request('/auth/github/connect');
     expect(connect.status).toBe(302);
-    expect(connect.headers.get('location')).toBe('https://github.com/apps/mastra/installations/new?state=platform-state');
+    expect(connect.headers.get('location')).toBe(
+      'https://github.com/apps/mastra/installations/new?state=platform-state',
+    );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
       'https://platform.example.com/v1/server/github-app/install-url?action=install',
