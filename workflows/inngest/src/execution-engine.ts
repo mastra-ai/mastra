@@ -523,24 +523,22 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runId: runId,
         });
 
-        // The nested workflow needs its OWN resume target (which inner step to
-        // resume and at what path). Normally that comes from the remaining
-        // `resume.steps` (a multi-level id path) and the parent snapshot. But
-        // when the parent only knows the nested workflow's id — `resume.steps`
-        // has a single entry, so `slice(1)` is empty and `steps[1]` is
-        // undefined — we must fall back to the nested snapshot's own
-        // `suspendedPaths`. Without this the nested workflow re-runs from
-        // scratch, the suspended tool never receives `resumeData`, and its
-        // memoized suspended step-update collides on replay. See issue #19699.
-        let nestedSteps = resume.steps.slice(1);
-        let nestedResumePath = resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined;
-        if (nestedSteps.length === 0 && snapshot?.status === 'suspended' && snapshot?.suspendedPaths) {
-          const nestedSuspendedStepIds = Object.keys(snapshot.suspendedPaths);
-          if (nestedSuspendedStepIds.length > 0) {
-            nestedSteps = nestedSuspendedStepIds;
-            nestedResumePath = snapshot.suspendedPaths[nestedSuspendedStepIds[0]!] as any;
+        const nestedResumeSteps = resume.steps.slice(1);
+        if (nestedResumeSteps.length === 0) {
+          const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+          if (suspendedStepIds.length === 0) {
+            throw new Error(`No suspended steps found in nested workflow: ${step.id}`);
           }
+          if (suspendedStepIds.length > 1) {
+            const pathStrings = suspendedStepIds.map(stepId => `[${stepId}]`);
+            throw new Error(
+              `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
+                'Please specify which step to resume using the "step" parameter.',
+            );
+          }
+          nestedResumeSteps.push(suspendedStepIds[0]!);
         }
+        const nestedResumeStepId = nestedResumeSteps[0];
 
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
@@ -551,10 +549,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: runId,
             resume: {
               runId: runId,
-              steps: nestedSteps,
+              steps: nestedResumeSteps,
               stepResults: snapshot?.context as any,
               resumePayload: resume.resumePayload,
-              resumePath: nestedResumePath,
+              resumePath: nestedResumeStepId ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any) : undefined,
             },
             outputOptions: { includeState: true },
             perStep,

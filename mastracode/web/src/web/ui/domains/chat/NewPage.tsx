@@ -4,12 +4,13 @@ import { useLocation } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
-import { ChatLayout, FolderIcon } from '../../ui';
-import type { Factory } from '../workspaces';
-import { EmptyFactoryState, useActiveFactoryContext } from '../workspaces';
+import { ChatLayout } from '../../ui/ChatLayout';
+import { FolderIcon } from '../../ui/icons';
+import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import type { Factory } from '../workspaces/services/factories';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
-import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
 import { ChatSessionBoundary } from './context/ChatSessionProvider';
@@ -33,7 +34,6 @@ export function NewPage() {
           ) : (
             <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
           )}
-          <ChatOverlays />
         </ChatSessionBoundary>
       }
     />
