@@ -176,6 +176,8 @@ export interface MastraChatProps {
    * Defaults to `false`; set to `true` to opt into thread signals.
    */
   enableThreadSignals?: boolean;
+  /** Override the legacy stream route for editor-owned hidden agents. */
+  streamPath?: string;
 }
 
 interface SharedArgs {
@@ -275,6 +277,7 @@ export const useChat = ({
   onSignalEcho,
   onThreadSignalsUnsupported,
   enableThreadSignals = false,
+  streamPath,
 }: MastraChatProps) => {
   const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
@@ -474,7 +477,7 @@ export const useChat = ({
         ...baseClient!.options,
         abortSignal: subscriptionAbort.signal,
       });
-      const subscriptionAgent = clientWithAbort.getAgent(agentId);
+      const subscriptionAgent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
       _threadSubscriptionPromiseRef.current = subscriptionAgent
         .subscribeToThread({ resourceId, threadId })
@@ -577,7 +580,7 @@ export const useChat = ({
       abortSignal: signal,
     });
 
-    const agent = clientWithAbort.getAgent(agentId);
+    const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const runId = uuid();
     _currentRunId.current = runId;
@@ -695,7 +698,7 @@ export const useChat = ({
       abortSignal: internalAbort.signal,
     });
 
-    const agent = clientWithAbort.getAgent(agentId);
+    const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const streamWithLegacyRoute = async () => {
       const runId = uuid();
@@ -849,7 +852,7 @@ export const useChat = ({
       abortSignal: signal,
     });
 
-    const agent = clientWithAbort.getAgent(agentId);
+    const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const runId = uuid();
 
@@ -916,7 +919,7 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
         await agent.sendToolApproval({
@@ -965,7 +968,7 @@ export const useChat = ({
 
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
         await agent.sendToolApproval({
@@ -1015,7 +1018,7 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.approveToolCallGenerate({
       runId: currentRunId,
       toolCallId,
@@ -1041,7 +1044,7 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.declineToolCallGenerate({
       runId: currentRunId,
       toolCallId,
@@ -1071,7 +1074,7 @@ export const useChat = ({
       [runId ? `${runId}-${toolName}` : toolName]: { status: 'approved' },
     }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.approveNetworkToolCall({
       runId: networkRunId,
       requestContext: _requestContext.current,
@@ -1103,7 +1106,7 @@ export const useChat = ({
       [runId ? `${runId}-${toolName}` : toolName]: { status: 'declined' },
     }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.declineNetworkToolCall({
       runId: networkRunId,
       requestContext: _requestContext.current,

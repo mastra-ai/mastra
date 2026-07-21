@@ -391,6 +391,7 @@ export class Agent extends BaseResource {
     options: ClientOptions,
     private agentId: string,
     private version?: AgentVersionIdentifier,
+    private routeOverrides?: { stream?: string },
   ) {
     super(options);
     this.voice = new AgentVoice(options, this.agentId, this.version);
@@ -2051,7 +2052,11 @@ export class Agent extends BaseResource {
       requestBody = resumeStreamBody;
     }
 
-    const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
+    const requestPath =
+      route === 'stream' && this.routeOverrides?.stream
+        ? this.routeOverrides.stream
+        : `/agents/${this.agentId}/${route}`;
+    const response: Response = await this.request(requestPath, {
       method: 'POST',
       body: requestBody,
       stream: true,
@@ -3204,7 +3209,7 @@ export class Agent extends BaseResource {
 
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    } = await this.request(`/agents/${this.agentId}/stream-legacy`, {
+    } = await this.request(this.routeOverrides?.stream ?? `/agents/${this.agentId}/stream-legacy`, {
       method: 'POST',
       body: processedParams,
       stream: true,

@@ -1,0 +1,347 @@
+import type { UpsertStoredWorkflowParams } from '@mastra/client-js';
+
+export type WorkflowDraft = UpsertStoredWorkflowParams;
+export type WorkflowDraftStep = WorkflowDraft['graph'][number];
+type JsonSchema = WorkflowDraft['inputSchema'];
+
+export interface WorkflowDraftStepSchema {
+  inputSchema?: JsonSchema;
+  outputSchema?: JsonSchema;
+}
+
+export interface WorkflowDraftValidationContext {
+  agents?: Record<string, WorkflowDraftStepSchema>;
+  tools?: Record<string, WorkflowDraftStepSchema>;
+}
+
+export type WorkflowDraftMutation =
+  | { type: 'set-identity'; id: string; description?: string }
+  | {
+      type: 'set-schemas';
+      inputSchema: WorkflowDraft['inputSchema'];
+      outputSchema: WorkflowDraft['outputSchema'];
+      stateSchema?: WorkflowDraft['stateSchema'];
+      requestContextSchema?: WorkflowDraft['requestContextSchema'];
+    }
+  | { type: 'add-step'; step: WorkflowDraftStep; index?: number }
+  | { type: 'update-step'; stepId: string; step: WorkflowDraftStep }
+  | { type: 'remove-step'; stepId: string };
+
+export type WorkflowDraftValidationIssueCode =
+  | 'invalid-workflow-id'
+  | 'invalid-schema'
+  | 'empty-graph'
+  | 'missing-step-id'
+  | 'duplicate-step-id'
+  | 'missing-reference'
+  | 'invalid-map-config'
+  | 'invalid-parallel'
+  | 'invalid-foreach'
+  | 'invalid-duration'
+  | 'invalid-date'
+  | 'incompatible-schema'
+  | 'invalid-mutation';
+
+export interface WorkflowDraftValidationIssue {
+  code: WorkflowDraftValidationIssueCode;
+  path: string;
+  message: string;
+}
+
+export type WorkflowDraftValidationResult = { ok: true } | { ok: false; issues: WorkflowDraftValidationIssue[] };
+
+export type WorkflowDraftMutationResult =
+  | { ok: true; draft: WorkflowDraft }
+  | { ok: false; draft: WorkflowDraft; issues: WorkflowDraftValidationIssue[] };
+
+const emptyObjectSchema = {
+  type: 'object',
+  properties: {},
+  additionalProperties: false,
+} as const;
+
+const agentInputSchema = {
+  type: 'object',
+  properties: { prompt: { type: 'string' } },
+  required: ['prompt'],
+} as const;
+
+export function createWorkflowDraft(id: string): WorkflowDraft {
+  return {
+    id,
+    inputSchema: emptyObjectSchema,
+    outputSchema: emptyObjectSchema,
+    graph: [],
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function validateJsonSchema(schema: unknown, path: string, issues: WorkflowDraftValidationIssue[]): void {
+  if (!isRecord(schema)) {
+    issues.push({ code: 'invalid-schema', path, message: 'Schema must be a JSON object.' });
+    return;
+  }
+  try {
+    JSON.stringify(schema);
+  } catch {
+    issues.push({ code: 'invalid-schema', path, message: 'Schema must be JSON-serializable.' });
+  }
+}
+
+type SchemaCompatibility = 'compatible' | 'incompatible' | 'unknown';
+
+function schemaCompatibility(source: unknown, destination: unknown): SchemaCompatibility {
+  if (!isRecord(source) || !isRecord(destination)) return 'unknown';
+  const sourceType = typeof source.type === 'string' ? source.type : undefined;
+  const destinationType = typeof destination.type === 'string' ? destination.type : undefined;
+  if (!sourceType || !destinationType) return 'unknown';
+  if (sourceType !== destinationType) return 'incompatible';
+
+  if (destinationType === 'array') return schemaCompatibility(source.items, destination.items);
+  if (destinationType !== 'object') return 'compatible';
+
+  const sourceProperties = isRecord(source.properties) ? source.properties : {};
+  const destinationProperties = isRecord(destination.properties) ? destination.properties : {};
+  const required = Array.isArray(destination.required)
+    ? destination.required.filter((key): key is string => typeof key === 'string')
+    : [];
+
+  for (const key of required) {
+    if (!(key in sourceProperties)) return 'incompatible';
+  }
+  for (const [key, destinationProperty] of Object.entries(destinationProperties)) {
+    if (!(key in sourceProperties)) continue;
+    if (schemaCompatibility(sourceProperties[key], destinationProperty) === 'incompatible') return 'incompatible';
+  }
+  return 'compatible';
+}
+
+function mappingOutputSchema(step: Extract<WorkflowDraftStep, { type: 'mapping' }>): JsonSchema | undefined {
+  try {
+    const config = JSON.parse(step.mapConfig);
+    if (!isRecord(config)) return undefined;
+    return {
+      type: 'object',
+      properties: Object.fromEntries(Object.keys(config).map(key => [key, {}])),
+      required: Object.keys(config),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function getStepInputSchema(step: WorkflowDraftStep, context?: WorkflowDraftValidationContext): JsonSchema | undefined {
+  switch (step.type) {
+    case 'agent':
+      return context?.agents?.[step.agentId]?.inputSchema ?? agentInputSchema;
+    case 'tool':
+      return context?.tools?.[step.toolId]?.inputSchema;
+    case 'foreach':
+      return { type: 'array', items: getStepInputSchema(step.step, context) ?? {} };
+    default:
+      return undefined;
+  }
+}
+
+function getStepOutputSchema(
+  step: WorkflowDraftStep,
+  context?: WorkflowDraftValidationContext,
+): JsonSchema | undefined {
+  switch (step.type) {
+    case 'agent':
+      return step.outputSchema ?? context?.agents?.[step.agentId]?.outputSchema;
+    case 'tool':
+      return context?.tools?.[step.toolId]?.outputSchema;
+    case 'mapping':
+      return mappingOutputSchema(step);
+    case 'foreach': {
+      const itemSchema = getStepOutputSchema(step.step, context);
+      return itemSchema ? { type: 'array', items: itemSchema } : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
+function validateStep(
+  step: WorkflowDraftStep,
+  path: string,
+  seenIds: Set<string>,
+  issues: WorkflowDraftValidationIssue[],
+  context?: WorkflowDraftValidationContext,
+): void {
+  if ('id' in step) {
+    if (step.id.trim().length === 0) {
+      issues.push({ code: 'missing-step-id', path: `${path}.id`, message: 'Step id is required.' });
+    } else if (seenIds.has(step.id)) {
+      issues.push({ code: 'duplicate-step-id', path: `${path}.id`, message: `Step id "${step.id}" is duplicated.` });
+    } else {
+      seenIds.add(step.id);
+    }
+  }
+
+  switch (step.type) {
+    case 'agent':
+      if (step.agentId.trim().length === 0 || (context?.agents && !context.agents[step.agentId])) {
+        issues.push({
+          code: 'missing-reference',
+          path: `${path}.agentId`,
+          message: `Agent "${step.agentId}" is unavailable.`,
+        });
+      }
+      return;
+    case 'tool':
+      if (step.toolId.trim().length === 0 || (context?.tools && !context.tools[step.toolId])) {
+        issues.push({
+          code: 'missing-reference',
+          path: `${path}.toolId`,
+          message: `Tool "${step.toolId}" is unavailable.`,
+        });
+      }
+      return;
+    case 'mapping':
+      if (!mappingOutputSchema(step)) {
+        issues.push({
+          code: 'invalid-map-config',
+          path: `${path}.mapConfig`,
+          message: 'Mapping config must be a JSON object.',
+        });
+      }
+      return;
+    case 'parallel':
+      if (step.steps.length === 0) {
+        issues.push({ code: 'invalid-parallel', path: `${path}.steps`, message: 'Parallel steps cannot be empty.' });
+      }
+      step.steps.forEach((child, index) => validateStep(child, `${path}.steps.${index}`, seenIds, issues, context));
+      return;
+    case 'foreach':
+      if (step.opts?.concurrency !== undefined && step.opts.concurrency < 1) {
+        issues.push({
+          code: 'invalid-foreach',
+          path: `${path}.opts.concurrency`,
+          message: 'Concurrency must be positive.',
+        });
+      }
+      validateStep(step.step, `${path}.step`, seenIds, issues, context);
+      return;
+    case 'sleep':
+      if (!Number.isFinite(step.duration) || step.duration < 0) {
+        issues.push({
+          code: 'invalid-duration',
+          path: `${path}.duration`,
+          message: 'Sleep duration must be non-negative.',
+        });
+      }
+      return;
+    case 'sleepUntil':
+      if (Number.isNaN(Date.parse(step.date))) {
+        issues.push({
+          code: 'invalid-date',
+          path: `${path}.date`,
+          message: 'Sleep-until date must be ISO-compatible.',
+        });
+      }
+      return;
+  }
+}
+
+export function validateWorkflowDraft(
+  draft: WorkflowDraft,
+  context?: WorkflowDraftValidationContext,
+): WorkflowDraftValidationResult {
+  const issues: WorkflowDraftValidationIssue[] = [];
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(draft.id)) {
+    issues.push({ code: 'invalid-workflow-id', path: 'id', message: 'Workflow id must be descriptive kebab-case.' });
+  }
+  validateJsonSchema(draft.inputSchema, 'inputSchema', issues);
+  validateJsonSchema(draft.outputSchema, 'outputSchema', issues);
+  if (draft.stateSchema !== undefined) validateJsonSchema(draft.stateSchema, 'stateSchema', issues);
+  if (draft.requestContextSchema !== undefined) {
+    validateJsonSchema(draft.requestContextSchema, 'requestContextSchema', issues);
+  }
+  if (draft.graph.length === 0) {
+    issues.push({ code: 'empty-graph', path: 'graph', message: 'Workflow graph must contain at least one step.' });
+  }
+
+  const seenIds = new Set<string>();
+  draft.graph.forEach((step, index) => validateStep(step, `graph.${index}`, seenIds, issues, context));
+  for (let index = 1; index < draft.graph.length; index += 1) {
+    const source = getStepOutputSchema(draft.graph[index - 1]!, context);
+    const destination = getStepInputSchema(draft.graph[index]!, context);
+    if (schemaCompatibility(source, destination) === 'incompatible') {
+      issues.push({
+        code: 'incompatible-schema',
+        path: `graph.${index}`,
+        message: `Step ${index} input is incompatible with the previous step output. Insert or update a mapping step.`,
+      });
+    }
+  }
+
+  return issues.length === 0 ? { ok: true } : { ok: false, issues };
+}
+
+function mutationIssue(draft: WorkflowDraft, path: string, message: string): WorkflowDraftMutationResult {
+  return { ok: false, draft, issues: [{ code: 'invalid-mutation', path, message }] };
+}
+
+function mutateWorkflowDraft(
+  draft: WorkflowDraft,
+  mutation: WorkflowDraftMutation,
+): WorkflowDraftMutationResult | WorkflowDraft {
+  switch (mutation.type) {
+    case 'set-identity':
+      return { ...draft, id: mutation.id, description: mutation.description };
+    case 'set-schemas':
+      return {
+        ...draft,
+        inputSchema: mutation.inputSchema,
+        outputSchema: mutation.outputSchema,
+        stateSchema: mutation.stateSchema,
+        requestContextSchema: mutation.requestContextSchema,
+      };
+    case 'add-step': {
+      if (mutation.index !== undefined && mutation.index > draft.graph.length) {
+        return mutationIssue(draft, 'index', 'Step index is outside the workflow graph.');
+      }
+      const graph = [...draft.graph];
+      graph.splice(mutation.index ?? graph.length, 0, mutation.step);
+      return { ...draft, graph };
+    }
+    case 'update-step':
+      if (!draft.graph.some(step => 'id' in step && step.id === mutation.stepId)) {
+        return mutationIssue(draft, 'stepId', `Step "${mutation.stepId}" does not exist.`);
+      }
+      return {
+        ...draft,
+        graph: draft.graph.map(step => ('id' in step && step.id === mutation.stepId ? mutation.step : step)),
+      };
+    case 'remove-step':
+      if (!draft.graph.some(step => 'id' in step && step.id === mutation.stepId)) {
+        return mutationIssue(draft, 'stepId', `Step "${mutation.stepId}" does not exist.`);
+      }
+      return { ...draft, graph: draft.graph.filter(step => !('id' in step) || step.id !== mutation.stepId) };
+  }
+}
+
+const issueKey = (issue: WorkflowDraftValidationIssue): string => `${issue.code}:${issue.path}`;
+
+export function applyWorkflowDraftMutation(
+  draft: WorkflowDraft,
+  mutation: WorkflowDraftMutation,
+  context?: WorkflowDraftValidationContext,
+): WorkflowDraftMutationResult {
+  const mutationResult = mutateWorkflowDraft(draft, mutation);
+  if ('ok' in mutationResult) return mutationResult;
+  const nextDraft = mutationResult;
+  const previousValidation = validateWorkflowDraft(draft, context);
+  const nextValidation = validateWorkflowDraft(nextDraft, context);
+  if (nextValidation.ok) return { ok: true, draft: nextDraft };
+
+  const previousIssueKeys = new Set(previousValidation.ok ? [] : previousValidation.issues.map(issueKey));
+  const introducedIssues = nextValidation.issues.filter(issue => !previousIssueKeys.has(issueKey(issue)));
+  if (introducedIssues.length > 0) return { ok: false, draft, issues: introducedIssues };
+  return { ok: true, draft: nextDraft };
+}
