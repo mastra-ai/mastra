@@ -1,4 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
+import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntegrationContext } from '@mastra/factory/integrations/base';
@@ -269,7 +270,8 @@ describe('PlatformLinearIntegration', () => {
 
   it('exposes platform-backed route and agent-tool surfaces without local OAuth routes', async () => {
     const seed = await seedFactoryStorageForTests();
-    const integration = createIntegration();
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ workspaces: [workspace] }));
+    const integration = createIntegration(fetchImpl);
     const projectRecord = await seed.projects.create({
       orgId: 'org-1',
       userId: 'user-1',
@@ -297,6 +299,10 @@ describe('PlatformLinearIntegration', () => {
       auth: context.auth,
     });
     const routes = integration.routes(context);
+    const app = new Hono();
+    for (const route of routes) {
+      if ('handler' in route) app.on(route.method, route.path, route.handler as never);
+    }
     const requestContext = new RequestContext();
     requestContext.set('controller', { resourceId: projectRecord.id });
 
@@ -307,6 +313,12 @@ describe('PlatformLinearIntegration', () => {
       expect.arrayContaining(['/web/linear/status', '/web/linear/projects', '/web/linear/issues']),
     );
     expect(routes.some(route => route.path.startsWith('/auth/linear/'))).toBe(false);
+    await expect(app.request('/web/linear/status').then(res => res.json())).resolves.toMatchObject({
+      enabled: true,
+      connected: true,
+      reason: 'ready',
+      workspace: { name: 'Acme', urlKey: 'acme' },
+    });
     await expect(integration.agentTools({ requestContext })).resolves.toEqual(
       expect.objectContaining({ linear_get_issue: expect.anything(), linear_create_comment: expect.anything() }),
     );

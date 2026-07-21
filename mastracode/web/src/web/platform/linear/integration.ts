@@ -10,7 +10,11 @@ import type { RouteAuth } from '@mastra/factory/routes/route';
 import { buildLinearAgentTools } from '@mastra/factory/integrations/linear/agent-tools';
 import type { LinearConnectionCheck, LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { buildLinearRoutes } from '@mastra/factory/integrations/linear/routes';
-import type { LinearConnectionData, LinearStorageHandle } from '@mastra/factory/integrations/linear/storage';
+import type {
+  LinearConnectionData,
+  LinearConnectionRow,
+  LinearStorageHandle,
+} from '@mastra/factory/integrations/linear/storage';
 import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
@@ -205,8 +209,37 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     }
   }
 
-  async checkConnection(_orgId: string): Promise<LinearConnectionCheck> {
-    return { connected: true, canComment: true, checkedAt: Date.now() };
+  async loadConnection(orgId: string): Promise<LinearConnectionRow | null> {
+    const workspace = (await this.#listWorkspaces())[0];
+    if (!workspace) return null;
+    const now = new Date();
+    return {
+      id: `platform-linear:${orgId}`,
+      orgId,
+      userId: null,
+      accessToken: this.#accessToken,
+      scope: 'read,comments:create',
+      refreshToken: null,
+      expiresAt: null,
+      workspaceName: workspace.linearWorkspaceName,
+      workspaceUrlKey: workspace.urlKey,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  async getFreshAccessToken(connection: LinearConnectionRow): Promise<string> {
+    return connection.accessToken;
+  }
+
+  canPostComments(connection: LinearConnectionRow): boolean {
+    const scopes = (connection.scope ?? '').split(/[\s,]+/).filter(Boolean);
+    return scopes.some(scope => scope === 'comments:create' || scope === 'write' || scope === 'admin');
+  }
+
+  async checkConnection(orgId: string): Promise<LinearConnectionCheck> {
+    const connection = await this.loadConnection(orgId);
+    return { connected: connection !== null, canComment: connection !== null && this.canPostComments(connection), checkedAt: Date.now() };
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {

@@ -26,14 +26,15 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@duckdb/node-bindings": "1.5.4-r.1",
     "@fontsource-variable/mona-sans": "5.3.0",
     "@mastra/auth-better-auth": "link:../../auth/better-auth",
     "@mastra/auth-studio": "link:../../auth/studio",
     "@mastra/auth-workos": "link:../../auth/workos",
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/code-sdk": "link:../sdk",
-    "@mastra/factory": "link:../factory",
     "@mastra/core": "link:../../packages/core",
+    "@mastra/factory": "link:../factory",
     "@mastra/hono": "link:../../server-adapters/hono",
     "@mastra/libsql": "link:../../stores/libsql",
     "@mastra/pg": "link:../../stores/pg",
@@ -47,6 +48,7 @@
     "@tanstack/react-query": "^5.90.21",
     "@workos-inc/node": "8.8.0",
     "date-fns": "^4.4.0",
+    "debug": "^4.4.3",
     "drizzle-orm": "^0.45.0",
     "hono": "^4.12.8",
     "lucide-react": "^0.474.0",
@@ -56,6 +58,7 @@
     "react-dom": "19.2.7",
     "react-router": "^7.13.1",
     "shiki": "^1.29.2",
+    "supports-color": "^10.2.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
