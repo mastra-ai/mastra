@@ -7,6 +7,7 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import {
@@ -301,7 +302,7 @@ function ToolCard({
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className={`min-w-0 max-w-full overflow-hidden bg-surface3 ${toolGroupClasses(groupPosition)}`}
+      className={cn('min-w-0 max-w-full overflow-hidden bg-surface3', toolGroupClasses(groupPosition))}
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
     >
@@ -315,7 +316,10 @@ function ToolCard({
         <span className="flex w-full items-center gap-2 px-2 py-1.5">
           <ChevronDown
             size={13}
-            className={`shrink-0 text-icon3 transition-transform duration-150 ${expanded ? 'rotate-0' : '-rotate-90'}`}
+            className={cn(
+              'shrink-0 text-icon3 transition-transform duration-150',
+              expanded ? 'rotate-0' : '-rotate-90',
+            )}
           />
           <ToolIcon name={tool.toolName} className="shrink-0 text-icon3" />
           <Txt as="span" variant="ui-sm" font="mono" className="text-icon5">

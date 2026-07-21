@@ -56,25 +56,32 @@ function askUserResultContent(output: unknown): string | undefined {
   return stringValue(output) ?? stringValue(record(output)?.content);
 }
 
+function askUserOptions(value: unknown): AskUserOption[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const options = value.flatMap(option => {
+    const optionValue = record(option);
+    const label = stringValue(optionValue?.label);
+    if (!label) return [];
+
+    const normalized: AskUserOption = { label };
+    const description = stringValue(optionValue?.description);
+    if (description) normalized.description = description;
+    return [normalized];
+  });
+
+  return options.length > 0 ? options : undefined;
+}
+
 function askUserPayload(input: unknown): AskUserPayload | undefined {
   const payload = record(input);
   const question = stringValue(payload?.question);
   if (!question) return undefined;
 
-  const options = Array.isArray(payload?.options)
-    ? payload.options.flatMap(option => {
-        const value = record(option);
-        const label = stringValue(value?.label);
-        if (!label) return [];
-        const normalized: AskUserOption = { label };
-        const description = stringValue(value?.description);
-        if (description) normalized.description = description;
-        return [normalized];
-      })
-    : undefined;
+  const options = askUserOptions(payload?.options);
   const selectionMode = payload?.selectionMode === 'multi_select' ? 'multi_select' : 'single_select';
 
-  return { question, ...(options?.length ? { options, selectionMode } : {}) };
+  return { question, ...(options ? { options, selectionMode } : {}) };
 }
 
 interface PlanData {
