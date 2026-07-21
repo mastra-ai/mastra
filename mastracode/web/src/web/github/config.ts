@@ -12,8 +12,14 @@
  */
 
 import { isWebAuthEnabled } from '../auth';
-import { getSeededGithubIntegration, getSeededStateSigner } from '../runtime-config';
+import { getSeededIntegration, getSeededStateSigner, getSeededStorage } from '../runtime-config';
 import { getSandboxProvider, isSandboxEnabled } from '../sandbox/fleet';
+import type { GithubIntegration } from './integration';
+
+function getGithubIntegration(): GithubIntegration | undefined {
+  const integration = getSeededIntegration('github');
+  return integration && 'getInstallationOctokit' in integration ? (integration as GithubIntegration) : undefined;
+}
 
 /**
  * Env vars the deploy entry reads to construct a `GithubIntegration`. Names
@@ -34,7 +40,7 @@ const GITHUB_APP_ENV_VARS = [
  * True when the GitHub App project feature should be active.
  */
 export function isGithubFeatureEnabled(): boolean {
-  return getSeededGithubIntegration() !== undefined && isWebAuthEnabled();
+  return getGithubIntegration() !== undefined && isWebAuthEnabled();
 }
 
 /**
@@ -60,11 +66,11 @@ export interface GithubFeatureDiagnostics {
  * the same state. Does not change `isGithubFeatureEnabled()` behavior.
  */
 export function getGithubFeatureDiagnostics(): GithubFeatureDiagnostics {
-  const github = getSeededGithubIntegration();
+  const github = getGithubIntegration();
   return {
     githubAppConfigured: github !== undefined,
     webAuthEnabled: isWebAuthEnabled(),
-    appDbConfigured: github?.storageDomain !== undefined,
+    appDbConfigured: getSeededStorage() !== undefined,
     stateSecretConfigured: getSeededStateSigner()?.stable ?? false,
     sandboxEnabled: isSandboxEnabled(),
     sandboxProvider: getSandboxProvider(),

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GithubSignalSubscriptionRow } from './storage/base';
+import type { GithubSignalSubscriptionRow } from './subscriptions';
 
 const getRepositoryCollaboratorPermission = vi.fn<
   (
@@ -32,19 +32,22 @@ function subscription(id: string, scope: string, threadId = `thread-${id}`): Git
   return {
     id,
     orgId: 'org-1',
-    installationId: 7,
-    githubProjectId: 'project-1',
-    repoId: 99,
-    repoFullName: 'octo/hello',
-    pullRequestNumber: 34,
+    targetKey: 'change-request:7:99:34',
     sessionId: `session-${id}`,
-    ownerId: 'owner-1',
     resourceId: 'resource-1',
     threadId,
     sessionScope: scope,
-    source: 'explicit-tool',
     status: 'open',
-    subscribedByUserId: 'user-1',
+    data: {
+      installationExternalId: '7',
+      projectRepositoryId: 'project-repository-1',
+      repositoryExternalId: '99',
+      repositorySlug: 'octo/hello',
+      changeRequestId: '34',
+      ownerId: 'owner-1',
+      source: 'explicit-tool',
+      subscribedByUserId: 'user-1',
+    },
     createdAt: new Date('2026-07-13T00:00:00Z'),
     updatedAt: new Date('2026-07-13T00:00:00Z'),
   };
@@ -202,7 +205,11 @@ describe('dispatchGithubWebhook', () => {
       ownerId: 'owner-1',
       resourceId: 'resource-1',
       scope: '/worktrees/b',
-      tags: { githubProjectId: 'project-1', projectPath: '/worktrees/b' },
+      tags: {
+        factoryProjectId: 'resource-1',
+        projectRepositoryId: 'project-repository-1',
+        worktreePath: '/worktrees/b',
+      },
     });
     expect(switchB).not.toHaveBeenCalled();
     expect(sendA).toHaveBeenCalledWith(
@@ -252,7 +259,7 @@ describe('dispatchGithubWebhook', () => {
       retireSubscription: updateStatus,
     });
 
-    expect(listSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ pullRequestNumber: 34 }), {
+    expect(listSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ changeRequestId: '34' }), {
       includeTerminal: true,
     });
     expect(updateStatus).toHaveBeenCalledWith('a', 'open');

@@ -1,120 +1,167 @@
 /**
- * Factory work items domain — the unified record behind the Factory kanban
- * board.
+ * Factory work-items storage domain.
  *
- * One `work_items` row represents a unit of work (a GitHub issue/PR, a Linear
- * issue, or a manually filed card) as it moves across board stages. Stages are
- * plain strings inside jsonb (`intake` → `execute` → `review` → `done` today),
- * so evolving the board's columns never needs a schema change. A single item
- * can sit in several stages at once (e.g. `['execute','review']`).
- *
- * Tenancy is **org-first**, like `github_projects`: the board is shared by the
- * whole org, scoped to one project. `created_by` and the per-entry `by` /
- * `startedBy` fields record who did what, but never scope reads.
- *
- * Stage history is appended exclusively here (server-side) on every stage
- * transition so it can never drift from `stages`.
+ * Work items belong to a first-class Factory project. External intake items use
+ * a provider-neutral source reference; manual work items have no source.
+ * Stage history is server-owned, while session and metadata patches merge
+ * atomically so concurrent actors do not overwrite each other.
  */
 
-import type { FactoryStorageContext, FactoryStorageDomain } from '../../domain';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
+import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
-/** Where a work item was materialized from. */
-export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
+export type WorkItemStage = string;
 
-/** A session/thread attached to a work item, keyed by role (`work`, `review`, ...). */
-export interface WorkItemSessionRef {
-  /** Worktree path the scoped agent-controller session is keyed by. */
-  projectPath: string;
-  /** Feature branch the worktree checks out. */
-  branch: string;
-  /** Agent-controller thread id for the role's conversation. */
-  threadId: string;
-  /** WorkOS user id whose sandbox/worktree the session runs in. */
-  startedBy: string;
+export interface ExternalWorkItemSource {
+  integrationId: string;
+  type: string;
+  externalId: string;
+  url?: string;
 }
 
-/** One stage-transition record, appended server-side (never client-supplied). */
 export interface WorkItemStageEntry {
-  stage: string;
-  /** ISO timestamp the item entered the stage. */
+  stage: WorkItemStage;
   enteredAt: string;
-  /** ISO timestamp the item left the stage; absent while still in it. */
   exitedAt?: string;
-  /** WorkOS user id who performed the transition. */
   by: string;
 }
 
-/** One persisted work item. */
-export interface WorkItemRow {
-  id: string;
-  /** Owning WorkOS organization id — the board is org-wide. */
-  orgId: string;
-  /** WorkOS user id of whoever materialized the record (audit only). */
-  createdBy: string;
-  /** Project (org-owned) the board belongs to. */
-  githubProjectId: string;
-  source: WorkItemSource;
-  /** Dedupe key (e.g. 'github-issue:123', 'linear:ENG-42'); null for manual cards. */
-  sourceKey: string | null;
-  title: string;
-  /** External link (issue/PR); null for manual cards. */
-  url: string | null;
-  /** Current stages, e.g. ['execute','review']. */
-  stages: string[];
-  /** Server-appended stage transition log. */
-  stageHistory: WorkItemStageEntry[];
-  /** Sessions keyed by role ('work' | 'review' | ...). */
-  sessions: Record<string, WorkItemSessionRef>;
-  /** Flexible source payload (issue number, labels, headBranch, ...). */
-  metadata: Record<string, unknown>;
-  createdAt: Date;
-  updatedAt: Date;
+export interface WorkItemSessionRef {
+  projectPath: string;
+  branch: string;
+  threadId: string;
+  startedBy: string;
 }
 
-/** Session ref as accepted from clients — `startedBy` is stamped server-side. */
 export interface WorkItemSessionInput {
   projectPath: string;
   branch: string;
   threadId: string;
 }
 
-export interface CreateWorkItemInput {
-  source: WorkItemSource;
-  sourceKey: string | null;
+export type WorkItemSessions = Record<string, WorkItemSessionRef>;
+
+export interface WorkItemRow {
+  id: string;
+  orgId: string;
+  factoryProjectId: string;
+  externalSource: ExternalWorkItemSource | null;
   title: string;
-  url: string | null;
-  stages: string[];
-  sessions: Record<string, WorkItemSessionInput>;
-  metadata: Record<string, unknown>;
+  stages: WorkItemStage[];
+  stageHistory: WorkItemStageEntry[];
+  sessions: WorkItemSessions;
+  metadata: Record<string, unknown> | null;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateWorkItemInput {
+  externalSource?: ExternalWorkItemSource | null;
+  title: string;
+  stages?: WorkItemStage[];
+  sessions?: Record<string, WorkItemSessionInput>;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface UpdateWorkItemInput {
   title?: string;
-  url?: string | null;
-  stages?: string[];
+  stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
 }
 
-/** Pre-patch state returned alongside an update so callers can diff for auditing. */
 export interface WorkItemPriorState {
-  stages: string[];
+  stages: WorkItemStage[];
   sessionRoles: string[];
 }
 
-/** Discriminated result of `upsert`: fresh insert vs source-key reuse. */
-export type UpsertWorkItemResult =
-  | { created: true; item: WorkItemRow }
-  | { created: false; item: WorkItemRow; previous: WorkItemPriorState };
+export interface UpsertWorkItemResult {
+  item: WorkItemRow;
+  created: boolean;
+  previous: WorkItemPriorState;
+}
 
-/**
- * Diff `oldStages` → `newStages` and return the updated history: exited stages
- * get `exitedAt` stamped on their open entry, entered stages get a new entry.
- */
+export const WORK_ITEMS_SCHEMA: CollectionSchema = {
+  name: 'work_items',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
+    external_source: { type: 'json', nullable: true },
+    source_key: { type: 'text', nullable: true },
+    title: { type: 'text' },
+    stages: { type: 'json' },
+    stage_history: { type: 'json' },
+    sessions: { type: 'json' },
+    metadata: { type: 'json', nullable: true },
+    created_by: { type: 'text' },
+    created_at: { type: 'timestamp' },
+    updated_at: { type: 'timestamp' },
+  },
+  uniqueIndexes: [
+    {
+      name: 'work_items_project_source_key_unique',
+      columns: ['factory_project_id', 'source_key'],
+    },
+  ],
+  indexes: [
+    {
+      name: 'work_items_org_project_updated_at_idx',
+      columns: ['org_id', 'factory_project_id', 'updated_at'],
+    },
+  ],
+};
+
+interface WorkItemDbRow extends Record<string, unknown> {
+  id: string;
+  org_id: string;
+  factory_project_id: string;
+  external_source: ExternalWorkItemSource | null;
+  source_key: string | null;
+  title: string;
+  stages: WorkItemStage[];
+  stage_history: WorkItemStageEntry[];
+  sessions: WorkItemSessions;
+  metadata: Record<string, unknown> | null;
+  created_by: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+function sourceKey(source: ExternalWorkItemSource | null | undefined): string | null {
+  return source ? `${source.integrationId}:${source.type}:${source.externalId}` : null;
+}
+
+function toWorkItem(row: WorkItemDbRow): WorkItemRow {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    factoryProjectId: row.factory_project_id,
+    externalSource: row.external_source,
+    title: row.title,
+    stages: row.stages,
+    stageHistory: row.stage_history,
+    sessions: row.sessions,
+    metadata: row.metadata,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function emptyPrior(): WorkItemPriorState {
+  return { stages: [], sessionRoles: [] };
+}
+
+function priorState(row: WorkItemDbRow): WorkItemPriorState {
+  return { stages: row.stages, sessionRoles: Object.keys(row.sessions) };
+}
+
 export function applyStageTransition(
   history: WorkItemStageEntry[],
-  oldStages: string[],
-  newStages: string[],
+  oldStages: WorkItemStage[],
+  newStages: WorkItemStage[],
   by: string,
   now: Date,
 ): WorkItemStageEntry[] {
@@ -122,7 +169,6 @@ export function applyStageTransition(
   const next = history.map(entry => ({ ...entry }));
   for (const stage of oldStages) {
     if (newStages.includes(stage)) continue;
-    // Close the most recent open entry for the exited stage.
     for (let i = next.length - 1; i >= 0; i--) {
       const entry = next[i]!;
       if (entry.stage === stage && entry.exitedAt === undefined) {
@@ -132,97 +178,155 @@ export function applyStageTransition(
     }
   }
   for (const stage of newStages) {
-    if (oldStages.includes(stage)) continue;
-    next.push({ stage, enteredAt: timestamp, by });
+    if (!oldStages.includes(stage)) next.push({ stage, enteredAt: timestamp, by });
   }
   return next;
 }
 
-/** Stamp `startedBy` onto client-supplied session refs. */
-export function stampSessions(
-  sessions: Record<string, WorkItemSessionInput>,
-  by: string,
-): Record<string, WorkItemSessionRef> {
-  const stamped: Record<string, WorkItemSessionRef> = {};
-  for (const [role, ref] of Object.entries(sessions)) {
-    stamped[role] = { ...ref, startedBy: by };
-  }
-  return stamped;
+export function stampSessions(sessions: Record<string, WorkItemSessionInput>, by: string): WorkItemSessions {
+  return Object.fromEntries(Object.entries(sessions).map(([role, session]) => [role, { ...session, startedBy: by }]));
 }
 
-/**
- * Compute the fields an update patch changes on `existing`: stage changes are
- * diffed into history, sessions and metadata are merged, `updatedAt` is always
- * stamped. Shared by backends so patch semantics can never diverge; each
- * backend is responsible for serializing concurrent read-modify-writes (e.g.
- * `FOR UPDATE` in Postgres).
- */
-export function computeWorkItemPatch(
-  existing: WorkItemRow,
-  patch: UpdateWorkItemInput,
-  userId: string,
-  now: Date,
-): { changes: Partial<WorkItemRow>; previous: WorkItemPriorState } {
-  const previous: WorkItemPriorState = {
-    stages: [...existing.stages],
-    sessionRoles: Object.keys(existing.sessions),
+function applyUpdate({
+  current,
+  userId,
+  input,
+}: {
+  current: WorkItemDbRow;
+  userId: string;
+  input: UpdateWorkItemInput;
+}): Partial<WorkItemDbRow> {
+  const now = new Date();
+  return {
+    ...(input.title !== undefined ? { title: input.title } : {}),
+    ...(input.stages !== undefined
+      ? {
+          stages: input.stages,
+          stage_history: applyStageTransition(current.stage_history, current.stages, input.stages, userId, now),
+        }
+      : {}),
+    ...(input.sessions !== undefined
+      ? { sessions: { ...current.sessions, ...stampSessions(input.sessions, userId) } }
+      : {}),
+    ...(input.metadata !== undefined
+      ? { metadata: input.metadata === null ? null : { ...(current.metadata ?? {}), ...input.metadata } }
+      : {}),
+    updated_at: now,
   };
-  const changes: Partial<WorkItemRow> = { updatedAt: now };
-  if (patch.title !== undefined) changes.title = patch.title;
-  if (patch.url !== undefined) changes.url = patch.url;
-  if (patch.stages !== undefined) {
-    changes.stages = patch.stages;
-    changes.stageHistory = applyStageTransition(existing.stageHistory, existing.stages, patch.stages, userId, now);
-  }
-  if (patch.sessions !== undefined && Object.keys(patch.sessions).length > 0) {
-    changes.sessions = { ...existing.sessions, ...stampSessions(patch.sessions, userId) };
-  }
-  if (patch.metadata !== undefined && Object.keys(patch.metadata).length > 0) {
-    changes.metadata = { ...existing.metadata, ...patch.metadata };
-  }
-  return { changes, previous };
 }
 
-/**
- * Abstract work item storage. Backends own their DDL in `init()`; query
- * methods are the typed surface the factory routes consume.
- */
-export abstract class WorkItemsStorage implements FactoryStorageDomain {
-  readonly name = 'work-items';
+export class WorkItemsStorage extends FactoryStorageDomain {
+  constructor() {
+    super('work-items');
+  }
 
-  abstract init(ctx: FactoryStorageContext): Promise<void>;
+  async init(): Promise<void> {
+    await this.ensureCollections([WORK_ITEMS_SCHEMA]);
+  }
 
-  /** List the org's work items for a project, newest first. */
-  abstract list(orgId: string, githubProjectId: string): Promise<WorkItemRow[]>;
+  async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany('work_items', {});
+  }
 
-  /**
-   * Create a work item, reusing the existing record when `sourceKey` already
-   * has one for the project (acting twice on the same issue must not duplicate
-   * the card). On reuse the provided stages replace the current ones (with the
-   * transition recorded in history) and sessions/metadata are merged in. The
-   * result discriminates insert from reuse so callers can audit the actual
-   * outcome.
-   */
-  abstract upsert(params: {
+  get #db(): FactoryStorageOps {
+    return this.ops;
+  }
+
+  async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
+    const rows = await this.#db.findMany<WorkItemDbRow>(
+      'work_items',
+      { org_id: orgId, factory_project_id: factoryProjectId },
+      { orderBy: [['updated_at', 'desc']] },
+    );
+    return rows.map(toWorkItem);
+  }
+
+  async get({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
+    const row = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    return row ? toWorkItem(row) : null;
+  }
+
+  async upsert({
+    orgId,
+    userId,
+    factoryProjectId,
+    input,
+  }: {
     orgId: string;
     userId: string;
-    githubProjectId: string;
+    factoryProjectId: string;
     input: CreateWorkItemInput;
-  }): Promise<UpsertWorkItemResult>;
+  }): Promise<UpsertWorkItemResult> {
+    const key = sourceKey(input.externalSource);
+    const reuse = async (): Promise<UpsertWorkItemResult | null> => {
+      if (!key) return null;
+      let previous = emptyPrior();
+      const updated = await this.#db.updateAtomic<WorkItemDbRow>(
+        'work_items',
+        { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
+        current => {
+          previous = priorState(current);
+          return {
+            external_source: input.externalSource ?? null,
+            ...applyUpdate({ current, userId, input }),
+          };
+        },
+      );
+      return updated ? { item: toWorkItem(updated), created: false, previous } : null;
+    };
 
-  /**
-   * Patch an org's work item: stage changes are diffed into history, sessions
-   * and metadata are merged. Returns the updated row plus the pre-patch stages
-   * and session roles (for audit diffing), or `null` when the item doesn't
-   * exist in the caller's org.
-   */
-  abstract update(
-    orgId: string,
-    id: string,
-    userId: string,
-    patch: UpdateWorkItemInput,
-  ): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null>;
+    const reused = await reuse();
+    if (reused) return reused;
 
-  /** Delete an org's work item. Returns the row actually deleted, or `null` when it doesn't exist in the org. */
-  abstract delete(orgId: string, id: string): Promise<WorkItemRow | null>;
+    const now = new Date();
+    const stages = input.stages ?? ['intake'];
+    try {
+      const row = await this.#db.insertOne<WorkItemDbRow>('work_items', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        external_source: input.externalSource ?? null,
+        source_key: key,
+        title: input.title,
+        stages,
+        stage_history: stages.map(stage => ({ stage, enteredAt: now.toISOString(), by: userId })),
+        sessions: stampSessions(input.sessions ?? {}, userId),
+        metadata: input.metadata ?? null,
+        created_by: userId,
+        created_at: now,
+        updated_at: now,
+      });
+      return { item: toWorkItem(row), created: true, previous: emptyPrior() };
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      const winner = await reuse();
+      if (winner) return winner;
+      throw error;
+    }
+  }
+
+  async update({
+    orgId,
+    id,
+    userId,
+    patch,
+  }: {
+    orgId: string;
+    id: string;
+    userId: string;
+    patch: UpdateWorkItemInput;
+  }): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
+    let previous = emptyPrior();
+    const row = await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, current => {
+      previous = priorState(current);
+      return applyUpdate({ current, userId, input: patch });
+    });
+    return row ? { item: toWorkItem(row), previous } : null;
+  }
+
+  async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
+    const existing = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    if (!existing) return null;
+    const deleted = await this.#db.deleteMany('work_items', { org_id: orgId, id });
+    return deleted > 0 ? toWorkItem(existing) : null;
+  }
 }

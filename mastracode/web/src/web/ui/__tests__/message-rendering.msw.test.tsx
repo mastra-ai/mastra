@@ -14,7 +14,7 @@ import { loginUrl, logoutUrl } from '../domains/auth';
 import Chat from '../domains/chat/Chat';
 import { NewPage } from '../domains/chat/NewPage';
 import { ThreadPage } from '../domains/chat/ThreadPage';
-import type { Project } from '../domains/workspaces';
+import type { Factory } from '../domains/workspaces';
 
 /**
  * Renders <Chat /> inside a memory router mirroring the app's pathless chat
@@ -59,15 +59,15 @@ describe('web UI stylesheet entry', () => {
 });
 
 function seedProject() {
-  const project: Project = {
+  const project: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
-    path: PROJECT_PATH,
     resourceId: RESOURCE_ID,
+    binding: { kind: 'local', path: PROJECT_PATH },
     createdAt: 1,
   };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -117,6 +117,7 @@ function delayedSse(event: AgentControllerEvent) {
     );
   return {
     response,
+    ready,
     emit: () =>
       ready.then(() => {
         pending = true;
@@ -296,6 +297,53 @@ describe('MastraCode message rendering', () => {
     });
   });
 
+  it('given hidden task tools beside one visible tool, when history renders, then no empty bulk control appears', async () => {
+    seedProject();
+    useAgentControllerHandlers({
+      messages: [
+        dbMessage('assistant-task-tools', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'task-write',
+              toolName: 'task_write',
+              args: { tasks: [] },
+              result: 'Tasks updated',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'visible-tool',
+              toolName: 'view',
+              args: { path: 'README.md' },
+              result: 'readme contents',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'task-check',
+              toolName: 'task_check',
+              args: {},
+              result: 'All tasks completed',
+            },
+          },
+        ]),
+      ],
+    });
+
+    renderChat();
+
+    expect(await screen.findByRole('group', { name: 'Tool: view' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Tool: task_write' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Tool: task_check' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /expand all/i })).not.toBeInTheDocument();
+  });
+
   it('composes consecutive tool cards into a single bordered container', async () => {
     seedProject();
     useAgentControllerHandlers({
@@ -341,6 +389,37 @@ describe('MastraCode message rendering', () => {
       // border-y gives the last card a top edge (the divider from the first card)
       // plus the closing bottom border.
       expect(last.className).toContain('border-y');
+    });
+  });
+
+  it('separates assistant text persisted after a tool-only message', async () => {
+    seedProject();
+    useAgentControllerHandlers({
+      messages: [
+        dbMessage('assistant-tools', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-complete',
+              toolName: 'task_complete',
+              args: { id: 'quality-gate' },
+              result: 'completed',
+            },
+          },
+        ]),
+        dbMessage('completion-signal', 'signal', [{ type: 'text', text: 'Quality gate completed' }]),
+        dbMessage('assistant-summary', 'assistant', [{ type: 'text', text: '## Quality gate' }]),
+      ],
+    });
+
+    renderChat();
+
+    await waitFor(() => {
+      const summaryHeading = screen
+        .getAllByRole('heading', { name: 'Quality gate' })
+        .find(heading => heading.closest('.prose'));
+      expect(summaryHeading?.closest('.prose')).toHaveClass('mt-4');
     });
   });
 
@@ -526,6 +605,47 @@ describe('MastraCode message rendering', () => {
       expect(within(card).getByRole('button', { name: 'Postgres' })).toBeInTheDocument();
       expect(within(card).getByRole('button', { name: 'SQLite' })).toBeInTheDocument();
     });
+
+    it('does not render a provisional free-text input before the suspension payload arrives', async () => {
+      seedProject();
+      const stream = delayedSse({
+        type: 'tool_suspended',
+        toolCallId: 'ask-delayed',
+        toolName: 'ask_user',
+        args: {},
+        suspendPayload: { question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
+      });
+      useAgentControllerHandlers({
+        messages: [
+          dbMessage('assistant-ask-delayed', 'assistant', [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'ask-delayed',
+                toolName: 'ask_user',
+                args: { question: 'Which database?' },
+              },
+            },
+          ]),
+        ],
+      });
+      server.use(http.get(`${SESSION}/stream`, () => stream.response()));
+
+      renderChat();
+
+      await screen.findByRole('button', { name: 'Select factory' });
+      await stream.ready;
+      expect(screen.queryByPlaceholderText('Type your answer...')).not.toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Question from the agent' })).not.toBeInTheDocument();
+
+      await stream.emit();
+
+      const card = await screen.findByRole('group', { name: 'Question from the agent' });
+      expect(within(card).getByRole('radio', { name: 'Postgres' })).toBeInTheDocument();
+      expect(within(card).getByRole('radio', { name: 'SQLite' })).toBeInTheDocument();
+      expect(within(card).queryByRole('textbox')).not.toBeInTheDocument();
+    });
   });
 
   describe('when a subagent is delegated work', () => {
@@ -691,8 +811,8 @@ describe('App mode + theme controls', () => {
       // The header must not contain any project switcher.
       expect(within(header as HTMLElement).queryByRole('button', { name: 'Select project' })).not.toBeInTheDocument();
 
-      // The sidebar remains the single source of the project switcher.
-      const switcher = screen.getByRole('button', { name: 'Select project' });
+      // The sidebar remains the single source of the factory switcher.
+      const switcher = screen.getByRole('button', { name: 'Select factory' });
       expect(switcher).toHaveTextContent('MastraCode Test');
       expect(header).not.toContainElement(switcher);
     });

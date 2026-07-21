@@ -45,37 +45,66 @@ vi.mock('./config', () => ({
 
 // Minimal injected instances: this suite only exercises sandbox teardown
 // routes, so the integration stub needs no real API methods.
-const githubStorage = {
-  getOrgProject: async (orgId: string, projectId: string) =>
-    tables.projects.find(row => row.orgId === orgId && row.id === projectId),
-  getOrCreateSandbox: async (project: Record<string, any>, userId: string) => {
-    const existing = tables.sandboxes.find(row => row.githubProjectId === project.id && row.userId === userId);
-    if (existing) return existing;
-    const row = {
-      id: `gen-sandboxes-${tables.sandboxes.length}`,
-      githubProjectId: project.id,
-      userId,
-      sandboxId: null,
-      sandboxWorkdir: project.sandboxWorkdir,
-      materializedAt: null,
-      createdAt: new Date(),
-    };
-    tables.sandboxes.push(row);
-    return row;
+const sourceControlStorage = {
+  integrationId: 'github',
+  installations: {
+    get: async ({ orgId, id }: { orgId: string; id: string }) =>
+      tables.installations.find(row => row.orgId === orgId && row.id === id) ?? null,
   },
-  getSandboxById: async (id: string) => tables.sandboxes.find(row => row.id === id),
-  setSandboxId: async (id: string, sandboxId: string) => {
-    const row = tables.sandboxes.find(candidate => candidate.id === id);
-    if (row) row.sandboxId = sandboxId;
+  repositories: {
+    get: async ({ orgId, id }: { orgId: string; id: string }) => {
+      const repository = tables.repositories.find(row => row.id === id);
+      const installation = tables.installations.find(row => row.id === repository?.installationId);
+      return installation?.orgId === orgId ? (repository ?? null) : null;
+    },
   },
-  clearSandboxBinding: async (id: string) => {
-    const row = tables.sandboxes.find(candidate => candidate.id === id);
-    if (row) Object.assign(row, { sandboxId: null, materializedAt: null });
+  connections: {
+    get: async ({ orgId, id }: { orgId: string; id: string }) =>
+      tables.connections.find(row => row.orgId === orgId && row.id === id) ?? null,
+  },
+  projectRepositories: {
+    get: async ({ orgId, id }: { orgId: string; id: string }) => {
+      const projectRepository = tables.projectRepositories.find(row => row.id === id);
+      const connection = tables.connections.find(row => row.id === projectRepository?.connectionId);
+      return connection?.orgId === orgId ? (projectRepository ?? null) : null;
+    },
+  },
+  sandboxes: {
+    getOrCreate: async ({ projectRepository, userId }: { projectRepository: Record<string, any>; userId: string }) => {
+      const existing = tables.sandboxes.find(
+        row => row.projectRepositoryId === projectRepository.id && row.userId === userId,
+      );
+      if (existing) return existing;
+      const row = {
+        id: `gen-sandboxes-${tables.sandboxes.length}`,
+        projectRepositoryId: projectRepository.id,
+        userId,
+        sandboxId: null,
+        sandboxWorkdir: projectRepository.sandboxWorkdir,
+        materializedAt: null,
+        createdAt: new Date(),
+      };
+      tables.sandboxes.push(row);
+      return row;
+    },
+    getById: async ({ id }: { id: string }) => tables.sandboxes.find(row => row.id === id) ?? null,
+    setSandboxId: async ({ id, sandboxId }: { id: string; sandboxId: string }) => {
+      const row = tables.sandboxes.find(candidate => candidate.id === id);
+      if (row) row.sandboxId = sandboxId;
+    },
+    clearBinding: async ({ id }: { id: string }) => {
+      const row = tables.sandboxes.find(candidate => candidate.id === id);
+      if (row) Object.assign(row, { sandboxId: null, materializedAt: null });
+    },
+    markMaterialized: async ({ id }: { id: string }) => {
+      const row = tables.sandboxes.find(candidate => candidate.id === id);
+      if (row) row.materializedAt = new Date();
+    },
   },
 } as any;
 
 const githubStub = {
-  storageDomain: githubStorage,
+  sourceControlStorage,
   mintInstallationToken: vi.fn(async () => 'install-token'),
 } as any;
 const stateSigner = {
@@ -91,72 +120,19 @@ const stateSigner = {
 
 // ── Shared in-memory DB shaped like routes.test.ts ────────────────────────
 interface Tables {
-  projects: Array<Record<string, any>>;
+  installations: Array<Record<string, any>>;
+  repositories: Array<Record<string, any>>;
+  connections: Array<Record<string, any>>;
+  projectRepositories: Array<Record<string, any>>;
   sandboxes: Array<Record<string, any>>;
 }
-const tables: Tables = { projects: [], sandboxes: [] };
-
-function dbNameToJsKey(name: string): string {
-  return name.replace(/_([a-z])/g, (_m, c) => c.toUpperCase());
-}
-
-function matches(row: Record<string, any>, cond: any): boolean {
-  if (!cond) return true;
-  if (cond.kind === 'and') return cond.conds.every((c: any) => matches(row, c));
-  if (cond.kind === 'eq') return row[dbNameToJsKey(cond.column)] === cond.value;
-  return true;
-}
-
-let sandboxesRef: any;
-function tableKind(table: any): keyof Tables {
-  return table === sandboxesRef ? 'sandboxes' : 'projects';
-}
-
-vi.mock('./db', () => ({
-  getAppDb: () => ({
-    select: () => ({
-      from: (table: any) => ({
-        where: async (cond: any) => tables[tableKind(table)].filter(r => matches(r, cond)),
-      }),
-    }),
-    insert: (table: any) => ({
-      values: (vals: any) => {
-        const kind = tableKind(table);
-        const push = () => {
-          const row = { id: `gen-${kind}-${tables[kind].length}`, ...vals };
-          tables[kind].push(row);
-          return row;
-        };
-        const chain: any = {
-          onConflictDoNothing: (opts?: any) => {
-            // Honor the conflict target: if a row already matches on the target
-            // columns, insert nothing (mirrors Postgres ON CONFLICT DO NOTHING).
-            const targets: string[] = (opts?.target ?? [])
-              .map((col: any) => (col?.name ? dbNameToJsKey(col.name) : undefined))
-              .filter(Boolean);
-            const existing = targets.length ? tables[kind].find(r => targets.every(t => r[t] === vals[t])) : undefined;
-            const row = existing ? undefined : push();
-            const result = row ? [row] : [];
-            const p: any = Promise.resolve(result);
-            p.returning = async () => result;
-            return p;
-          },
-          returning: async () => [push()],
-        };
-        return chain;
-      },
-    }),
-    update: (table: any) => ({
-      set: (vals: any) => ({
-        where: async (cond: any) => {
-          for (const r of tables[tableKind(table)]) {
-            if (matches(r, cond)) Object.assign(r, vals);
-          }
-        },
-      }),
-    }),
-  }),
-}));
+const tables: Tables = {
+  installations: [],
+  repositories: [],
+  connections: [],
+  projectRepositories: [],
+  sandboxes: [],
+};
 
 import { mountApiRoutes } from '../test-utils';
 import type * as RoutesModule from './routes';
@@ -169,10 +145,7 @@ import {
 } from '../sandbox/fleet';
 import type { MaterializationSandbox } from '../sandbox/fleet';
 import { ensureProjectSandbox, teardownProjectSandbox } from './sandbox';
-import type { GithubProjectSandboxRow } from './storage/base';
-
-const githubProjectSandboxes = {};
-sandboxesRef = githubProjectSandboxes;
+import type { ProjectRepositorySandbox } from '../storage/domains/source-control/base';
 
 /** Minimal fake sandbox VM that records lifecycle calls. */
 class FakeSandbox implements MaterializationSandbox {
@@ -196,16 +169,16 @@ class FakeSandbox implements MaterializationSandbox {
   }
 }
 
-function makeBindingRow(id: string): GithubProjectSandboxRow {
+function makeBindingRow(id: string): ProjectRepositorySandbox {
   const row = {
     id,
-    githubProjectId: `proj-${id}`,
+    projectRepositoryId: `project-repository-${id}`,
     userId: 'u1',
     sandboxId: null,
     sandboxWorkdir: '/workspace/hello',
     materializedAt: null,
     createdAt: new Date(),
-  } satisfies GithubProjectSandboxRow;
+  } satisfies ProjectRepositorySandbox;
   tables.sandboxes.push(row as unknown as Record<string, any>);
   return row;
 }
@@ -214,7 +187,10 @@ afterEach(() => {
   resetSandboxFactory();
   __resetLiveSandboxCount(0);
   __resetRuntimeConfigForTests();
-  tables.projects = [];
+  tables.installations = [];
+  tables.repositories = [];
+  tables.connections = [];
+  tables.projectRepositories = [];
   tables.sandboxes = [];
   vi.restoreAllMocks();
 });
@@ -229,26 +205,26 @@ describe('S7 — sandbox fleet budget', () => {
     const rowB = makeBindingRow('b');
 
     // First fresh provision succeeds and consumes the single slot.
-    const sandboxA = (await ensureProjectSandbox(rowA, githubStorage)) as FakeSandbox;
+    const sandboxA = (await ensureProjectSandbox(rowA, sourceControlStorage.sandboxes)) as FakeSandbox;
     expect(sandboxA.startCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
     expect(rowA.sandboxId).toBe('vm-fresh-1');
 
     // Second fresh provision is over budget → rejected before spending quota.
-    const err = await ensureProjectSandbox(rowB, githubStorage).catch(e => e);
+    const err = await ensureProjectSandbox(rowB, sourceControlStorage.sandboxes).catch(e => e);
     expect(err).toBeInstanceOf(SandboxBudgetError);
     expect(err.max).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
     expect(rowB.sandboxId).toBeNull();
 
     // Tear down A → frees the slot.
-    await teardownProjectSandbox(rowA, githubStorage, sandboxA);
+    await teardownProjectSandbox(rowA, sourceControlStorage.sandboxes, sandboxA);
     expect(sandboxA.stopCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(0);
     expect(rowA.sandboxId).toBeNull();
 
     // Now B provisions successfully.
-    const sandboxB = (await ensureProjectSandbox(rowB, githubStorage)) as FakeSandbox;
+    const sandboxB = (await ensureProjectSandbox(rowB, sourceControlStorage.sandboxes)) as FakeSandbox;
     expect(sandboxB.startCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
     expect(rowB.sandboxId).toBe('vm-fresh-2');
@@ -260,21 +236,21 @@ describe('S7 — sandbox fleet budget', () => {
 
     const row = makeBindingRow('a');
 
-    const first = (await ensureProjectSandbox(row, githubStorage)) as FakeSandbox;
+    const first = (await ensureProjectSandbox(row, sourceControlStorage.sandboxes)) as FakeSandbox;
     expect(getLiveSandboxCount()).toBe(1);
     expect(row.sandboxId).toBe('vm-fresh-1');
 
     // Simulate a materialized binding so teardown clears that too.
     (row as { materializedAt: Date | null }).materializedAt = new Date();
 
-    await teardownProjectSandbox(row, githubStorage, first);
+    await teardownProjectSandbox(row, sourceControlStorage.sandboxes, first);
     expect(first.stopCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(0);
     expect(row.sandboxId).toBeNull();
     expect(row.materializedAt).toBeNull();
 
     // Next open re-provisions a brand new sandbox (fresh provider id).
-    const second = (await ensureProjectSandbox(row, githubStorage)) as FakeSandbox;
+    const second = (await ensureProjectSandbox(row, sourceControlStorage.sandboxes)) as FakeSandbox;
     expect(second).not.toBe(first);
     expect(second.startCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
@@ -283,7 +259,7 @@ describe('S7 — sandbox fleet budget', () => {
 
   it('teardown of a never-provisioned binding is a no-op that does not underflow the counter', async () => {
     const row = makeBindingRow('a'); // sandboxId stays null
-    await teardownProjectSandbox(row, githubStorage);
+    await teardownProjectSandbox(row, sourceControlStorage.sandboxes);
     expect(getLiveSandboxCount()).toBe(0);
     expect(row.sandboxId).toBeNull();
   });
@@ -298,12 +274,68 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
   let buildGithubRoutes: (typeof RoutesModule)['buildGithubRoutes'];
 
   beforeEach(async () => {
-    tables.projects = [
-      { id: 'p1', orgId: 'org1', installationId: 7, repoFullName: 'octo/hello', sandboxWorkdir: '/workspace/hello' },
+    const now = new Date();
+    tables.installations = [
+      {
+        id: 'installation-1',
+        integrationId: 'github',
+        orgId: 'org1',
+        connectedByUserId: 'u1',
+        externalId: '7',
+        accountName: 'octo',
+        accountType: 'Organization',
+        providerMetadata: {},
+        createdAt: now,
+      },
+    ];
+    tables.repositories = [
+      {
+        id: 'repository-1',
+        installationId: 'installation-1',
+        externalId: 'octo/hello',
+        slug: 'octo/hello',
+        defaultBranch: 'main',
+        providerMetadata: {},
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    tables.connections = [
+      {
+        id: 'connection-1',
+        orgId: 'org1',
+        factoryProjectId: 'factory-project-1',
+        integrationId: 'github',
+        installationId: 'installation-1',
+        createdByUserId: 'u1',
+        createdAt: now,
+      },
+    ];
+    tables.projectRepositories = [
+      {
+        id: 'p1',
+        connectionId: 'connection-1',
+        repositoryId: 'repository-1',
+        createdByUserId: 'u1',
+        branch: null,
+        sandboxProvider: 'railway',
+        sandboxWorkdir: '/workspace/hello',
+        setupCommand: null,
+        createdAt: now,
+        updatedAt: now,
+      },
     ];
     // Only user 1 has a provisioned sandbox binding.
     tables.sandboxes = [
-      { id: 's1', githubProjectId: 'p1', userId: 'u1', sandboxId: 'vm-u1', sandboxWorkdir: '/workspace/hello' },
+      {
+        id: 's1',
+        projectRepositoryId: 'p1',
+        userId: 'u1',
+        sandboxId: 'vm-u1',
+        sandboxWorkdir: '/workspace/hello',
+        materializedAt: now,
+        createdAt: now,
+      },
     ];
     process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
     // A seeded sandbox template makes isSandboxEnabled() true.

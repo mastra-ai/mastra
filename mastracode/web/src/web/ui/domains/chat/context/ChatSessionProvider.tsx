@@ -6,8 +6,8 @@ import { useApiConfig } from '../../../../../shared/api/config';
 import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { SkeletonRows } from '../../../ui';
 import { userSessionResourceId } from '../../auth/services/auth';
-import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
-import { findUserSessionByThreadId } from '../../workspaces/services/projects';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import { findUserSessionByThreadId, isServerFactory, selectedRepository } from '../../workspaces/services/factories';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -37,12 +37,16 @@ export function ChatSessionConfigProvider({
   threadId?: string;
   userScoped?: boolean;
 }) {
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
   const auth = useWebAuth();
   const { baseUrl } = useApiConfig();
-  const projectPath = deriveProjectPath(activeProject);
+  const projectPath = deriveProjectPath(activeFactory);
   const userSession = userScoped && threadId ? findUserSessionByThreadId(threadId) : undefined;
-  const projectSessionEnabled = sessionEnabled && (activeProject?.source !== 'github' || Boolean(projectPath));
+  const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
+  const repository = serverFactory ? selectedRepository(serverFactory) : undefined;
+  // A repo-less server factory still chats against the factory resource, so
+  // only repo-backed sessions wait on a worktree path.
+  const projectSessionEnabled = sessionEnabled && (!repository || Boolean(projectPath));
   const value = userScoped
     ? {
         resourceId: userSessionResourceId(auth.data),
@@ -56,15 +60,17 @@ export function ChatSessionConfigProvider({
         resourceId,
         sessionEnabled: projectSessionEnabled,
         projectPath,
-        // Session state consumed server-side: GitHub PR auto-subscription,
-        // the subscribe tools, and agent git-action auditing all gate on
-        // `githubProjectId` being present in session state.
-        projectState:
-          activeProject?.source === 'github' && activeProject.githubProjectId
-            ? { githubProjectId: activeProject.githubProjectId }
+        factorySessionState:
+          serverFactory && repository
+            ? {
+                factoryProjectId: serverFactory.binding.factoryProjectId,
+                projectRepositoryId: repository.projectRepositoryId,
+                sandboxId: repository.sandboxId,
+                sandboxWorkdir: repository.sandboxWorkdir,
+              }
             : undefined,
         baseUrl,
-        kind: activeProject?.source === 'github' ? ('factory' as const) : ('user' as const),
+        kind: serverFactory ? ('factory' as const) : ('user' as const),
         threadBasePath: '/threads' as const,
       };
 
@@ -88,7 +94,7 @@ export function ChatSessionBoundary({
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     threadId,
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),

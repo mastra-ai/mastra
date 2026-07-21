@@ -4,11 +4,7 @@ import type {
   AgentControllerTaskSnapshot,
   AgentControllerOMProgress,
 } from '@mastra/client-js';
-import type {
-  AgentControllerEvent as CoreAgentControllerEvent,
-  MastraDBMessage,
-  MastraMessagePart,
-} from '@mastra/core/agent-controller';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 
 import { stripAnsi } from './ansi';
 
@@ -117,12 +113,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | MessageEntry
-  | NoticeEntry
-  | PromptEntry
-  | NotificationEntry
-  | NotificationSummaryEntry
-  | SubagentEntry;
+  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
 
 /** Token usage snapshot from usage_update events. */
 export interface UsageSnapshot {
@@ -201,16 +192,8 @@ export interface OutgoingFile {
   filename?: string;
 }
 
-type CanonicalMessageEvent = Extract<
-  CoreAgentControllerEvent,
-  { type: 'message_start' | 'message_update' | 'message_end' }
->;
-type TranscriptEvent =
-  | Exclude<KnownAgentControllerEvent, { type: 'message_start' | 'message_update' | 'message_end' }>
-  | CanonicalMessageEvent;
-
 type Action =
-  | { type: 'event'; event: AgentControllerEvent | CoreAgentControllerEvent }
+  | { type: 'event'; event: AgentControllerEvent }
   | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
   | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
@@ -281,8 +264,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
-function applyEvent(state: TranscriptState, raw: AgentControllerEvent | CoreAgentControllerEvent): TranscriptState {
-  const event = raw as TranscriptEvent;
+function applyEvent(state: TranscriptState, raw: AgentControllerEvent): TranscriptState {
+  const event = raw as KnownAgentControllerEvent;
   switch (event.type) {
     case 'agent_start':
       // Reset the rate at the start of a new turn (not at the end) so the last
@@ -296,7 +279,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent | CoreAgen
 
     case 'message_start':
     case 'message_update': {
-      const message = event.message;
+      const message = event.message as MastraDBMessage;
       const next = upsertMessage(state, message, true);
       if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
@@ -313,9 +296,8 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent | CoreAgen
       return { ...decoded, pending: false };
     }
     case 'message_end': {
-      const message = event.message;
-      const next = upsertMessage(state, message, false);
-      return message.role === 'assistant' ? { ...next, pending: false } : next;
+      const next = upsertMessage(state, event.message, false);
+      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
     }
 
     case 'tool_input_start':
@@ -623,6 +605,29 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
   const nextMessage = message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
   const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
+
+  if (message.role === 'assistant') {
+    const ownedToolCallIds = new Set(
+      nextMessage.content.parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)),
+    );
+    if (ownedToolCallIds.size > 0) {
+      for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+        if (entryIndex === idx) continue;
+        const candidate = entries[entryIndex];
+        if (candidate.kind !== 'message' || candidate.message.role !== 'assistant') continue;
+        const parts = candidate.message.content.parts.filter(part => {
+          const toolCallId = toolCallIdForPart(part);
+          return !toolCallId || !ownedToolCallIds.has(toolCallId);
+        });
+        if (parts.length !== candidate.message.content.parts.length) {
+          entries[entryIndex] = {
+            ...candidate,
+            message: { ...candidate.message, content: { ...candidate.message.content, parts } },
+          };
+        }
+      }
+    }
+  }
 
   if (idx === -1) entries.push(entry);
   else entries[idx] = entry;

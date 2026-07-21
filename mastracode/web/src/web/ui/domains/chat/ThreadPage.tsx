@@ -3,18 +3,16 @@ import { useLocation, useParams } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
-import { ChatLayout } from '../../ui';
-import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
-import {
-  activeWorkspacePath,
-  EmptyProjectState,
-  findUserSessionByThreadId,
-  useActiveProjectContext,
-} from '../workspaces';
+import { ChatLayout } from '../../ui/ChatLayout';
+import { renderedPaths } from '../workspace-viewer/config';
+import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
+import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
-import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
+import { TaskPanel } from './components/TaskPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
@@ -25,18 +23,18 @@ const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
   const overlays = useOverlays();
-  const { activeProject } = useActiveProjectContext();
+  const { activeFactory } = useActiveFactoryContext();
   const { threadId } = useParams();
   const location = useLocation();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
   const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
   const activeUserSessionMatch =
-    userSessionMatch && activeProject?.id === userSessionMatch.project.id ? userSessionMatch : undefined;
+    userSessionMatch && activeFactory?.id === userSessionMatch.factory.id ? userSessionMatch : undefined;
   const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
-  const workspaceProject = isUserThreadRoute ? activeUserSessionMatch?.project : activeProject;
-  const workspacePath = workspaceProject
-    ? activeWorkspacePath(workspaceProject, activeUserSessionMatch?.worktree)
+  const workspaceFactory = isUserThreadRoute ? activeUserSessionMatch?.factory : activeFactory;
+  const workspacePath = workspaceFactory
+    ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
 
   return (
@@ -52,7 +50,7 @@ export function ThreadPage() {
             workspacePath={workspacePath}
             renderedPaths={renderedPaths}
             title="Workspace files"
-            context={workspaceProject?.name}
+            context={workspaceFactory?.name}
             onExpandedChange={setWorkspaceViewerExpanded}
             onCollapse={() => setWorkspaceViewerVisible(false)}
           />
@@ -60,8 +58,11 @@ export function ThreadPage() {
       }
       main={
         <ChatSessionBoundary threadId={threadId}>
-          {activeProject ? <ThreadPageMain /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
-          <ChatOverlays />
+          {activeFactory ? (
+            <ThreadPageMain />
+          ) : (
+            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+          )}
         </ChatSessionBoundary>
       }
     />
@@ -72,10 +73,11 @@ function ThreadPageMain() {
   useGlobalShortcuts();
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden">
       <ChatMessageBoundary>
         <ThreadPageContent />
       </ChatMessageBoundary>
+      <TaskPanel />
       <ThreadComposer />
     </div>
   );

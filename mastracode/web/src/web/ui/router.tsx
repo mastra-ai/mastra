@@ -6,7 +6,7 @@
  * React Query hook (shared cache key with the rest of the UI), redirecting
  * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
- * `/` so the app can choose the active project's board or draft composer.
+ * `/` so the app can choose the active factory's board or draft composer.
  */
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -17,11 +17,13 @@ import { safeReturnTo, SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
-import { useActiveProject } from '../../shared/hooks/useActiveProject';
+import { useActiveFactory } from '../../shared/hooks/useActiveFactory';
 import { useWorkItemsQuery } from '../../shared/hooks/useWorkItems';
+import { isServerFactory } from './domains/workspaces/services/factories';
 import { AuditPage } from './domains/factory/AuditPage';
 import { BoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
+import { OverviewPage } from './domains/factory/OverviewPage';
 
 /**
  * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
@@ -69,12 +71,13 @@ function SignInGate() {
 }
 
 function RootLanding() {
-  const { activeProject } = useActiveProject();
-  const githubProjectId = activeProject?.source === 'github' ? activeProject.githubProjectId : undefined;
-  const workItems = useWorkItemsQuery(githubProjectId);
+  const { activeFactory } = useActiveFactory();
+  const factoryProjectId =
+    activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
+  const workItems = useWorkItemsQuery(factoryProjectId);
 
-  if (githubProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;
-  if (githubProjectId && workItems.isError) {
+  if (factoryProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;
+  if (factoryProjectId && workItems.isError) {
     return (
       <div className="flex h-dvh w-full items-center justify-center bg-surface1 p-4">
         <Notice variant="destructive">
@@ -83,7 +86,7 @@ function RootLanding() {
       </div>
     );
   }
-  return <Navigate to={githubProjectId && (workItems.data?.length ?? 0) > 0 ? '/factory/board' : '/new'} replace />;
+  return <Navigate to={factoryProjectId && (workItems.data?.length ?? 0) > 0 ? '/factory/board' : '/new'} replace />;
 }
 
 function RedirectToDraftThread() {
@@ -112,6 +115,7 @@ export function createAppRoutes(): RouteObject[] {
             // session provider binds to the user's own resourceId + worktree.
             { path: 'user/threads/:threadId', element: <ThreadPage /> },
             { path: 'factory/board', element: <BoardPage /> },
+            { path: 'factory/overview', element: <OverviewPage /> },
             { path: 'factory/metrics', element: <MetricsPage /> },
             { path: 'factory/audit', element: <AuditPage /> },
             // Legacy Factory pages, folded into the Board.

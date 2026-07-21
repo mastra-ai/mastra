@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router';
 
 import { OverlaysProvider } from '../../lib/overlays';
-import { ActiveProjectProvider } from '../workspaces';
+import { ActiveFactoryProvider } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
@@ -15,13 +15,13 @@ import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
 export default function Chat() {
   return (
     <MainSidebarProvider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
-      <ActiveProjectProvider>
+      <ActiveFactoryProvider>
         <ChatSessionRouteProvider>
           <OverlaysProvider>
             <ChatShell />
           </OverlaysProvider>
         </ChatSessionRouteProvider>
-      </ActiveProjectProvider>
+      </ActiveFactoryProvider>
     </MainSidebarProvider>
   );
 }

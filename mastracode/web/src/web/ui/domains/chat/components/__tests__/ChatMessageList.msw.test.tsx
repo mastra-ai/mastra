@@ -15,9 +15,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { ChatMessageList } from '../ChatMessageList';
+import { TaskPanel } from '../TaskPanel';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
@@ -29,16 +30,15 @@ afterEach(() => {
 });
 
 function seedProject() {
-  const project: Project = {
+  const project: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
-    path: '/tmp/mastracode-test',
     resourceId: RESOURCE_ID,
-    gitBranch: 'main',
+    binding: { kind: 'local', path: '/tmp/mastracode-test', gitBranch: 'main' },
     createdAt: 1,
   };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -95,11 +95,12 @@ function renderMessageList() {
         <Route
           path="/threads/:threadId"
           element={
-            <ActiveProjectProvider>
+            <ActiveFactoryProvider>
               <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatMessageList />
+                <TaskPanel />
               </ChatSessionProvider>
-            </ActiveProjectProvider>
+            </ActiveFactoryProvider>
           }
         />
       </Routes>
@@ -114,7 +115,7 @@ describe('ChatMessageList', () => {
     renderMessageList();
 
     await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
-    expect(screen.getByText('Project')).toBeInTheDocument();
+    expect(screen.getByText('Factory')).toBeInTheDocument();
     expect(screen.getByText('MastraCode Test')).toBeInTheDocument();
     expect(screen.getByText('Resource ID')).toBeInTheDocument();
     expect(screen.getByText(RESOURCE_ID)).toBeInTheDocument();
@@ -142,6 +143,20 @@ describe('ChatMessageList', () => {
     renderMessageList();
 
     await waitFor(() => expect(screen.getByText('Hello from the agent')).toBeInTheDocument());
+  });
+
+  it('given a live task snapshot, then it renders the current tasks outside the transcript', async () => {
+    seedProject();
+    useAgentControllerHandlers([
+      {
+        type: 'task_updated',
+        tasks: [{ id: 'one', content: 'Restore tool UI', activeForm: 'Restoring tool UI', status: 'in_progress' }],
+      },
+    ]);
+    renderMessageList();
+
+    const taskPanel = await screen.findByRole('region', { name: 'Current tasks' });
+    expect(taskPanel).toHaveTextContent('Restoring tool UI');
   });
 
   it('given a streamed notification signal, then it renders the notification provenance in the transcript', async () => {

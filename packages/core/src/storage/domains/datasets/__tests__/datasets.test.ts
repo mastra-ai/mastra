@@ -164,6 +164,155 @@ describe('DatasetsInMemory', () => {
       expect(item.updatedAt).toBeInstanceOf(Date);
     });
 
+    it('addItem rejects circular payloads before idempotency comparison', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      await storage.addItem({ datasetId: dataset.id, externalId: 'cyclic-item', input: { prompt: 'safe' } });
+      const input: Record<string, unknown> = { prompt: 'hello' };
+      input.self = input;
+
+      await expect(storage.addItem({ datasetId: dataset.id, externalId: 'cyclic-item', input })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining('items[0].input.self references items[0].input'),
+      });
+    });
+
+    it('updateItem rejects circular payloads with the offending path', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { prompt: 'hello' } });
+      const metadata: Record<string, unknown> = {};
+      metadata.self = metadata;
+
+      await expect(storage.updateItem({ id: item.id, datasetId: dataset.id, metadata })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining('item.metadata.self references item.metadata'),
+      });
+    });
+
+    it('batchInsertItems rejects circular payloads before insertion', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const requestContext: Record<string, unknown> = {};
+      requestContext.self = requestContext;
+
+      await expect(
+        storage.batchInsertItems({
+          datasetId: dataset.id,
+          items: [{ input: { prompt: 'safe' } }, { input: { prompt: 'cyclic' }, requestContext }],
+        }),
+      ).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining('items[1].requestContext.self references items[1].requestContext'),
+      });
+
+      const items = await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } });
+      expect(items.items).toHaveLength(0);
+    });
+
+    it.each([
+      ['a nested undefined value', { prompt: 'hello', missing: undefined }, 'undefined value at item.input.missing'],
+      ['a function', { prompt: 'hello', callback: () => 'hi' }, 'function at item.input.callback'],
+      ['a symbol', { prompt: 'hello', token: Symbol('token') }, 'symbol at item.input.token'],
+      ['a bigint', { prompt: 'hello', count: 1n }, 'bigint at item.input.count'],
+      [
+        'a non-finite number',
+        { prompt: 'hello', score: Number.POSITIVE_INFINITY },
+        'non-finite number Infinity at item.input.score',
+      ],
+      [
+        'an undefined array entry',
+        { prompt: 'hello', steps: ['a', undefined] },
+        'undefined value at item.input.steps[1]',
+      ],
+      [
+        'a Date',
+        { prompt: 'hello', createdAt: new Date('2026-01-01T00:00:00Z') },
+        'non-plain object (Date) at item.input.createdAt',
+      ],
+      ['a Map', { prompt: 'hello', lookup: new Map([['a', 1]]) }, 'non-plain object (Map) at item.input.lookup'],
+      ['a Set', { prompt: 'hello', tags: new Set(['a']) }, 'non-plain object (Set) at item.input.tags'],
+      [
+        'a class instance',
+        { prompt: 'hello', price: new (class Money {})() },
+        'non-plain object (Money) at item.input.price',
+      ],
+      [
+        'a class instance with a custom toJSON',
+        {
+          prompt: 'hello',
+          amount: new (class Money {
+            toJSON() {
+              return { cents: 100 };
+            }
+          })(),
+        },
+        'non-plain object (Money) at item.input.amount',
+      ],
+    ] as const)('updateItem rejects payloads containing %s', async (_label, input, expectedPath) => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { prompt: 'safe' } });
+
+      await expect(storage.updateItem({ id: item.id, datasetId: dataset.id, input })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining(expectedPath),
+      });
+    });
+
+    it('addItem accepts omitted optional payload fields set to undefined', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+
+      const item = await storage.addItem({ datasetId: dataset.id, input: { prompt: 'hello' }, groundTruth: undefined });
+      expect(item.input).toEqual({ prompt: 'hello' });
+    });
+
+    it('addItem rejects lossy payloads so identical externalId retries stay idempotent', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const input = { prompt: 'hello', extra: undefined };
+
+      // Without rejection, the first call would persist {prompt} (undefined dropped by
+      // serialization) while the retry compares against {prompt, extra: undefined} in
+      // memory, turning an identical retry into a spurious identity conflict.
+      await expect(storage.addItem({ datasetId: dataset.id, externalId: 'lossy-item', input })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining('undefined value at items[0].input.extra'),
+      });
+      await expect(storage.addItem({ datasetId: dataset.id, externalId: 'lossy-item', input })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+      });
+
+      // A JSON-safe payload stays idempotent across identical externalId retries.
+      const safeInput = { prompt: 'hello' };
+      const first = await storage.addItem({ datasetId: dataset.id, externalId: 'lossy-item', input: safeInput });
+      const retry = await storage.addItem({ datasetId: dataset.id, externalId: 'lossy-item', input: safeInput });
+      expect(retry.id).toBe(first.id);
+
+      const items = await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } });
+      expect(items.items).toHaveLength(1);
+    });
+
+    it('addItem rejects non-plain objects so identical externalId retries stay idempotent', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const input = { prompt: 'hello', createdAt: new Date('2026-01-01T00:00:00Z') };
+
+      // Without rejection, the first call would persist createdAt as an ISO string
+      // while the retry compares against a live Date instance in memory, turning an
+      // identical retry into a spurious identity conflict.
+      await expect(storage.addItem({ datasetId: dataset.id, externalId: 'date-item', input })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining('non-plain object (Date) at items[0].input.createdAt'),
+      });
+      await expect(storage.addItem({ datasetId: dataset.id, externalId: 'date-item', input })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+      });
+
+      // Explicitly converted, the payload stays idempotent across retries.
+      const safeInput = { prompt: 'hello', createdAt: input.createdAt.toISOString() };
+      const first = await storage.addItem({ datasetId: dataset.id, externalId: 'date-item', input: safeInput });
+      const retry = await storage.addItem({ datasetId: dataset.id, externalId: 'date-item', input: safeInput });
+      expect(retry.id).toBe(first.id);
+
+      const items = await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } });
+      expect(items.items).toHaveLength(1);
+    });
+
     it('addItem throws for non-existent dataset', async () => {
       await expect(storage.addItem({ datasetId: 'non-existent', input: {} })).rejects.toThrow('Dataset not found');
     });

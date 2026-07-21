@@ -17,7 +17,8 @@
 import type { Context } from 'hono';
 
 import { ensureWebAuthUser, isWebAuthEnabled, webAuthTenant } from './auth.js';
-import { getFactoryStore, isRuntimeConfigSeeded } from './runtime-config.js';
+import { getFactoryStorage, isRuntimeConfigSeeded } from './runtime-config.js';
+import { getModelCredentialsStorage } from './storage/domains.js';
 import type { CredentialRecord, LoginSessionKind, ModelCredentialsStorage } from './storage/domains/credentials/base';
 
 /**
@@ -43,8 +44,7 @@ export const WEB_OAUTH_FLOW_KINDS: Readonly<Record<string, LoginSessionKind>> = 
 };
 
 export type CredentialContext =
-  | { mode: 'local' }
-  | { mode: 'tenant'; storage: ModelCredentialsStorage; orgId: string; userId: string };
+  { mode: 'local' } | { mode: 'tenant'; storage: ModelCredentialsStorage; orgId: string; userId: string };
 
 /**
  * The tenant credentials domain, when registered and ready. `undefined` means
@@ -53,18 +53,18 @@ export type CredentialContext =
  */
 export async function getTenantCredentialsStorage(): Promise<ModelCredentialsStorage | undefined> {
   if (!isRuntimeConfigSeeded()) return undefined;
-  let store: ReturnType<typeof getFactoryStore>;
+  let storage: ReturnType<typeof getFactoryStorage>;
   try {
-    store = getFactoryStore();
+    storage = getFactoryStorage();
   } catch {
     return undefined;
   }
   try {
-    await store.ensureReady('model-credentials');
+    await storage.ensureDomainReady('model-credentials');
   } catch {
     return undefined;
   }
-  return store.credentials;
+  return getModelCredentialsStorage();
 }
 
 /**

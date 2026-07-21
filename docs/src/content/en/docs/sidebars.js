@@ -388,6 +388,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'browser/firecrawl',
+              label: 'Firecrawl',
+            },
+            {
+              type: 'doc',
               id: 'browser/recording',
               label: 'Recording',
               customProps: {
@@ -1030,6 +1035,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/regions',
+          label: 'Regions',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/observability',
           label: 'Observability',
         },
@@ -1055,6 +1068,14 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/database',
           label: 'Hosted databases',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/workspace',
+          label: 'Workspace',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',

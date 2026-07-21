@@ -21,7 +21,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import type * as AuthService from '../domains/auth/services/auth';
-import type { Project } from '../domains/workspaces';
+import type { Factory } from '../domains/workspaces';
 import { createAppRoutes } from '../router';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
@@ -66,17 +66,20 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject(projects?: Project[], activeProjectId?: string) {
-  const project: Project = {
+function seedFactory(projects?: Factory[], activeFactoryId?: string) {
+  const project: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
-    path: '/tmp/mastracode-test',
     resourceId: RESOURCE_ID,
     createdAt: 1,
+    binding: {
+      kind: 'local',
+      path: '/tmp/mastracode-test',
+    },
   };
   const storedProjects = projects ?? [project];
-  localStorage.setItem('mastracode-projects', JSON.stringify(storedProjects));
-  localStorage.setItem('mastracode-active-project', activeProjectId ?? storedProjects[0]?.id ?? project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify(storedProjects));
+  localStorage.setItem('mastracode-active-factory', activeFactoryId ?? storedProjects[0]?.id ?? project.id);
 }
 
 function sessionState(threadId: string): AgentControllerSessionState {
@@ -211,8 +214,8 @@ function useAgentControllerHandlers({
   return captured;
 }
 
-function renderRoutes(initialEntry: string, projects?: Project[], activeProjectId?: string) {
-  seedProject(projects, activeProjectId);
+function renderRoutes(initialEntry: string, projects?: Factory[], activeFactoryId?: string) {
+  seedFactory(projects, activeFactoryId);
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
@@ -226,32 +229,43 @@ async function expectPathname(router: ReturnType<typeof createMemoryRouter>, pat
 
 describe('MastraCode thread pages', () => {
   it('hides user-session workspace files when the thread belongs to another project', async () => {
-    const activeProject: Project = {
+    const activeFactory: Factory = {
       id: 'project-active',
-      name: 'Active project',
-      path: '/tmp/active-project',
+      name: 'Active factory',
       resourceId: RESOURCE_ID,
       createdAt: 1,
+      binding: {
+        kind: 'local',
+        path: '/tmp/active-project',
+      },
     };
-    const threadProject: Project = {
+    const threadProject: Factory = {
       id: 'project-thread',
       name: 'Thread project',
-      source: 'github',
-      githubProjectId: 'github-thread',
       resourceId: RESOURCE_ID,
-      worktrees: [
-        {
-          branch: 'user/thread-session',
-          worktreePath: '/tmp/thread-project-session',
-          baseBranch: 'main',
-          threadId: threadOne.id,
-        },
-      ],
       createdAt: 2,
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'fp-github-thread',
+        repositories: [
+          {
+            projectRepositoryId: 'pr-github-thread',
+            slug: 'mastra-ai/thread-project',
+            worktrees: [
+              {
+                branch: 'user/thread-session',
+                worktreePath: '/tmp/thread-project-session',
+                baseBranch: 'main',
+                threadId: threadOne.id,
+              },
+            ],
+          },
+        ],
+      },
     };
 
     useAgentControllerHandlers();
-    renderRoutes(`/user/threads/${threadOne.id}`, [activeProject, threadProject], activeProject.id);
+    renderRoutes(`/user/threads/${threadOne.id}`, [activeFactory, threadProject], activeFactory.id);
 
     await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
     expect(screen.queryByTestId('workspace-viewer-panel')).not.toBeInTheDocument();

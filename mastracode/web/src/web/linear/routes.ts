@@ -27,6 +27,7 @@ import {
   LinearReauthRequiredError,
   loadLinearConnection as loadConnection,
 } from './connection';
+import { upsertLinearConnection } from './storage';
 
 type RouteContext = Context;
 
@@ -137,7 +138,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
           });
         }
 
-        const connection = await loadConnection(tenant.orgId, linear);
+        const connection = await loadConnection(tenant.orgId);
         return c.json({
           enabled: true,
           connected: Boolean(connection),
@@ -200,7 +201,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         try {
           const tokens = await linear.exchangeOAuthCode(code, redirectUri);
           const workspace = await linear.fetchWorkspace(tokens.accessToken);
-          await linear.storageDomain.upsertConnection({
+          await upsertLinearConnection({
             orgId,
             userId,
             accessToken: tokens.accessToken,
@@ -231,9 +232,9 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
 
-        const connection = await loadConnection(resolved.tenant.orgId, linear);
+        const connection = await loadConnection(resolved.tenant.orgId);
         if (!connection) {
-          return c.json({ error: 'linear_not_connected', message: 'Connect Linear to list projects.' }, 409);
+          return c.json({ error: 'linear_not_connected', message: 'Connect Linear to list Linear projects.' }, 409);
         }
 
         try {
@@ -261,26 +262,51 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         const after = parseAfterCursor(c.req.query('after'));
         if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
 
-        const connection = await loadConnection(resolved.tenant.orgId, linear);
+        const connection = await loadConnection(resolved.tenant.orgId);
         if (!connection) {
           return c.json({ error: 'linear_not_connected', message: 'Connect Linear to see intake issues.' }, 409);
         }
 
-        const config = await getIntakeConfig(resolved.tenant.orgId, resolved.tenant.userId);
-        if (!config.linear.enabled) {
+        const config = await getIntakeConfig({
+          orgId: resolved.tenant.orgId,
+          userId: resolved.tenant.userId,
+          integrationIds: ['linear'],
+        });
+        const selection = config.linear!;
+        if (!selection.enabled) {
           return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
         }
 
         // No projects selected means nothing is synced — don't fan out to Linear.
-        const projectIds = config.linear.projectIds ?? [];
+        const projectIds = selection.sourceIds ?? [];
         if (projectIds.length === 0) {
           return c.json({ issues: [], nextCursor: null });
         }
 
         try {
           const accessToken = await getFreshAccessToken(linear, connection);
-          const { issues, nextCursor } = await linear.listActiveIssues(accessToken, after, projectIds);
-          return c.json({ issues, nextCursor });
+          const { issues, nextCursor } = await linear.intake.listIssues({
+            connection: { type: 'oauth', accessToken },
+            sourceIds: projectIds,
+            cursor: after,
+          });
+          return c.json({
+            issues: issues.map(issue => ({
+              id: issue.id,
+              identifier: issue.identifier,
+              title: issue.title,
+              url: issue.url,
+              state: issue.state,
+              stateType: issue.stateType,
+              priorityLabel: issue.priority,
+              assignee: issue.assignee,
+              team: issue.source,
+              labels: issue.labels,
+              createdAt: issue.createdAt,
+              updatedAt: issue.updatedAt,
+            })),
+            nextCursor,
+          });
         } catch (err) {
           return linearFetchError(loose(c), err);
         }

@@ -2,7 +2,7 @@
  * BDD coverage for the Factory Board page and sidebar section.
  *
  * Drives the real route table through a memory router with the full provider
- * stack (auth guard, Chat providers, ActiveProject context), so the specs
+ * stack (auth guard, Chat providers, ActiveFactory context), so the specs
  * exercise exactly what a user sees: the Factory sidebar link and the kanban
  * board that merges live GitHub/Linear candidates with persisted work items.
  * Only the network is mocked (MSW).
@@ -16,8 +16,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
-import type { GithubStatus, Project } from '../../workspaces';
+import type { GithubStatus, Factory } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
+import { FactoryItemActions } from '../components/FactoryItemActions';
 import type { GithubIssue, GithubPullRequest } from '../services/factory';
 import type { IntakeConfig } from '../services/intake';
 import type { LinearIssue, LinearStatus } from '../services/linear';
@@ -27,27 +28,39 @@ const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-gh';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
-const GITHUB_PROJECT_ID = 'github-project-1';
+const FACTORY_PROJECT_ID = 'fp-github-project-1';
+const PROJECT_REPOSITORY_ID = 'repo-link-1';
 
-const githubProject: Project = {
-  id: 'project-gh',
-  name: 'mastra-ai/mastra',
-  source: 'github',
-  githubProjectId: GITHUB_PROJECT_ID,
-  sandboxWorkdir: '/sandbox/mastra',
-  resourceId: RESOURCE_ID,
+const githubRepository = {
+  projectRepositoryId: PROJECT_REPOSITORY_ID,
+  slug: 'mastra-ai/mastra',
   gitBranch: 'main',
-  worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
-  selectedWorktreePath: '/sandbox/mastra',
-  createdAt: 1,
+  sandboxWorkdir: '/sandbox/mastra',
+  selectedWorktreePath: '/sandbox/mastra/worktrees/main',
+  worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra/worktrees/main', baseBranch: 'main' }],
 };
 
-const localProject: Project = {
-  id: 'project-local',
-  name: 'Local',
-  path: '/projects/local',
+const githubProject: Factory = {
+  id: 'project-gh',
+  name: 'mastra-ai/mastra',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'factory',
+    factoryProjectId: FACTORY_PROJECT_ID,
+    repositories: [githubRepository],
+  },
+};
+
+const localProject: Factory = {
+  id: 'project-local',
+  name: 'Local',
+  resourceId: RESOURCE_ID,
+  createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/local',
+  },
 };
 
 const issues: GithubIssue[] = [
@@ -126,7 +139,7 @@ const notConnectedStatus: GithubStatus = {
 
 /** Both sources selected so GitHub/Linear specs see data by default. */
 const defaultIntakeConfig: IntakeConfig = {
-  github: { enabled: true, projectIds: [GITHUB_PROJECT_ID] },
+  github: { enabled: true, repositoryIds: [PROJECT_REPOSITORY_ID] },
   linear: { enabled: true, projectIds: ['lin-proj-1'] },
 };
 
@@ -206,7 +219,7 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
   return {
     orgId: 'org-1',
     createdBy: 'user-1',
-    githubProjectId: GITHUB_PROJECT_ID,
+    githubProjectId: FACTORY_PROJECT_ID,
     source: 'manual',
     sourceKey: null,
     url: null,
@@ -252,7 +265,7 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
     issueRequests: [],
   };
   server.use(
-    http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/issues`, ({ request }) => {
       const label = new URL(request.url).searchParams.get('label');
       state.issueRequests.push(label);
       return HttpResponse.json({
@@ -261,22 +274,22 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
       });
     }),
     http.post(
-      `${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/:number/triage`,
+      `${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/issues/:number/triage`,
       async ({ request, params }) => {
         state.triageRequests.push({ number: Number(params.number), body: await request.json() });
         return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
       },
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/prs`, () =>
+    http.get(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: options.pullRequests ?? [], nextPage: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
       HttpResponse.json({ issues: options.linearIssues ?? [], nextCursor: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${GITHUB_PROJECT_ID}/work-items`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
       HttpResponse.json({ workItems: state.items }),
     ),
-    http.post(`${TEST_BASE_URL}/web/factory/projects/${GITHUB_PROJECT_ID}/work-items`, async ({ request }) => {
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, async ({ request }) => {
       const body = (await request.json()) as CreateWorkItemInput;
       state.posts.push(body);
       const sessions = Object.fromEntries(
@@ -323,18 +336,18 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
   return state;
 }
 
-function seedActiveProject(project: Project) {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedActiveFactory(project: Factory) {
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function renderAt(
   initialEntry: string,
-  project: Project = githubProject,
+  project: Factory = githubProject,
   githubStatus: GithubStatus = connectedStatus,
   options: AppHandlerOptions = {},
 ) {
-  seedActiveProject(project);
+  seedActiveFactory(project);
   useAppHandlers(githubStatus, options);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
@@ -391,16 +404,16 @@ describe('Factory sidebar section', () => {
     expect(screen.queryByRole('navigation', { name: 'Factory' })).not.toBeInTheDocument();
   });
 
-  it('given GitHub is not connected, when the app renders, then the Board link is hidden but Sessions remain', async () => {
+  it('given GitHub is not connected, when the app renders, then the Board link and Sessions both remain', async () => {
     renderAt('/new', githubProject, notConnectedStatus);
 
-    // Sessions work off the project's own worktrees, so the Factory menu stays;
-    // only the Board (which needs the GitHub integration) disappears.
+    // A server-backed Factory always has a Board — disconnected GitHub surfaces
+    // connect CTAs inside the pages instead of hiding the navigation.
     const nav = await screen.findByRole('navigation', { name: 'Factory' });
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
-    await waitFor(() => expect(within(nav).queryByRole('link', { name: /Board/ })).not.toBeInTheDocument());
-    expect(within(nav).queryByRole('link', { name: /Metrics/ })).not.toBeInTheDocument();
-    expect(within(nav).queryByRole('link', { name: /Audit/ })).not.toBeInTheDocument();
+    expect(within(nav).getByRole('link', { name: /Board/ })).toHaveAttribute('href', '/factory/board');
+    expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute('href', '/factory/metrics');
+    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute('href', '/factory/audit');
   });
 });
 
@@ -421,17 +434,23 @@ describe('Factory Board routing', () => {
     expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
   });
 
-  it('given a local project, when visiting the Board, then a GitHub-only notice renders instead of columns', async () => {
+  it('given a local project, when visiting the Board, then a server-factory notice renders instead of columns', async () => {
     renderAt('/factory/board', localProject);
 
-    expect(await screen.findByText(/only available for GitHub projects/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Board, metrics, and audit are available for server-backed Factories/),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
 
-  it('given GitHub is not connected, when visiting the Board, then a connect notice renders instead of columns', async () => {
-    renderAt('/factory/board', githubProject, notConnectedStatus);
+  it('given a factory with no linked repositories, when visiting the Board, then a connect prompt renders instead of columns', async () => {
+    const emptyFactory: Factory = {
+      ...githubProject,
+      binding: { kind: 'factory', factoryProjectId: FACTORY_PROJECT_ID, repositories: [] },
+    };
+    renderAt('/factory/board', emptyFactory, notConnectedStatus);
 
-    expect(await screen.findByText(/Factory requires a GitHub connection/)).toBeInTheDocument();
+    expect(await screen.findByText(/Connect a repository to start intake/)).toBeInTheDocument();
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
 });
@@ -480,7 +499,7 @@ describe('Factory Board — Intake candidates', () => {
     useBoardHandlers();
     renderAt('/factory/board', githubProject, connectedStatus, {
       intakeConfig: {
-        github: { enabled: false, projectIds: [] },
+        github: { enabled: false, repositoryIds: [] },
         linear: { enabled: false, projectIds: [] },
       },
     });
@@ -489,9 +508,16 @@ describe('Factory Board — Intake candidates', () => {
     expect(within(intake).queryByRole('link', { name: 'Create GitHub issue' })).not.toBeInTheDocument();
   });
 
-  it('given the project name is not a canonical GitHub repository, when the Board renders, then no issue URL is invented', async () => {
+  it('given the repository slug is not a canonical GitHub repository, when the Board renders, then no issue URL is invented', async () => {
     useBoardHandlers();
-    renderAt('/factory/board', { ...githubProject, name: '../not-a-repository' });
+    renderAt('/factory/board', {
+      ...githubProject,
+      binding: {
+        kind: 'factory',
+        factoryProjectId: FACTORY_PROJECT_ID,
+        repositories: [{ ...githubRepository, slug: '../not-a-repository' }],
+      },
+    });
 
     const intake = await screen.findByTestId('board-column-intake');
     expect(within(intake).queryByRole('link', { name: 'Create GitHub issue' })).not.toBeInTheDocument();
@@ -514,7 +540,7 @@ describe('Factory Board — Intake candidates', () => {
       resolveIssues = resolve;
     });
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, async ({ request }) => {
+      http.get(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/issues`, async ({ request }) => {
         if (new URL(request.url).searchParams.has('label')) return HttpResponse.json({ issues: [], nextPage: null });
         await issuesReady;
         return HttpResponse.json({ issues: [], nextPage: null });
@@ -558,7 +584,7 @@ describe('Factory Board — Intake candidates', () => {
       resolveIssues = resolve;
     });
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, async ({ request }) => {
+      http.get(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/issues`, async ({ request }) => {
         if (new URL(request.url).searchParams.has('label')) return HttpResponse.json({ issues: [], nextPage: null });
         await issuesReady;
         return HttpResponse.json({ issues: [], nextPage: null });
@@ -589,7 +615,7 @@ describe('Factory Board — Intake candidates', () => {
     });
     server.use(
       http.post(
-        `${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/:number/triage`,
+        `${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/issues/:number/triage`,
         async ({ request, params }) => {
           state.triageRequests.push({ number: Number(params.number), body: await request.json() });
           await triageStarted;
@@ -604,9 +630,10 @@ describe('Factory Board — Intake candidates', () => {
     await userEvent.click(within(card).getByRole('button', { name: 'More actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Triage issue' }));
 
-    const pendingButton = await within(card).findByRole('button', { name: 'Investigate Fix flaky test' });
-    expect(pendingButton).toBeDisabled();
-    expect(pendingButton).toHaveTextContent('Starting…');
+    await waitFor(() => expect(state.triageRequests).toHaveLength(1));
+    expect(within(card).getByRole('button', { name: 'Investigate Fix flaky test' })).toBeEnabled();
+    await userEvent.click(within(card).getByRole('button', { name: 'More actions for Fix flaky test' }));
+    expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
     expect(state.triageRequests).toEqual([
       {
         number: 12,
@@ -748,6 +775,29 @@ describe('Factory Board — Intake candidates', () => {
   });
 });
 
+describe('Factory item actions', () => {
+  it('given a custom prompt opened before the action starts, then the stale form cannot duplicate the pending action', async () => {
+    const onRunPrompt = vi.fn();
+    const props = {
+      actionLabel: 'Investigate',
+      itemLabel: 'Fix flaky test',
+      disabled: false,
+      onAction: vi.fn(),
+      onRunPrompt,
+    };
+    const view = renderWithProviders(<FactoryItemActions {...props} starting={false} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Prompt for Fix flaky test' }), 'Check the race');
+    view.rerender(<FactoryItemActions {...props} starting />);
+
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+    fireEvent.submit(screen.getByRole('form', { name: 'Custom prompt for Fix flaky test' }));
+    expect(onRunPrompt).not.toHaveBeenCalled();
+  });
+});
+
 describe('Factory Board — persisted cards', () => {
   it('given a work item in multiple stages, when the Board renders, then it shows a card in each column with a chip for the other stage', async () => {
     useBoardHandlers({
@@ -776,12 +826,21 @@ describe('Factory Board — persisted cards', () => {
   // A project that still has the worktree the cards' session refs point at:
   // the title only links to the thread while the ref's worktree exists.
   const issueWorktreePath = '/sandbox/mastra/worktrees/factory-issue-12';
-  const projectWithIssueWorktree: Project = {
+  const projectWithIssueWorktree: Factory = {
     ...githubProject,
-    worktrees: [
-      ...(githubProject.worktrees ?? []),
-      { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
-    ],
+    binding: {
+      kind: 'factory',
+      factoryProjectId: FACTORY_PROJECT_ID,
+      repositories: [
+        {
+          ...githubRepository,
+          worktrees: [
+            ...githubRepository.worktrees,
+            { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
+          ],
+        },
+      ],
+    },
   };
   const issueWorkSession = {
     projectPath: issueWorktreePath,
@@ -904,7 +963,7 @@ describe('Factory Board — persisted cards', () => {
     // message — record those endpoints without registering the run handlers.
     const sideEffects: string[] = [];
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () => {
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree`, () => {
         sideEffects.push('worktree');
         return HttpResponse.json({}, { status: 500 });
       }),
@@ -920,8 +979,10 @@ describe('Factory Board — persisted cards', () => {
     await userEvent.click(within(card).getByRole('link', { name: 'Fix flaky test' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-work'));
-    const stored = JSON.parse(localStorage.getItem('mastracode-projects') ?? '[]') as Project[];
-    expect(stored[0]?.selectedWorktreePath).toBe(issueWorktreePath);
+    const stored = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];
+    expect(
+      stored[0]?.binding.kind === 'factory' ? stored[0].binding.repositories[0]?.selectedWorktreePath : undefined,
+    ).toBe(issueWorktreePath);
     expect(sideEffects).toEqual([]);
   });
 
@@ -1028,6 +1089,214 @@ describe('Factory Board — persisted cards', () => {
     await waitFor(() => expect(state.patches).toEqual([{ id: 'wi-1', stages: ['planning'] }]));
     expect(within(column('planning')).getByText('Fix flaky test')).toBeInTheDocument();
     expect(within(column('triage')).queryByTestId('work-item-card')).not.toBeInTheDocument();
+  });
+
+  it('given two same-role cards, when one run starts, then only its action shows progress', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['triage'],
+          metadata: { number: 12 },
+        }),
+        makeWorkItem({
+          id: 'wi-2',
+          title: 'Improve docs',
+          source: 'github-issue',
+          sourceKey: 'github-issue:15',
+          stages: ['triage'],
+          metadata: { number: 15 },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    let releaseWorktree!: () => void;
+    const worktreeBlocked = new Promise<void>(resolve => {
+      releaseWorktree = resolve;
+    });
+    let markWorktreeRequested!: () => void;
+    const worktreeRequested = new Promise<void>(resolve => {
+      markWorktreeRequested = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree`, async () => {
+        markWorktreeRequested();
+        await worktreeBlocked;
+        return HttpResponse.json({
+          worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+          branch: 'factory/issue-12',
+          baseBranch: 'main',
+          resourceId: RESOURCE_ID,
+        });
+      }),
+    );
+    renderAt('/factory/board');
+
+    try {
+      const triageColumn = await screen.findByTestId('board-column-triage');
+      const firstActions = within(triageColumn).getByRole('button', { name: 'Actions for Fix flaky test' });
+      await userEvent.click(firstActions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+      await worktreeRequested;
+      await waitFor(() => expect(screen.queryByRole('menuitem')).not.toBeInTheDocument());
+      await userEvent.click(firstActions);
+      expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByRole('menuitem', { name: 'Build' })).not.toHaveAttribute('aria-disabled', 'true');
+
+      await userEvent.click(within(triageColumn).getByRole('button', { name: 'Actions for Improve docs' }));
+      expect(await screen.findByRole('menuitem', { name: 'Investigate' })).not.toHaveAttribute('aria-disabled', 'true');
+    } finally {
+      releaseWorktree();
+      await waitFor(() => expect(captured.messages).toHaveLength(1));
+    }
+  });
+
+  it('given two runs start concurrently, when one fails, then each action keeps its own pending lifecycle', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['triage'],
+          metadata: { number: 12 },
+        }),
+        makeWorkItem({
+          id: 'wi-2',
+          title: 'Improve docs',
+          source: 'github-issue',
+          sourceKey: 'github-issue:15',
+          stages: ['triage'],
+          metadata: { number: 15 },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let releaseSecond!: () => void;
+    const secondBlocked = new Promise<void>(resolve => {
+      releaseSecond = resolve;
+    });
+    let markFirstRequested!: () => void;
+    const firstRequested = new Promise<void>(resolve => {
+      markFirstRequested = resolve;
+    });
+    let markSecondRequested!: () => void;
+    const secondRequested = new Promise<void>(resolve => {
+      markSecondRequested = resolve;
+    });
+    let requestCount = 0;
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree`, async () => {
+        requestCount += 1;
+        if (requestCount === 1) {
+          markFirstRequested();
+          await firstBlocked;
+          return HttpResponse.json({
+            worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+            branch: 'factory/issue-12',
+            baseBranch: 'main',
+            resourceId: RESOURCE_ID,
+          });
+        }
+        markSecondRequested();
+        await secondBlocked;
+        return HttpResponse.json({ error: 'git_error', message: 'second worktree failed' }, { status: 502 });
+      }),
+    );
+    renderAt('/factory/board');
+
+    try {
+      const triageColumn = await screen.findByTestId('board-column-triage');
+      const firstActions = within(triageColumn).getByRole('button', { name: 'Actions for Fix flaky test' });
+      const secondActions = within(triageColumn).getByRole('button', { name: 'Actions for Improve docs' });
+
+      await userEvent.click(firstActions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+      await firstRequested;
+      await userEvent.click(secondActions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+      await secondRequested;
+
+      await userEvent.click(firstActions);
+      expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
+      await userEvent.click(secondActions);
+      expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
+
+      releaseSecond();
+      expect(await screen.findByText('second worktree failed')).toBeInTheDocument();
+      await userEvent.click(secondActions);
+      expect(await screen.findByRole('menuitem', { name: 'Investigate' })).not.toHaveAttribute('aria-disabled', 'true');
+      await userEvent.click(firstActions);
+      expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
+    } finally {
+      releaseSecond();
+      releaseFirst();
+      await waitFor(() => expect(captured.messages).toHaveLength(1));
+    }
+  });
+
+  it('given two actions on one card start concurrently, then both exact actions remain pending', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['triage'],
+          metadata: { number: 12 },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    let releaseWorktrees!: () => void;
+    const worktreesBlocked = new Promise<void>(resolve => {
+      releaseWorktrees = resolve;
+    });
+    let requestCount = 0;
+    let markBothRequested!: () => void;
+    const bothRequested = new Promise<void>(resolve => {
+      markBothRequested = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree`, async () => {
+        requestCount += 1;
+        if (requestCount === 2) markBothRequested();
+        await worktreesBlocked;
+        return HttpResponse.json({
+          worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+          branch: 'factory/issue-12',
+          baseBranch: 'main',
+          resourceId: RESOURCE_ID,
+        });
+      }),
+    );
+    renderAt('/factory/board');
+
+    try {
+      const triageColumn = await screen.findByTestId('board-column-triage');
+      const actions = within(triageColumn).getByRole('button', { name: 'Actions for Fix flaky test' });
+      await userEvent.click(actions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+      await waitFor(() => expect(requestCount).toBe(1));
+      await userEvent.click(actions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
+      await bothRequested;
+
+      await userEvent.click(actions);
+      expect(await screen.findAllByRole('menuitem', { name: 'Starting…' })).toHaveLength(2);
+    } finally {
+      releaseWorktrees();
+      await waitFor(() => expect(captured.messages).toHaveLength(2));
+    }
   });
 
   it('given a card in Planning, when Build is chosen, then planning exits and the card moves to Building', async () => {
@@ -1194,7 +1463,7 @@ interface CapturedRun {
 function useFactoryRunHandlers(branchDir: string): CapturedRun {
   const captured: CapturedRun = { threadTitles: [], messages: [], skillInvocations: [] };
   server.use(
-    http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
+    http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree`, async ({ request }) => {
       captured.worktree = (await request.json()) as Record<string, unknown>;
       return HttpResponse.json({
         worktreePath: `/sandbox/mastra/worktrees/${branchDir}`,
@@ -1230,6 +1499,46 @@ function useFactoryRunHandlers(branchDir: string): CapturedRun {
 }
 
 describe('Factory Board — investigate flow', () => {
+  it('given two candidates, when one run starts, then the unrelated candidate stays operable', async () => {
+    useBoardHandlers({ issues });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    let releaseWorktree!: () => void;
+    const worktreeBlocked = new Promise<void>(resolve => {
+      releaseWorktree = resolve;
+    });
+    let markWorktreeRequested!: () => void;
+    const worktreeRequested = new Promise<void>(resolve => {
+      markWorktreeRequested = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree`, async () => {
+        markWorktreeRequested();
+        await worktreeBlocked;
+        return HttpResponse.json({
+          worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+          branch: 'factory/issue-12',
+          baseBranch: 'main',
+          resourceId: RESOURCE_ID,
+        });
+      }),
+    );
+    renderAt('/factory/board');
+
+    try {
+      const intake = await screen.findByTestId('board-column-intake');
+      await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
+      await worktreeRequested;
+
+      expect(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' })).toBeDisabled();
+      expect(within(intake).getByRole('button', { name: 'Investigate Improve docs' })).toBeEnabled();
+      await userEvent.click(within(intake).getByRole('button', { name: 'More actions for Fix flaky test' }));
+      expect(await screen.findByRole('menuitem', { name: 'Custom prompt…' })).toHaveAttribute('aria-disabled', 'true');
+    } finally {
+      releaseWorktree();
+      await waitFor(() => expect(captured.messages).toHaveLength(1));
+    }
+  });
+
   it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and direct skill activation are created, a work item materializes into Planning, and the app navigates to the thread', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
@@ -1413,7 +1722,7 @@ describe('Factory Board — investigate flow', () => {
     const captured = useFactoryRunHandlers('factory-issue-12');
     // The card filing endpoint blows up, but the run itself already succeeded.
     server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${GITHUB_PROJECT_ID}/work-items`, () =>
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
         HttpResponse.json({ error: 'boom' }, { status: 500 }),
       ),
     );
@@ -1682,7 +1991,7 @@ describe('Factory Board — investigate flow', () => {
   it('given the worktree call fails, when Investigate is clicked, then an error notice renders and no work item is filed', async () => {
     const state = useBoardHandlers({ issues });
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () =>
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree`, () =>
         HttpResponse.json({ error: 'git_error', message: 'worktree failed' }, { status: 502 }),
       ),
     );
@@ -1693,6 +2002,7 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
 
     expect(await screen.findByText('worktree failed')).toBeInTheDocument();
+    expect(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' })).toBeEnabled();
     expect(state.posts).toEqual([]);
     expect(router.state.location.pathname).toBe('/factory/board');
   });
@@ -1700,12 +2010,21 @@ describe('Factory Board — investigate flow', () => {
 
 describe('Factory Board — open session from the card title', () => {
   const issueWorktreePath = '/sandbox/mastra/worktrees/factory-issue-12';
-  const projectWithIssueWorktree: Project = {
+  const projectWithIssueWorktree: Factory = {
     ...githubProject,
-    worktrees: [
-      ...(githubProject.worktrees ?? []),
-      { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
-    ],
+    binding: {
+      kind: 'factory',
+      factoryProjectId: FACTORY_PROJECT_ID,
+      repositories: [
+        {
+          ...githubRepository,
+          worktrees: [
+            ...githubRepository.worktrees,
+            { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
+          ],
+        },
+      ],
+    },
   };
 
   it('given a persisted card without a session, when the title is clicked, then an empty session is created and filed under chat with no prompt sent', async () => {

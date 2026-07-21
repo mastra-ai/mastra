@@ -2,22 +2,17 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
-import type { IssueTriageRunInput, IssueTriageRunResult } from '../factory-integration';
 import type { GithubIntegration } from './integration';
-import type { GithubSignalSubscriptionRow } from './storage/base';
+import type { GithubIssueTriageInput, GithubIssueTriageResult } from './issue-triage';
 import {
   listPullRequestSubscriptionsForWebhook,
   retirePullRequestSubscription,
+  type GithubSignalSubscriptionRow,
   type GithubWebhookPullRequestTarget,
 } from './subscriptions';
 
-/**
- * The triage-run hook types are part of the system-wide integration contract
- * (`../factory-integration.ts`); re-exported under the GitHub-prefixed names
- * existing consumers import from this module.
- */
-export type GithubIssueTriageRunInput = IssueTriageRunInput;
-export type GithubIssueTriageRunResult = IssueTriageRunResult;
+export type GithubIssueTriageRunInput = GithubIssueTriageInput;
+export type GithubIssueTriageRunResult = GithubIssueTriageResult;
 
 export interface GithubWebhookHandlerOptions {
   /** Integration providing webhook-secret verification + collaborator permission checks. */
@@ -323,26 +318,31 @@ async function resolveSubscriptionSession(
   controller: MountedMastraCode['controller'],
   subscription: GithubSignalSubscriptionRow,
 ) {
+  const { sessionId, resourceId, threadId } = subscription;
+  if (!sessionId || !resourceId || !threadId) {
+    throw new Error(`GitHub subscription ${subscription.id} is missing its session binding.`);
+  }
   const scope = subscription.sessionScope || undefined;
-  let session = await controller.getSessionByResource(subscription.resourceId, scope);
+  let session = await controller.getSessionByResource(resourceId, scope);
   if (!session) {
     const tags = {
-      githubProjectId: subscription.githubProjectId,
-      ...(scope ? { projectPath: scope } : {}),
+      factoryProjectId: resourceId,
+      projectRepositoryId: subscription.data.projectRepositoryId,
+      ...(scope ? { worktreePath: scope } : {}),
     };
     session = await controller.createSession({
-      id: subscription.sessionId,
-      ownerId: subscription.ownerId,
-      resourceId: subscription.resourceId,
+      id: sessionId,
+      ownerId: subscription.data.ownerId,
+      resourceId,
       scope,
       tags,
     });
   }
-  if (session.thread.getId() !== subscription.threadId) {
-    await session.thread.switch({ threadId: subscription.threadId, emitEvent: false });
+  if (session.thread.getId() !== threadId) {
+    await session.thread.switch({ threadId, emitEvent: false });
   }
-  if (session.thread.getId() !== subscription.threadId) {
-    throw new Error(`Session ${subscription.sessionId} did not bind thread ${subscription.threadId}.`);
+  if (session.thread.getId() !== threadId) {
+    throw new Error(`Session ${sessionId} did not bind thread ${threadId}.`);
   }
   return session;
 }
@@ -411,21 +411,25 @@ export async function dispatchGithubWebhook(
   }
 
   const target = {
-    installationId: notification.metadata.installationId,
-    repoId: notification.metadata.repositoryId,
-    pullRequestNumber: notification.metadata.pullRequestNumber,
+    installationExternalId: notification.metadata.installationId.toString(),
+    repositoryExternalId: notification.metadata.repositoryId.toString(),
+    changeRequestId: notification.metadata.pullRequestNumber.toString(),
   };
   const listSubscriptions =
     dependencies.listSubscriptions ??
     ((subscriptionTarget: GithubWebhookPullRequestTarget, options?: { includeTerminal?: boolean }) => {
       if (!dependencies.github) throw new Error('GitHub integration is required to load webhook subscriptions.');
-      return listPullRequestSubscriptionsForWebhook(subscriptionTarget, options, dependencies.github.storageDomain);
+      return listPullRequestSubscriptionsForWebhook(
+        subscriptionTarget,
+        options,
+        dependencies.github.integrationStorage,
+      );
     });
   const retireSubscription =
     dependencies.retireSubscription ??
     ((id: string, status: 'open' | 'closed' | 'merged') => {
       if (!dependencies.github) throw new Error('GitHub integration is required to retire webhook subscriptions.');
-      return retirePullRequestSubscription(id, status, dependencies.github.storageDomain);
+      return retirePullRequestSubscription(id, status, dependencies.github.integrationStorage);
     });
   const subscriptions = await listSubscriptions(target, { includeTerminal: notification.action === 'reopened' });
   let delivered = 0;
@@ -442,7 +446,7 @@ export async function dispatchGithubWebhook(
         payload: notification.payload,
         sourceId: parsed.deliveryId,
         dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
-        coalesceKey: `github:${subscription.repoId}:pull-request:${subscription.pullRequestNumber}`,
+        coalesceKey: `github:${subscription.data.repositoryExternalId}:pull-request:${subscription.data.changeRequestId}`,
         metadata: {
           event: notification.metadata.event,
           action: notification.action,

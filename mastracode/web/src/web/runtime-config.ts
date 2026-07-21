@@ -6,23 +6,19 @@
  * parameterized through every call site (such as the auth module) consult it
  * via getters instead of reading deployment env themselves.
  *
- * The registry holds *instances*, not connection strings: the injected Mastra
- * storage (whose pg pool is shared by every app-table consumer), the vector
- * store, and the {@link FactoryStore} of app-table domains initialized against
- * that shared pool.
+ * The registry holds *instances*, not connection strings: the factory storage
+ * backend (shared by agent state and every app-table consumer and owner of the
+ * app-table domains) and the vector store.
  */
 
-import type { MastraCompositeStore } from '@mastra/core/storage';
+import type { IMastraAuthProvider } from '@mastra/core/server';
+import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { PostgresStore } from '@mastra/pg';
-import type pg from 'pg';
-import type { WebAuthAdapter } from './auth-adapter.js';
 import type { FactoryIntegration } from './factory-integration.js';
 import type { GithubIntegration } from './github/integration.js';
 import type { LinearIntegration } from './linear/integration.js';
 import type { StateSigner } from './state-signing.js';
-import type { FactoryStore } from './storage/factory-store.js';
 
 /**
  * Factory-resolved sandbox runtime: the machine GitHub projects clone their
@@ -44,27 +40,20 @@ export interface WebSandboxRuntime {
 
 export interface WebRuntimeConfig {
   /**
-   * Injected Mastra storage instance powering BOTH agent storage (threads,
-   * messages, memory, OM) and — when it is a `PostgresStore` — the app tables
-   * (github/factory/audit/intake) via its shared pg pool. `undefined` when
-   * the factory was configured without storage.
+   * The factory storage backend powering BOTH agent storage (threads,
+   * messages, memory, OM — via `getMastraStorage()`) and the app tables
+   * (github/factory/audit/intake — via `ops`). `undefined` only when the
+   * factory never ran (test seeds may omit it).
    */
-  storage?: MastraCompositeStore;
+  storage?: FactoryStorage;
   /** Injected vector store instance (recall search), when configured. */
   vector?: MastraVector;
   /** Browser-facing origin, normalized without a trailing slash. */
   publicUrl?: string;
-  /** Active web auth adapter, or `undefined` when auth is disabled. */
-  authAdapter?: WebAuthAdapter;
+  /** Active auth provider, or `undefined` when auth is disabled. */
+  authProvider?: IMastraAuthProvider;
   /** Active sandbox runtime, or `undefined` when sandboxes are disabled. */
   sandbox?: WebSandboxRuntime;
-  /**
-   * Registry of factory app-table storage domains (intake, audit, work-items,
-   * integration-provided), initialized by `MastraFactory.prepare()` against
-   * the injected storage's shared connection. `undefined` when the factory
-   * was configured without pg-backed storage — app-DB features stay off.
-   */
-  factoryStore?: FactoryStore;
   /** Registered integrations (GitHub, Linear, third-party), keyed by their stable id. */
   integrations?: FactoryIntegration[];
   /** Shared OAuth state signer created by the factory (see `./state-signing.ts`). */
@@ -78,8 +67,8 @@ export function seedRuntimeConfig(config: WebRuntimeConfig): void {
   seeded = { ...config };
 }
 
-/** The injected Mastra storage instance, if seeded. */
-export function getSeededStorage(): MastraCompositeStore | undefined {
+/** The factory storage backend, if seeded. */
+export function getSeededStorage(): FactoryStorage | undefined {
   return seeded?.storage;
 }
 
@@ -89,14 +78,16 @@ export function getSeededVector(): MastraVector | undefined {
 }
 
 /**
- * The pg pool shared by all app-table consumers (the `getAppDb()` drizzle
- * bridge, the distributed project lock, better-auth). Available only when the
- * seeded storage is a `PostgresStore` — any other backend (or no storage)
- * returns `undefined` and app-DB features stay off.
+ * The factory storage backend shared by all app-table consumers (the storage
+ * domains, the distributed project lock, better-auth). Throws when the
+ * factory never ran — deep consumers only reach this after `prepare()`.
  */
-export function getSharedAppPool(): pg.Pool | undefined {
+export function getFactoryStorage(): FactoryStorage {
   const storage = seeded?.storage;
-  return storage instanceof PostgresStore ? storage.pool : undefined;
+  if (!storage) {
+    throw new Error('MastraCode Web: factory storage unavailable — MastraFactory.prepare() has not run.');
+  }
+  return storage;
 }
 
 /** Browser-facing origin resolved by the factory, if seeded. */
@@ -110,12 +101,12 @@ export function isRuntimeConfigSeeded(): boolean {
 }
 
 /**
- * Active web auth adapter seeded by the factory. `undefined` either because
- * auth is disabled (seeded without an adapter) or because the factory never
+ * Active auth provider seeded by the factory. `undefined` either because
+ * auth is disabled (seeded without a provider) or because the factory never
  * ran — callers that need the distinction check {@link isRuntimeConfigSeeded}.
  */
-export function getSeededAuthAdapter(): WebAuthAdapter | undefined {
-  return seeded?.authAdapter;
+export function getSeededAuthProvider(): IMastraAuthProvider | undefined {
+  return seeded?.authProvider;
 }
 
 /**
@@ -127,22 +118,6 @@ export function getSeededSandbox(): WebSandboxRuntime | undefined {
   return seeded?.sandbox;
 }
 
-/**
- * The seeded {@link FactoryStore}, for the app-table wrapper modules
- * (intake/audit/work-items stores). Throws when the factory never ran or was
- * configured without storage — callers behind a readiness gate never hit
- * this; ungated callers (audit recording) treat it as a normal failure.
- */
-export function getFactoryStore(): FactoryStore {
-  const store = seeded?.factoryStore;
-  if (!store) {
-    throw new Error(
-      'MastraCode Web: factory storage unavailable — MastraFactory.prepare() has not run or no storage was provided.',
-    );
-  }
-  return store;
-}
-
 /** Look up a registered integration by its stable id. */
 export function getSeededIntegration(id: string): FactoryIntegration | undefined {
   return seeded?.integrations?.find(integration => integration.id === id);
@@ -152,14 +127,12 @@ export function getSeededIntegration(id: string): FactoryIntegration | undefined
  * GitHub App integration seeded by the factory. Typed convenience over
  * {@link getSeededIntegration} for the sandbox fleet + session tooling, which
  * need GitHub-typed API methods. `undefined` when no GitHub integration was
- * registered (or the factory never ran) — GitHub-backed projects stay off in
+ * registered (or the factory never ran) — GitHub-backed repositories stay off in
  * that case.
  */
 export function getSeededGithubIntegration(): GithubIntegration | undefined {
   const integration = getSeededIntegration('github');
-  return integration instanceof Object && 'getInstallationOctokit' in integration
-    ? (integration as GithubIntegration)
-    : undefined;
+  return integration?.versionControl ? (integration as GithubIntegration) : undefined;
 }
 
 /**
@@ -169,9 +142,7 @@ export function getSeededGithubIntegration(): GithubIntegration | undefined {
  */
 export function getSeededLinearIntegration(): LinearIntegration | undefined {
   const integration = getSeededIntegration('linear');
-  return integration instanceof Object && 'listActiveIssues' in integration
-    ? (integration as LinearIntegration)
-    : undefined;
+  return integration?.intake ? (integration as LinearIntegration) : undefined;
 }
 
 /**

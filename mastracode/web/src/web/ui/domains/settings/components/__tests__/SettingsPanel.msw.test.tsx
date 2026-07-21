@@ -9,8 +9,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../../chat/context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { SettingsPanel } from '../../index';
 import { loadDoneSound, playDoneSound } from '../../services/doneSound';
 
@@ -27,12 +27,15 @@ const RESOURCE_ID = 'resource-settings-panel';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-settings-panel';
 
-const project: Project = {
+const project: Factory = {
   id: 'project-settings-panel',
   name: 'Settings Panel Project',
-  path: '/tmp/settings-panel',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/tmp/settings-panel',
+  },
 };
 
 interface CapturedRequests {
@@ -122,14 +125,16 @@ function useAgentControllerHandlers(): CapturedRequests {
     }),
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/stream`, () => sse()),
+    // The Model tab hosts the packs section now, so opening it loads the catalog.
+    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json({ packs: [], activePackId: null })),
   );
 
   return captured;
 }
 
-function seedProject() {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedFactory() {
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function ThemeProbe() {
@@ -139,17 +144,17 @@ function ThemeProbe() {
 
 function Harness({ children }: { children: ReactNode }) {
   return (
-    <ActiveProjectProvider>
+    <ActiveFactoryProvider>
       <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
         <ThemeProbe />
         {children}
       </ChatSessionProvider>
-    </ActiveProjectProvider>
+    </ActiveFactoryProvider>
   );
 }
 
 function renderSettingsPanel() {
-  seedProject();
+  seedFactory();
   const captured = useAgentControllerHandlers();
   renderWithProviders(
     <Harness>
@@ -192,27 +197,27 @@ describe('SettingsPanel', () => {
     });
   });
 
-  describe('when managing projects', () => {
-    it('removes the active project and reconciles the project selection', async () => {
+  describe('when managing source control', () => {
+    it('removes the active factory and reconciles the factory selection', async () => {
       const user = userEvent.setup();
       renderSettingsPanel();
 
-      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+      await user.click(screen.getByRole('tab', { name: 'Source Control' }));
       expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
-      await waitFor(() => expect(localStorage.getItem('mastracode-active-project')).toBeNull());
-      await user.click(screen.getByRole('tab', { name: 'Projects' }));
-      await screen.findByText('No configured projects.');
-      expect(JSON.parse(localStorage.getItem('mastracode-projects') ?? '[]')).toEqual([]);
+      await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBeNull());
+      await user.click(screen.getByRole('tab', { name: 'Source Control' }));
+      await screen.findByText('Select a factory to manage its source control.');
+      expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]);
     });
 
-    it('keeps the project visible and reports storage failures', async () => {
+    it('keeps the factory visible and reports storage failures', async () => {
       const user = userEvent.setup();
       renderSettingsPanel();
-      await user.click(screen.getByRole('tab', { name: 'Projects' }));
-      const storageError = new Error('Project storage is unavailable');
+      await user.click(screen.getByRole('tab', { name: 'Source Control' }));
+      const storageError = new Error('Factory storage is unavailable');
       const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
         throw storageError;
       });
@@ -220,7 +225,7 @@ describe('SettingsPanel', () => {
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
       expect(await screen.findByText(storageError.message)).toBeInTheDocument();
-      expect(screen.getByText('Settings Panel Project')).toBeInTheDocument();
+      expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
       setItem.mockRestore();
     });
   });
@@ -235,6 +240,19 @@ describe('SettingsPanel', () => {
 
       await waitFor(() => expect(captured.stateUpdates).toContainEqual({ thinkingLevel: 'high' }));
     });
+
+    it('hosts model packs inside the Model tab instead of a separate Packs tab', async () => {
+      const user = userEvent.setup();
+      renderSettingsPanel();
+
+      expect(screen.queryByRole('tab', { name: 'Packs' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: /model/i }));
+
+      expect(await screen.findByText('Model packs')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /New pack/ })).toBeInTheDocument();
+      // A local factory has no server-side project, so no default-model picker.
+      expect(screen.queryByLabelText('Factory default model')).not.toBeInTheDocument();
+    });
   });
 
   describe('when changing behavior preferences', () => {
@@ -243,7 +261,8 @@ describe('SettingsPanel', () => {
       const captured = renderSettingsPanel();
 
       await user.click(screen.getByRole('tab', { name: /behavior/i }));
-      await user.click(screen.getByRole('button', { name: 'System' }));
+      const notifications = await screen.findByRole('group', { name: 'Notifications' });
+      await user.click(within(notifications).getByRole('button', { name: 'System' }));
       const readPermission = await screen.findByRole('group', { name: 'Read permission' });
       await user.click(within(readPermission).getByRole('button', { name: 'Allow' }));
 

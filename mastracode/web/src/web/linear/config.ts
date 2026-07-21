@@ -12,11 +12,11 @@
  */
 
 import { isWebAuthEnabled } from '../auth';
-import { getSeededLinearIntegration } from '../runtime-config';
+import { getSeededIntegration, getSeededStorage } from '../runtime-config';
 
 /** True when a Linear integration instance is registered with the factory. */
 export function isLinearAppConfigured(): boolean {
-  return getSeededLinearIntegration() !== undefined;
+  return getSeededIntegration('linear') !== undefined;
 }
 
 /** True when the Linear intake feature should be active. */
@@ -35,10 +35,13 @@ export interface LinearFeatureDiagnostics {
 }
 
 export function getLinearFeatureDiagnostics(): LinearFeatureDiagnostics {
-  const linear = getSeededLinearIntegration();
+  const linear = getSeededIntegration('linear');
   return {
     linearAppConfigured: linear !== undefined,
     webAuthEnabled: isWebAuthEnabled(),
-    appDbConfigured: linear?.storageDomain !== undefined,
+    // Storage is a required factory slot, so app persistence is configured
+    // whenever the factory booted. Connections live in the generic
+    // integration-storage domain.
+    appDbConfigured: getSeededStorage() !== undefined,
   };
 }

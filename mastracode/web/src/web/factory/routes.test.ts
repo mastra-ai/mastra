@@ -3,71 +3,65 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
-// Capture audit events at the store boundary so the real `emitAudit` path
-// (actor resolution, request context, never-throws) is exercised end to end.
+import type { AuditEmitter } from '../audit/domain';
+import { __resetRuntimeConfigForTests } from '../runtime-config';
+
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
 
-vi.mock('../audit/store', () => ({
-  recordAuditEvent: async (input: any) => {
-    if (auditFailure) throw auditFailure;
-    auditRecorded.push(input);
-    return {
-      id: `00000000-0000-4000-9000-${String(auditRecorded.length).padStart(12, '0')}`,
-      occurredAt: new Date(),
-      ...input,
-      githubProjectId: input.githubProjectId ?? null,
-      metadata: input.metadata ?? {},
-      context: input.context ?? {},
-    };
+const audit: AuditEmitter = {
+  async emit({ context, input }) {
+    try {
+      if (auditFailure) throw auditFailure;
+      const user = context.get('webAuthUser' as never) as { workosId: string; organizationId?: string } | undefined;
+      if (!user?.organizationId) return;
+      auditRecorded.push({
+        orgId: user.organizationId,
+        actorId: user.workosId,
+        actorType: 'human',
+        action: input.action,
+        factoryProjectId: input.factoryProjectId,
+        targets: input.targets,
+        metadata: input.metadata,
+      });
+    } catch (error) {
+      console.warn('[Audit] Failed to emit audit event', {
+        action: input.action,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   },
-  listAuditEvents: async () => ({ events: [] }),
-}));
-
-import { GithubStorageInMemory } from '../github/storage/inmemory';
-import { __resetRuntimeConfigForTests } from '../runtime-config';
-import { seedInMemoryFactoryStoreForTests } from '../storage/test-utils';
-import type { InMemoryFactoryStoreSeed } from '../storage/test-utils';
+};
+import { seedFactoryStorageForTests } from '../storage/test-utils';
+import type { FactoryStorageTestSeed } from '../storage/test-utils';
 import { mountApiRoutes } from '../test-utils';
 import { buildFactoryRoutes } from './routes';
 import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-let githubStorage!: GithubStorageInMemory;
-
-function buildApp(
-  user: { workosId: string; organizationId?: string } | null,
-  storage: GithubStorageInMemory | null = githubStorage,
-) {
+function buildApp(user: { workosId: string; organizationId?: string } | null) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildFactoryRoutes(storage ?? undefined));
+  mountApiRoutes(app as any, buildFactoryRoutes({ audit }));
   return app;
 }
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
-const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
+let PROJECT_ID = '';
 
-function seedProject(orgId = 'org1', id = PROJECT_ID) {
-  githubStorage.projects.push({
-    id,
+async function seedProject(orgId = 'org1') {
+  const project = await seed.projects.create({
     orgId,
     userId: 'u1',
-    installationId: 1,
-    repoFullName: 'acme/app',
-    repoId: 1,
-    defaultBranch: 'main',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/tmp/acme-app',
-    setupCommand: null,
-    createdAt: new Date(),
+    input: { name: `${orgId} project` },
   });
+  PROJECT_ID = project.id;
 }
 
-const listItems = () => seed.workItems.list('org1', PROJECT_ID);
+const listItems = () => seed.workItems.list({ orgId: 'org1', factoryProjectId: PROJECT_ID });
 
 function json(method: string, path: string, body?: unknown, user: typeof orgUser | null = orgUser) {
   return buildApp(user).request(path, {
@@ -77,23 +71,25 @@ function json(method: string, path: string, body?: unknown, user: typeof orgUser
 }
 
 const createBody = (overrides: Record<string, unknown> = {}) => ({
-  source: 'github-issue',
-  sourceKey: 'github-issue:42',
+  externalSource: {
+    integrationId: 'github',
+    type: 'issue',
+    externalId: '42',
+    url: 'https://github.com/acme/app/issues/42',
+  },
   title: 'Fix the login flow',
-  url: 'https://github.com/acme/app/issues/42',
   stages: ['intake'],
   metadata: { number: 42 },
   ...overrides,
 });
 
-let seed: InMemoryFactoryStoreSeed;
+let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
-  seed = await seedInMemoryFactoryStoreForTests();
-  githubStorage = new GithubStorageInMemory();
+  seed = await seedFactoryStorageForTests();
   auditRecorded = [];
   auditFailure = undefined;
-  seedProject();
+  await seedProject();
 });
 
 afterEach(() => {
@@ -114,15 +110,9 @@ describe('auth and scoping', () => {
   });
 
   it('404s when the project belongs to another org', async () => {
-    githubStorage.projects = [];
-    seedProject('other-org');
+    await seedProject('other-org');
     const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
     expect(res.status).toBe(404);
-  });
-
-  it('503s when GitHub storage is unavailable', async () => {
-    const res = await buildApp(orgUser, null).request(`/web/factory/projects/${PROJECT_ID}/work-items`);
-    expect(res.status).toBe(503);
   });
 
   it('404s on a non-uuid project id', async () => {
@@ -150,9 +140,13 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     expect(workItem).toMatchObject({
       orgId: 'org1',
       createdBy: 'u1',
-      githubProjectId: PROJECT_ID,
-      source: 'github-issue',
-      sourceKey: 'github-issue:42',
+      factoryProjectId: PROJECT_ID,
+      externalSource: {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: '42',
+        url: 'https://github.com/acme/app/issues/42',
+      },
       title: 'Fix the login flow',
       stages: ['intake'],
       metadata: { number: 42 },
@@ -163,7 +157,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     expect(workItem.stageHistory[0].exitedAt).toBeUndefined();
   });
 
-  it('upserts on sourceKey instead of duplicating', async () => {
+  it('upserts on the external source identity instead of duplicating', async () => {
     await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const res = await json(
       'POST',
@@ -190,24 +184,20 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     });
   });
 
-  it('never dedupes manual cards (null sourceKey)', async () => {
-    await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ source: 'manual', sourceKey: null }),
-    );
-    await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ source: 'manual', sourceKey: null }),
-    );
+  it('never dedupes manual cards without an external source', async () => {
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ externalSource: null }));
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ externalSource: null }));
     expect(await listItems()).toHaveLength(2);
   });
 
   it('400s on an invalid body', async () => {
     const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ stages: [] }));
     expect(res.status).toBe(400);
-    const bad = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ source: 'jira' }));
+    const bad = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ externalSource: { integrationId: 'jira' } }),
+    );
     expect(bad.status).toBe(400);
   });
 });
@@ -322,8 +312,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`, undefined, null)).status).toBe(401);
 
-    githubStorage.projects = [];
-    seedProject('other-org');
+    await seedProject('other-org');
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`)).status).toBe(404);
   });
 
@@ -346,7 +335,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     await json(
       'POST',
       `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ source: 'manual', sourceKey: null, title: 'Manual card' }),
+      createBody({ externalSource: null, title: 'Manual card' }),
     );
 
     const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?days=7`);
@@ -365,7 +354,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(metrics.transitions).toEqual({ human: 3, total: 3 });
     expect(metrics.sourceMix).toEqual(
       expect.arrayContaining([
-        { source: 'github-issue', count: 1 },
+        { source: 'github:issue', count: 1 },
         { source: 'manual', count: 1 },
       ]),
     );
@@ -378,6 +367,27 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(metrics.cycleTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
     expect(metrics.wip).toEqual([]);
     expect(metrics.agingWip).toEqual([]);
+  });
+});
+
+describe('GET /web/factory/projects/:id/health/thresholds', () => {
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`, undefined, null)).status).toBe(
+      401,
+    );
+
+    await seedProject('other-org');
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`)).status).toBe(404);
+  });
+
+  it('returns the default config when unset and the saved config after saveConfig', async () => {
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`);
+    expect(res.status).toBe(200);
+    expect((await res.json()).thresholds).toEqual([14400, 86400, 259200]);
+
+    await seed.queueHealth.saveConfig('org1', PROJECT_ID, { thresholdsSeconds: [60, 300, 3600] });
+    const res2 = await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`);
+    expect((await res2.json()).thresholds).toEqual([60, 300, 3600]);
   });
 });
 
@@ -395,9 +405,17 @@ describe('audit events', () => {
       orgId: 'org1',
       actorId: 'u1',
       action: 'factory.work_item.created',
-      githubProjectId: PROJECT_ID,
+      factoryProjectId: PROJECT_ID,
       targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
-      metadata: { source: 'github-issue', sourceKey: 'github-issue:42', stages: ['intake'] },
+      metadata: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: '42',
+          url: 'https://github.com/acme/app/issues/42',
+        },
+        stages: ['intake'],
+      },
     });
   });
 
@@ -431,7 +449,7 @@ describe('audit events', () => {
     expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated', 'factory.work_item.stage_moved']);
     expect(auditRecorded[0].metadata).toEqual({ fields: ['stages'] });
     expect(auditRecorded[1]).toMatchObject({
-      githubProjectId: PROJECT_ID,
+      factoryProjectId: PROJECT_ID,
       targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
       metadata: { from: ['intake'], to: ['execute'] },
     });
@@ -474,7 +492,7 @@ describe('audit events', () => {
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
       action: 'factory.work_item.deleted',
-      githubProjectId: PROJECT_ID,
+      factoryProjectId: PROJECT_ID,
       targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
     });
   });
@@ -500,38 +518,36 @@ describe('audit events', () => {
 
 // ── Validation units ─────────────────────────────────────────────────────
 describe('parseCreateWorkItem', () => {
-  it('accepts a minimal valid body and defaults sessions/metadata', () => {
-    const input = parseCreateWorkItem({ source: 'manual', title: 'Card', stages: ['intake'] });
-    expect(input).toEqual({
-      source: 'manual',
-      sourceKey: null,
+  it('accepts a minimal manual work item', () => {
+    expect(parseCreateWorkItem({ title: ' Card ', stages: ['intake'] })).toEqual({
       title: 'Card',
-      url: null,
       stages: ['intake'],
-      sessions: {},
-      metadata: {},
     });
   });
 
-  it('rejects bad stages, urls, and oversized metadata', () => {
+  it('accepts a normalized external source', () => {
+    expect(parseCreateWorkItem(createBody())).toEqual(createBody());
+  });
+
+  it('rejects bad stages, malformed external sources, and oversized metadata', () => {
     expect(parseCreateWorkItem(createBody({ stages: ['in take'] }))).toBeNull();
     expect(parseCreateWorkItem(createBody({ stages: ['a', 'a'] }))).toBeNull();
-    expect(parseCreateWorkItem(createBody({ url: 'javascript:alert(1)' }))).toBeNull();
+    expect(parseCreateWorkItem(createBody({ externalSource: { integrationId: 'github' } }))).toBeNull();
     expect(parseCreateWorkItem(createBody({ metadata: { blob: 'x'.repeat(20_000) } }))).toBeNull();
   });
 
   it('rejects malformed sessions', () => {
     expect(parseCreateWorkItem(createBody({ sessions: { work: { projectPath: '/p' } } }))).toBeNull();
     expect(
-      parseCreateWorkItem(createBody({ sessions: { 'bad role!': { projectPath: '/p', branch: 'b', threadId: 't' } } })),
+      parseCreateWorkItem(createBody({ sessions: { '': { projectPath: '/p', branch: 'b', threadId: 't' } } })),
     ).toBeNull();
   });
 });
 
 describe('parseUpdateWorkItem', () => {
-  it('rejects an empty patch and passes through valid fields', () => {
+  it('rejects an empty or unknown-only patch and passes through valid fields', () => {
     expect(parseUpdateWorkItem({})).toBeNull();
     expect(parseUpdateWorkItem({ stages: ['done'] })).toEqual({ stages: ['done'] });
-    expect(parseUpdateWorkItem({ url: null })).toEqual({ url: null });
+    expect(parseUpdateWorkItem({ url: null })).toBeNull();
   });
 });

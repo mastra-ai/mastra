@@ -9,7 +9,7 @@
  * unavailable.
  *
  * Tenancy is **org-first**, like `work_items`: events are scoped by `org_id`
- * and (usually) `github_project_id`; `actor_id` records who acted but never
+ * and (usually) `factory_project_id`; `actor_id` records who acted but never
  * scopes reads.
  *
  * v1 action taxonomy (register these in the WorkOS dashboard under
@@ -37,7 +37,8 @@
  * whose message drove the run.
  */
 
-import type { FactoryStorageContext, FactoryStorageDomain } from '../../domain';
+import { FactoryStorageDomain } from '@mastra/core/storage';
+import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
 /** What an audit event acted on (WorkOS Audit Logs target shape). */
 export interface AuditTarget {
@@ -75,8 +76,10 @@ export interface AuditEventRow {
   targets: AuditTarget[];
   /** Bounded event summary — never full payloads, never secrets. */
   metadata: Record<string, unknown>;
-  /** Project the event is scoped to; null for org-level events. */
-  githubProjectId: string | null;
+  /** Factory project the event is scoped to; null for org-level events. */
+  factoryProjectId: string | null;
+  /** Project-repository link affected by a repository-specific action. */
+  projectRepositoryId: string | null;
   /** Request context (`x-forwarded-for` / `user-agent`). */
   context: AuditContext;
   occurredAt: Date;
@@ -91,17 +94,18 @@ export interface RecordAuditEventInput {
   action: string;
   targets: AuditTarget[];
   metadata?: Record<string, unknown>;
-  githubProjectId?: string;
+  factoryProjectId?: string;
+  projectRepositoryId?: string;
   context?: AuditContext;
   occurredAt?: Date;
 }
 
-/** A fully-normalized event ready to persist (id assigned by the backend). */
+/** A fully-normalized event ready to persist (id assigned on insert). */
 export type AuditEventInsert = Omit<AuditEventRow, 'id'>;
 
 export interface ListAuditEventsInput {
   orgId: string;
-  githubProjectId?: string;
+  factoryProjectId?: string;
   /** Restrict to these actions (exact match). */
   actions?: string[];
   actorId?: string;
@@ -154,33 +158,123 @@ export function decodeAuditCursor(cursor: string): { occurredAt: Date; id: strin
   return { occurredAt, id };
 }
 
-/**
- * Abstract audit event storage. `record()` normalizes inputs (defaults,
- * metadata bounding) identically across backends; each backend implements the
- * raw `insert` and the keyset-paginated `list`.
- */
-export abstract class AuditStorage implements FactoryStorageDomain {
-  readonly name = 'audit';
+export const AUDIT_EVENTS_SCHEMA: CollectionSchema = {
+  name: 'audit_events',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    actor_id: { type: 'text' },
+    actor_type: { type: 'text', default: 'human' },
+    action: { type: 'text' },
+    targets: { type: 'json' },
+    metadata: { type: 'json' },
+    factory_project_id: { type: 'text', nullable: true },
+    project_repository_id: { type: 'text', nullable: true },
+    context: { type: 'json' },
+    occurred_at: { type: 'timestamp' },
+  },
+  indexes: [
+    { name: 'audit_events_org_occurred_idx', columns: ['org_id', 'occurred_at'] },
+    { name: 'audit_events_org_project_occurred_idx', columns: ['org_id', 'factory_project_id', 'occurred_at'] },
+  ],
+};
 
-  abstract init(ctx: FactoryStorageContext): Promise<void>;
+/** Column shape of one `audit_events` row as returned by ops. */
+interface AuditEventDbRow extends Record<string, unknown> {
+  id: string;
+  org_id: string;
+  actor_id: string;
+  actor_type: AuditActorType;
+  action: string;
+  targets: AuditTarget[];
+  metadata: Record<string, unknown>;
+  factory_project_id: string | null;
+  project_repository_id: string | null;
+  context: AuditContext;
+  occurred_at: Date;
+}
+
+function toRow(db: AuditEventDbRow): AuditEventRow {
+  return {
+    id: db.id,
+    orgId: db.org_id,
+    actorId: db.actor_id,
+    actorType: db.actor_type,
+    action: db.action,
+    targets: db.targets,
+    metadata: db.metadata,
+    factoryProjectId: db.factory_project_id,
+    projectRepositoryId: db.project_repository_id,
+    context: db.context,
+    occurredAt: db.occurred_at,
+  };
+}
+
+/**
+ * Audit event storage, written once against the generic `FactoryStorageOps`
+ * surface. `record()` normalizes inputs (defaults, metadata bounding);
+ * `list()` is keyset-paginated on `(occurred_at, id)` newest-first.
+ */
+export class AuditStorage extends FactoryStorageDomain {
+  constructor() {
+    super('audit');
+  }
+
+  async init(): Promise<void> {
+    await this.ensureCollections([AUDIT_EVENTS_SCHEMA]);
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany('audit_events', {});
+  }
+
+  get #db(): FactoryStorageOps {
+    return this.ops;
+  }
 
   /** Append one audit event. Throws on failure — swallow-on-failure lives in the caller. */
-  record(input: RecordAuditEventInput): Promise<AuditEventRow> {
-    return this.insert({
-      orgId: input.orgId,
-      actorId: input.actorId,
-      actorType: input.actorType ?? 'human',
+  async record(input: RecordAuditEventInput): Promise<AuditEventRow> {
+    const inserted = await this.#db.insertOne<AuditEventDbRow>('audit_events', {
+      org_id: input.orgId,
+      actor_id: input.actorId,
+      actor_type: input.actorType ?? 'human',
       action: input.action,
       targets: input.targets,
       metadata: boundAuditMetadata(input.metadata),
-      githubProjectId: input.githubProjectId ?? null,
+      factory_project_id: input.factoryProjectId ?? null,
+      project_repository_id: input.projectRepositoryId ?? null,
       context: input.context ?? {},
-      occurredAt: input.occurredAt ?? new Date(),
+      occurred_at: input.occurredAt ?? new Date(),
     });
+    return toRow(inserted);
   }
 
-  protected abstract insert(row: AuditEventInsert): Promise<AuditEventRow>;
-
   /** List an org's audit events newest-first with keyset pagination. */
-  abstract list(input: ListAuditEventsInput): Promise<AuditEventPage>;
+  async list(input: ListAuditEventsInput): Promise<AuditEventPage> {
+    const limit = clampAuditLimit(input.limit);
+
+    const where: CollectionWhere = { org_id: input.orgId };
+    if (input.factoryProjectId) where.factory_project_id = input.factoryProjectId;
+    if (input.actions && input.actions.length > 0) where.action = { in: input.actions };
+    if (input.actorId) where.actor_id = input.actorId;
+
+    const cursor = input.before ? decodeAuditCursor(input.before) : undefined;
+
+    const rows = await this.#db.findMany<AuditEventDbRow>('audit_events', where, {
+      orderBy: [
+        ['occurred_at', 'desc'],
+        ['id', 'desc'],
+      ],
+      limit: limit + 1,
+      ...(cursor ? { cursor: { values: [cursor.occurredAt, cursor.id] } } : {}),
+    });
+
+    const events = rows.slice(0, limit).map(toRow);
+    const hasMore = rows.length > limit;
+    const last = events[events.length - 1];
+    return {
+      events,
+      ...(hasMore && last ? { nextCursor: encodeAuditCursor(last) } : {}),
+    };
+  }
 }

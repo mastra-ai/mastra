@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
-import type { GithubStatus, Project } from '../../workspaces';
+import type { GithubStatus, Factory } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
 import type { FactoryMetrics } from '../services/metrics';
 
@@ -23,27 +23,38 @@ const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-gh';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
-const GITHUB_PROJECT_ID = 'github-project-1';
+const FACTORY_PROJECT_ID = 'fp-1';
 
-const githubProject: Project = {
+const githubProject: Factory = {
   id: 'project-gh',
   name: 'Mastra',
-  source: 'github',
-  githubProjectId: GITHUB_PROJECT_ID,
-  sandboxWorkdir: '/sandbox/mastra',
   resourceId: RESOURCE_ID,
-  gitBranch: 'main',
-  worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
-  selectedWorktreePath: '/sandbox/mastra',
   createdAt: 1,
+  binding: {
+    kind: 'factory',
+    factoryProjectId: FACTORY_PROJECT_ID,
+    repositories: [
+      {
+        projectRepositoryId: 'pr-1',
+        slug: 'mastra-ai/mastra',
+        gitBranch: 'main',
+        sandboxWorkdir: '/sandbox/mastra',
+        selectedWorktreePath: '/sandbox/mastra',
+        worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
+      },
+    ],
+  },
 };
 
-const localProject: Project = {
+const localProject: Factory = {
   id: 'project-local',
   name: 'Local',
-  path: '/projects/local',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/local',
+  },
 };
 
 const connectedStatus: GithubStatus = {
@@ -124,7 +135,7 @@ function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsSta
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
-        config: { github: { enabled: true, projectIds: [] }, linear: { enabled: false, projectIds: [] } },
+        config: { github: { enabled: true, repositoryIds: [] }, linear: { enabled: false, projectIds: [] } },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
@@ -141,7 +152,7 @@ function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsSta
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${GITHUB_PROJECT_ID}/metrics`, ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/metrics`, ({ request }) => {
       const days = new URL(request.url).searchParams.get('days') ?? '';
       state.requestedDays.push(days);
       return HttpResponse.json({ metrics: { ...metrics, windowDays: Number(days) || metrics.windowDays } });
@@ -150,9 +161,9 @@ function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsSta
   return state;
 }
 
-function renderAt(initialEntry: string, project: Project = githubProject) {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function renderAt(initialEntry: string, project: Factory = githubProject) {
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
@@ -252,11 +263,13 @@ describe('Factory Metrics page', () => {
     expect(within(cycle).getByText('—')).toBeInTheDocument();
   });
 
-  it('given a local project, when visiting Metrics, then the GitHub-only notice renders instead of the dashboard', async () => {
+  it('given a local project, when visiting Metrics, then the server-factory notice renders instead of the dashboard', async () => {
     useMetricsHandlers();
     renderAt('/factory/metrics', localProject);
 
-    expect(await screen.findByText(/only available for GitHub projects/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Board, metrics, and audit are available for server-backed Factories/),
+    ).toBeInTheDocument();
     expect(screen.queryByText('Median cycle time')).not.toBeInTheDocument();
   });
 });

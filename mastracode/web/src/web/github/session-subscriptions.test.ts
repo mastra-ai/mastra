@@ -13,17 +13,35 @@ vi.mock('./subscriptions', () => ({
 }));
 
 // Stub integration: entry points consume the injected instance for PR verification and persistence.
+const integrationStorage = {};
 const githubStub = {
-  storageDomain: {
-    getOrgProject: vi.fn(async () => ({
-      id: 'project-1',
-      orgId: 'org-1',
-      installationId: 7,
-      repoId: 99,
-      repoFullName: 'mastra-ai/mastra',
-    })),
-    subscribeToPullRequest: mocks.subscribe,
-    unsubscribeFromPullRequest: mocks.unsubscribe,
+  integrationStorage,
+  sourceControlStorage: {
+    projectRepositories: {
+      get: vi.fn(async () => ({
+        id: 'project-repository-1',
+        connectionId: 'connection-1',
+        repositoryId: 'repository-1',
+      })),
+    },
+    connections: {
+      get: vi.fn(async () => ({
+        id: 'connection-1',
+        factoryProjectId: 'resource-1',
+        installationId: 'installation-1',
+      })),
+    },
+    repositories: {
+      get: vi.fn(async () => ({
+        id: 'repository-1',
+        installationId: 'installation-1',
+        externalId: '99',
+        slug: 'mastra-ai/mastra',
+      })),
+    },
+    installations: {
+      get: vi.fn(async () => ({ id: 'installation-1', externalId: '7' })),
+    },
   },
   getInstallationOctokit: () => ({ pulls: { get: mocks.getPullRequest } }),
 } as unknown as import('./integration').GithubIntegration;
@@ -43,7 +61,7 @@ function authenticatedRequestContext(scope = '/worktrees/a') {
     threadId: 'thread-1',
     scope,
     session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
-    getState: () => ({ githubProjectId: 'project-1' }),
+    getState: () => ({ factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' }),
   });
   return requestContext;
 }
@@ -99,14 +117,14 @@ describe('parseCreatedPullRequest', () => {
 });
 
 describe('GitHub subscription entry points', () => {
-  it('does not expose tools without authenticated GitHub-project context', () => {
+  it('does not expose tools without authenticated repository context', () => {
     const requestContext = new RequestContext();
-    requestContext.set('controller', { getState: () => ({ githubProjectId: 'project-1' }) });
+    requestContext.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
 
     expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
   });
 
-  it('silently skips auto-subscription outside GitHub-project sessions', async () => {
+  it('silently skips auto-subscription outside repository sessions', async () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       resourceId: 'resource-1',
@@ -117,15 +135,15 @@ describe('GitHub subscription entry points', () => {
     });
 
     await expect(
-      subscribeCurrentSessionToPullRequest(requestContext, 123, 'auto-gh-pr-create'),
+      subscribeCurrentSessionToPullRequest(requestContext, 123, 'auto-gh-pr-create', githubStub),
     ).resolves.toBeUndefined();
     expect(mocks.subscribe).not.toHaveBeenCalled();
   });
 
-  it('still rejects the explicit tool path outside GitHub-project sessions', async () => {
-    await expect(subscribeCurrentSessionToPullRequest(new RequestContext(), 123, 'explicit-tool')).rejects.toThrow(
-      'GitHub subscriptions require an authenticated GitHub-project session with an active thread.',
-    );
+  it('still rejects the explicit tool path outside repository sessions', async () => {
+    await expect(
+      subscribeCurrentSessionToPullRequest(new RequestContext(), 123, 'explicit-tool', githubStub),
+    ).rejects.toThrow('GitHub subscriptions require an authenticated repository session with an active thread.');
     expect(mocks.subscribe).not.toHaveBeenCalled();
   });
 
@@ -139,12 +157,13 @@ describe('GitHub subscription entry points', () => {
     expect(mocks.subscribe).toHaveBeenCalledTimes(2);
     expect(mocks.subscribe).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        pullRequestNumber: 123,
+        changeRequestId: '123',
         resourceId: 'resource-1',
         threadId: 'thread-1',
         sessionScope: '/worktrees/a',
         source: 'auto-gh-pr-create',
       }),
+      integrationStorage,
     );
   });
 
@@ -187,11 +206,12 @@ describe('GitHub subscription entry points', () => {
     expect(number).toBe(123);
     expect(mocks.unsubscribe).toHaveBeenCalledWith(
       expect.objectContaining({
-        pullRequestNumber: 123,
+        changeRequestId: '123',
         resourceId: 'resource-1',
         threadId: 'thread-1',
         sessionScope: '/worktrees/a',
       }),
+      integrationStorage,
     );
   });
 });

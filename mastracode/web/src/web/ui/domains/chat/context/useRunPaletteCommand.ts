@@ -1,7 +1,7 @@
 import type { ToolCategory } from '@mastra/client-js';
 import type { Dispatch, SetStateAction } from 'react';
 
-import { useActiveProjectContext } from '../../workspaces';
+import { useActiveFactoryContext } from '../../workspaces';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -12,6 +12,7 @@ import {
   useAbortAgentControllerMutation,
   useFollowUpAgentControllerMutation,
 } from '../../../../../shared/hooks/useAgentControllerRunMutations';
+import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import type { SlashCommand } from '../services/commands';
 import { SLASH_COMMANDS } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -24,7 +25,7 @@ import { useChatTranscript } from './useChatTranscript';
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
 export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAction<string | undefined>>) {
-  const { activeProject } = useActiveProjectContext();
+  const { activeFactory } = useActiveFactoryContext();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { activeModeId } = useChatModes();
@@ -33,7 +34,7 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -95,8 +96,8 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
       case 'settings':
         pushNotice(
           [
-            `Project: ${activeProject?.name ?? '(none)'}`,
-            `Path: ${activeProject?.path ?? '(default workspace)'}`,
+            `Factory: ${activeFactory?.name ?? '(none)'}`,
+            `Path: ${activeFactory ? deriveProjectPath(activeFactory) || '(no workspace selected)' : '(none)'}`,
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
