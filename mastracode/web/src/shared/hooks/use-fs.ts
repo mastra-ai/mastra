@@ -15,6 +15,7 @@ export function useDirectoryListing(path: string | undefined) {
   const { client } = useApiConfig();
   return useQuery<DirectoryListing>({
     queryKey: queryKeys.fsList(path),
+    placeholderData: previousData => previousData,
     queryFn: () => {
       const qs = path ? `?path=${encodeURIComponent(path)}` : '';
       return client.get<DirectoryListing>(`/web/fs/list${qs}`);
