@@ -37,6 +37,10 @@ export function ThreadPage() {
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
 
+  if (!activeFactory) {
+    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+  }
+
   return (
     <ChatLayout
       sidebar={<Sidebar />}
@@ -58,11 +62,7 @@ export function ThreadPage() {
       }
       main={
         <ChatSessionBoundary threadId={threadId}>
-          {activeFactory ? (
-            <ThreadPageMain />
-          ) : (
-            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-          )}
+          <ThreadPageMain />
         </ChatSessionBoundary>
       }
     />
