@@ -392,6 +392,37 @@ describe('MastraCode message rendering', () => {
     });
   });
 
+  it('separates assistant text persisted after a tool-only message', async () => {
+    seedProject();
+    useAgentControllerHandlers({
+      messages: [
+        dbMessage('assistant-tools', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-complete',
+              toolName: 'task_complete',
+              args: { id: 'quality-gate' },
+              result: 'completed',
+            },
+          },
+        ]),
+        dbMessage('completion-signal', 'signal', [{ type: 'text', text: 'Quality gate completed' }]),
+        dbMessage('assistant-summary', 'assistant', [{ type: 'text', text: '## Quality gate' }]),
+      ],
+    });
+
+    renderChat();
+
+    await waitFor(() => {
+      const summaryHeading = screen
+        .getAllByRole('heading', { name: 'Quality gate' })
+        .find(heading => heading.closest('.prose'));
+      expect(summaryHeading?.closest('.prose')).toHaveClass('mt-4');
+    });
+  });
+
   it('renders assistant text when SSE message updates arrive after subscription', async () => {
     seedProject();
     const stream = delayedSse({

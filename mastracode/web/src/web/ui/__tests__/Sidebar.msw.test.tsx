@@ -59,21 +59,27 @@ const secondLocalProject: Factory = {
   },
 };
 
+const githubRepository = {
+  projectRepositoryId: 'pr-mastra-1',
+  slug: 'mastra-ai/mastra',
+  gitBranch: 'main',
+  sandboxWorkdir: '/sandbox/mastra',
+  selectedWorktreePath: '/sandbox/mastra',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+};
+
 const githubProject: Factory = {
   id: 'p-github',
   name: 'Mastra',
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: 'gh-project-1',
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra',
-    worktrees: [
-      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-    ],
+    kind: 'factory',
+    factoryProjectId: 'fp-github-project-1',
+    repositories: [githubRepository],
   },
 };
 
@@ -292,8 +298,7 @@ describe('Sidebar', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
 
       expect(await screen.findByRole('menuitem', { name: 'Mastra' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Create factory from local folder' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Create/connect factory from GitHub' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Create Factory' })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /remove/i })).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
@@ -327,7 +332,11 @@ describe('Sidebar', () => {
     it('explains how factory Sessions are created when none exist', async () => {
       seedFactory({
         ...githubProject,
-        binding: { ...githubProject.binding, worktrees: [githubProject.binding.worktrees[0]!] },
+        binding: {
+          kind: 'factory',
+          factoryProjectId: 'fp-github-project-1',
+          repositories: [{ ...githubRepository, worktrees: [githubRepository.worktrees[0]!] }],
+        },
       });
       useAuthHandler();
       useGithubStatusHandler();

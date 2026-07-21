@@ -1,6 +1,7 @@
 /**
  * Factory model — a browser-owned selectable product entity bound to either a
- * local folder or a connected GitHub repository.
+ * local folder or a server-backed Factory project (which owns a list of linked
+ * source-control repositories).
  *
  * Factories are persisted in localStorage so they survive page reloads. The
  * factory's `resourceId` is resolved by the server from its binding using the
@@ -14,20 +15,21 @@
  * remains the SDK/TUI session tag for the execution workspace path.
  */
 
-import { deleteConnectedRepository, listConnectedRepositories } from './github';
+import { deleteFactoryProject, listFactoryProjects } from './github';
+import type { MaterializeResult } from './github';
 
 const STORAGE_KEY = 'mastracode-factories';
 const ACTIVE_KEY = 'mastracode-active-factory';
 
 /**
- * A workspace (git worktree) inside a GitHub factory's sandbox. Each worktree
- * is a distinct branch checked out at its own path, created from the repo's
- * HEAD (default) branch. The repo-root checkout is never a workspace itself —
- * it only serves as the source that worktrees branch from. Board-created
- * worktrees share the factory's session resourceId (shared with the TUI); their
- * threads are partitioned per workspace by the `projectPath` tag (the worktree
- * path). User-session worktrees use the `user/` branch prefix and run under the
- * signed-in user's own resourceId.
+ * A workspace (git worktree) inside a linked repository's sandbox. Each
+ * worktree is a distinct branch checked out at its own path, created from the
+ * repo's HEAD (default) branch. The repo-root checkout is never a workspace
+ * itself — it only serves as the source that worktrees branch from.
+ * Board-created worktrees share the factory's session resourceId (shared with
+ * the TUI); their threads are partitioned per workspace by the `projectPath`
+ * tag (the worktree path). User-session worktrees use the `user/` branch
+ * prefix and run under the signed-in user's own resourceId.
  */
 export interface Worktree {
   branch: string;
@@ -60,41 +62,54 @@ export interface LocalFactoryBinding {
   gitBranch?: string;
 }
 
-export interface GithubFactoryBinding {
-  kind: 'github';
-  /**
-   * Server-side GitHub repository row id from `source_control_projects`. This is the
-   * provider-specific repository binding identity — not the browser Factory id.
-   */
-  githubProjectId: string;
-  /**
-   * Optional default/feature branch preserved from persistence or materialization.
-   * Not invented from picker input.
-   */
+/**
+ * A source-control repository linked to a server-backed Factory project.
+ * `projectRepositoryId` is the server's project-repository link UUID — the
+ * identity used for materialization, git operations, and intake filtering.
+ */
+export interface FactoryRepository {
+  projectRepositoryId: string;
+  /** Repository slug, e.g. `owner/name`. */
+  slug: string;
+  /** Branch the link tracks; the repo's default branch when unset. */
   gitBranch?: string;
   /**
-   * Cloud sandbox binding for a GitHub factory, persisted after the repo is
-   * materialized so a re-opened factory (e.g. after a page reload) can reattach
-   * to the same sandbox without re-running the open flow first.
+   * Cloud sandbox binding, persisted after the repository is materialized so a
+   * re-opened factory (e.g. after a page reload) can reattach to the same
+   * sandbox without re-running the open flow first.
    */
   sandboxId?: string;
   sandboxWorkdir?: string;
   /**
-   * Workspaces (git worktrees) for a GitHub factory: board feature-branch
+   * Workspaces (git worktrees) for this repository: board feature-branch
    * worktrees plus `user/`-prefixed personal session worktrees, all branched
    * from the repo's HEAD. The repo-root checkout is never listed.
    */
   worktrees: Worktree[];
   /**
-   * Currently selected board-created worktree for a GitHub factory (by
-   * worktreePath). The session binds to this worktree's path + resourceId.
-   * Falls back to the first board worktree when unset; no selection when the
-   * factory has no board worktree yet.
+   * Currently selected board-created worktree (by worktreePath). The session
+   * binds to this worktree's path + resourceId. Falls back to the first board
+   * worktree when unset; no selection when the repository has no board
+   * worktree yet.
    */
   selectedWorktreePath?: string;
 }
 
-export type FactoryBinding = LocalFactoryBinding | GithubFactoryBinding;
+/**
+ * Server-backed Factory binding. `factoryProjectId` is the authoritative
+ * identity (`factory_projects` row); linked repositories may be empty — a
+ * Factory without repositories is a valid state (Board shows a connect
+ * prompt).
+ */
+export interface ServerFactoryBinding {
+  kind: 'factory';
+  factoryProjectId: string;
+  repositories: FactoryRepository[];
+  /** Selected repository (by projectRepositoryId); first repo when unset. */
+  selectedRepositoryId?: string;
+}
+
+export type FactoryBinding = LocalFactoryBinding | ServerFactoryBinding;
 
 interface FactoryBase {
   /** Stable browser UUID (localStorage key). Not used for the session. */
@@ -113,30 +128,16 @@ export interface LocalFactory extends FactoryBase {
 }
 
 /**
- * GitHub factories receive `resourceId` from their persisted source-control row.
- * Legacy cached entries may omit it until the next backend hydration.
- * `Factory.id` is always a browser UUID distinct from `binding.githubProjectId`.
+ * Server-backed factories may omit `resourceId` until a repository is
+ * materialized on open. `Factory.id` is a browser UUID distinct from
+ * `binding.factoryProjectId`.
  */
-export interface GithubFactory extends FactoryBase {
+export interface ServerFactory extends FactoryBase {
   resourceId?: string;
-  binding: GithubFactoryBinding;
+  binding: ServerFactoryBinding;
 }
 
-export type Factory = LocalFactory | GithubFactory;
-
-/** Transport DTO returned by the connected-repository routes. */
-export interface GithubConnectedRepositoryPayload {
-  id: string;
-  name: string;
-  source: 'github';
-  githubProjectId: string;
-  resourceId?: string;
-  gitBranch?: string;
-  sandboxId?: string;
-  sandboxWorkdir?: string;
-  worktrees?: Worktree[];
-  createdAt?: number;
-}
+export type Factory = LocalFactory | ServerFactory;
 
 /** The resourceId used when no factory is selected. */
 export const DEFAULT_RESOURCE_ID = 'web-demo-user';
@@ -153,8 +154,8 @@ export function isLocalFactory(factory: Factory): factory is LocalFactory {
   return factory.binding.kind === 'local';
 }
 
-export function isGithubFactory(factory: Factory): factory is GithubFactory {
-  return factory.binding.kind === 'github';
+export function isServerFactory(factory: Factory): factory is ServerFactory {
+  return factory.binding.kind === 'factory';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -181,12 +182,12 @@ function isLocalFactoryBinding(value: unknown): value is LocalFactoryBinding {
   );
 }
 
-function isGithubFactoryBinding(value: unknown): value is GithubFactoryBinding {
+function isFactoryRepository(value: unknown): value is FactoryRepository {
   if (
     !isRecord(value) ||
-    value.kind !== 'github' ||
-    typeof value.githubProjectId !== 'string' ||
-    value.githubProjectId.length === 0
+    typeof value.projectRepositoryId !== 'string' ||
+    value.projectRepositoryId.length === 0 ||
+    typeof value.slug !== 'string'
   ) {
     return false;
   }
@@ -195,6 +196,20 @@ function isGithubFactoryBinding(value: unknown): value is GithubFactoryBinding {
   if (value.sandboxWorkdir !== undefined && typeof value.sandboxWorkdir !== 'string') return false;
   if (value.selectedWorktreePath !== undefined && typeof value.selectedWorktreePath !== 'string') return false;
   if (!Array.isArray(value.worktrees) || !value.worktrees.every(isWorktree)) return false;
+  return true;
+}
+
+function isServerFactoryBinding(value: unknown): value is ServerFactoryBinding {
+  if (
+    !isRecord(value) ||
+    value.kind !== 'factory' ||
+    typeof value.factoryProjectId !== 'string' ||
+    value.factoryProjectId.length === 0
+  ) {
+    return false;
+  }
+  if (value.selectedRepositoryId !== undefined && typeof value.selectedRepositoryId !== 'string') return false;
+  if (!Array.isArray(value.repositories) || !value.repositories.every(isFactoryRepository)) return false;
   return true;
 }
 
@@ -213,7 +228,7 @@ function isFactory(value: unknown): value is Factory {
     return typeof value.resourceId === 'string' && value.resourceId.length > 0;
   }
 
-  if (isGithubFactoryBinding(value.binding)) {
+  if (isServerFactoryBinding(value.binding)) {
     return value.resourceId === undefined || typeof value.resourceId === 'string';
   }
 
@@ -238,7 +253,9 @@ export function loadFactories(): Factory[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     // Guard against non-array payloads (a stray object/string would otherwise
-    // pass the cast and break consumers that call array methods).
+    // pass the cast and break consumers that call array methods). Entries that
+    // fail validation (including prerelease `kind: 'github'` bindings) are
+    // dropped — server hydration rebuilds server-backed factories.
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(isFactory);
   } catch {
@@ -251,49 +268,69 @@ export function saveFactories(factories: Factory[]): void {
 }
 
 /**
- * Load local factories from the browser and hydrate GitHub factories from the
- * source-control backend. Browser-only identity, thread bindings, and the
- * selected worktree are retained only while their backend rows still exist.
+ * Load factories, rebuilding server-backed ones from the Factory project list
+ * (one browser factory per project). Cached sandbox/worktree/thread metadata
+ * merges by `projectRepositoryId`; repository links that no longer exist on
+ * the server are dropped. When the project list is unavailable (signed out,
+ * org-less, feature off) the cached list is returned unchanged so nothing is
+ * wiped by a transient auth state.
  */
 export async function loadFactoriesWithResolvedIds(baseUrl: string): Promise<Factory[]> {
-  const cachedFactories = loadFactories();
-  const localFactories = cachedFactories.filter(isLocalFactory);
-  const cachedGithubFactories = new Map(
-    cachedFactories.filter(isGithubFactory).map(factory => [factory.binding.githubProjectId, factory]),
+  const cached = loadFactories();
+  const projects = await listFactoryProjects(baseUrl);
+  if (!projects) return cached;
+
+  const cachedServer = new Map(
+    cached.filter(isServerFactory).map(factory => [factory.binding.factoryProjectId, factory]),
   );
-  const repositories = await listConnectedRepositories(baseUrl);
-  const githubFactories = repositories.map(repository => {
-    const cached = cachedGithubFactories.get(repository.githubProjectId);
-    const backendWorktrees = (repository.worktrees ?? []).filter(
-      worktree => worktree.worktreePath !== repository.sandboxWorkdir,
+  const localFactories = cached.filter(isLocalFactory);
+  const serverFactories = projects.map(project => {
+    const existing = cachedServer.get(project.id);
+    const cachedRepositories = new Map(
+      (existing?.binding.repositories ?? []).map(repository => [repository.projectRepositoryId, repository]),
     );
-    const cachedWorktrees = new Map(cached?.binding.worktrees.map(worktree => [worktree.branch, worktree]));
-    const selectedWorktreePath = backendWorktrees.some(
-      worktree => worktree.worktreePath === cached?.binding.selectedWorktreePath,
+    const repositories = project.repositories.map(link => {
+      const cachedRepository = cachedRepositories.get(link.projectRepositoryId);
+      const sandboxWorkdir = link.sandboxWorkdir ?? cachedRepository?.sandboxWorkdir;
+      const worktrees = (cachedRepository?.worktrees ?? []).filter(
+        worktree => worktree.worktreePath !== sandboxWorkdir,
+      );
+      const selectedWorktreePath = worktrees.some(
+        worktree => worktree.worktreePath === cachedRepository?.selectedWorktreePath,
+      )
+        ? cachedRepository?.selectedWorktreePath
+        : undefined;
+      return {
+        projectRepositoryId: link.projectRepositoryId,
+        slug: link.slug,
+        gitBranch: link.gitBranch ?? cachedRepository?.gitBranch,
+        sandboxId: cachedRepository?.sandboxId,
+        sandboxWorkdir,
+        worktrees,
+        selectedWorktreePath,
+      } satisfies FactoryRepository;
+    });
+    const selectedRepositoryId = repositories.some(
+      repository => repository.projectRepositoryId === existing?.binding.selectedRepositoryId,
     )
-      ? cached?.binding.selectedWorktreePath
+      ? existing?.binding.selectedRepositoryId
       : undefined;
 
     return {
-      id: cached?.id ?? crypto.randomUUID(),
-      name: repository.name,
-      resourceId: repository.resourceId,
-      createdAt: repository.createdAt ?? cached?.createdAt ?? Date.now(),
+      id: existing?.id ?? crypto.randomUUID(),
+      name: project.name,
+      resourceId: existing?.resourceId,
+      createdAt: existing?.createdAt ?? Date.now(),
       binding: {
-        kind: 'github' as const,
-        githubProjectId: repository.githubProjectId,
-        gitBranch: repository.gitBranch,
-        sandboxId: repository.sandboxId,
-        sandboxWorkdir: repository.sandboxWorkdir,
-        selectedWorktreePath,
-        worktrees: backendWorktrees.map(worktree => ({
-          ...worktree,
-          threadId: cachedWorktrees.get(worktree.branch)?.threadId,
-        })),
+        kind: 'factory' as const,
+        factoryProjectId: project.id,
+        repositories,
+        selectedRepositoryId,
       },
-    } satisfies GithubFactory;
+    } satisfies ServerFactory;
   });
-  const factories = [...localFactories, ...githubFactories];
+
+  const factories = [...localFactories, ...serverFactories];
   saveFactories(factories);
   return factories;
 }
@@ -324,58 +361,119 @@ export async function addLocalFactory(baseUrl: string, name: string, path: strin
 }
 
 /**
- * Persist a factory created from a GitHub repo. The server already created the
- * `source_control_projects` row and returns a temporary DTO whose `id`/`githubProjectId`
- * are the repository UUID. The browser always generates a new Factory.id and
- * copies the repository UUID only onto `binding.githubProjectId`. Reconnecting
- * the same repository returns the existing Factory without replacing its browser
- * ID. The `resourceId` comes from the persisted source-control row; connecting
- * the repository does not provision a sandbox or clone it.
+ * Persist a browser factory for a freshly created (or newly discovered) server
+ * Factory project. Starts with zero linked repositories — repositories are
+ * connected afterwards. Re-adding a project that is already stored returns the
+ * existing factory without replacing its browser ID.
  */
-export function addGithubFactory(payload: GithubConnectedRepositoryPayload): GithubFactory {
+export function addServerFactory(project: { id: string; name: string }): ServerFactory {
   const factories = loadFactories();
   const existing = factories.find(
-    (factory): factory is GithubFactory =>
-      isGithubFactory(factory) && factory.binding.githubProjectId === payload.githubProjectId,
+    (factory): factory is ServerFactory => isServerFactory(factory) && factory.binding.factoryProjectId === project.id,
   );
   if (existing) return existing;
 
-  const stored: GithubFactory = {
+  const stored: ServerFactory = {
     id: crypto.randomUUID(),
-    name: payload.name,
-    resourceId: payload.resourceId,
+    name: project.name,
     binding: {
-      kind: 'github',
-      githubProjectId: payload.githubProjectId,
-      gitBranch: payload.gitBranch,
-      sandboxId: payload.sandboxId,
-      sandboxWorkdir: payload.sandboxWorkdir,
-      worktrees: payload.worktrees ?? [],
+      kind: 'factory',
+      factoryProjectId: project.id,
+      repositories: [],
     },
-    createdAt: payload.createdAt ?? Date.now(),
+    createdAt: Date.now(),
   };
   factories.push(stored);
   saveFactories(factories);
   return stored;
 }
 
-/** Replace a stored factory in place (by id) and persist. */
+/**
+ * Replace a stored factory in place (by id) and persist. Used to record the
+ * server-resolved `resourceId` and repository sandbox bindings.
+ */
 export function updateFactory(factory: Factory): void {
   const factories = loadFactories().map(item => (item.id === factory.id ? factory : item));
   saveFactories(factories);
 }
 
 /**
- * Every session worktree for a factory (board workspaces + user sessions).
- * The repo-root checkout is never a workspace: any entry whose path equals the
- * sandbox workdir is filtered out.
+ * The factory's currently selected repository — explicit selection when valid,
+ * otherwise the first linked repository. Undefined for local factories and for
+ * server factories with no linked repositories yet.
+ */
+export function selectedRepository(factory: Factory): FactoryRepository | undefined {
+  if (!isServerFactory(factory)) return undefined;
+  const { repositories, selectedRepositoryId } = factory.binding;
+  if (repositories.length === 0) return undefined;
+  const match = selectedRepositoryId
+    ? repositories.find(repository => repository.projectRepositoryId === selectedRepositoryId)
+    : undefined;
+  return match ?? repositories[0];
+}
+
+/** Persist the selected repository for a factory and return the updated factory. */
+export function selectRepository(factory: Factory, projectRepositoryId: string): Factory {
+  if (!isServerFactory(factory)) return factory;
+  const updated: ServerFactory = {
+    ...factory,
+    binding: {
+      ...factory.binding,
+      selectedRepositoryId: projectRepositoryId,
+    },
+  };
+  updateFactory(updated);
+  return updated;
+}
+
+/** Replace one repository entry (by projectRepositoryId) on a server factory. */
+function withRepository(
+  factory: ServerFactory,
+  projectRepositoryId: string,
+  update: (repository: FactoryRepository) => FactoryRepository,
+): ServerFactory {
+  return {
+    ...factory,
+    binding: {
+      ...factory.binding,
+      repositories: factory.binding.repositories.map(repository =>
+        repository.projectRepositoryId === projectRepositoryId ? update(repository) : repository,
+      ),
+    },
+  };
+}
+
+/**
+ * Merge a server `MaterializeResult` (from the `/ensure` route) into a stored
+ * server factory and persist it: records the session `resourceId` plus the
+ * sandbox binding on the materialized repository. The repo-root checkout is
+ * not a workspace, so no worktree is seeded — workspaces only exist once
+ * created explicitly.
+ */
+export function applyMaterializeResult(factory: ServerFactory, result: MaterializeResult): ServerFactory {
+  const updated = withRepository(
+    { ...factory, resourceId: result.resourceId },
+    result.projectRepositoryId,
+    repository => ({
+      ...repository,
+      sandboxId: result.sandboxId,
+      sandboxWorkdir: result.sandboxWorkdir,
+    }),
+  );
+  updateFactory(updated);
+  return updated;
+}
+
+/**
+ * Every session worktree for the factory's selected repository (board
+ * workspaces + user sessions). The repo-root checkout is never a workspace:
+ * any entry whose path equals the sandbox workdir is filtered out.
  */
 export function allFactoryWorktrees(factory: Factory): Worktree[] {
-  if (!isGithubFactory(factory)) return [];
-  const persisted = factory.binding.worktrees;
-  if (persisted.length === 0) return [];
+  const repository = selectedRepository(factory);
+  if (!repository) return [];
   // Drop legacy repo-root entries (default branch at the sandbox workdir).
-  return persisted.filter(worktree => worktree.worktreePath !== factory.binding.sandboxWorkdir);
+  return repository.worktrees.filter(worktree => worktree.worktreePath !== repository.sandboxWorkdir);
 }
 
 /** Board-created factory session workspaces only (excludes `user/` personal sessions). */
@@ -390,99 +488,99 @@ export function userSessionWorktrees(factory: Factory): Worktree[] {
 
 /**
  * Resolve the user-session worktree that holds the given thread, searching
- * every stored factory. Used by the `/user/threads/:threadId` route to rebind
- * the user-scoped session (resourceId = user id, scope = worktree path) on
- * deep links and reloads.
+ * every repository of every stored factory. Used by the `/user/threads/:threadId`
+ * route to rebind the user-scoped session (resourceId = user id, scope =
+ * worktree path) on deep links and reloads.
  */
-export function findUserSessionByThreadId(threadId: string): { factory: Factory; worktree: Worktree } | undefined {
+export function findUserSessionByThreadId(
+  threadId: string,
+): { factory: Factory; repository: FactoryRepository; worktree: Worktree } | undefined {
   for (const factory of loadFactories()) {
-    const worktree = userSessionWorktrees(factory).find(item => item.threadId === threadId);
-    if (worktree) return { factory, worktree };
+    if (!isServerFactory(factory)) continue;
+    for (const repository of factory.binding.repositories) {
+      const worktree = repository.worktrees.find(item => isUserSessionWorktree(item) && item.threadId === threadId);
+      if (worktree) return { factory, repository, worktree };
+    }
   }
   return undefined;
 }
 
 /**
- * The currently selected board workspace, falling back to the first one.
- * User-session worktrees are never the factory selection — they are opened
- * through their own routes. Undefined when the factory has no board
- * workspace yet (nothing to chat in until one is created).
+ * The currently selected board workspace of the selected repository, falling
+ * back to the first one. User-session worktrees are never the factory
+ * selection — they are opened through their own routes. Undefined when the
+ * repository has no board workspace yet (nothing to chat in until one is
+ * created).
  */
 export function selectedWorktree(factory: Factory): Worktree | undefined {
-  if (!isGithubFactory(factory)) return undefined;
+  const repository = selectedRepository(factory);
+  if (!repository) return undefined;
   const list = boardSessionWorktrees(factory);
   if (list.length === 0) return undefined;
-  const match = factory.binding.selectedWorktreePath
-    ? list.find(worktree => worktree.worktreePath === factory.binding.selectedWorktreePath)
+  const match = repository.selectedWorktreePath
+    ? list.find(worktree => worktree.worktreePath === repository.selectedWorktreePath)
     : undefined;
   return match ?? list[0];
 }
 
 export function activeWorkspacePath(factory: Factory, userSession?: Worktree): string | undefined {
   if (userSession) return userSession.worktreePath;
-  if (isGithubFactory(factory)) return selectedWorktree(factory)?.worktreePath;
+  if (isServerFactory(factory)) return selectedWorktree(factory)?.worktreePath;
   return factory.binding.path;
 }
 
 /**
- * Append (or update) a worktree on a factory and persist. De-duped by branch.
- * Returns the updated factory. Does NOT change the selection.
+ * Append (or update) a worktree on the factory's selected repository and
+ * persist. De-duped by branch. Returns the updated factory. Does NOT change
+ * the selection.
  */
 export function upsertWorktree(factory: Factory, worktree: Worktree): Factory {
-  if (!isGithubFactory(factory)) return factory;
-  const existing = allFactoryWorktrees(factory);
-  const without = existing.filter(item => item.branch !== worktree.branch);
-  const updated: GithubFactory = {
-    ...factory,
-    binding: {
-      ...factory.binding,
-      worktrees: [...without, worktree],
-    },
-  };
+  const repository = selectedRepository(factory);
+  if (!isServerFactory(factory) || !repository) return factory;
+  const updated = withRepository(factory, repository.projectRepositoryId, current => ({
+    ...current,
+    worktrees: [...current.worktrees.filter(item => item.branch !== worktree.branch), worktree],
+  }));
   updateFactory(updated);
   return updated;
 }
 
 /**
- * Remove a worktree from a factory and persist. If the removed worktree was
- * selected, selection falls back to the first remaining board workspace (or
- * none — the repo root is not a workspace). Returns the updated factory.
+ * Remove a worktree from the factory's selected repository and persist. If the
+ * removed worktree was selected, selection falls back to the first remaining
+ * board workspace (or none — the repo root is not a workspace). Returns the
+ * updated factory.
  */
 export function removeWorktree(factory: Factory, worktreePath: string): Factory {
-  if (!isGithubFactory(factory)) return factory;
-  const remaining = allFactoryWorktrees(factory).filter(worktree => worktree.worktreePath !== worktreePath);
+  const repository = selectedRepository(factory);
+  if (!isServerFactory(factory) || !repository) return factory;
+  const remaining = repository.worktrees.filter(worktree => worktree.worktreePath !== worktreePath);
   const fallback = remaining.find(worktree => !isUserSessionWorktree(worktree))?.worktreePath;
-  const updated: GithubFactory = {
-    ...factory,
-    binding: {
-      ...factory.binding,
-      worktrees: remaining,
-      selectedWorktreePath:
-        factory.binding.selectedWorktreePath === worktreePath ? fallback : factory.binding.selectedWorktreePath,
-    },
-  };
+  const updated = withRepository(factory, repository.projectRepositoryId, current => ({
+    ...current,
+    worktrees: remaining,
+    selectedWorktreePath: current.selectedWorktreePath === worktreePath ? fallback : current.selectedWorktreePath,
+  }));
   updateFactory(updated);
   return updated;
 }
 
-/** Persist the selected worktree for a factory and return the updated factory. */
+/** Persist the selected worktree for the factory's selected repository. */
 export function selectWorktree(factory: Factory, worktreePath: string): Factory {
-  if (!isGithubFactory(factory)) return factory;
-  const updated: GithubFactory = {
-    ...factory,
-    binding: {
-      ...factory.binding,
-      selectedWorktreePath: worktreePath,
-    },
-  };
+  const repository = selectedRepository(factory);
+  if (!isServerFactory(factory) || !repository) return factory;
+  const updated = withRepository(factory, repository.projectRepositoryId, current => ({
+    ...current,
+    selectedWorktreePath: worktreePath,
+  }));
   updateFactory(updated);
   return updated;
 }
 
 export async function removeFactory(baseUrl: string, id: string): Promise<void> {
   const existing = loadFactories().find(factory => factory.id === id);
-  if (existing && isGithubFactory(existing)) {
-    await deleteConnectedRepository(baseUrl, existing.binding.githubProjectId);
+  if (existing && isServerFactory(existing)) {
+    await deleteFactoryProject(baseUrl, existing.binding.factoryProjectId);
   }
   const factories = loadFactories().filter(factory => factory.id !== id);
   saveFactories(factories);

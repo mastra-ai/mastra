@@ -22,8 +22,14 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
+import type {
+  FactoryIntegration,
+  IntakeIntegrationCapability,
+  IntegrationContext,
+  IntegrationTools,
+} from '../factory-integration.js';
 import { buildLinearAgentTools } from './agent-tools.js';
+import { getFreshLinearAccessToken, loadLinearConnection } from './connection.js';
 import { buildLinearRoutes } from './routes.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
@@ -60,6 +66,7 @@ export interface LinearWorkspace {
 
 export interface LinearIssue {
   id: string;
+  projectId: string;
   /** Human key like `ENG-123`. */
   identifier: string;
   title: string;
@@ -134,6 +141,7 @@ interface IssuesQueryData {
       createdAt: string;
       updatedAt: string;
       state: { name: string; type: string };
+      project: { id: string };
       assignee: { name: string } | null;
       team: { key: string } | null;
       labels: { nodes: Array<{ name: string }> };
@@ -164,6 +172,7 @@ interface IssueDetailQueryData {
     createdAt: string;
     updatedAt: string;
     state: { name: string; type: string };
+    project: { id: string };
     assignee: { name: string } | null;
     team: { key: string } | null;
     labels: { nodes: Array<{ name: string }> };
@@ -226,6 +235,46 @@ export class LinearIntegration implements FactoryIntegration {
    * Linear, so a multi-replica deploy needs a deployment-stable state secret.
    */
   readonly requiresStableStateSigner = true;
+
+  readonly intake: IntakeIntegrationCapability = {
+    listSources: async ({ orgId }) => {
+      const connection = await loadLinearConnection(orgId);
+      if (!connection) return [];
+      const accessToken = await getFreshLinearAccessToken(this, connection);
+      const projects = await this.listProjects(accessToken);
+      return projects.map(project => ({
+        id: project.id,
+        name: project.name,
+        type: 'project',
+      }));
+    },
+    listItems: async ({ orgId, sourceIds, cursor }) => {
+      if (sourceIds.length === 0) return { items: [], nextCursor: null };
+      const connection = await loadLinearConnection(orgId);
+      if (!connection) return { items: [], nextCursor: null };
+      const accessToken = await getFreshLinearAccessToken(this, connection);
+      const page = await this.listActiveIssues(accessToken, cursor, sourceIds);
+      return {
+        items: page.issues.map(issue => ({
+          source: { type: 'issue', externalId: issue.id, url: issue.url },
+          sourceId: issue.projectId,
+          title: `${issue.identifier}: ${issue.title}`,
+          status: issue.state,
+          labels: issue.labels,
+          assignee: issue.assignee,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+          metadata: {
+            identifier: issue.identifier,
+            stateType: issue.stateType,
+            priority: issue.priorityLabel,
+            team: issue.team,
+          },
+        })),
+        nextCursor: page.nextCursor,
+      };
+    },
+  };
 
   readonly #clientId: string;
   readonly #clientSecret: string;
@@ -369,6 +418,7 @@ export class LinearIntegration implements FactoryIntegration {
             createdAt
             updatedAt
             state { name type }
+            project { id }
             assignee { name }
             team { key }
             labels { nodes { name } }
@@ -386,6 +436,7 @@ export class LinearIntegration implements FactoryIntegration {
     return {
       issues: nodes.map(node => ({
         id: node.id,
+        projectId: node.project.id,
         identifier: node.identifier,
         title: node.title,
         url: node.url,
@@ -453,6 +504,7 @@ export class LinearIntegration implements FactoryIntegration {
             createdAt
             updatedAt
             state { name type }
+            project { id }
             assignee { name }
             team { key }
             labels { nodes { name } }
@@ -477,6 +529,7 @@ export class LinearIntegration implements FactoryIntegration {
     const comments = allComments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return {
       id: issue.id,
+      projectId: issue.project.id,
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description?.trim() ? issue.description : null,

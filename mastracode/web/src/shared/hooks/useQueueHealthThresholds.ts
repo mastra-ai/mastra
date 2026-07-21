@@ -5,12 +5,12 @@ import { queryKeys } from '../api/keys';
 import { fetchQueueHealthThresholds } from '../../web/ui/domains/factory/services/health';
 
 /** Per-project queue-health age-threshold config (seconds), defaulting server-side. */
-export function useQueueHealthThresholds(githubProjectId: string | undefined) {
+export function useQueueHealthThresholds(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.factoryHealthThresholds(githubProjectId),
-    queryFn: () => fetchQueueHealthThresholds(baseUrl, githubProjectId!),
-    enabled: Boolean(githubProjectId),
+    queryKey: queryKeys.factoryHealthThresholds(factoryProjectId),
+    queryFn: () => fetchQueueHealthThresholds(baseUrl, factoryProjectId!),
+    enabled: Boolean(factoryProjectId),
     staleTime: 30_000,
   });
 }
