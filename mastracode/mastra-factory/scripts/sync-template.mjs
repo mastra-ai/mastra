@@ -111,7 +111,10 @@ function isExcluded(rel) {
   const basename = path.posix.basename(rel);
   if (rel.startsWith('src/mastra/public/')) return true; // vite build output
   if (rel === 'scripts/monorepo-deps.mjs') return true;
-  if (rel === 'src/web/test-utils.ts') return true;
+  // Test-only helpers (vitest, mount fixtures). Match any *test-utils* name —
+  // e.g. src/web/test-utils.ts AND src/web/storage/test-utils.ts — so the
+  // template never depends on vitest after we strip it from devDependencies.
+  if (/(^|\/|[-_.])test-utils\.(ts|tsx|mts|mjs)$/.test(rel)) return true;
   if (/(^|\/)__tests__(\/|$)/.test(rel)) return true;
   if (/\.test\.(ts|tsx|mts|mjs)$/.test(rel)) return true;
   // Never ship someone's local env (.env, .env.local, ...) — only the schema.

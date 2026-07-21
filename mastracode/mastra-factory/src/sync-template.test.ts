@@ -103,6 +103,10 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     // Tests and their dependencies are stripped.
     expect(allDeps.vitest).toBeUndefined();
     expect(fs.existsSync(path.join(outDir, 'e2e'))).toBe(false);
+    // Test helpers (vitest imports) must not ship — typecheck would fail
+    // once vitest is stripped from devDependencies.
+    expect(fs.existsSync(path.join(outDir, 'src/web/test-utils.ts'))).toBe(false);
+    expect(fs.existsSync(path.join(outDir, 'src/web/storage/test-utils.ts'))).toBe(false);
 
     // Scripts map the web project's own flow, minus monorepo-only bits.
     expect(pkg.scripts.dev).toContain('concurrently');
