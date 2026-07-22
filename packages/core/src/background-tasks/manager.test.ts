@@ -430,6 +430,31 @@ describe('BackgroundTaskManager', () => {
 
       await cleanup();
     });
+
+    it('fails immediately without retrying on FGADeniedError', async () => {
+      const denial = new Error('access denied');
+      denial.name = 'FGADeniedError';
+      const executeFn = vi.fn().mockRejectedValue(denial);
+
+      const { mgr: retryManager, cleanup } = await makeLocalManager({
+        enabled: true,
+        defaultRetries: { retryDelayMs: 0 },
+      });
+
+      const { task } = await retryManager.enqueue(
+        { toolName: 'secure-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', maxRetries: 3, runId: 'run-1' },
+        ctx(executeFn),
+      );
+
+      await retryManager.waitForNextTask([task.id], { timeoutMs: 5000 });
+
+      const result = await retryManager.getTask(task.id);
+      expect(result?.status).toBe('failed');
+      expect(result?.error?.message).toBe('access denied');
+      expect(executeFn).toHaveBeenCalledTimes(1); // no retries for authorization denials
+
+      await cleanup();
+    });
   });
 
   describe('cancel', () => {

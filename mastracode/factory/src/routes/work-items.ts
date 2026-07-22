@@ -706,6 +706,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           }
           const input = parseStartBody(await readJson(loose(c)), resolved, resolved.factoryProjectId);
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
+          input.requestContext = loose(c).get('requestContext');
           if (
             !input.workItem.id &&
             ((input.workItem.input.stages ?? ['intake']).length !== 1 ||

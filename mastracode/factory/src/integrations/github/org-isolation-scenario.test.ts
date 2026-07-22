@@ -190,6 +190,12 @@ const githubStub = {
       : null,
   ),
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
+  versionControl: {
+    getRepositoryAccess: vi.fn(async ({ repositoryId }: { repositoryId: string }) => ({
+      cloneUrl: 'https://github.com/octo/hello.git',
+      authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
+    })),
+  },
 };
 
 // Deterministic state signer stub (replaces the old signState/verifyState mocks).
