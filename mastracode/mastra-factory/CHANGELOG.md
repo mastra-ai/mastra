@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.0.3-alpha.2
+
+### Patch Changes
+
+- Marked projects created by create-factory as factory-enabled on the Mastra platform. ([#19973](https://github.com/mastra-ai/mastra/pull/19973))
+
+- Updated dependencies:
+  - mastra@1.20.0-alpha.13
+
 ## 0.0.3-alpha.1
 
 ### Patch Changes
