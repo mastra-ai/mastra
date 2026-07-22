@@ -635,7 +635,7 @@ export const StateParity: Story = {
     docs: {
       description: {
         story:
-          'Side-by-side expanded vs collapsed. NavLink rows and the Trigger all share **h-9 (36px)** so toggling collapse never reflows surrounding rows. Use this story to visually verify row alignment.',
+          'Side-by-side expanded vs collapsed. NavLink rows and the Trigger all share **h-7 (28px)** so toggling collapse never reflows surrounding rows. Use this story to visually verify row alignment.',
       },
     },
   },

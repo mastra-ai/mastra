@@ -23,6 +23,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 }
 
+const STEP_TITLES = {
+  name: 'Name your new Factory.',
+  vcs: 'Choose your codebase.',
+  'project-management': 'Connect the work behind the code.',
+} as const;
+
 /**
  * Full-screen Create Factory wizard (`/factories/create`): Name → VCS →
  * Project management, mirroring onboarding. The factory is created up-front on
@@ -102,6 +108,12 @@ export function CreateFactoryPage() {
   };
 
   const step = flow.state?.step;
+  const stepDescription =
+    step === 'name'
+      ? 'A Factory owns its board, metrics, and audit trail. You can connect repositories in the next step.'
+      : step === 'vcs'
+        ? `Connect GitHub, then select the repository to link to ${pendingFactory?.name ?? 'your Factory'}.`
+        : undefined;
 
   return (
     <FactorySetupShell
@@ -114,7 +126,9 @@ export function CreateFactoryPage() {
     >
       {step && (
         <>
-          <FactorySetupShell.Progress steps={['name', 'vcs', 'project-management']} current={step} />
+          <FactorySetupShell.Header title={STEP_TITLES[step]} description={stepDescription}>
+            <FactorySetupShell.Progress steps={['name', 'vcs', 'project-management']} current={step} />
+          </FactorySetupShell.Header>
           <FactorySetupShell.Step stepKey={step}>
             {step === 'name' && (
               <FactoryNameStep
@@ -130,7 +144,6 @@ export function CreateFactoryPage() {
                   githubRedirecting={githubRedirecting}
                   mutationPending={linkRepository.isPending}
                   mutationError={mutationError}
-                  description={`Connect GitHub, then select the repository to link to ${pendingFactory?.name ?? 'your Factory'}.`}
                   onConnect={() => {
                     setGithubRedirecting(true);
                     flow.persistBeforeRedirect();

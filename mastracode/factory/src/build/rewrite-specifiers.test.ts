@@ -137,10 +137,20 @@ import { c } from '@mastra/core';`;
     expect(rewriteRelativeSpecifiers(src, resolveSuffix)).toBe(`import { foo } from "./foo.js";`);
   });
 
-  // Regex-based rewriting may match import-like syntax inside strings/template
-  // literals. This is harmless: the filesystem resolver only rewrites when the
-  // target file actually exists, and such patterns are vanishingly rare in
-  // real TypeScript source.
+  it('does not rewrite import-like text inside strings, templates, or comments', () => {
+    const src = `const stringValue = "import('./dyn')";
+const templateValue = \`export { foo } from './foo'\`;
+// import './bar'
+/* import('./dyn') */
+const mod = await import('./dyn');`;
+    const expected = `const stringValue = "import('./dyn')";
+const templateValue = \`export { foo } from './foo'\`;
+// import './bar'
+/* import('./dyn') */
+const mod = await import('./dyn.js');`;
+    expect(rewriteRelativeSpecifiers(src, resolveSuffix)).toBe(expected);
+  });
+
   it('leaves source unchanged when no resolvable relative specifiers present', () => {
     const src = `import { foo } from '@mastra/core';
 const x = 1;`;

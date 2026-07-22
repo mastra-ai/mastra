@@ -1,5 +1,24 @@
 # create-factory
 
+## 0.1.0-alpha.4
+
+### Minor Changes
+
+- Standardized the Vite SPA output directory to `src/mastra/public/factory/`. The template's `build` script delegates SPA building to `mastra build` (which calls `build:ui` automatically) instead of chaining it separately. ([#19948](https://github.com/mastra-ai/mastra/pull/19948))
+
+### Patch Changes
+
+- Make the Software Factory template installable and buildable against published packages so the sync-softwarefactory-template workflow can push it again. Three changes to the generation step: ([#20001](https://github.com/mastra-ai/mastra/pull/20001))
+
+  - Pin every synced Mastra dep to `"alpha"` instead of `"latest"` — the Mastra Factory sources on `main` are built against the alpha release train, and the previous `"latest"` default mixed release trains (worse, `@mastra/factory@latest` is currently an empty stub).
+  - Emit `.npmrc` with `legacy-peer-deps=true` so npm accepts the internally-consistent prerelease peer graph (the same relaxation pnpm applies automatically inside the monorepo).
+  - Downgrade `typescript` from tsgo (v7) to the classic compiler (`^5.9.2`) in the emitted template. The sources happily typecheck under tsgo, but `mastra build` transitively loads TypeScript via `typescript-paths`, which needs the classic `ts.sys` API tsgo doesn't expose. In the monorepo pnpm hoists classic TypeScript from another workspace package, hiding the problem; the standalone template has no hoist.
+
+  All three are annotated as temporary in the script and README — remove once the packages ship stable releases and the deployer supports tsgo.
+
+- Updated dependencies [[`0a50de7`](https://github.com/mastra-ai/mastra/commit/0a50de7024816171701e81ac3b69434cf5a302ea)]:
+  - mastra@1.20.0-alpha.14
+
 ## 0.0.3-alpha.3
 
 ### Patch Changes

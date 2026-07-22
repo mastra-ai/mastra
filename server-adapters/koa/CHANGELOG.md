@@ -1,5 +1,13 @@
 # @mastra/koa
 
+## 1.6.8-alpha.13
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.52.0-alpha.13
+  - @mastra/server@1.52.0-alpha.13
+
 ## 1.6.8-alpha.12
 
 ### Patch Changes

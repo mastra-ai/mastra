@@ -22,7 +22,6 @@ import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { MetricsPage } from './pages/MetricsPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
@@ -95,7 +94,6 @@ export function createAppRoutes(): RouteObject[] {
               element: <Chat />,
               children: [
                 { path: 'new', element: <NewPage /> },
-                { path: 'overview', element: <OverviewPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'metrics', element: <MetricsPage /> },

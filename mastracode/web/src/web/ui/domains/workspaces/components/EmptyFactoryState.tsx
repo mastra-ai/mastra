@@ -3,7 +3,11 @@ import { useEffect, useState } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useCreateFactoryMutation, useFactoriesQuery, useLinkRepositoryMutation } from '../../../../../shared/hooks/useFactories';
+import {
+  useCreateFactoryMutation,
+  useFactoriesQuery,
+  useLinkRepositoryMutation,
+} from '../../../../../shared/hooks/useFactories';
 import { connectLinear } from '../../factory/services/linear';
 import type { FactoryProject, FactoryProjectPayload } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
@@ -18,6 +22,21 @@ export type Step = 'initial' | 'vcs' | 'project-management';
 
 const STEP_KEY = 'mastracode.factory-onboarding.step';
 const FACTORY_KEY = 'mastracode.factory-onboarding.factory-id';
+
+const STEP_META: Record<Step, { title: string; description?: string }> = {
+  initial: {
+    title: 'Build software with a Factory that knows your work.',
+    description:
+      'Mastra Factory connects your code, project context, and coding sessions in one shared workspace. It keeps every agent grounded in the repository and work that matters to your team.',
+  },
+  vcs: {
+    title: 'Choose your codebase.',
+    description: 'Connect GitHub, then select the repository that will become your first factory.',
+  },
+  'project-management': {
+    title: 'Connect the work behind the code.',
+  },
+};
 
 function storedStep(): Step {
   const value = sessionStorage.getItem(STEP_KEY);
@@ -116,7 +135,9 @@ export function EmptyFactoryState() {
 
   return (
     <FactorySetupShell>
-      <FactorySetupShell.Progress steps={['initial', 'vcs', 'project-management']} current={step} />
+      <FactorySetupShell.Header title={STEP_META[step].title} description={STEP_META[step].description}>
+        <FactorySetupShell.Progress steps={['initial', 'vcs', 'project-management']} current={step} />
+      </FactorySetupShell.Header>
       <FactorySetupShell.Step stepKey={step}>
         {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
         {step === 'vcs' && (
