@@ -61,11 +61,11 @@ export function FactorySessionHeader() {
   const destinations = relatedItems.map(item => ({ item, session: latestLiveSession(item, livePaths) }));
   const isReview = currentItem.source === 'github-pr';
   const section = isReview ? 'Review' : 'Work';
-  const sectionPath = isReview ? '/factory/review' : '/factory/work';
+  const sectionPath = isReview ? `/factories/${activeFactory?.id}/review` : `/factories/${activeFactory?.id}/work`;
 
   const openSession = async (session: WorkItemSessionRef) => {
     await selectWorkspace.mutateAsync(session.sessionId);
-    void navigate(`/threads/${session.threadId}`);
+    void navigate(`/factories/${activeFactory?.id}/threads/${session.threadId}`);
   };
 
   return (
@@ -88,7 +88,7 @@ export function FactorySessionHeader() {
                 return (
                   <Link
                     key={item.id}
-                    to={relationshipPath(item)}
+                    to={relationshipPath(item, activeFactory?.id ?? '')}
                     className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6"
                     aria-label={`Open ${label}: ${item.title}`}
                   >

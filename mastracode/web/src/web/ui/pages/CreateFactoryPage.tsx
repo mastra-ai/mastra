@@ -1,15 +1,13 @@
 import { useLocation, useNavigate } from 'react-router';
 
-import { Sidebar } from '../Sidebar';
-import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactoriesPanel } from '../domains/workspaces/components/FactoriesPanel';
-import { PageLayout } from '../ui';
 
 /**
- * Dedicated Create Factory page (`/factories/create`). Rendered inside the
- * pathless <Chat /> layout so the sidebar and session providers stay mounted.
- * Cancel/Escape returns to the page the user came from (the factory switcher
- * passes it via location state); deep links fall back to `/new`.
+ * Dedicated Create Factory page (`/factories/create`). Lives outside the
+ * factory-scoped routes (no active factory is required to create one), so it
+ * renders standalone without the chat sidebar. Cancel/Escape returns to the
+ * page the user came from (the factory switcher passes it via location
+ * state); deep links fall back to `/`.
  */
 export function CreateFactoryPage() {
   const navigate = useNavigate();
@@ -17,8 +15,8 @@ export function CreateFactoryPage() {
   const from = (location.state as { from?: string } | null)?.from;
 
   return (
-    <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
-      <FactoriesPanel onClose={() => void navigate(from ?? '/new')} />
-    </PageLayout>
+    <main className="flex h-dvh min-h-0 flex-col overflow-hidden bg-surface2">
+      <FactoriesPanel onClose={() => void navigate(from ?? '/')} />
+    </main>
   );
 }

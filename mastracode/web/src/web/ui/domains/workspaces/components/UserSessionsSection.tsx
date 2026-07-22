@@ -90,7 +90,7 @@ export function UserSessionsSection() {
       setCreating(false);
       setName('');
       invalidate();
-      void navigate(`/user/threads/${session.sessionId}`);
+      void navigate(`/factories/${activeFactory?.id}/user/threads/${session.sessionId}`);
     },
   });
 
@@ -108,8 +108,8 @@ export function UserSessionsSection() {
       setConfirmDelete(null);
       invalidate();
       toast('Session deleted');
-      if (location.pathname === `/user/threads/${session.sessionId}`) {
-        void navigate('/new', { replace: true });
+      if (location.pathname === `/factories/${activeFactory?.id}/user/threads/${session.sessionId}`) {
+        void navigate(`/factories/${activeFactory?.id}/new`, { replace: true });
       }
     },
     onError: error => {
@@ -124,7 +124,7 @@ export function UserSessionsSection() {
   const openSession = async (session: FactoryUserSession) => {
     try {
       await controllerSession(session.sessionId).create({ threadId: session.sessionId });
-      void navigate(`/user/threads/${session.sessionId}`);
+      void navigate(`/factories/${activeFactory?.id}/user/threads/${session.sessionId}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to open session');
     }
@@ -167,7 +167,7 @@ export function UserSessionsSection() {
         <MainSidebar.NavList>
           {sessions.map(session => {
             const name = sessionLabel(session);
-            const url = `/user/threads/${session.sessionId}`;
+            const url = `/factories/${activeFactory?.id}/user/threads/${session.sessionId}`;
             const active = location.pathname === url;
 
             return (
@@ -175,7 +175,6 @@ export function UserSessionsSection() {
                 key={session.sessionId}
                 link={{ name, url }}
                 isActive={active}
-                size="sm"
                 className="group/session"
                 render={
                   <button

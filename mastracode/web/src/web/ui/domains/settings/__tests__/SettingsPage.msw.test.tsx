@@ -191,7 +191,6 @@ function useAgentControllerHandlers(): CapturedRequests {
 
 function seedFactory(factory: Factory = project) {
   localStorage.setItem('mastracode-factories', JSON.stringify([factory]));
-  localStorage.setItem('mastracode-active-factory', factory.id);
 }
 
 function ThemeProbe() {
@@ -205,18 +204,19 @@ interface RenderOptions {
 }
 
 async function renderSettingsPage(options?: RenderOptions) {
-  seedFactory(options?.factory);
+  const factory = options?.factory ?? project;
+  seedFactory(factory);
   const captured = useAgentControllerHandlers();
   const router = createMemoryRouter(
     [
-      { path: '/settings/:section', element: <SettingsPage /> },
+      { path: '/factories/:factoryId/settings/:section', element: <SettingsPage /> },
       { path: '*', element: <p>Outside settings</p> },
     ],
-    { initialEntries: [options?.initialEntry ?? '/settings/general'] },
+    { initialEntries: [options?.initialEntry ?? `/factories/${factory.id}/settings/general`] },
   );
   const rendered = renderWithProviders(
     <MainSidebarProvider storageKey="settings-page-test" mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
+      <ActiveFactoryProvider factoryId={options?.factory?.id ?? project.id}>
         <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
           <OverlaysProvider>
             <ThemeProbe />
@@ -260,7 +260,7 @@ describe('SettingsPage', () => {
 
       await openSection(user, 'Source Control');
 
-      expect(router.state.location.pathname).toBe('/settings/source-control');
+      expect(router.state.location.pathname).toBe(`/factories/${project.id}/settings/source-control`);
       expect(await screen.findByRole('heading', { name: 'Source Control' })).toBeInTheDocument();
     });
   });
@@ -269,7 +269,10 @@ describe('SettingsPage', () => {
     it('returns to the origin page carried in navigation state via Back to app', async () => {
       const user = userEvent.setup();
       const { router } = await renderSettingsPage({
-        initialEntry: { pathname: '/settings/general', state: { from: { pathname: '/threads/t1' } } },
+        initialEntry: {
+          pathname: `/factories/${project.id}/settings/general`,
+          state: { from: { pathname: '/threads/t1' } },
+        },
       });
       await screen.findByRole('region', { name: 'Settings' });
 
@@ -285,19 +288,22 @@ describe('SettingsPage', () => {
 
       await user.click(screen.getByRole('button', { name: 'Back to app' }));
 
-      await waitFor(() => expect(router.state.location.pathname).toBe('/new'));
+      await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${project.id}/new`));
     });
 
     it('does not navigate away when pressing Escape', async () => {
       const user = userEvent.setup();
       const { router } = await renderSettingsPage({
-        initialEntry: { pathname: '/settings/general', state: { from: { pathname: '/threads/t1' } } },
+        initialEntry: {
+          pathname: `/factories/${project.id}/settings/general`,
+          state: { from: { pathname: '/threads/t1' } },
+        },
       });
       await screen.findByRole('region', { name: 'Settings' });
 
       await user.keyboard('{Escape}');
 
-      expect(router.state.location.pathname).toBe('/settings/general');
+      expect(router.state.location.pathname).toBe(`/factories/${project.id}/settings/general`);
     });
   });
 
@@ -339,7 +345,6 @@ describe('SettingsPage', () => {
 
       await user.click(screen.getByRole('button', { name: 'Remove Settings Page Project' }));
 
-      await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBeNull());
       // The section is URL-addressed, so the empty state renders in place.
       await screen.findByText('Select a factory to manage its source control.');
       expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]);
@@ -408,10 +413,9 @@ describe('SettingsPage', () => {
       expect(screen.queryByLabelText('Factory default model')).not.toBeInTheDocument();
     });
 
-    it('keeps session settings and pack activation available when an active server factory has no worktree selected', async () => {
+    it('keeps pack activation available when an active server factory has no worktree selected', async () => {
       const user = userEvent.setup();
       let activateBody: unknown;
-      const rendered = renderSettingsPage({ factory: serverProjectWithoutWorktree });
       server.use(
         http.get(`${TEST_BASE_URL}/web/factory/projects/factory-project-settings-panel`, () =>
           HttpResponse.json({
@@ -442,12 +446,9 @@ describe('SettingsPage', () => {
           return HttpResponse.json({ ok: true, activePackId: 'openai' });
         }),
       );
-      await rendered;
+      await renderSettingsPage({ factory: serverProjectWithoutWorktree });
 
       await openSection(user, 'Model');
-      const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
-      await waitFor(() => expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).toBePressed());
-      expect(within(thinkingLevel).getByRole('button', { name: 'High' })).toBeEnabled();
 
       const activate = await screen.findByRole('button', { name: 'Activate' });
       expect(activate).toBeEnabled();

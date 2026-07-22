@@ -11,7 +11,7 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
@@ -74,7 +74,6 @@ afterEach(() => {
 
 function seedFactory(seeded: Factory = project) {
   localStorage.setItem('mastracode-factories', JSON.stringify([seeded]));
-  localStorage.setItem('mastracode-active-factory', seeded.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -111,6 +110,20 @@ function useAgentControllerHandlers(threads: AgentControllerThreadInfo[]): Captu
   const newThread = thread('thread-new', 'New thread', '2026-06-05T00:00:00.000Z');
 
   server.use(
+    // Mount-driven sandbox materialization for the server-factory variants:
+    // `/ensure` must succeed before the session is allowed to bind.
+    http.post(`${TEST_BASE_URL}/web/github/projects/${worktreeRepository.projectRepositoryId}/ensure`, () => {
+      const done = {
+        resourceId: RESOURCE_ID,
+        factoryProjectId: 'fp-gh-1',
+        projectRepositoryId: worktreeRepository.projectRepositoryId,
+        sandboxId: 'sbx-test',
+        sandboxWorkdir: worktreeRepository.sandboxWorkdir,
+      };
+      return new HttpResponse(`event: done\ndata: ${JSON.stringify(done)}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }),
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: threadOne.id }),
     ),
@@ -165,18 +178,25 @@ function LocationProbe() {
   return <span data-testid="location">{location.pathname}</span>;
 }
 
-function renderThreadList() {
+function renderThreadList(factoryId = project.id) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/chat']}>
-      <ActiveFactoryProvider>
-        <ChatSessionProvider>
-          <OverlaysProvider>
-            <ThreadList />
-            <SidebarOverlayProbe />
-            <LocationProbe />
-          </OverlaysProvider>
-        </ChatSessionProvider>
-      </ActiveFactoryProvider>
+    <MemoryRouter initialEntries={[`/factories/${factoryId}/chat`]}>
+      <Routes>
+        <Route
+          path="/factories/:factoryId/*"
+          element={
+            <ActiveFactoryProvider factoryId={factoryId}>
+              <ChatSessionProvider>
+                <OverlaysProvider>
+                  <ThreadList />
+                  <SidebarOverlayProbe />
+                  <LocationProbe />
+                </OverlaysProvider>
+              </ChatSessionProvider>
+            </ActiveFactoryProvider>
+          }
+        />
+      </Routes>
       <Toaster position="bottom-right" />
     </MemoryRouter>,
   );
@@ -231,7 +251,7 @@ describe('ThreadList', () => {
   it('given a feature worktree is active, then thread titles render read-only without actions or a new-thread control', async () => {
     seedFactory(worktreeProject);
     useAgentControllerHandlers([threadOne]);
-    renderThreadList();
+    renderThreadList(worktreeProject.id);
 
     // The title still shows for context…
     expect(await screen.findByText('First thread')).toBeInTheDocument();
@@ -253,7 +273,7 @@ describe('ThreadList', () => {
       },
     });
     useAgentControllerHandlers([threadOne]);
-    renderThreadList();
+    renderThreadList(worktreeProject.id);
 
     expect(await screen.findByText('First thread')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New thread' })).not.toBeInTheDocument();

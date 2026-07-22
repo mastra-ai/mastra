@@ -8,10 +8,11 @@ import { useLocation, useNavigate } from 'react-router';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { isServerFactory } from '../services/factories';
+import { factoryHomePath } from '../services/factoryPaths';
 
 /** Inline factory selection with a single Create Factory action. */
 export function FactorySwitcher() {
-  const { factories, activeFactory, selectFactory } = useActiveFactoryContext();
+  const { factories, activeFactory } = useActiveFactoryContext();
   const navigate = useNavigate();
   const location = useLocation();
   const { setOpenMobile } = useMainSidebar();
@@ -37,15 +38,13 @@ export function FactorySwitcher() {
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => {
-          const nextSpot = isServerFactory(factory) ? '/factory/work' : '/new';
           const projectPath = deriveProjectPath(factory);
 
           return (
             <DropdownMenu.Item
               key={factory.id}
-              onSelect={async () => {
-                await selectFactory(factory);
-                void navigate(nextSpot);
+              onSelect={() => {
+                void navigate(factoryHomePath(factory));
               }}
             >
               {isServerFactory(factory) ? <FactoryIcon /> : <Folder />}

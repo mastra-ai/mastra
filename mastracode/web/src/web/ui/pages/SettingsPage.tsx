@@ -7,7 +7,7 @@ import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
-import { DEFAULT_SETTINGS_PATH, isSettingsSection } from '../domains/settings/settingsSections';
+import { isSettingsSection } from '../domains/settings/settingsSections';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;
@@ -20,7 +20,7 @@ export function SettingsPage() {
   const location = useLocation();
 
   if (!isSettingsSection(section)) {
-    return <Navigate to={DEFAULT_SETTINGS_PATH} replace state={location.state} />;
+    return <Navigate to="../general" replace state={location.state} />;
   }
   return <SettingsPageContent />;
 }
