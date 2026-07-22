@@ -5,6 +5,3 @@ src/mastra/public/factory/
 # Factory skill assets — copied from @mastra/factory by
 # scripts/copy-factory-skills.mjs during web:ui:build.
 src/mastra/public/factory-skills/
-
-# Factory SPA build output served by `mastra dev`.
-src/mastra/public/ui/
