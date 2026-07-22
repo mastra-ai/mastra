@@ -446,7 +446,7 @@ describe('BackgroundTaskManager', () => {
         ctx(executeFn),
       );
 
-      await tick(200);
+      await retryManager.waitForNextTask([task.id], { timeoutMs: 5000 });
 
       const result = await retryManager.getTask(task.id);
       expect(result?.status).toBe('failed');
