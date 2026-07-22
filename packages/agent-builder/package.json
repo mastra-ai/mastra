@@ -25,7 +25,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "lint": "eslint .",
-    "build": "tsup --silent --config tsup.config.ts",
+    "build": "tsdown --silent --config tsdown.config.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -55,7 +55,7 @@
     "@vitest/ui": "catalog:",
     "ai-v5": "npm:ai@5.0.216",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:",

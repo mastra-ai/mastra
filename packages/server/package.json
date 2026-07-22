@@ -94,7 +94,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
@@ -132,7 +132,7 @@
     "canonicalize": "^1.0.8",
     "eslint": "^10.7.0",
     "superjson": "^2.2.6",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

@@ -36,7 +36,7 @@
   "scripts": {
     "lint": "eslint .",
     "generate:route-types": "pnpm --filter @mastra/server generate:route-types",
-    "build:lib": "tsup --config tsup.config.ts",
+    "build:lib": "tsdown --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "dev": "pnpm generate:route-types && pnpm build:lib --watch",
     "test": "vitest",
@@ -64,7 +64,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

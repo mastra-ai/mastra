@@ -23,7 +23,7 @@
   ],
   "scripts": {
     "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
@@ -91,7 +91,7 @@
     "eslint": "^10.7.0",
     "memfs": "^4.56.11",
     "rollup": "^4.62.2",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "type-fest": "^5.4.4",
     "typescript": "catalog:",

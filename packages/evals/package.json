@@ -63,7 +63,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build:lib": "pnpm check && tsup --silent --config tsup.config.ts",
+    "build:lib": "pnpm check && tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test": "vitest",
@@ -97,7 +97,7 @@
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

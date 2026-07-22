@@ -29,7 +29,7 @@
     }
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build": "tsdown --silent --config tsdown.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
@@ -53,7 +53,7 @@
     "msw": "^2.12.11",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:"
   },
   "peerDependencies": {

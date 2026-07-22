@@ -28,7 +28,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint ."
@@ -78,11 +78,11 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@libsql/client": "^0.17.4",
     "@internal/types-builder": "workspace:*",
+    "@libsql/client": "^0.17.4",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "^8.57.0",
