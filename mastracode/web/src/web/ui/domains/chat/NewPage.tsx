@@ -2,7 +2,7 @@ import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useLocation } from 'react-router';
 
-import { FolderIcon } from '../../ui';
+import { FolderIcon, PageLayout } from '../../ui';
 import type { Factory } from '../workspaces';
 import { isLocalFactory, selectedRepository, useActiveFactoryContext } from '../workspaces';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
@@ -10,17 +10,32 @@ import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
 import { useChatTranscript } from './context/useChatTranscript';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ChatSessionBoundary } from './context/ChatSessionProvider';
-import { FactoryPageShell } from '../factory/components/FactoryPageShell';
+
+import { ChatHeader } from './components/ChatHeader';
+import { Sidebar } from '../../Sidebar';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
+  const { factoriesPending, activeFactory } = useActiveFactoryContext();
+
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
+
+  if (!activeFactory) return <div>No active factory</div>;
+
   return (
     <ChatSessionBoundary>
-      <FactoryPageShell title="New thread" description="Create a new factory">
-        {factory => <NewPageContent activeFactory={factory} />}
-      </FactoryPageShell>
+      <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
+        <NewPageContent activeFactory={activeFactory} />
+      </PageLayout>
     </ChatSessionBoundary>
   );
 }

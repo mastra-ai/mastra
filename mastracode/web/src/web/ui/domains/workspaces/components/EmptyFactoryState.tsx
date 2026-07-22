@@ -15,6 +15,7 @@ import type { GithubRepo } from '../services/github';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
+import { useNavigate } from 'react-router';
 
 export type Step = 'initial' | 'vcs' | 'project-management';
 
@@ -43,6 +44,7 @@ export function EmptyFactoryState() {
   const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | null>(null);
   const [githubRedirecting, setGithubRedirecting] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (persistedFactories.isPending || pendingFactory) return;
@@ -102,14 +104,13 @@ export function EmptyFactoryState() {
   };
 
   const finish = async () => {
-    if (!pendingFactory || finishing) return;
     setCompletionError(null);
     setFinishing(true);
     try {
       await selectFactory(pendingFactory);
       sessionStorage.removeItem(STEP_KEY);
       sessionStorage.removeItem(FACTORY_KEY);
-      window.history.replaceState({}, '', '/factory/work');
+      void navigate('/factory/work');
     } catch (error) {
       setCompletionError(errorMessage(error));
       setFinishing(false);

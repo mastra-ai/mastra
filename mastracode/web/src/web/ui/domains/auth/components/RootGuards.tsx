@@ -1,6 +1,6 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
-import { Navigate, Outlet } from 'react-router';
+import { Navigate, Outlet, useLocation } from 'react-router';
 import { useActiveFactoryContext } from '../../workspaces';
 import { useEffect, useEffectEvent, useState } from 'react';
 
@@ -26,13 +26,13 @@ const AuthGuard = () => {
 };
 
 const OnboardingGuard = () => {
-  const { activeFactory, factoriesPending, factories } = useActiveFactoryContext();
+  const pathname = useLocation().pathname;
+  const { factoriesPending, factories } = useActiveFactoryContext();
   const { isActivatingInitialFactory } = useSetInitialFactoryWhenNoActive();
 
   if (isActivatingInitialFactory) return <AuthPendingSkeleton />;
   if (factoriesPending) return <AuthPendingSkeleton />;
-  if (factories.length === 0) return <Navigate to="/onboarding" replace />;
-  if (!activeFactory) return <Navigate to="/onboarding" replace />;
+  if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
 
   return <Outlet />;
 };
