@@ -631,8 +631,13 @@ export type ListStoredWorkflowsParams = GeneratedRequest<QueryParams<'GET /store
 export type ListStoredWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
 export type UpsertStoredWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
 export type UpsertStoredWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
-export type StoredWorkflowDefinition = Omit<GeneratedResponse<'GET /stored/workflows/:storedWorkflowId'>, 'graph'> &
-  Pick<UpsertStoredWorkflowParams, 'graph'>;
+type StoredWorkflowDefinitionField =
+  'description' | 'inputSchema' | 'outputSchema' | 'stateSchema' | 'requestContextSchema' | 'graph';
+export type StoredWorkflowDefinition = Omit<
+  GeneratedResponse<'GET /stored/workflows/:storedWorkflowId'>,
+  StoredWorkflowDefinitionField
+> &
+  Pick<UpsertStoredWorkflowParams, StoredWorkflowDefinitionField>;
 export type DeleteStoredWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:storedWorkflowId'>;
 
 export interface GetWorkflowResponse {

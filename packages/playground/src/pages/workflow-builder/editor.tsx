@@ -29,11 +29,15 @@ import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 const EMPTY_MESSAGES: MastraDBMessage[] = [];
 const WORKFLOW_BUILDER_ROUTE = '/workflow-builder';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function parseSchema(schema: string | undefined): WorkflowDraftStepSchema['inputSchema'] | undefined {
   if (!schema) return undefined;
   try {
     const parsed: unknown = JSON.parse(schema);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : undefined;
+    return isRecord(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }
