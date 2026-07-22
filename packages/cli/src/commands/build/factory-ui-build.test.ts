@@ -1,102 +1,56 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PinoLogger } from '@mastra/loggers';
-import { execa } from 'execa';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { detectPackageManagerFromRoot, buildFactoryUI } from './factory-ui-build';
-
-// Mock execa so we don't actually run subprocesses
-vi.mock('execa', () => ({
-  execa: vi.fn(),
-}));
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { buildFactoryUI } from './factory-ui-build';
 
 const logger = new PinoLogger({ name: 'test', level: 'silent' });
 
-describe('detectPackageManagerFromRoot', () => {
-  it('detects pnpm from pnpm-lock.yaml', () => {
-    const tmp = mkdtempSyncSafe();
-    writeFileSyncSafe(join(tmp, 'pnpm-lock.yaml'), '');
-    expect(detectPackageManagerFromRoot(tmp)).toBe('pnpm');
-  });
-
-  it('detects npm from package-lock.json', () => {
-    const tmp = mkdtempSyncSafe();
-    writeFileSyncSafe(join(tmp, 'package-lock.json'), '');
-    expect(detectPackageManagerFromRoot(tmp)).toBe('npm');
-  });
-
-  it('detects yarn from yarn.lock', () => {
-    const tmp = mkdtempSyncSafe();
-    writeFileSyncSafe(join(tmp, 'yarn.lock'), '');
-    expect(detectPackageManagerFromRoot(tmp)).toBe('yarn');
-  });
-
-  it('defaults to npm when no lockfile found', () => {
-    const tmp = mkdtempSyncSafe();
-    expect(detectPackageManagerFromRoot(tmp)).toBe('npm');
-  });
-});
-
 describe('buildFactoryUI', () => {
   let tmpDir: string;
+  let mastraDir: string;
+  let factoryUISource: string;
 
-  beforeEach(() => {
-    tmpDir = mkdtempSyncSafe();
-    vi.mocked(execa).mockReset();
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'factory-ui-build-test-'));
+    mastraDir = join(tmpDir, 'project', 'src', 'mastra');
+    factoryUISource = join(tmpDir, 'prebuilt-factory');
   });
 
-  afterEach(() => {
-    rmSyncSafe(tmpDir);
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it('runs build:ui with detected package manager', async () => {
-    writeFileSyncSafe(join(tmpDir, 'pnpm-lock.yaml'), '');
-    // Pre-create the expected output so the existence check passes
-    const mastraDir = join(tmpDir, 'src', 'mastra');
-    await mkdir(join(mastraDir, 'public', 'factory'), { recursive: true });
-    await writeFile(join(mastraDir, 'public', 'factory', 'index.html'), '<html></html>');
+  it('copies the prebuilt Factory UI into the Mastra public directory', async () => {
+    await mkdir(join(factoryUISource, 'assets'), { recursive: true });
+    await writeFile(join(factoryUISource, 'index.html'), '<html>factory</html>');
+    await writeFile(join(factoryUISource, 'assets', 'app.js'), 'console.log("factory")');
 
-    vi.mocked(execa).mockResolvedValue({} as any);
+    await buildFactoryUI(mastraDir, logger, factoryUISource);
 
-    await buildFactoryUI(tmpDir, mastraDir, logger);
-
-    expect(execa).toHaveBeenCalledWith('pnpm', ['run', 'build:ui'], {
-      cwd: tmpDir,
-      stdio: 'inherit',
-    });
-  });
-
-  it('throws when build:ui fails', async () => {
-    writeFileSyncSafe(join(tmpDir, 'package-lock.json'), '');
-    vi.mocked(execa).mockRejectedValue(new Error('build failed'));
-
-    await expect(buildFactoryUI(tmpDir, join(tmpDir, 'src', 'mastra'), logger)).rejects.toThrow(
-      /Factory UI build failed/,
+    await expect(readFile(join(mastraDir, 'public', 'factory', 'index.html'), 'utf8')).resolves.toBe(
+      '<html>factory</html>',
+    );
+    await expect(readFile(join(mastraDir, 'public', 'factory', 'assets', 'app.js'), 'utf8')).resolves.toBe(
+      'console.log("factory")',
     );
   });
 
-  it('throws when index.html is not produced', async () => {
-    writeFileSyncSafe(join(tmpDir, 'package-lock.json'), '');
-    vi.mocked(execa).mockResolvedValue({} as any);
+  it('overwrites stale Factory UI assets', async () => {
+    await mkdir(factoryUISource, { recursive: true });
+    await writeFile(join(factoryUISource, 'index.html'), '<html>current</html>');
 
-    // No index.html created
-    await expect(buildFactoryUI(tmpDir, join(tmpDir, 'src', 'mastra'), logger)).rejects.toThrow(
-      /did not produce expected output/,
-    );
+    const outputDir = join(mastraDir, 'public', 'factory');
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(outputDir, 'index.html'), '<html>stale</html>');
+
+    await buildFactoryUI(mastraDir, logger, factoryUISource);
+
+    await expect(readFile(join(outputDir, 'index.html'), 'utf8')).resolves.toBe('<html>current</html>');
+  });
+
+  it('throws when the prebuilt Factory UI is missing', async () => {
+    await expect(buildFactoryUI(mastraDir, logger, factoryUISource)).rejects.toThrow(/Prebuilt Factory UI not found/);
   });
 });
-
-// Helpers that use sync APIs for setup simplicity
-function mkdtempSyncSafe(): string {
-  return mkdtempSync(join(tmpdir(), 'factory-ui-build-test-'));
-}
-
-function writeFileSyncSafe(path: string, content: string): void {
-  writeFileSync(path, content);
-}
-
-function rmSyncSafe(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
-}

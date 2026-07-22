@@ -209,7 +209,7 @@ export abstract class Bundler extends MastraBundler {
     if (!existsSync(factoryIndex)) {
       throw new MastraError({
         id: 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING',
-        text: 'Software Factory project detected but factory/index.html was not found in the build output. Make sure your build:ui script produces src/mastra/public/factory/index.html.',
+        text: 'Software Factory project detected but factory/index.html was not found after copying the prebuilt Factory UI.',
         domain: ErrorDomain.DEPLOYER,
         category: ErrorCategory.SYSTEM,
       });
@@ -448,7 +448,7 @@ export const tools = [${toolsExports.join(', ')}]`,
 
       // For Software Factory projects, write a deterministic deployment marker
       // after public assets (including the SPA) have been copied.
-      if (analyzedBundleInfo.projectType === 'factory') {
+      if (analyzedBundleInfo.projectType === 'software-factory') {
         await this.writeFactoryMarker(outputDirectory);
       }
 

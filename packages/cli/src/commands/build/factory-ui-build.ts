@@ -1,46 +1,39 @@
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { PinoLogger } from '@mastra/loggers';
-import { execa } from 'execa';
-import type { PackageManager } from '../../utils/package-manager';
+import { copy } from 'fs-extra';
 
-const LOCKFILE_MAP: [string, PackageManager][] = [
-  ['pnpm-lock.yaml', 'pnpm'],
-  ['package-lock.json', 'npm'],
-  ['yarn.lock', 'yarn'],
-  ['bun.lock', 'bun'],
-  ['bun.lockb', 'bun'],
-];
+function resolveFactoryUISource(): string {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
 
-export function detectPackageManagerFromRoot(rootDir: string): PackageManager {
-  for (const [file, pm] of LOCKFILE_MAP) {
-    if (existsSync(join(rootDir, file))) return pm;
-  }
-  return 'npm';
+  return join(dirname(__dirname), 'dist', 'factory');
 }
 
 /**
- * Runs the project's standardized `build:ui` script to produce the Factory SPA
- * at `src/mastra/public/factory/`. Called before `prepare()` clears `.mastra`
- * so the bundler's `copyPublic()` can pick up the built assets.
+ * Copies the Factory SPA bundled with the CLI into the project's public directory
+ * so the bundler's `copyPublic()` can include it in the deployment output.
  */
-export async function buildFactoryUI(rootDir: string, mastraDir: string, logger: PinoLogger): Promise<void> {
-  const pm = detectPackageManagerFromRoot(rootDir);
-  logger.info('Building Factory UI...');
-
-  try {
-    await execa(pm, ['run', 'build:ui'], {
-      cwd: rootDir,
-      stdio: 'inherit',
-    });
-  } catch {
-    throw new Error(`Factory UI build failed — run \`${pm} run build:ui\` manually to see the full output`);
+export async function buildFactoryUI(
+  mastraDir: string,
+  logger: PinoLogger,
+  factoryUISource = resolveFactoryUISource(),
+): Promise<void> {
+  const sourceIndex = join(factoryUISource, 'index.html');
+  if (!existsSync(sourceIndex)) {
+    throw new Error(`Prebuilt Factory UI not found: ${sourceIndex}`);
   }
 
-  const expectedOutput = join(mastraDir, 'public', 'factory', 'index.html');
-  if (!existsSync(expectedOutput)) {
-    throw new Error(`Factory UI build did not produce expected output: ${expectedOutput}`);
+  logger.info('Copying Factory UI...');
+
+  const factoryUIOutput = join(mastraDir, 'public', 'factory');
+  await copy(factoryUISource, factoryUIOutput, { overwrite: true });
+
+  const outputIndex = join(factoryUIOutput, 'index.html');
+  if (!existsSync(outputIndex)) {
+    throw new Error(`Factory UI copy did not produce expected output: ${outputIndex}`);
   }
 
-  logger.info('Factory UI built successfully');
+  logger.info('Factory UI copied successfully');
 }

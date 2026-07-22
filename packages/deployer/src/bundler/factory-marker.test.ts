@@ -56,7 +56,7 @@ describe('Software Factory project type detection in analyzeBundle', () => {
       noopLogger,
     );
 
-    expect(result.projectType).toBe('factory');
+    expect(result.projectType).toBe('software-factory');
   });
 
   it('classifies an ordinary Mastra entry as undefined projectType', async () => {

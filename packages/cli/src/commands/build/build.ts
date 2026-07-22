@@ -43,14 +43,14 @@ export async function build({
     // instance from discovered primitives.
     const mastraEntryFile = findMastraEntryFile(mastraDir);
 
-    // For Software Factory projects, build the project-owned SPA before
-    // prepare() clears .mastra so copyPublic() can pick it up.
+    // For Software Factory projects, copy the prebuilt SPA bundled with the CLI
+    // into the public directory so copyPublic() can include it in the output.
     // Skip for synthetic file-routed entries (no real index.ts).
     let projectType: string | undefined;
     if (mastraEntryFile) {
       projectType = await analyzeEntryProjectType(mastraEntryFile);
       if (projectType === 'software-factory') {
-        await buildFactoryUI(rootDir, mastraDir, logger);
+        await buildFactoryUI(mastraDir, logger);
       }
     }
 

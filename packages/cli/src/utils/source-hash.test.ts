@@ -126,12 +126,12 @@ describe.sequential('source-hash', () => {
       await writeFileSynced(join(testDir, 'package.json'), '{"name": "test"}');
       await writeFileSynced(join(testDir, 'src', 'web', 'ui', 'App.tsx'), 'export const App = () => null');
 
-      const hash1 = await computeSourceHash(testDir, mastraDir, 'factory');
+      const hash1 = await computeSourceHash(testDir, mastraDir, 'software-factory');
 
       // Change a UI file — hash must change
       await writeFileSynced(join(testDir, 'src', 'web', 'ui', 'App.tsx'), 'export const App = () => <div/>');
 
-      const hash2 = await computeSourceHash(testDir, mastraDir, 'factory');
+      const hash2 = await computeSourceHash(testDir, mastraDir, 'software-factory');
 
       expect(hash1).not.toBe(hash2);
     });
@@ -141,11 +141,11 @@ describe.sequential('source-hash', () => {
       await writeFileSynced(join(testDir, 'package.json'), '{"name": "test"}');
       await writeFileSynced(join(testDir, 'src', 'web', 'vite.config.ts'), 'export default {}');
 
-      const hash1 = await computeSourceHash(testDir, mastraDir, 'factory');
+      const hash1 = await computeSourceHash(testDir, mastraDir, 'software-factory');
 
       await writeFileSynced(join(testDir, 'src', 'web', 'vite.config.ts'), 'export default { changed: true }');
 
-      const hash2 = await computeSourceHash(testDir, mastraDir, 'factory');
+      const hash2 = await computeSourceHash(testDir, mastraDir, 'software-factory');
 
       expect(hash1).not.toBe(hash2);
     });
@@ -171,12 +171,12 @@ describe.sequential('source-hash', () => {
       // Simulate generated Factory UI output
       await writeFileSynced(join(mastraDir, 'public', 'factory', 'index.html'), '<html></html>');
 
-      const hash1 = await computeSourceHash(testDir, mastraDir, 'factory');
+      const hash1 = await computeSourceHash(testDir, mastraDir, 'software-factory');
 
       // Change generated output — hash must NOT change
       await writeFileSynced(join(mastraDir, 'public', 'factory', 'index.html'), '<html><body>changed</body></html>');
 
-      const hash2 = await computeSourceHash(testDir, mastraDir, 'factory');
+      const hash2 = await computeSourceHash(testDir, mastraDir, 'software-factory');
 
       expect(hash1).toBe(hash2);
     });

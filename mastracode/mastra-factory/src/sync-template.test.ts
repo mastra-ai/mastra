@@ -117,8 +117,7 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(pkg.scripts['dev:prod']).not.toContain('concurrently');
     expect(pkg.scripts.prebuild).toBeUndefined();
     expect(JSON.stringify(pkg.scripts)).not.toContain('monorepo-deps');
-    // The build script delegates SPA building to `mastra build` (which calls
-    // `build:ui` via the Factory UI build step), not a chained `npm run build:ui`.
+    // Production builds use the prebuilt Factory UI bundled with the Mastra CLI.
     expect(pkg.scripts.build).toBe('mastra build --dir src/mastra');
     expect(pkg.scripts['build:ui']).toBe('vite --config src/web/vite.config.ts build');
     expect(pkg.scripts['build:server']).toBeUndefined();
