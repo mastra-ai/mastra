@@ -1,5 +1,33 @@
 # @internal/playground
 
+## 1.20.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`f901b73`](https://github.com/mastra-ai/mastra/commit/f901b7363b8d21849b98c167bae168fa11d3edcf), [`f901b73`](https://github.com/mastra-ai/mastra/commit/f901b7363b8d21849b98c167bae168fa11d3edcf), [`b9ab7e2`](https://github.com/mastra-ai/mastra/commit/b9ab7e24696a2770985d0a0b0077f4f75e90e7a8)]:
+  - @mastra/client-js@1.33.0-alpha.13
+  - @mastra/playground-ui@42.0.0-alpha.15
+  - @mastra/react@1.3.0-alpha.13
+
+## 1.20.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`d7385ad`](https://github.com/mastra-ai/mastra/commit/d7385ad9e88f9e4f33d15c0ec0bfebedde0cbc2e), [`3d6e539`](https://github.com/mastra-ai/mastra/commit/3d6e539272eb2ea0407034605ee1906b3be06b39), [`35865a5`](https://github.com/mastra-ai/mastra/commit/35865a53e194aa9634d6a70a97010e7a6b9d58b1), [`70687f7`](https://github.com/mastra-ai/mastra/commit/70687f7e495a322a02070b4a67cb0c77a5ca91ec), [`b2190f8`](https://github.com/mastra-ai/mastra/commit/b2190f88bf2dd57c498ebd2948da2798463807e9), [`3d6e539`](https://github.com/mastra-ai/mastra/commit/3d6e539272eb2ea0407034605ee1906b3be06b39)]:
+  - @mastra/core@1.52.0-alpha.12
+  - @mastra/playground-ui@42.0.0-alpha.14
+  - @mastra/client-js@1.33.0-alpha.12
+  - @mastra/react@1.3.0-alpha.12
+
+## 1.20.0-alpha.11
+
+### Patch Changes
+
+- Improved the Agents page with list and compact views, name sorting, and immediate hover details for models, workflows, agents, and tools. ([#19747](https://github.com/mastra-ai/mastra/pull/19747))
+
+- Updated dependencies [[`82d3914`](https://github.com/mastra-ai/mastra/commit/82d3914dfcf9c3aef813dbb3a6641fb66c396943)]:
+  - @mastra/playground-ui@42.0.0-alpha.13
+
 ## 1.20.0-alpha.10
 
 ### Patch Changes

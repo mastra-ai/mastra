@@ -5,7 +5,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { MoreHorizontal, Plus } from 'lucide-react';
+import { Copy, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
@@ -54,7 +54,7 @@ export function ThreadList() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      {!readOnly && <ThreadListHeader threadCount={threads.length} />}
+      {!readOnly && <ThreadListHeader factoryId={activeFactory.id} threadCount={threads.length} />}
       <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {sortedThreads.length === 0 && (
           <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
@@ -68,6 +68,7 @@ export function ThreadList() {
             <ThreadRow
               key={thread.id}
               thread={thread}
+              factoryId={activeFactory.id}
               active={thread.id === activeThreadId}
               readOnly={readOnly}
               onStartRename={() => setRenamingId(thread.id)}
@@ -90,7 +91,7 @@ function useThreadHookArgs() {
   };
 }
 
-function ThreadListHeader({ threadCount }: { threadCount: number }) {
+function ThreadListHeader({ factoryId, threadCount }: { factoryId: string; threadCount: number }) {
   const overlays = useOverlays();
   const navigate = useNavigate();
 
@@ -110,7 +111,7 @@ function ThreadListHeader({ threadCount }: { threadCount: number }) {
         aria-label="New thread"
         onClick={() => {
           overlays.close('sidebar');
-          void navigate('/new');
+          void navigate(`/factories/${factoryId}/new`);
         }}
       >
         <Plus size={15} />
@@ -153,11 +154,13 @@ function RenameThreadRow({ thread, onDone }: { thread: AgentControllerThreadInfo
 
 function ThreadRow({
   thread,
+  factoryId,
   active,
   readOnly,
   onStartRename,
 }: {
   thread: AgentControllerThreadInfo;
+  factoryId: string;
   active: boolean;
   readOnly: boolean;
   onStartRename: () => void;
@@ -171,31 +174,32 @@ function ThreadRow({
   const cloneThreadMutation = useCloneAgentControllerThreadMutation(hookArgs);
 
   const openThread = () => {
-    void navigate(`/threads/${thread.id}`);
+    void navigate(`/factories/${factoryId}/threads/${thread.id}`);
     overlays.close('sidebar');
   };
 
   const cloneThread = async () => {
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
     toast.success('Thread cloned');
-    void navigate(`/threads/${clonedThread.id}`);
+    void navigate(`/factories/${factoryId}/threads/${clonedThread.id}`);
   };
 
   const deleteThread = async () => {
     await deleteThreadMutation.mutateAsync(thread.id);
     toast('Thread deleted');
     if (thread.id === routeThreadId) {
-      void navigate('/new');
+      void navigate(`/factories/${factoryId}/new`);
     }
   };
 
   return (
-    <div role="listitem" className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
-      <button
-        type="button"
-        className="flex w-full flex-col gap-0.5 rounded-md px-2 py-2 text-left"
-        onClick={openThread}
-      >
+    <div
+      role="listitem"
+      className={`group relative rounded-md ${
+        active ? 'bg-[var(--sidebar-nav-active)]' : 'hover:bg-[var(--sidebar-nav-hover)]'
+      }`}
+    >
+      <button type="button" className="flex w-full flex-col rounded-md px-2 py-1.5 text-left" onClick={openThread}>
         <span className="truncate text-ui-sm text-icon6">{thread.title || 'Untitled thread'}</span>
         <span className="text-ui-xs text-icon3">{relativeTime(thread.updatedAt ?? thread.createdAt ?? '')}</span>
       </button>
@@ -214,10 +218,17 @@ function ThreadRow({
               </Button>
             }
           />
-          <DropdownMenu.Content align="end" className="min-w-28">
-            <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
-            <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
+          <DropdownMenu.Content align="end">
+            <DropdownMenu.Item onClick={onStartRename}>
+              <Pencil />
+              Rename
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onClick={() => void cloneThread()}>
+              <Copy />
+              Clone
+            </DropdownMenu.Item>
             <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
+              <Trash2 />
               Delete
             </DropdownMenu.Item>
           </DropdownMenu.Content>

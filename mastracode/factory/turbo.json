@@ -1,0 +1,24 @@
+{
+  "$schema": "https://v2-9-16.turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build:lib": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "build": {
+      "dependsOn": ["build:lib"],
+      "inputs": ["package.json"]
+    }
+  }
+}

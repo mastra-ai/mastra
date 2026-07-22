@@ -289,7 +289,7 @@ export class AgentController<TState = {}> {
       setState: updates => void session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
     });
-    session.thread.connect(this.createThreadDataStore(), session as Session);
+    session.thread.connect(this.createThreadDataStore(session), session as Session);
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
       subscribeToThread: ({ resourceId, threadId }) =>
@@ -344,6 +344,7 @@ export class AgentController<TState = {}> {
     id,
     scope,
     tags,
+    threadId,
     workspace,
     browser,
     requestContext,
@@ -369,6 +370,8 @@ export class AgentController<TState = {}> {
      * changing the API. Falls back to `initialState` when omitted.
      */
     tags?: Record<string, string>;
+    /** Exact thread id to bind during session creation. Existing threads are resumed; missing threads are created with this id. */
+    threadId?: string;
     workspace?: Workspace;
     browser?: MastraBrowser;
     requestContext?: RequestContext;
@@ -391,6 +394,7 @@ export class AgentController<TState = {}> {
 
     const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
       scope,
+      threadId,
       workspace,
       browser,
       requestContext,
@@ -416,6 +420,7 @@ export class AgentController<TState = {}> {
     tags?: Record<string, string>,
     overrides?: {
       scope?: string;
+      threadId?: string;
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
@@ -519,38 +524,53 @@ export class AgentController<TState = {}> {
       }
     }
 
-    // Bring the session online with a current thread. Selection is tag-aware so
-    // worktrees sharing a resourceId each resume their own thread without
-    // claiming threads owned by another scope. A thread is a candidate only when
-    // its metadata matches every provided tag; with no tags every thread
-    // qualifies. Tags default to the controller-global state when omitted.
-    const selectionTags: Record<string, string> = {};
-    if (tags && Object.keys(tags).length > 0) {
-      Object.assign(selectionTags, tags);
+    if (overrides?.threadId) {
+      const existingThread = await session.thread.getById({ threadId: overrides.threadId });
+      if (existingThread) {
+        if (existingThread.resourceId !== effectiveResourceId) {
+          throw new Error(`Thread not found: ${overrides.threadId}`);
+        }
+        await this.config.threadLock?.acquire(existingThread.id);
+        session.thread.set({ threadId: existingThread.id });
+        await session.thread.loadMetadata();
+        await session.thread.ensureCurrentSubscription();
+      } else {
+        await session.thread.create({ id: overrides.threadId });
+      }
     } else {
-      const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
-      if (projectPath) selectionTags.projectPath = projectPath;
-    }
-    const tagEntries = Object.entries(selectionTags);
+      // Bring the session online with a current thread. Selection is tag-aware so
+      // worktrees sharing a resourceId each resume their own thread without
+      // claiming threads owned by another scope. A thread is a candidate only when
+      // its metadata matches every provided tag; with no tags every thread
+      // qualifies. Tags default to the controller-global state when omitted.
+      const selectionTags: Record<string, string> = {};
+      if (tags && Object.keys(tags).length > 0) {
+        Object.assign(selectionTags, tags);
+      } else {
+        const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
+        if (projectPath) selectionTags.projectPath = projectPath;
+      }
+      const tagEntries = Object.entries(selectionTags);
 
-    const threads = await session.thread.list();
-    const candidates =
-      tagEntries.length > 0
-        ? threads.filter(t => {
-            const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-            return tagEntries.every(([key, value]) => metadata[key] === value);
-          })
-        : threads;
+      const threads = await session.thread.list();
+      const candidates =
+        tagEntries.length > 0
+          ? threads.filter(t => {
+              const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+              return tagEntries.every(([key, value]) => metadata[key] === value);
+            })
+          : threads;
 
-    // Resume the most recent same-resource candidate, or create a new thread.
-    if (candidates.length === 0) {
-      await session.thread.create();
-    } else {
-      const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
-      await this.config.threadLock?.acquire(mostRecent.id);
-      session.thread.set({ threadId: mostRecent.id });
-      await session.thread.loadMetadata();
-      await session.thread.ensureCurrentSubscription();
+      // Resume the most recent same-resource candidate, or create a new thread.
+      if (candidates.length === 0) {
+        await session.thread.create();
+      } else {
+        const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+        await this.config.threadLock?.acquire(mostRecent.id);
+        session.thread.set({ threadId: mostRecent.id });
+        await session.thread.loadMetadata();
+        await session.thread.ensureCurrentSubscription();
+      }
     }
 
     return session;
@@ -663,22 +683,6 @@ export class AgentController<TState = {}> {
    */
   #resolveStorage(): MastraCompositeStore | undefined {
     return this.#externalMastra?.getStorage() ?? this.config.storage;
-  }
-
-  private async resolveConfiguredMemory(): Promise<MastraMemory | undefined> {
-    const configuredMemory = this.config.memory;
-    if (!configuredMemory) return undefined;
-
-    const memory =
-      typeof configuredMemory === 'function'
-        ? await configuredMemory({ requestContext: new RequestContext(), mastra: this.getMastra() })
-        : configuredMemory;
-
-    if (!memory) {
-      throw new Error('Dynamic memory factory returned empty value');
-    }
-
-    return memory;
   }
 
   /**
@@ -800,10 +804,11 @@ export class AgentController<TState = {}> {
 
   /**
    * The shared-host storage gateway the Session's thread domain reads/writes
-   * through. The Session owns the thread-domain logic; this adapter just maps
-   * raw storage rows to AgentController types — it does not call back into Session.
+   * through. The Session owns the thread-domain logic; this adapter maps raw
+   * storage rows to AgentController types and uses the active session only when
+   * resolving configured memory for a clone.
    */
-  private createThreadDataStore(): ThreadDataStore {
+  private createThreadDataStore(session: Session<TState>): ThreadDataStore {
     return {
       listThreads: ({ resourceId, includeForkedSubagents, metadata }) =>
         this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
@@ -817,7 +822,7 @@ export class AgentController<TState = {}> {
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
       cloneThread: ({ sourceThreadId, resourceId, title, metadata }) =>
-        this.cloneThreadRow({ sourceThreadId, resourceId, title, metadata }),
+        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -849,18 +854,24 @@ export class AgentController<TState = {}> {
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
   private async cloneThreadRow({
+    session,
     sourceThreadId,
     resourceId,
     title,
     metadata,
   }: {
+    session: Session<TState>;
     sourceThreadId: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
-    const memory = storage ? await storage.getStore('memory') : await this.resolveConfiguredMemory();
+    const memory = this.config.memory
+      ? await this.resolveMemory(session)
+      : storage
+        ? await storage.getStore('memory')
+        : undefined;
     if (!memory) {
       throw new Error(
         storage ? 'Storage does not have a memory domain configured' : 'Memory is not configured on this Harness',

@@ -69,6 +69,7 @@ interface StartOptions {
   https?: HTTPSOptions;
   mastraPackages?: MastraPackageInfo[];
   peerDepMismatches?: PeerDepMismatch[];
+  factory?: boolean;
 }
 
 type ProcessOptions = {
@@ -149,7 +150,7 @@ const startServer = async (
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_PACKAGES_FILE: packagesFilePath,
-        MASTRA_TELEMETRY_COMMAND: 'dev',
+        MASTRA_TELEMETRY_COMMAND: startOptions.factory ? 'factory dev' : 'dev',
         MASTRA_PROJECT_ROOT: resolve(dotMastraPath, '..'),
         ...(getAnalytics()?.getDistinctId() ? { MASTRA_CLI_DISTINCT_ID: getAnalytics()!.getDistinctId() } : {}),
         ...(startOptions?.https
@@ -158,6 +159,7 @@ const startServer = async (
               MASTRA_HTTPS_CERT: startOptions.https.cert.toString('base64'),
             }
           : {}),
+        ...(startOptions.factory ? { MASTRA_FACTORY_DEV: 'true' } : {}),
       },
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
@@ -423,6 +425,7 @@ export async function dev({
   https,
   requestContextPresets,
   debug,
+  factory,
 }: {
   dir?: string;
   root?: string;
@@ -434,6 +437,7 @@ export async function dev({
   https?: boolean;
   requestContextPresets?: string;
   debug: boolean;
+  factory?: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -446,7 +450,7 @@ export async function dev({
   // file-based project), prepareFsAgentsEntry auto-constructs a Mastra instance.
   const userEntryFile = findMastraEntryFile(mastraDir);
 
-  const bundler = new DevBundler(env);
+  const bundler = new DevBundler(env, factory);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
   // Discover fs-routed agents under agents/* and, if any exist, wrap the entry so
@@ -533,9 +537,14 @@ export async function dev({
     https: httpsOptions,
     mastraPackages,
     peerDepMismatches,
+    factory,
   };
 
   await bundler.prepare(dotMastraPath);
+
+  // Re-assert the lock after prepare() emptied the directory.
+  // The bundler preserves the lock, but this ensures the data is current.
+  await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
 
   // Write the generated fs-routed agents wrapper entry. Runs after `prepare()`
   // empties the output directory so the wrapper is not wiped before the watcher

@@ -1,5 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { createContext, useContext, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 type PageLayoutProps = {
   sidebar: ReactNode;
@@ -11,32 +11,15 @@ type PageLayoutProps = {
   children: ReactNode;
 };
 
-type PageLayoutMainViewProviderProps = {
-  children: ReactNode;
-  view?: ReactNode;
-};
-
-const PageLayoutMainViewContext = createContext<ReactNode | undefined>(undefined);
-
-export function PageLayoutMainViewProvider({ children, view }: PageLayoutMainViewProviderProps) {
-  return <PageLayoutMainViewContext.Provider value={view}>{children}</PageLayoutMainViewContext.Provider>;
-}
-
 export function PageLayout({ sidebar, header, title, description, actions, children }: PageLayoutProps) {
   const hasHeading = title !== undefined || description !== undefined;
-  const view = useContext(PageLayoutMainViewContext);
 
   return (
     <div className="relative z-1 flex h-screen overflow-hidden bg-surface1">
-      <aside className="h-full min-h-0 shrink-0 overflow-hidden py-5">{sidebar}</aside>
+      <aside className="h-full min-h-0 shrink-0 overflow-hidden py-2">{sidebar}</aside>
       <div className="relative z-1 flex min-w-0 flex-1 flex-col overflow-hidden border-l border-border1 bg-surface2">
         {header}
-        <main
-          className="flex min-h-0 flex-1 flex-col overflow-hidden"
-          hidden={view !== undefined}
-          inert={view !== undefined ? true : undefined}
-          aria-hidden={view !== undefined ? true : undefined}
-        >
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {hasHeading ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-4 md:px-4 md:py-5">
               <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
@@ -58,7 +41,6 @@ export function PageLayout({ sidebar, header, title, description, actions, child
             children
           )}
         </main>
-        {view !== undefined && <main className="flex min-h-0 flex-1 flex-col overflow-hidden">{view}</main>}
       </div>
     </div>
   );

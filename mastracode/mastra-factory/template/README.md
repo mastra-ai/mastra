@@ -1,4 +1,4 @@
-# Mastra Software Factory
+# Mastra Factory
 
 An open source, agent-powered software delivery environment built on [Mastra](https://mastra.ai). Connect GitHub and Linear, pull issues into an intake board, hand them to coding agents, and ship pull requests — from a web app you own and can deploy anywhere.
 
@@ -16,8 +16,9 @@ npm run dev
 ```
 
 - **Factory UI** → http://localhost:5173
-- **Mastra Studio** → http://localhost:4111
 - **API** → http://localhost:4111/api
+
+For a production-like, same-origin server without UI live reload, run `npm run dev:prod` and open http://localhost:5173.
 
 With zero configuration the app runs in local, auth-less mode (agents + local storage, no integrations). Open the Factory UI to finish setup — model provider keys are added there (Settings › Models). Deployment-level features enable themselves as you add environment variables — see below.
 
@@ -72,11 +73,14 @@ Create a Linear OAuth app (Linear → Settings → API → OAuth applications �
 | Script                      | What it does                                                                                   |
 | --------------------------- | ---------------------------------------------------------------------------------------------- |
 | `npm run dev`               | API server (:4111) + Factory UI (:5173) with live reload                                       |
+| `npm run dev:prod`          | Build the UI once and serve it from the Factory server (:5173)                                 |
 | `npm run db:up` / `db:down` | Start/stop local Postgres + Redis (Docker)                                                     |
-| `npm run build`             | Build the SPA and bundle the server to `.mastra/output`                                        |
+| `npm run build`             | Build the SPA (`build:ui`) and bundle the server to `.mastra/output`                           |
 | `npm run start`             | Run the production build                                                                       |
 | `npm run deploy`            | Build, validate, and deploy to [Mastra Cloud](https://mastra.ai/docs/mastra-platform/overview) |
 | `npm run check`             | Typecheck server and UI                                                                        |
+
+`mastra build` and `mastra deploy` detect the Factory entry automatically and run `build:ui` (Vite) before bundling. The SPA is copied to `.mastra/output/factory/` and a `mastra-project.json` manifest is emitted alongside it.
 
 ## Requirements
 
@@ -86,7 +90,9 @@ Create a Linear OAuth app (Linear → Settings → API → OAuth applications �
 
 ## Versions
 
-The Mastra packages use caret ranges (currently anchored on `@mastra/core@{{@mastra/core}}` and `@mastra/code-sdk@{{@mastra/code-sdk}}`). Upgrade them together when updating.
+The Mastra packages are pinned to `alpha`, so `npm install` pulls the current published prerelease. Upgrade them together by re-running `npm install` (or by rescaffolding).
+
+The included `.npmrc` sets `legacy-peer-deps=true` so npm accepts the internally-consistent prerelease peer graph; you can delete it once the packages ship stable releases.
 
 ## License
 

@@ -1,74 +1,50 @@
-import { analytics } from '../..';
-import type { CLI_ORIGIN } from '../../analytics';
-import { create } from '../create/create';
-import type { Editor } from '../init/mcp-docs-server-install';
-import type { Component, LLMProvider } from '../init/utils';
+import pkgJson from '../../../package.json';
+import { getAnalytics } from '../../analytics';
+import type { CreateCommandOptions } from '../create/create';
+import { getCreateCommandAnalyticsArgs, isCreateCancelledError, runCreateCommand } from '../create/create';
+import { getVersionTag } from '../utils';
 
-const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
+type Analytics = NonNullable<ReturnType<typeof getAnalytics>>;
+type CreateOrigin = Parameters<Analytics['trackCommandExecution']>[0]['origin'];
 
-interface CreateProjectArgs {
-  default?: boolean;
-  components?: Component[];
-  llm?: LLMProvider;
-  llmApiKey?: string;
-  example?: boolean;
-  timeout?: string | boolean;
-  dir?: string;
-  projectName?: string;
-  mcp?: Editor;
-  skills?: string[];
-  template?: string | boolean;
-  observability?: boolean;
-  observabilityProject?: string;
+const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CreateOrigin;
+
+export interface CreateProjectDependencies {
+  analytics?: Analytics | null;
+  resolveVersionTag?: () => Promise<string | undefined>;
 }
 
-export const createProject = async (projectNameArg: string | undefined, args: CreateProjectArgs) => {
-  // TODO(major): Remove args.projectName in favor of projectNameArg
-  const projectName = projectNameArg || args.projectName;
-  if (args.observability !== undefined) {
-    analytics.trackEvent('cli_observability_selected', {
-      command: 'create',
-      enabled: args.observability,
-      answer: args.observability ? 'yes' : 'no',
-      selection_method: 'cli_args',
-    });
+export const createProjectWithDependencies = async (
+  projectName: string | undefined,
+  args: CreateCommandOptions,
+  dependencies: CreateProjectDependencies = {},
+) => {
+  const analytics = dependencies.analytics === undefined ? getAnalytics() : dependencies.analytics;
+  const resolveVersionTag = dependencies.resolveVersionTag ?? (() => getVersionTag(pkgJson.version));
+  const execution = async () => {
+    try {
+      await runCreateCommand(projectName, args, {
+        analytics: analytics ?? undefined,
+        resolveVersionTag,
+      });
+    } catch (error) {
+      if (isCreateCancelledError(error)) return;
+      throw error;
+    }
+  };
+
+  if (!analytics) {
+    await execution();
+    return;
   }
 
   await analytics.trackCommandExecution({
     command: 'create',
-    args: { ...args, projectName },
-    execution: async () => {
-      const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
-      if (args.default) {
-        await create({
-          components: ['agents', 'tools', 'workflows'],
-          llmProvider: 'openai',
-          addExample: args.example === false ? false : true,
-          timeout,
-          projectName: projectNameArg,
-          mcpServer: args.mcp,
-          skills: args.skills,
-          template: args.template,
-          observability: args.observability,
-          observabilityProject: args.observabilityProject,
-        });
-        return;
-      }
-      await create({
-        components: args.components ? args.components : [],
-        llmProvider: args.llm,
-        addExample: args.example,
-        llmApiKey: args.llmApiKey,
-        timeout,
-        projectName,
-        directory: args.dir,
-        mcpServer: args.mcp,
-        skills: args.skills,
-        template: args.template,
-        observability: args.observability,
-        observabilityProject: args.observabilityProject,
-      });
-    },
+    args: getCreateCommandAnalyticsArgs(args),
+    execution,
     origin,
   });
 };
+
+export const createProject = (projectName: string | undefined, args: CreateCommandOptions) =>
+  createProjectWithDependencies(projectName, args);

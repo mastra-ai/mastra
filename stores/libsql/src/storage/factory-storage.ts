@@ -47,8 +47,17 @@ function assertIdentifier(kind: string, name: string): void {
 }
 
 function isUniqueViolation(error: unknown): boolean {
+  // Only uniqueness conflicts (including PK conflicts) qualify. A bare
+  // `SQLITE_CONSTRAINT` match would also swallow NOT NULL/CHECK/FK failures,
+  // which must surface as real errors rather than insert-or-recover races.
+  const code = typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;
+  if (code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT_PRIMARYKEY') return true;
   const message = error instanceof Error ? error.message : String(error);
-  return message.includes('UNIQUE constraint failed') || message.includes('SQLITE_CONSTRAINT');
+  return (
+    message.includes('UNIQUE constraint failed') ||
+    message.includes('SQLITE_CONSTRAINT_UNIQUE') ||
+    message.includes('SQLITE_CONSTRAINT_PRIMARYKEY')
+  );
 }
 
 function primaryKeyOf(schema: CollectionSchema): string {
@@ -101,12 +110,14 @@ class Mutex {
   }
 }
 
+type LibSQLExecutor = Pick<Client, 'execute'>;
+
 class LibSQLFactoryStorageOps implements FactoryStorageOps {
-  readonly #client: Client;
+  readonly #client: LibSQLExecutor;
   readonly #schemas: Map<string, CollectionSchema>;
   readonly #writeMutex = new Mutex();
 
-  constructor(client: Client, schemas: Map<string, CollectionSchema>) {
+  constructor(client: LibSQLExecutor, schemas: Map<string, CollectionSchema>) {
     this.#client = client;
     this.#schemas = schemas;
   }
@@ -428,6 +439,21 @@ export class LibSQLFactoryStorage extends FactoryStorage {
     await this.#client.execute('SELECT 1');
   }
 
+  async withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> {
+    if (this.#config.url.includes(':memory:')) return fn(this.ops);
+    const transaction = await this.#client.transaction('write');
+    try {
+      const result = await fn(new LibSQLFactoryStorageOps(transaction, this.#schemas));
+      await transaction.commit();
+      return result;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    } finally {
+      transaction.close();
+    }
+  }
+
   async ensureCollections(schemas: CollectionSchema[]): Promise<void> {
     for (const schema of schemas) {
       await this.#ensureCollection(schema);
@@ -452,6 +478,41 @@ export class LibSQLFactoryStorage extends FactoryStorage {
     return ddl;
   }
 
+  /**
+   * A table created by an older schema may still say NOT NULL on a column the
+   * current schema declares nullable — inserts of null then fail on databases
+   * that predate the change. SQLite has no `ALTER COLUMN DROP NOT NULL`, so
+   * relaxation swaps in a table rebuilt from the current schema (create shadow
+   * → copy → drop → rename) atomically.
+   */
+  async #relaxDriftedNotNulls(schema: CollectionSchema): Promise<void> {
+    const info = await this.#client.execute(`PRAGMA table_info("${schema.name}")`);
+    const hasDrift = info.rows.some(row => {
+      const spec = schema.columns[String(row.name)];
+      if (!spec || spec.type === 'uuid-pk' || spec.primaryKey) return false;
+      return spec.nullable === true && Number(row.notnull) === 1;
+    });
+    if (!hasDrift) return;
+
+    // The additive ADD COLUMN pass has already run, so every schema column
+    // exists on the old table and can be copied straight across.
+    const ddl = Object.entries(schema.columns).map(([name, spec]) => this.#columnDdl(name, spec));
+    const shadow = `${schema.name}__nullable_rebuild`;
+    const cols = Object.keys(schema.columns)
+      .map(name => `"${name}"`)
+      .join(', ');
+    await this.#client.batch(
+      [
+        `DROP TABLE IF EXISTS "${shadow}"`,
+        `CREATE TABLE "${shadow}" (${ddl.join(', ')})`,
+        `INSERT INTO "${shadow}" (${cols}) SELECT ${cols} FROM "${schema.name}"`,
+        `DROP TABLE "${schema.name}"`,
+        `ALTER TABLE "${shadow}" RENAME TO "${schema.name}"`,
+      ],
+      'write',
+    );
+  }
+
   async #ensureCollection(schema: CollectionSchema): Promise<void> {
     assertIdentifier('collection', schema.name);
     primaryKeyOf(schema); // validates exactly one pk
@@ -466,6 +527,11 @@ export class LibSQLFactoryStorage extends FactoryStorage {
       if (existing.has(name)) continue;
       await this.#client.execute(`ALTER TABLE "${schema.name}" ADD COLUMN ${this.#columnDdl(name, spec)}`);
     }
+
+    // Relaxing evolution: drop NOT NULL from columns the schema now declares
+    // nullable. Runs before index creation — a rebuild drops the old table's
+    // indexes, and the loops below recreate them.
+    await this.#relaxDriftedNotNulls(schema);
 
     for (const index of schema.uniqueIndexes ?? []) {
       assertIdentifier('index', index.name);

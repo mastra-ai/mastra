@@ -2,41 +2,67 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { createMemoryRouter, Navigate, Outlet, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { loginUrl, logoutUrl } from '../domains/auth';
 import Chat from '../domains/chat/Chat';
-import { NewPage } from '../domains/chat/NewPage';
-import { ThreadPage } from '../domains/chat/ThreadPage';
+import { NewPage } from '../pages/NewPage';
+import { SettingsPage } from '../pages/SettingsPage';
+import { ThreadPage } from '../pages/ThreadPage';
 import type { Factory } from '../domains/workspaces';
+import { ActiveFactoryProvider } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { CreateFactoryLayout } from '../pages/CreateFactoryLayout';
+import { CreateFactoryPage } from '../pages/CreateFactoryPage';
 
 /**
  * Renders <Chat /> inside a memory router mirroring the app's pathless chat
  * layout (Chat itself uses router hooks for /threads/:threadId navigation).
  * Auth guards are intentionally bypassed — these specs stub /auth/me directly.
  */
-function renderChat() {
+function renderChat(initialEntry = '/factories/project-test/threads/thread-test') {
   const router = createMemoryRouter(
     [
       {
-        element: <Chat />,
+        path: '/factories/:factoryId',
+        element: (
+          <ActiveFactoryProvider factoryId="project-test">
+            <Outlet />
+          </ActiveFactoryProvider>
+        ),
         children: [
-          { path: '/chat', element: <NewPage /> },
-          { path: '/threads/:threadId', element: <ThreadPage /> },
+          {
+            element: <Chat />,
+            children: [
+              // The transcript only renders on the thread's own page — `new` is
+              // the draft composer and hides the bound thread's history.
+              { path: 'new', element: <NewPage /> },
+              { path: 'threads/:threadId', element: <ThreadPage /> },
+              {
+                path: 'settings',
+                children: [
+                  { index: true, element: <Navigate to="general" replace /> },
+                  { path: ':section', element: <SettingsPage /> },
+                ],
+              },
+            ],
+          },
         ],
       },
+      {
+        path: '/factories/create',
+        element: <CreateFactoryLayout />,
+        children: [{ element: <Chat />, children: [{ index: true, element: <CreateFactoryPage /> }] }],
+      },
     ],
-    // The transcript only renders on the thread's own page now — /chat is the
-    // draft composer and hides the bound thread's history.
-    { initialEntries: ['/threads/thread-test'] },
+    { initialEntries: [initialEntry] },
   );
-  return renderWithProviders(<RouterProvider router={router} />);
+  return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -67,7 +93,6 @@ function seedProject() {
     createdAt: 1,
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -250,15 +275,19 @@ describe('MastraCode sidebar auth actions', () => {
 });
 
 describe('MastraCode empty thread state', () => {
-  it('given a project with no messages, when the app renders, then the Mastra Code wordmark hero appears', async () => {
+  it('given a project with no messages, when a starter is chosen, then it prefills and focuses the composer', async () => {
+    const user = userEvent.setup();
     renderSeededApp();
 
+    expect(await screen.findByRole('heading', { name: 'What can I help you build?' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Mastra Code')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Explore this codebase' }));
+
+    const composer = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
     await waitFor(() => {
-      expect(screen.getByText('Ready for new conversation')).toBeInTheDocument();
-      const wordmark = screen.getByLabelText('Mastra Code');
-      expect(wordmark).toBeInTheDocument();
-      // The hero sits inside the transcript scroller, which centers empty content vertically.
-      expect(wordmark.closest('.place-items-center')).not.toBeNull();
+      expect(composer).toHaveValue('Help me understand how this codebase is structured.');
+      expect(composer).toHaveFocus();
     });
   });
 });
@@ -434,14 +463,16 @@ describe('MastraCode message rendering', () => {
 
     renderChat();
 
-    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'What can I help you build?' })).toBeInTheDocument(),
+    );
     await new Promise(resolve => setTimeout(resolve, 100));
     await stream.emit();
 
     await waitFor(() => expect(screen.getByText('Streaming now')).toBeInTheDocument());
   });
 
-  it('keeps the running conversation and stream subscription alive while Settings is open', async () => {
+  it('recovers the running conversation after visiting the Settings page and back', async () => {
     const user = userEvent.setup();
     seedProject();
     const stream = delayedSse({
@@ -458,6 +489,17 @@ describe('MastraCode message rendering', () => {
         streamRequests();
         return stream.response();
       }),
+      // Settings page (general section) data.
+      http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json({ packs: [], activePackId: null })),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: { github: { enabled: true, repositoryIds: [] }, linear: { enabled: false, projectIds: [] } },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: false, connected: false, workspace: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),
     );
 
     renderChat();
@@ -465,20 +507,23 @@ describe('MastraCode message rendering', () => {
     expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
     await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
 
-    const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
-    await user.click(settingsTrigger);
-    expect(screen.getByRole('region', { name: 'Settings' })).toBeInTheDocument();
+    // Opening settings navigates to /settings/general; the thread page (and
+    // its sidebar instance) unmounts while the session layout stays mounted.
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(await screen.findByRole('region', { name: 'Settings' })).toBeInTheDocument();
 
     await stream.emit();
-    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Back to app' }));
 
     expect(await screen.findByText('Streaming while settings are open')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
-    await waitFor(() => expect(settingsTrigger).toHaveFocus());
-    expect(streamRequests).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Settings' })).toHaveFocus());
+    // Leaving the thread route drops the session's threadId, so returning
+    // re-subscribes (same as any thread → /new → thread navigation).
+    expect(streamRequests).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps the running conversation mounted while Create Factory is open in the layout', async () => {
+  it('recovers the running conversation after navigating to Create Factory and back', async () => {
     const user = userEvent.setup();
     seedProject();
     const stream = delayedSse({
@@ -497,39 +542,34 @@ describe('MastraCode message rendering', () => {
       }),
     );
 
-    renderChat();
+    const { router } = renderChat();
 
     expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
     await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
 
-    const factorySwitcher = screen.getByRole('button', { name: 'Select factory' });
-    await user.click(factorySwitcher);
-    await user.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
+    await act(() =>
+      router.navigate('/factories/create', { state: { from: '/factories/project-test/threads/thread-test' } }),
+    );
 
+    // Create Factory is a dedicated page inside the persistent app shell.
     const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
     expect(factorySurface.closest('main')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
 
     await stream.emit();
-    await user.click(screen.getByRole('button', { name: 'Close factory creation' }));
+    // Close navigates back to the thread page the user came from.
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(await screen.findByText('Streaming while factory creation is open')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
-    await waitFor(() => expect(factorySwitcher).toHaveFocus());
-    expect(streamRequests).toHaveBeenCalledTimes(1);
+    // Leaving the thread route drops the session's threadId, so returning
+    // re-subscribes (same as any thread → /new → thread navigation).
+    expect(streamRequests).toHaveBeenCalledTimes(2);
   });
 
-  it('shows required first-run Factory creation in the layout after empty backend hydration', async () => {
-    useAgentControllerHandlers();
-    server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
-
-    renderChat();
-
-    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
-    expect(factorySurface.closest('main')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Close factory creation' })).not.toBeInTheDocument();
-  });
+  // First-run onboarding (no factories) is covered by routing.msw.test.tsx —
+  // the OnboardingGuard redirect owns that flow now, not NewPage.
 
   it('does not show first-run Factory creation after a remote Factory hydrates', async () => {
     useAgentControllerHandlers();

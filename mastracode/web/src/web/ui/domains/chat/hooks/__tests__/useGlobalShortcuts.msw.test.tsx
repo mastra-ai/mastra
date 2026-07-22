@@ -3,8 +3,9 @@
  *
  * The hook is now zero-args: it observes `useOverlays()`,
  * `useChatTranscript()` (busy + abort), and `useActiveFactoryContext()` (zero
- * projects force the Factory creation view open) directly. Specs preserve the
- * `?` shortcuts toggle unless typing, and the Escape priority cascade.
+ * factories disable the Escape cascade during onboarding) directly. Specs
+ * preserve the `?` shortcuts toggle unless typing, and the Escape priority
+ * cascade.
  */
 import type { AgentControllerEvent } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
@@ -29,7 +30,7 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 
-const OVERLAYS: OverlayName[] = ['sidebar', 'settings', 'shortcuts', 'factories'];
+const OVERLAYS: OverlayName[] = ['sidebar', 'shortcuts'];
 
 afterEach(() => {
   localStorage.clear();
@@ -47,7 +48,6 @@ function seedFactory() {
     },
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sse(events: AgentControllerEvent[] = []): Response {
@@ -114,7 +114,7 @@ function Probe() {
 function renderProbe(threadId?: string) {
   return renderWithProviders(
     <MainSidebarProvider storageKey="global-shortcuts-test" mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
+      <ActiveFactoryProvider factoryId="project-test">
         <ChatSessionProvider threadId={threadId}>
           <OverlaysProvider>
             <Probe />
@@ -162,56 +162,38 @@ describe('useGlobalShortcuts', () => {
     renderProbe(THREAD_ID);
     await ready();
 
-    await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open shortcuts' }));
     await userEvent.keyboard('{Control>}k{/Control}');
 
-    expectOverlay('settings', 'open');
+    expectOverlay('shortcuts', 'open');
   });
 
-  it('given several overlays are open, when Escape is pressed repeatedly, then they close in priority order shortcuts → settings → sidebar', async () => {
+  it('given several overlays are open, when Escape is pressed repeatedly, then they close in priority order shortcuts → sidebar', async () => {
     seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
 
-    for (const name of ['sidebar', 'settings', 'shortcuts'] as const) {
+    for (const name of ['sidebar', 'shortcuts'] as const) {
       await userEvent.click(screen.getByRole('button', { name: `open ${name}` }));
     }
 
     await userEvent.keyboard('{Escape}');
     expectOverlay('shortcuts', 'closed');
-    expectOverlay('settings', 'open');
-
-    await userEvent.keyboard('{Escape}');
-    expectOverlay('settings', 'closed');
     expectOverlay('sidebar', 'open');
 
     await userEvent.keyboard('{Escape}');
     expectOverlay('sidebar', 'closed');
   });
 
-  it('given the Factory creation view is open, when Escape is pressed, then the global handler yields to it', async () => {
-    seedFactory();
-    useAgentControllerHandlers();
-    renderProbe(THREAD_ID);
-    await ready();
-
-    await userEvent.click(screen.getByRole('button', { name: 'open factories' }));
-    await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
-
-    await userEvent.keyboard('{Escape}');
-    expectOverlay('factories', 'open');
-    expectOverlay('settings', 'open');
-  });
-
-  it('given zero factories (forced creation view), when Escape is pressed, then it is a no-op even with overlays open', async () => {
-    // No seedFactory(): Factory creation is forced open by derivation.
+  it('given zero factories (onboarding), when Escape is pressed, then it is a no-op even with overlays open', async () => {
+    // No seedFactory(): the Escape cascade is disabled during onboarding.
     useAgentControllerHandlers();
     renderProbe(undefined);
 
-    await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open shortcuts' }));
     await userEvent.keyboard('{Escape}');
-    expectOverlay('settings', 'open');
+    expectOverlay('shortcuts', 'open');
   });
 
   it('given a running turn and no open overlays, when Escape is pressed, then the run is aborted', async () => {

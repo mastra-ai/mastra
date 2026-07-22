@@ -1,5 +1,38 @@
 # @mastra/core
 
+## 1.52.0-alpha.12
+
+### Patch Changes
+
+- dependencies updates: ([#19776](https://github.com/mastra-ai/mastra/pull/19776))
+  - Updated dependency [`chat@^4.34.0` ↗︎](https://www.npmjs.com/package/chat/v/4.34.0) (from `^4.29.0`, in `dependencies`)
+
+- Added a public ensureReady() method to FactoryStorageDomain so consumers can initialize a storage domain without going through a global registry. ([#19866](https://github.com/mastra-ai/mastra/pull/19866))
+
+- Fixed durable agent runs continuing after a tool call was denied by authorization. The run now fails immediately instead of letting the model retry the denied tool. ([#19886](https://github.com/mastra-ai/mastra/pull/19886))
+
+- Fixed Code Mode executions failing when programs return large results or error messages. ([#19878](https://github.com/mastra-ai/mastra/pull/19878))
+
+- Moved the server config routes and provider credential helpers into @mastra/factory as a reusable ConfigRoutes class. Route handlers now receive their auth checks through an injected RouteAuth seam and storage domains through constructor options, so hosts other than the Mastra Code web app can mount the same routes. ([#19866](https://github.com/mastra-ai/mastra/pull/19866))
+
+## 1.52.0-alpha.11
+
+### Minor Changes
+
+- Added an optional `threadId` parameter to AgentController session creation so hosts can create or resume a session bound to an exact thread ID. ([#19758](https://github.com/mastra-ai/mastra/pull/19758))
+
+### Patch Changes
+
+- Fixed caller-supplied tool providers so selected connectionless tools can initialize and manage user connections. ([#19872](https://github.com/mastra-ai/mastra/pull/19872))
+
+- Fixed prebuilt agent signals so callers can supply per-run request context. ([#19702](https://github.com/mastra-ai/mastra/pull/19702))
+
+- Added a working directory override when deriving local sandboxes so callers can isolate each derived checkout. ([#19907](https://github.com/mastra-ai/mastra/pull/19907))
+
+- Added `checkpointName` to sandbox derive options so providers can attach durable checkpoint identities to derived sandboxes. ([#19907](https://github.com/mastra-ai/mastra/pull/19907))
+
+- Fixed thread cloning to preserve configured memory state, including observational memory progress. ([#19917](https://github.com/mastra-ai/mastra/pull/19917))
+
 ## 1.52.0-alpha.10
 
 ### Minor Changes

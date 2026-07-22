@@ -51,7 +51,6 @@ function seedFactory() {
     },
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function useAgentControllerHandlers({ running = false }: { running?: boolean } = {}) {
@@ -124,12 +123,12 @@ function PaletteCommandProbe() {
 
 function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+    <MemoryRouter initialEntries={[`/factories/project-test/threads/${THREAD_ID}`]}>
       <Routes>
         <Route
-          path="/threads/:threadId"
+          path="/factories/:factoryId/threads/:threadId"
           element={
-            <ActiveFactoryProvider>
+            <ActiveFactoryProvider factoryId="project-test">
               <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatCommandsProvider>
                   <Composer {...props} />

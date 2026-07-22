@@ -1,20 +1,19 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { SkeletonRows } from '../../../ui';
-import { userSessionResourceId } from '../../auth/services/auth';
 import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
-import { findUserSessionByThreadId, isServerFactory, selectedRepository } from '../../workspaces/services/factories';
+import { isServerFactory, selectedRepository } from '../../workspaces/services/factories';
+import { getUserSession } from '../../workspaces/services/github';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
-import { ChatPermissionsProvider } from './ChatPermissionsProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatSessionContext } from './useChatSessionContext';
@@ -37,23 +36,33 @@ export function ChatSessionConfigProvider({
   threadId?: string;
   userScoped?: boolean;
 }) {
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
-  const auth = useWebAuth();
+  const { activeFactory, resourceId, sessionEnabled: activeResourceEnabled } = useActiveFactoryContext();
   const { baseUrl } = useApiConfig();
-  const projectPath = deriveProjectPath(activeFactory);
-  const userSession = userScoped && threadId ? findUserSessionByThreadId(threadId) : undefined;
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
   const repository = serverFactory ? selectedRepository(serverFactory) : undefined;
-  // A repo-less server factory still chats against the factory resource, so
-  // only repo-backed sessions wait on a worktree path.
-  const projectSessionEnabled = sessionEnabled && (!repository || Boolean(projectPath));
+  const sessionQuery = useQuery({
+    queryKey: ['factory-session', threadId],
+    queryFn: () => getUserSession(baseUrl, threadId!),
+    enabled: Boolean(threadId) && (userScoped || Boolean(serverFactory)),
+    retry: false,
+  });
+  const storedSession = sessionQuery.data;
+  const resolvingStoredSession = Boolean(threadId && serverFactory) && sessionQuery.isPending;
+  const derivedProjectPath = storedSession || resolvingStoredSession ? undefined : deriveProjectPath(activeFactory);
+  const projectSessionEnabled =
+    !resolvingStoredSession &&
+    (storedSession
+      ? activeResourceEnabled
+      : activeResourceEnabled && (!repository || Boolean(derivedProjectPath)));
+  const userSessionEnabled = Boolean(storedSession) && !sessionQuery.isPending;
 
   // A `?resourceId=` query param overrides the active factory's resource so the
   // whole chat session (transcript, messages, connection, thread switch) binds
   // to a thread that lives under a different resource — e.g. a Slack channel
   // session keyed `channel:slack:...`. Channel threads are not partitioned by
   // worktree, so drop `projectPath` when the override is present. This only
-  // applies to the factory branch; user-scoped sessions derive identity from auth.
+  // applies to the non-user-scoped branch; user-scoped sessions derive identity
+  // from their stored session.
   //
   // Read once from the entry URL rather than via the router's `useSearchParams`:
   // this is a deep-link entry param that the session binds to at mount and does
@@ -62,33 +71,25 @@ export function ChatSessionConfigProvider({
   const resourceOverride = userScoped
     ? null
     : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
+  const projectPath = resourceOverride ? undefined : derivedProjectPath;
 
-  const value = userScoped
-    ? {
-        resourceId: userSessionResourceId(auth.data),
-        sessionEnabled: !auth.isPending && Boolean(userSession),
-        projectPath: userSession?.worktree.worktreePath,
-        baseUrl,
-        kind: 'user' as const,
-        threadBasePath: '/user/threads' as const,
-      }
-    : {
-        resourceId: resourceOverride ?? resourceId,
-        sessionEnabled: projectSessionEnabled,
-        projectPath: resourceOverride ? undefined : projectPath,
-        factorySessionState:
-          serverFactory && repository
-            ? {
-                factoryProjectId: serverFactory.binding.factoryProjectId,
-                projectRepositoryId: repository.projectRepositoryId,
-                sandboxId: repository.sandboxId,
-                sandboxWorkdir: repository.sandboxWorkdir,
-              }
-            : undefined,
-        baseUrl,
-        kind: serverFactory ? ('factory' as const) : ('user' as const),
-        threadBasePath: '/threads' as const,
-      };
+  const value = {
+    resourceId: resourceOverride ?? storedSession?.sessionId ?? resourceId,
+    sessionEnabled: userScoped ? userSessionEnabled : projectSessionEnabled,
+    resourceEnabled: userScoped ? userSessionEnabled : activeResourceEnabled,
+    projectPath,
+    factorySessionState:
+      serverFactory && repository
+        ? {
+            factoryProjectId: serverFactory.binding.factoryProjectId,
+            projectRepositoryId: repository.projectRepositoryId,
+            sandboxId: storedSession?.sandboxId ?? repository.sandboxId,
+            sandboxWorkdir: storedSession?.sandboxWorkdir ?? repository.sandboxWorkdir,
+          }
+        : undefined,
+    baseUrl,
+    kind: userScoped ? ('user' as const) : serverFactory ? ('factory' as const) : ('user' as const),
+  };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;
 }

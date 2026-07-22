@@ -60,22 +60,23 @@ export function PullRequestLinks({
     item =>
       item.source === 'github-pr' &&
       Object.values(item.sessions).some(
-        session => session.threadId === threadId && (!projectPath || session.projectPath === projectPath),
+        session => session.threadId === threadId && (!projectPath || session.sessionId === projectPath),
       ),
   );
-  const reviewNumber = reviewItem?.metadata.number;
+  const reviewNumber = reviewItem?.metadata.githubPullRequestNumber ?? reviewItem?.metadata.number;
+  const normalizedReviewNumber = Number(reviewNumber);
   const factorySubscription: PullRequestSubscription | undefined =
     reviewItem &&
     repositorySlug &&
     (typeof reviewNumber === 'number' || typeof reviewNumber === 'string') &&
-    Number.isInteger(Number(reviewNumber))
+    Number.isInteger(normalizedReviewNumber)
       ? {
           id: `factory-work-item:${reviewItem.id}`,
           repoFullName: repositorySlug,
-          pullRequestNumber: Number(reviewNumber),
+          pullRequestNumber: normalizedReviewNumber,
           status:
             reviewItem.metadata.merged === true ? 'merged' : reviewItem.metadata.state === 'closed' ? 'closed' : 'open',
-          url: `https://github.com/${repositorySlug}/pull/${reviewNumber}`,
+          url: `https://github.com/${repositorySlug}/pull/${normalizedReviewNumber}`,
         }
       : undefined;
   const notificationIds = transcriptEntries
@@ -128,7 +129,7 @@ export function PullRequestLinks({
   if (links.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="ml-auto flex items-center gap-2">
       {links.map(subscription => (
         <a
           key={subscription.id}

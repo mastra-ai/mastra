@@ -6,11 +6,8 @@ import {
   applyMaterializeResult,
   DEFAULT_RESOURCE_ID,
   isServerFactory,
-  loadActiveFactoryId,
-  saveActiveFactoryId,
   selectedRepository,
 } from '../../web/ui/domains/workspaces/services/factories';
-import type { Factory, FactoryRepository, ServerFactory } from '../../web/ui/domains/workspaces/services/factories';
 import { useEnsureRepoMaterializedMutation } from './useEnsureRepoMaterialized';
 import { useFactoriesQuery } from './useFactories';
 
@@ -20,112 +17,102 @@ export interface PreparingState {
   message: string;
 }
 
-export function useActiveFactory() {
+/**
+ * Resolves the route's `factoryId` against the factories list and drives
+ * mount-driven sandbox materialization for server factories. The URL is the
+ * single source of truth for which factory is active; this hook only prepares
+ * it and gates the chat session until the workspace is safe to bind.
+ */
+export function useActiveFactory(factoryId: string) {
   const queryClient = useQueryClient();
-  const {
-    data: factories,
-    isPending: factoriesPending,
-    isFetching: factoriesFetching,
-    isError: factoriesError,
-  } = useFactoriesQuery();
+  const { data: factories, isPending: factoriesPending } = useFactoriesQuery();
+  const factoryList = factories ?? [];
   const ensureMaterialized = useEnsureRepoMaterializedMutation();
-  const [selectedFactoryId, setSelectedFactoryId] = useState<string | null>(() => loadActiveFactoryId());
   const [preparing, setPreparing] = useState<PreparingState | null>(null);
-  // Monotonic selection token so a newer selection supersedes an in-flight
-  // materialization instead of re-activating the previous target.
-  const selectionRequestRef = useRef(0);
-  // Derived: a selection pointing at a deleted factory counts as no selection.
-  const activeFactoryId =
-    selectedFactoryId && factories.some(factory => factory.id === selectedFactoryId) ? selectedFactoryId : null;
-  const activeFactory = factories.find(factory => factory.id === activeFactoryId) ?? null;
+  // Set once `/ensure` succeeds for the given factoryId; cleared implicitly by
+  // navigating to a different factory.
+  const [materializedFor, setMaterializedFor] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  // Monotonic token so navigating to another factory supersedes an in-flight
+  // materialization instead of letting its result stomp the newer route.
+  const requestRef = useRef(0);
+  // Which `${factoryId}:${attempt}` run has already been started, so factories
+  // refetches don't re-trigger the ensure.
+  const startedKeyRef = useRef<string | null>(null);
+
+  const activeFactory = factoryList.find(factory => factory.id === factoryId) ?? null;
   // Server-backed factories without a materialized repository chat against the
   // factory project itself; local factories always carry a resolved resourceId.
   const resourceId =
     activeFactory?.resourceId ??
     (activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined) ??
     DEFAULT_RESOURCE_ID;
-  const sessionEnabled = !!activeFactory;
-
-  // Persisting to localStorage is external-system sync; keep as an effect.
-  // A failed backend hydration must not erase a selection that may become valid
-  // again once the factory list can be loaded.
-  useEffect(() => {
-    if (!factoriesFetching && !factoriesError) saveActiveFactoryId(activeFactoryId);
-  }, [activeFactoryId, factoriesError, factoriesFetching]);
-
-  const selectFactory = async (factory: Factory | null) => {
-    const requestId = ++selectionRequestRef.current;
-
-    if (!factory) {
-      setPreparing(null);
-      setSelectedFactoryId(null);
-      return;
-    }
-
-    if (isServerFactory(factory)) {
-      const repository = selectedRepository(factory);
-      if (!repository) {
-        // No linked repositories yet — a valid state. The Board renders with a
-        // connect prompt and chat scopes to the factory project resource.
-        setPreparing(null);
-        setSelectedFactoryId(factory.id);
-        return;
-      }
-      await prepareRepository(factory, repository, requestId);
-      return;
-    }
-
-    // Local factories always carry a required resourceId from creation.
-    setPreparing(null);
-    setSelectedFactoryId(factory.id);
-  };
+  const repository = activeFactory && isServerFactory(activeFactory) ? selectedRepository(activeFactory) : undefined;
+  // Never bind the session to the wrong workspace: while a server factory's
+  // repository is being materialized (or failed to), the session stays off.
+  const sessionEnabled = !!activeFactory && (!repository || materializedFor === factoryId);
 
   /**
    * Opening a server factory materializes its selected repository into its
-   * cloud sandbox first (provision/reattach + clone/pull via the server's
-   * `/ensure` SSE route). On failure the previous selection is kept —
-   * activating with the default scope would silently bind the session to the
-   * wrong workspace.
+   * cloud sandbox (provision/reattach + clone/pull via the server's `/ensure`
+   * SSE route) when the route mounts or the factoryId changes. Switching and
+   * deep-linking share this single code path.
    */
-  const prepareRepository = async (factory: ServerFactory, repository: FactoryRepository, requestId: number) => {
-    setPreparing({ factoryId: factory.id, message: 'Preparing sandbox…' });
-    try {
-      const result = await ensureMaterialized.mutateAsync({
-        projectRepositoryId: repository.projectRepositoryId,
-        onProgress: event => {
-          if (selectionRequestRef.current !== requestId) return;
-          setPreparing({ factoryId: factory.id, message: event.message });
-        },
-      });
-      // A newer selection won while materialization was still running — discard
-      // this result so it cannot stomp the user's latest choice.
-      if (selectionRequestRef.current !== requestId) return;
-      applyMaterializeResult(factory, result);
-      // Refresh the factories query from localStorage so the selection sees the
-      // persisted resourceId (otherwise the session would briefly be disabled).
-      await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-      if (selectionRequestRef.current !== requestId) return;
-      setSelectedFactoryId(factory.id);
-    } catch {
-      // The mutation retains the error (exposed as `prepareError`); selection
-      // stays unchanged so the user can retry by re-selecting the factory.
-    } finally {
-      if (selectionRequestRef.current === requestId) {
-        setPreparing(null);
+  useEffect(() => {
+    if (!activeFactory || !isServerFactory(activeFactory)) return;
+    const repo = selectedRepository(activeFactory);
+    if (!repo) return;
+    if (materializedFor === factoryId) return;
+    const key = `${factoryId}:${attempt}`;
+    if (startedKeyRef.current === key) return;
+    startedKeyRef.current = key;
+    const requestId = ++requestRef.current;
+    setPreparing({ factoryId, message: 'Preparing sandbox…' });
+    void (async () => {
+      try {
+        const result = await ensureMaterialized.mutateAsync({
+          projectRepositoryId: repo.projectRepositoryId,
+          onProgress: event => {
+            if (requestRef.current !== requestId) return;
+            setPreparing({ factoryId, message: event.message });
+          },
+        });
+        // The route moved to another factory while materialization was still
+        // running — discard this result.
+        if (requestRef.current !== requestId) return;
+        applyMaterializeResult(activeFactory, result);
+        // Refresh the factories query from localStorage so consumers see the
+        // persisted resourceId before the session is enabled.
+        await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+        if (requestRef.current !== requestId) return;
+        setMaterializedFor(factoryId);
+      } catch {
+        // The mutation retains the error (exposed as `prepareError`); the
+        // session stays disabled until `retryPrepare()` succeeds.
+      } finally {
+        if (requestRef.current === requestId) {
+          setPreparing(null);
+        }
       }
-    }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFactory, factoryId, attempt, materializedFor]);
+
+  /** Re-runs the sandbox materialization after a failure. */
+  const retryPrepare = () => {
+    setAttempt(current => current + 1);
   };
 
   return {
-    factories,
+    factories: factoryList,
     factoriesPending,
     activeFactory,
     resourceId,
     sessionEnabled,
-    selectFactory,
     /** Non-null while a factory repository is being provisioned/cloned. */
     preparing,
     /** Last materialization failure (carries the server's `code`), if any. */
     prepareError: (ensureMaterialized.error as (Error & { code?: string }) | null) ?? null,
+    retryPrepare,
   };
 }
