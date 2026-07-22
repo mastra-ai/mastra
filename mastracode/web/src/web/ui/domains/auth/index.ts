@@ -1,5 +1,4 @@
-export { safeReturnTo, SignInPage } from './components/SignInPage';
-export { useWebAuth } from '../../../../shared/hooks/useWebAuth';
+export { useFactoryAuth } from '../../../../shared/hooks/useFactoryAuth';
 export {
   fetchAuthState,
   loginUrl,
@@ -10,4 +9,4 @@ export {
   signUpWithPassword,
   userSessionResourceId,
 } from './services/auth';
-export type { WebAuthState } from './services/auth';
+export type { FactoryAuthState } from './services/auth';

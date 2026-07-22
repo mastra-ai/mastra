@@ -3,7 +3,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';
 
 import { useApiConfig } from '../../shared/api/config';
-import { redirectToLogout, useWebAuth } from './domains/auth';
+import { redirectToLogout, useFactoryAuth } from './domains/auth';
 import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
@@ -110,7 +110,7 @@ function SidebarFooter() {
 }
 
 function SidebarAuth() {
-  const auth = useWebAuth();
+  const auth = useFactoryAuth();
   const { baseUrl } = useApiConfig();
 
   if (auth.isLoading) {

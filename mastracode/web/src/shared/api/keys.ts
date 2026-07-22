@@ -16,7 +16,7 @@
 export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
 export const queryKeys = {
-  webAuth: () => ['web-auth'] as const,
+  factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
   factoryOnboarding: () => ['factories', 'onboarding'] as const,

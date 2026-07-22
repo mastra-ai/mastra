@@ -1,5 +1,14 @@
 # @internal/playground
 
+## 1.20.0-alpha.11
+
+### Patch Changes
+
+- Improved the Agents page with list and compact views, name sorting, and immediate hover details for models, workflows, agents, and tools. ([#19747](https://github.com/mastra-ai/mastra/pull/19747))
+
+- Updated dependencies [[`82d3914`](https://github.com/mastra-ai/mastra/commit/82d3914dfcf9c3aef813dbb3a6641fb66c396943)]:
+  - @mastra/playground-ui@42.0.0-alpha.13
+
 ## 1.20.0-alpha.10
 
 ### Patch Changes

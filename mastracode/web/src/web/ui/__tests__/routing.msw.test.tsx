@@ -2,7 +2,7 @@
  * BDD coverage for the SPA route table (`src/web/ui/router.tsx`).
  *
  * Drives the real route components (auth-guard layout + redirects, powered by
- * the `useWebAuth` React Query hook) through a memory router with MSW stubbing
+ * the `useFactoryAuth` React Query hook) through a memory router with MSW stubbing
  * `/auth/me` and the agent-controller API, mirroring how the browser entry
  * wires `createBrowserRouter`.
  */

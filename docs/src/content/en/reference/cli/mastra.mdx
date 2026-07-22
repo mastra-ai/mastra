@@ -107,6 +107,18 @@ mastra dev
 These are forwarded to the Mastra model router and will work with any `"openai/..."`
 or `"anthropic/..."` model selections.
 
+## `mastra factory dev`
+
+Starts a development server for [Agent Builder](/docs/agent-builder/overview) development. It uses the same dev runtime and flags as [`mastra dev`](#mastra-dev) and writes to the same `.mastra/output` directory.
+
+```bash
+npx mastra factory dev
+```
+
+Both commands share the same dev lock, so `mastra dev` and `mastra factory dev` can't run simultaneously in the same project. If one is already running, the other exits with a duplicate development server error.
+
+Use `mastra factory dev` when developing Agent Builder features. It accepts the same flags as [`mastra dev`](#mastra-dev), including `--https`, `--inspect`, `--inspect-brk`, `--custom-args`, and `--request-context-presets`.
+
 ## `mastra build`
 
 The `mastra build` command bundles your Mastra project into a production-ready Hono server. [Hono](https://hono.dev/) is a lightweight, type-safe web framework that makes it straightforward to deploy Mastra agents as HTTP endpoints with middleware support.

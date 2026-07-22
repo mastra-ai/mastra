@@ -78,7 +78,7 @@ function runtimeConfigPlugin(mode: string): Plugin {
  * The production build outputs the static SPA to `src/mastra/public/ui`.
  * `mastra build` copies the `public/` dir next to the Mastra entry into
  * `.mastra/output/` automatically, so the build output is self-contained and
- * the API server serves the SPA same-origin at `/` (see src/web/spa-static.ts).
+ * the API server serves the SPA same-origin at `/` (see @mastra/factory/spa-static).
  * Hosting the SPA separately (static host / CDN, cross-origin via
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */

@@ -6,7 +6,7 @@
  * storage, vector), plain values for config (publicUrl, origins) — so anyone
  * reading the entry sees exactly which env var feeds which slot.
  * Everything else (feature readiness, route/middleware assembly, controller
- * construction) lives in `MastraFactory` (`../web/factory-entry.ts`).
+ * construction) lives in `MastraFactory` (`@mastra/factory`).
  *
  * `mastra build` requires the entry to export a `Mastra` instance named
  * `mastra` constructed by a literal `new Mastra(...)` in THIS file (validated
@@ -29,11 +29,11 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { WorkOS } from '@workos-inc/node';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { WorkOSAuditIntegration } from '../web/audit/workos-integration.js';
-import { MastraFactory } from '../web/factory-entry.js';
-import type { FactoryIntegration } from '../web/factory-integration.js';
-import { GithubIntegration } from '../web/github/integration.js';
-import { LinearIntegration } from '../web/linear/integration.js';
+import { WorkOSAuditIntegration } from '@mastra/factory/integrations/workos/integration';
+import { MastraFactory } from '@mastra/factory';
+import type { FactoryIntegration } from '@mastra/factory/integrations/base';
+import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
