@@ -72,6 +72,54 @@ describe('workflow draft', () => {
     });
   });
 
+  describe('when a mapping contains an unsupported expression', () => {
+    it('rejects the mapping before the workflow can be finalized', () => {
+      const draft = createValidDraft();
+      draft.graph = [{ type: 'mapping', id: 'calculate-sum', mapConfig: '{"sum":"${input.a + input.b}"}' }];
+
+      const result = validateWorkflowDraft(draft);
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          {
+            code: 'invalid-map-config',
+            path: 'graph.0.mapConfig.sum',
+            message:
+              'Mapping entries must use value, template, requestContextPath, or a step/initData source with a path. Expressions are not supported.',
+          },
+        ],
+      });
+    });
+  });
+
+  describe('when a mapping template uses an unknown namespace', () => {
+    it('rejects the mapping before the workflow can be finalized', () => {
+      const draft = createValidDraft();
+      draft.graph = [
+        {
+          type: 'mapping',
+          id: 'shape-output',
+          mapConfig: '{"result":{"template":"${steps.add_numbers.output.result}"}}',
+        },
+      ];
+
+      const result = validateWorkflowDraft(draft);
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          {
+            code: 'invalid-map-config',
+            path: 'graph.0.mapConfig.result',
+            message:
+              'Mapping entries must use value, template, requestContextPath, or a step/initData source with a path. Expressions are not supported.',
+          },
+        ],
+      });
+    });
+  });
+
   describe('when constrained mutations are applied', () => {
     it('updates identity and graph entries without replacing the whole draft', () => {
       const initial = createWorkflowDraft('new-workflow');

@@ -141,10 +141,52 @@ function schemaCompatibility(source: unknown, destination: unknown): SchemaCompa
   return 'compatible';
 }
 
-function mappingOutputSchema(step: Extract<WorkflowDraftStep, { type: 'mapping' }>): JsonSchema | undefined {
+function isValidMappingTemplate(template: string): boolean {
+  for (const match of template.matchAll(/\$\{([^}]*)\}/g)) {
+    const expression = match[1] ?? '';
+    if (!expression || expression !== expression.trim()) return false;
+    const [scope, ...path] = expression.split('.');
+    if (scope === 'stepResults') {
+      if (!path[0]) return false;
+      continue;
+    }
+    if (scope === 'requestContext') {
+      if (path.length === 0) return false;
+      continue;
+    }
+    if (!['inputData', 'initData', 'state'].includes(scope)) return false;
+  }
+  return true;
+}
+
+function isValidMappingSource(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if ('value' in value) return true;
+  if (typeof value.template === 'string') return isValidMappingTemplate(value.template);
+  if (typeof value.requestContextPath === 'string' && value.requestContextPath.length > 0) return true;
+  if (typeof value.path !== 'string') return false;
+  if (value.initData === true) return true;
+  if (typeof value.step === 'string' && value.step.length > 0) return true;
+  return Array.isArray(value.step) && value.step.length > 0 && value.step.every(step => typeof step === 'string');
+}
+
+function mappingOutputSchema(
+  step: Extract<WorkflowDraftStep, { type: 'mapping' }>,
+  path?: string,
+  issues?: WorkflowDraftValidationIssue[],
+): JsonSchema | undefined {
   try {
-    const config = JSON.parse(step.mapConfig);
+    const config: unknown = JSON.parse(step.mapConfig);
     if (!isRecord(config)) return undefined;
+    for (const [key, source] of Object.entries(config)) {
+      if (isValidMappingSource(source)) continue;
+      issues?.push({
+        code: 'invalid-map-config',
+        path: `${path}.${key}`,
+        message:
+          'Mapping entries must use value, template, requestContextPath, or a step/initData source with a path. Expressions are not supported.',
+      });
+    }
     return {
       type: 'object',
       properties: Object.fromEntries(Object.keys(config).map(key => [key, {}])),
@@ -248,7 +290,7 @@ function validateStep(
       }
       return;
     case 'mapping':
-      if (!mappingOutputSchema(step)) {
+      if (!mappingOutputSchema(step, `${path}.mapConfig`, issues)) {
         issues.push({
           code: 'invalid-map-config',
           path: `${path}.mapConfig`,
