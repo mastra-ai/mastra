@@ -124,7 +124,12 @@ export function ThreadPage() {
       : workspaceViewerExpanded;
 
   const rightPanel = factoryEligible ? (
-    currentLifecycleKey && workspacePath && bindingSessionId && factoryProjectId && threadId && workspaceViewerVisible ? (
+    currentLifecycleKey &&
+    workspacePath &&
+    bindingSessionId &&
+    factoryProjectId &&
+    threadId &&
+    workspaceViewerVisible ? (
       <FactorySessionContextPanel
         factoryProjectId={factoryProjectId}
         threadId={threadId}
