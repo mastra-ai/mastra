@@ -361,11 +361,15 @@ mastra env vars pull
 mastra env vars pull <env> --output .env.staging
 ```
 
-`<env>` can be an environment name, slug, or ID, and can be omitted when the project has exactly one environment. The file is written with `0600` permissions.
+`<env>` can be an environment name, slug, or ID, and can be omitted when the project has exactly one environment. The file is written with `0600` permissions. The command stops if the output file already exists. Pass `--force` to replace it.
 
 #### `-o, --output`
 
 File to write. Defaults to `.env`.
+
+#### `-f, --force`
+
+Replace an existing output file.
 
 ### `mastra env db`
 

@@ -84,7 +84,7 @@ describe('envVarsPullAction', () => {
     expect(filePath).toContain('.env');
     expect(content).toContain('A="1"');
     expect(content).toContain('B="2"');
-    expect(options).toEqual({ encoding: 'utf-8', mode: 0o600 });
+    expect(options).toEqual({ encoding: 'utf-8', mode: 0o600, flag: 'wx' });
     expect(mockChmod).toHaveBeenCalledWith(filePath, 0o600);
     expect(spy.mock.calls.some(c => String(c[0]).includes('Pulled 2 variable(s)'))).toBe(true);
     spy.mockRestore();
@@ -174,6 +174,38 @@ describe('envVarsPullAction', () => {
     const [filePath] = mockWriteFile.mock.calls[0]!;
     expect(filePath).toContain('.env.production');
     expect(spy.mock.calls.some(c => String(c[0]).includes('.env.production'))).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('requires --force before overwriting an existing output file', async () => {
+    mockFetchEnvironments.mockResolvedValue([environment({ envVars: { FOO: 'bar' } })]);
+    const error = Object.assign(new Error('EEXIST'), { code: 'EEXIST' });
+    mockWriteFile.mockRejectedValueOnce(error);
+
+    const { envVarsPullAction } = await import('./vars.js');
+    await expect(envVarsPullAction(undefined, {})).rejects.toThrow('Refusing to overwrite .env');
+
+    expect(mockWriteFile).toHaveBeenCalledWith(expect.any(String), expect.any(String), {
+      encoding: 'utf-8',
+      mode: 0o600,
+      flag: 'wx',
+    });
+    expect(mockChmod).not.toHaveBeenCalled();
+  });
+
+  it('overwrites an existing output file when --force is set', async () => {
+    mockFetchEnvironments.mockResolvedValue([environment({ envVars: { FOO: 'bar' } })]);
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const { envVarsPullAction } = await import('./vars.js');
+    await envVarsPullAction(undefined, { force: true });
+
+    expect(mockWriteFile).toHaveBeenCalledWith(expect.any(String), expect.any(String), {
+      encoding: 'utf-8',
+      mode: 0o600,
+      flag: 'w',
+    });
+    expect(mockChmod).toHaveBeenCalledTimes(1);
     spy.mockRestore();
   });
 
