@@ -1100,6 +1100,8 @@ export class SessionSuspensions {
 export interface FollowUp {
   /** The message text to send. */
   content: string;
+  /** Optional signal attributes preserved when the queued message is sent. */
+  attributes?: AgentSignalAttributes;
   /** Optional request context to apply when the queued message is sent. */
   requestContext?: RequestContext;
 }
@@ -3009,6 +3011,7 @@ export class Session<TState = unknown> {
       | AgentSignalInput
       | {
           content: AgentSignalContents;
+          attributes?: AgentSignalAttributes;
           ifActive?: { attributes?: AgentSignalAttributes };
           ifIdle?: { attributes?: AgentSignalAttributes };
           tracingContext?: TracingContext;
@@ -3049,7 +3052,9 @@ export class Session<TState = unknown> {
     // run to fully idle before starting a new run.
     const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
-      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
+      'content' in input
+        ? { type: 'user', tagName: 'user', contents: input.content, attributes: input.attributes }
+        : input,
     );
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
@@ -3164,12 +3169,14 @@ export class Session<TState = unknown> {
   async sendMessage({
     content,
     files,
+    attributes,
     tracingContext,
     tracingOptions,
     requestContext: requestContextInput,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    attributes?: AgentSignalAttributes;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
@@ -3190,6 +3197,7 @@ export class Session<TState = unknown> {
         });
     const signal = this.sendSignal({
       content: messageInput,
+      attributes,
       tracingContext,
       tracingOptions,
       requestContext: requestContextInput,
@@ -3213,23 +3221,39 @@ export class Session<TState = unknown> {
   /**
    * Steer the agent mid-stream: aborts the current run and sends a new message.
    */
-  async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+  async steer({
+    content,
+    attributes,
+    requestContext,
+  }: {
+    content: string;
+    attributes?: AgentSignalAttributes;
+    requestContext?: RequestContext;
+  }): Promise<void> {
     this.abort();
     this.followUps.clear();
     this.emit({ type: 'follow_up_queued', count: 0 });
-    await this.sendMessage({ content, requestContext });
+    await this.sendMessage({ content, attributes, requestContext });
   }
 
   /**
    * Queue a follow-up message to be processed after the current run completes,
    * or send it immediately when the session is idle.
    */
-  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+  async followUp({
+    content,
+    attributes,
+    requestContext,
+  }: {
+    content: string;
+    attributes?: AgentSignalAttributes;
+    requestContext?: RequestContext;
+  }): Promise<void> {
     if (this.run.isRunning()) {
-      this.followUps.enqueue({ content, requestContext });
+      this.followUps.enqueue({ content, attributes, requestContext });
       this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
     } else {
-      await this.sendMessage({ content, requestContext });
+      await this.sendMessage({ content, attributes, requestContext });
     }
   }
 
@@ -3253,11 +3277,15 @@ export class Session<TState = unknown> {
           tracingContext: options?.tracingContext,
           tracingOptions: options?.tracingOptions,
         });
-        const result = agent.queueMessage(this.createMessageInput({ content: next.content }), {
-          resourceId: this.identity.getResourceId(),
-          threadId,
-          ifIdle: { streamOptions: streamOptions as any },
-        });
+        const messageInput = this.createMessageInput({ content: next.content });
+        const result = agent.queueMessage(
+          next.attributes ? { contents: messageInput, attributes: next.attributes } : messageInput,
+          {
+            resourceId: this.identity.getResourceId(),
+            threadId,
+            ifIdle: { streamOptions: streamOptions as any },
+          },
+        );
         // Let a rejected `accepted` propagate: `next` is already dequeued, so a
         // setup/misconfig failure must reach the outer catch to requeue it
         // rather than being swallowed into a false success (the follow-up would
@@ -3269,6 +3297,7 @@ export class Session<TState = unknown> {
         this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
         await this.sendMessage({
           content: next.content,
+          attributes: next.attributes,
           requestContext: next.requestContext,
           tracingContext: options?.tracingContext,
           tracingOptions: options?.tracingOptions,

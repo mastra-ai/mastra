@@ -64,6 +64,68 @@ describe('AgentController signal messages', () => {
     );
   });
 
+  it('preserves attributed message attributes for active delivery, persistence, and model input', async () => {
+    const activeRunId = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-attributed-active',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    const subscription = createSubscription(() => activeRunId);
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: activeRunId });
+    session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
+
+    await session.sendMessage({
+      content: 'Use <safe> & sound output',
+      attributes: { userId: 'user-1', name: 'Ada Lovelace' },
+    });
+
+    const signal = agent.sendSignal.mock.calls[0]![0];
+    expect(signal.attributes).toEqual({ userId: 'user-1', name: 'Ada Lovelace' });
+    expect(signal.toDBMessage().content.metadata.signal.attributes).toEqual({
+      userId: 'user-1',
+      name: 'Ada Lovelace',
+    });
+    expect(signal.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<user userId="user-1" name="Ada Lovelace">Use &lt;safe&gt; &amp; sound output</user>',
+    });
+  });
+
+  it('preserves attributed message attributes when an idle signal wakes a run', async () => {
+    const agent = createAgentMock(() => null);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-attributed-idle',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    const result = session.sendSignal({
+      content: 'wake up',
+      attributes: { name: 'Ada Lovelace' },
+    });
+    await expect(result.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+
+    expect(agent.sendSignal.mock.calls[0]![0]).toEqual(
+      expect.objectContaining({
+        type: 'user',
+        tagName: 'user',
+        contents: 'wake up',
+        attributes: { name: 'Ada Lovelace' },
+      }),
+    );
+  });
+
   it('declines an armed approval with interruption context before delivering a user signal', async () => {
     let activeRunId: string | null = 'run-1';
     const agent = createAgentMock(() => activeRunId);

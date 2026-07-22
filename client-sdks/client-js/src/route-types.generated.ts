@@ -19803,6 +19803,11 @@ export type PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParam
 
 export type PostAgentControllerControllerIdSessionsResourceIdMessages_Body = {
   message: string;
+  attributes?:
+    | {
+        [key: string]: string | number | boolean | null | undefined;
+      }
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -19856,6 +19861,11 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams =
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
   message: string;
+  attributes?:
+    | {
+        [key: string]: string | number | boolean | null | undefined;
+      }
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;

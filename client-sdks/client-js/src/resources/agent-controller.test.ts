@@ -97,6 +97,23 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
   });
 
+  it('sends attributes for user-authored session messages', async () => {
+    const session = client.getAgentController('code').session('user-1');
+    const attributes = { userId: 'user-1', name: 'Ada Lovelace' };
+
+    mockJson({ ok: true });
+    await session.sendMessage('hello', { attributes });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'hello', attributes });
+
+    mockJson({ ok: true });
+    await session.steer('focus', { attributes });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'focus', attributes });
+
+    mockJson({ ok: true });
+    await session.followUp('later', { attributes });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'later', attributes });
+  });
+
   it('sends requestContext in the body for run-triggering methods', async () => {
     const session = client.getAgentController('code').session('user-1');
     const requestContext = { userId: 'u-42', tier: 'pro' };

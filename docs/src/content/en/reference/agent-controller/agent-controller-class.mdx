@@ -688,13 +688,20 @@ const session = await agentController.getSession()
 
 ### Messages
 
-#### `sendMessage({ content, files?, requestContext? })`
+#### `sendMessage({ content, files?, attributes?, requestContext? })`
 
 Send a message to the current agent. Creates a thread if none exists, builds a `RequestContext` and toolsets, and streams the agent's response. Handles tool calls, approvals, and errors automatically. If you provide `requestContext`, the agentController forwards it to tools and subagents during the run.
 
+Use `attributes` for bounded display or prompt context. Signal rendering escapes the values and includes them on the user XML element. For example, the following message reaches the model as `<user name="Ada Lovelace">Explain the authentication flow</user>`:
+
 ```typescript
-await agentController.sendMessage({ content: 'Explain the authentication flow' })
+await agentController.sendMessage({
+  content: 'Explain the authentication flow',
+  attributes: { name: 'Ada Lovelace' },
+})
 ```
+
+Treat attributes as context, not authorization claims. At an HTTP boundary, replace identity attributes with values from the authenticated server session before forwarding the message.
 
 Reading messages is owned by [`session.thread`](/reference/agent-controller/session#thread): use `listActiveMessages()` for the active thread, `listMessages({ threadId })` for a specific thread, and `firstUserMessage({ threadId })` / `firstUserMessages({ threadIds })` for thread previews.
 
@@ -720,20 +727,26 @@ Abort any in-progress generation.
 agentController.abort()
 ```
 
-#### `steer({ content, requestContext? })`
+#### `steer({ content, attributes?, requestContext? })`
 
-Steer the agent mid-stream by injecting an instruction into the current generation.
+Steer the agent mid-stream by injecting an instruction into the current generation. Attributes are preserved on the injected user signal.
 
 ```typescript
-agentController.steer({ content: 'Focus on security implications' })
+agentController.steer({
+  content: 'Focus on security implications',
+  attributes: { name: 'Ada Lovelace' },
+})
 ```
 
-#### `followUp({ content, requestContext? })`
+#### `followUp({ content, attributes?, requestContext? })`
 
-Queue a follow-up message to be sent after the current generation completes. If no operation is running, sends the message immediately.
+Queue a follow-up message to be sent after the current generation completes. If no operation is running, sends the message immediately. Attributes remain attached while a follow-up waits in the queue.
 
 ```typescript
-agentController.followUp({ content: 'Now apply those changes' })
+agentController.followUp({
+  content: 'Now apply those changes',
+  attributes: { name: 'Ada Lovelace' },
+})
 ```
 
 ### Tool approvals

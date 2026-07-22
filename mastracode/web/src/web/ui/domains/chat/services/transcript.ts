@@ -49,6 +49,8 @@ export interface MessageEntry {
   streaming?: boolean;
   /** A steer (interjection) vs a normal message. */
   steer?: boolean;
+  /** Authenticated display name attached to a user-authored signal. */
+  authorName?: string;
 }
 
 export interface NoticeEntry {
@@ -194,7 +196,7 @@ export interface OutgoingFile {
 
 type Action =
   | { type: 'event'; event: AgentControllerEvent }
-  | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
+  | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[]; authorName?: string }
   | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
@@ -248,7 +250,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
                 parts: [{ type: 'text', text: action.text }, ...(action.files ?? []).map(toOutgoingFilePart)],
               },
             },
-            { steer: action.steer },
+            { steer: action.steer, authorName: action.authorName },
           ),
         ],
       };
@@ -627,7 +629,7 @@ function prependOlderMessages(state: TranscriptState, messages: MastraDBMessage[
 
 function toMessageEntry(
   message: MastraDBMessage,
-  options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
+  options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall>; authorName?: string } = {},
 ): MessageEntry {
   const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
   const signal =
@@ -640,6 +642,9 @@ function toMessageEntry(
       ? (signal.attributes as Record<string, unknown>)
       : undefined;
   const displayMessage = isUserSignal ? { ...message, role: 'user' as const } : message;
+  const attributedName = isUserSignal && typeof attributes?.name === 'string' ? attributes.name : undefined;
+  const candidateName = attributedName ?? options.authorName;
+  const authorName = candidateName && candidateName.length <= 128 ? candidateName : undefined;
 
   return {
     kind: 'message',
@@ -648,6 +653,7 @@ function toMessageEntry(
     runtimeTools: options.runtimeTools,
     streaming: options.streaming,
     steer: options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined),
+    authorName,
   };
 }
 
