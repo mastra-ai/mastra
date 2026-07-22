@@ -1,7 +1,6 @@
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
 import { useActiveFactoryContext } from '../../workspaces';
-import { useCloseSettings } from '../../settings/hooks/useCloseSettings';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -9,7 +8,6 @@ import { useAbortAgentControllerMutation } from '../../../../../shared/hooks/use
 
 export function useGlobalShortcuts() {
   const overlays = useOverlays();
-  const closeSettings = useCloseSettings();
   const { factories } = useActiveFactoryContext();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { busy } = useChatTranscript();
@@ -30,14 +28,9 @@ export function useGlobalShortcuts() {
       overlays.toggle('shortcuts');
     },
     escape: () => {
-      const factoriesForcedOpen = overlays.isOpen('factories') || factories.length === 0;
-      if (factoriesForcedOpen) return;
+      if (factories.length === 0) return;
       if (overlays.isOpen('shortcuts')) {
         overlays.close('shortcuts');
-        return;
-      }
-      if (overlays.isOpen('settings')) {
-        closeSettings();
         return;
       }
       if (overlays.isOpen('sidebar')) {

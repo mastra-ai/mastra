@@ -13,7 +13,6 @@ import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/
 import { setupDebugLogging } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
-import { createTuiCleanup } from './main-cleanup.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
@@ -24,8 +23,6 @@ let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
-let githubSignals: Awaited<ReturnType<typeof createMastraCode>>['githubSignals'];
-let storageMaintenance: Awaited<ReturnType<typeof createMastraCode>>['storageMaintenance'];
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 let tui: MastraTUI | undefined;
 
@@ -74,8 +71,6 @@ async function tuiMain(pipedInput?: string | null) {
   hookManager = result.hookManager;
   authStorage = result.authStorage;
   signalsPubSub = result.signalsPubSub;
-  githubSignals = result.githubSignals;
-  storageMaintenance = result.storageMaintenance;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -138,7 +133,9 @@ async function tuiMain(pipedInput?: string | null) {
     githubSignals: result.githubSignals,
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
-  const tuiRun = tui.run();
+  tui.run().catch(error => {
+    handleFatalError(error);
+  });
 
   if (settings.browser.enabled) {
     void loadBrowser()
@@ -149,28 +146,22 @@ async function tuiMain(pipedInput?: string | null) {
       })
       .catch(() => {});
   }
-
-  await tuiRun;
-  await asyncCleanup();
 }
 
-export const asyncCleanup = createTuiCleanup({
-  stopWork: [
-    () => mcpManager?.disconnect(),
-    () => controller?.getMastra()?.stopWorkers(),
-    () => controller?.stopIntervals(),
-    () => githubSignals?.stopAllPolling(),
-    () => (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close?.(),
-  ],
-  closeStorage: () => storageMaintenance?.closeStorage?.(),
-  shutdownAnalytics: () => analytics?.shutdown(),
-  releaseLocks: releaseAllThreadLocks,
-});
+const asyncCleanup = async () => {
+  releaseAllThreadLocks();
+  const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+  await Promise.allSettled([
+    mcpManager?.disconnect(),
+    controller?.getMastra()?.stopWorkers(),
+    controller?.stopIntervals(),
+    closeSignalsPubSub?.(),
+    analytics?.shutdown(),
+  ]);
+};
 
 process.on('beforeExit', () => {
-  void asyncCleanup().catch(error => {
-    process.stderr.write(`Storage cleanup failed: ${error instanceof Error ? error.message : String(error)}\n`);
-  });
+  void asyncCleanup();
 });
 process.on('exit', () => {
   // Ensure terminal protocols (kitty keyboard, modifyOtherKeys, bracketed paste,
@@ -215,13 +206,7 @@ const handleTermSignal = () => {
   } catch {
     // ignored — exit handler has failsafe reset
   }
-  void asyncCleanup().then(
-    () => process.exit(0),
-    error => {
-      process.stderr.write(`Storage cleanup failed: ${error instanceof Error ? error.message : String(error)}\n`);
-      process.exit(1);
-    },
-  );
+  void asyncCleanup().finally(() => process.exit(0));
 };
 process.on('SIGINT', handleTermSignal);
 process.on('SIGTERM', handleTermSignal);
@@ -265,7 +250,7 @@ function readFlag(args: string[], flag: string): string | undefined {
   return value;
 }
 
-function handleFatalError(error: unknown): void {
+function handleFatalError(error: unknown): never {
   // Always write to real stderr, even if console.error was overridden
   const write = (msg: string) => process.stderr.write(msg + '\n');
 
@@ -279,12 +264,7 @@ function handleFatalError(error: unknown): void {
         `\n\nTo switch back to LibSQL:` +
         `\n  Set MASTRA_STORAGE_BACKEND=libsql or change the backend in /settings\n`,
     );
-    void asyncCleanup()
-      .catch(cleanupError => {
-        write(`Storage cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
-      })
-      .finally(() => process.exit(1));
-    return;
+    process.exit(1);
   }
 
   const msg = `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
@@ -297,11 +277,7 @@ function handleFatalError(error: unknown): void {
   if (error instanceof Error && error.stack) {
     write(error.stack);
   }
-  void asyncCleanup()
-    .catch(cleanupError => {
-      write(`Storage cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
-    })
-    .finally(() => process.exit(1));
+  process.exit(1);
 }
 
 async function main() {

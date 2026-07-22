@@ -1,0 +1,357 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useState } from 'react';
+
+import { useApiConfig } from '../../../shared/api/config';
+import { useFactoryMetrics } from '../../../shared/hooks/useFactoryMetrics';
+import { useWorkspaceActivity } from '../../../shared/hooks/useWorkspaceActivity';
+import { deriveProjectPath, useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
+import { formatDuration, relativeTime } from '../../../shared/lib/date';
+import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
+import { isServerFactory, useActiveFactoryContext } from '../domains/workspaces';
+import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import type { FactoryMetrics } from '../domains/factory/services/metrics';
+import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
+
+const WINDOW_OPTIONS = [
+  { value: 7, label: '7d' },
+  { value: 30, label: '30d' },
+  { value: 90, label: '90d' },
+] as const;
+
+type WindowDays = (typeof WINDOW_OPTIONS)[number]['value'];
+
+const THROUGHPUT_SERIES = [{ dataKey: 'done', label: 'Done per day', color: '#34d399' }];
+
+const SOURCE_LABELS: Record<string, string> = {
+  'github-issue': 'GitHub issues',
+  'github-pr': 'GitHub PRs',
+  'linear-issue': 'Linear issues',
+  manual: 'Manual',
+};
+
+/** Terminal stages have no "pass through", so they never get automation rows. */
+const TERMINAL_STAGE_IDS = new Set(['done', 'canceled']);
+
+const EM_DASH = '—';
+
+/**
+ * Factory flow metrics: throughput, cycle time, stage breakdown, aging WIP,
+ * and demand mix — aggregated server-side from the board's stage history.
+ * "Agents running" is live, from the same thread-state source as the sidebar
+ * activity dots.
+ */
+export function MetricsPage() {
+  return (
+    <FactoryPageShell
+      title="Metrics"
+      description="Flow health for this project's factory: throughput, where work stalls, and what's aging."
+    >
+      {project => <MetricsContent factoryProjectId={project.binding.factoryProjectId} />}
+    </FactoryPageShell>
+  );
+}
+
+function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
+  const [days, setDays] = useState<WindowDays>(30);
+  const metricsQuery = useFactoryMetrics(factoryProjectId, days);
+  const agentsRunning = useAgentsRunningCount();
+
+  if (metricsQuery.isError) {
+    return <Notice variant="destructive">{(metricsQuery.error as Error).message}</Notice>;
+  }
+  const metrics = metricsQuery.data;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+      <div className="flex items-center justify-between">
+        <ButtonsGroup spacing="close" role="group" aria-label="Metrics window">
+          {WINDOW_OPTIONS.map(option => (
+            <Button
+              key={option.value}
+              variant={days === option.value ? 'primary' : 'outline'}
+              size="sm"
+              aria-pressed={days === option.value}
+              onClick={() => setDays(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </ButtonsGroup>
+      </div>
+
+      {!metrics ? null : (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <StatCard
+              label={`Completed (${days}d)`}
+              value={String(metrics.throughput.reduce((sum, point) => sum + point.count, 0))}
+            />
+            <StatCard
+              label="Median cycle time"
+              value={formatDuration(metrics.cycleTime.medianMs)}
+              hint={metrics.cycleTime.p90Ms !== null ? `p90 ${formatDuration(metrics.cycleTime.p90Ms)}` : undefined}
+            />
+            <StatCard label="In flight" value={String(metrics.wipTotal)} />
+            <StatCard label="Agents running" value={String(agentsRunning)} />
+            <StatCard
+              label={`Automated moves (${days}d)`}
+              value={
+                metrics.transitions.total === 0
+                  ? EM_DASH
+                  : String(metrics.transitions.total - metrics.transitions.human)
+              }
+              hint={metrics.transitions.total === 0 ? undefined : `of ${metrics.transitions.total} stage moves`}
+            />
+          </div>
+
+          <Section title="Throughput">
+            <MetricsLineChart
+              data={metrics.throughput.map(point => ({ time: point.date, done: point.count }))}
+              series={THROUGHPUT_SERIES}
+              height={180}
+            />
+          </Section>
+
+          <Section title="Stages">
+            <StageBreakdown metrics={metrics} />
+          </Section>
+
+          <Section title="Automation by stage">
+            <StageAutomation metrics={metrics} />
+          </Section>
+
+          <Section title="Oldest in-flight items">
+            <AgingWipTable metrics={metrics} />
+          </Section>
+
+          <Section title="Source mix">
+            <SourceMix metrics={metrics} />
+          </Section>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Live count of worktrees with an agent run in flight (sidebar dot source). */
+function useAgentsRunningCount(): number {
+  const { baseUrl } = useApiConfig();
+  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const workspaces = useWorkspacesQuery(activeFactory);
+  const worktrees = workspaces.data?.worktrees ?? [];
+  const projectPath = deriveProjectPath(activeFactory) || undefined;
+  const runningByPath = useWorkspaceActivity({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    scope: projectPath,
+    worktreePaths: worktrees.map(worktree => worktree.worktreePath),
+    baseUrl,
+    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory) && projectPath),
+  });
+  return Object.values(runningByPath).filter(Boolean).length;
+}
+
+function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-border1 bg-surface2 p-3">
+      <Txt as="span" variant="ui-sm" className="text-icon3">
+        {label}
+      </Txt>
+      <span className="text-xl text-icon6">{value}</span>
+      {hint ? (
+        <Txt as="span" variant="ui-xs" className="text-icon3">
+          {hint}
+        </Txt>
+      ) : null}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2 rounded-lg border border-border1 bg-surface2 p-3">
+      <h2 className="m-0 text-ui-md font-medium text-icon5">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+/** Median time-in-stage bars plus each column's current card count. */
+function StageBreakdown({ metrics }: { metrics: FactoryMetrics }) {
+  const wipByStage = new Map(metrics.wip.map(entry => [entry.stage, entry.count]));
+  const durationByStage = new Map(metrics.stageDurations.map(entry => [entry.stage, entry]));
+  const stages = [
+    ...new Set([
+      ...BOARD_STAGES.map(stage => stage.id as string),
+      ...metrics.wip.map(entry => entry.stage),
+      ...metrics.stageDurations.map(entry => entry.stage),
+    ]),
+  ].sort((a, b) => stageOrder(a) - stageOrder(b));
+  const maxMedian = Math.max(1, ...metrics.stageDurations.map(entry => entry.medianMs));
+
+  return (
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      {stages.map(stage => {
+        const duration = durationByStage.get(stage);
+        const wip = wipByStage.get(stage) ?? 0;
+        return (
+          <li key={stage} className="grid grid-cols-[7rem_1fr_auto] items-center gap-3">
+            <Txt as="span" variant="ui-sm" className="text-icon4">
+              {stageLabel(stage)}
+            </Txt>
+            <div className="h-2 overflow-hidden rounded-full bg-surface4">
+              {duration ? (
+                <div
+                  className="h-full rounded-full bg-accent1"
+                  style={{ width: `${Math.max(2, Math.round((duration.medianMs / maxMedian) * 100))}%` }}
+                />
+              ) : null}
+            </div>
+            <Txt as="span" variant="ui-xs" className="text-right text-icon3">
+              {duration ? `median ${formatDuration(duration.medianMs)} · ` : ''}
+              {wip} in column
+            </Txt>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * Per-stage automation: what share of completed passes through each stage was
+ * fully automated (entered and exited by automation, first visit), and how
+ * the automated passes' items ended up.
+ */
+function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
+  // Rows only exist for stages with ≥1 exit, so an empty list means no stage
+  // had a completed pass in the window.
+  if (metrics.stageAutomation.length === 0) {
+    return (
+      <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+        No completed stage passes in this window yet.
+      </Txt>
+    );
+  }
+
+  const rowsByStage = new Map(metrics.stageAutomation.map(row => [row.stage, row]));
+  // Non-terminal board stages in column order, plus any stages present in the
+  // data but unknown to the board (raw id, sorted last — same rule as
+  // stageLabel/stageOrder).
+  const stages = [
+    ...new Set([
+      ...BOARD_STAGES.map(stage => stage.id as string).filter(id => !TERMINAL_STAGE_IDS.has(id)),
+      ...metrics.stageAutomation.map(row => row.stage),
+    ]),
+  ].sort((a, b) => stageOrder(a) - stageOrder(b));
+
+  return (
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      {stages.map(stage => {
+        const row = rowsByStage.get(stage);
+        const exits = row?.exits ?? 0;
+        const automated = row?.automated ?? 0;
+        const pct = exits === 0 ? null : Math.round((automated / exits) * 100);
+        return (
+          <li key={stage} className="grid grid-cols-[7rem_1fr_auto] items-center gap-3">
+            <Txt as="span" variant="ui-sm" className="text-icon4">
+              {stageLabel(stage)}
+            </Txt>
+            <div className="h-2 overflow-hidden rounded-full bg-surface4">
+              {pct !== null && automated > 0 ? (
+                <div className="h-full rounded-full bg-accent1" style={{ width: `${Math.max(2, pct)}%` }} />
+              ) : null}
+            </div>
+            <Txt as="span" variant="ui-xs" className="text-right text-icon3">
+              {pct === null
+                ? EM_DASH
+                : `${pct}% automated (${automated}/${exits})${row && automated > 0 ? ` · ${outcomeSummary(row.outcomes)}` : ''}`}
+            </Txt>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Compact split of automated-pass outcomes, omitting zero buckets. */
+function outcomeSummary(outcomes: FactoryMetrics['stageAutomation'][number]['outcomes']): string {
+  const parts: string[] = [];
+  if (outcomes.done > 0) parts.push(`${outcomes.done} done`);
+  if (outcomes.canceled > 0) parts.push(`${outcomes.canceled} canceled`);
+  if (outcomes.reworked > 0) parts.push(`${outcomes.reworked} reworked`);
+  if (outcomes.inFlight > 0) parts.push(`${outcomes.inFlight} in flight`);
+  return parts.join(', ');
+}
+
+function AgingWipTable({ metrics }: { metrics: FactoryMetrics }) {
+  if (metrics.agingWip.length === 0) {
+    return (
+      <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+        Nothing in flight — the board is clear.
+      </Txt>
+    );
+  }
+  return (
+    <ul className="m-0 flex list-none flex-col p-0">
+      {metrics.agingWip.map(item => (
+        <li
+          key={`${item.id}:${item.stage}`}
+          className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-border1 py-1.5 last:border-b-0"
+        >
+          {item.url ? (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              className="truncate text-ui-sm text-icon5 no-underline hover:text-icon6 hover:underline"
+            >
+              {item.title}
+            </a>
+          ) : (
+            <span className="truncate text-ui-sm text-icon5">{item.title}</span>
+          )}
+          <span className="rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-icon4">{stageLabel(item.stage)}</span>
+          <Txt as="span" variant="ui-xs" className="text-icon3">
+            in stage {relativeTime(item.enteredAt) || 'just now'}
+          </Txt>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SourceMix({ metrics }: { metrics: FactoryMetrics }) {
+  const total = metrics.sourceMix.reduce((sum, entry) => sum + entry.count, 0);
+  if (total === 0) {
+    return (
+      <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+        No items created in this window.
+      </Txt>
+    );
+  }
+  return (
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      {metrics.sourceMix.map(entry => (
+        <li key={entry.source} className="grid grid-cols-[9rem_1fr_auto] items-center gap-3">
+          <Txt as="span" variant="ui-sm" className="text-icon4">
+            {SOURCE_LABELS[entry.source] ?? entry.source}
+          </Txt>
+          <div className="h-2 overflow-hidden rounded-full bg-surface4">
+            <div
+              className="h-full rounded-full bg-accent1"
+              style={{ width: `${Math.max(2, Math.round((entry.count / total) * 100))}%` }}
+            />
+          </div>
+          <Txt as="span" variant="ui-xs" className="text-right text-icon3">
+            {entry.count}
+          </Txt>
+        </li>
+      ))}
+    </ul>
+  );
+}

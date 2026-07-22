@@ -37,7 +37,7 @@ import type { MastraVector } from '@mastra/core/vector';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import {
   Observability,
   MastraStorageExporter,
@@ -100,7 +100,7 @@ import {
 } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
-import { createOwnedVectorStore, createStorage } from './utils/storage-factory.js';
+import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
@@ -512,20 +512,20 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Vector store for recall search (separate DB file to avoid bloating main
   // storage). An injected instance is used as-is; with an injected storage
   // instance and no injected vector, recall search stays vector-less.
-  const ownedVector =
-    config?.vector || !storageConfig ? undefined : await createOwnedVectorStore(storageConfig, storageResult.backend);
-  const vector = config?.vector ?? ownedVector?.vector;
+  const vector =
+    config?.vector ?? (storageConfig ? await createVectorStore(storageConfig, storageResult.backend) : undefined);
 
-  // Maintenance handle for /prune and shutdown: prunes via the inner store
-  // (whose retention config covers every domain, including legacy libsql
-  // observability spans) and closes only vector stores created here. Injected
-  // vectors remain owned by their caller.
+  // Maintenance handle for /prune: prunes via the inner store (whose retention
+  // config covers every domain, including legacy libsql observability spans)
+  // and can compact local libsql files to reclaim disk. The vector store's
+  // connection must close alongside storage — the compaction's file swap
+  // refuses to run while any connection is open.
   const storageMaintenance: StorageMaintenance = createStorageMaintenance({
     storage: storageResult.storage,
     backend: storageResult.backend,
     retention: DEFAULT_RETENTION,
     localDbFiles: storageConfig ? resolveLocalDbFiles(storageConfig, storageResult.backend) : [],
-    closeVector: ownedVector?.close,
+    closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
   const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
@@ -992,7 +992,7 @@ export async function wireSessionConcerns(
       if (event.type === 'thread_changed') void startGithubPollingForCurrentThread(event.threadId);
       else if (event.type === 'thread_created') void startGithubPollingForCurrentThread(event.thread.id);
     });
-    await startGithubPollingForCurrentThread(session.thread.getId());
+    void startGithubPollingForCurrentThread(session.thread.getId());
   }
 
   // Persist MastraCode-owned /om settings per-thread (mastracode-only concern;
@@ -1013,28 +1013,12 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   const base = await createMastraCodeAgentController(config);
   const { controller, sessionId, ownerId } = base;
 
-  try {
-    await controller.init();
-    await controller.getMastra()?.startWorkers();
-    const session = await controller.createSession({ id: sessionId, ownerId });
-    await wireSessionConcerns(base, session);
+  await controller.init();
+  await controller.getMastra()?.startWorkers();
+  const session = await controller.createSession({ id: sessionId, ownerId });
+  await wireSessionConcerns(base, session);
 
-    return { ...base, session };
-  } catch (error) {
-    const stopWork: Array<() => Promise<unknown> | unknown> = [
-      () => controller.getMastra()?.stopWorkers(),
-      () => controller.stopIntervals(),
-      () => base.mcpManager?.disconnect(),
-      () => (base.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close?.(),
-    ];
-    await Promise.allSettled(stopWork.map(stop => Promise.resolve().then(stop)));
-    try {
-      await base.storageMaintenance.closeStorage?.();
-    } catch (closeError) {
-      throw new AggregateError([error, closeError], 'Mastra Code startup and storage cleanup failed');
-    }
-    throw error;
-  }
+  return { ...base, session };
 }
 
 /** Result of {@link mountAgentControllerOnMastra}: shared handles plus the owning Mastra. */
