@@ -78,6 +78,10 @@ function loose(c: unknown): Context {
   return c as Context;
 }
 
+function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
+  return (ctx.baseUrl || new URL(requestUrl).origin).replace(/\/+$/, '');
+}
+
 export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
   readonly #client: PlatformApiClient;
@@ -274,8 +278,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         const tenant = ctx.auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
-        const returnTo = c.req.query('return_to') || `/orgs/${tenant.orgId}/settings/general`;
-        const query = new URLSearchParams({ return_to: returnTo });
+        const returnTo = c.req.query('return_to') || '/';
+        const query = new URLSearchParams({ return_to: returnTo, originator: routeBaseUrl(ctx, c.req.url) });
         const location = await this.#client.requestRedirect('GET', `${API_PREFIX}/authorize?${query}`);
         return c.redirect(location);
       },

@@ -550,6 +550,7 @@ describe('PlatformGithubIntegration', () => {
       },
       controller: {},
       stateSigner: {},
+      baseUrl: 'https://factory.example',
     } as unknown as IntegrationContext;
     integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
     integration.versionControl.initialize({ storage: context.storage.sourceControl });
@@ -578,7 +579,7 @@ describe('PlatformGithubIntegration', () => {
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
-      'https://platform.example.com/v1/server/github-app/install-url?action=install',
+      'https://platform.example.com/v1/server/github-app/install-url?action=install&redirectTo=%2F&originator=https%3A%2F%2Ffactory.example',
       expect.anything(),
     );
   });
