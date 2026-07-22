@@ -661,6 +661,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/postgresql', label: 'PostgreSQL Storage' },
         { type: 'doc', id: 'storage/redis', label: 'Redis Storage' },
         { type: 'doc', id: 'storage/retention', label: 'Retention (prune)' },
+        { type: 'doc', id: 'storage/turso', label: 'Turso Storage' },
         { type: 'doc', id: 'storage/upstash', label: 'Upstash Storage' },
       ],
     },
