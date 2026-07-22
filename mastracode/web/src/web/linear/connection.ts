@@ -36,7 +36,8 @@ export class LinearReauthRequiredError extends Error {
 /** Distinguishes an external token-refresh failure from internal connection storage failures. */
 export class LinearProviderUnavailableError extends Error {
   constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : 'Linear token refresh failed.', { cause });
+    super('Linear token refresh failed.', { cause });
+    this.name = 'LinearProviderUnavailableError';
   }
 }
 
@@ -67,7 +68,7 @@ export function canPostLinearComments(connection: LinearConnectionRow): boolean 
  * and cannot be refreshed — the org has to go through the OAuth flow again.
  */
 export async function getFreshLinearAccessToken(
-  linear: LinearIntegration,
+  linear: Pick<LinearIntegration, 'refreshAccessToken'>,
   connection: LinearConnectionRow,
 ): Promise<string> {
   const expired = connection.expiresAt !== null && connection.expiresAt.getTime() - TOKEN_REFRESH_SKEW_MS <= Date.now();

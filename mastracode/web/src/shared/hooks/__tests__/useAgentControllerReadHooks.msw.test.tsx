@@ -1,10 +1,10 @@
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
-import { useAgentControllerModels } from '../useAgentControllerModels';
+import { useAvailableModelsQuery } from '../useAvailableModels';
 import { useAgentControllerThreadMessages } from '../useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE, useAgentControllerThreads } from '../useAgentControllerThreads';
 
@@ -14,27 +14,19 @@ const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessio
 const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
 
 describe('agent-controller read hooks', () => {
-  it('filters models to providers with API keys before caching them', async () => {
+  it('loads the session-independent model catalog from the config endpoint', async () => {
     const onReadModels = vi.fn();
 
     server.use(
-      http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/models`, () => {
+      http.get(`${TEST_BASE_URL}/web/config/models`, () => {
         onReadModels();
         return HttpResponse.json({
-          models: [
-            { id: 'openai/gpt-4.1', label: 'GPT 4.1', provider: 'openai', hasApiKey: true },
-            {
-              id: 'anthropic/claude-sonnet-4-20250514',
-              label: 'Claude Sonnet 4',
-              provider: 'anthropic',
-              hasApiKey: false,
-            },
-          ],
+          models: [{ id: 'openai/gpt-4.1', provider: 'openai', modelName: 'gpt-4.1', hasApiKey: true }],
         });
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useAgentControllerModels(hookArgs));
+    const { result } = renderHookWithProviders(() => useAvailableModelsQuery());
 
     await waitFor(() => expect(result.current.data?.map(model => model.id)).toEqual(['openai/gpt-4.1']));
     expect(onReadModels).toHaveBeenCalledTimes(1);
@@ -54,7 +46,7 @@ describe('agent-controller read hooks', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useAgentControllerThreads({ ...hookArgs, projectPath: '/sandbox/mastra' }),
+      useAgentControllerThreads({ ...hookArgs, scope: '/sandbox/mastra' }),
     );
 
     await waitFor(() => expect(result.current.data?.[0]?.id).toBe('thread-one'));
@@ -86,5 +78,117 @@ describe('agent-controller read hooks', () => {
     await new Promise(resolve => setTimeout(resolve, 20));
 
     expect(onReadMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('grows the fetch window on loadMore and stops when the top is reached', async () => {
+    // Thread has 3 messages total. The endpoint honors ?limit= by returning the
+    // newest N (oldest-first), which is how the real server behaves.
+    const all = [
+      { id: 'm1', role: 'assistant', content: 'one' },
+      { id: 'm2', role: 'assistant', content: 'two' },
+      { id: 'm3', role: 'assistant', content: 'three' },
+    ];
+    const seenLimits: number[] = [];
+
+    server.use(
+      http.get(`${sessionUrl}/threads/thread-one/messages`, ({ request }) => {
+        const limit = Number(new URL(request.url).searchParams.get('limit'));
+        seenLimits.push(limit);
+        return HttpResponse.json({ messages: all.slice(Math.max(0, all.length - limit)) });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() =>
+      useAgentControllerThreadMessages({ ...hookArgs, threadId: 'thread-one', initialLimit: 2, pageSize: 2 }),
+    );
+
+    // First window: newest 2 of 3 -> a full page, so more history may exist.
+    await waitFor(() => expect(result.current.data?.map(m => m.id)).toEqual(['m2', 'm3']));
+    expect(result.current.hasMore).toBe(true);
+    expect(seenLimits).toEqual([2]);
+
+    // Grow the window: fetch newest 4 -> only 3 exist -> short page -> top reached.
+    act(() => result.current.loadMore());
+
+    // The previous window stays on screen while the larger one loads (no blank
+    // skeleton / remount): data is never cleared to undefined during the grow.
+    expect(result.current.data).toBeDefined();
+    expect(result.current.isPending).toBe(false);
+
+    await waitFor(() => expect(result.current.data?.map(m => m.id)).toEqual(['m1', 'm2', 'm3']));
+    expect(result.current.hasMore).toBe(false);
+    expect(seenLimits).toEqual([2, 4]);
+  });
+
+  it("does not carry a previous thread's messages when switching threads", async () => {
+    server.use(
+      http.get(`${sessionUrl}/threads/:threadId/messages`, ({ params }) => {
+        const id = params.threadId as string;
+        return HttpResponse.json({ messages: [{ id: `${id}-msg`, role: 'assistant', content: id }] });
+      }),
+    );
+
+    const { result, rerender } = renderHookWithProviders(
+      ({ threadId }: { threadId: string }) => useAgentControllerThreadMessages({ ...hookArgs, threadId }),
+      { initialProps: { threadId: 'thread-a' } },
+    );
+
+    await waitFor(() => expect(result.current.data?.[0]?.id).toBe('thread-a-msg'));
+
+    rerender({ threadId: 'thread-b' });
+
+    // Switching threads is a real pending state — the old thread's data must not
+    // leak in via placeholderData.
+    expect(result.current.data).toBeUndefined();
+    await waitFor(() => expect(result.current.data?.[0]?.id).toBe('thread-b-msg'));
+  });
+
+  it('resets the window to the initial cap when switching threads (no grown-limit fetch)', async () => {
+    // Record the (threadId, limit) of every request so we can assert the new
+    // thread is never fetched with the previous thread's grown limit.
+    const requests: Array<{ threadId: string; limit: number }> = [];
+
+    server.use(
+      http.get(`${sessionUrl}/threads/:threadId/messages`, ({ params, request }) => {
+        const threadId = params.threadId as string;
+        const limit = Number(new URL(request.url).searchParams.get('limit'));
+        requests.push({ threadId, limit });
+        return HttpResponse.json({
+          // Return a full page so hasMore stays true and loadMore is allowed.
+          messages: Array.from({ length: limit }, (_, i) => ({
+            id: `${threadId}-m${i}`,
+            role: 'assistant',
+            content: threadId,
+          })),
+        });
+      }),
+    );
+
+    const { result, rerender } = renderHookWithProviders(
+      ({ threadId }: { threadId: string }) =>
+        useAgentControllerThreadMessages({ ...hookArgs, threadId, initialLimit: 2, pageSize: 2 }),
+      { initialProps: { threadId: 'thread-a' } },
+    );
+
+    await waitFor(() => expect(result.current.data?.length).toBe(2));
+
+    // Grow thread-a's window to 4.
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.data?.length).toBe(4));
+    expect(requests).toEqual([
+      { threadId: 'thread-a', limit: 2 },
+      { threadId: 'thread-a', limit: 4 },
+    ]);
+
+    // Switch to thread-b: the very first fetch must use the initial cap (2),
+    // never the grown limit (4) carried over from thread-a.
+    rerender({ threadId: 'thread-b' });
+    await waitFor(() => expect(requests.some(r => r.threadId === 'thread-b')).toBe(true));
+
+    const threadBRequests = requests.filter(r => r.threadId === 'thread-b');
+    expect(threadBRequests[0]?.limit).toBe(2);
+    expect(threadBRequests.every(r => r.limit === 2)).toBe(true);
+    // The hook also reports it is not mid-load-more on the fresh thread.
+    expect(result.current.isLoadingMore).toBe(false);
   });
 });

@@ -9,10 +9,11 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import type { FactoryThreadTaskContext } from '../../../../../../shared/api/types';
 import { FactorySessionContextPanel, type FactorySessionContextTab } from '../FactorySessionContextPanel';
 
-const PROJECT_ID = 'github-project-1';
+const PROJECT_ID = 'factory-project-1';
 const THREAD_ID = 'factory-thread-1';
+const RESOURCE_ID = 'resource-1';
 const WORKSPACE = '/home/user/project';
-const CONTEXT_URL = `${TEST_BASE_URL}/web/factory/repositories/${PROJECT_ID}/threads/${THREAD_ID}/context`;
+const CONTEXT_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/threads/${THREAD_ID}/context`;
 const LIST_URL = `${TEST_BASE_URL}/web/workspace/rendered/list`;
 const FILE_URL = `${TEST_BASE_URL}/web/workspace/file`;
 
@@ -96,8 +97,9 @@ function PanelHarness({ initialTab = 'task' }: { initialTab?: FactorySessionCont
 
   return (
     <FactorySessionContextPanel
-      githubProjectId={PROJECT_ID}
+      factoryProjectId={PROJECT_ID}
       threadId={THREAD_ID}
+      resourceId={RESOURCE_ID}
       workspacePath={WORKSPACE}
       activeTab={tab}
       onTabChange={nextTab => {

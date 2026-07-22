@@ -1,8 +1,10 @@
 import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
-import { Octokit } from '@octokit/rest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { TASK_CONTEXT_LIMITS } from '../capabilities/task-context.js';
+import { __resetRuntimeConfigForTests } from '../runtime-config.js';
 import { createStateSigner } from '../state-signing.js';
+import { seedFactoryStorageForTests } from '../storage/test-utils.js';
 import { GithubIntegration, GithubProviderRequestError, normalizePrivateKey } from './integration.js';
 
 // Real RSA key so we can prove Node's PEM decoder accepts the normalized
@@ -21,6 +23,38 @@ function validConfig() {
     clientSecret: 'shhh',
     slug: 'test-app',
     webhookSecret: 'hook-secret',
+  };
+}
+
+function pullRequestData() {
+  return {
+    number: 34,
+    title: 'Ship intake',
+    html_url: 'https://github.com/acme/app/pull/34',
+    user: { login: 'ada' },
+    body: 'Ready to ship',
+    state: 'open',
+    base: { ref: 'main' },
+    head: { ref: 'feat/intake', sha: 'abc123' },
+    draft: false,
+    merged: false,
+    mergeable: true,
+    labels: [{ name: 'factory' }, { name: 'ready' }],
+    assignee: { login: 'ada' },
+    assignees: [{ login: 'ada' }, { login: 'grace' }],
+    created_at: '2026-07-01T00:00:00Z',
+    updated_at: '2026-07-02T00:00:00Z',
+  };
+}
+
+function commentData() {
+  return {
+    id: 91,
+    html_url: 'https://github.com/acme/app/pull/34#issuecomment-91',
+    user: { login: 'grace' },
+    body: 'Looks good',
+    created_at: '2026-07-03T00:00:00Z',
+    updated_at: '2026-07-03T00:00:00Z',
   };
 }
 
@@ -71,152 +105,442 @@ describe('GithubIntegration constructor', () => {
   });
 });
 
-describe('GithubIntegration FactoryIntegration surface', () => {
-  it('routes() returns the GitHub HTTP surface as ApiRoute[]', () => {
+describe('GithubIntegration capability surface', () => {
+  it('normalizes GitHub issues through the shared Intake contract', async () => {
     const github = new GithubIntegration(validConfig());
-    const routes = github.routes({ stateSigner: createStateSigner('secret') });
+    const listForRepo = vi.fn(async () => ({
+      data: [
+        {
+          number: 12,
+          title: 'Fix intake',
+          html_url: 'https://github.com/acme/app/issues/12',
+          user: { login: 'ada' },
+          labels: [{ name: 'bug' }],
+          comments: 3,
+          created_at: '2026-07-01T00:00:00Z',
+          updated_at: '2026-07-02T00:00:00Z',
+        },
+      ],
+    }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { listForRepo } } as any);
+
+    await expect(
+      github.intake.listIssues({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceIds: ['acme/app'],
+        labels: ['bug', 'urgent'],
+      }),
+    ).resolves.toEqual({
+      issues: [
+        expect.objectContaining({
+          id: '12',
+          identifier: '#12',
+          source: 'acme/app',
+          state: 'open',
+          labels: ['bug'],
+          commentCount: 3,
+        }),
+      ],
+      nextCursor: null,
+    });
+    expect(listForRepo).toHaveBeenCalledWith(expect.objectContaining({ labels: 'bug,urgent' }));
+  });
+
+  it('fetches issue details and creates comments through the shared Intake contract', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn(async () => ({
+      data: {
+        number: 12,
+        title: 'Fix intake',
+        html_url: 'https://github.com/acme/app/issues/12',
+        user: { login: 'ada' },
+        state: 'open',
+        assignee: null,
+        labels: [{ name: 'bug' }],
+        comments: 1,
+        body: 'Issue body',
+        created_at: '2026-07-01T00:00:00Z',
+        updated_at: '2026-07-02T00:00:00Z',
+      },
+    }));
+    const createComment = vi.fn(async () => ({
+      data: { id: 99, html_url: 'https://github.com/acme/app/issues/12#issuecomment-99' },
+    }));
+    const paginate = vi.fn(async () => [
+      { user: { login: 'grace' }, body: 'Looking now', created_at: '2026-07-03T00:00:00Z' },
+    ]);
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      issues: { get, listComments: vi.fn(), createComment },
+      paginate,
+    } as any);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+
+    await expect(github.intake.getIssue({ connection, sourceId: 'acme/app', issueId: '12' })).resolves.toMatchObject({
+      description: 'Issue body',
+      comments: [{ author: 'grace', body: 'Looking now' }],
+    });
+    await expect(
+      github.intake.createComment({ connection, sourceId: 'acme/app', issueId: '12', body: 'Done' }),
+    ).resolves.toEqual({ id: '99', url: 'https://github.com/acme/app/issues/12#issuecomment-99' });
+  });
+
+  it('sanitizes GitHub issue request failures without hiding response mapping bugs', async () => {
+    const github = new GithubIntegration(validConfig());
+    const requestFailure = new Error('provider token must not leak');
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(requestFailure)
+      .mockResolvedValueOnce({ data: { number: 12 } });
+    const paginate = vi.fn().mockResolvedValue([]);
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      issues: { get, listComments: vi.fn() },
+      paginate,
+    } as any);
+    const input = {
+      connection: { type: 'app-installation' as const, installationId: 7 },
+      sourceId: 'acme/app',
+      issueId: '12',
+    };
+
+    const providerError = await github.intake.getIssue(input).catch(error => error);
+    expect(providerError).toBeInstanceOf(GithubProviderRequestError);
+    expect(providerError).toHaveProperty('message', 'GitHub API request failed.');
+    expect(providerError.message).not.toContain('provider token must not leak');
+    await expect(github.intake.getIssue(input)).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it('reads bounded GitHub issue task context without requesting comments', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn().mockResolvedValue({
+      data: {
+        number: 12,
+        title: 'Fix intake',
+        html_url: 'https://github.com/acme/app/issues/12',
+        state: 'open',
+        assignee: { login: 'ada' },
+        assignees: [{ login: 'ada' }, { login: 'grace' }],
+        labels: [{ name: 'bug' }],
+        body: 'Issue body',
+      },
+    });
+    const paginate = vi.fn();
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { get }, paginate } as any);
+
+    await expect(
+      github.taskContext.getIssue?.({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        issueId: '12',
+      }),
+    ).resolves.toEqual({
+      identifier: '#12',
+      title: 'Fix intake',
+      description: 'Issue body',
+      state: 'open',
+      labels: ['bug'],
+      assignees: ['ada', 'grace'],
+      url: 'https://github.com/acme/app/issues/12',
+    });
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(paginate).not.toHaveBeenCalled();
+  });
+
+  it('bounds GitHub task-context fields at the provider capability', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn().mockResolvedValue({
+      data: {
+        number: 12,
+        title: 't'.repeat(TASK_CONTEXT_LIMITS.title + 10),
+        html_url: `https://github.com/${'u'.repeat(TASK_CONTEXT_LIMITS.url)}`,
+        state: 's'.repeat(TASK_CONTEXT_LIMITS.state + 10),
+        assignees: Array.from({ length: TASK_CONTEXT_LIMITS.listItems + 10 }, (_, index) => ({
+          login: `${index}-${'a'.repeat(TASK_CONTEXT_LIMITS.listItem + 10)}`,
+        })),
+        labels: Array.from({ length: TASK_CONTEXT_LIMITS.listItems + 10 }, (_, index) => ({
+          name: `${index}-${'l'.repeat(TASK_CONTEXT_LIMITS.listItem + 10)}`,
+        })),
+        body: 'd'.repeat(TASK_CONTEXT_LIMITS.description + 10),
+      },
+    });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { get } } as any);
+
+    const detail = await github.taskContext.getIssue?.({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'acme/app',
+      issueId: '12',
+    });
+
+    expect(detail?.title).toHaveLength(TASK_CONTEXT_LIMITS.title);
+    expect(detail?.description).toHaveLength(TASK_CONTEXT_LIMITS.description);
+    expect(detail?.state).toHaveLength(TASK_CONTEXT_LIMITS.state);
+    expect(detail?.labels).toHaveLength(TASK_CONTEXT_LIMITS.listItems);
+    expect(detail?.labels[0]).toHaveLength(TASK_CONTEXT_LIMITS.listItem);
+    expect(detail?.assignees).toHaveLength(TASK_CONTEXT_LIMITS.listItems);
+    expect(detail?.assignees[0]).toHaveLength(TASK_CONTEXT_LIMITS.listItem);
+    expect(detail?.url).toBeNull();
+  });
+
+  it('reads GitHub pull-request task context from one request', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn().mockResolvedValue({ data: { ...pullRequestData(), merged: true, state: 'closed' } });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { get } } as any);
+
+    await expect(
+      github.taskContext.getPullRequest?.({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        pullRequestId: '34',
+      }),
+    ).resolves.toEqual({
+      identifier: '#34',
+      title: 'Ship intake',
+      description: 'Ready to ship',
+      state: 'merged',
+      labels: ['factory', 'ready'],
+      assignees: ['ada', 'grace'],
+      url: 'https://github.com/acme/app/pull/34',
+    });
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('sanitizes task-context request failures without hiding mapper bugs', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('provider token must not leak'))
+      .mockResolvedValueOnce({ data: { number: 12, labels: null } });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { get } } as any);
+    const input = {
+      connection: { type: 'app-installation' as const, installationId: 7 },
+      sourceId: 'acme/app',
+      issueId: '12',
+    };
+
+    const providerError = await github.taskContext.getIssue?.(input).catch(error => error);
+    expect(providerError).toBeInstanceOf(GithubProviderRequestError);
+    expect(providerError).toHaveProperty('message', 'GitHub API request failed.');
+    expect(providerError.message).not.toContain('provider token must not leak');
+    await expect(github.taskContext.getIssue?.(input)).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it('normalizes pull requests through the shared VersionControl contract', async () => {
+    const github = new GithubIntegration(validConfig());
+    const list = vi.fn(async () => ({ data: [pullRequestData()] }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { list } } as any);
+
+    await expect(
+      github.versionControl.listPullRequests({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+      }),
+    ).resolves.toEqual({
+      pullRequests: [
+        expect.objectContaining({ id: '34', baseBranch: 'main', headBranch: 'feat/intake', headSha: 'abc123' }),
+      ],
+      nextCursor: null,
+    });
+  });
+
+  it('implements the full pull-request lifecycle through VersionControl', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn(async () => ({ data: pullRequestData() }));
+    const create = vi.fn(async () => ({ data: pullRequestData() }));
+    const update = vi.fn(async () => ({ data: pullRequestData() }));
+    const merge = vi.fn(async () => ({ data: { merged: true, message: 'merged', sha: 'merge-sha' } }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { get, create, update, merge } } as any);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+    const ref = { connection, sourceId: 'acme/app', pullRequestId: '34' };
+
+    await expect(github.versionControl.getPullRequest(ref)).resolves.toMatchObject({ id: '34', state: 'open' });
+    await expect(
+      github.versionControl.createPullRequest({
+        connection,
+        sourceId: 'acme/app',
+        title: 'Ship intake',
+        body: 'Ready to ship',
+        baseBranch: 'main',
+        headBranch: 'feat/intake',
+        draft: true,
+      }),
+    ).resolves.toMatchObject({ id: '34' });
+    await github.versionControl.updatePullRequest({ ...ref, title: 'Ship all intake', body: null });
+    await github.versionControl.closePullRequest(ref);
+    await expect(github.versionControl.mergePullRequest({ ...ref, method: 'squash' })).resolves.toEqual({
+      merged: true,
+      message: 'merged',
+      sha: 'merge-sha',
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ owner: 'acme', repo: 'app', base: 'main', head: 'feat/intake', draft: true }),
+    );
+    expect(update).toHaveBeenNthCalledWith(1, expect.objectContaining({ pull_number: 34, body: '' }));
+    expect(update).toHaveBeenNthCalledWith(2, expect.objectContaining({ pull_number: 34, state: 'closed' }));
+    expect(merge).toHaveBeenCalledWith(expect.objectContaining({ pull_number: 34, merge_method: 'squash' }));
+  });
+
+  it('implements conversation and inline review comment CRUD through VersionControl', async () => {
+    const github = new GithubIntegration(validConfig());
+    const issueComment = commentData();
+    const reviewComment = { ...commentData(), path: 'src/app.ts', line: 12, side: 'RIGHT', commit_id: 'abc123' };
+    const issues = {
+      listComments: vi.fn(async () => ({ data: [issueComment] })),
+      createComment: vi.fn(async () => ({ data: issueComment })),
+      updateComment: vi.fn(async () => ({ data: issueComment })),
+      deleteComment: vi.fn(async () => undefined),
+    };
+    const pulls = {
+      listReviewComments: vi.fn(async () => ({ data: [reviewComment] })),
+      createReviewComment: vi.fn(async () => ({ data: reviewComment })),
+      createReplyForReviewComment: vi.fn(async () => ({ data: { ...reviewComment, in_reply_to_id: 91 } })),
+      updateReviewComment: vi.fn(async () => ({ data: reviewComment })),
+      deleteReviewComment: vi.fn(async () => undefined),
+    };
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues, pulls } as any);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+    const ref = { connection, sourceId: 'acme/app', pullRequestId: '34' };
+
+    await expect(github.versionControl.listComments(ref)).resolves.toMatchObject({ comments: [{ id: '91' }] });
+    await github.versionControl.createComment({ ...ref, body: 'Looks good' });
+    await github.versionControl.updateComment({ connection, sourceId: 'acme/app', commentId: '91', body: 'Updated' });
+    await github.versionControl.deleteComment({ connection, sourceId: 'acme/app', commentId: '91' });
+    await expect(github.versionControl.listReviewComments(ref)).resolves.toMatchObject({
+      comments: [{ id: '91', path: 'src/app.ts', line: 12, side: 'right' }],
+    });
+    await github.versionControl.createReviewComment({
+      ...ref,
+      body: 'Fix this',
+      commitId: 'abc123',
+      path: 'src/app.ts',
+      line: 12,
+      side: 'right',
+    });
+    await github.versionControl.createReviewComment({ ...ref, body: 'Agreed', replyToId: '91' });
+    await github.versionControl.updateReviewComment({
+      connection,
+      sourceId: 'acme/app',
+      commentId: '91',
+      body: 'Updated',
+    });
+    await github.versionControl.deleteReviewComment({ connection, sourceId: 'acme/app', commentId: '91' });
+
+    expect(pulls.createReviewComment).toHaveBeenCalledWith(
+      expect.objectContaining({ pull_number: 34, commit_id: 'abc123', path: 'src/app.ts', line: 12, side: 'RIGHT' }),
+    );
+    expect(pulls.createReplyForReviewComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 91 }));
+  });
+
+  it('implements reviews and reviewer requests through VersionControl', async () => {
+    const github = new GithubIntegration(validConfig());
+    const review = {
+      id: 55,
+      html_url: 'https://github.com/acme/app/pull/34#pullrequestreview-55',
+      user: { login: 'grace' },
+      body: 'Approved',
+      state: 'APPROVED',
+      commit_id: 'abc123',
+      submitted_at: '2026-07-03T00:00:00Z',
+    };
+    const pulls = {
+      listReviews: vi.fn(async () => ({ data: [review] })),
+      getReview: vi.fn(async () => ({ data: review })),
+      createReview: vi.fn(async () => ({ data: review })),
+      updateReview: vi.fn(async () => ({ data: { ...review, state: 'PENDING' } })),
+      submitReview: vi.fn(async () => ({ data: review })),
+      dismissReview: vi.fn(async () => ({ data: { ...review, state: 'DISMISSED' } })),
+      deletePendingReview: vi.fn(async () => undefined),
+      listRequestedReviewers: vi.fn(async () => ({ data: { users: [{ login: 'grace' }], teams: [{ slug: 'core' }] } })),
+      requestReviewers: vi.fn(async () => ({
+        data: { requested_reviewers: [{ login: 'grace' }], requested_teams: [{ slug: 'core' }] },
+      })),
+      removeRequestedReviewers: vi.fn(async () => ({ data: { requested_reviewers: [], requested_teams: [] } })),
+    };
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls } as any);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+    const ref = { connection, sourceId: 'acme/app', pullRequestId: '34' };
+
+    await expect(github.versionControl.listReviews(ref)).resolves.toMatchObject({ reviews: [{ state: 'approved' }] });
+    await expect(github.versionControl.getReview({ ...ref, reviewId: '55' })).resolves.toMatchObject({ id: '55' });
+    await github.versionControl.createReview({ ...ref, body: 'Approved', event: 'approve' });
+    await github.versionControl.updateReview({ ...ref, reviewId: '55', body: 'Pending update' });
+    await github.versionControl.submitReview({ ...ref, reviewId: '55', body: 'Approved', event: 'approve' });
+    await github.versionControl.dismissReview({ ...ref, reviewId: '55', message: 'Superseded' });
+    await github.versionControl.deletePendingReview({ ...ref, reviewId: '55' });
+    await expect(github.versionControl.listRequestedReviewers(ref)).resolves.toEqual({
+      users: ['grace'],
+      teams: ['core'],
+    });
+    await expect(
+      github.versionControl.requestReviewers({ ...ref, users: ['grace'], teams: ['core'] }),
+    ).resolves.toEqual({
+      users: ['grace'],
+      teams: ['core'],
+    });
+    await expect(github.versionControl.removeRequestedReviewers({ ...ref, users: ['grace'] })).resolves.toEqual({
+      users: [],
+      teams: [],
+    });
+
+    expect(pulls.createReview).toHaveBeenCalledWith(expect.objectContaining({ event: 'APPROVE' }));
+    expect(pulls.dismissReview).toHaveBeenCalledWith(expect.objectContaining({ review_id: 55 }));
+  });
+});
+
+describe('GithubIntegration FactoryIntegration surface', () => {
+  afterEach(() => {
+    __resetRuntimeConfigForTests();
+  });
+
+  it('routes() returns the GitHub HTTP surface as ApiRoute[]', async () => {
+    const { integrations, sourceControl } = await seedFactoryStorageForTests();
+    const github = new GithubIntegration(validConfig());
+    const routes = github.routes({
+      stateSigner: createStateSigner('secret'),
+      storage: {
+        generic: integrations.forIntegration(github.id),
+        sourceControl: sourceControl.forIntegration(github.id),
+      },
+    });
     expect(routes.length).toBeGreaterThan(0);
     for (const route of routes) {
       expect(route.path).toMatch(/^\/(web|auth)\/github\//);
     }
   });
 
+  it('registers provider installations and repositories through its version-control capability', async () => {
+    const { sourceControl } = await seedFactoryStorageForTests();
+    const github = new GithubIntegration(validConfig());
+    github.versionControl.initialize({ storage: sourceControl.forIntegration(github.id) });
+
+    const installation = await github.versionControl.registerInstallation({
+      orgId: 'org-1',
+      userId: 'user-1',
+      installation: { externalId: '42', accountName: 'octo', accountType: 'Organization' },
+    });
+    const [repository] = await github.versionControl.registerRepositories({
+      orgId: 'org-1',
+      installationId: installation.id,
+      repositories: [{ externalId: '101', slug: 'octo/widgets', defaultBranch: 'main' }],
+    });
+
+    expect(repository).toMatchObject({
+      installationId: installation.id,
+      externalId: '101',
+      slug: 'octo/widgets',
+      defaultBranch: 'main',
+    });
+    await expect(github.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual([
+      {
+        id: repository!.id,
+        name: 'octo/widgets',
+        type: 'repository',
+        metadata: { defaultBranch: 'main' },
+      },
+    ]);
+  });
+
   it('diagnostics() exposes only non-secret config', () => {
     const github = new GithubIntegration(validConfig());
     expect(github.diagnostics()).toEqual({ slug: 'test-app', webhookSecretConfigured: true });
-  });
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-function mockInstallationClient(github: GithubIntegration) {
-  const octokit = new Octokit();
-  vi.spyOn(github, 'getInstallationOctokit').mockReturnValue(octokit);
-  return {
-    issueGet: vi.spyOn(octokit.issues, 'get'),
-    pullGet: vi.spyOn(octokit.pulls, 'get'),
-  };
-}
-
-describe('GithubIntegration task detail reads', () => {
-  it('maps and bounds issue fields through the scoped installation client', async () => {
-    const github = new GithubIntegration(validConfig());
-    const { issueGet } = mockInstallationClient(github);
-    const labels = Array.from({ length: 55 }, (_, index) => ({ name: `label-${index}-${'x'.repeat(100)}` }));
-    const assignees = Array.from({ length: 55 }, (_, index) => ({ login: `user-${index}-${'x'.repeat(100)}` }));
-    issueGet.mockResolvedValue({
-      data: {
-        number: 42,
-        title: 't'.repeat(600),
-        body: 'd'.repeat(65_000),
-        state: 'closed',
-        labels,
-        assignees,
-        html_url: 'https://github.com/mastra-ai/mastra/issues/42',
-      },
-      headers: {},
-      status: 200,
-      url: 'https://api.github.com/repos/mastra-ai/mastra/issues/42',
-    } as unknown as Awaited<ReturnType<typeof issueGet>>);
-
-    const detail = await github.getIssueDetail(123, 'mastra-ai/mastra', 42);
-
-    expect(issueGet).toHaveBeenCalledWith({ owner: 'mastra-ai', repo: 'mastra', issue_number: 42 });
-    expect(detail).toEqual({
-      number: 42,
-      title: 't'.repeat(512),
-      description: 'd'.repeat(64_000),
-      state: 'closed',
-      labels: labels.slice(0, 50).map(label => label.name.slice(0, 100)),
-      assignees: assignees.slice(0, 50).map(assignee => assignee.login.slice(0, 100)),
-      url: 'https://github.com/mastra-ai/mastra/issues/42',
-    });
-  });
-
-  it('reports merged pull requests and omits unsafe or oversized URLs', async () => {
-    const github = new GithubIntegration(validConfig());
-    const { issueGet, pullGet } = mockInstallationClient(github);
-    pullGet.mockResolvedValue({
-      data: {
-        number: 77,
-        title: 'Ship task context',
-        body: 'PR body',
-        state: 'closed',
-        merged: true,
-        labels: [{ name: 'feature' }],
-        assignees: [{ login: 'octocat' }],
-        html_url: 'javascript:alert(1)',
-      },
-      headers: {},
-      status: 200,
-      url: 'https://api.github.com/repos/mastra-ai/mastra/pulls/77',
-    } as unknown as Awaited<ReturnType<typeof pullGet>>);
-    issueGet.mockResolvedValue({
-      data: {
-        number: 43,
-        title: 'Oversized URL',
-        body: null,
-        state: 'open',
-        labels: [],
-        assignees: [],
-        html_url: `https://github.com/${'x'.repeat(2_100)}`,
-      },
-      headers: {},
-      status: 200,
-      url: 'https://api.github.com/repos/mastra-ai/mastra/issues/43',
-    } as unknown as Awaited<ReturnType<typeof issueGet>>);
-
-    await expect(github.getPullRequestDetail(123, 'mastra-ai/mastra', 77)).resolves.toEqual({
-      number: 77,
-      title: 'Ship task context',
-      description: 'PR body',
-      state: 'merged',
-      labels: ['feature'],
-      assignees: ['octocat'],
-    });
-    await expect(github.getIssueDetail(123, 'mastra-ai/mastra', 43)).resolves.toEqual({
-      number: 43,
-      title: 'Oversized URL',
-      state: 'open',
-      labels: [],
-      assignees: [],
-    });
-  });
-
-  it('returns null only for not-found responses and types other provider failures', async () => {
-    const github = new GithubIntegration(validConfig());
-    const { issueGet, pullGet } = mockInstallationClient(github);
-    issueGet.mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }));
-    pullGet.mockRejectedValue(Object.assign(new Error('token leaked in upstream failure'), { status: 500 }));
-
-    await expect(github.getIssueDetail(123, 'mastra-ai/mastra', 42)).resolves.toBeNull();
-    await expect(github.getPullRequestDetail(123, 'mastra-ai/mastra', 77)).rejects.toBeInstanceOf(
-      GithubProviderRequestError,
-    );
-  });
-
-  it('does not classify successful-response mapping failures as provider failures', async () => {
-    const github = new GithubIntegration(validConfig());
-    const { issueGet } = mockInstallationClient(github);
-    issueGet.mockResolvedValue({
-      data: {
-        number: 42,
-        title: 'Issue',
-        body: null,
-        state: 'open',
-        labels: undefined,
-        assignees: [],
-        html_url: 'https://github.com/mastra-ai/mastra/issues/42',
-      },
-      headers: {},
-      status: 200,
-      url: 'https://api.github.com/repos/mastra-ai/mastra/issues/42',
-    } as unknown as Awaited<ReturnType<typeof issueGet>>);
-
-    const error = await github.getIssueDetail(123, 'mastra-ai/mastra', 42).catch(error => error);
-    expect(error).toBeInstanceOf(TypeError);
-    expect(error).not.toBeInstanceOf(GithubProviderRequestError);
   });
 });

@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
@@ -22,10 +22,10 @@ const rootListing: DirectoryListing = {
   entries: [{ name: 'gamma', path: '/projects/gamma' }],
 };
 
-function renderProjects(onOpenGithub?: () => void) {
+function renderFactories() {
   return renderWithProviders(
     <OverlayTestProviders>
-      <FactoriesPanel onOpenGithub={onOpenGithub} />
+      <FactoriesPanel />
     </OverlayTestProviders>,
   );
 }
@@ -49,30 +49,49 @@ beforeEach(() => {
 afterEach(() => localStorage.clear());
 
 describe('FactoriesPanel', () => {
-  it('offers GitHub alongside local directory browsing', async () => {
-    const onOpenGithub = vi.fn();
-    const user = userEvent.setup();
-    renderProjects(onOpenGithub);
+  it('renders as a labelled in-layout section without dialog semantics', async () => {
+    renderFactories();
 
+    expect(await screen.findByRole('region', { name: 'Create Factory' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Create/connect factory from GitHub' }));
-
-    expect(onOpenGithub).toHaveBeenCalledOnce();
+    expect(screen.getByLabelText('Factory name')).toHaveFocus();
   });
-
-  it('opens directly into local directory browsing', async () => {
-    renderProjects();
-
-    expect(await screen.findByText('gamma')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Use this folder' })).toBeInTheDocument();
-  });
-
-  it('adds and selects the currently displayed folder', async () => {
+  it('creates a named server-backed Factory as the primary path', async () => {
+    let received: unknown;
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
+        received = await request.json();
+        return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra' } });
+      }),
+    );
     const user = userEvent.setup();
-    renderProjects();
+    renderFactories();
 
-    await user.click(await screen.findByRole('button', { name: 'Use this folder' }));
+    await user.type(await screen.findByLabelText('Factory name'), 'Mastra');
+    await user.click(screen.getByRole('button', { name: 'Create Factory' }));
+
+    await waitFor(() => {
+      expect(loadFactories()).toEqual([
+        expect.objectContaining({
+          name: 'Mastra',
+          binding: expect.objectContaining({ kind: 'factory', factoryProjectId: 'fp-1', repositories: [] }),
+        }),
+      ]);
+    });
+    expect(received).toEqual({ name: 'Mastra' });
+    expect(localStorage.getItem('mastracode-active-factory')).toBe(loadFactories()[0]?.id);
+  });
+
+  it('binds a local folder through the secondary path', async () => {
+    const user = userEvent.setup();
+    renderFactories();
+
+    await user.click(await screen.findByRole('button', { name: 'Bind a local folder instead' }));
+
+    // The directory browser lists the folders at the fs root.
+    expect(await screen.findByText('gamma')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Use this folder' }));
 
     await waitFor(() => {
       expect(loadFactories()).toEqual([

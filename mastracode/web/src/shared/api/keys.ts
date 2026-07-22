@@ -6,9 +6,19 @@
  * data. Keeping every key in one place makes invalidation in the mutation hooks
  * unambiguous.
  */
+/**
+ * Initial (and grow-step) size of the bounded transcript window. Opening a long
+ * thread fetches only the newest N messages so the un-virtualized list doesn't
+ * freeze; scroll-to-top grows the window by this amount. Cache writers that seed
+ * a thread's initial transcript key on this so the hook's first read hits the
+ * same entry.
+ */
+export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
+
 export const queryKeys = {
   webAuth: () => ['web-auth'] as const,
   factories: () => ['factories'] as const,
+  factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (githubProjectId: string | undefined, label?: string) =>
@@ -18,21 +28,26 @@ export const queryKeys = {
     ['github', 'repository-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
-  linearIssues: () => ['linear', 'issues'] as const,
+  linearIssuesAll: () => ['linear', 'issues'] as const,
+  linearIssues: (githubProjectId: string | undefined) =>
+    [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
-  workItems: (githubProjectId: string | undefined) => ['factory', 'work-items', githubProjectId ?? null] as const,
-  factoryThreadTaskContext: (githubProjectId: string, threadId: string) =>
-    ['factory', 'thread-task-context', githubProjectId, threadId] as const,
+  workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  factoryThreadTaskContext: (factoryProjectId: string, threadId: string, resourceId: string, projectPath: string) =>
+    ['factory', 'thread-task-context', factoryProjectId, threadId, resourceId, projectPath] as const,
   factoryMetrics: (githubProjectId: string | undefined, days: number) =>
     ['factory', 'metrics', githubProjectId ?? null, days] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
     ['factory', 'health-thresholds', githubProjectId ?? null] as const,
+  factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
+    ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string) =>
     ['factory', 'audit', githubProjectId ?? null, group] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
   workspaces: (factoryId: string | undefined) => ['workspaces', factoryId ?? null] as const,
   userSessions: (factoryId: string | undefined) => ['user-sessions', factoryId ?? null] as const,
   providers: () => ['providers'] as const,
+  availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,
   modelPacks: (resourceId: string | undefined) => ['model-packs', resourceId ?? null] as const,
   /** Prefix that matches every `modelPacks(*)` entry — pack CRUD is global, so it invalidates all of them. */
@@ -44,8 +59,6 @@ export const queryKeys = {
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
-  agentControllerModels: (agentControllerId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'models'] as const,
   agentControllerModes: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'modes'] as const,
   // Sessions are scoped per worktree (projectPath), so every session-derived key
@@ -100,6 +113,12 @@ export const queryKeys = {
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     threadId: string | undefined,
+    // The transcript is fetched as a bounded newest-N window; the limit is part
+    // of the cache key so read (`useAgentControllerThreadMessages`) and write
+    // (optimistic seed / prefetch) paths hydrate the same entry. Callers that
+    // seed a thread's initial transcript must pass `INITIAL_THREAD_MESSAGE_LIMIT`
+    // so the value matches the hook's first read.
+    limit?: number,
   ) =>
     [
       'agent-controller',
@@ -109,5 +128,6 @@ export const queryKeys = {
       'threads',
       threadId ?? null,
       'messages',
+      ...(limit === undefined ? [] : [limit]),
     ] as const,
 } as const;

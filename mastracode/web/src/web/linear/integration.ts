@@ -22,8 +22,23 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
+import type { IntegrationConnection } from '../capabilities/connection.js';
+import type {
+  CreateIntakeCommentInput,
+  GetIntakeIssueInput,
+  Intake,
+  IntakeIssue,
+  IntakeIssueDetail,
+  ListIntakeIssuesInput,
+} from '../capabilities/intake.js';
+import {
+  boundedTaskContextDetail,
+  TaskContextProviderRequestError,
+  type TaskContext,
+} from '../capabilities/task-context.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
 import { buildLinearAgentTools } from './agent-tools.js';
+import { getFreshLinearAccessToken, loadLinearConnection } from './connection.js';
 import { buildLinearRoutes } from './routes.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
@@ -60,6 +75,7 @@ export interface LinearWorkspace {
 
 export interface LinearIssue {
   id: string;
+  projectId: string;
   /** Human key like `ENG-123`. */
   identifier: string;
   title: string;
@@ -112,17 +128,6 @@ export interface LinearIssueDetail extends LinearIssue {
   comments: LinearIssueComment[];
 }
 
-/** Basic bounded fields needed by the Factory task-context panel. */
-export interface LinearIssueContext {
-  identifier: string;
-  title: string;
-  description?: string;
-  state: string;
-  labels: string[];
-  assignees: string[];
-  url?: string;
-}
-
 /** The comment created by {@link LinearIntegration.createIssueComment}. */
 export interface LinearCreatedComment {
   id: string;
@@ -133,30 +138,6 @@ const LINEAR_ISSUES_PAGE_SIZE = 30;
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
 /** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
 const ISSUE_COMMENTS_MAX_PAGES = 20;
-
-const TASK_IDENTIFIER_MAX_LENGTH = 128;
-const TASK_TITLE_STATE_MAX_LENGTH = 512;
-const TASK_DESCRIPTION_MAX_LENGTH = 64_000;
-const TASK_URL_MAX_LENGTH = 2_048;
-const TASK_LIST_MAX_ITEMS = 50;
-const TASK_LIST_ITEM_MAX_LENGTH = 100;
-
-function boundedTaskUrl(value: string | null | undefined): string | undefined {
-  if (!value || value.length > TASK_URL_MAX_LENGTH) return undefined;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function boundedTaskNames(values: Array<string | null | undefined>): string[] {
-  return values
-    .filter((value): value is string => Boolean(value))
-    .slice(0, TASK_LIST_MAX_ITEMS)
-    .map(value => value.slice(0, TASK_LIST_ITEM_MAX_LENGTH));
-}
 
 interface IssuesQueryData {
   issues: {
@@ -169,6 +150,7 @@ interface IssuesQueryData {
       createdAt: string;
       updatedAt: string;
       state: { name: string; type: string };
+      project: { id: string };
       assignee: { name: string } | null;
       team: { key: string } | null;
       labels: { nodes: Array<{ name: string }> };
@@ -199,6 +181,7 @@ interface IssueDetailQueryData {
     createdAt: string;
     updatedAt: string;
     state: { name: string; type: string };
+    project: { id: string };
     assignee: { name: string } | null;
     team: { key: string } | null;
     labels: { nodes: Array<{ name: string }> };
@@ -206,7 +189,11 @@ interface IssueDetailQueryData {
   } | null;
 }
 
-interface IssueContextQueryData {
+interface IssueCommentsQueryData {
+  issue: { comments: IssueCommentsPage } | null;
+}
+
+interface TaskContextIssueQueryData {
   issue: {
     identifier: string;
     title: string;
@@ -218,10 +205,6 @@ interface IssueContextQueryData {
   } | null;
 }
 
-interface IssueCommentsQueryData {
-  issue: { comments: IssueCommentsPage } | null;
-}
-
 interface IssueIdQueryData {
   issue: { id: string } | null;
 }
@@ -230,7 +213,12 @@ interface CommentCreateMutationData {
   commentCreate: { success: boolean; comment: { id: string; url: string } | null };
 }
 
-export class LinearProviderRequestError extends Error {
+interface LinearGraphqlError {
+  message?: string;
+  extensions?: { code?: string };
+}
+
+export class LinearProviderRequestError extends TaskContextProviderRequestError {
   readonly status?: number;
 
   constructor(message: string, options?: { cause?: unknown; status?: number }) {
@@ -240,11 +228,28 @@ export class LinearProviderRequestError extends Error {
   }
 }
 
-class LinearGraphqlOperationError extends Error {
-  constructor(message: string) {
-    super(message);
+export class LinearGraphqlOperationError extends Error {
+  readonly errors: LinearGraphqlError[];
+
+  constructor(errors: LinearGraphqlError[]) {
+    super(`Linear API error: ${errors[0]?.message ?? 'unknown error'}`);
     this.name = 'LinearGraphqlOperationError';
+    this.errors = errors;
   }
+}
+
+function isLinearTaskContextProviderFailure(error: LinearGraphqlOperationError): boolean {
+  return !error.errors.some(({ message = '', extensions }) => {
+    const code = extensions?.code;
+    return (
+      code === 'GRAPHQL_PARSE_FAILED' ||
+      code === 'GRAPHQL_VALIDATION_FAILED' ||
+      code === 'BAD_USER_INPUT' ||
+      /cannot query field|unknown (?:argument|type)|syntax error|variable .+ (?:was not provided|got invalid value)|validation/i.test(
+        message,
+      )
+    );
+  });
 }
 
 /** POST a GraphQL query to Linear with the given OAuth access token. */
@@ -265,28 +270,26 @@ async function linearGraphql<T>(accessToken: string, query: string, variables?: 
   }
 
   if (!res.ok) {
-    // Linear returns GraphQL errors (validation, missing scopes, …) with a
-    // 400 status — surface the actual message instead of just the code.
-    let detail: string | null = null;
+    // Linear can return GraphQL operation errors with a 400 status. Preserve
+    // their structured classification so task context can distinguish query
+    // bugs from provider authorization or availability failures.
     try {
-      const errBody = (await res.json()) as { errors?: Array<{ message?: string }> };
-      detail = errBody.errors?.[0]?.message ?? null;
-    } catch {
-      // Non-JSON error body; fall back to the status code alone.
+      const errBody = (await res.json()) as { errors?: LinearGraphqlError[] };
+      if (errBody.errors?.length) throw new LinearGraphqlOperationError(errBody.errors);
+    } catch (error) {
+      if (error instanceof LinearGraphqlOperationError) throw error;
     }
-    throw new LinearProviderRequestError(`Linear API request failed (${res.status})${detail ? `: ${detail}` : ''}`, {
-      status: res.status,
-    });
+    throw new LinearProviderRequestError(`Linear API request failed (${res.status}).`, { status: res.status });
   }
 
-  let body: { data?: T; errors?: Array<{ message?: string }> };
+  let body: { data?: T; errors?: LinearGraphqlError[] };
   try {
-    body = (await res.json()) as { data?: T; errors?: Array<{ message?: string }> };
+    body = (await res.json()) as { data?: T; errors?: LinearGraphqlError[] };
   } catch (error) {
     throw new LinearProviderRequestError('Linear API returned invalid JSON.', { cause: error });
   }
   if (body.errors?.length) {
-    throw new LinearGraphqlOperationError(`Linear API error: ${body.errors[0]?.message ?? 'unknown error'}`);
+    throw new LinearGraphqlOperationError(body.errors);
   }
   if (!body.data) {
     throw new LinearProviderRequestError('Linear API returned no data.');
@@ -297,6 +300,51 @@ async function linearGraphql<T>(accessToken: string, query: string, variables?: 
 export class LinearIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'linear';
+  readonly intake: Intake = {
+    listSources: async ({ orgId }) => {
+      const connection = await loadLinearConnection(orgId);
+      if (!connection) return [];
+      const accessToken = await getFreshLinearAccessToken(this, connection);
+      const projects = await this.listProjects(accessToken);
+      return projects.map(project => ({
+        id: project.id,
+        name: project.name,
+        type: 'project',
+      }));
+    },
+    listItems: async ({ orgId, sourceIds, cursor }) => {
+      if (sourceIds.length === 0) return { items: [], nextCursor: null };
+      const connection = await loadLinearConnection(orgId);
+      if (!connection) return { items: [], nextCursor: null };
+      const accessToken = await getFreshLinearAccessToken(this, connection);
+      const page = await this.listActiveIssues(accessToken, cursor, sourceIds);
+      return {
+        items: page.issues.map(issue => ({
+          source: { type: 'issue', externalId: issue.id, url: issue.url },
+          sourceId: issue.projectId,
+          title: `${issue.identifier}: ${issue.title}`,
+          status: issue.state,
+          labels: issue.labels,
+          assignee: issue.assignee,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+          metadata: {
+            identifier: issue.identifier,
+            stateType: issue.stateType,
+            priority: issue.priorityLabel,
+            team: issue.team,
+          },
+        })),
+        nextCursor: page.nextCursor,
+      };
+    },
+    listIssues: input => this.#listIntakeIssues(input),
+    getIssue: input => this.#getIntakeIssue(input),
+    createComment: input => this.#createIntakeComment(input),
+  };
+  readonly taskContext: TaskContext = {
+    getIssue: input => this.#getTaskIssueContext(input),
+  };
   /**
    * The OAuth connect/callback flow round-trips a signed `state` through
    * Linear, so a multi-replica deploy needs a deployment-stable state secret.
@@ -395,6 +443,71 @@ export class LinearIntegration implements FactoryIntegration {
     return { name: data.organization.name, urlKey: data.organization.urlKey };
   }
 
+  async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
+    const accessToken = getLinearAccessToken(input.connection);
+    const result = await this.listActiveIssues(accessToken, input.cursor, input.sourceIds, input.labels);
+    return {
+      issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
+      nextCursor: result.nextCursor,
+    };
+  }
+
+  async #getIntakeIssue(input: GetIntakeIssueInput): Promise<IntakeIssueDetail | null> {
+    const accessToken = getLinearAccessToken(input.connection);
+    const issue = await this.fetchIssueDetail(accessToken, input.issueId);
+    if (!issue) return null;
+    return {
+      ...linearIssueToIntakeIssue(issue),
+      description: issue.description,
+      commentCount: issue.comments.length,
+      comments: issue.comments,
+    };
+  }
+
+  async #getTaskIssueContext(input: GetIntakeIssueInput) {
+    const accessToken = getLinearAccessToken(input.connection);
+    let data: TaskContextIssueQueryData;
+    try {
+      data = await linearGraphql<TaskContextIssueQueryData>(
+        accessToken,
+        `query TaskContextIssue($id: String!) {
+          issue(id: $id) {
+            identifier
+            title
+            description
+            url
+            state { name }
+            assignee { name }
+            labels { nodes { name } }
+          }
+        }`,
+        { id: input.issueId },
+      );
+    } catch (err) {
+      if (err instanceof Error && /entity not found/i.test(err.message)) return null;
+      if (err instanceof LinearGraphqlOperationError && isLinearTaskContextProviderFailure(err)) {
+        throw new LinearProviderRequestError('Linear API request failed.', { cause: err });
+      }
+      throw err;
+    }
+    const issue = data.issue;
+    if (!issue) return null;
+    return boundedTaskContextDetail({
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description?.trim() ? issue.description : null,
+      state: issue.state.name,
+      labels: issue.labels.nodes.map(label => label.name),
+      assignees: issue.assignee ? [issue.assignee.name] : [],
+      url: issue.url,
+    });
+  }
+
+  async #createIntakeComment(input: CreateIntakeCommentInput): Promise<{ id: string; url: string } | null> {
+    const accessToken = getLinearAccessToken(input.connection);
+    return this.createIssueComment(accessToken, input.issueId, input.body);
+  }
+
   /** List the workspace's projects (for the Settings intake-source picker). */
   async listProjects(accessToken: string): Promise<LinearProject[]> {
     const data = await linearGraphql<{
@@ -424,17 +537,25 @@ export class LinearIntegration implements FactoryIntegration {
    * first. When `projectIds` is provided, only issues from those projects are
    * returned.
    */
-  async listActiveIssues(accessToken: string, after?: string, projectIds?: string[]): Promise<LinearIssuePage> {
+  async listActiveIssues(
+    accessToken: string,
+    after?: string,
+    projectIds?: string[],
+    labels?: string[],
+  ): Promise<LinearIssuePage> {
+    const normalizedLabels = [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
     const projectFilter = projectIds?.length ? ', project: { id: { in: $projectIds } }' : '';
     const projectVar = projectIds?.length ? ', $projectIds: [ID!]' : '';
+    const labelFilter = normalizedLabels.length > 0 ? ', labels: { name: { in: $labels } }' : '';
+    const labelVar = normalizedLabels.length > 0 ? ', $labels: [String!]' : '';
     const data = await linearGraphql<IssuesQueryData>(
       accessToken,
-      `query Intake($first: Int!, $after: String${projectVar}) {
+      `query Intake($first: Int!, $after: String${projectVar}${labelVar}) {
         issues(
           first: $first
           after: $after
           orderBy: updatedAt
-          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter} }
+          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter}${labelFilter} }
         ) {
           nodes {
             id
@@ -445,6 +566,7 @@ export class LinearIntegration implements FactoryIntegration {
             createdAt
             updatedAt
             state { name type }
+            project { id }
             assignee { name }
             team { key }
             labels { nodes { name } }
@@ -456,12 +578,14 @@ export class LinearIntegration implements FactoryIntegration {
         first: LINEAR_ISSUES_PAGE_SIZE,
         after: after ?? null,
         ...(projectIds?.length ? { projectIds } : {}),
+        ...(normalizedLabels.length > 0 ? { labels: normalizedLabels } : {}),
       },
     );
     const { nodes, pageInfo } = data.issues;
     return {
       issues: nodes.map(node => ({
         id: node.id,
+        projectId: node.project.id,
         identifier: node.identifier,
         title: node.title,
         url: node.url,
@@ -475,44 +599,6 @@ export class LinearIntegration implements FactoryIntegration {
         updatedAt: node.updatedAt,
       })),
       nextCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
-    };
-  }
-
-  /** Fetch one issue's basic panel fields without requesting comments. */
-  async fetchIssueContext(accessToken: string, idOrIdentifier: string): Promise<LinearIssueContext | null> {
-    let data: IssueContextQueryData;
-    try {
-      data = await linearGraphql<IssueContextQueryData>(
-        accessToken,
-        `query IssueContext($id: String!) {
-          issue(id: $id) {
-            identifier
-            title
-            description
-            url
-            state { name }
-            assignee { name }
-            labels { nodes { name } }
-          }
-        }`,
-        { id: idOrIdentifier },
-      );
-    } catch (error) {
-      if (error instanceof LinearGraphqlOperationError && /entity not found/i.test(error.message)) return null;
-      throw error;
-    }
-    const issue = data.issue;
-    if (!issue) return null;
-    const description = issue.description?.trim() ? issue.description.slice(0, TASK_DESCRIPTION_MAX_LENGTH) : undefined;
-    const url = boundedTaskUrl(issue.url);
-    return {
-      identifier: issue.identifier.slice(0, TASK_IDENTIFIER_MAX_LENGTH),
-      title: issue.title.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
-      ...(description !== undefined ? { description } : {}),
-      state: issue.state.name.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
-      labels: boundedTaskNames(issue.labels.nodes.map(label => label.name)),
-      assignees: boundedTaskNames([issue.assignee?.name]),
-      ...(url !== undefined ? { url } : {}),
     };
   }
 
@@ -567,6 +653,7 @@ export class LinearIntegration implements FactoryIntegration {
             createdAt
             updatedAt
             state { name type }
+            project { id }
             assignee { name }
             team { key }
             labels { nodes { name } }
@@ -591,6 +678,7 @@ export class LinearIntegration implements FactoryIntegration {
     const comments = allComments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return {
       id: issue.id,
+      projectId: issue.project.id,
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description?.trim() ? issue.description : null,
@@ -660,6 +748,7 @@ export class LinearIntegration implements FactoryIntegration {
       linear: this,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
+      hooks: ctx.hooks,
     });
   }
 
@@ -677,4 +766,30 @@ export class LinearIntegration implements FactoryIntegration {
       oauthAppConfigured: true,
     };
   }
+}
+
+function getLinearAccessToken(connection: IntegrationConnection): string {
+  if (connection.type !== 'oauth') {
+    throw new Error('Linear capabilities require an OAuth connection.');
+  }
+  return connection.accessToken;
+}
+
+function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    url: issue.url,
+    author: null,
+    state: issue.state,
+    stateType: issue.stateType,
+    priority: issue.priorityLabel,
+    assignee: issue.assignee,
+    source: issue.team,
+    labels: issue.labels,
+    commentCount: null,
+    createdAt: issue.createdAt,
+    updatedAt: issue.updatedAt,
+  };
 }

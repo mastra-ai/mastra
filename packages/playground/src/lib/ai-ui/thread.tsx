@@ -315,7 +315,7 @@ const AgentComposer = ({
             }}
             disabled={!canExecuteAgent}
           />
-          {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
+          {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
           <ComposerActions>
             <ComposerActionRow
               canExecute={canExecuteAgent}
@@ -392,7 +392,7 @@ const ComposerActionRow = ({
           {showModelSwitcher && agentId && (
             <>
               <div className="rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
-                <ComposerModelSwitcher agentId={agentId} />
+                <ComposerModelSwitcher />
               </div>
               <ComposerModelSettings agentId={agentId} />
             </>

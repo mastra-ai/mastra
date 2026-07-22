@@ -8,6 +8,7 @@ import { getScenario } from './tui/index.js';
 import type {
   McE2eInProcessApp,
   McE2ePrepareContext,
+  McE2eScenario,
   McE2eScenarioRuntime,
   McE2eStartMastraCodeAppOptions,
   McE2eTerminal,
@@ -401,12 +402,14 @@ async function startMastraCodeApp(
 
   return {
     async stop() {
+      result.session.thread.detachFromCurrent();
       tui.stop();
       const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
       await Promise.allSettled([
         result.mcpManager?.disconnect(),
         result.controller.getMastra()?.stopWorkers(),
         result.controller.stopIntervals(),
+        result.githubSignals?.stopAllPolling(),
         closeSignalsPubSub?.(),
       ]);
     },
@@ -415,7 +418,13 @@ async function startMastraCodeApp(
 
 export async function runTerminalBackend(runConfig: TerminalRunConfig): Promise<number> {
   if (runConfig.liveOutput) throw new Error('terminal backend only supports run mode');
-  const scenario = getScenario(runConfig.scenarioName);
+  return runTerminalScenario(runConfig, getScenario(runConfig.scenarioName));
+}
+
+export async function runTerminalScenario(
+  runConfig: TerminalRunConfig,
+  scenario: Omit<McE2eScenario, 'name'> & { name: string },
+): Promise<number> {
   if (scenario.entrypoint && !scenario.inProcessApp) {
     throw new Error(`Terminal backend does not yet support custom entrypoint scenarios: ${scenario.name}`);
   }

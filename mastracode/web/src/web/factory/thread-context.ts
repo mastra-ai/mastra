@@ -1,15 +1,18 @@
-import { GithubProviderRequestError } from '../github/integration.js';
-import type { GithubIntegration, GithubTaskDetail } from '../github/integration.js';
+import { isTaskContextProviderRequestError, type TaskContextDetail } from '../capabilities/task-context.js';
+import type { FactoryIntegration } from '../factory-integration.js';
 import {
   getFreshLinearAccessToken,
   LinearProviderUnavailableError,
   LinearReauthRequiredError,
   loadLinearConnection,
 } from '../linear/connection.js';
-import { LinearProviderRequestError } from '../linear/integration.js';
-import type { LinearIntegration, LinearIssueContext } from '../linear/integration.js';
-import type { SourceControlProject } from '../storage/domains/source-control/base.js';
-import type { WorkItemRow, WorkItemSource } from './store.js';
+import type { LinearIntegration } from '../linear/integration.js';
+import type {
+  SourceControlInstallation,
+  SourceControlRepository,
+  SourceControlStorageHandle,
+} from '../storage/domains/source-control/base.js';
+import type { ExternalWorkItemSource, WorkItemRow } from '../storage/domains/work-items/base.js';
 
 const MAX_IDENTIFIER_LENGTH = 128;
 const MAX_TITLE_STATE_LENGTH = 512;
@@ -17,10 +20,15 @@ const MAX_DESCRIPTION_LENGTH = 64_000;
 const MAX_URL_LENGTH = 2_048;
 const MAX_LIST_ITEMS = 50;
 const MAX_LIST_ITEM_LENGTH = 100;
+const MAX_SOURCE_NUMBER = 9_999_999_999;
+const LINEAR_ISSUE_IDENTIFIER_RE = /^[A-Z][A-Z0-9]*-[1-9]\d*$/;
+const LINEAR_ISSUE_UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+export type FactoryTaskSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
 
 export interface FactoryThreadTaskContext {
   task: {
-    source: WorkItemSource;
+    source: FactoryTaskSource;
     identifier?: string;
     title: string;
     description?: string;
@@ -36,19 +44,21 @@ export interface FactoryThreadTaskContext {
 }
 
 type StoredReason = NonNullable<FactoryThreadTaskContext['resolution']['reason']>;
+export type LinearTaskContextIntegration = FactoryIntegration & Pick<LinearIntegration, 'refreshAccessToken'>;
 
 type ParsedSource =
-  | { source: 'github-issue'; identifier: string; number: number }
-  | { source: 'github-pr'; identifier: string; number: number }
+  | { source: 'github-issue'; identifier: string; number: number; repositoryExternalId: string }
+  | { source: 'github-pr'; identifier: string; number: number; repositoryExternalId: string }
   | { source: 'linear-issue'; identifier: string };
 
 export interface LoadFactoryThreadTaskContextDeps {
   orgId: string;
-  project: SourceControlProject;
+  factoryProjectId: string;
   workItem: WorkItemRow;
-  githubIntegration?: GithubIntegration;
+  sourceControlStorage?: SourceControlStorageHandle;
+  githubIntegration?: FactoryIntegration;
   ensureGithubReady?: () => Promise<void>;
-  linearIntegration?: LinearIntegration;
+  linearIntegration?: LinearTaskContextIntegration;
   ensureLinearReady?: () => Promise<void>;
 }
 
@@ -67,18 +77,27 @@ function boundedUrl(value: string | null | undefined): string | undefined {
   }
 }
 
-function boundedNames(values: string[]): string[] {
+function boundedNames(values: Array<string | null | undefined>): string[] {
   return values
-    .filter(Boolean)
+    .filter((value): value is string => Boolean(value))
     .slice(0, MAX_LIST_ITEMS)
     .map(value => value.slice(0, MAX_LIST_ITEM_LENGTH));
 }
 
+function sourceType(source: ExternalWorkItemSource | null): FactoryTaskSource {
+  if (!source) return 'manual';
+  if (source.integrationId === 'github' && source.type === 'issue') return 'github-issue';
+  if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
+  if (source.integrationId === 'linear' && source.type === 'issue') return 'linear-issue';
+  return 'manual';
+}
+
 function storedContext(workItem: WorkItemRow, reason: StoredReason): FactoryThreadTaskContext {
-  const url = boundedUrl(workItem.url);
+  const source = sourceType(workItem.externalSource);
+  const url = boundedUrl(workItem.externalSource?.url);
   return {
     task: {
-      source: workItem.source,
+      source,
       title: workItem.title.slice(0, MAX_TITLE_STATE_LENGTH),
       labels: [],
       assignees: [],
@@ -88,38 +107,87 @@ function storedContext(workItem: WorkItemRow, reason: StoredReason): FactoryThre
   };
 }
 
-function parseSource(workItem: WorkItemRow): ParsedSource | null {
-  const sourceKey = workItem.sourceKey;
-  if (!sourceKey) return null;
+function barePositiveInteger(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 && value <= MAX_SOURCE_NUMBER ? value : null;
+  }
+  if (typeof value !== 'string' || !/^[1-9]\d{0,9}$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
 
-  if (workItem.source === 'github-issue' || workItem.source === 'github-pr') {
-    const prefix = `${workItem.source}:`;
-    if (!sourceKey.startsWith(prefix)) return null;
-    const identifier = sourceKey.slice(prefix.length);
-    if (!/^[1-9]\d{0,9}$/.test(identifier)) return null;
-    const number = Number(identifier);
-    if (!Number.isSafeInteger(number)) return null;
-    return { source: workItem.source, identifier, number };
+function sourcePositiveInteger(value: string, prefix: 'github-issue' | 'github-pr'): number | null {
+  const bare = barePositiveInteger(value);
+  if (bare !== null) return bare;
+  const match = value.match(new RegExp(`^${prefix}:([1-9]\\d{0,9})$`));
+  return match ? barePositiveInteger(match[1]) : null;
+}
+
+function metadataString(metadata: Record<string, unknown> | null, key: string): string | null {
+  const value = metadata?.[key];
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return String(value);
+  return null;
+}
+
+function validLinearIssueIdentifier(value: string): boolean {
+  if (value.length === 0 || value.length > MAX_IDENTIFIER_LENGTH) return false;
+  return LINEAR_ISSUE_IDENTIFIER_RE.test(value) || LINEAR_ISSUE_UUID_RE.test(value);
+}
+
+function parseSource(workItem: WorkItemRow): ParsedSource | null {
+  const source = workItem.externalSource;
+  if (!source) return null;
+
+  if (source.integrationId === 'github' && (source.type === 'issue' || source.type === 'pull-request')) {
+    const numberKey = source.type === 'issue' ? 'githubIssueNumber' : 'githubPullRequestNumber';
+    const parsedSource = source.type === 'issue' ? 'github-issue' : 'github-pr';
+    const metadataNumber = workItem.metadata?.[numberKey];
+    const number =
+      metadataNumber === undefined
+        ? sourcePositiveInteger(source.externalId, parsedSource)
+        : barePositiveInteger(metadataNumber);
+    const repositoryExternalId = metadataString(workItem.metadata, 'githubRepositoryId');
+    if (number === null || !repositoryExternalId) return null;
+    return { source: parsedSource, identifier: String(number), number, repositoryExternalId };
   }
 
-  if (workItem.source === 'linear-issue') {
-    const prefix = 'linear:';
-    if (!sourceKey.startsWith(prefix)) return null;
-    const identifier = sourceKey.slice(prefix.length);
-    if (identifier.length === 0 || identifier.length > MAX_IDENTIFIER_LENGTH) return null;
-    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const humanIdentifier = /^[A-Z][A-Z0-9]{0,31}-[1-9]\d{0,9}$/;
-    if (!uuid.test(identifier) && !humanIdentifier.test(identifier)) return null;
+  if (source.integrationId === 'linear' && source.type === 'issue') {
+    const metadataIdentifier = workItem.metadata?.linearIssueIdentifier;
+    const externalIdentifier = source.externalId.startsWith('linear:')
+      ? source.externalId.slice('linear:'.length)
+      : source.externalId;
+    const identifier = metadataIdentifier === undefined ? externalIdentifier : metadataIdentifier;
+    if (typeof identifier !== 'string' || !validLinearIssueIdentifier(identifier)) return null;
     return { source: 'linear-issue', identifier };
   }
 
   return null;
 }
 
-function liveGithubContext(
+async function resolveGithubRepository(
+  storage: SourceControlStorageHandle,
+  orgId: string,
+  factoryProjectId: string,
+  repositoryExternalId: string,
+): Promise<{ installation: SourceControlInstallation; repository: SourceControlRepository } | null> {
+  const connections = await storage.connections.list({ orgId, factoryProjectId });
+  for (const connection of connections) {
+    const projectRepositories = await storage.projectRepositories.list({ orgId, connectionId: connection.id });
+    for (const projectRepository of projectRepositories) {
+      const repository = await storage.repositories.get({ orgId, id: projectRepository.repositoryId });
+      if (!repository || repository.externalId !== repositoryExternalId) continue;
+      const installation = await storage.installations.get({ orgId, id: connection.installationId });
+      if (installation) return { installation, repository };
+    }
+  }
+  return null;
+}
+
+function liveIssueContext(
   workItem: WorkItemRow,
-  parsed: Extract<ParsedSource, { source: 'github-issue' | 'github-pr' }>,
-  detail: GithubTaskDetail,
+  parsed: Extract<ParsedSource, { source: 'github-issue' | 'linear-issue' }>,
+  detail: TaskContextDetail,
 ): FactoryThreadTaskContext {
   const description = boundedText(detail.description, MAX_DESCRIPTION_LENGTH);
   const state = boundedText(detail.state, MAX_TITLE_STATE_LENGTH);
@@ -127,7 +195,7 @@ function liveGithubContext(
   return {
     task: {
       source: parsed.source,
-      identifier: parsed.identifier,
+      identifier: boundedText(detail.identifier, MAX_IDENTIFIER_LENGTH) ?? parsed.identifier,
       title: boundedText(detail.title, MAX_TITLE_STATE_LENGTH) ?? workItem.title.slice(0, MAX_TITLE_STATE_LENGTH),
       ...(description !== undefined ? { description } : {}),
       ...(state !== undefined ? { state } : {}),
@@ -139,18 +207,18 @@ function liveGithubContext(
   };
 }
 
-function liveLinearContext(
+function livePullRequestContext(
   workItem: WorkItemRow,
-  parsed: Extract<ParsedSource, { source: 'linear-issue' }>,
-  detail: LinearIssueContext,
+  parsed: Extract<ParsedSource, { source: 'github-pr' }>,
+  detail: TaskContextDetail,
 ): FactoryThreadTaskContext {
   const description = boundedText(detail.description, MAX_DESCRIPTION_LENGTH);
   const state = boundedText(detail.state, MAX_TITLE_STATE_LENGTH);
   const url = boundedUrl(detail.url);
   return {
     task: {
-      source: 'linear-issue',
-      identifier: parsed.identifier,
+      source: 'github-pr',
+      identifier: boundedText(detail.identifier, MAX_IDENTIFIER_LENGTH) ?? parsed.identifier,
       title: boundedText(detail.title, MAX_TITLE_STATE_LENGTH) ?? workItem.title.slice(0, MAX_TITLE_STATE_LENGTH),
       ...(description !== undefined ? { description } : {}),
       ...(state !== undefined ? { state } : {}),
@@ -166,38 +234,62 @@ export async function loadFactoryThreadTaskContext(
   deps: LoadFactoryThreadTaskContextDeps,
 ): Promise<FactoryThreadTaskContext> {
   const { workItem } = deps;
-  if (workItem.source === 'manual') return storedContext(workItem, 'manual');
+  if (!workItem.externalSource) return storedContext(workItem, 'manual');
 
   const parsed = parseSource(workItem);
   if (!parsed) return storedContext(workItem, 'invalid-source');
 
   if (parsed.source === 'github-issue' || parsed.source === 'github-pr') {
     const github = deps.githubIntegration;
-    if (!github) return storedContext(workItem, 'provider-unavailable');
-    const installationId = Number(deps.project.installationExternalId);
+    if (!github || !deps.sourceControlStorage) return storedContext(workItem, 'provider-unavailable');
+    await deps.ensureGithubReady?.();
+    const resolvedRepository = await resolveGithubRepository(
+      deps.sourceControlStorage,
+      deps.orgId,
+      deps.factoryProjectId,
+      parsed.repositoryExternalId,
+    );
+    if (!resolvedRepository) return storedContext(workItem, 'not-found');
+    const installationId = Number(resolvedRepository.installation.externalId);
     if (!Number.isSafeInteger(installationId) || installationId <= 0) {
       return storedContext(workItem, 'provider-unavailable');
     }
-    await deps.ensureGithubReady?.();
-    let detail: GithubTaskDetail | null;
+    const connection = { type: 'app-installation' as const, installationId };
+    if (parsed.source === 'github-issue') {
+      if (!github.taskContext?.getIssue) return storedContext(workItem, 'provider-unavailable');
+      let detail: TaskContextDetail | null;
+      try {
+        detail = await github.taskContext.getIssue({
+          connection,
+          sourceId: resolvedRepository.repository.slug,
+          issueId: String(parsed.number),
+        });
+      } catch (error) {
+        if (isTaskContextProviderRequestError(error)) return storedContext(workItem, 'provider-unavailable');
+        throw error;
+      }
+      return detail ? liveIssueContext(workItem, parsed, detail) : storedContext(workItem, 'not-found');
+    }
+    if (!github.taskContext?.getPullRequest) return storedContext(workItem, 'provider-unavailable');
+    let detail: TaskContextDetail | null;
     try {
-      detail =
-        parsed.source === 'github-issue'
-          ? await github.getIssueDetail(installationId, deps.project.repositorySlug, parsed.number)
-          : await github.getPullRequestDetail(installationId, deps.project.repositorySlug, parsed.number);
+      detail = await github.taskContext.getPullRequest({
+        connection,
+        sourceId: resolvedRepository.repository.slug,
+        pullRequestId: String(parsed.number),
+      });
     } catch (error) {
-      if (error instanceof GithubProviderRequestError) return storedContext(workItem, 'provider-unavailable');
+      if (isTaskContextProviderRequestError(error)) return storedContext(workItem, 'provider-unavailable');
       throw error;
     }
-    return detail ? liveGithubContext(workItem, parsed, detail) : storedContext(workItem, 'not-found');
+    return detail ? livePullRequestContext(workItem, parsed, detail) : storedContext(workItem, 'not-found');
   }
 
   const linear = deps.linearIntegration;
-  if (!linear) return storedContext(workItem, 'provider-unavailable');
+  if (!linear?.taskContext?.getIssue) return storedContext(workItem, 'provider-unavailable');
+  await deps.ensureLinearReady?.();
   const connection = await loadLinearConnection(deps.orgId);
   if (!connection) return storedContext(workItem, 'not-connected');
-
-  await deps.ensureLinearReady?.();
 
   let accessToken: string;
   try {
@@ -208,12 +300,15 @@ export async function loadFactoryThreadTaskContext(
     throw error;
   }
 
-  let detail: LinearIssueContext | null;
+  let detail: TaskContextDetail | null;
   try {
-    detail = await linear.fetchIssueContext(accessToken, parsed.identifier);
+    detail = await linear.taskContext.getIssue({
+      connection: { type: 'oauth', accessToken },
+      issueId: parsed.identifier,
+    });
   } catch (error) {
-    if (error instanceof LinearProviderRequestError) return storedContext(workItem, 'provider-unavailable');
+    if (isTaskContextProviderRequestError(error)) return storedContext(workItem, 'provider-unavailable');
     throw error;
   }
-  return detail ? liveLinearContext(workItem, parsed, detail) : storedContext(workItem, 'not-found');
+  return detail ? liveIssueContext(workItem, parsed, detail) : storedContext(workItem, 'not-found');
 }

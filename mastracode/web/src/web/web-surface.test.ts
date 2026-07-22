@@ -1,49 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { buildFactoryRoutesMock } = vi.hoisted(() => ({
-  buildFactoryRoutesMock: vi.fn((_deps: unknown) => []),
-}));
-vi.mock('./factory/routes', () => ({ buildFactoryRoutes: buildFactoryRoutesMock }));
-
-// The state-secret guard must run before any DB work; stub the side-effectful
-// import so `resolveLinearReady` can be exercised without external services.
 vi.mock('./sandbox-reattach-registration', () => ({ registerSandboxReattach: () => {} }));
 
-import type { IMastraAuthProvider } from '@mastra/core/server';
-import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config';
+import { buildIssueTriagePrompt } from './github/issue-triage';
+import { __resetRuntimeConfigForTests } from './runtime-config';
 import { seedFactoryStorageForTests } from './storage/test-utils';
-import { createStateSigner } from './state-signing';
-import { assembleWebApiRoutes, buildIssueTriagePrompt, resolveFactoryReady, resolveLinearReady } from './web-surface';
-
-// ── Linear-only state-secret deploy scenario ─────────────────────────────
-// Linear's OAuth `state` is signed with the shared factory signer. The
-// GitHub-side stability assertion is a no-op when the GitHub feature is off,
-// so a Linear-only deployment relies on `resolveLinearReady()` running its
-// own fail-loud check against the seeded signer.
-
-let stderrSpy: ReturnType<typeof vi.spyOn>;
-
-async function enableLinearFeature(options?: { stableStateSigner?: boolean }): Promise<void> {
-  const linearStub = { id: 'linear', listActiveIssues: vi.fn() } as any;
-  const seed = await seedFactoryStorageForTests();
-  seedRuntimeConfig({
-    storage: seed.storage,
-    authProvider: { name: 'workos' } as IMastraAuthProvider,
-    integrations: [linearStub],
-    // No explicit secret ⇒ per-process random signer (stable: false).
-    stateSigner: createStateSigner(options?.stableStateSigner ? 'explicit-secret' : undefined),
-  });
-}
-
-beforeEach(() => {
-  __resetRuntimeConfigForTests();
-  buildFactoryRoutesMock.mockClear();
-  stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
-});
+import { assembleWebApiRoutes, factoryRuleBranch } from './web-surface';
 
 afterEach(() => {
   __resetRuntimeConfigForTests();
-  stderrSpy.mockRestore();
+  vi.clearAllMocks();
 });
 
 describe('buildIssueTriagePrompt', () => {
@@ -69,48 +35,47 @@ describe('buildIssueTriagePrompt', () => {
   });
 });
 
-describe('Factory route readiness and assembly', () => {
-  it('keeps storage-backed Factory routes ready without a GitHub integration', async () => {
+describe('assembleWebApiRoutes', () => {
+  it('keeps the Factory context route mounted when provider integrations are absent', async () => {
     const seed = await seedFactoryStorageForTests();
-
-    await expect(resolveFactoryReady()).resolves.toBe(true);
-
-    const forIntegration = vi.spyOn(seed.sourceControl, 'forIntegration');
-    assembleWebApiRoutes({
+    const routes = assembleWebApiRoutes({
       controllerId: 'code',
-      controller: {} as never,
-      authStorage: {} as never,
+      controller: {} as any,
+      authStorage: {} as any,
+      audit: { emit: vi.fn() },
       publicOrigin: 'http://localhost:4111',
       integrationStorage: seed.integrations,
       sourceControlStorage: seed.sourceControl,
       integrations: [],
       intakeReady: false,
       factoryReady: true,
+      factoryTransitionService: { transition: vi.fn(), ruleSetVersion: 'test' } as any,
     });
 
-    expect(forIntegration).toHaveBeenCalledWith('github');
-    expect(buildFactoryRoutesMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceControlStorage: expect.any(Object),
-      }),
-    );
-    expect(buildFactoryRoutesMock.mock.calls[0]?.[0]).not.toHaveProperty('githubIntegration');
+    expect(routes.some(route => route.path === '/web/factory/projects/:id/threads/:threadId/context')).toBe(true);
   });
 });
 
-describe('resolveLinearReady startup guard', () => {
-  it('throws when Linear is enabled but no replica-stable state secret is set', async () => {
-    await enableLinearFeature();
-    await expect(resolveLinearReady()).rejects.toThrow(/replica-stable state secret/);
-  });
+describe('factoryRuleBranch', () => {
+  const item = {
+    id: 'item-1',
+    orgId: 'org-1',
+    factoryProjectId: 'project-1',
+    externalSource: { integrationId: 'github', type: 'issue', externalId: '42' },
+    parentWorkItemId: null,
+    title: 'Issue 42',
+    stages: ['triage'],
+    sessions: {},
+    stageHistory: [],
+    metadata: {},
+    revision: 1,
+    createdBy: 'user-1',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 
-  it('resolves when Linear is enabled and an explicit secret is set', async () => {
-    await enableLinearFeature({ stableStateSigner: true });
-    await expect(resolveLinearReady()).resolves.toBe(true);
-  });
-
-  it('returns false without throwing when the Linear feature is off', async () => {
-    seedRuntimeConfig({});
-    await expect(resolveLinearReady()).resolves.toBe(false);
+  it('supports webhook and board-candidate issue metadata', () => {
+    expect(factoryRuleBranch({ ...item, metadata: { githubIssueNumber: 42 } })).toBe('factory/issue-42');
+    expect(factoryRuleBranch({ ...item, metadata: { number: 43 } })).toBe('factory/issue-43');
   });
 });

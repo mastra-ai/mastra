@@ -1,7 +1,8 @@
 import { Input } from '@mastra/playground-ui/components/Input';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Search } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import type { OAuthStartResponse } from '../../../../../shared/api/types';
 import {
@@ -19,6 +20,8 @@ interface ActiveOAuthSession {
   session: OAuthStartResponse;
 }
 
+const API_KEY_LIST_MAX_HEIGHT = 280;
+
 /** Provider OAuth and API-key management for local and tenant-scoped web deployments. */
 export function ProvidersSection() {
   const providersQuery = useProvidersQuery();
@@ -28,6 +31,7 @@ export function ProvidersSection() {
   const [search, setSearch] = useState('');
   const [startingProvider, setStartingProvider] = useState<string>();
   const [activeOAuth, setActiveOAuth] = useState<ActiveOAuthSession>();
+  const apiKeyListRef = useRef<HTMLDivElement | null>(null);
 
   const providers = providersQuery.data ?? [];
   const authEnabled = authQuery.data?.authEnabled === true;
@@ -36,16 +40,16 @@ export function ProvidersSection() {
     .sort((left, right) => left.provider.localeCompare(right.provider));
   const oauthProviderIds = new Set(oauthProviders.map(provider => provider.provider));
 
+  const apiKeyProviders = providers
+    .filter(provider => !oauthProviderIds.has(provider.provider))
+    .sort((left, right) => {
+      if ((left.source !== 'none') !== (right.source !== 'none')) return left.source !== 'none' ? -1 : 1;
+      return left.provider.localeCompare(right.provider);
+    });
   const query = search.trim().toLowerCase();
   const results = query
-    ? providers
-        .filter(provider => !oauthProviderIds.has(provider.provider) && provider.provider.toLowerCase().includes(query))
-        .sort((left, right) => {
-          if ((left.source !== 'none') !== (right.source !== 'none')) return left.source !== 'none' ? -1 : 1;
-          return left.provider.localeCompare(right.provider);
-        })
-        .slice(0, 50)
-    : [];
+    ? apiKeyProviders.filter(provider => provider.provider.toLowerCase().includes(query))
+    : apiKeyProviders;
 
   const startOAuth = async (provider: string, mode?: string) => {
     setStartingProvider(provider);
@@ -67,7 +71,11 @@ export function ProvidersSection() {
     }
   };
 
-  const searching = query.length > 0;
+  const updateSearch = (value: string) => {
+    setSearch(value);
+    apiKeyListRef.current?.scrollTo({ top: 0 });
+  };
+
   const requestError = providersQuery.error ?? startOAuthMutation.error ?? cancelOAuthMutation.error;
   const error = requestError instanceof Error ? requestError.message : undefined;
 
@@ -123,30 +131,36 @@ export function ProvidersSection() {
           type="text"
           placeholder="Search providers to add an API key…"
           value={search}
-          onChange={event => setSearch(event.target.value)}
+          onChange={event => updateSearch(event.target.value)}
           aria-label="Search providers"
           className="pl-8"
         />
       </div>
 
-      {searching &&
+      {!providersQuery.isPending &&
         (results.length === 0 ? (
           <Txt as="p" variant="ui-sm" className="text-icon3">
-            {`No providers match “${search.trim()}”.`}
+            {query ? `No providers match “${search.trim()}”.` : 'No API key providers are available.'}
           </Txt>
         ) : (
-          <ul role="list" aria-label="API key providers" className="flex flex-col divide-y divide-border1">
-            {results.map(provider => (
-              <ProviderRow
-                key={provider.provider}
-                provider={provider}
-                authEnabled={authEnabled}
-                disabled={startOAuthMutation.isPending}
-                startingOAuth={startingProvider === provider.provider}
-                onStartOAuth={startOAuth}
-              />
-            ))}
-          </ul>
+          <ScrollArea
+            maxHeight={`${API_KEY_LIST_MAX_HEIGHT}px`}
+            viewportRef={apiKeyListRef}
+            className="min-h-0 rounded-md border border-border1"
+          >
+            <ul role="list" aria-label="API key providers" className="flex flex-col divide-y divide-border1 px-2">
+              {results.map(provider => (
+                <ProviderRow
+                  key={provider.provider}
+                  provider={provider}
+                  authEnabled={authEnabled}
+                  disabled={startOAuthMutation.isPending}
+                  startingOAuth={startingProvider === provider.provider}
+                  onStartOAuth={startOAuth}
+                />
+              ))}
+            </ul>
+          </ScrollArea>
         ))}
 
       {activeOAuth && (

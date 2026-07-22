@@ -34,8 +34,8 @@ vi.mock('../domains/auth/services/auth', async importOriginal => {
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
-const GITHUB_PROJECT_ID = 'github-project-context';
-const FACTORY_CONTEXT_URL = `${TEST_BASE_URL}/web/factory/repositories/:projectId/threads/:threadId/context`;
+const FACTORY_PROJECT_ID = 'factory-project-context';
+const FACTORY_CONTEXT_URL = `${TEST_BASE_URL}/web/factory/projects/:projectId/threads/:threadId/context`;
 
 class TestMediaQueryList extends EventTarget implements MediaQueryList {
   readonly media: string;
@@ -102,22 +102,31 @@ function githubFactory(): Factory {
     name: 'Mastra GitHub',
     resourceId: RESOURCE_ID,
     binding: {
-      kind: 'github',
-      githubProjectId: GITHUB_PROJECT_ID,
-      worktrees: [
+      kind: 'factory',
+      factoryProjectId: FACTORY_PROJECT_ID,
+      repositories: [
         {
-          branch: 'feat/factory-context',
-          worktreePath: '/tmp/mastra-factory',
-          baseBranch: 'main',
-        },
-        {
-          branch: 'user/personal-context',
-          worktreePath: '/tmp/mastra-personal',
-          baseBranch: 'main',
-          threadId: threadTwo.id,
+          projectRepositoryId: 'project-repository-context',
+          slug: 'mastra-ai/mastra',
+          sandboxId: 'sandbox-context',
+          sandboxWorkdir: '/tmp/mastra-repository',
+          worktrees: [
+            {
+              branch: 'feat/factory-context',
+              worktreePath: '/tmp/mastra-factory',
+              baseBranch: 'main',
+            },
+            {
+              branch: 'user/personal-context',
+              worktreePath: '/tmp/mastra-personal',
+              baseBranch: 'main',
+              threadId: threadTwo.id,
+            },
+          ],
+          selectedWorktreePath: '/tmp/mastra-factory',
         },
       ],
-      selectedWorktreePath: '/tmp/mastra-factory',
+      selectedRepositoryId: 'project-repository-context',
     },
     createdAt: 2,
   };
@@ -410,14 +419,20 @@ describe('MastraCode thread pages', () => {
       resourceId: RESOURCE_ID,
       createdAt: 2,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-thread',
-        worktrees: [
+        kind: 'factory',
+        factoryProjectId: 'fp-github-thread',
+        repositories: [
           {
-            branch: 'user/thread-session',
-            worktreePath: '/tmp/thread-project-session',
-            baseBranch: 'main',
-            threadId: threadOne.id,
+            projectRepositoryId: 'pr-github-thread',
+            slug: 'mastra-ai/thread-project',
+            worktrees: [
+              {
+                branch: 'user/thread-session',
+                worktreePath: '/tmp/thread-project-session',
+                baseBranch: 'main',
+                threadId: threadOne.id,
+              },
+            ],
           },
         ],
       },

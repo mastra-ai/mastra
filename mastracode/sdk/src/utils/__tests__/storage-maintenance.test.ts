@@ -94,7 +94,7 @@ describe('createStorageMaintenance', () => {
       localDbFiles: [],
       closeVector,
     });
-    await withClose.closeStorage!();
+    await Promise.all([withClose.closeStorage!(), withClose.closeStorage!()]);
     expect(close).toHaveBeenCalledOnce();
     expect(closeVector).toHaveBeenCalledOnce();
 
@@ -105,6 +105,27 @@ describe('createStorageMaintenance', () => {
       localDbFiles: [],
     });
     await expect(withoutClose.closeStorage!()).resolves.toBeUndefined();
+  });
+
+  it('attempts both closes and propagates their failures', async () => {
+    const storageError = new Error('storage close failed');
+    const vectorError = new Error('vector close failed');
+    const close = vi.fn().mockRejectedValue(storageError);
+    const closeVector = vi.fn().mockRejectedValue(vectorError);
+    const maintenance = createStorageMaintenance({
+      storage: { prune: vi.fn(), close } as any,
+      backend: 'libsql',
+      retention: DEFAULT_RETENTION,
+      localDbFiles: [],
+      closeVector,
+    });
+
+    const error = await maintenance.closeStorage!().catch(error => error);
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(closeVector).toHaveBeenCalledOnce();
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toEqual([storageError, vectorError]);
   });
 });
 

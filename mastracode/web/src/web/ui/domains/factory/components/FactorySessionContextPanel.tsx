@@ -12,8 +12,9 @@ import { renderedPaths, WorkspaceViewerPanel } from '../../workspace-viewer';
 export type FactorySessionContextTab = 'task' | 'files';
 
 interface FactorySessionContextPanelProps {
-  githubProjectId: string;
+  factoryProjectId: string;
   threadId: string;
+  resourceId: string;
   workspacePath: string;
   activeTab: FactorySessionContextTab;
   onTabChange: (tab: FactorySessionContextTab) => void;
@@ -49,8 +50,9 @@ function safeHttpUrl(value: string | undefined): string | undefined {
 }
 
 export function FactorySessionContextPanel({
-  githubProjectId,
+  factoryProjectId,
   threadId,
+  resourceId,
   workspacePath,
   activeTab,
   onTabChange,
@@ -90,7 +92,12 @@ export function FactorySessionContextPanel({
 
         {activeTab === 'task' ? (
           <TabContent value="task" className="min-h-0 flex-1 px-3 pb-4">
-            <FactoryTaskContext githubProjectId={githubProjectId} threadId={threadId} />
+            <FactoryTaskContext
+              factoryProjectId={factoryProjectId}
+              threadId={threadId}
+              resourceId={resourceId}
+              projectPath={workspacePath}
+            />
           </TabContent>
         ) : null}
         {activeTab === 'files' ? (
@@ -109,8 +116,18 @@ export function FactorySessionContextPanel({
   );
 }
 
-function FactoryTaskContext({ githubProjectId, threadId }: { githubProjectId: string; threadId: string }) {
-  const query = useFactoryThreadTaskContextQuery(githubProjectId, threadId, true);
+function FactoryTaskContext({
+  factoryProjectId,
+  threadId,
+  resourceId,
+  projectPath,
+}: {
+  factoryProjectId: string;
+  threadId: string;
+  resourceId: string;
+  projectPath: string;
+}) {
+  const query = useFactoryThreadTaskContextQuery(factoryProjectId, threadId, resourceId, projectPath, true);
 
   if (query.isPending) {
     return <SkeletonRows label="Loading task context" rows={5} />;

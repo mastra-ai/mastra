@@ -54,7 +54,7 @@ describe('getFactoryWorkspace', () => {
     );
     const assetNames = (await fs.readdir(assetRoot)).sort();
 
-    expect(assetNames).toEqual(['understand-issue', 'understand-pr']);
+    expect(assetNames).toEqual(['configure-factory-rules', 'understand-issue', 'understand-pr']);
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
@@ -71,14 +71,18 @@ describe('getFactoryWorkspace', () => {
     );
 
     const workspace = await getFactoryWorkspace({ requestContext: createRequestContext(projectPath) });
+    const configureRules = await workspace.skills?.get('configure-factory-rules');
     const understandIssue = await workspace.skills?.get('understand-issue');
     const understandPr = await workspace.skills?.get('understand-pr');
     const filesystem = workspace.filesystem as LocalFilesystem;
 
     expect(workspace.id).toContain('-web-factory');
+    expect(configureRules?.instructions).toContain('# Configure Factory Rules');
     expect(understandIssue?.instructions).toContain('# Understand Issue');
     expect(understandIssue?.instructions).not.toContain('# Shadowed Project Skill');
+    expect(understandIssue?.metadata).toMatchObject({ goal: true });
     expect(understandPr?.instructions).toContain('# Understand PR');
+    expect(understandPr?.metadata).toMatchObject({ goal: true });
     expect(filesystem.allowedPaths).not.toContain('/__mastracode_factory_skills__');
     await expect(filesystem.writeFile(path.join(understandIssue!.path, 'SKILL.md'), 'mutated')).rejects.toMatchObject({
       name: 'PermissionError',

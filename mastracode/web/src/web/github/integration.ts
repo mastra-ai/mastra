@@ -28,10 +28,41 @@ import { Octokit } from '@octokit/rest';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
+import type { IntegrationConnection } from '../capabilities/connection.js';
+import type {
+  CreateIntakeCommentInput,
+  GetIntakeIssueInput,
+  Intake,
+  IntakeIssue,
+  IntakeIssueDetail,
+  ListIntakeIssuesInput,
+} from '../capabilities/intake.js';
+import {
+  boundedTaskContextDetail,
+  TaskContextProviderRequestError,
+  type TaskContext,
+} from '../capabilities/task-context.js';
+import type {
+  PullRequest,
+  PullRequestComment,
+  PullRequestRef,
+  Review,
+  ReviewComment,
+  VersionControl,
+} from '../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
+import { runGithubIssueTriage } from './issue-triage.js';
 import { buildGithubRoutes } from './routes.js';
-import { createGithubSubscriptionTools } from './session-subscriptions.js';
+import {
+  createGithubSubscriptionTools,
+  parseCreatedPullRequest,
+  subscribeCurrentSessionToPullRequest,
+} from './session-subscriptions.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
+
+type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
+  ? TInput
+  : never;
 
 /**
  * Normalize a PEM private key supplied via env. Env tooling tends to mangle
@@ -82,54 +113,6 @@ export interface IssueSummary {
 /** Page size for issue/PR listings; one GitHub API call per page. */
 export const LIST_PAGE_SIZE = 30;
 
-const TASK_TITLE_STATE_MAX_LENGTH = 512;
-const TASK_DESCRIPTION_MAX_LENGTH = 64_000;
-const TASK_URL_MAX_LENGTH = 2_048;
-const TASK_LIST_MAX_ITEMS = 50;
-const TASK_LIST_ITEM_MAX_LENGTH = 100;
-
-function boundedOptionalText(value: string | null | undefined, maxLength: number): string | undefined {
-  if (!value) return undefined;
-  return value.slice(0, maxLength);
-}
-
-function boundedTaskUrl(value: string | null | undefined): string | undefined {
-  if (!value || value.length > TASK_URL_MAX_LENGTH) return undefined;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function boundedTaskNames(values: Array<string | null | undefined>): string[] {
-  return values
-    .filter((value): value is string => Boolean(value))
-    .slice(0, TASK_LIST_MAX_ITEMS)
-    .map(value => value.slice(0, TASK_LIST_ITEM_MAX_LENGTH));
-}
-
-function isGithubNotFound(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'status' in error && error.status === 404;
-}
-
-export class GithubProviderRequestError extends Error {
-  constructor(cause: unknown) {
-    super('GitHub provider request failed.', { cause });
-    this.name = 'GithubProviderRequestError';
-  }
-}
-
-async function requestGithubTask<T>(request: () => Promise<T>): Promise<T | null> {
-  try {
-    return await request();
-  } catch (error) {
-    if (isGithubNotFound(error)) return null;
-    throw new GithubProviderRequestError(error);
-  }
-}
-
 export interface IssuePage {
   issues: IssueSummary[];
   /** Next page number to request, or `null` when this was the last page. */
@@ -140,32 +123,11 @@ export interface ListRepoOpenIssuesOptions {
   label?: string;
 }
 
-export interface PullRequestSummary {
-  number: number;
-  title: string;
-  url: string;
-  author: string | null;
-  baseBranch: string;
-  headBranch: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PullRequestPage {
-  pullRequests: PullRequestSummary[];
-  /** Next page number to request, or `null` when this was the last page. */
-  nextPage: number | null;
-}
-
-/** Basic bounded fields needed by the Factory task-context panel. */
-export interface GithubTaskDetail {
-  number: number;
-  title: string;
-  description?: string;
-  state: string;
-  labels: string[];
-  assignees: string[];
-  url?: string;
+export class GithubProviderRequestError extends TaskContextProviderRequestError {
+  constructor(cause: unknown) {
+    super('GitHub API request failed.', { cause });
+    this.name = 'GithubProviderRequestError';
+  }
 }
 
 export interface GithubIntegrationConfig {
@@ -196,6 +158,161 @@ const REQUIRED_FIELDS = ['appId', 'privateKey', 'clientId', 'clientSecret', 'slu
 export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
+  readonly intake: Intake = {
+    listSources: async ({ orgId }) => {
+      const installations = await this.sourceControlStorage.installations.list({ orgId });
+      const repositories = await Promise.all(
+        installations.map(installation =>
+          this.sourceControlStorage.repositories.list({ orgId, installationId: installation.id }),
+        ),
+      );
+      return repositories.flat().map(repository => ({
+        id: repository.id,
+        name: repository.slug,
+        type: 'repository',
+        metadata: { defaultBranch: repository.defaultBranch },
+      }));
+    },
+    listItems: async ({ orgId, sourceIds, cursor }) => {
+      const page = cursor ? Number.parseInt(cursor, 10) : 1;
+      const requestedPage = Number.isSafeInteger(page) && page > 0 ? page : 1;
+      const pages = await Promise.all(
+        sourceIds.map(async sourceId => {
+          const repository = await this.sourceControlStorage.repositories.get({ orgId, id: sourceId });
+          if (!repository) return { items: [], hasNextPage: false };
+          const installation = await this.sourceControlStorage.installations.get({
+            orgId,
+            id: repository.installationId,
+          });
+          if (!installation) return { items: [], hasNextPage: false };
+          const installationId = Number.parseInt(installation.externalId, 10);
+          if (!Number.isSafeInteger(installationId)) return { items: [], hasNextPage: false };
+          const [issues, pullRequests] = await Promise.all([
+            this.listRepoOpenIssues(installationId, repository.slug, requestedPage),
+            this.versionControl.listPullRequests({
+              connection: { type: 'app-installation', installationId },
+              sourceId: repository.slug,
+              includeDrafts: false,
+              cursor: String(requestedPage),
+            }),
+          ]);
+          return {
+            items: [
+              ...issues.issues.map(issue => ({
+                source: { type: 'issue', externalId: `${repository.externalId}:${issue.number}`, url: issue.url },
+                sourceId: repository.id,
+                title: issue.title,
+                status: 'open',
+                labels: issue.labels,
+                createdAt: issue.createdAt,
+                updatedAt: issue.updatedAt,
+                metadata: { repository: repository.slug, number: issue.number, author: issue.author },
+              })),
+              ...pullRequests.pullRequests.map(pullRequest => ({
+                source: {
+                  type: 'pull-request',
+                  externalId: `${repository.externalId}:${pullRequest.id}`,
+                  url: pullRequest.url,
+                },
+                sourceId: repository.id,
+                title: pullRequest.title,
+                status: 'open',
+                createdAt: pullRequest.createdAt,
+                updatedAt: pullRequest.updatedAt,
+                metadata: {
+                  repository: repository.slug,
+                  number: Number(pullRequest.id),
+                  author: pullRequest.author,
+                  baseBranch: pullRequest.baseBranch,
+                  headBranch: pullRequest.headBranch,
+                },
+              })),
+            ],
+            hasNextPage: issues.nextPage !== null || pullRequests.nextCursor !== null,
+          };
+        }),
+      );
+      return {
+        items: pages.flatMap(result => result.items),
+        nextCursor: pages.some(result => result.hasNextPage) ? String(requestedPage + 1) : null,
+      };
+    },
+    listIssues: input => this.#listIntakeIssues(input),
+    getIssue: input => this.#getIntakeIssue(input),
+    createComment: input => this.#createIntakeComment(input),
+  };
+  readonly taskContext: TaskContext = {
+    getIssue: input => this.#getTaskIssueContext(input),
+    getPullRequest: input => this.#getTaskPullRequestContext(input),
+  };
+  readonly versionControl: VersionControl = {
+    initialize: ({ storage }) => {
+      this.#sourceControlStorage = storage;
+    },
+    registerInstallation: ({ orgId, userId, installation }) =>
+      this.sourceControlStorage.installations.upsert({
+        orgId,
+        connectedByUserId: userId,
+        externalId: installation.externalId,
+        accountName: installation.accountName,
+        accountType: installation.accountType,
+        providerMetadata: installation.metadata,
+      }),
+    registerRepositories: ({ orgId, installationId, repositories }) =>
+      Promise.all(
+        repositories.map(repository =>
+          this.sourceControlStorage.repositories.upsert({
+            orgId,
+            input: {
+              installationId,
+              externalId: repository.externalId,
+              slug: repository.slug,
+              defaultBranch: repository.defaultBranch,
+              providerMetadata: repository.metadata,
+            },
+          }),
+        ),
+      ),
+    getRepositoryAccess: async ({ orgId, repositoryId }) => {
+      const repository = await this.sourceControlStorage.repositories.get({ orgId, id: repositoryId });
+      if (!repository) throw new Error('Version-control repository not found.');
+      const installation = await this.sourceControlStorage.installations.get({
+        orgId,
+        id: repository.installationId,
+      });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const installationId = Number.parseInt(installation.externalId, 10);
+      if (!Number.isSafeInteger(installationId)) throw new Error('GitHub installation id is invalid.');
+      return {
+        cloneUrl: `https://github.com/${repository.slug}.git`,
+        authorization: { scheme: 'bearer', token: await this.mintInstallationToken(installationId) },
+      };
+    },
+    listPullRequests: input => this.#listPullRequests(input),
+    getPullRequest: input => this.#getPullRequest(input),
+    createPullRequest: input => this.#createPullRequest(input),
+    updatePullRequest: input => this.#updatePullRequest(input),
+    closePullRequest: input => this.#closePullRequest(input),
+    mergePullRequest: input => this.#mergePullRequest(input),
+    listComments: input => this.#listComments(input),
+    createComment: input => this.#createComment(input),
+    updateComment: input => this.#updateComment(input),
+    deleteComment: input => this.#deleteComment(input),
+    listReviews: input => this.#listReviews(input),
+    getReview: input => this.#getReview(input),
+    createReview: input => this.#createReview(input),
+    updateReview: input => this.#updateReview(input),
+    submitReview: input => this.#submitReview(input),
+    dismissReview: input => this.#dismissReview(input),
+    deletePendingReview: input => this.#deletePendingReview(input),
+    listReviewComments: input => this.#listReviewComments(input),
+    createReviewComment: input => this.#createReviewComment(input),
+    updateReviewComment: input => this.#updateReviewComment(input),
+    deleteReviewComment: input => this.#deleteReviewComment(input),
+    listRequestedReviewers: input => this.#listRequestedReviewers(input),
+    requestReviewers: input => this.#requestReviewers(input),
+    removeRequestedReviewers: input => this.#removeReviewers(input),
+  };
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
    * multi-replica deploy needs a deployment-stable state secret.
@@ -209,6 +326,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #slug: string;
   readonly #webhookSecret: string | undefined;
   #storage: IntegrationContext['storage'] | undefined;
+  #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
 
   constructor(config: GithubIntegrationConfig) {
     const missing = REQUIRED_FIELDS.filter(field => !config[field]);
@@ -238,8 +356,9 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   get sourceControlStorage(): IntegrationContext['storage']['sourceControl'] {
-    if (!this.#storage) throw new Error('GithubIntegration storage has not been initialized.');
-    return this.#storage.sourceControl;
+    const storage = this.#sourceControlStorage ?? this.#storage?.sourceControl;
+    if (!storage) throw new Error('GithubIntegration source-control storage has not been initialized.');
+    return storage;
   }
 
   get integrationStorage(): GithubSubscriptionStorage {
@@ -375,65 +494,452 @@ export class GithubIntegration implements FactoryIntegration {
     }
   }
 
-  /** Fetch the basic fields for one issue through the project's installation. */
-  async getIssueDetail(
-    installationId: number,
-    repoFullName: string,
-    issueNumber: number,
-  ): Promise<GithubTaskDetail | null> {
-    const parts = splitRepoFullName(repoFullName);
-    if (!parts) return null;
-    const response = await requestGithubTask(() =>
-      this.getInstallationOctokit(installationId).issues.get({
-        ...parts,
-        issue_number: issueNumber,
-      }),
-    );
-    if (!response) return null;
-
-    const { data } = response;
-    const description = boundedOptionalText(data.body, TASK_DESCRIPTION_MAX_LENGTH);
-    const url = boundedTaskUrl(data.html_url);
+  async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
+    const installationId = getGithubInstallationId(input.connection);
+    const repoFullName = getSingleSourceId(input.sourceIds, 'GitHub Intake requires exactly one repository source.');
+    const page = parsePositiveCursor(input.cursor);
+    const labels = normalizeLabels(input.labels);
+    const result = await this.listRepoOpenIssues(installationId, repoFullName, page, {
+      label: labels.length > 0 ? labels.join(',') : undefined,
+    });
     return {
-      number: data.number,
-      title: data.title.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
-      ...(description !== undefined ? { description } : {}),
-      state: data.state.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
-      labels: boundedTaskNames(data.labels.map(label => (typeof label === 'string' ? label : label.name))),
-      assignees: boundedTaskNames(data.assignees?.map(assignee => assignee.login) ?? []),
-      ...(url !== undefined ? { url } : {}),
+      issues: result.issues.map(issue => ({
+        id: String(issue.number),
+        identifier: `#${issue.number}`,
+        title: issue.title,
+        url: issue.url,
+        author: issue.author,
+        state: 'open',
+        stateType: 'open',
+        priority: null,
+        assignee: null,
+        source: repoFullName,
+        labels: issue.labels,
+        commentCount: issue.comments,
+        createdAt: issue.createdAt,
+        updatedAt: issue.updatedAt,
+      })),
+      nextCursor: result.nextPage === null ? null : String(result.nextPage),
     };
   }
 
-  /** Fetch the basic fields for one pull request through the project's installation. */
-  async getPullRequestDetail(
-    installationId: number,
-    repoFullName: string,
-    pullRequestNumber: number,
-  ): Promise<GithubTaskDetail | null> {
+  async #getIntakeIssue(input: GetIntakeIssueInput): Promise<IntakeIssueDetail | null> {
+    const installationId = getGithubInstallationId(input.connection);
+    const repoFullName = requireSourceId(input.sourceId, 'GitHub Intake requires a repository source.');
     const parts = splitRepoFullName(repoFullName);
-    if (!parts) return null;
-    const response = await requestGithubTask(() =>
-      this.getInstallationOctokit(installationId).pulls.get({
-        ...parts,
-        pull_number: pullRequestNumber,
-      }),
-    );
-    if (!response) return null;
-
-    const { data } = response;
-    const state = data.merged ? 'merged' : data.state;
-    const description = boundedOptionalText(data.body, TASK_DESCRIPTION_MAX_LENGTH);
-    const url = boundedTaskUrl(data.html_url);
+    const issueNumber = parsePositiveInteger(input.issueId);
+    if (!parts || issueNumber === null) return null;
+    const octokit = this.getInstallationOctokit(installationId);
+    let response;
+    try {
+      response = await Promise.all([
+        octokit.issues.get({ owner: parts.owner, repo: parts.repo, issue_number: issueNumber }),
+        octokit.paginate(octokit.issues.listComments, {
+          owner: parts.owner,
+          repo: parts.repo,
+          issue_number: issueNumber,
+          per_page: 100,
+        }),
+      ]);
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw new GithubProviderRequestError(err);
+    }
+    const [{ data: issue }, comments] = response;
+    if (issue.pull_request) return null;
     return {
-      number: data.number,
-      title: data.title.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
-      ...(description !== undefined ? { description } : {}),
-      state: state.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
-      labels: boundedTaskNames(data.labels.map(label => label.name)),
-      assignees: boundedTaskNames(data.assignees?.map(assignee => assignee.login) ?? []),
-      ...(url !== undefined ? { url } : {}),
+      id: String(issue.number),
+      identifier: `#${issue.number}`,
+      title: issue.title,
+      url: issue.html_url,
+      author: issue.user?.login ?? null,
+      state: issue.state,
+      stateType: issue.state,
+      priority: null,
+      assignee: issue.assignee?.login ?? null,
+      source: repoFullName,
+      labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
+      commentCount: issue.comments,
+      createdAt: issue.created_at,
+      updatedAt: issue.updated_at,
+      description: issue.body?.trim() ? issue.body : null,
+      comments: comments.map(comment => ({
+        author: comment.user?.login ?? null,
+        body: comment.body ?? '',
+        createdAt: comment.created_at,
+      })),
     };
+  }
+
+  async #getTaskIssueContext(input: GetIntakeIssueInput) {
+    const installationId = getGithubInstallationId(input.connection);
+    const repoFullName = requireSourceId(input.sourceId, 'GitHub task context requires a repository source.');
+    const parts = splitRepoFullName(repoFullName);
+    const issueNumber = parsePositiveInteger(input.issueId);
+    if (!parts || issueNumber === null) return null;
+    const octokit = this.getInstallationOctokit(installationId);
+    let issue;
+    try {
+      ({ data: issue } = await octokit.issues.get({ owner: parts.owner, repo: parts.repo, issue_number: issueNumber }));
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw new GithubProviderRequestError(err);
+    }
+    if (issue.pull_request) return null;
+    const assignees = issue.assignees ?? (issue.assignee ? [issue.assignee] : []);
+    return boundedTaskContextDetail({
+      identifier: `#${issue.number}`,
+      title: issue.title,
+      description: issue.body?.trim() ? issue.body : null,
+      state: issue.state,
+      labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
+      assignees: assignees.map(assignee => assignee.login).filter((login): login is string => Boolean(login)),
+      url: issue.html_url,
+    });
+  }
+
+  async #createIntakeComment(input: CreateIntakeCommentInput): Promise<{ id: string; url: string } | null> {
+    const installationId = getGithubInstallationId(input.connection);
+    const repoFullName = requireSourceId(input.sourceId, 'GitHub Intake requires a repository source.');
+    const parts = splitRepoFullName(repoFullName);
+    const issueNumber = parsePositiveInteger(input.issueId);
+    if (!parts || issueNumber === null) return null;
+    const octokit = this.getInstallationOctokit(installationId);
+    try {
+      const { data } = await octokit.issues.createComment({
+        owner: parts.owner,
+        repo: parts.repo,
+        issue_number: issueNumber,
+        body: input.body,
+      });
+      return { id: String(data.id), url: data.html_url };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  }
+
+  #repositoryClient(connection: IntegrationConnection, sourceId: string) {
+    const installationId = getGithubInstallationId(connection);
+    const parts = splitRepoFullName(sourceId);
+    if (!parts) throw new Error('GitHub pull requests require an owner/repository source.');
+    return { octokit: this.getInstallationOctokit(installationId), parts };
+  }
+
+  async #listPullRequests(input: InputOf<'listPullRequests'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const page = parsePositiveCursor(input.cursor);
+    const response = await octokit.pulls.list({
+      ...parts,
+      state: input.state ?? 'open',
+      per_page: LIST_PAGE_SIZE,
+      page,
+    });
+    const pullRequests = response.data
+      .filter(pr => input.includeDrafts !== false || !pr.draft)
+      .map(pr => parsePullRequest(pr));
+    return {
+      pullRequests,
+      nextCursor: response.data.length === LIST_PAGE_SIZE ? String(page + 1) : null,
+    };
+  }
+
+  async #getPullRequest(input: InputOf<'getPullRequest'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const pullNumber = requirePullRequestNumber(input.pullRequestId);
+    let data;
+    try {
+      ({ data } = await octokit.pulls.get({ ...parts, pull_number: pullNumber }));
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw new GithubProviderRequestError(err);
+    }
+    return parsePullRequest(data);
+  }
+
+  async #getTaskPullRequestContext(input: PullRequestRef) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const pullNumber = requirePullRequestNumber(input.pullRequestId);
+    let data;
+    try {
+      ({ data } = await octokit.pulls.get({ ...parts, pull_number: pullNumber }));
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw new GithubProviderRequestError(err);
+    }
+    const assignees = data.assignees ?? (data.assignee ? [data.assignee] : []);
+    return boundedTaskContextDetail({
+      identifier: `#${data.number}`,
+      title: data.title,
+      description: data.body?.trim() ? data.body : null,
+      state: data.merged ? 'merged' : data.state,
+      labels: data.labels.map(label => label.name).filter((name): name is string => Boolean(name)),
+      assignees: assignees.map(assignee => assignee.login).filter((login): login is string => Boolean(login)),
+      url: data.html_url,
+    });
+  }
+
+  async #createPullRequest(input: InputOf<'createPullRequest'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.create({
+      ...parts,
+      title: input.title,
+      body: input.body,
+      base: input.baseBranch,
+      head: input.headBranch,
+      draft: input.draft,
+    });
+    return parsePullRequest(data);
+  }
+
+  async #updatePullRequest(input: InputOf<'updatePullRequest'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.update({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      title: input.title,
+      body: input.body === null ? '' : input.body,
+      base: input.baseBranch,
+      state: input.state,
+    });
+    return parsePullRequest(data);
+  }
+
+  async #closePullRequest(input: InputOf<'closePullRequest'>) {
+    return this.#updatePullRequest({ ...input, state: 'closed' });
+  }
+
+  async #mergePullRequest(input: InputOf<'mergePullRequest'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.merge({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      commit_title: input.commitTitle,
+      commit_message: input.commitMessage,
+      merge_method: input.method,
+    });
+    return { merged: data.merged, message: data.message, sha: data.sha ?? null };
+  }
+
+  async #listComments(input: InputOf<'listComments'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const page = parsePositiveCursor(input.cursor);
+    const response = await octokit.issues.listComments({
+      ...parts,
+      issue_number: requirePullRequestNumber(input.pullRequestId),
+      per_page: LIST_PAGE_SIZE,
+      page,
+    });
+    return {
+      comments: response.data.map(comment => parsePullRequestComment(comment)),
+      nextCursor: response.data.length === LIST_PAGE_SIZE ? String(page + 1) : null,
+    };
+  }
+
+  async #createComment(input: InputOf<'createComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.issues.createComment({
+      ...parts,
+      issue_number: requirePullRequestNumber(input.pullRequestId),
+      body: input.body,
+    });
+    return parsePullRequestComment(data);
+  }
+
+  async #updateComment(input: InputOf<'updateComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.issues.updateComment({
+      ...parts,
+      comment_id: requirePositiveId(input.commentId, 'comment'),
+      body: input.body,
+    });
+    return parsePullRequestComment(data);
+  }
+
+  async #deleteComment(input: InputOf<'deleteComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    await octokit.issues.deleteComment({ ...parts, comment_id: requirePositiveId(input.commentId, 'comment') });
+  }
+
+  async #listReviews(input: InputOf<'listReviews'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const page = parsePositiveCursor(input.cursor);
+    const response = await octokit.pulls.listReviews({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      per_page: LIST_PAGE_SIZE,
+      page,
+    });
+    return {
+      reviews: response.data.map(review => parseReview(review)),
+      nextCursor: response.data.length === LIST_PAGE_SIZE ? String(page + 1) : null,
+    };
+  }
+
+  async #getReview(input: InputOf<'getReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    try {
+      const { data } = await octokit.pulls.getReview({
+        ...parts,
+        pull_number: requirePullRequestNumber(input.pullRequestId),
+        review_id: requirePositiveId(input.reviewId, 'review'),
+      });
+      return parseReview(data);
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  }
+
+  async #createReview(input: InputOf<'createReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.createReview({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      body: input.body,
+      commit_id: input.commitId,
+      event: input.event ? reviewEventToGithub(input.event) : undefined,
+    });
+    return parseReview(data);
+  }
+
+  async #updateReview(input: InputOf<'updateReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.updateReview({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      review_id: requirePositiveId(input.reviewId, 'review'),
+      body: input.body,
+    });
+    return parseReview(data);
+  }
+
+  async #submitReview(input: InputOf<'submitReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.submitReview({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      review_id: requirePositiveId(input.reviewId, 'review'),
+      body: input.body,
+      event: reviewEventToGithub(input.event),
+    });
+    return parseReview(data);
+  }
+
+  async #dismissReview(input: InputOf<'dismissReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.dismissReview({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      review_id: requirePositiveId(input.reviewId, 'review'),
+      message: input.message,
+    });
+    return parseReview(data);
+  }
+
+  async #deletePendingReview(input: InputOf<'deletePendingReview'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    await octokit.pulls.deletePendingReview({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      review_id: requirePositiveId(input.reviewId, 'review'),
+    });
+  }
+
+  async #listReviewComments(input: InputOf<'listReviewComments'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const page = parsePositiveCursor(input.cursor);
+    const response = await octokit.pulls.listReviewComments({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      per_page: LIST_PAGE_SIZE,
+      page,
+    });
+    return {
+      comments: response.data.map(comment => parseReviewComment(comment)),
+      nextCursor: response.data.length === LIST_PAGE_SIZE ? String(page + 1) : null,
+    };
+  }
+
+  async #createReviewComment(input: InputOf<'createReviewComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const pullNumber = requirePullRequestNumber(input.pullRequestId);
+    if (input.replyToId) {
+      const { data } = await octokit.pulls.createReplyForReviewComment({
+        ...parts,
+        pull_number: pullNumber,
+        comment_id: requirePositiveId(input.replyToId, 'review comment'),
+        body: input.body,
+      });
+      return parseReviewComment(data);
+    }
+    if (!input.commitId || !input.path || input.line === undefined || !input.side) {
+      throw new Error('A review comment requires commitId, path, line, and side unless it is a reply.');
+    }
+    if ((input.startLine === undefined) !== (input.startSide === undefined)) {
+      throw new Error('A multi-line review comment requires both startLine and startSide.');
+    }
+    const { data } = await octokit.pulls.createReviewComment({
+      ...parts,
+      pull_number: pullNumber,
+      body: input.body,
+      commit_id: input.commitId,
+      path: input.path,
+      line: input.line,
+      side: input.side.toUpperCase() as 'LEFT' | 'RIGHT',
+      start_line: input.startLine,
+      start_side: input.startSide?.toUpperCase() as 'LEFT' | 'RIGHT' | undefined,
+    });
+    return parseReviewComment(data);
+  }
+
+  async #updateReviewComment(input: InputOf<'updateReviewComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.updateReviewComment({
+      ...parts,
+      comment_id: requirePositiveId(input.commentId, 'review comment'),
+      body: input.body,
+    });
+    return parseReviewComment(data);
+  }
+
+  async #deleteReviewComment(input: InputOf<'deleteReviewComment'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    await octokit.pulls.deleteReviewComment({
+      ...parts,
+      comment_id: requirePositiveId(input.commentId, 'review comment'),
+    });
+  }
+
+  async #listRequestedReviewers(input: InputOf<'listRequestedReviewers'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.listRequestedReviewers({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+    });
+    return parseRequestedReviewers(data);
+  }
+
+  async #requestReviewers(input: InputOf<'requestReviewers'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.requestReviewers({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      reviewers: input.users ?? [],
+      team_reviewers: input.teams ?? [],
+    });
+    return parseRequestedReviewers(data);
+  }
+
+  async #removeReviewers(input: InputOf<'removeRequestedReviewers'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { data } = await octokit.pulls.removeRequestedReviewers({
+      ...parts,
+      pull_number: requirePullRequestNumber(input.pullRequestId),
+      reviewers: input.users ?? [],
+      team_reviewers: input.teams ?? [],
+    });
+    return parseRequestedReviewers(data);
   }
 
   /** Add labels to an issue (deduplicated; no-op on empty/malformed input). */
@@ -492,37 +998,6 @@ export class GithubIntegration implements FactoryIntegration {
         updatedAt: issue.updated_at,
       }));
     return { issues, nextPage: response.data.length === LIST_PAGE_SIZE ? page + 1 : null };
-  }
-
-  /**
-   * List one page of a repo's open, non-draft pull requests through an
-   * installation token. Draft filtering can make a non-final page shorter than
-   * the page size — `nextPage` is derived from the raw response length.
-   */
-  async listRepoOpenPullRequests(installationId: number, repoFullName: string, page: number): Promise<PullRequestPage> {
-    const parts = splitRepoFullName(repoFullName);
-    if (!parts) return { pullRequests: [], nextPage: null };
-    const octokit = this.getInstallationOctokit(installationId);
-    const response = await octokit.pulls.list({
-      owner: parts.owner,
-      repo: parts.repo,
-      state: 'open',
-      per_page: LIST_PAGE_SIZE,
-      page,
-    });
-    const pullRequests = response.data
-      .filter(pr => !pr.draft)
-      .map(pr => ({
-        number: pr.number,
-        title: pr.title,
-        url: pr.html_url,
-        author: pr.user?.login ?? null,
-        baseBranch: pr.base.ref,
-        headBranch: pr.head.ref,
-        createdAt: pr.created_at,
-        updatedAt: pr.updated_at,
-      }));
-    return { pullRequests, nextPage: response.data.length === LIST_PAGE_SIZE ? page + 1 : null };
   }
 
   /**
@@ -585,7 +1060,12 @@ export class GithubIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       controller: ctx.controller,
-      runIssueTriage: ctx.hooks?.runIssueTriage,
+      runIssueTriage: ctx.controller
+        ? input => runGithubIssueTriage({ controller: ctx.controller!, input })
+        : undefined,
+      emitAudit: ctx.hooks?.emitAudit,
+      ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
+      revokeFactoryBindingsForProjectPath: ctx.hooks?.revokeFactoryBindingsForProjectPath,
     });
   }
 
@@ -593,8 +1073,17 @@ export class GithubIntegration implements FactoryIntegration {
    * Session-scoped agent tools: PR subscribe/unsubscribe for sessions bound
    * to a GitHub-backed project. Empty for sessions outside a GitHub project.
    */
-  sessionTools(requestContext: RequestContext): IntegrationTools {
+  sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
     return createGithubSubscriptionTools(requestContext, this);
+  }
+
+  async postToolObserver({
+    toolContext,
+    requestContext,
+  }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
+    const pullRequestUrl = parseCreatedPullRequest(toolContext);
+    if (!pullRequestUrl || !requestContext) return;
+    await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create', this);
   }
 
   /** Non-secret config snapshot for system diagnostics/startup logs. */
@@ -604,6 +1093,180 @@ export class GithubIntegration implements FactoryIntegration {
       webhookSecretConfigured: this.#webhookSecret !== undefined,
     };
   }
+}
+
+interface GithubPullRequestData {
+  number: number;
+  title: string;
+  html_url: string;
+  user: { login?: string } | null;
+  body?: string | null;
+  state: string;
+  draft?: boolean | null;
+  merged?: boolean;
+  merged_at?: string | null;
+  mergeable?: boolean | null;
+  base: { ref: string };
+  head: { ref: string; sha: string };
+  created_at: string;
+  updated_at: string;
+}
+
+interface GithubCommentData {
+  id: number;
+  html_url: string;
+  user: { login?: string } | null;
+  body?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface GithubReviewData {
+  id: number;
+  html_url?: string;
+  user: { login?: string } | null;
+  body?: string | null;
+  state: string;
+  commit_id?: string | null;
+  submitted_at?: string | null;
+}
+
+interface GithubReviewCommentData extends GithubCommentData {
+  path: string;
+  line?: number | null;
+  side?: string | null;
+  commit_id: string;
+  in_reply_to_id?: number | null;
+}
+
+function parsePullRequest(pr: GithubPullRequestData): PullRequest {
+  return {
+    id: String(pr.number),
+    title: pr.title,
+    url: pr.html_url,
+    author: pr.user?.login ?? null,
+    body: pr.body?.trim() ? pr.body : null,
+    state: pr.state === 'closed' ? 'closed' : 'open',
+    draft: pr.draft ?? false,
+    merged: pr.merged ?? Boolean(pr.merged_at),
+    mergeable: typeof pr.mergeable === 'boolean' ? pr.mergeable : null,
+    baseBranch: pr.base.ref,
+    headBranch: pr.head.ref,
+    headSha: pr.head.sha,
+    createdAt: pr.created_at,
+    updatedAt: pr.updated_at,
+  };
+}
+
+function parsePullRequestComment(comment: GithubCommentData): PullRequestComment {
+  return {
+    id: String(comment.id),
+    url: comment.html_url,
+    author: comment.user?.login ?? null,
+    body: comment.body ?? '',
+    createdAt: comment.created_at,
+    updatedAt: comment.updated_at,
+  };
+}
+
+function parseReview(review: GithubReviewData): Review {
+  return {
+    id: String(review.id),
+    url: review.html_url ?? null,
+    author: review.user?.login ?? null,
+    body: review.body?.trim() ? review.body : null,
+    state: parseReviewState(review.state),
+    commitId: review.commit_id ?? null,
+    submittedAt: review.submitted_at ?? null,
+  };
+}
+
+function parseReviewComment(comment: GithubReviewCommentData): ReviewComment {
+  const parsed = parsePullRequestComment(comment);
+  const side = comment.side?.toLowerCase();
+  return {
+    ...parsed,
+    path: comment.path,
+    line: comment.line ?? null,
+    side: side === 'left' || side === 'right' ? side : null,
+    commitId: comment.commit_id,
+    replyToId: comment.in_reply_to_id ? String(comment.in_reply_to_id) : null,
+  };
+}
+
+function parseRequestedReviewers(data: {
+  users?: Array<{ login?: string }> | null;
+  teams?: Array<{ slug?: string }> | null;
+  requested_reviewers?: Array<{ login?: string }> | null;
+  requested_teams?: Array<{ slug?: string }> | null;
+}) {
+  return {
+    users: (data.users ?? data.requested_reviewers ?? []).flatMap(user => (user.login ? [user.login] : [])),
+    teams: (data.teams ?? data.requested_teams ?? []).flatMap(team => (team.slug ? [team.slug] : [])),
+  };
+}
+
+function parseReviewState(state: string): Review['state'] {
+  if (state === 'PENDING') return 'pending';
+  if (state === 'COMMENTED') return 'commented';
+  if (state === 'APPROVED') return 'approved';
+  if (state === 'CHANGES_REQUESTED') return 'changes-requested';
+  if (state === 'DISMISSED') return 'dismissed';
+  throw new Error(`Unsupported GitHub review state: ${state}`);
+}
+
+function reviewEventToGithub(event: Exclude<InputOf<'createReview'>['event'], undefined>) {
+  if (event === 'approve') return 'APPROVE' as const;
+  if (event === 'request-changes') return 'REQUEST_CHANGES' as const;
+  return 'COMMENT' as const;
+}
+
+function requirePullRequestNumber(value: string): number {
+  return requirePositiveId(value, 'pull request');
+}
+
+function requirePositiveId(value: string, resource: string): number {
+  const parsed = parsePositiveInteger(value);
+  if (parsed === null) throw new Error(`GitHub ${resource} id must be a positive integer.`);
+  return parsed;
+}
+
+function getGithubInstallationId(connection: IntegrationConnection): number {
+  if (connection.type !== 'app-installation') {
+    throw new Error('GitHub capabilities require an app-installation connection.');
+  }
+  return connection.installationId;
+}
+
+function getSingleSourceId(sourceIds: string[], message: string): string {
+  if (sourceIds.length !== 1) throw new Error(message);
+  return sourceIds[0]!;
+}
+
+function normalizeLabels(labels: string[] | undefined): string[] {
+  return [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
+}
+
+function requireSourceId(sourceId: string | undefined, message: string): string {
+  if (!sourceId) throw new Error(message);
+  return sourceId;
+}
+
+function parsePositiveCursor(cursor: string | undefined): number {
+  if (cursor === undefined) return 1;
+  const page = parsePositiveInteger(cursor);
+  if (page === null) throw new Error('GitHub cursor must be a positive page number.');
+  return page;
+}
+
+function parsePositiveInteger(value: string): number | null {
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'status' in error && error.status === 404;
 }
 
 /** Split an `owner/name` full name into its parts, or `null` when malformed. */

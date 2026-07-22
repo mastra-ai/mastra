@@ -3,73 +3,66 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
-// Capture audit events at the store boundary so the real `emitAudit` path
-// (actor resolution, request context, never-throws) is exercised end to end.
+import type { AuditEmitter } from '../audit/domain';
+import { __resetRuntimeConfigForTests } from '../runtime-config';
+import { upsertLinearConnection } from '../linear/storage';
+
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
 
-vi.mock('../audit/store', () => ({
-  recordAuditEvent: async (input: any) => {
-    if (auditFailure) throw auditFailure;
-    auditRecorded.push(input);
-    return {
-      id: `00000000-0000-4000-9000-${String(auditRecorded.length).padStart(12, '0')}`,
-      occurredAt: new Date(),
-      ...input,
-      githubProjectId: input.githubProjectId ?? null,
-      metadata: input.metadata ?? {},
-      context: input.context ?? {},
-    };
+const audit: AuditEmitter = {
+  async emit({ context, input }) {
+    try {
+      if (auditFailure) throw auditFailure;
+      const user = context.get('webAuthUser' as never) as { workosId: string; organizationId?: string } | undefined;
+      if (!user?.organizationId) return;
+      auditRecorded.push({
+        orgId: user.organizationId,
+        actorId: user.workosId,
+        actorType: 'human',
+        action: input.action,
+        factoryProjectId: input.factoryProjectId,
+        targets: input.targets,
+        metadata: input.metadata,
+      });
+    } catch (error) {
+      console.warn('[Audit] Failed to emit audit event', {
+        action: input.action,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   },
-  listAuditEvents: async () => ({ events: [] }),
-}));
-
-import { GithubIntegration, GithubProviderRequestError } from '../github/integration';
-import { LinearIntegration, LinearProviderRequestError } from '../linear/integration';
-import { upsertLinearConnection } from '../linear/storage';
-import { __resetRuntimeConfigForTests } from '../runtime-config';
-import { handleServerError } from '../server-error';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
+};
 import { seedFactoryStorageForTests } from '../storage/test-utils';
 import type { FactoryStorageTestSeed } from '../storage/test-utils';
 import { mountApiRoutes } from '../test-utils';
+import { builtInFactoryRules } from './rules/defaults';
+import { FactoryTransitionService } from './rules/transition-service';
 import { buildFactoryRoutes } from './routes';
-import type { FactoryRoutesDeps } from './routes';
+import type { FactoryRoutesOptions } from './routes';
+import type { LinearTaskContextIntegration } from './thread-context';
 import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-let sourceControlStorage!: SourceControlStorageHandle;
-let githubIntegration!: GithubIntegration;
-let linearIntegration!: LinearIntegration;
-
-interface ProviderOverrides {
-  githubIntegration?: GithubIntegration | null;
-  linearIntegration?: LinearIntegration | null;
-  ensureGithubReady?: FactoryRoutesDeps['ensureGithubReady'];
-  ensureLinearReady?: FactoryRoutesDeps['ensureLinearReady'];
-}
-
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
-  storage: SourceControlStorageHandle | null = sourceControlStorage,
-  overrides: ProviderOverrides = {},
+  startCoordinator?: { prepare: (input: any) => Promise<any> },
+  transitionService: any = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+  options: Pick<FactoryRoutesOptions, 'taskContext'> = {},
 ) {
   const app = new Hono();
-  app.onError(handleServerError);
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  const github = overrides.githubIntegration === null ? undefined : (overrides.githubIntegration ?? githubIntegration);
-  const linear = overrides.linearIntegration === null ? undefined : (overrides.linearIntegration ?? linearIntegration);
   mountApiRoutes(
     app as any,
     buildFactoryRoutes({
-      ...(storage ? { sourceControlStorage: storage } : {}),
-      ...(github ? { githubIntegration: github } : {}),
-      ...(linear ? { linearIntegration: linear } : {}),
-      ...(overrides.ensureGithubReady ? { ensureGithubReady: overrides.ensureGithubReady } : {}),
-      ...(overrides.ensureLinearReady ? { ensureLinearReady: overrides.ensureLinearReady } : {}),
+      audit,
+      transitionService,
+      startCoordinator,
+      decisionStorage: seed.workItems,
+      ...options,
     }),
   );
   return app;
@@ -79,20 +72,15 @@ const orgUser = { workosId: 'u1', organizationId: 'org1' };
 let PROJECT_ID = '';
 
 async function seedProject(orgId = 'org1') {
-  const project = await sourceControlStorage.projects.upsert({
+  const project = await seed.projects.create({
     orgId,
-    createdByUserId: 'u1',
-    installationExternalId: '1',
-    repositorySlug: `acme/${orgId}-app`,
-    repositoryExternalId: orgId === 'org1' ? '1' : `1-${orgId}`,
-    defaultBranch: 'main',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/tmp/acme-app',
+    userId: 'u1',
+    input: { name: `${orgId} project` },
   });
   PROJECT_ID = project.id;
 }
 
-const listItems = () => seed.workItems.list('org1', PROJECT_ID);
+const listItems = () => seed.workItems.list({ orgId: 'org1', factoryProjectId: PROJECT_ID });
 
 function json(method: string, path: string, body?: unknown, user: typeof orgUser | null = orgUser) {
   return buildApp(user).request(path, {
@@ -102,10 +90,13 @@ function json(method: string, path: string, body?: unknown, user: typeof orgUser
 }
 
 const createBody = (overrides: Record<string, unknown> = {}) => ({
-  source: 'github-issue',
-  sourceKey: 'github-issue:42',
+  externalSource: {
+    integrationId: 'github',
+    type: 'issue',
+    externalId: '42',
+    url: 'https://github.com/acme/app/issues/42',
+  },
   title: 'Fix the login flow',
-  url: 'https://github.com/acme/app/issues/42',
   stages: ['intake'],
   metadata: { number: 42 },
   ...overrides,
@@ -115,15 +106,6 @@ let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
   seed = await seedFactoryStorageForTests();
-  sourceControlStorage = seed.sourceControl.forIntegration('github');
-  githubIntegration = new GithubIntegration({
-    appId: '123',
-    privateKey: 'test-private-key',
-    clientId: 'github-client',
-    clientSecret: 'github-secret',
-    slug: 'test-app',
-  });
-  linearIntegration = new LinearIntegration({ clientId: 'linear-client', clientSecret: 'linear-secret' });
   auditRecorded = [];
   auditFailure = undefined;
   await seedProject();
@@ -137,35 +119,30 @@ afterEach(() => {
 // ── Auth / scoping ───────────────────────────────────────────────────────
 describe('auth and scoping', () => {
   it('401s without a user', async () => {
-    const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/work-items`, undefined, null);
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`, undefined, null);
     expect(res.status).toBe(401);
   });
 
   it('403s without an organization', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request(`/web/factory/repositories/${PROJECT_ID}/work-items`);
+    const res = await buildApp({ workosId: 'u1' }).request(`/web/factory/projects/${PROJECT_ID}/work-items`);
     expect(res.status).toBe(403);
   });
 
   it('404s when the project belongs to another org', async () => {
     await seedProject('other-org');
-    const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/work-items`);
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
     expect(res.status).toBe(404);
   });
 
-  it('503s when GitHub storage is unavailable', async () => {
-    const res = await buildApp(orgUser, null).request(`/web/factory/repositories/${PROJECT_ID}/work-items`);
-    expect(res.status).toBe(503);
-  });
-
   it('404s on a non-uuid project id', async () => {
-    const res = await json('GET', `/web/factory/repositories/not-a-uuid/work-items`);
+    const res = await json('GET', `/web/factory/projects/not-a-uuid/work-items`);
     expect(res.status).toBe(404);
   });
 
   it('is org-wide: another member of the same org sees the item', async () => {
-    await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const res = await buildApp({ workosId: 'u2', organizationId: 'org1' }).request(
-      `/web/factory/repositories/${PROJECT_ID}/work-items`,
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
     );
     const body = await res.json();
     expect(body.workItems).toHaveLength(1);
@@ -174,405 +151,158 @@ describe('auth and scoping', () => {
 });
 
 // ── Thread task context ──────────────────────────────────────────────────
-describe('GET /web/factory/repositories/:id/threads/:threadId/context', () => {
-  async function createLinkedItem(threadId: string, overrides: Record<string, unknown> = {}) {
-    const response = await json(
-      'POST',
-      `/web/factory/repositories/${PROJECT_ID}/work-items`,
-      createBody({
-        sessions: { work: { projectPath: `/workspace/${threadId}`, branch: `factory/${threadId}`, threadId } },
-        ...overrides,
-      }),
-    );
-    expect(response.status).toBe(200);
+describe('GET /web/factory/projects/:id/threads/:threadId/context', () => {
+  const threadId = 'thread:/opaque?value=1';
+  const resourceId = 'resource-1';
+  const projectPath = '/repo/worktree';
+
+  function contextPath(overrides: { resourceId?: string; projectPath?: string } = {}) {
+    const query = new URLSearchParams({
+      resourceId: overrides.resourceId ?? resourceId,
+      projectPath: overrides.projectPath ?? projectPath,
+    });
+    return `/web/factory/projects/${PROJECT_ID}/threads/${encodeURIComponent(threadId)}/context?${query}`;
   }
 
-  function requestContext(threadId: string, overrides: ProviderOverrides = {}) {
-    return buildApp(orgUser, sourceControlStorage, overrides).request(
-      `/web/factory/repositories/${PROJECT_ID}/threads/${encodeURIComponent(threadId)}/context`,
-    );
-  }
+  it('returns null when the exact session address has no binding history', async () => {
+    const res = await buildApp(orgUser).request(contextPath());
 
-  async function connectLinear(
-    overrides: {
-      accessToken?: string;
-      refreshToken?: string | null;
-      expiresAt?: Date | null;
-    } = {},
-  ) {
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ context: null });
+  });
+
+  it('requires the full session address', async () => {
+    const res = await buildApp(orgUser).request(
+      `/web/factory/projects/${PROJECT_ID}/threads/${encodeURIComponent(threadId)}/context`,
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_session_address' });
+  });
+
+  it('returns stored context for the exact historical binding after revocation', async () => {
+    const prepared = await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { input: { title: 'Manual task title', stages: ['intake'] } },
+      role: 'work',
+      session: { threadId, projectPath, branch: 'feature/context' },
+      resourceId,
+      kickoffKey: 'context-kickoff',
+      kickoffMessage: null,
+    });
+    await seed.workItems.revokeRunBinding({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: prepared.binding.id,
+      revokedAt: new Date(),
+    });
+
+    const res = await buildApp(orgUser).request(contextPath());
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      context: {
+        task: { source: 'manual', title: 'Manual task title', labels: [], assignees: [] },
+        resolution: { mode: 'stored', reason: 'manual' },
+      },
+    });
+    const mismatched = await buildApp(orgUser).request(contextPath({ resourceId: 'other-resource' }));
+    await expect(mismatched.json()).resolves.toEqual({ context: null });
+  });
+
+  it('hydrates a bound Linear issue through the bounded task-context capability', async () => {
+    await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId: 'ENG-42',
+            url: 'https://linear.app/mastra/issue/ENG-42',
+          },
+          title: 'Stored Linear title',
+          stages: ['intake'],
+          metadata: { linearIssueIdentifier: 'ENG-42' },
+        },
+      },
+      role: 'work',
+      session: { threadId, projectPath, branch: 'feature/context' },
+      resourceId,
+      kickoffKey: 'linear-context-kickoff',
+      kickoffMessage: null,
+    });
     await upsertLinearConnection({
       orgId: 'org1',
       userId: 'u1',
-      accessToken: overrides.accessToken ?? 'linear-access-token',
-      refreshToken: overrides.refreshToken ?? null,
-      expiresAt: overrides.expiresAt ?? null,
+      accessToken: 'linear-access-token',
+      refreshToken: 'linear-refresh-token',
+      expiresAt: new Date('2027-07-22T00:00:00.000Z'),
       scope: 'read',
-      workspaceName: 'Acme',
-      workspaceUrlKey: 'acme',
+      workspaceName: 'Mastra',
+      workspaceUrlKey: 'mastra',
     });
-  }
+    const getIssue = vi.fn().mockResolvedValue({
+      identifier: 'ENG-42',
+      title: 'Live Linear title',
+      description: 'Live Linear description',
+      state: 'In Progress',
+      labels: ['factory'],
+      assignees: ['Ada'],
+      url: 'https://linear.app/mastra/issue/ENG-42',
+    });
+    const linearIntegration = {
+      id: 'linear',
+      taskContext: { getIssue },
+      refreshAccessToken: vi.fn(),
+    } as unknown as LinearTaskContextIntegration;
 
-  it('hydrates GitHub issues and pull requests with the scoped installation and repository', async () => {
-    await createLinkedItem('issue-thread');
-    await createLinkedItem('pr-thread', {
-      source: 'github-pr',
-      sourceKey: 'github-pr:77',
-      title: 'Stored PR title',
-      url: 'https://github.com/acme/org1-app/pull/77',
-    });
-    const issue = vi.spyOn(githubIntegration, 'getIssueDetail').mockResolvedValue({
-      number: 42,
-      title: 'Live issue title',
-      description: 'Live **markdown** body',
-      state: 'open',
-      labels: ['bug'],
-      assignees: ['octocat'],
-      url: 'https://github.com/acme/org1-app/issues/42',
-    });
-    const pullRequest = vi.spyOn(githubIntegration, 'getPullRequestDetail').mockResolvedValue({
-      number: 77,
-      title: 'Live PR title',
-      description: 'PR body',
-      state: 'merged',
-      labels: ['feature'],
-      assignees: ['grace'],
-      url: 'https://github.com/acme/org1-app/pull/77',
-    });
+    const res = await buildApp(orgUser, undefined, undefined, {
+      taskContext: { linearIntegration, ensureLinearReady: vi.fn().mockResolvedValue(undefined) },
+    }).request(contextPath());
 
-    const issueResponse = await requestContext('issue-thread');
-    const prResponse = await requestContext('pr-thread');
-
-    expect(issueResponse.status).toBe(200);
-    await expect(issueResponse.json()).resolves.toEqual({
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
       context: {
         task: {
-          source: 'github-issue',
-          identifier: '42',
-          title: 'Live issue title',
-          description: 'Live **markdown** body',
-          state: 'open',
-          labels: ['bug'],
-          assignees: ['octocat'],
-          url: 'https://github.com/acme/org1-app/issues/42',
+          source: 'linear-issue',
+          identifier: 'ENG-42',
+          title: 'Live Linear title',
+          description: 'Live Linear description',
+          state: 'In Progress',
+          labels: ['factory'],
+          assignees: ['Ada'],
         },
         resolution: { mode: 'live' },
       },
     });
-    expect(prResponse.status).toBe(200);
-    expect((await prResponse.json()).context.task).toMatchObject({
-      source: 'github-pr',
-      identifier: '77',
-      title: 'Live PR title',
-      state: 'merged',
+    expect(getIssue).toHaveBeenCalledWith({
+      connection: { type: 'oauth', accessToken: 'linear-access-token' },
+      issueId: 'ENG-42',
     });
-    expect(issue).toHaveBeenCalledWith(1, 'acme/org1-app', 42);
-    expect(pullRequest).toHaveBeenCalledWith(1, 'acme/org1-app', 77);
-  });
-
-  it('hydrates a Linear issue with one lightweight provider read', async () => {
-    await createLinkedItem('linear-thread', {
-      source: 'linear-issue',
-      sourceKey: 'linear:ENG-42',
-      title: 'Stored Linear title',
-      url: 'https://linear.app/acme/issue/ENG-42',
-    });
-    await connectLinear();
-    const fetchIssue = vi.spyOn(linearIntegration, 'fetchIssueContext').mockResolvedValue({
-      identifier: 'ENG-42',
-      title: 'Live Linear title',
-      description: 'Linear description',
-      state: 'In Progress',
-      labels: ['factory'],
-      assignees: ['ada'],
-      url: 'https://linear.app/acme/issue/ENG-42',
-    });
-
-    const response = await requestContext('linear-thread');
-
-    expect(response.status).toBe(200);
-    expect((await response.json()).context).toEqual({
-      task: {
-        source: 'linear-issue',
-        identifier: 'ENG-42',
-        title: 'Live Linear title',
-        description: 'Linear description',
-        state: 'In Progress',
-        labels: ['factory'],
-        assignees: ['ada'],
-        url: 'https://linear.app/acme/issue/ENG-42',
-      },
-      resolution: { mode: 'live' },
-    });
-    expect(fetchIssue).toHaveBeenCalledWith('linear-access-token', 'ENG-42');
-  });
-
-  it('returns null for an unlinked thread and 409 for ambiguous linkage', async () => {
-    const unlinked = await requestContext('unlinked-thread');
-    expect(unlinked.status).toBe(200);
-    await expect(unlinked.json()).resolves.toEqual({ context: null });
-
-    await createLinkedItem('ambiguous-thread');
-    await createLinkedItem('ambiguous-thread', { sourceKey: 'github-issue:43' });
-    const ambiguous = await requestContext('ambiguous-thread');
-    expect(ambiguous.status).toBe(409);
-    await expect(ambiguous.json()).resolves.toEqual({
-      error: 'ambiguous_thread_context',
-      message: 'Multiple work items reference this thread.',
-    });
-  });
-
-  it('uses stored context for manual and malformed source identities without provider calls', async () => {
-    const issue = vi.spyOn(githubIntegration, 'getIssueDetail');
-    const pullRequest = vi.spyOn(githubIntegration, 'getPullRequestDetail');
-    const linear = vi.spyOn(linearIntegration, 'fetchIssueContext');
-
-    await seed.workItems.upsert({
-      orgId: 'org1',
-      userId: 'u1',
-      githubProjectId: PROJECT_ID,
-      input: {
-        source: 'manual',
-        sourceKey: null,
-        title: 'Manual task',
-        url: 'javascript:alert(1)',
-        stages: ['intake'],
-        sessions: {
-          work: { projectPath: '/workspace/manual-thread', branch: 'factory/manual-thread', threadId: 'manual-thread' },
-        },
-        metadata: {},
-      },
-    });
-    const manual = await requestContext('manual-thread');
-    expect((await manual.json()).context).toEqual({
-      task: { source: 'manual', title: 'Manual task', labels: [], assignees: [] },
-      resolution: { mode: 'stored', reason: 'manual' },
-    });
-
-    const invalid = [
-      ['github-issue', 'github-issue:0'],
-      ['github-issue', 'github-issue:042'],
-      ['github-pr', 'github-issue:42'],
-      ['linear-issue', 'linear:eng-42'],
-      ['linear-issue', 'linear: ENG-42'],
-      ['linear-issue', `linear:${'A'.repeat(129)}`],
-    ] as const;
-    for (const [index, [source, sourceKey]] of invalid.entries()) {
-      const threadId = `invalid-${index}`;
-      await createLinkedItem(threadId, { source, sourceKey, title: `Stored ${index}` });
-      const response = await requestContext(threadId);
-      expect((await response.json()).context.resolution).toEqual({ mode: 'stored', reason: 'invalid-source' });
-    }
-
-    expect(issue).not.toHaveBeenCalled();
-    expect(pullRequest).not.toHaveBeenCalled();
-    expect(linear).not.toHaveBeenCalled();
-  });
-
-  it('degrades provider absence, disconnect, reauth, not-found, and provider failures to stored context', async () => {
-    await createLinkedItem('github-missing', { url: 'https://github.com/acme/org1-app/issues/42' });
-    const githubMissing = await requestContext('github-missing', { githubIntegration: null });
-    expect((await githubMissing.json()).context.resolution).toEqual({
-      mode: 'stored',
-      reason: 'provider-unavailable',
-    });
-
-    await createLinkedItem('github-not-found', { sourceKey: 'github-issue:43' });
-    vi.spyOn(githubIntegration, 'getIssueDetail').mockResolvedValueOnce(null);
-    const githubNotFound = await requestContext('github-not-found');
-    expect((await githubNotFound.json()).context.resolution).toEqual({ mode: 'stored', reason: 'not-found' });
-
-    await createLinkedItem('github-error', { sourceKey: 'github-issue:44' });
-    vi.spyOn(githubIntegration, 'getIssueDetail').mockRejectedValueOnce(
-      new GithubProviderRequestError(new Error('provider token must not leak')),
-    );
-    const githubError = await requestContext('github-error');
-    const githubErrorBody = await githubError.json();
-    expect(githubErrorBody.context.resolution).toEqual({ mode: 'stored', reason: 'provider-unavailable' });
-    expect(JSON.stringify(githubErrorBody)).not.toContain('provider token must not leak');
-
-    await createLinkedItem('linear-disconnected', {
-      source: 'linear-issue',
-      sourceKey: 'linear:ENG-42',
-      title: 'Stored Linear title',
-    });
-    const disconnected = await requestContext('linear-disconnected');
-    expect((await disconnected.json()).context.resolution).toEqual({ mode: 'stored', reason: 'not-connected' });
-
-    await connectLinear({ expiresAt: new Date(Date.now() - 120_000) });
-    const reauth = await requestContext('linear-disconnected');
-    expect((await reauth.json()).context.resolution).toEqual({ mode: 'stored', reason: 'reauth-required' });
-
-    await connectLinear({ refreshToken: 'refresh-token', expiresAt: new Date(Date.now() - 120_000) });
-    vi.spyOn(linearIntegration, 'refreshAccessToken').mockRejectedValueOnce(
-      Object.assign(new Error('upstream token secret'), { status: 503 }),
-    );
-    const unavailable = await requestContext('linear-disconnected');
-    const unavailableBody = await unavailable.json();
-    expect(unavailableBody.context.resolution).toEqual({ mode: 'stored', reason: 'provider-unavailable' });
-    expect(JSON.stringify(unavailableBody)).not.toContain('upstream token secret');
-
-    vi.restoreAllMocks();
-    await createLinkedItem('linear-provider-error', {
-      source: 'linear-issue',
-      sourceKey: 'linear:ENG-43',
-      title: 'Stored Linear provider title',
-    });
-    await connectLinear();
-    vi.spyOn(linearIntegration, 'fetchIssueContext').mockRejectedValueOnce(
-      new LinearProviderRequestError('Linear provider request failed.', {
-        cause: new Error('provider token must not leak'),
-      }),
-    );
-    const linearError = await requestContext('linear-provider-error');
-    const linearErrorBody = await linearError.json();
-    expect(linearErrorBody.context.resolution).toEqual({ mode: 'stored', reason: 'provider-unavailable' });
-    expect(JSON.stringify(linearErrorBody)).not.toContain('provider token must not leak');
-  });
-
-  it('keeps integration storage readiness failures on the normal 500 path', async () => {
-    await createLinkedItem('github-readiness');
-    const issue = vi.spyOn(githubIntegration, 'getIssueDetail');
-    const githubFailure = await requestContext('github-readiness', {
-      ensureGithubReady: vi.fn().mockRejectedValue(new Error('github storage initialization failed')),
-    });
-    expect(githubFailure.status).toBe(500);
-    expect(issue).not.toHaveBeenCalled();
-
-    await createLinkedItem('linear-readiness', {
-      source: 'linear-issue',
-      sourceKey: 'linear:ENG-42',
-      title: 'Stored Linear title',
-    });
-    await connectLinear();
-    const linear = vi.spyOn(linearIntegration, 'fetchIssueContext');
-    const linearFailure = await requestContext('linear-readiness', {
-      ensureLinearReady: vi.fn().mockRejectedValue(new Error('linear storage initialization failed')),
-    });
-    expect(linearFailure.status).toBe(500);
-    expect(linear).not.toHaveBeenCalled();
-  });
-
-  it('keeps connection storage and mapping failures on the normal 500 path', async () => {
-    await createLinkedItem('linear-storage', {
-      source: 'linear-issue',
-      sourceKey: 'linear:ENG-42',
-      title: 'Stored Linear title',
-    });
-    const realLinearStorage = seed.integrations.forIntegration('linear');
-    vi.spyOn(seed.integrations, 'forIntegration').mockReturnValue({
-      ...realLinearStorage,
-      connections: {
-        ...realLinearStorage.connections,
-        get: vi.fn().mockRejectedValue(new Error('connection storage unavailable')),
-      },
-    } as never);
-
-    const storageFailure = await requestContext('linear-storage');
-    expect(storageFailure.status).toBe(500);
-
-    vi.restoreAllMocks();
-    await createLinkedItem('github-mapping', { sourceKey: 'github-issue:45' });
-    vi.spyOn(githubIntegration, 'getIssueDetail').mockRejectedValueOnce(new Error('github mapping bug'));
-    const githubMappingFailure = await requestContext('github-mapping');
-    expect(githubMappingFailure.status).toBe(500);
-
-    vi.restoreAllMocks();
-    await connectLinear();
-    vi.spyOn(linearIntegration, 'fetchIssueContext').mockRejectedValueOnce(new Error('linear mapping bug'));
-    const linearIntegrationMappingFailure = await requestContext('linear-storage');
-    expect(linearIntegrationMappingFailure.status).toBe(500);
-
-    vi.restoreAllMocks();
-    vi.spyOn(linearIntegration, 'fetchIssueContext').mockResolvedValue({
-      identifier: 'ENG-42',
-      get title(): string {
-        throw new Error('context mapping bug');
-      },
-      state: 'open',
-      labels: [],
-      assignees: [],
-    });
-    const contextMappingFailure = await requestContext('linear-storage');
-    expect(contextMappingFailure.status).toBe(500);
-  });
-
-  it('fails with 500 when a rotated Linear token cannot be persisted or the connection disappears', async () => {
-    await createLinkedItem('linear-refresh', {
-      source: 'linear-issue',
-      sourceKey: 'linear:ENG-42',
-      title: 'Stored Linear title',
-    });
-    await connectLinear({ refreshToken: 'refresh-token', expiresAt: new Date(Date.now() - 120_000) });
-    const realLinearStorage = seed.integrations.forIntegration('linear');
-    vi.spyOn(seed.integrations, 'forIntegration').mockReturnValue({
-      ...realLinearStorage,
-      connections: {
-        ...realLinearStorage.connections,
-        update: vi.fn().mockRejectedValue(new Error('token persistence failed')),
-      },
-    } as never);
-    vi.spyOn(linearIntegration, 'refreshAccessToken').mockResolvedValue({
-      accessToken: 'rotated-access-token',
-      refreshToken: 'rotated-refresh-token',
-      expiresAt: new Date(Date.now() + 3_600_000),
-      scope: 'read',
-    });
-    const fetchIssue = vi.spyOn(linearIntegration, 'fetchIssueContext');
-
-    const persistenceFailure = await requestContext('linear-refresh');
-    expect(persistenceFailure.status).toBe(500);
-    expect(fetchIssue).not.toHaveBeenCalled();
-
-    vi.restoreAllMocks();
-    await connectLinear({ refreshToken: 'refresh-token-2', expiresAt: new Date(Date.now() - 120_000) });
-    const storage = seed.integrations.forIntegration('linear');
-    vi.spyOn(linearIntegration, 'refreshAccessToken').mockImplementationOnce(async () => {
-      await storage.connections.delete('org1');
-      return {
-        accessToken: 'orphaned-access-token',
-        refreshToken: 'orphaned-refresh-token',
-        expiresAt: new Date(Date.now() + 3_600_000),
-        scope: 'read',
-      };
-    });
-    const fetchAfterDelete = vi.spyOn(linearIntegration, 'fetchIssueContext');
-
-    const disappeared = await requestContext('linear-refresh');
-    expect(disappeared.status).toBe(500);
-    expect(fetchAfterDelete).not.toHaveBeenCalled();
-  });
-
-  it('retains tenant, repository, input, and work-item storage failures as route errors', async () => {
-    const wrongOrg = await seedProject('other-org');
-    const crossOrg = await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/threads/thread/context`);
-    expect(wrongOrg).toBeUndefined();
-    expect(crossOrg.status).toBe(404);
-
-    await seedProject('org1');
-    const invalid = await buildApp(orgUser).request(
-      `/web/factory/repositories/${PROJECT_ID}/threads/${'x'.repeat(1_025)}/context`,
-    );
-    expect(invalid.status).toBe(400);
-    await expect(invalid.json()).resolves.toEqual({ error: 'invalid_thread_id' });
-
-    vi.spyOn(seed.workItems, 'findByThreadId').mockRejectedValueOnce(new Error('work-item storage failed'));
-    const storageFailure = await requestContext('storage-error');
-    expect(storageFailure.status).toBe(500);
   });
 });
 
 // ── Create / upsert ──────────────────────────────────────────────────────
-describe('POST /web/factory/repositories/:id/work-items', () => {
+describe('POST /web/factory/projects/:id/work-items', () => {
   it('creates a work item with server-stamped history', async () => {
-    const res = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     expect(res.status).toBe(200);
     const { workItem } = await res.json();
     expect(workItem).toMatchObject({
       orgId: 'org1',
       createdBy: 'u1',
-      githubProjectId: PROJECT_ID,
-      source: 'github-issue',
-      sourceKey: 'github-issue:42',
+      factoryProjectId: PROJECT_ID,
+      externalSource: {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: '42',
+        url: 'https://github.com/acme/app/issues/42',
+      },
       title: 'Fix the login flow',
       stages: ['intake'],
       metadata: { number: 42 },
@@ -583,54 +313,88 @@ describe('POST /web/factory/repositories/:id/work-items', () => {
     expect(workItem.stageHistory[0].exitedAt).toBeUndefined();
   });
 
-  it('upserts on sourceKey instead of duplicating', async () => {
-    await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
+  it('evaluates Intake onEnter when a work item is created manually', async () => {
+    const transition = vi.fn(async (request: any) => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: request.workItemId,
+      board: request.board,
+      stage: request.stage,
+      revision: 2,
+    }));
+
+    const res = await buildApp(orgUser, undefined, { transition } as never).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody()),
+      },
+    );
+
+    expect(res.status).toBe(200);
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        board: 'work',
+        stage: 'intake',
+        actor: { type: 'human', id: 'u1' },
+        initialEntry: true,
+      }),
+    );
+  });
+
+  it('removes a newly created work item when its initial Intake entry is rejected', async () => {
+    const transition = vi.fn(async () => ({
+      status: 'rejected' as const,
+      code: 'forbidden',
+      reason: 'Intake is closed.',
+    }));
+
+    const res = await buildApp(orgUser, undefined, { transition } as never).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody({ externalSource: null })),
+      },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ status: 'rejected', code: 'forbidden', reason: 'Intake is closed.' });
+    expect(await listItems()).toEqual([]);
+  });
+
+  it('rejects an external-source upsert that tries to bypass governed stage transition', async () => {
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const res = await json(
       'POST',
-      `/web/factory/repositories/${PROJECT_ID}/work-items`,
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
       createBody({
         stages: ['execute'],
         sessions: { work: { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' } },
       }),
     );
-    const { workItem } = await res.json();
-    expect(await listItems()).toHaveLength(1);
-    expect(workItem.stages).toEqual(['execute']);
-    // History: intake entered+exited, execute entered.
-    expect(workItem.stageHistory.map((e: any) => [e.stage, e.exitedAt !== undefined])).toEqual([
-      ['intake', true],
-      ['execute', false],
-    ]);
-    // Session got the acting user stamped server-side.
-    expect(workItem.sessions.work).toMatchObject({
-      projectPath: '/sb/wt/issue-42',
-      branch: 'factory/issue-42',
-      threadId: 't-1',
-      startedBy: 'u1',
-    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'governed_transition_required' });
+    const [workItem] = await listItems();
+    expect(workItem?.stages).toEqual(['intake']);
+    expect(workItem?.stageHistory).toHaveLength(1);
+    expect(workItem?.sessions).toEqual({});
   });
 
-  it('never dedupes manual cards (null sourceKey)', async () => {
-    await json(
-      'POST',
-      `/web/factory/repositories/${PROJECT_ID}/work-items`,
-      createBody({ source: 'manual', sourceKey: null }),
-    );
-    await json(
-      'POST',
-      `/web/factory/repositories/${PROJECT_ID}/work-items`,
-      createBody({ source: 'manual', sourceKey: null }),
-    );
+  it('never dedupes manual cards without an external source', async () => {
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ externalSource: null }));
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ externalSource: null }));
     expect(await listItems()).toHaveLength(2);
   });
 
   it('400s on an invalid body', async () => {
-    const res = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody({ stages: [] }));
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ stages: [] }));
     expect(res.status).toBe(400);
     const bad = await json(
       'POST',
-      `/web/factory/repositories/${PROJECT_ID}/work-items`,
-      createBody({ source: 'jira' }),
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ externalSource: { integrationId: 'jira' } }),
     );
     expect(bad.status).toBe(400);
   });
@@ -639,11 +403,11 @@ describe('POST /web/factory/repositories/:id/work-items', () => {
 // ── Patch ────────────────────────────────────────────────────────────────
 describe('PATCH /web/factory/work-items/:id', () => {
   async function createItem(overrides: Record<string, unknown> = {}) {
-    const res = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody(overrides));
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides));
     return (await res.json()).workItem;
   }
 
-  it('moves stages and appends history with the acting user', async () => {
+  it('rejects direct stage mutation and leaves the canonical item unchanged', async () => {
     const item = await createItem();
     const res = await buildApp({ workosId: 'u2', organizationId: 'org1' }).request(
       `/web/factory/work-items/${item.id}`,
@@ -653,21 +417,21 @@ describe('PATCH /web/factory/work-items/:id', () => {
         body: JSON.stringify({ stages: ['execute'] }),
       },
     );
-    const { workItem } = await res.json();
-    expect(workItem.stages).toEqual(['execute']);
-    expect(workItem.stageHistory).toHaveLength(2);
-    expect(workItem.stageHistory[0]).toMatchObject({ stage: 'intake', by: 'u1' });
-    expect(workItem.stageHistory[0].exitedAt).toBeTruthy();
-    expect(workItem.stageHistory[1]).toMatchObject({ stage: 'execute', by: 'u2' });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'governed_transition_required' });
+    const [canonical] = await listItems();
+    expect(canonical?.stages).toEqual(['intake']);
+    expect(canonical?.stageHistory).toHaveLength(1);
   });
 
-  it('keeps concurrent stages untouched when moving one of them', async () => {
-    const item = await createItem({ stages: ['execute', 'review'] });
-    const res = await json('PATCH', `/web/factory/work-items/${item.id}`, { stages: ['done'] });
-    const { workItem } = await res.json();
-    expect(workItem.stages).toEqual(['done']);
-    const open = workItem.stageHistory.filter((e: any) => e.exitedAt === undefined);
-    expect(open.map((e: any) => e.stage)).toEqual(['done']);
+  it('rejects creation outside exclusive intake', async () => {
+    const res = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ stages: ['intake', 'execute'] }),
+    );
+    expect(res.status).toBe(409);
+    expect(await listItems()).toHaveLength(0);
   });
 
   it('merges sessions and metadata instead of replacing', async () => {
@@ -701,7 +465,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
     expect(workRes.status).toBe(200);
     expect(reviewRes.status).toBe(200);
 
-    const list = await json('GET', `/web/factory/repositories/${PROJECT_ID}/work-items`);
+    const list = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
     const [workItem] = (await list.json()).workItems;
     expect(Object.keys(workItem.sessions).sort()).toEqual(['review', 'work']);
   });
@@ -713,7 +477,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
       {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ stages: ['done'] }),
+        body: JSON.stringify({ title: 'Cross-tenant mutation' }),
       },
     );
     expect(res.status).toBe(404);
@@ -726,10 +490,179 @@ describe('PATCH /web/factory/work-items/:id', () => {
   });
 });
 
+describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () => {
+  async function createItem(overrides: Record<string, unknown> = {}) {
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides));
+    return (await res.json()).workItem;
+  }
+
+  const transition = (item: { id: string; revision: number }, overrides: Record<string, unknown> = {}) =>
+    json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/transition`, {
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: item.revision,
+      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+      cause: 'board_drag',
+      ...overrides,
+    });
+
+  it('moves through the rule authority and preserves storage-owned history', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+    const res = await transition(item);
+    expect(res.status).toBe(200);
+    const { result } = await res.json();
+    expect(result).toMatchObject({ status: 'accepted', itemId: item.id, revision: 2, stage: 'execute' });
+    const [canonical] = await listItems();
+    expect(canonical?.stages).toEqual(['execute']);
+    expect(canonical?.stageHistory.map(entry => [entry.stage, entry.exitedAt !== undefined])).toEqual([
+      ['intake', true],
+      ['execute', false],
+    ]);
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.work_item.stage_moved',
+        metadata: expect.objectContaining({ ingressType: 'human', ruleSetVersion: 'factory-default-v1' }),
+      }),
+    );
+  });
+
+  it('returns typed stale without overwriting the winner', async () => {
+    const item = await createItem();
+    expect((await transition(item)).status).toBe(200);
+    const stale = await transition(item, { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', stage: 'planning' });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
+    expect((await listItems())[0]?.stages).toEqual(['execute']);
+  });
+
+  it('replays immutable ingress without evaluating a second destination', async () => {
+    const item = await createItem();
+    const first = await transition(item);
+    const replay = await transition(item, { stage: 'planning' });
+    expect(await replay.json()).toEqual(await first.json());
+    expect((await listItems())[0]?.stages).toEqual(['execute']);
+  });
+
+  it('rejects non-UUID human request identities before they can collide across work items', async () => {
+    const item = await createItem();
+    const res = await transition(item, { requestId: 'reused-human-request' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a work item addressed through the Review board', async () => {
+    const item = await createItem();
+    const res = await transition(item, { board: 'review' });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+  });
+});
+
+describe('POST /web/factory/projects/:id/runs/start', () => {
+  const startBody = (workItemId?: string) => ({
+    resourceId: 'resource-1',
+    projectPath: '/worktrees/issue-42',
+    branch: 'factory/issue-42',
+    threadTitle: 'Investigate issue 42',
+    threadTags: { role: 'plan' },
+    kickoffKey: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+    kickoffMessage: 'Start',
+    destinationStage: 'planning',
+    workItem: {
+      id: workItemId,
+      role: 'plan',
+      input: createBody({ stages: ['intake'] }),
+    },
+  });
+
+  it('passes authenticated tenant identity to the coordinator and audits the prepared binding', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    auditRecorded = [];
+    const prepare = vi.fn(async (input: any) => ({
+      workItemId: input.workItem.id,
+      bindingId: 'binding-1',
+      threadId: 'thread-1',
+      resourceId: input.resourceId,
+      projectPath: input.projectPath,
+      branch: input.branch,
+      revision: 2,
+      kickoffStatus: 'pending',
+      replayed: false,
+    }));
+    const app = buildApp(orgUser, { prepare });
+
+    const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(startBody(workItem.id)),
+    });
+
+    expect(res.status).toBe(202);
+    expect(prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: 'org1', userId: 'u1', factoryProjectId: PROJECT_ID }),
+    );
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.run.started',
+        metadata: expect.objectContaining({ bindingId: 'binding-1', role: 'plan' }),
+      }),
+    );
+  });
+
+  it('rejects a non-UUID kickoff identity before coordination', async () => {
+    const prepare = vi.fn();
+    const app = buildApp(orgUser, { prepare });
+
+    const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...startBody(), kickoffKey: 'reused-kickoff' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it.each(['', 'not-a-uuid', 'x'.repeat(65), 42])(
+    'rejects an explicitly supplied invalid work item identity: %o',
+    async id => {
+      const prepare = vi.fn();
+      const app = buildApp(orgUser, { prepare });
+      const body = startBody();
+
+      const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...body, workItem: { ...body.workItem, id } }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(prepare).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses non-Intake creation before the coordinator can bypass transition authority', async () => {
+    const prepare = vi.fn();
+    const app = buildApp(orgUser, { prepare });
+    const body = startBody();
+    body.workItem.input.stages = ['planning'];
+
+    const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    expect(res.status).toBe(409);
+    expect(prepare).not.toHaveBeenCalled();
+  });
+});
+
 // ── Delete ───────────────────────────────────────────────────────────────
 describe('DELETE /web/factory/work-items/:id', () => {
   it('removes the item for the org', async () => {
-    const created = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();
     const res = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
     expect((await res.json()).ok).toBe(true);
@@ -741,18 +674,118 @@ describe('DELETE /web/factory/work-items/:id', () => {
   });
 });
 
+// ── Related Work / Review items ──────────────────────────────────────────
+describe('work item relations', () => {
+  const create = async (externalId: string, overrides: Record<string, unknown> = {}) => {
+    const response = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        externalSource: { integrationId: 'github', type: 'issue', externalId },
+        ...overrides,
+      }),
+    );
+    return { response, body: await response.json() };
+  };
+
+  it('creates separate related items and preserves the relation on source-key reuse', async () => {
+    const { body: parent } = await create('parent');
+    const { body: child } = await create('child', {
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'child' },
+      parentWorkItemId: parent.workItem.id,
+    });
+
+    expect(child.workItem.parentWorkItemId).toBe(parent.workItem.id);
+
+    const { body: repeated } = await create('child', {
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'child' },
+      parentWorkItemId: null,
+      title: 'Updated review title',
+    });
+    expect(repeated.workItem).toMatchObject({
+      id: child.workItem.id,
+      parentWorkItemId: parent.workItem.id,
+      title: 'Updated review title',
+    });
+  });
+
+  it('attaches a parent when a repeated source-key upsert supplies one', async () => {
+    const { body: parent } = await create('late-parent');
+    const pullRequestSource = { integrationId: 'github', type: 'pull-request', externalId: 'late-child' };
+    const { body: existing } = await create('late-child', { externalSource: pullRequestSource });
+    const { body: related } = await create('late-child', {
+      externalSource: pullRequestSource,
+      parentWorkItemId: parent.workItem.id,
+    });
+
+    expect(related.workItem).toMatchObject({ id: existing.workItem.id, parentWorkItemId: parent.workItem.id });
+  });
+
+  it('rejects missing, cross-project, self, and cyclic relations', async () => {
+    const missing = await create('missing', {
+      parentWorkItemId: '00000000-0000-4000-8000-000000000099',
+    });
+    expect(missing.response.status).toBe(400);
+
+    const otherProject = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'u1',
+      input: { name: 'Other project' },
+    });
+    const otherParentResponse = await json(
+      'POST',
+      `/web/factory/projects/${otherProject.id}/work-items`,
+      createBody({
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'other-project' },
+      }),
+    );
+    const otherParent = (await otherParentResponse.json()).workItem;
+    const crossProject = await create('cross-project', { parentWorkItemId: otherParent.id });
+    expect(crossProject.response.status).toBe(400);
+
+    const { body: first } = await create('first');
+    const { body: second } = await create('second', { parentWorkItemId: first.workItem.id });
+    expect(
+      (
+        await json('PATCH', `/web/factory/work-items/${first.workItem.id}`, {
+          parentWorkItemId: first.workItem.id,
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await json('PATCH', `/web/factory/work-items/${first.workItem.id}`, {
+          parentWorkItemId: second.workItem.id,
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it('clears a relation explicitly and when the parent is deleted', async () => {
+    const { body: parent } = await create('delete-parent');
+    const { body: child } = await create('delete-child', { parentWorkItemId: parent.workItem.id });
+
+    const cleared = await json('PATCH', `/web/factory/work-items/${child.workItem.id}`, { parentWorkItemId: null });
+    expect((await cleared.json()).workItem.parentWorkItemId).toBeNull();
+
+    await json('PATCH', `/web/factory/work-items/${child.workItem.id}`, { parentWorkItemId: parent.workItem.id });
+    expect((await json('DELETE', `/web/factory/work-items/${parent.workItem.id}`)).status).toBe(200);
+    expect((await listItems())[0]?.parentWorkItemId).toBeNull();
+  });
+});
+
 // ── Metrics ──────────────────────────────────────────────────────────────
-describe('GET /web/factory/repositories/:id/metrics', () => {
+describe('GET /web/factory/projects/:id/metrics', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
-    expect((await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics`, undefined, null)).status).toBe(401);
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`, undefined, null)).status).toBe(401);
 
     await seedProject('other-org');
-    expect((await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics`)).status).toBe(404);
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`)).status).toBe(404);
   });
 
   it('clamps the days param to a supported window', async () => {
     const bodyFor = async (query: string) =>
-      (await (await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics${query}`)).json()).metrics;
+      (await (await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics${query}`)).json()).metrics;
 
     expect((await bodyFor('')).windowDays).toBe(30);
     expect((await bodyFor('?days=7')).windowDays).toBe(7);
@@ -763,16 +796,22 @@ describe('GET /web/factory/repositories/:id/metrics', () => {
 
   it('aggregates the project board: throughput, WIP, transitions, and source mix', async () => {
     // One card completed today (intake → done), one still in intake.
-    const created = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();
-    await json('PATCH', `/web/factory/work-items/${workItem.id}`, { stages: ['done'] });
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
+      board: 'work',
+      stage: 'done',
+      expectedRevision: workItem.revision,
+      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3',
+      cause: 'board_drag',
+    });
     await json(
       'POST',
-      `/web/factory/repositories/${PROJECT_ID}/work-items`,
-      createBody({ source: 'manual', sourceKey: null, title: 'Manual card' }),
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ externalSource: null, title: 'Manual card' }),
     );
 
-    const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics?days=7`);
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?days=7`);
     expect(res.status).toBe(200);
     const { metrics } = await res.json();
 
@@ -788,14 +827,14 @@ describe('GET /web/factory/repositories/:id/metrics', () => {
     expect(metrics.transitions).toEqual({ human: 3, total: 3 });
     expect(metrics.sourceMix).toEqual(
       expect.arrayContaining([
-        { source: 'github-issue', count: 1 },
+        { source: 'github:issue', count: 1 },
         { source: 'manual', count: 1 },
       ]),
     );
   });
 
   it('returns zeroed metrics for an empty board', async () => {
-    const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics`);
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`);
     const { metrics } = await res.json();
     expect(metrics.throughput).toHaveLength(30);
     expect(metrics.cycleTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
@@ -804,23 +843,23 @@ describe('GET /web/factory/repositories/:id/metrics', () => {
   });
 });
 
-describe('GET /web/factory/repositories/:id/health/thresholds', () => {
+describe('GET /web/factory/projects/:id/health/thresholds', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
-    expect(
-      (await json('GET', `/web/factory/repositories/${PROJECT_ID}/health/thresholds`, undefined, null)).status,
-    ).toBe(401);
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`, undefined, null)).status).toBe(
+      401,
+    );
 
     await seedProject('other-org');
-    expect((await json('GET', `/web/factory/repositories/${PROJECT_ID}/health/thresholds`)).status).toBe(404);
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`)).status).toBe(404);
   });
 
   it('returns the default config when unset and the saved config after saveConfig', async () => {
-    const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/health/thresholds`);
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`);
     expect(res.status).toBe(200);
     expect((await res.json()).thresholds).toEqual([14400, 86400, 259200]);
 
     await seed.queueHealth.saveConfig('org1', PROJECT_ID, { thresholdsSeconds: [60, 300, 3600] });
-    const res2 = await json('GET', `/web/factory/repositories/${PROJECT_ID}/health/thresholds`);
+    const res2 = await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`);
     expect((await res2.json()).thresholds).toEqual([60, 300, 3600]);
   });
 });
@@ -828,7 +867,7 @@ describe('GET /web/factory/repositories/:id/health/thresholds', () => {
 // ── Audit events ─────────────────────────────────────────────────────────
 describe('audit events', () => {
   async function createItem(overrides: Record<string, unknown> = {}) {
-    const res = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody(overrides));
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides));
     return (await res.json()).workItem;
   }
 
@@ -839,46 +878,39 @@ describe('audit events', () => {
       orgId: 'org1',
       actorId: 'u1',
       action: 'factory.work_item.created',
-      githubProjectId: PROJECT_ID,
+      factoryProjectId: PROJECT_ID,
       targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
-      metadata: { source: 'github-issue', sourceKey: 'github-issue:42', stages: ['intake'] },
+      metadata: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: '42',
+          url: 'https://github.com/acme/app/issues/42',
+        },
+        stages: ['intake'],
+      },
     });
   });
 
-  it('records updated (not created) when a POST reuses an existing sourceKey', async () => {
+  it('audits only the bounded non-stage refresh when a source-key POST reuses the canonical item', async () => {
     const item = await createItem();
     auditRecorded = [];
 
-    const session = { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
-    await json(
-      'POST',
-      `/web/factory/repositories/${PROJECT_ID}/work-items`,
-      createBody({ stages: ['execute'], sessions: { work: session } }),
-    );
-    expect(auditRecorded.map(e => e.action)).toEqual([
-      'factory.work_item.updated',
-      'factory.work_item.stage_moved',
-      'factory.run.started',
-    ]);
-    expect(auditRecorded[1]).toMatchObject({
-      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
-      metadata: { from: ['intake'], to: ['execute'] },
-    });
-    expect(auditRecorded[2].metadata).toMatchObject({ role: 'work', branch: 'factory/issue-42' });
+    const reused = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    expect(reused.status).toBe(200);
+    expect((await reused.json()).workItem.id).toBe(item.id);
+    expect(auditRecorded.map(event => event.action)).toEqual(['factory.work_item.updated']);
+    expect(auditRecorded[0]?.metadata.fields).not.toContain('stages');
+    expect(auditRecorded[0]?.metadata.fields).not.toContain('sessions');
   });
 
-  it('records updated + stage_moved with the server-diffed from/to on a stage PATCH', async () => {
+  it('does not audit a rejected legacy stage PATCH as a movement', async () => {
     const item = await createItem();
     auditRecorded = [];
 
-    await json('PATCH', `/web/factory/work-items/${item.id}`, { stages: ['execute'] });
-    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated', 'factory.work_item.stage_moved']);
-    expect(auditRecorded[0].metadata).toEqual({ fields: ['stages'] });
-    expect(auditRecorded[1]).toMatchObject({
-      githubProjectId: PROJECT_ID,
-      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
-      metadata: { from: ['intake'], to: ['execute'] },
-    });
+    const rejected = await json('PATCH', `/web/factory/work-items/${item.id}`, { stages: ['execute'] });
+    expect(rejected.status).toBe(409);
+    expect(auditRecorded).toEqual([]);
   });
 
   it('records run.started when a PATCH introduces a new session role, but not on re-file', async () => {
@@ -918,7 +950,7 @@ describe('audit events', () => {
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
       action: 'factory.work_item.deleted',
-      githubProjectId: PROJECT_ID,
+      factoryProjectId: PROJECT_ID,
       targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
     });
   });
@@ -927,12 +959,22 @@ describe('audit events', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     auditFailure = new Error('audit db down');
 
-    const created = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     expect(created.status).toBe(200);
     const { workItem } = await created.json();
 
-    const patched = await json('PATCH', `/web/factory/work-items/${workItem.id}`, { stages: ['done'] });
-    expect(patched.status).toBe(200);
+    const transitioned = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`,
+      {
+        board: 'work',
+        stage: 'done',
+        expectedRevision: workItem.revision,
+        requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4',
+        cause: 'board_drag',
+      },
+    );
+    expect(transitioned.status).toBe(200);
 
     const deleted = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
     expect(deleted.status).toBe(200);
@@ -942,40 +984,118 @@ describe('audit events', () => {
   });
 });
 
+// ── Durable decision status ──────────────────────────────────────────────
+describe('decision status', () => {
+  async function queueDecision(identity: string, now: string, orgId = 'org1') {
+    await seed.workItems.commitRuleEvaluation({
+      orgId,
+      factoryProjectId: PROJECT_ID,
+      workItemId: null,
+      ingress: { identity, triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: null,
+      actor: { type: 'human', id: 'u1' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'notify', idempotencyKey: identity, title: 'Rule update', body: 'Bounded body' }],
+      causalChain: [],
+      now: new Date(now),
+    });
+  }
+
+  it('returns a bounded tenant-scoped newest-first page with an opaque cursor', async () => {
+    await queueDecision('effect-1', '2030-01-01T00:00:00.000Z');
+    await queueDecision('effect-2', '2030-01-01T00:01:00.000Z');
+    await queueDecision('other-org', '2030-01-01T00:02:00.000Z', 'org2');
+
+    const first = await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions?statuses=pending&limit=1`);
+    expect(first.status).toBe(200);
+    const firstPage = await first.json();
+    expect(firstPage.decisions).toEqual([
+      expect.objectContaining({ type: 'notify', status: 'pending', attempts: 0, lastError: null }),
+    ]);
+    expect(firstPage.decisions[0]).not.toHaveProperty('orgId');
+    expect(firstPage.decisions[0]).not.toHaveProperty('decision');
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+
+    const second = await json(
+      'GET',
+      `/web/factory/projects/${PROJECT_ID}/decisions?statuses=pending&limit=1&before=${encodeURIComponent(firstPage.nextCursor)}`,
+    );
+    expect(second.status).toBe(200);
+    const secondPage = await second.json();
+    expect(secondPage.decisions).toHaveLength(1);
+    expect(secondPage.decisions[0].createdAt).toBe('2030-01-01T00:00:00.000Z');
+    expect(secondPage.nextCursor).toBeUndefined();
+  });
+
+  it('requeues only a tenant-scoped failed effect while preserving its identity', async () => {
+    await queueDecision('effect-retry', '2030-01-01T00:00:00.000Z');
+    const now = new Date('2030-01-01T00:01:00.000Z');
+    const [leased] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date('2030-01-01T00:02:00.000Z'),
+      limit: 1,
+    });
+    await seed.workItems.failDeferredDecision({
+      id: leased!.id,
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'terminal failure',
+      terminal: true,
+    });
+
+    const response = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${leased!.id}/retry`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      decision: expect.objectContaining({ id: leased!.id, evaluationId: leased!.evaluationId, status: 'retry' }),
+    });
+    const denied = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${leased!.id}/retry`);
+    expect(denied.status).toBe(409);
+  });
+
+  it('rejects malformed cursors instead of silently restarting pagination', async () => {
+    const response = await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions?before=not-a-cursor`);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_cursor' });
+  });
+});
+
 // ── Validation units ─────────────────────────────────────────────────────
 describe('parseCreateWorkItem', () => {
-  it('accepts a minimal valid body and defaults sessions/metadata', () => {
-    const input = parseCreateWorkItem({ source: 'manual', title: 'Card', stages: ['intake'] });
-    expect(input).toEqual({
-      source: 'manual',
-      sourceKey: null,
+  it('accepts a minimal manual work item', () => {
+    expect(parseCreateWorkItem({ title: ' Card ', stages: ['intake'] })).toEqual({
       title: 'Card',
-      url: null,
       stages: ['intake'],
-      sessions: {},
-      metadata: {},
     });
   });
 
-  it('rejects bad stages, urls, and oversized metadata', () => {
+  it('accepts a normalized external source', () => {
+    expect(parseCreateWorkItem(createBody())).toEqual(createBody());
+  });
+
+  it('rejects bad stages, malformed external sources, and oversized metadata', () => {
     expect(parseCreateWorkItem(createBody({ stages: ['in take'] }))).toBeNull();
     expect(parseCreateWorkItem(createBody({ stages: ['a', 'a'] }))).toBeNull();
-    expect(parseCreateWorkItem(createBody({ url: 'javascript:alert(1)' }))).toBeNull();
+    expect(parseCreateWorkItem(createBody({ externalSource: { integrationId: 'github' } }))).toBeNull();
     expect(parseCreateWorkItem(createBody({ metadata: { blob: 'x'.repeat(20_000) } }))).toBeNull();
   });
 
   it('rejects malformed sessions', () => {
     expect(parseCreateWorkItem(createBody({ sessions: { work: { projectPath: '/p' } } }))).toBeNull();
     expect(
-      parseCreateWorkItem(createBody({ sessions: { 'bad role!': { projectPath: '/p', branch: 'b', threadId: 't' } } })),
+      parseCreateWorkItem(createBody({ sessions: { '': { projectPath: '/p', branch: 'b', threadId: 't' } } })),
     ).toBeNull();
   });
 });
 
 describe('parseUpdateWorkItem', () => {
-  it('rejects an empty patch and passes through valid fields', () => {
+  it('rejects an empty or unknown-only patch and passes through valid fields', () => {
     expect(parseUpdateWorkItem({})).toBeNull();
     expect(parseUpdateWorkItem({ stages: ['done'] })).toEqual({ stages: ['done'] });
-    expect(parseUpdateWorkItem({ url: null })).toEqual({ url: null });
+    expect(parseUpdateWorkItem({ url: null })).toBeNull();
   });
 });

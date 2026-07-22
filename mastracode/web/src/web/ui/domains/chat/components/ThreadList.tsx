@@ -1,6 +1,7 @@
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -10,8 +11,7 @@ import { useNavigate, useParams } from 'react-router';
 
 import { relativeTime } from '../../../../../shared/lib/date';
 import { useOverlays } from '../../../lib/overlays';
-import { useToast } from '../../../ui';
-import { isGithubFactory, useActiveFactoryContext } from '../../workspaces';
+import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import {
   useCloneAgentControllerThreadMutation,
@@ -29,7 +29,7 @@ export function ThreadList() {
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
@@ -42,7 +42,7 @@ export function ThreadList() {
   // "Threads" header/count, no rename/clone/delete actions, and no way to
   // create more threads. Every GitHub chat target is a worktree (the repo
   // root is not a workspace), so any GitHub project path is read-only here.
-  const readOnly = isGithubFactory(activeFactory) && Boolean(projectPath);
+  const readOnly = isServerFactory(activeFactory) && Boolean(projectPath);
 
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;
@@ -84,7 +84,7 @@ function useThreadHookArgs() {
   return {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -122,14 +122,13 @@ function ThreadListHeader({ threadCount }: { threadCount: number }) {
 function RenameThreadRow({ thread, onDone }: { thread: AgentControllerThreadInfo; onDone: () => void }) {
   const hookArgs = useThreadHookArgs();
   const renameThreadMutation = useRenameAgentControllerThreadMutation(hookArgs);
-  const { toast } = useToast();
   const [draft, setDraft] = useState(() => thread.title ?? '');
 
   const commit = () => {
     const title = draft.trim();
     if (title) {
       void renameThreadMutation.mutateAsync({ threadId: thread.id, title });
-      toast('Thread renamed', 'success');
+      toast.success('Thread renamed');
     }
     onDone();
   };
@@ -165,7 +164,6 @@ function ThreadRow({
 }) {
   const hookArgs = useThreadHookArgs();
   const overlays = useOverlays();
-  const { toast } = useToast();
   const navigate = useNavigate();
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
 
@@ -179,7 +177,7 @@ function ThreadRow({
 
   const cloneThread = async () => {
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
-    toast('Thread cloned', 'success');
+    toast.success('Thread cloned');
     void navigate(`/threads/${clonedThread.id}`);
   };
 

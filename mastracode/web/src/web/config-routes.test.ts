@@ -294,3 +294,120 @@ describe('provider key routes with a tenant', () => {
     expect(setStoredApiKey).not.toHaveBeenCalled();
   });
 });
+
+// ── Available models + DB-backed model packs (tenant mode) ──────────────
+
+describe('GET /web/config/models', () => {
+  afterEach(() => __resetRuntimeConfigForTests());
+
+  it('returns only credentialed models with their ids', async () => {
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: true },
+        { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: false },
+        { provider: 'google', hasApiKey: true }, // no id — dropped
+      ],
+    };
+    const app = new Hono();
+    mountApiRoutes(app as any, buildConfigRoutes({ controller }));
+
+    const res = await app.request('/web/config/models');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
+    });
+  });
+});
+
+describe('model pack routes with a tenant', () => {
+  let seed: FactoryStorageTestSeed;
+  const authProvider = { name: 'test', authenticateToken: async () => null } as unknown as IMastraAuthProvider;
+  const controller = makeAgentController([
+    { provider: 'anthropic', hasApiKey: true, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
+  ]);
+
+  function buildApp(user: { workosId: string; organizationId?: string } | null) {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      if (user) c.set('webAuthUser' as never, user as never);
+      await next();
+    });
+    mountApiRoutes(app as any, buildConfigRoutes({ controller }));
+    return app;
+  }
+
+  const userA = { workosId: 'user-a', organizationId: 'org1' };
+  const userOtherOrg = { workosId: 'user-c', organizationId: 'org2' };
+  const packBody = {
+    name: 'Team pack',
+    models: { build: 'anthropic/claude-fable-5', plan: 'anthropic/claude-fable-5', fast: 'anthropic/claude-haiku-4-5' },
+  };
+
+  const postPack = (app: Hono, body: unknown) =>
+    app.request('/web/config/model-packs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(async () => {
+    seed = await seedFactoryStorageForTests();
+    seedRuntimeConfig({ storage: seed.storage, authProvider });
+  });
+
+  afterEach(() => {
+    __resetRuntimeConfigForTests();
+    vi.clearAllMocks();
+  });
+
+  it('rejects unauthenticated pack access when web auth is enabled', async () => {
+    const res = await buildApp(null).request('/web/config/model-packs');
+    expect(res.status).toBe(401);
+  });
+
+  it('persists custom packs in the org-scoped storage domain', async () => {
+    const created = await postPack(buildApp(userA), packBody);
+    expect(created.status).toBe(200);
+    const { pack } = await created.json();
+    expect(pack).toMatchObject({ name: 'Team pack', models: packBody.models });
+    expect(pack.id).toMatch(/^custom:/);
+
+    const stored = await seed.modelPacks.list({ orgId: 'org1' });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ createdBy: 'user-a', name: 'Team pack' });
+
+    const listed = await buildApp(userA).request('/web/config/model-packs');
+    const { packs } = await listed.json();
+    expect(packs.find((p: { id: string }) => p.id === pack.id)).toMatchObject({ custom: true, active: false });
+  });
+
+  it('keeps packs invisible across organizations', async () => {
+    await postPack(buildApp(userA), packBody);
+
+    const otherOrgList = await buildApp(userOtherOrg).request('/web/config/model-packs');
+    const { packs } = await otherOrgList.json();
+    expect(packs.filter((p: { custom: boolean }) => p.custom)).toEqual([]);
+  });
+
+  it('deletes a pack by its custom-prefixed id within the org only', async () => {
+    const created = await postPack(buildApp(userA), packBody);
+    const { pack } = await created.json();
+
+    const crossOrg = await buildApp(userOtherOrg).request(`/web/config/model-packs/${encodeURIComponent(pack.id)}`, {
+      method: 'DELETE',
+    });
+    expect(crossOrg.status).toBe(404);
+    expect(await seed.modelPacks.list({ orgId: 'org1' })).toHaveLength(1);
+
+    const res = await buildApp(userA).request(`/web/config/model-packs/${encodeURIComponent(pack.id)}`, {
+      method: 'DELETE',
+    });
+    expect(res.status).toBe(200);
+    expect(await seed.modelPacks.list({ orgId: 'org1' })).toEqual([]);
+  });
+
+  it('validates the pack payload', async () => {
+    expect((await postPack(buildApp(userA), { models: packBody.models })).status).toBe(400);
+    expect((await postPack(buildApp(userA), { name: 'x', models: { build: 'a/b' } })).status).toBe(400);
+  });
+});

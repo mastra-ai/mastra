@@ -13,47 +13,82 @@ import { setupServer } from 'msw/node';
  * the fixed local resourceId. Tests that exercise authenticated flows override
  * it with `server.use(...)`.
  */
+interface StoredRepository {
+  projectRepositoryId?: string;
+  slug?: string;
+  gitBranch?: string;
+  sandboxWorkdir?: string;
+  worktrees?: Array<{ branch: string; baseBranch: string; worktreePath: string }>;
+}
+
+interface StoredFactory {
+  name?: string;
+  binding?: {
+    kind?: string;
+    factoryProjectId?: string;
+    repositories?: StoredRepository[];
+  };
+}
+
+/**
+ * Read persisted server-backed factories from localStorage so the default
+ * handlers can reflect them back through the Factory-projects routes, matching
+ * what the real server would return after onboarding. Hydration keeps cached
+ * worktrees / resource ids, so only the project + repository-link identity
+ * needs to round-trip here.
+ */
+function storedServerFactories(): Array<{ name: string; factoryProjectId: string; repositories: StoredRepository[] }> {
+  const raw = globalThis.localStorage?.getItem('mastracode-factories');
+  if (!raw) return [];
+  try {
+    const factories = JSON.parse(raw) as StoredFactory[];
+    return factories.flatMap(factory =>
+      factory.binding?.kind === 'factory' && factory.binding.factoryProjectId && factory.name
+        ? [
+            {
+              name: factory.name,
+              factoryProjectId: factory.binding.factoryProjectId,
+              repositories: factory.binding.repositories ?? [],
+            },
+          ]
+        : [],
+    );
+  } catch {
+    return [];
+  }
+}
+
 export const server = setupServer(
   http.get('*/auth/me', () => HttpResponse.json(null, { status: 404 })),
-  http.get('*/web/github/repositories', () => {
-    const raw = globalThis.localStorage?.getItem('mastracode-factories');
-    if (!raw) return HttpResponse.json([]);
-    try {
-      const factories = JSON.parse(raw) as Array<{
-        name?: string;
-        resourceId?: string;
-        createdAt?: number;
-        binding?: {
-          kind?: string;
-          githubProjectId?: string;
-          gitBranch?: string;
-          sandboxId?: string;
-          sandboxWorkdir?: string;
-          worktrees?: unknown[];
-        };
-      }>;
-      return HttpResponse.json(
-        factories.flatMap(factory => {
-          const binding = factory.binding;
-          if (binding?.kind !== 'github' || !binding.githubProjectId || !factory.name) return [];
-          return [
-            {
-              id: binding.githubProjectId,
-              name: factory.name,
-              source: 'github',
-              githubProjectId: binding.githubProjectId,
-              resourceId: factory.resourceId,
-              gitBranch: binding.gitBranch,
-              sandboxId: binding.sandboxId,
-              sandboxWorkdir: binding.sandboxWorkdir,
-              worktrees: binding.worktrees ?? [],
-              createdAt: factory.createdAt,
-            },
-          ];
-        }),
-      );
-    } catch {
-      return HttpResponse.json([]);
-    }
+  // Ambient model catalog for settings pickers; tests with model-specific
+  // assertions override it with `server.use(...)`.
+  http.get('*/web/config/models', () => HttpResponse.json({ models: [] })),
+  http.get('*/web/factory/projects', () =>
+    HttpResponse.json({
+      projects: storedServerFactories().map(factory => ({ id: factory.factoryProjectId, name: factory.name })),
+    }),
+  ),
+  http.get('*/web/factory/projects/:id/source-control-connections', ({ params }) => {
+    const factory = storedServerFactories().find(candidate => candidate.factoryProjectId === params.id);
+    if (!factory || factory.repositories.length === 0) return HttpResponse.json({ connections: [] });
+    return HttpResponse.json({
+      connections: [
+        {
+          id: `conn-${factory.factoryProjectId}`,
+          repositories: factory.repositories.map(link => ({
+            id: link.projectRepositoryId,
+            branch: link.gitBranch ?? null,
+            sandboxWorkdir: link.sandboxWorkdir,
+            repository: { slug: link.slug ?? factory.name, defaultBranch: link.gitBranch ?? 'main' },
+          })),
+        },
+      ],
+    });
+  }),
+  http.get('*/web/github/projects/:projectRepositoryId/worktrees', ({ params }) => {
+    const repository = storedServerFactories()
+      .flatMap(factory => factory.repositories)
+      .find(candidate => candidate.projectRepositoryId === params.projectRepositoryId);
+    return HttpResponse.json({ worktrees: repository?.worktrees ?? [] });
   }),
 );

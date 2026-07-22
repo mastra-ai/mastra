@@ -319,9 +319,11 @@ describe('workspace skill invocation route', () => {
     });
     expect(sourceControlStorage.worktreesRows).toHaveLength(0);
 
-    const projectId = '00000000-0000-4000-8000-000000000001';
+    const factoryProjectId = '00000000-0000-4000-8000-000000000001';
+    const missingProjectRepositoryId = '00000000-0000-4000-8000-000000000002';
     const denied = await invoke(app, {
-      resourceId: projectId,
+      resourceId: factoryProjectId,
+      projectRepositoryId: missingProjectRepositoryId,
       scope: '/worktrees/review-42',
       name: 'understand-pr',
     });
@@ -332,23 +334,49 @@ describe('workspace skill invocation route', () => {
     });
     expect(getSessionByResource).not.toHaveBeenCalled();
 
-    sourceControlStorage.worktreesRows.push({
-      id: 'worktree-1',
+    const installation = await sourceControlStorage.installations.upsert({
       orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'installation-1',
+    });
+    const repository = await sourceControlStorage.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: 'repository-1',
+        slug: 'acme/repository',
+        defaultBranch: 'main',
+      },
+    });
+    const connection = await sourceControlStorage.connections.create({
+      orgId: 'org-1',
+      factoryProjectId,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const projectRepository = await sourceControlStorage.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace/repository',
+    });
+    await sourceControlStorage.worktrees.upsert({
+      projectRepositoryId: projectRepository.id,
       userId: 'user-1',
-      projectId,
       branch: 'review-42',
       baseBranch: 'main',
       worktreePath: '/worktrees/review-42',
-      createdAt: new Date(),
     });
     const allowed = await invoke(app, {
-      resourceId: projectId,
+      resourceId: factoryProjectId,
+      projectRepositoryId: projectRepository.id,
       scope: '/worktrees/review-42',
       name: 'understand-pr',
     });
     expect(allowed.status).toBe(200);
-    expect(getSessionByResource).toHaveBeenCalledWith(projectId, '/worktrees/review-42');
+    expect(getSessionByResource).toHaveBeenCalledWith(factoryProjectId, '/worktrees/review-42');
     expect(sendMessage).toHaveBeenCalledOnce();
   });
 

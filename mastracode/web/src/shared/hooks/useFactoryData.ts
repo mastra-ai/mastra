@@ -29,13 +29,19 @@ function waitForCommittedQueryMount(signal: AbortSignal): Promise<void> {
   });
 }
 
-export function useFactoryThreadTaskContextQuery(githubProjectId: string, threadId: string, enabled: boolean) {
+export function useFactoryThreadTaskContextQuery(
+  factoryProjectId: string,
+  threadId: string,
+  resourceId: string,
+  projectPath: string,
+  enabled: boolean,
+) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.factoryThreadTaskContext(githubProjectId, threadId),
+    queryKey: queryKeys.factoryThreadTaskContext(factoryProjectId, threadId, resourceId, projectPath),
     queryFn: async ({ signal }) => {
       await waitForCommittedQueryMount(signal);
-      return fetchFactoryThreadTaskContext(baseUrl, githubProjectId, threadId, signal);
+      return fetchFactoryThreadTaskContext(baseUrl, factoryProjectId, threadId, resourceId, projectPath, signal);
     },
     enabled,
     staleTime: 0,
@@ -50,29 +56,29 @@ export function useFactoryThreadTaskContextQuery(githubProjectId: string, thread
  * Open issues for a GitHub project, loaded one page at a time as the list is
  * scrolled; disabled until a github project is active.
  */
-export function useProjectIssuesQuery(githubProjectId: string | undefined, label?: string) {
+export function useProjectIssuesQuery(projectRepositoryId: string | undefined, label?: string) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
-    queryKey: queryKeys.githubIssues(githubProjectId, label),
-    queryFn: ({ pageParam }) => listRepositoryIssues(baseUrl, githubProjectId!, pageParam, label),
+    queryKey: queryKeys.githubIssues(projectRepositoryId, label),
+    queryFn: ({ pageParam }) => listRepositoryIssues(baseUrl, projectRepositoryId!, pageParam, label),
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.nextPage,
-    enabled: Boolean(githubProjectId),
+    enabled: Boolean(projectRepositoryId),
     select: data => data.pages.flatMap(page => page.issues),
   });
 }
 
-export function useStartIssueTriageMutation(githubProjectId: string | undefined) {
+export function useStartIssueTriageMutation(projectRepositoryId: string | undefined, factoryProjectId?: string) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const mutationKey = ['factory', 'triage-issue', githubProjectId] as const;
+  const mutationKey = ['factory', 'triage-issue', projectRepositoryId] as const;
   const mutation = useMutation({
     mutationKey,
-    mutationFn: (issue: GithubIssue) => startRepositoryIssueTriage(baseUrl, githubProjectId!, issue),
+    mutationFn: (issue: GithubIssue) => startRepositoryIssueTriage(baseUrl, projectRepositoryId!, issue),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId, 'auto-triaged') });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(projectRepositoryId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(projectRepositoryId, 'auto-triaged') });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
     },
   });
   const pendingIssueNumbers = useMutationState({
@@ -91,14 +97,14 @@ function isGithubIssue(value: unknown): value is GithubIssue {
 }
 
 /** Open (non-draft) pull requests for a GitHub project, one page at a time. */
-export function useProjectPullRequestsQuery(githubProjectId: string | undefined) {
+export function useProjectPullRequestsQuery(projectRepositoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
-    queryKey: queryKeys.githubPulls(githubProjectId),
-    queryFn: ({ pageParam }) => listRepositoryPullRequests(baseUrl, githubProjectId!, pageParam),
+    queryKey: queryKeys.githubPulls(projectRepositoryId),
+    queryFn: ({ pageParam }) => listRepositoryPullRequests(baseUrl, projectRepositoryId!, pageParam),
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.nextPage,
-    enabled: Boolean(githubProjectId),
+    enabled: Boolean(projectRepositoryId),
     select: data => data.pages.flatMap(page => page.pullRequests),
   });
 }

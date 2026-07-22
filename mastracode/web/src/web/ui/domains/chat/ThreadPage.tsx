@@ -8,14 +8,16 @@ import {
   FactorySessionContextPanel,
   type FactorySessionContextTab,
 } from '../factory/components/FactorySessionContextPanel';
+import { FactorySessionHeader } from '../factory/components/RelatedFactorySessions';
 import { renderedPaths } from '../workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
 import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
-import { activeWorkspacePath, findUserSessionByThreadId, isGithubFactory } from '../workspaces/services/factories';
+import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ComposerPanel } from './components/ComposerPanel';
+import { TaskPanel } from './components/TaskPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useChatSessionContext } from './context/useChatSessionContext';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
@@ -42,7 +44,7 @@ function useDesktopRightPanelAvailable() {
 export function ThreadPage() {
   const overlays = useOverlays();
   const { activeFactory } = useActiveFactoryContext();
-  const { kind, threadBasePath } = useChatSessionContext();
+  const { kind, threadBasePath, resourceId, projectPath, factorySessionState } = useChatSessionContext();
   const { threadId } = useParams();
   const location = useLocation();
   const desktopRightPanelAvailable = useDesktopRightPanelAvailable();
@@ -56,13 +58,21 @@ export function ThreadPage() {
   const workspacePath = workspaceFactory
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
-  const githubProjectId =
-    activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined;
+  const factoryProjectId = factorySessionState?.factoryProjectId;
   const factoryEligible =
-    kind === 'factory' && threadBasePath === '/threads' && Boolean(threadId && githubProjectId && workspacePath);
+    kind === 'factory' &&
+    threadBasePath === '/threads' &&
+    Boolean(
+      threadId &&
+      resourceId &&
+      projectPath &&
+      factoryProjectId &&
+      factorySessionState?.projectRepositoryId &&
+      workspacePath,
+    );
   const currentLifecycleKey =
-    factoryEligible && desktopRightPanelAvailable && threadId && githubProjectId
-      ? `${githubProjectId}:${threadId}`
+    factoryEligible && desktopRightPanelAvailable && threadId && factoryProjectId && projectPath
+      ? `${factoryProjectId}:${threadId}:${resourceId}:${projectPath}`
       : undefined;
   const [factoryPanelState, setFactoryPanelState] = useState<{
     lifecycleKey: string | undefined;
@@ -76,6 +86,10 @@ export function ThreadPage() {
     setFactoryPanelState({ lifecycleKey: currentLifecycleKey, tab: 'task' });
     setWorkspaceViewerExpanded(false);
   }, [currentLifecycleKey, factoryPanelState.lifecycleKey]);
+
+  if (!activeFactory) {
+    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+  }
 
   const collapseRightPanel = () => {
     setWorkspaceViewerExpanded(false);
@@ -101,11 +115,12 @@ export function ThreadPage() {
       : workspaceViewerExpanded;
 
   const rightPanel = factoryEligible ? (
-    currentLifecycleKey && workspacePath && githubProjectId && threadId && workspaceViewerVisible ? (
+    currentLifecycleKey && workspacePath && projectPath && factoryProjectId && threadId && workspaceViewerVisible ? (
       <FactorySessionContextPanel
-        githubProjectId={githubProjectId}
+        factoryProjectId={factoryProjectId}
         threadId={threadId}
-        workspacePath={workspacePath}
+        resourceId={resourceId}
+        workspacePath={projectPath}
         activeTab={activeFactoryTab}
         onTabChange={changeFactoryTab}
         expanded={rightPanelExpanded}
@@ -136,11 +151,7 @@ export function ThreadPage() {
       rightPanel={rightPanel}
       main={
         <ChatSessionBoundary threadId={threadId}>
-          {activeFactory ? (
-            <ThreadPageMain />
-          ) : (
-            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-          )}
+          <ThreadPageMain />
         </ChatSessionBoundary>
       }
     />
@@ -151,10 +162,11 @@ function ThreadPageMain() {
   useGlobalShortcuts();
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden">
       <ChatMessageBoundary>
         <ThreadPageContent />
       </ChatMessageBoundary>
+      <TaskPanel />
       <ThreadComposer />
     </div>
   );
@@ -174,5 +186,12 @@ function ThreadPageContent() {
   useRouteThreadSync();
   useThreadPageKickoffs();
 
-  return <ChatMessageList />;
+  return (
+    <div className="flex min-h-0 flex-col">
+      <FactorySessionHeader />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <ChatMessageList />
+      </div>
+    </div>
+  );
 }
