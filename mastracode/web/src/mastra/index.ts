@@ -6,7 +6,7 @@
  * storage, vector), plain values for config (publicUrl, origins) — so anyone
  * reading the entry sees exactly which env var feeds which slot.
  * Everything else (feature readiness, route/middleware assembly, controller
- * construction) lives in `MastraFactory` (`../web/factory-entry.ts`).
+ * construction) lives in `MastraFactory` (`@mastra/factory`).
  *
  * `mastra build` requires the entry to export a `Mastra` instance named
  * `mastra` constructed by a literal `new Mastra(...)` in THIS file (validated
@@ -24,16 +24,20 @@ import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
+import { PlatformSandbox } from '@mastra/platform-workspace';
 import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { WorkOS } from '@workos-inc/node';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { WorkOSAuditIntegration } from '../web/audit/workos-integration.js';
-import { MastraFactory } from '../web/factory-entry.js';
-import type { FactoryIntegration } from '../web/factory-integration.js';
-import { GithubIntegration } from '../web/github/integration.js';
-import { LinearIntegration } from '../web/linear/integration.js';
+import { WorkOSAuditIntegration } from '@mastra/factory/integrations/workos/integration';
+import { MastraFactory } from '@mastra/factory';
+import type { FactoryIntegration } from '@mastra/factory/integrations/base';
+import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
+import { PlatformGithubIntegration } from '@mastra/factory/integrations/platform/github/integration';
+import { PlatformLinearIntegration } from '@mastra/factory/integrations/platform/linear/integration';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -68,12 +72,12 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-// Web auth: MastraFactory installs `MastraAuthStudio` by default (identity
-// proxied to the shared Mastra platform API — reads `MASTRA_SHARED_API_URL`,
-// `MASTRA_ORGANIZATION_ID`, and `MASTRA_COOKIE_DOMAIN` from env). Set
-// `MASTRACODE_AUTH_DISABLED=1` to boot with no auth provider (open server,
-// bare local dev).
-const auth = process.env.MASTRACODE_AUTH_DISABLED === '1' ? null : undefined;
+const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
+let auth: IMastraAuthProvider | null | undefined;
+
+if (authDisabled) {
+  auth = null;
+}
 
 // WorkOS audit export is an independent capability. Supplying its dedicated
 // API key enables mirroring + the Admin Portal route regardless of whether web
@@ -115,27 +119,59 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
+const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_PROJECT_ID', 'MASTRA_ENVIRONMENT_ID'] as const;
+
+function hasPlatformSecretKey(): boolean {
+  // MASTRA_PLATFORM_ACCESS_TOKEN is a deprecated alias for
+  // MASTRA_PLATFORM_SECRET_KEY.
+  return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim() || process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim());
+}
+
+function hasPlatformSandboxEnv(): boolean {
+  return hasPlatformSecretKey() && PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
+}
+
+function missingPlatformSandboxEnv(): string[] {
+  const missing: string[] = hasPlatformSecretKey() ? [] : ['MASTRA_PLATFORM_SECRET_KEY'];
+  return [...missing, ...PLATFORM_SANDBOX_ENV_KEYS.filter(key => !process.env[key]?.trim())];
+}
+
 // Sandbox machine, by env precedence (any `WorkspaceSandbox` implementing
 // `clone()` works here too — the factory clones one sandbox per GitHub
 // project from it):
-//   1. MASTRACODE_SANDBOX_PROVIDER=railway|local — explicit selection. Railway
-//      selected without a token is a hard misconfiguration error.
-//   2. RAILWAY_API_TOKEN set → RailwaySandbox (isolated cloud VMs,
+//   1. MASTRACODE_SANDBOX_PROVIDER=platform|railway|local — explicit selection.
+//      Platform/Railway selected without their required env is a hard
+//      misconfiguration error.
+//   2. PlatformSandbox when MASTRA_PLATFORM_SECRET_KEY (or the deprecated
+//      MASTRA_PLATFORM_ACCESS_TOKEN alias), MASTRA_PROJECT_ID, and
+//      MASTRA_ENVIRONMENT_ID are all set.
+//   3. RAILWAY_API_TOKEN set → RailwaySandbox (isolated cloud VMs,
 //      multi-tenant safe).
-//   3. Neither → LocalSandbox, so repos can always be opened with no extra
+//   4. Neither → LocalSandbox, so repos can always be opened with no extra
 //      wiring. WARNING: the local host-process sandbox has NO tenant
 //      isolation — repo checkouts and agent commands run as the server
-//      process. Single-user local dev only; set a Railway token for shared
+//      process. Single-user local dev only; set a cloud sandbox for shared
 //      deployments.
 // Budget/GC knobs: MASTRACODE_SANDBOX_IDLE_MINUTES (default 30, baked into the
 // Railway template), MASTRACODE_MAX_SANDBOXES (default unlimited),
 // MASTRACODE_SANDBOX_WORKDIR (cloud checkout base, default /workspace),
 // MASTRACODE_LOCAL_SANDBOX_ROOT (local checkout root, default
 // ~/.mastracode/web/sandboxes).
-const sandboxKind = process.env.MASTRACODE_SANDBOX_PROVIDER ?? (process.env.RAILWAY_API_TOKEN ? 'railway' : 'local');
-const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES);
+const sandboxKind =
+  process.env.MASTRACODE_SANDBOX_PROVIDER ??
+  (hasPlatformSandboxEnv() ? 'platform' : process.env.RAILWAY_API_TOKEN ? 'railway' : 'local');
+const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES) ?? 5;
 let sandbox: WorkspaceSandbox;
-if (sandboxKind === 'railway') {
+if (sandboxKind === 'platform') {
+  const missing = missingPlatformSandboxEnv();
+  if (missing.length > 0) {
+    throw new Error(
+      `MASTRACODE_SANDBOX_PROVIDER=platform requires ${missing.join(', ')} — set the missing variable(s), ` +
+        'or unset the provider to fall back to the local sandbox (single-user dev only).',
+    );
+  }
+  sandbox = new PlatformSandbox();
+} else if (sandboxKind === 'railway') {
   const railwayToken = process.env.RAILWAY_API_TOKEN;
   if (!railwayToken) {
     throw new Error(
@@ -155,7 +191,7 @@ if (sandboxKind === 'railway') {
   });
 } else {
   throw new Error(
-    `Unknown MASTRACODE_SANDBOX_PROVIDER "${sandboxKind}" — expected "railway" or "local" ` +
+    `Unknown MASTRACODE_SANDBOX_PROVIDER "${sandboxKind}" — expected "platform", "railway", or "local" ` +
       '(or pass any WorkspaceSandbox implementing clone() to MastraFactory).',
   );
 }
@@ -204,7 +240,9 @@ const github = githubEnv
       slug: githubEnv.GITHUB_APP_SLUG,
       webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET,
     })
-  : undefined;
+  : hasPlatformSecretKey()
+    ? new PlatformGithubIntegration()
+    : undefined;
 
 // Linear OAuth app: per-org workspace connections + issue intake.
 const linearEnv = envGroup(
@@ -216,7 +254,9 @@ const linearEnv = envGroup(
 );
 const linear = linearEnv
   ? new LinearIntegration({ clientId: linearEnv.LINEAR_CLIENT_ID, clientSecret: linearEnv.LINEAR_CLIENT_SECRET })
-  : undefined;
+  : hasPlatformSecretKey()
+    ? new PlatformLinearIntegration()
+    : undefined;
 
 const integrations: FactoryIntegration[] = [github, linear, workosAudit].filter(i => i !== undefined);
 
@@ -287,7 +327,14 @@ export const factory = new MastraFactory({
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
 // `server` config (middleware + apiRoutes + cors).
-export const mastra = new Mastra(await factory.prepare());
+const prepared = await factory.prepare();
+export const mastra = new Mastra({
+  ...prepared,
+  bundler: {
+    externals: ['@anush008/tokenizers', '@duckdb/node-bindings', '@node-rs/xxhash', 'supports-color'],
+    transpilePackages: ['@mastra/factory'],
+  },
+});
 
 // Post-construct boot: initialize the controller (which now inherits this
 // instance's storage) and start its workers. Runs at module load via top-level

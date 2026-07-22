@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.52.0-alpha.11
+
+### Minor Changes
+
+- Added an optional `threadId` parameter to AgentController session creation so hosts can create or resume a session bound to an exact thread ID. ([#19758](https://github.com/mastra-ai/mastra/pull/19758))
+
+### Patch Changes
+
+- Fixed caller-supplied tool providers so selected connectionless tools can initialize and manage user connections. ([#19872](https://github.com/mastra-ai/mastra/pull/19872))
+
+- Fixed prebuilt agent signals so callers can supply per-run request context. ([#19702](https://github.com/mastra-ai/mastra/pull/19702))
+
+- Added a working directory override when deriving local sandboxes so callers can isolate each derived checkout. ([#19907](https://github.com/mastra-ai/mastra/pull/19907))
+
+- Added `checkpointName` to sandbox derive options so providers can attach durable checkpoint identities to derived sandboxes. ([#19907](https://github.com/mastra-ai/mastra/pull/19907))
+
+- Fixed thread cloning to preserve configured memory state, including observational memory progress. ([#19917](https://github.com/mastra-ai/mastra/pull/19917))
+
 ## 1.52.0-alpha.10
 
 ### Minor Changes

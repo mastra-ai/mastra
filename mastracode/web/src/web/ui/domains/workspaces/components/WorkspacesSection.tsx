@@ -65,7 +65,7 @@ export function WorkspacesSection() {
     scope: projectPath || undefined,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory)),
+    enabled: sessionEnabled && Boolean(projectPath) && Boolean(activeFactory && isServerFactory(activeFactory)),
   };
   const runningByPath = useWorkspaceActivity(activityOptions);
   // Both hooks read the same cached thread listing — one poll, no extra request.
@@ -84,7 +84,7 @@ export function WorkspacesSection() {
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
     allWorkItems.flatMap(item =>
-      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.projectPath, item] as const),
+      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.sessionId, item] as const),
     ),
   );
   const rows = worktrees.flatMap(worktree => {
@@ -215,40 +215,46 @@ export function WorkspacesSection() {
     });
   };
 
+  if (workRows.length === 0 && reviewRows.length === 0) return null;
+
   return (
     <section className="flex flex-col gap-4" aria-label="Factory sessions">
-      <WorkspaceGroup
-        title="Work Sessions"
-        rows={workRows}
-        pending={pending}
-        onSelect={row => {
-          clearAttention(row.worktree.worktreePath);
-          if (row.active) {
-            void openWorktreeThread(row.worktree.worktreePath);
-            return;
-          }
-          selectWorkspace.mutate(row.worktree.worktreePath, {
-            onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
-          });
-        }}
-        onDelete={worktree => setConfirmDelete(worktree)}
-      />
-      <WorkspaceGroup
-        title="Review Sessions"
-        rows={reviewRows}
-        pending={pending}
-        onSelect={row => {
-          clearAttention(row.worktree.worktreePath);
-          if (row.active) {
-            void openWorktreeThread(row.worktree.worktreePath);
-            return;
-          }
-          selectWorkspace.mutate(row.worktree.worktreePath, {
-            onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
-          });
-        }}
-        onDelete={worktree => setConfirmDelete(worktree)}
-      />
+      {workRows.length > 0 && (
+        <WorkspaceGroup
+          title="Work Sessions"
+          rows={workRows}
+          pending={pending}
+          onSelect={row => {
+            clearAttention(row.worktree.worktreePath);
+            if (row.active) {
+              void openWorktreeThread(row.worktree.worktreePath);
+              return;
+            }
+            selectWorkspace.mutate(row.worktree.worktreePath, {
+              onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
+            });
+          }}
+          onDelete={worktree => setConfirmDelete(worktree)}
+        />
+      )}
+      {reviewRows.length > 0 && (
+        <WorkspaceGroup
+          title="Review Sessions"
+          rows={reviewRows}
+          pending={pending}
+          onSelect={row => {
+            clearAttention(row.worktree.worktreePath);
+            if (row.active) {
+              void openWorktreeThread(row.worktree.worktreePath);
+              return;
+            }
+            selectWorkspace.mutate(row.worktree.worktreePath, {
+              onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
+            });
+          }}
+          onDelete={worktree => setConfirmDelete(worktree)}
+        />
+      )}
 
       {confirmDelete && (
         <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
@@ -326,13 +332,6 @@ function WorkspaceGroup({
             onDelete={() => onDelete(row.worktree)}
           />
         ))}
-        {rows.length === 0 && (
-          <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
-            {title === 'Review Sessions'
-              ? 'Review sessions appear when a PR review starts.'
-              : 'Work sessions appear when work starts.'}
-          </Txt>
-        )}
       </div>
     </section>
   );

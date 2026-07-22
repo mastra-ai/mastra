@@ -2,7 +2,7 @@
  * BDD coverage for the propless `Sidebar`.
  *
  * The sidebar consumes the domain contexts directly (`useActiveFactoryContext`,
- * focused chat hooks, `useOverlays`, toast feedback, and `useWebAuth`) instead of a
+ * focused chat hooks, `useOverlays`, toast feedback, and `useFactoryAuth`) instead of a
  * drilled prop bag, so the spec drives it end-to-end: real fetch transport,
  * MSW at the network boundary, assertions on the requests the thread actions
  * produce.
@@ -369,11 +369,11 @@ describe('Sidebar', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
 
-      expect(await screen.findByRole('menuitem', { name: 'Mastra' })).toBeInTheDocument();
+      expect(await screen.findByRole('menuitem', { name: /^Mastra\b/ })).toBeInTheDocument();
       expect(screen.getByRole('menuitem', { name: 'Create Factory' })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /remove/i })).not.toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: /^Beta\b/ }));
 
       await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBe(secondLocalProject.id));
       expect(await screen.findByText('Beta')).toBeInTheDocument();
@@ -394,7 +394,7 @@ describe('Sidebar', () => {
       expect(within(factory).queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
     });
 
-    it('explains how Work and Review sessions are created when none exist', async () => {
+    it('hides role-based Factory session sections when none exist', async () => {
       seedFactory({
         ...githubProject,
         binding: {
@@ -409,8 +409,8 @@ describe('Sidebar', () => {
       renderSidebar();
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
-      expect(within(factory).getByText('Work sessions appear when work starts.')).toBeInTheDocument();
-      expect(within(factory).getByText('Review sessions appear when a PR review starts.')).toBeInTheDocument();
+      expect(within(factory).queryByRole('region', { name: 'Work Sessions' })).not.toBeInTheDocument();
+      expect(within(factory).queryByRole('region', { name: 'Review Sessions' })).not.toBeInTheDocument();
     });
 
     it('renders the User Sessions section and no thread list', async () => {

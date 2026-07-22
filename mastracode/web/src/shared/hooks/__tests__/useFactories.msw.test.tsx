@@ -17,6 +17,7 @@ import {
   useCreateFactoryMutation,
   useFactoriesQuery,
   useLinkRepositoryMutation,
+  useLoadFactories,
   useRemoveFactoryMutation,
 } from '../useFactories';
 
@@ -69,13 +70,45 @@ beforeEach(() => {
 });
 
 describe('factories query hooks', () => {
+  it('loads persisted factories asynchronously through React Query', async () => {
+    saveFactories([localFactory]);
+
+    const { result } = renderHookWithProviders(() => useLoadFactories());
+
+    expect(result.current.isPending).toBe(true);
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(result.current.data?.[0]).toMatchObject({ id: 'factory-local', name: 'Mastra' });
+  });
+
+  it('stays pending until Factory hydration resolves', async () => {
+    let resolveProjects!: () => void;
+    const projectsReady = new Promise<void>(resolve => {
+      resolveProjects = resolve;
+    });
+    server.use(
+      http.get(`${ORIGIN}/web/factory/projects`, async () => {
+        await projectsReady;
+        return HttpResponse.json({ projects: [] });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useFactoriesQuery());
+
+    expect(result.current.isPending).toBe(true);
+    expect(result.current.data).toBeUndefined();
+
+    resolveProjects();
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.data).toEqual([]);
+  });
+
   it('reads persisted factories through React Query', async () => {
     saveFactories([localFactory]);
 
     const { result } = renderHookWithProviders(() => useFactoriesQuery());
 
     await waitFor(() => expect(result.current.data).toHaveLength(1));
-    expect(result.current.data[0]).toMatchObject({ id: 'factory-local', name: 'Mastra' });
+    expect(result.current.data?.[0]).toMatchObject({ id: 'factory-local', name: 'Mastra' });
   });
 
   it('hydrates server factories from the Factory project list while preserving browser identity', async () => {
@@ -183,7 +216,7 @@ describe('factories query hooks', () => {
     expect(stored).not.toHaveProperty('rootPath');
     expect(stored).not.toHaveProperty('gitUrl');
     await waitFor(() =>
-      expect(result.current.factories.data.map(factory => factory.name)).toEqual(['Mastra', 'New App']),
+      expect(result.current.factories.data?.map(factory => factory.name)).toEqual(['Mastra', 'New App']),
     );
   });
 
@@ -211,7 +244,7 @@ describe('factories query hooks', () => {
     expect(created).toBeDefined();
     expect(created!.id).not.toBe('fp-1');
     expect(created!.binding).toEqual({ kind: 'factory', factoryProjectId: 'fp-1', repositories: [] });
-    await waitFor(() => expect(result.current.factories.data.map(factory => factory.name)).toEqual(['Acme Product']));
+    await waitFor(() => expect(result.current.factories.data?.map(factory => factory.name)).toEqual(['Acme Product']));
 
     // Re-creating the same project keeps the existing browser factory.
     let second: ServerFactory | undefined;
@@ -269,7 +302,7 @@ describe('factories query hooks', () => {
     await waitForMutationsIdle(client);
 
     await waitFor(() => {
-      const factory = result.current.factories.data.find(candidate => candidate.id === 'factory-server');
+      const factory = result.current.factories.data?.find(candidate => candidate.id === 'factory-server');
       expect(factory?.binding.kind === 'factory' && factory.binding.repositories).toEqual([
         {
           projectRepositoryId: 'pr-1',
@@ -304,7 +337,7 @@ describe('factories query hooks', () => {
 
     expect(loadFactories().map(factory => factory.id)).toEqual(['factory-server']);
     expect(loadActiveFactoryId()).toBeNull();
-    await waitFor(() => expect(result.current.factories.data.map(factory => factory.id)).toEqual(['factory-server']));
+    await waitFor(() => expect(result.current.factories.data?.map(factory => factory.id)).toEqual(['factory-server']));
   });
 
   it('deletes the Factory project from the backend before removing its browser factory', async () => {

@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { useChatModes } from '../../context/useChatModes';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { getModeTextColorClass } from '../mode-colors';
+import { getModeColorClass } from '../mode-colors';
 
 function ModeIcon({ modeId }: { modeId: string }) {
   const iconProps = { size: 12, 'aria-hidden': true };
@@ -64,7 +64,7 @@ export function ModesSelection() {
         size="xs"
         aria-label="Session mode"
         aria-busy={Boolean(pendingModeId)}
-        className={cn('w-auto', getModeTextColorClass(selectedMode.id))}
+        className={cn('chat-mode-text w-auto', getModeColorClass(selectedMode.id))}
       >
         <ModeLabel modeId={selectedMode.id} name={selectedMode.name ?? selectedMode.id} />
       </SelectTrigger>

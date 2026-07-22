@@ -28,6 +28,7 @@ export function useActiveFactory() {
     isFetching: factoriesFetching,
     isError: factoriesError,
   } = useFactoriesQuery();
+  const factoryList = factories ?? [];
   const ensureMaterialized = useEnsureRepoMaterializedMutation();
   const [selectedFactoryId, setSelectedFactoryId] = useState<string | null>(() => loadActiveFactoryId());
   const [preparing, setPreparing] = useState<PreparingState | null>(null);
@@ -36,8 +37,8 @@ export function useActiveFactory() {
   const selectionRequestRef = useRef(0);
   // Derived: a selection pointing at a deleted factory counts as no selection.
   const activeFactoryId =
-    selectedFactoryId && factories.some(factory => factory.id === selectedFactoryId) ? selectedFactoryId : null;
-  const activeFactory = factories.find(factory => factory.id === activeFactoryId) ?? null;
+    selectedFactoryId && factoryList.some(factory => factory.id === selectedFactoryId) ? selectedFactoryId : null;
+  const activeFactory = factoryList.find(factory => factory.id === activeFactoryId) ?? null;
   // Server-backed factories without a materialized repository chat against the
   // factory project itself; local factories always carry a resolved resourceId.
   const resourceId =
@@ -117,7 +118,7 @@ export function useActiveFactory() {
   };
 
   return {
-    factories,
+    factories: factoryList,
     factoriesPending,
     activeFactory,
     resourceId,

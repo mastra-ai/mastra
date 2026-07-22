@@ -1,15 +1,13 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { MemoryRouter, useLocation } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
-import {
-  OverlayTestProviders,
-  useOverlayControllerHandlers,
-} from '../../../chat/components/__tests__/overlay-test-utils';
 import type { DirectoryListing } from '../../../../../../shared/api/types';
+import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
 import { FactoriesPanel } from '../../index';
 import { loadFactories } from '../../services/factories';
 
@@ -22,17 +20,25 @@ const rootListing: DirectoryListing = {
   entries: [{ name: 'gamma', path: '/projects/gamma' }],
 };
 
+function LocationProbe() {
+  return <output data-testid="pathname">{useLocation().pathname}</output>;
+}
+
 function renderFactories() {
-  return renderWithProviders(
-    <OverlayTestProviders>
-      <FactoriesPanel />
-    </OverlayTestProviders>,
+  const onClose = vi.fn();
+  const view = renderWithProviders(
+    <MemoryRouter initialEntries={['/factories/create']}>
+      <ActiveFactoryProvider>
+        <FactoriesPanel onClose={onClose} />
+        <LocationProbe />
+      </ActiveFactoryProvider>
+    </MemoryRouter>,
   );
+  return { onClose, ...view };
 }
 
 beforeEach(() => {
   localStorage.clear();
-  useOverlayControllerHandlers();
   server.use(
     http.get(FS_URL, () => HttpResponse.json(rootListing)),
     http.get(`${TEST_BASE_URL}/web/codebase/resolve`, ({ request }) => {
@@ -56,7 +62,8 @@ describe('FactoriesPanel', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Factory name')).toHaveFocus();
   });
-  it('creates a named server-backed Factory as the primary path', async () => {
+
+  it('creates a named server-backed Factory as the primary path, then lands on the Board', async () => {
     let received: unknown;
     server.use(
       http.post(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
@@ -80,9 +87,10 @@ describe('FactoriesPanel', () => {
     });
     expect(received).toEqual({ name: 'Mastra' });
     expect(localStorage.getItem('mastracode-active-factory')).toBe(loadFactories()[0]?.id);
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factory/board'));
   });
 
-  it('binds a local folder through the secondary path', async () => {
+  it('binds a local folder through the secondary path, then lands on /new', async () => {
     const user = userEvent.setup();
     renderFactories();
 
@@ -103,5 +111,17 @@ describe('FactoriesPanel', () => {
       ]);
     });
     expect(localStorage.getItem('mastracode-active-factory')).toBe(loadFactories()[0]?.id);
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/new'));
+  });
+
+  it('calls onClose from the Cancel button and from Escape', async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderFactories();
+
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });
