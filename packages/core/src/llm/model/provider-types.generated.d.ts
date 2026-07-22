@@ -1645,6 +1645,7 @@ export type ProviderModelsMap = {
   readonly wandb: readonly [
     'JetBrains/Mellum2-12B-A2.5B-Instruct',
     'MiniMaxAI/MiniMax-M2.5',
+    'MiniMaxAI/MiniMax-M3',
     'OpenPipe/Qwen3-14B-Instruct',
     'Qwen/Qwen3-30B-A3B-Instruct-2507',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
@@ -4477,11 +4478,11 @@ export type ProviderModelsMap = {
   ];
   readonly inferx: readonly [
     'google/gemma-4-31b-it-fp8',
-    'qwen/qwen3-coder-next-fp8',
-    'qwen/qwen3-coder-next-fp8-1m',
     'qwen/qwen3.5-122b-a10b-nvfp4',
     'qwen/qwen3.6-27b-fp8',
     'qwen/qwen3.6-35b-a3b-fp8',
+    'qwen3-coder-next-fp8',
+    'qwen3-coder-next-fp8-1m',
   ];
   readonly poe: readonly [
     'anthropic/claude-haiku-3',
