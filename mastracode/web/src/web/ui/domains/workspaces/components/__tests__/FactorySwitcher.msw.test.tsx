@@ -34,7 +34,6 @@ afterEach(() => {
 
 function seedFactory(project: Factory = PROJECT) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function StateProbe() {
@@ -49,11 +48,11 @@ function StateProbe() {
   );
 }
 
-function renderSwitcher() {
+function renderSwitcher(factoryId = PROJECT.id) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/new']}>
+    <MemoryRouter initialEntries={[`/factories/${factoryId}/new`]}>
       <MainSidebarProvider storageKey="factory-switcher-test" mobileBreakpoint={768}>
-        <ActiveFactoryProvider>
+        <ActiveFactoryProvider factoryId={factoryId}>
           <FactorySwitcher />
           <StateProbe />
         </ActiveFactoryProvider>
@@ -85,7 +84,7 @@ describe('FactorySwitcher', () => {
 
     const factoryItem = await screen.findByRole('menuitem', { name: /MastraCode Test/ });
     expect(within(factoryItem).getByText('/tmp/mastracode-test')).toBeInTheDocument();
-    expect(screen.getByTestId('pathname')).toHaveTextContent('/new');
+    expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${PROJECT.id}/new`);
   });
 
   it('when a server-backed Factory is selected from /new, then the user is taken to Work', async () => {
@@ -100,13 +99,12 @@ describe('FactorySwitcher', () => {
       },
     };
     localStorage.setItem('mastracode-factories', JSON.stringify([PROJECT, serverFactory]));
-    localStorage.setItem('mastracode-active-factory', PROJECT.id);
     renderSwitcher();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: /Server Factory/ }));
 
-    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factory/work'));
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/server-factory/work'));
   });
 
   it('when Create Factory is selected on mobile, then it navigates to /factories/create and the sidebar closes', async () => {

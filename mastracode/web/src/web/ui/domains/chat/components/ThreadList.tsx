@@ -5,7 +5,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { Copy, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
@@ -93,6 +93,7 @@ function useThreadHookArgs() {
 function ThreadListHeader({ threadCount }: { threadCount: number }) {
   const overlays = useOverlays();
   const navigate = useNavigate();
+  const { factoryId } = useParams<{ factoryId: string }>();
 
   return (
     <div className="flex items-center justify-between px-1">
@@ -110,7 +111,7 @@ function ThreadListHeader({ threadCount }: { threadCount: number }) {
         aria-label="New thread"
         onClick={() => {
           overlays.close('sidebar');
-          void navigate('/new');
+          void navigate(`/factories/${factoryId}/new`);
         }}
       >
         <Plus size={15} />
@@ -165,27 +166,27 @@ function ThreadRow({
   const hookArgs = useThreadHookArgs();
   const overlays = useOverlays();
   const navigate = useNavigate();
-  const { threadId: routeThreadId } = useParams<{ threadId: string }>();
+  const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
 
   const deleteThreadMutation = useDeleteAgentControllerThreadMutation(hookArgs);
   const cloneThreadMutation = useCloneAgentControllerThreadMutation(hookArgs);
 
   const openThread = () => {
-    void navigate(`/threads/${thread.id}`);
+    void navigate(`/factories/${factoryId}/threads/${thread.id}`);
     overlays.close('sidebar');
   };
 
   const cloneThread = async () => {
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
     toast.success('Thread cloned');
-    void navigate(`/threads/${clonedThread.id}`);
+    void navigate(`/factories/${factoryId}/threads/${clonedThread.id}`);
   };
 
   const deleteThread = async () => {
     await deleteThreadMutation.mutateAsync(thread.id);
     toast('Thread deleted');
     if (thread.id === routeThreadId) {
-      void navigate('/new');
+      void navigate(`/factories/${factoryId}/new`);
     }
   };
 
@@ -215,9 +216,15 @@ function ThreadRow({
               </Button>
             }
           />
-          <DropdownMenu.Content align="end" className="min-w-28">
-            <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
-            <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
+          <DropdownMenu.Content align="end">
+            <DropdownMenu.Item onClick={onStartRename}>
+              <Pencil />
+              Rename
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onClick={() => void cloneThread()}>
+              <Copy />
+              Clone
+            </DropdownMenu.Item>
             <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
               <Trash2 />
               Delete

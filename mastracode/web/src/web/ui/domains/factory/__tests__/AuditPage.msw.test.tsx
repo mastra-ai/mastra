@@ -207,11 +207,10 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
   return state;
 }
 
-function renderAt(initialEntry: string, project: Factory = githubProject) {
+function renderAt(page: 'audit' | 'rules' = 'audit', project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${project.id}/${page}`] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -240,7 +239,7 @@ describe('Factory Rules and Audit log pages', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt();
 
     expect((await screen.findAllByRole('heading', { name: 'Audit log' }))[0]).toBeInTheDocument();
     const list = await screen.findByRole('list', { name: 'Audit events' });
@@ -280,7 +279,7 @@ describe('Factory Rules and Audit log pages', () => {
         },
       ],
     });
-    renderAt('/factory/rules');
+    renderAt('rules');
     expect((await screen.findAllByRole('heading', { name: 'Rules' }))[0]).toBeInTheDocument();
 
     const list = await screen.findByRole('list', { name: 'Rule decisions' });
@@ -321,7 +320,7 @@ describe('Factory Rules and Audit log pages', () => {
         },
       ],
     });
-    renderAt('/factory/rules');
+    renderAt('rules');
 
     const list = await screen.findByRole('list', { name: 'Rule decisions' });
     await userEvent.click(screen.getByRole('button', { name: 'Load more effects' }));
@@ -332,7 +331,7 @@ describe('Factory Rules and Audit log pages', () => {
 
   it('given the All filter, when the user picks Git, then only matching events are shown and the filter can reset', async () => {
     const state = useAuditHandlers();
-    renderAt('/factory/audit');
+    renderAt();
 
     await screen.findByRole('list', { name: 'Audit events' });
     expect(state.requests[0]!.actions).toBeNull();
@@ -352,7 +351,7 @@ describe('Factory Rules and Audit log pages', () => {
 
   it('given the All filter, when the user picks Agent, then events are refetched with the agent action list', async () => {
     const state = useAuditHandlers();
-    renderAt('/factory/audit');
+    renderAt();
 
     await screen.findByRole('list', { name: 'Audit events' });
 
@@ -382,7 +381,7 @@ describe('Factory Rules and Audit log pages', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt();
 
     const list = await screen.findByRole('list', { name: 'Audit events' });
     const row = within(list).getAllByRole('listitem')[0]!;
@@ -402,7 +401,7 @@ describe('Factory Rules and Audit log pages', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt();
 
     const list = await screen.findByRole('list', { name: 'Audit events' });
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
@@ -417,7 +416,7 @@ describe('Factory Rules and Audit log pages', () => {
   it('given WorkOS is configured, when the user clicks Open in WorkOS, then the one-time portal link opens in a new tab', async () => {
     useAuditHandlers({ portalUrl: 'https://portal.workos.com/audit-logs/one-time' });
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
-    renderAt('/factory/audit');
+    renderAt();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Open in WorkOS' }));
 
@@ -426,7 +425,7 @@ describe('Factory Rules and Audit log pages', () => {
 
   it('given no events yet, when Audit log renders, then it shows its empty state without loading rule decisions', async () => {
     const state = useAuditHandlers({ pages: [{ events: [] }] });
-    renderAt('/factory/audit');
+    renderAt();
 
     expect(await screen.findByText('No audit events yet')).toBeInTheDocument();
     expect(screen.queryByText('No rule effects yet')).not.toBeInTheDocument();
@@ -435,7 +434,7 @@ describe('Factory Rules and Audit log pages', () => {
 
   it('given no rule effects yet, when Rules renders, then it shows its empty state without loading audit events', async () => {
     const state = useAuditHandlers({ decisionPages: [{ decisions: [] }] });
-    renderAt('/factory/rules');
+    renderAt('rules');
 
     expect(await screen.findByText('No rule effects yet')).toBeInTheDocument();
     expect(screen.queryByText('No audit events yet')).not.toBeInTheDocument();
@@ -444,7 +443,7 @@ describe('Factory Rules and Audit log pages', () => {
 
   it('given a local project, when visiting Audit log, then the server-factory notice renders instead of the trail', async () => {
     useAuditHandlers();
-    renderAt('/factory/audit', localProject);
+    renderAt('audit', localProject);
 
     expect(
       await screen.findByText(/Board, metrics, rules, and audit are available for server-backed Factories/),

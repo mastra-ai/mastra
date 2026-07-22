@@ -5,7 +5,7 @@ import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-cont
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, Navigate, RouterProvider } from 'react-router';
+import { createMemoryRouter, Navigate, Outlet, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
@@ -24,34 +24,40 @@ import { CreateFactoryPage } from '../pages/CreateFactoryPage';
  * layout (Chat itself uses router hooks for /threads/:threadId navigation).
  * Auth guards are intentionally bypassed — these specs stub /auth/me directly.
  */
-function renderChat(initialEntry = '/threads/thread-test') {
+function renderChat(initialEntry = '/factories/project-test/threads/thread-test') {
   const router = createMemoryRouter(
     [
       {
-        element: <Chat />,
+        path: '/factories/:factoryId',
+        element: (
+          <ActiveFactoryProvider factoryId="project-test">
+            <Outlet />
+          </ActiveFactoryProvider>
+        ),
         children: [
-          { path: '/chat', element: <NewPage /> },
-          { path: '/threads/:threadId', element: <ThreadPage /> },
-          { path: '/factories/create', element: <CreateFactoryPage /> },
           {
-            path: '/settings',
+            element: <Chat />,
             children: [
-              { index: true, element: <Navigate to="/settings/general" replace /> },
-              { path: ':section', element: <SettingsPage /> },
+              // The transcript only renders on the thread's own page — `new` is
+              // the draft composer and hides the bound thread's history.
+              { path: 'new', element: <NewPage /> },
+              { path: 'threads/:threadId', element: <ThreadPage /> },
+              {
+                path: 'settings',
+                children: [
+                  { index: true, element: <Navigate to="general" replace /> },
+                  { path: ':section', element: <SettingsPage /> },
+                ],
+              },
             ],
           },
         ],
       },
+      { path: '/factories/create', element: <CreateFactoryPage /> },
     ],
-    // The transcript only renders on the thread's own page now — /chat is the
-    // draft composer and hides the bound thread's history.
     { initialEntries: [initialEntry] },
   );
-  return renderWithProviders(
-    <ActiveFactoryProvider>
-      <RouterProvider router={router} />
-    </ActiveFactoryProvider>,
-  );
+  return renderWithProviders(<RouterProvider router={router} />);
 }
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -82,7 +88,6 @@ function seedProject() {
     createdAt: 1,
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -556,18 +561,8 @@ describe('MastraCode message rendering', () => {
     expect(streamRequests).toHaveBeenCalledTimes(2);
   });
 
-  it('shows the first-run factory onboarding after empty backend hydration', async () => {
-    useAgentControllerHandlers();
-    server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
-
-    renderChat('/chat');
-
-    expect(
-      await screen.findByRole('heading', { name: 'Build software with a Factory that knows your work.' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create my first factory' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
+  // First-run onboarding (no factories) is covered by routing.msw.test.tsx —
+  // the OnboardingGuard redirect owns that flow now, not NewPage.
 
   it('does not show first-run Factory creation after a remote Factory hydrates', async () => {
     useAgentControllerHandlers();

@@ -13,7 +13,7 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
-import { MemoryRouter, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../domains/chat/context/ChatSessionTestProvider';
@@ -121,7 +121,6 @@ afterEach(() => {
 
 function seedFactory(active: Factory = project, projects: Factory[] = [active]) {
   localStorage.setItem('mastracode-factories', JSON.stringify(projects));
-  localStorage.setItem('mastracode-active-factory', active.id);
 }
 
 function useGithubStatusHandler() {
@@ -180,6 +179,20 @@ function useAgentControllerHandlers(): CapturedRequests {
   };
 
   server.use(
+    // Mount-driven sandbox materialization for the GitHub-factory variants:
+    // `/ensure` must succeed before the session is allowed to bind.
+    http.post(`${TEST_BASE_URL}/web/github/projects/${githubRepository.projectRepositoryId}/ensure`, () => {
+      const done = {
+        resourceId: RESOURCE_ID,
+        factoryProjectId: 'fp-github-project-1',
+        projectRepositoryId: githubRepository.projectRepositoryId,
+        sandboxId: 'sbx-test',
+        sandboxWorkdir: githubRepository.sandboxWorkdir,
+      };
+      return new HttpResponse(`event: done\ndata: ${JSON.stringify(done)}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }),
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: threadOne.id }),
     ),
@@ -224,18 +237,33 @@ function LocationProbe() {
   return <span data-testid="location">{location.pathname}</span>;
 }
 
-function renderSidebar() {
+/**
+ * Mirrors `FactoryLayout`: the route param is the single source of truth for
+ * the active factory, so navigating to another `/factories/:factoryId/**` URL
+ * remounts the provider with the new ID (e.g. via the factory switcher).
+ */
+function FactoryRouteHarness() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  return (
+    <ActiveFactoryProvider factoryId={factoryId!}>
+      <ChatSessionProvider>
+        <OverlaysProvider>
+          <Sidebar />
+          <LocationProbe />
+        </OverlaysProvider>
+      </ChatSessionProvider>
+    </ActiveFactoryProvider>
+  );
+}
+
+function renderSidebar(factoryId: string = project.id) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/chat']}>
+    <MemoryRouter initialEntries={[`/factories/${factoryId}/new`]}>
       <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
-        <ActiveFactoryProvider>
-          <ChatSessionProvider>
-            <OverlaysProvider>
-              <Sidebar />
-              <LocationProbe />
-            </OverlaysProvider>
-          </ChatSessionProvider>
-        </ActiveFactoryProvider>
+        <Routes>
+          <Route path="/factories/:factoryId/*" element={<FactoryRouteHarness />} />
+          <Route path="*" element={<LocationProbe />} />
+        </Routes>
         <Toaster position="bottom-right" />
       </MainSidebarProvider>
     </MemoryRouter>,
@@ -396,7 +424,10 @@ describe('Sidebar', () => {
 
       await userEvent.click(screen.getByRole('menuitem', { name: /^Beta\b/ }));
 
-      await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBe(secondLocalProject.id));
+      // Switching is navigation-only: the URL drives which factory is active.
+      await waitFor(() =>
+        expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${secondLocalProject.id}/new`),
+      );
       expect(await screen.findByText('Beta')).toBeInTheDocument();
     });
   });
@@ -407,7 +438,7 @@ describe('Sidebar', () => {
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
-      renderSidebar();
+      renderSidebar(githubProject.id);
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
       const workSessions = within(factory).getByRole('region', { name: 'Work Sessions' });
@@ -427,7 +458,7 @@ describe('Sidebar', () => {
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
-      renderSidebar();
+      renderSidebar(githubProject.id);
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
       expect(within(factory).queryByRole('region', { name: 'Work Sessions' })).not.toBeInTheDocument();
@@ -447,7 +478,7 @@ describe('Sidebar', () => {
           HttpResponse.json({ sessions: [userSession] }),
         ),
       );
-      renderSidebar();
+      renderSidebar(githubProject.id);
 
       const userSessions = await screen.findByRole('region', { name: 'User sessions' });
       expect(await within(userSessions).findByRole('button', { name: 'alice-notes' })).toBeInTheDocument();

@@ -175,11 +175,10 @@ function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsSta
   return state;
 }
 
-function renderAt(initialEntry: string, project: Factory = githubProject) {
+function renderAt(project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${project.id}/metrics`] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -202,7 +201,7 @@ describe('Factory Metrics page', () => {
         wipTotal: 4,
       }),
     );
-    renderAt('/factory/metrics');
+    renderAt();
 
     expect(await screen.findByRole('group', { name: 'Date range timeline' })).toBeInTheDocument();
 
@@ -244,7 +243,7 @@ describe('Factory Metrics page', () => {
 
   it('given mixed automation, when the page renders, then the automated-moves stat and per-stage rows appear', async () => {
     useMetricsHandlers();
-    renderAt('/factory/metrics');
+    renderAt();
 
     // Global stat: total - human automated moves, with the window total as hint.
     const automatedMoves = (await screen.findByText('Automated moves (30d)')).parentElement!;
@@ -266,7 +265,7 @@ describe('Factory Metrics page', () => {
 
   it('given the default window, when the page renders, then the timeline drives a 30-day fetch', async () => {
     const state = useMetricsHandlers();
-    renderAt('/factory/metrics');
+    renderAt();
 
     expect(await screen.findByText('Completed')).toBeInTheDocument();
     // The draggable date-range timeline is the window control.
@@ -291,7 +290,7 @@ describe('Factory Metrics page', () => {
         stageAutomation: [],
       }),
     );
-    renderAt('/factory/metrics');
+    renderAt();
 
     expect(await screen.findByText('Nothing in flight — the board is clear.')).toBeInTheDocument();
     expect(screen.getByText('No items created in this window.')).toBeInTheDocument();
@@ -307,7 +306,7 @@ describe('Factory Metrics page', () => {
 
   it('given a local project, when visiting Metrics, then the server-factory notice renders instead of the dashboard', async () => {
     useMetricsHandlers();
-    renderAt('/factory/metrics', localProject);
+    renderAt(localProject);
 
     expect(
       await screen.findByText(/Board, metrics, rules, and audit are available for server-backed Factories/),

@@ -117,7 +117,7 @@ export function useStartFactoryRun() {
         }),
         queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) }),
       ]);
-      void navigate(`/threads/${prepared.threadId}`);
+      void navigate(`/factories/${activeFactory?.id}/threads/${prepared.threadId}`);
     },
   });
 
