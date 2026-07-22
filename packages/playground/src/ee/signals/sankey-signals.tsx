@@ -248,6 +248,7 @@ export function SankeySignals({
   }, [drillIn, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
   const isPlaybackBlockedByDrillIn = drillIn !== undefined && (pathsQuery.isFetching || pathsQuery.isError);
+  const hasActivePathsError = drillIn !== undefined && pathsQuery.isError;
 
   useEffect(() => {
     if (!isPlaying || snapshots.length < 2 || isFlowPending || hasFlowError || isPlaybackBlockedByDrillIn) return;
@@ -285,7 +286,7 @@ export function SankeySignals({
 
   if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
 
-  if (snapshotsQuery.isError || hasFlowError || pathsQuery.isError) {
+  if (snapshotsQuery.isError || hasFlowError || hasActivePathsError) {
     return (
       <SignalsErrorState
         message="Unable to load signal flow."
@@ -295,7 +296,7 @@ export function SankeySignals({
           void Promise.all(flowQueries.map(query => query.refetch()));
           if (drillIn && drillInAvailable) void pathsQuery.refetch();
         }}
-        onClear={pathsQuery.isError ? () => setDrillIn(undefined) : undefined}
+        onClear={hasActivePathsError ? () => setDrillIn(undefined) : undefined}
       />
     );
   }
