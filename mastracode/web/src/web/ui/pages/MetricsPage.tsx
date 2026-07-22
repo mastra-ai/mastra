@@ -1,14 +1,9 @@
-import {
-  DateRangeTimeline,
-  clampDateRangeToBounds,
-  getDateRangeBounds,
-} from '@mastra/playground-ui/components/DateRangeTimeline';
+import { DateRangeTimeline, getDateRangeBounds } from '@mastra/playground-ui/components/DateRangeTimeline';
 import type { DateRangeValue } from '@mastra/playground-ui/components/DateRangeTimeline';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { format, subDays } from 'date-fns';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { useApiConfig } from '../../../shared/api/config';
 import { useFactoryMetrics } from '../../../shared/hooks/useFactoryMetrics';
@@ -18,26 +13,37 @@ import { formatDuration, relativeTime } from '../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { isServerFactory, useActiveFactoryContext } from '../domains/workspaces';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
-import type { FactoryMetrics, FactoryMetricsRange } from '../domains/factory/services/metrics';
+import type { FactoryMetrics } from '../domains/factory/services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
 
-const API_DATE_FORMAT = 'yyyy-MM-dd';
-/** Domain lower bound when the board has no items yet — there's no real
- * creation date to anchor to, so offer a modest explorable window. */
+const DAY_MS = 86_400_000;
 const EMPTY_BOARD_LOOKBACK_DAYS = 90;
+/** Mirrors the server's bounded aggregation window. */
+const MAX_METRICS_WINDOW_DAYS = 366;
 
-/** Default window: the last 30 days, as `yyyy-MM-dd` bounds. */
-function defaultRange(): DateRangeValue {
-  const today = new Date();
-  return { from: format(subDays(today, 30), API_DATE_FORMAT), to: format(today, API_DATE_FORMAT) };
+function shiftUtcDay(day: string, offset: number): string {
+  return new Date(Date.parse(`${day}T00:00:00.000Z`) + offset * DAY_MS).toISOString().slice(0, 10);
+}
+
+function inclusiveRangeDays(range: DateRangeValue): number {
+  return Math.floor((Date.parse(`${range.to}T00:00:00.000Z`) - Date.parse(`${range.from}T00:00:00.000Z`)) / DAY_MS) + 1;
+}
+
+function clampRangeSpan(range: DateRangeValue, maximumDays: number): DateRangeValue {
+  if (inclusiveRangeDays(range) <= maximumDays) return range;
+  return { from: shiftUtcDay(range.to, -(maximumDays - 1)), to: range.to };
+}
+
+function defaultRange(today: string): DateRangeValue {
+  return { from: shiftUtcDay(today, -29), to: today };
 }
 
 const THROUGHPUT_SERIES = [{ dataKey: 'done', label: 'Done per day', color: '#34d399' }];
 
 const SOURCE_LABELS: Record<string, string> = {
-  'github-issue': 'GitHub issues',
-  'github-pr': 'GitHub PRs',
-  'linear-issue': 'Linear issues',
+  'github:issue': 'GitHub issues',
+  'github:pull-request': 'GitHub PRs',
+  'linear:issue': 'Linear issues',
   manual: 'Manual',
 };
 
@@ -64,48 +70,33 @@ export function MetricsPage() {
 }
 
 function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const [today] = useState(() => format(new Date(), API_DATE_FORMAT));
-  const [range, setRange] = useState<DateRangeValue>(defaultRange);
-
-  // Expand the day-granular range to a precise instant window: full first day
-  // through end of the last day (the server clamps the end to `now`). Keyed on
-  // the day strings so the query key stays stable across renders.
-  const fetchRange = useMemo<FactoryMetricsRange>(
-    () => ({
-      from: new Date(`${range.from}T00:00:00.000Z`).toISOString(),
-      to: new Date(`${range.to}T23:59:59.999Z`).toISOString(),
-    }),
-    [range.from, range.to],
-  );
-  // Whole-day span of the selected window, for labels like "Automated moves (30d)".
-  const windowDays = Math.max(
-    1,
-    Math.round((Date.parse(`${range.to}T00:00:00.000Z`) - Date.parse(`${range.from}T00:00:00.000Z`)) / 86_400_000),
-  );
-  const metricsQuery = useFactoryMetrics(factoryProjectId, fetchRange);
+  const [today] = useState(() => new Date().toISOString().slice(0, 10));
+  const [range, setRange] = useState<DateRangeValue>(() => defaultRange(today));
+  const metricsQuery = useFactoryMetrics(factoryProjectId, range);
   const agentsRunning = useAgentsRunningCount();
 
   if (metricsQuery.isError) {
-    return <Notice variant="destructive">{(metricsQuery.error as Error).message}</Notice>;
+    const message = metricsQuery.error instanceof Error ? metricsQuery.error.message : 'Failed to load metrics';
+    return <Notice variant="destructive">{message}</Notice>;
   }
   const metrics = metricsQuery.data;
+  const windowDays = inclusiveRangeDays(range);
 
-  // Bounds: project's first work item (once metrics load) → today. Fall back to
-  // the max lookback until the earliest date is known.
+  // Keep the current request inside the rendered domain. Once the user moves
+  // the range, the real creation date becomes the natural lower bound.
   const earliestDay = metrics?.earliestItemAt
     ? metrics.earliestItemAt.slice(0, 10)
-    : format(subDays(new Date(`${today}T00:00:00.000Z`), EMPTY_BOARD_LOOKBACK_DAYS), API_DATE_FORMAT);
-  const bounds = getDateRangeBounds(earliestDay, today);
-  const selectedRange = clampDateRangeToBounds(range, bounds);
+    : shiftUtcDay(today, -(EMPTY_BOARD_LOOKBACK_DAYS - 1));
+  const bounds = getDateRangeBounds(earliestDay < range.from ? earliestDay : range.from, today);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
       <DateRangeTimeline
         key={`${bounds.min}:${bounds.max}`}
-        value={selectedRange}
+        value={range}
         min={bounds.min}
         max={bounds.max}
-        onCommit={setRange}
+        onCommit={value => setRange(clampRangeSpan(value, MAX_METRICS_WINDOW_DAYS))}
       />
 
       {!metrics ? null : (

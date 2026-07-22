@@ -43,7 +43,7 @@ export interface FactoryMetrics {
   }[];
 }
 
-/** Absolute window bounds (ISO 8601) for a metrics request. */
+/** Inclusive UTC calendar-date bounds (`yyyy-MM-dd`) for a metrics request. */
 export interface FactoryMetricsRange {
   from: string;
   to: string;
