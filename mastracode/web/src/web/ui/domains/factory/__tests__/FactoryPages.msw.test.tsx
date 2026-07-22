@@ -585,13 +585,13 @@ describe('Factory Work and Review intake candidates', () => {
     expect(within(intake).getByText('Improve docs')).toBeInTheDocument();
     expect(within(intake).getAllByTestId('candidate-card')).toHaveLength(2);
     // Candidates link out to GitHub via the external-link icon (the title
-    // opens the session) without exposing implementation label chips.
+    // opens the session) and surface their user-facing labels as card chips.
     const flakyCandidate = within(intake).getByRole('article', { name: 'Fix flaky test' });
     expect(within(flakyCandidate).getByRole('link', { name: 'Open in GitHub' })).toHaveAttribute(
       'href',
       'https://github.com/mastra-ai/mastra/issues/12',
     );
-    expect(within(flakyCandidate).queryByText('bug')).not.toBeInTheDocument();
+    expect(within(flakyCandidate).getByText('bug')).toBeInTheDocument();
     // PRs never appear as Work intake candidates — they live on the Review board.
     expect(within(intake).queryByText('Add factory pages')).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Intake source' })).not.toBeInTheDocument();
@@ -805,7 +805,7 @@ describe('Factory Work and Review intake candidates', () => {
     });
   });
 
-  it('given an auto-triaged issue candidate, when the Board renders, then it appears in Triage with Investigate and no label chips', async () => {
+  it('given an auto-triaged issue candidate, when the Board renders, then it shows user-facing labels but hides control labels', async () => {
     const state = useBoardHandlers({ triageIssues: [{ ...issues[0]!, labels: ['bug', 'auto-triaged'] }] });
     renderAt('/factory/work');
 
@@ -814,11 +814,11 @@ describe('Factory Work and Review intake candidates', () => {
     const card = await within(triageColumn).findByRole('article', { name: 'Fix flaky test' });
     expect(within(card).getByRole('button', { name: 'Investigate Fix flaky test' })).toBeInTheDocument();
     expect(within(card).queryByText('auto-triaged')).not.toBeInTheDocument();
-    expect(within(card).queryByText('bug')).not.toBeInTheDocument();
+    expect(within(card).getByText('bug')).toBeInTheDocument();
     expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument();
   });
 
-  it('given an auto-triaged issue needing approval, when the Board renders, then it appears in Triage with Prepare approval and no label chips', async () => {
+  it('given an auto-triaged issue needing approval, when the Board renders, then it offers approval without exposing control labels', async () => {
     const state = useBoardHandlers({
       triageIssues: [{ ...issues[0]!, labels: ['bug', 'auto-triaged', 'needs-approval'] }],
     });

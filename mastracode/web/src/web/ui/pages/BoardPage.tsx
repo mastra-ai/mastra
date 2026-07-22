@@ -4,7 +4,17 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, CircleDot, EllipsisVertical, ExternalLink, GitCompareArrows, Link2, Plus } from 'lucide-react';
+import {
+  ArrowUpRight,
+  CheckCircle2,
+  CircleDot,
+  CircleX,
+  EllipsisVertical,
+  ExternalLink,
+  GitCompareArrows,
+  Link2,
+  Plus,
+} from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -53,6 +63,7 @@ import type { BoardStageId } from '../domains/factory/stages';
 
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
 const NEEDS_APPROVAL_LABEL = 'needs-approval';
+const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'github-issue': 'Issue',
@@ -64,7 +75,7 @@ const SOURCE_LABELS: Record<WorkItemSource, string> = {
 function SourceTitle({ source, title }: { source: WorkItemSource; title: string }) {
   return (
     <>
-      <span>{SOURCE_LABELS[source]}: </span>
+      <span className="sr-only">{SOURCE_LABELS[source]}: </span>
       <span>{title}</span>
     </>
   );
@@ -240,8 +251,8 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
     title: issue.title,
     url: issue.url,
     meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · opened ${relativeTime(issue.createdAt)}`,
-    icon: CircleDot,
-    iconClassName: 'text-accent1',
+    icon: IssueSourceIcon,
+    iconClassName: '',
     column: autoTriaged ? 'triage' : 'intake',
     runActions: needsApproval
       ? [
@@ -977,8 +988,8 @@ function BoardColumn({
       aria-label={label}
       data-testid={`board-column-${stage}`}
       className={cn(
-        'flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg border p-2 transition',
-        dragOver ? 'border-accent1 bg-surface3' : 'border-border1 bg-surface2',
+        'flex min-h-0 w-80 shrink-0 flex-col gap-4 rounded-xl transition-colors',
+        dragOver ? 'bg-surface3 ring-1 ring-accent1' : 'bg-transparent',
       )}
       onDragOver={event => {
         if (!event.dataTransfer.types.includes(CARD_MIME)) return;
@@ -994,16 +1005,19 @@ function BoardColumn({
         if (payload) onDrop(payload, stage);
       }}
     >
-      <div className="flex items-center justify-between gap-2 px-1">
-        <Txt as="h2" variant="ui-xs" className="m-0 uppercase tracking-wide text-icon3">
-          {label}
-        </Txt>
-        {headerAction}
+      <div className="flex min-h-8 items-start justify-between gap-2">
+        <div className="flex h-8 min-w-0 items-center gap-2">
+          <BoardStageIcon stage={stage} />
+          <Txt as="h2" variant="ui-smd" className="m-0 truncate font-semibold text-icon3">
+            {label}
+          </Txt>
+        </div>
+        {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
       </div>
       {headerExtras}
       {/* Cards scroll inside the swimlane; the page stays fixed. */}
       <ScrollArea className="min-h-16 flex-1">
-        <div className="flex flex-col gap-1.5">{children}</div>
+        <div className="flex flex-col gap-2.5">{children}</div>
       </ScrollArea>
     </section>
   );
@@ -1015,11 +1029,79 @@ const SOURCE_ICONS: Record<
   WorkItemSource,
   { icon: ComponentType<{ size?: number; className?: string }>; className: string }
 > = {
-  'github-issue': { icon: CircleDot, className: 'text-accent1' },
+  'github-issue': { icon: IssueSourceIcon, className: '' },
   'github-pr': { icon: GitCompareArrows, className: 'text-accent1' },
   'linear-issue': { icon: CircleDot, className: 'text-accent3' },
   manual: { icon: CircleDot, className: 'text-icon3' },
 };
+
+const STAGE_ICON_SOURCES: Partial<Record<BoardStageId, string>> = {
+  intake: '/factory-stage-icons/intake.svg',
+  triage: '/factory-stage-icons/triage.svg',
+  planning: '/factory-stage-icons/in-progress.svg',
+  execute: '/factory-stage-icons/in-progress.svg',
+  review: '/factory-stage-icons/review.svg',
+};
+
+function BoardStageIcon({ stage }: { stage: BoardStageId }) {
+  const source = STAGE_ICON_SOURCES[stage];
+  if (source) return <img src={source} alt="" aria-hidden className="size-4 shrink-0" />;
+  const Icon = stage === 'done' ? CheckCircle2 : CircleX;
+  return <Icon size={16} className="shrink-0 text-icon3" aria-hidden />;
+}
+
+function IssueSourceIcon({ size = 16, className }: { size?: number; className?: string }) {
+  return (
+    <img src="/factory-stage-icons/issue.svg" alt="" aria-hidden width={size} height={size} className={className} />
+  );
+}
+
+function labelDotClass(label: string): string {
+  const normalized = label.toLowerCase();
+  if (normalized.includes('bug') || normalized.includes('error')) return 'bg-accent2';
+  if (normalized.includes('approval') || normalized.includes('priority')) return 'bg-accent6';
+  if (normalized.includes('triage') || normalized.includes('ready')) return 'bg-accent1';
+  if (normalized.includes('cli') || normalized.includes('linear')) return 'bg-accent3';
+  if (normalized.includes('work') || normalized.includes('trio')) return 'bg-accent6';
+  return 'bg-icon3';
+}
+
+function CardLabels({ labels }: { labels: readonly string[] }) {
+  const displayLabels = labels.filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
+  if (displayLabels.length === 0) return null;
+  const visibleLabels = displayLabels.slice(0, 3);
+  const hiddenCount = displayLabels.length - visibleLabels.length;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" aria-label="Labels">
+      {visibleLabels.map(label => (
+        <span
+          key={label}
+          className="inline-flex h-6 max-w-full items-center gap-1 rounded-full border border-border1 px-2 text-ui-xs text-icon4"
+          title={label}
+        >
+          <span className={cn('size-1.5 shrink-0 rounded-full', labelDotClass(label))} aria-hidden />
+          <span className="truncate">{label}</span>
+        </span>
+      ))}
+      {hiddenCount > 0 && (
+        <span className="inline-flex h-6 items-center rounded-full border border-border1 px-2 text-ui-xs text-icon3">
+          +{hiddenCount}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function workItemMeta(item: WorkItem): string {
+  const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
+  const age = `added ${relativeTime(item.createdAt)}`;
+  const githubNumber = githubNumberForItem(item);
+  if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
+  if (item.source === 'linear-issue' && typeof item.metadata.identifier === 'string') {
+    return `${item.metadata.identifier}${author ? ` · ${author}` : ''} · ${age}`;
+  }
+  return `${SOURCE_LABELS[item.source]} · ${age}`;
+}
 
 /**
  * The card's single conversation. A work item keeps one threadId for its whole
@@ -1092,6 +1174,7 @@ function WorkItemCard({
   const runActions = runSpec === null ? [] : runSpec.actions.filter(action => !(action.role in liveSessions));
   const threadSession = itemThreadSession(liveSessions);
   const relatedItems = relatedWorkItems(item, allItems);
+  const labels = metadataLabels(item.metadata);
 
   return (
     <article
@@ -1104,84 +1187,88 @@ function WorkItemCard({
         if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
       }}
       className={cn(
-        'flex flex-col gap-1.5 rounded-md border border-border1 bg-surface4 p-2',
+        'group flex flex-col gap-3.5 rounded-xl border border-border1 bg-surface2 p-4 transition-colors hover:bg-surface3',
         evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
       )}
     >
-      <div className="flex items-start gap-2">
-        <Icon size={14} className={cn('mt-0.5 shrink-0', iconClassName)} aria-hidden />
-        {threadSession !== null ? (
-          <a
-            href={`/threads/${threadSession.threadId}`}
-            onClick={event => {
-              event.preventDefault();
-              onOpenThread(threadSession);
-            }}
-            className="min-w-0 flex-1 truncate text-ui-sm text-icon6 no-underline hover:underline"
-          >
-            <SourceTitle source={item.source} title={item.title} />
-          </a>
-        ) : (
-          <button
-            type="button"
-            disabled={runDisabled}
-            aria-busy={pendingRunRoles.size > 0 || undefined}
-            onClick={() => onCreateSession(itemSessionSpec(item))}
-            className="min-w-0 flex-1 truncate text-left text-ui-sm text-icon6 hover:underline disabled:opacity-60"
-          >
-            <SourceTitle source={item.source} title={item.title} />
-          </button>
-        )}
-        {item.url !== null && (
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={externalLinkLabel(item.source)}
-            className="mt-0.5 shrink-0 text-icon3 hover:text-icon5"
-          >
-            <ExternalLink size={12} aria-hidden />
-          </a>
-        )}
-        <DropdownMenu>
-          <DropdownMenu.Trigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                disabled={evaluating}
-                aria-label={`Actions for ${item.title}`}
-              >
-                <EllipsisVertical size={13} aria-hidden />
-              </Button>
-            }
-          />
-          <DropdownMenu.Content align="end" className="min-w-44">
-            {runSpec !== null &&
-              runActions.map(action => {
-                const starting = pendingRunRoles.has(action.role);
-                return (
-                  <DropdownMenu.Item
-                    key={action.label}
-                    disabled={runDisabled || starting}
-                    onClick={() => onStartRun(runSpec, action)}
-                  >
-                    {starting ? 'Starting…' : action.label}
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <span className="truncate text-ui-xs text-icon2">{workItemMeta(item)}</span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+          {threadSession !== null ? (
+            <a
+              href={`/threads/${threadSession.threadId}`}
+              onClick={event => {
+                event.preventDefault();
+                onOpenThread(threadSession);
+              }}
+              className="min-w-0 flex-1 truncate text-ui-smd font-semibold text-icon6 no-underline hover:underline"
+            >
+              <SourceTitle source={item.source} title={item.title} />
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled={runDisabled}
+              aria-busy={pendingRunRoles.size > 0 || undefined}
+              onClick={() => onCreateSession(itemSessionSpec(item))}
+              className="min-w-0 flex-1 truncate text-left text-ui-smd font-semibold text-icon6 hover:underline disabled:opacity-60"
+            >
+              <SourceTitle source={item.source} title={item.title} />
+            </button>
+          )}
+          {item.url !== null && (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={externalLinkLabel(item.source)}
+              className="shrink-0 text-icon3 hover:text-icon5"
+            >
+              <ExternalLink size={12} aria-hidden />
+            </a>
+          )}
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={evaluating}
+                  aria-label={`Actions for ${item.title}`}
+                >
+                  <EllipsisVertical size={13} aria-hidden />
+                </Button>
+              }
+            />
+            <DropdownMenu.Content align="end" className="min-w-44">
+              {runSpec !== null &&
+                runActions.map(action => {
+                  const starting = pendingRunRoles.has(action.role);
+                  return (
+                    <DropdownMenu.Item
+                      key={action.label}
+                      disabled={runDisabled || starting}
+                      onClick={() => onStartRun(runSpec, action)}
+                    >
+                      {starting ? 'Starting…' : action.label}
+                    </DropdownMenu.Item>
+                  );
+                })}
+              {itemStageOptions(item)
+                .filter(stage => stage.id !== columnStage)
+                .map(stage => (
+                  <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+                    {stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}
                   </DropdownMenu.Item>
-                );
-              })}
-            {itemStageOptions(item)
-              .filter(stage => stage.id !== columnStage)
-              .map(stage => (
-                <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
-                  {stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}
-                </DropdownMenu.Item>
-              ))}
-            <DropdownMenu.Item onClick={onRemove}>Remove</DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu>
+                ))}
+              <DropdownMenu.Item onClick={onRemove}>Remove</DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
+        </div>
       </div>
+      <CardLabels labels={labels} />
       {relatedItems.map(related => {
         const relationText = relationshipLabel(related);
         const relatedLiveSessions = Object.fromEntries(
@@ -1208,7 +1295,7 @@ function WorkItemCard({
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
-            <span key={stage} className="rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-icon4">
+            <span key={stage} className="rounded-full border border-border1 px-2 py-0.5 text-ui-xs text-icon4">
               {itemStageLabel(item, stage)}
             </span>
           ))}
@@ -1293,32 +1380,33 @@ function CandidateCard({
           },
         })
       }
-      className="group flex cursor-grab flex-col gap-1 rounded-md border border-border1 border-dashed bg-surface3 p-2 active:cursor-grabbing"
+      className="group flex cursor-grab flex-col gap-3.5 rounded-xl border border-border1 bg-surface2 p-4 transition-colors hover:bg-surface3 active:cursor-grabbing"
     >
-      <div className="flex items-start gap-2">
-        <Icon size={14} className={cn('mt-0.5 shrink-0', candidate.iconClassName)} aria-hidden />
-        <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <span className="block truncate text-ui-xs text-icon2">{candidate.meta}</span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Icon size={16} className={cn('shrink-0', candidate.iconClassName)} aria-hidden />
           <button
             type="button"
             disabled={disabled}
             aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
             onClick={onOpenSession}
-            className="truncate text-left text-ui-sm text-icon6 hover:underline disabled:opacity-60"
+            className="min-w-0 flex-1 truncate text-left text-ui-smd font-semibold text-icon6 hover:underline disabled:opacity-60"
           >
             <SourceTitle source={candidate.source} title={candidate.title} />
           </button>
-          <span className="block truncate text-ui-xs text-icon3">{candidate.meta}</span>
+          <a
+            href={candidate.url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={externalLinkLabel(candidate.source)}
+            className="shrink-0 text-icon3 transition-[opacity,translate] hover:text-icon5 focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100 motion-reduce:transition-none"
+          >
+            <ArrowUpRight size={12} aria-hidden />
+          </a>
         </div>
-        <a
-          href={candidate.url}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={externalLinkLabel(candidate.source)}
-          className="mt-0.5 shrink-0 text-icon3 transition-[opacity,translate] hover:text-icon5 focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100 motion-reduce:transition-none"
-        >
-          <ArrowUpRight size={12} aria-hidden />
-        </a>
       </div>
+      <CardLabels labels={labels} />
       <FactoryItemActions
         actionLabel={defaultAction.label}
         itemLabel={candidate.title}

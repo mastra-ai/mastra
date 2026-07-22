@@ -1,8 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
-import { ChevronDown, Play } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 
@@ -58,46 +59,48 @@ export function FactoryItemActions({
   };
 
   return (
-    <div ref={anchorRef} className="flex shrink-0 items-center">
-      <Button
-        variant="ghost"
-        size="sm"
-        aria-label={`${actionLabel} ${itemLabel}`}
-        disabled={disabled || starting}
-        onClick={onAction}
-      >
-        <Play size={13} aria-hidden />
-        {starting ? 'Starting…' : actionLabel}
-      </Button>
-      <DropdownMenu>
-        <DropdownMenu.Trigger
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`More actions for ${itemLabel}`}
-              disabled={disabled}
-            >
-              <ChevronDown size={13} aria-hidden />
-            </Button>
-          }
-        />
-        <DropdownMenu.Content align="end" className="min-w-40">
-          <DropdownMenu.Item disabled={starting} onClick={onAction}>
-            {starting ? 'Starting…' : actionLabel}
-          </DropdownMenu.Item>
-          {extraActions?.map(action => (
-            <DropdownMenu.Item key={action.label} disabled={action.starting} onClick={action.onAction}>
-              {action.starting ? 'Starting…' : action.label}
+    <div ref={anchorRef} className="w-full min-w-0">
+      <ButtonsGroup spacing="close" className="w-full min-w-0">
+        <Button
+          variant="default"
+          size="sm"
+          aria-label={`${actionLabel} ${itemLabel}`}
+          disabled={disabled || starting}
+          onClick={onAction}
+          className="min-w-0 flex-1 justify-start"
+        >
+          {starting ? 'Starting…' : actionLabel}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button
+                type="button"
+                variant="default"
+                size="icon-sm"
+                aria-label={`More actions for ${itemLabel}`}
+                disabled={disabled}
+              >
+                <ChevronDown size={13} aria-hidden />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end" className="min-w-40">
+            <DropdownMenu.Item disabled={starting} onClick={onAction}>
+              {starting ? 'Starting…' : actionLabel}
             </DropdownMenu.Item>
-          ))}
-          <DropdownMenu.Item disabled={starting} onClick={() => setPromptOpen(true)}>
-            Custom prompt…
-          </DropdownMenu.Item>
-          {menuExtras}
-        </DropdownMenu.Content>
-      </DropdownMenu>
+            {extraActions?.map(action => (
+              <DropdownMenu.Item key={action.label} disabled={action.starting} onClick={action.onAction}>
+                {action.starting ? 'Starting…' : action.label}
+              </DropdownMenu.Item>
+            ))}
+            <DropdownMenu.Item disabled={starting} onClick={() => setPromptOpen(true)}>
+              Custom prompt…
+            </DropdownMenu.Item>
+            {menuExtras}
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      </ButtonsGroup>
       <Popover open={promptOpen} onOpenChange={open => (open ? setPromptOpen(true) : closePrompt())}>
         <PopoverContent anchor={anchorRef} align="end" className="w-80 p-3">
           <form
