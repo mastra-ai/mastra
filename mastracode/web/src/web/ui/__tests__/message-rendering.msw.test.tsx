@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Navigate, Outlet, RouterProvider } from 'react-router';
@@ -17,6 +17,7 @@ import { SettingsPage } from '../pages/SettingsPage';
 import { ThreadPage } from '../pages/ThreadPage';
 import type { Factory } from '../domains/workspaces';
 import { ActiveFactoryProvider } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { CreateFactoryLayout } from '../pages/CreateFactoryLayout';
 import { CreateFactoryPage } from '../pages/CreateFactoryPage';
 
 /**
@@ -53,11 +54,15 @@ function renderChat(initialEntry = '/factories/project-test/threads/thread-test'
           },
         ],
       },
-      { path: '/factories/create', element: <CreateFactoryPage /> },
+      {
+        path: '/factories/create',
+        element: <CreateFactoryLayout />,
+        children: [{ element: <Chat />, children: [{ index: true, element: <CreateFactoryPage /> }] }],
+      },
     ],
     { initialEntries: [initialEntry] },
   );
-  return renderWithProviders(<RouterProvider router={router} />);
+  return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -537,22 +542,24 @@ describe('MastraCode message rendering', () => {
       }),
     );
 
-    renderChat();
+    const { router } = renderChat();
 
     expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
     await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByRole('button', { name: 'Select factory' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
+    await act(() =>
+      router.navigate('/factories/create', { state: { from: '/factories/project-test/threads/thread-test' } }),
+    );
 
-    // Create Factory is now a dedicated page inside the chat layout.
+    // Create Factory is a dedicated page inside the persistent app shell.
     const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
     expect(factorySurface.closest('main')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
 
     await stream.emit();
     // Close navigates back to the thread page the user came from.
-    await user.click(screen.getByRole('button', { name: 'Close factory creation' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(await screen.findByText('Streaming while factory creation is open')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
