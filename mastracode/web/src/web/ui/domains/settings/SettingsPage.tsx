@@ -1,0 +1,53 @@
+import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Navigate, useLocation, useParams } from 'react-router';
+
+import { useKeyDown } from '../../lib/hooks';
+import { Sidebar } from '../../Sidebar';
+import { PageLayout } from '../../ui/PageLayout';
+import { ChatHeader } from '../chat/components/ChatHeader';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { SettingsHeader } from './components/SettingsHeader';
+import { SettingsPanel } from './components/SettingsPanel';
+import { useCloseSettings } from './hooks/useCloseSettings';
+import { DEFAULT_SETTINGS_PATH, isSettingsSection } from './settingsSections';
+
+/**
+ * Routed settings page (`/settings/:section`). Sections are URL-addressable;
+ * unknown sections redirect to the default. With an active factory the page
+ * keeps the standard app frame (sidebar swaps to section navigation); without
+ * one it renders full-bleed, as there is no sidebar to frame.
+ */
+export function SettingsPage() {
+  const { section } = useParams();
+  const location = useLocation();
+
+  if (!isSettingsSection(section)) {
+    return <Navigate to={DEFAULT_SETTINGS_PATH} replace state={location.state} />;
+  }
+  return <SettingsPageContent />;
+}
+
+function SettingsPageContent() {
+  const { activeFactory } = useActiveFactoryContext();
+  const { isMobile } = useMainSidebar();
+  const closeSettings = useCloseSettings();
+
+  useKeyDown({ escape: closeSettings });
+
+  if (!activeFactory) {
+    return (
+      <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">
+        {isMobile && <SettingsHeader autoFocus placement="mobile" />}
+        <SettingsPanel />
+      </main>
+    );
+  }
+  return (
+    <PageLayout
+      sidebar={<Sidebar />}
+      header={<ChatHeader mobileContent={isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined} />}
+    >
+      <SettingsPanel />
+    </PageLayout>
+  );
+}

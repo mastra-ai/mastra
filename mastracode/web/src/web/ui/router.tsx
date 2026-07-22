@@ -15,6 +15,8 @@ import { SignInPage } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
+import { SettingsPage } from './domains/settings/SettingsPage';
+import { DEFAULT_SETTINGS_PATH } from './domains/settings/settingsSections';
 
 import { AuditPage } from './domains/factory/AuditPage';
 import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
@@ -66,6 +68,13 @@ export function createAppRoutes(): RouteObject[] {
             { path: 'factory/metrics', element: <MetricsPage /> },
             { path: 'factory/audit', element: <AuditPage /> },
             { path: 'factories/create', element: <CreateFactoryPage /> },
+            {
+              path: 'settings',
+              children: [
+                { index: true, element: <Navigate to={DEFAULT_SETTINGS_PATH} replace /> },
+                { path: ':section', element: <SettingsPage /> },
+              ],
+            },
             // Compatibility routes from the former combined Board.
             { path: 'factory/board', element: <Navigate to="/factory/work" replace /> },
             { path: 'factory/intake', element: <Navigate to="/factory/work" replace /> },

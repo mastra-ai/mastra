@@ -5,40 +5,39 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { ReactNode } from 'react';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatSessionTestProvider as ChatSessionProvider } from '../../../chat/context/ChatSessionTestProvider';
-import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../../e2e/web-ui/render';
-import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider } from '../../../workspaces';
-import { OverlaysProvider } from '../../../../lib/overlays';
-import { SettingsPanel } from '../../index';
-import { loadDoneSound, playDoneSound } from '../../services/doneSound';
-import { SettingsNavigationProvider, useSetSettingsSection } from '../../context/SettingsNavigationProvider';
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../chat/context/ChatSessionTestProvider';
+import { server } from '../../../../../../e2e/web-ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/web-ui/render';
+import type { Factory } from '../../workspaces';
+import { ActiveFactoryProvider } from '../../workspaces';
+import { OverlaysProvider } from '../../../lib/overlays';
+import { SettingsPage } from '../SettingsPage';
+import { loadDoneSound, playDoneSound } from '../services/doneSound';
 
 // The completion sound synthesizes audio via AudioContext, which jsdom
 // doesn't provide; mock playback (persistence stays real) so specs can
 // assert the preview fired.
-vi.mock('../../services/doneSound', async importOriginal => ({
-  ...(await importOriginal<typeof import('../../services/doneSound')>()),
+vi.mock('../services/doneSound', async importOriginal => ({
+  ...(await importOriginal<typeof import('../services/doneSound')>()),
   playDoneSound: vi.fn(),
 }));
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
-const RESOURCE_ID = 'resource-settings-panel';
+const RESOURCE_ID = 'resource-settings-page';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
-const THREAD_ID = 'thread-settings-panel';
+const THREAD_ID = 'thread-settings-page';
 
 const project: Factory = {
-  id: 'project-settings-panel',
-  name: 'Settings Panel Project',
+  id: 'project-settings-page',
+  name: 'Settings Page Project',
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
     kind: 'local',
-    path: '/tmp/settings-panel',
+    path: '/tmp/settings-page',
   },
 };
 
@@ -188,52 +187,39 @@ function ThemeProbe() {
   return <span data-testid="theme-value">{theme}</span>;
 }
 
-function SettingsSectionControls() {
-  const setSection = useSetSettingsSection();
-  return (
-    <div aria-label="Settings test controls">
-      <button type="button" onClick={() => setSection('source-control')}>
-        Show source control settings
-      </button>
-      <button type="button" onClick={() => setSection('model')}>
-        Show model settings
-      </button>
-      <button type="button" onClick={() => setSection('behavior')}>
-        Show behavior settings
-      </button>
-    </div>
-  );
+interface RenderOptions {
+  initialEntry?: string | { pathname: string; state?: unknown };
 }
 
-function Harness({ children }: { children: ReactNode }) {
-  return (
-    <MainSidebarProvider storageKey="settings-panel-test" mobileBreakpoint={768}>
+async function renderSettingsPage(options?: RenderOptions) {
+  seedFactory();
+  const captured = useAgentControllerHandlers();
+  const router = createMemoryRouter(
+    [
+      { path: '/settings/:section', element: <SettingsPage /> },
+      { path: '*', element: <p>Outside settings</p> },
+    ],
+    { initialEntries: [options?.initialEntry ?? '/settings/general'] },
+  );
+  const rendered = renderWithProviders(
+    <MainSidebarProvider storageKey="settings-page-test" mobileBreakpoint={768}>
       <ActiveFactoryProvider>
         <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
           <OverlaysProvider>
-            <SettingsNavigationProvider>
-              <ThemeProbe />
-              <SettingsSectionControls />
-              {children}
-              <Toaster position="bottom-right" />
-            </SettingsNavigationProvider>
+            <ThemeProbe />
+            <RouterProvider router={router} />
+            <Toaster position="bottom-right" />
           </OverlaysProvider>
         </ChatSessionProvider>
       </ActiveFactoryProvider>
-    </MainSidebarProvider>
-  );
-}
-
-async function renderSettingsPanel() {
-  seedFactory();
-  const captured = useAgentControllerHandlers();
-  const rendered = renderWithProviders(
-    <Harness>
-      <SettingsPanel />
-    </Harness>,
+    </MainSidebarProvider>,
   );
   await waitForMutationsIdle(rendered.client);
-  return captured;
+  return { captured, router };
+}
+
+async function openSection(user: ReturnType<typeof userEvent.setup>, label: string) {
+  await user.click(await screen.findByRole('link', { name: label }));
 }
 
 afterEach(() => {
@@ -241,26 +227,61 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe('SettingsPanel', () => {
+describe('SettingsPage', () => {
   describe('when rendered', () => {
-    it('exposes a focused, labelled in-layout section without dialog semantics', async () => {
-      await renderSettingsPanel();
+    it('exposes a focused, labelled section with the sidebar navigation outside the content region', async () => {
+      await renderSettingsPage();
 
-      const settings = screen.getByRole('region', { name: 'Settings' });
+      const settings = await screen.findByRole('region', { name: 'Settings' });
       const heading = within(settings).getByRole('heading', { name: 'General' });
 
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(within(settings).queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
+      expect(screen.getByRole('navigation', { name: 'Settings sections' })).toBeInTheDocument();
       expect(heading).toHaveFocus();
+    });
+
+    it('navigates between sections through links that only change the URL section segment', async () => {
+      const user = userEvent.setup();
+      const { router } = await renderSettingsPage();
+
+      await openSection(user, 'Source Control');
+
+      expect(router.state.location.pathname).toBe('/settings/source-control');
+      expect(await screen.findByRole('heading', { name: 'Source Control' })).toBeInTheDocument();
+    });
+  });
+
+  describe('when leaving settings', () => {
+    it('returns to the origin page carried in navigation state when pressing Escape', async () => {
+      const user = userEvent.setup();
+      const { router } = await renderSettingsPage({
+        initialEntry: { pathname: '/settings/general', state: { from: { pathname: '/threads/t1' } } },
+      });
+      await screen.findByRole('region', { name: 'Settings' });
+
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/threads/t1'));
+    });
+
+    it('falls back to the draft composer for deep links without an origin', async () => {
+      const user = userEvent.setup();
+      const { router } = await renderSettingsPage();
+      await screen.findByRole('region', { name: 'Settings' });
+
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/new'));
     });
   });
 
   describe('when changing general preferences', () => {
     it('updates the theme from the real theme provider and omits density controls', async () => {
       const user = userEvent.setup();
-      await renderSettingsPanel();
+      await renderSettingsPage();
 
-      await user.click(screen.getByRole('button', { name: 'Light' }));
+      await user.click(await screen.findByRole('button', { name: 'Light' }));
 
       await waitFor(() => expect(screen.getByTestId('theme-value')).toHaveTextContent('light'));
       expect(screen.queryByText('Density')).not.toBeInTheDocument();
@@ -270,9 +291,9 @@ describe('SettingsPanel', () => {
     it('persists the completion sound choice and previews it', async () => {
       const user = userEvent.setup();
       vi.mocked(playDoneSound).mockClear();
-      await renderSettingsPanel();
+      await renderSettingsPage();
 
-      const soundGroup = screen.getByRole('group', { name: 'Completion sound' });
+      const soundGroup = await screen.findByRole('group', { name: 'Completion sound' });
       await user.click(within(soundGroup).getByRole('button', { name: 'Arcade' }));
 
       expect(loadDoneSound()).toBe('arcade');
@@ -286,32 +307,33 @@ describe('SettingsPanel', () => {
   describe('when managing source control', () => {
     it('removes the active factory and reconciles the factory selection', async () => {
       const user = userEvent.setup();
-      await renderSettingsPanel();
+      await renderSettingsPage();
 
-      await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
-      expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
+      await openSection(user, 'Source Control');
+      expect(await screen.findByText('/tmp/settings-page')).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
+      await user.click(screen.getByRole('button', { name: 'Remove Settings Page Project' }));
 
       await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBeNull());
-      await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
+      // The section is URL-addressed, so the empty state renders in place.
       await screen.findByText('Select a factory to manage its source control.');
       expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]);
     });
 
     it('keeps the factory visible and reports storage failures', async () => {
       const user = userEvent.setup();
-      await renderSettingsPanel();
-      await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
+      await renderSettingsPage();
+      await openSection(user, 'Source Control');
+      await screen.findByText('/tmp/settings-page');
       const storageError = new Error('Factory storage is unavailable');
       const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
         throw storageError;
       });
 
-      await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
+      await user.click(screen.getByRole('button', { name: 'Remove Settings Page Project' }));
 
       expect(await screen.findByText(storageError.message)).toBeInTheDocument();
-      expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
+      expect(screen.getByText('/tmp/settings-page')).toBeInTheDocument();
       setItem.mockRestore();
     });
   });
@@ -319,9 +341,9 @@ describe('SettingsPanel', () => {
   describe('when changing model preferences', () => {
     it('persists the thinking level and updates the selected button', async () => {
       const user = userEvent.setup();
-      const captured = await renderSettingsPanel();
+      const { captured } = await renderSettingsPage();
 
-      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
+      await openSection(user, 'Model');
       const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
       await waitFor(() => expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).toBePressed());
       await user.click(within(thinkingLevel).getByRole('button', { name: 'High' }));
@@ -334,9 +356,9 @@ describe('SettingsPanel', () => {
 
     it('reports an acknowledged but unpersisted update and restores the selected button', async () => {
       const user = userEvent.setup();
-      await renderSettingsPanel();
+      await renderSettingsPage();
 
-      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
+      await openSection(user, 'Model');
       const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
       await waitFor(() => expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).toBePressed());
       server.use(http.put(`${SESSION}/state`, () => HttpResponse.json({ ok: true })));
@@ -349,10 +371,11 @@ describe('SettingsPanel', () => {
 
     it('hosts model packs inside the Model settings section', async () => {
       const user = userEvent.setup();
-      await renderSettingsPanel();
+      await renderSettingsPage();
 
+      await screen.findByRole('region', { name: 'Settings' });
       expect(screen.queryByText('Model packs')).not.toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
+      await openSection(user, 'Model');
 
       expect(await screen.findByText('Model packs')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /New pack/ })).toBeInTheDocument();
@@ -364,9 +387,9 @@ describe('SettingsPanel', () => {
   describe('when changing behavior preferences', () => {
     it('updates session settings and permission categories through chat providers', async () => {
       const user = userEvent.setup();
-      const captured = await renderSettingsPanel();
+      const { captured } = await renderSettingsPage();
 
-      await user.click(screen.getByRole('button', { name: 'Show behavior settings' }));
+      await openSection(user, 'Behavior');
       const notifications = await screen.findByRole('group', { name: 'Notifications' });
       await user.click(within(notifications).getByRole('button', { name: 'System' }));
       const readPermission = await screen.findByRole('group', { name: 'Read permission' });
@@ -378,9 +401,9 @@ describe('SettingsPanel', () => {
 
     it('keeps notification delivery separate from completion sound previews', async () => {
       const user = userEvent.setup();
-      await renderSettingsPanel();
+      await renderSettingsPage();
 
-      await user.click(screen.getByRole('button', { name: 'Show behavior settings' }));
+      await openSection(user, 'Behavior');
       const notifications = await screen.findByRole('group', { name: 'Notifications' });
 
       expect(screen.queryByRole('button', { name: 'Preview notification sound' })).not.toBeInTheDocument();
