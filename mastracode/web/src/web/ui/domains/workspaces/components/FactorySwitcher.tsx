@@ -29,7 +29,7 @@ export function FactorySwitcher() {
         id="factory-switcher-trigger"
         type="button"
         aria-label="Select factory"
-        className={cn(buttonVariants({ variant: 'ghost' }), 'w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0')}
+        className={cn(buttonVariants({ variant: 'default' }), 'mt-1 w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0')}
       >
         <FactoryIcon size={16} className="shrink-0 text-icon3" />
         <Txt as="span" variant="ui-sm" className="min-w-0 flex-1 truncate text-icon6">
