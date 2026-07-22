@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import { coreContentToString } from '../../agent/message-list';
+import { convertMessages, coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
@@ -945,10 +945,25 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     outputResult,
                   );
 
-                  // Get text from the latest response message (the last assistant message)
-                  const responseMessages = self.messageList.get.response.aiV4.core();
-                  const lastResponseMessage = responseMessages[responseMessages.length - 1];
-                  const outputText = lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
+                  // Get text from the latest response message, skipping internal
+                  // completion-check feedback so it can't become the final text (#19875).
+                  // The metadata only exists on DB-format messages, and the message is
+                  // converted alone so adjacent assistant messages aren't merged.
+                  const responseDbMessages = self.messageList.get.response.db();
+                  const hasCompletionCheckMessages = responseDbMessages.some(
+                    m => m.content?.metadata?.completionResult,
+                  );
+                  let outputText = '';
+                  if (hasCompletionCheckMessages) {
+                    const lastRealMessage = responseDbMessages.findLast(m => !m.content?.metadata?.completionResult);
+                    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
+                    const lastConverted = converted[converted.length - 1];
+                    outputText = lastConverted ? coreContentToString(lastConverted.content) : '';
+                  } else {
+                    const responseMessages = self.messageList.get.response.aiV4.core();
+                    const lastResponseMessage = responseMessages[responseMessages.length - 1];
+                    outputText = lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
+                  }
 
                   // Only update the last step's text if output processors actually modified it
                   // This preserves text from retry scenarios where step.text is already correct

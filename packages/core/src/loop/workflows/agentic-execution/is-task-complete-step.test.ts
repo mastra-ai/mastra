@@ -80,3 +80,32 @@ describe('isTaskCompleteStep — working memory skip', () => {
     expect(runScorersSpy).toHaveBeenCalled();
   });
 });
+
+describe('isTaskCompleteStep — completion feedback message', () => {
+  beforeEach(() => {
+    vi.spyOn(validation, 'formatStreamCompletionFeedback').mockReturnValue('#### Completion Check Results' as any);
+  });
+
+  it('does not append the feedback message when the check passes', async () => {
+    vi.spyOn(validation, 'runStreamCompletionScorers').mockResolvedValue({ complete: true, scorers: [] } as any);
+    const params = baseParams();
+    const step = createIsTaskCompleteStep(params as any);
+
+    await executeStep(step, makeInput());
+
+    const responseMessages = params.messageList.get.response.db();
+    expect(responseMessages.filter(m => m.content?.metadata?.completionResult)).toHaveLength(0);
+  });
+
+  it('appends the feedback message when the check fails so the next iteration can course-correct', async () => {
+    vi.spyOn(validation, 'runStreamCompletionScorers').mockResolvedValue({ complete: false, scorers: [] } as any);
+    const params = baseParams();
+    const step = createIsTaskCompleteStep(params as any);
+
+    await executeStep(step, makeInput());
+
+    const feedbackMessages = params.messageList.get.response.db().filter(m => m.content?.metadata?.completionResult);
+    expect(feedbackMessages).toHaveLength(1);
+    expect(feedbackMessages[0]?.role).toBe('assistant');
+  });
+});
