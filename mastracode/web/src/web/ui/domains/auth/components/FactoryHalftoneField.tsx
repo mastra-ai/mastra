@@ -140,7 +140,7 @@ export function FactoryHalftoneField() {
       }
 
       const travel = reducedMotion.matches ? 0.63 : (time * 0.000055) % 1;
-      const railY = top + fieldHeight * 0.56;
+      const railY = top + fieldHeight * 0.03;
       context.setLineDash([2, 7]);
       context.strokeStyle = railLine;
       context.beginPath();
