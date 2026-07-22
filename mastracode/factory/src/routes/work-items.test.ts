@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -42,10 +43,12 @@ import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
+  requestContext?: RequestContext,
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
+    if (requestContext) c.set('requestContext' as never, requestContext as never);
     await next();
   });
   mountApiRoutes(
@@ -402,7 +405,9 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
       kickoffStatus: 'pending',
       replayed: false,
     }));
-    const app = buildApp(orgUser, { prepare });
+    const requestContext = new RequestContext();
+    requestContext.set('user', orgUser);
+    const app = buildApp(orgUser, { prepare }, requestContext);
 
     const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
       method: 'POST',
@@ -412,7 +417,12 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
 
     expect(res.status).toBe(202);
     expect(prepare).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'org1', userId: 'u1', factoryProjectId: PROJECT_ID }),
+      expect.objectContaining({
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: PROJECT_ID,
+        requestContext,
+      }),
     );
     expect(auditRecorded).toContainEqual(
       expect.objectContaining({

@@ -50,21 +50,21 @@ overrides:
   '@mastra/memory>image-size': 1.2.1
   body-parser@<=2.2.1: 2.3.0
   inngest: ^4.2.2
-  fast-xml-parser@<5.5.7: ^5.7.1
+  fast-xml-parser@<5.5.7: ^5.10.1
   langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
   serialize-javascript@<7.0.5: ^7.0.5
   simple-git@<3.36.0: 3.36.0
   axios@>=1.0.0 <1.16.0: 1.18.0
-  protobufjs@>=7.0.0 <7.6.3: 7.6.3
+  protobufjs@>=7.0.0 <7.6.3: 7.6.5
   protobufjs@>=8.0.0 <8.6.0: 8.6.6
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
   ws@>=8.0.0 <8.21.0: 8.21.0
   webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.15.2: 6.15.2
-  fast-uri@<3.1.2: 3.1.2
+  fast-uri@<3.1.2: 3.1.4
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@<1.1.13: 1.1.13
@@ -73,7 +73,7 @@ overrides:
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.4: 17.13.4
-  svgo@>=3.0.0 <3.3.3: 3.3.3
+  svgo@>=3.0.0 <3.3.3: 3.3.4
   undici@<6.0.0: 6.27.0
   undici@>=6.0.0 <6.27.0: 6.27.0
   undici@>=7.0.0 <7.28.0: 7.28.0
@@ -91,7 +91,7 @@ overrides:
   websocket-driver@<0.7.5: 0.7.5
   '@babel/core@>=7.0.0 <7.29.6': 8.0.1
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
-  dompurify@>=3.0.0 <3.4.11: 3.4.11
+  dompurify@>=3.0.0 <3.4.11: 3.4.12
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1
   aggregate-error: npm:@socketregistry/aggregate-error@^1
@@ -1812,7 +1812,7 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^2.0.8
-        version: 2.0.8(hono@4.12.30)
+        version: 2.0.10(hono@4.12.30)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../../../packages/_vendored/ai_v5
@@ -7550,8 +7550,8 @@ importers:
   stores/spanner:
     dependencies:
       '@google-cloud/spanner':
-        specifier: ^8.8.1
-        version: 8.8.1
+        specifier: ^8.9.0
+        version: 8.9.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -13787,8 +13787,8 @@ packages:
     resolution: {integrity: sha512-xXAQBVVrFviWz8L8yDKEqv1ziVw/gMSpYHt3IxSYRSY0fTyjis+xOrKJILj8dd8PAUHGnGiAIYuTprflkE9jsQ==}
     engines: {node: '>=18'}
 
-  '@google-cloud/spanner@8.8.1':
-    resolution: {integrity: sha512-kQA9QYgxmjFZ1lRPlUAVg6CG7vcTm9zquKfMqZJvT/v8hQU/ek9GL7BA3r+CUdBvZwdNZd+KrF4mt4egw6DRRQ==}
+  '@google-cloud/spanner@8.9.0':
+    resolution: {integrity: sha512-YUm+m92VB/3JopYclmu9flXrTa8ms7YpmGAYDFeYkrj8T6BfhRBMJrkpCYkPd/u2CJucfl99Jn6HuBaAIlUsOA==}
     engines: {node: '>=18'}
 
   '@google-cloud/speech@6.7.1':
@@ -13899,8 +13899,8 @@ packages:
     peerDependencies:
       hono: ^4
 
-  '@hono/node-server@2.0.8':
-    resolution: {integrity: sha512-GuCWzLxwg218fy1JaHculFsdcuY12hxit83V+algozTPnwhNjLrRL/Alg9OYjLZLoUZ1rw/S4CdTMsnkSKCmFA==}
+  '@hono/node-server@2.0.10':
+    resolution: {integrity: sha512-ZcnNVhKTmyDJeg0UlnZjvM73JBsTAuhrH/J4fjwGOw59PwOW51r4J+p6CsKZWXdKSme4MFqU62CZMOsdDrU4CA==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
@@ -15229,8 +15229,8 @@ packages:
     resolution: {integrity: sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==}
     engines: {node: '>= 20.19.0'}
 
-  '@nodable/entities@2.2.0':
-    resolution: {integrity: sha512-9uGyhaQavEUMC8AIddIjau4NsnsXhou+j5sBAGojCM1oxmQpVKTWR/9JxABD6UAv12vpIms55fPZKFQEhG6uBg==}
+  '@nodable/entities@3.0.0':
+    resolution: {integrity: sha512-8L9xFeTYKhm49xfIypoe2W5wV1m/3Z58kT+7kR9A8OyFxcPduI4VmxaUMQyKYrRjUoLLSXv6EKKID5Tvj9cUVw==}
 
   '@node-rs/xxhash-android-arm-eabi@1.7.6':
     resolution: {integrity: sha512-ptmfpFZ8SgTef58Us+0HsZ9BKhyX/gZYbhLkuzPt7qUoMqMSJK85NC7LEgzDgjUiG+S5GahEEQ9/tfh9BVvKhw==}
@@ -16870,9 +16870,6 @@ packages:
 
   '@protobufjs/float@1.0.2':
     resolution: {integrity: sha512-Ddb+kVXlXst9d+R9PfTIxh1EdNkgoRe5tOX6t01f1lYWOvJnSPDBlG241QLzcyPdoNTsblLUdujGSE4RzrTZGQ==}
-
-  '@protobufjs/inquire@1.1.2':
-    resolution: {integrity: sha512-pa0vFRuws4wkvaXKK1uXZMAwAX4/t8ANaJo45iw/oQHNQ9q5xUzwgFmVJGXiga2BeN+zpX7Vf9vmsiIa2J+MUw==}
 
   '@protobufjs/path@1.1.2':
     resolution: {integrity: sha512-6JOcJ5Tm08dOHAbdR3GrvP+yUUfkjG5ePsHYczMFLq3ZmMkAD98cDgcT2iA1lJ9NVwFd4tH/iSSoe44YWkltEA==}
@@ -22492,8 +22489,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.4.11:
-    resolution: {integrity: sha512-zhlUV12GsaRzMsf9q5M254YhA4+VuF0fG+QFqu6aYpoGlKtz+w8//jBcGVYBgQkR5GHjUomejY84AV+/uPbWdw==}
+  dompurify@3.4.12:
+    resolution: {integrity: sha512-zQvGet8Z2sWbQhCmfFz/T5QWH2oBmjnqK3qvOjaqaNLrLEF912WamU+ohnTp0TCep/MFVHpdJuCZEdFOdTnEFg==}
 
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
@@ -23182,8 +23179,8 @@ packages:
   fast-string-width@3.0.2:
     resolution: {integrity: sha512-gX8LrtNEI5hq8DVUfRQMbr5lpaS4nMIWV+7XEbXk2b8kiQIizgnlr12B4dA3ZEx3308ze0O4Q1R+cHts8kyUJg==}
 
-  fast-uri@3.1.2:
-    resolution: {integrity: sha512-rVjf7ArG3LTk+FS6Yw81V1DLuZl1bRbNrev6Tmd/9RaroeeRRJhAt7jg/6YFxbvAQXUCavSoZhPPj6oOx+5KjQ==}
+  fast-uri@3.1.4:
+    resolution: {integrity: sha512-8JnbkQ4juDyvYs4mgFGQqg4yCYtFDtUtmp2QIQq11ZZe5CFQ5wcqm1rqDgAh/QdMySuBnPzMUiJUNZG5N/AiQw==}
 
   fast-wrap-ansi@0.2.2:
     resolution: {integrity: sha512-7F2Fl+TjRSenLqlU3UjSH0iyqopqoZIu7eZVpEirP2g1GtWa2G/ecEmBdgz31+Mxr+ELclgg6sokpSFIQiZ02Q==}
@@ -23191,8 +23188,8 @@ packages:
   fast-xml-builder@1.2.1:
     resolution: {integrity: sha512-tPb5TTWfgfVx5BNSi2xV0eLr89POeXXn0dXIsCJ9m1narrWxeIyx6je9d7Rce/3NyXLbvuQmLkxq+RuxMWejvw==}
 
-  fast-xml-parser@5.9.3:
-    resolution: {integrity: sha512-brCNCeScma/kqa54J4PIDriSSSLssRkuYaUCpvHJulGc3HGI/xxKUCTDcYkAdqJsyb//ydpbxecjC3hB9+tb/g==}
+  fast-xml-parser@5.10.1:
+    resolution: {integrity: sha512-IEMIf7298kXuZSRFoGfMYrl7is8LpavODgbNz1cwIudv7KwVFnuU+UsMporfq6PD6aXSlawZlARiA3UywCTfMw==}
     hasBin: true
 
   fastest-levenshtein@1.0.16:
@@ -24523,8 +24520,8 @@ packages:
   is-typedarray@1.0.0:
     resolution: {integrity: sha512-cyA56iCMHAh5CdzjJIa4aohJyeO1YbwLi3Jc35MmRU6poroFjIGZzUzupGiRPOjgHg9TLu43xbpwXk523fMxKA==}
 
-  is-unsafe@1.0.1:
-    resolution: {integrity: sha512-CLK2+VdgERgD96EYm5lUQssZYlRg2tkZnbsxZoacmSiRxiFJ4Nk4SzjCl+Ur+v3kXIY9dTIdb3IH22y1mZ56LA==}
+  is-unsafe@2.0.0:
+    resolution: {integrity: sha512-2LdV822R+wmI86unXA93WCFpL6g+av8ynWk0nrHyJqGop5VoocYsSLFgN8jrfalT6iGeLNM4KXuVSsULP53kEA==}
 
   is-url-superb@4.0.0:
     resolution: {integrity: sha512-GI+WjezhPPcbM+tqE9LnmsY5qqjwHzTvjJ36wxYX5ujNXefSUJ/T17r5bqDV8yLhcgB59KTPNOc9O9cmHTPWsA==}
@@ -27447,10 +27444,6 @@ packages:
     resolution: {integrity: sha512-iUi7jGLuECChuoUwtvf6eXBDcFXTHAt5GM6ckvtD3RqD+j2wW0GW6WndPOu9IWeUk7n933lzrskcNMHJy2tFSw==}
     engines: {node: '>=18'}
 
-  protobufjs@7.6.3:
-    resolution: {integrity: sha512-+k0vdJKNdW+Vu+dYe8tZA/VvQb6XKNWexC6URwBFXxNnjLJz9nQJCemGyNgRAWD+B7+nGNc9qMPGwcD7s4nzUw==}
-    engines: {node: '>=12.0.0'}
-
   protobufjs@7.6.5:
     resolution: {integrity: sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==}
     engines: {node: '>=12.0.0'}
@@ -28956,8 +28949,8 @@ packages:
   svg-parser@2.0.4:
     resolution: {integrity: sha512-e4hG1hRwoOdRb37cIMSgzNsxyzKfayW6VOflrwvR+/bzrkyxY/31WkbgnQpgtrNp1SdpJvpUAGTa/ZoiPNDuRQ==}
 
-  svgo@3.3.3:
-    resolution: {integrity: sha512-+wn7I4p7YgJhHs38k2TNjy1vCfPIfLIJWR5MnCStsN8WuuTcBnRKcMHQLMM2ijxGZmDoZwNv8ipl5aTTen62ng==}
+  svgo@3.3.4:
+    resolution: {integrity: sha512-GsNRis4e8jxn2Y9ENz/8lbJ93CstG8svtMnuRaHbiF2LTJ5tK0/q3t/URPq9Zc7zVWBJnNnJMIp6bevK7bSmNg==}
     engines: {node: '>=14.0.0'}
     hasBin: true
 
@@ -30353,6 +30346,10 @@ packages:
 
   xml-naming@0.1.0:
     resolution: {integrity: sha512-k8KO9hrMyNk6tUWqUfkTEZbezRRpONVOzUTnc97VnCvyj6Tf9lyUR9EDAIeiVLv56jsMcoXEwjW8Kv5yPY52lw==}
+    engines: {node: '>=16.0.0'}
+
+  xml-naming@0.3.0:
+    resolution: {integrity: sha512-ghig2TBE/H11aOVgmahA3MhimvkBr6JIYknH/Dhdk10nXwdbIqBJsbfMxpvFPG8bAw77gN29aQWvKpmVoPlvPQ==}
     engines: {node: '>=16.0.0'}
 
   xmlchars@2.2.0:
@@ -32114,7 +32111,7 @@ snapshots:
 
   '@azure/core-xml@1.5.1':
     dependencies:
-      fast-xml-parser: 5.9.3
+      fast-xml-parser: 5.10.1
       tslib: 2.8.1
 
   '@azure/identity@4.13.0':
@@ -36113,7 +36110,7 @@ snapshots:
     dependencies:
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
-      fast-uri: 3.1.2
+      fast-uri: 3.1.4
 
   '@fastify/busboy@3.2.0': {}
 
@@ -36322,7 +36319,7 @@ snapshots:
       fast-deep-equal: 3.1.3
       functional-red-black-tree: 1.0.1
       google-gax: 4.6.1(encoding@0.1.13)
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -36386,7 +36383,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/spanner@8.8.1':
+  '@google-cloud/spanner@8.9.0':
     dependencies:
       '@babel/core': 8.0.1
       '@babel/helpers': 7.27.6
@@ -36417,7 +36414,7 @@ snapshots:
       lodash.snakecase: 4.1.1
       merge-stream: 2.0.0
       p-queue: 6.6.2
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
       retry-request: 8.0.2
       split-array-stream: 2.0.0
       stack-trace: 0.0.10
@@ -36448,7 +36445,7 @@ snapshots:
       abort-controller: 3.0.0
       async-retry: 1.3.3
       duplexify: 4.1.3
-      fast-xml-parser: 5.9.3
+      fast-xml-parser: 5.10.1
       gaxios: 6.7.1(encoding@0.1.13)
       google-auth-library: 9.15.1(encoding@0.1.13)
       html-entities: 2.6.0
@@ -36470,7 +36467,7 @@ snapshots:
     dependencies:
       google-auth-library: 10.9.0
       p-retry: 4.6.2
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
       ws: 8.21.0(bufferutil@4.1.0)
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
@@ -36492,14 +36489,14 @@ snapshots:
     dependencies:
       lodash.camelcase: 4.3.0
       long: 5.3.2
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
       yargs: 17.7.3
 
   '@grpc/proto-loader@0.8.1':
     dependencies:
       lodash.camelcase: 4.3.0
       long: 5.3.2
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
       yargs: 17.7.3
 
   '@hapi/bourne@3.0.0': {}
@@ -36599,7 +36596,7 @@ snapshots:
     dependencies:
       hono: 4.12.30
 
-  '@hono/node-server@2.0.8(hono@4.12.30)':
+  '@hono/node-server@2.0.10(hono@4.12.30)':
     dependencies:
       hono: 4.12.30
 
@@ -38035,7 +38032,7 @@ snapshots:
 
   '@noble/hashes@2.2.0': {}
 
-  '@nodable/entities@2.2.0': {}
+  '@nodable/entities@3.0.0': {}
 
   '@node-rs/xxhash-android-arm-eabi@1.7.6':
     optional: true
@@ -39189,7 +39186,7 @@ snapshots:
       '@opentelemetry/sdk-logs': 0.207.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.1)
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
 
   '@opentelemetry/otlp-transformer@0.208.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -39200,7 +39197,7 @@ snapshots:
       '@opentelemetry/sdk-logs': 0.208.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.1)
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
 
   '@opentelemetry/otlp-transformer@0.217.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -39232,7 +39229,7 @@ snapshots:
       '@opentelemetry/sdk-logs': 0.54.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics': 1.27.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 1.27.0(@opentelemetry/api@1.9.1)
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
 
   '@opentelemetry/propagator-b3@1.30.1(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -39895,8 +39892,6 @@ snapshots:
       '@protobufjs/aspromise': 1.1.2
 
   '@protobufjs/float@1.0.2': {}
-
-  '@protobufjs/inquire@1.1.2': {}
 
   '@protobufjs/path@1.1.2': {}
 
@@ -41594,7 +41589,7 @@ snapshots:
       '@svgr/core': 8.1.0(typescript@6.0.3)
       cosmiconfig: 8.3.6(typescript@6.0.3)
       deepmerge: 4.3.1
-      svgo: 3.3.3
+      svgo: 3.3.4
     transitivePeerDependencies:
       - typescript
 
@@ -43819,14 +43814,14 @@ snapshots:
   ajv@8.18.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.2
+      fast-uri: 3.1.4
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
   ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.2
+      fast-uri: 3.1.4
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -45829,7 +45824,7 @@ snapshots:
   disk@0.8.13:
     dependencies:
       commander: 14.0.3
-      fast-xml-parser: 5.9.3
+      fast-xml-parser: 5.10.1
       openapi-fetch: 0.13.8
 
   dns-packet@5.6.1:
@@ -45856,7 +45851,7 @@ snapshots:
       '@grpc/grpc-js': 1.14.4
       '@grpc/proto-loader': 0.7.15
       docker-modem: 5.0.7
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
       tar-fs: 2.1.5
       uuid: 11.1.1
     transitivePeerDependencies:
@@ -45900,7 +45895,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.4.11:
+  dompurify@3.4.12:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -46009,7 +46004,7 @@ snapshots:
       '@zip.js/zip.js': 2.8.26
       decamelize: 6.0.1
       edge-paths: 3.0.5
-      fast-xml-parser: 5.9.3
+      fast-xml-parser: 5.10.1
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
       which: 6.0.1
@@ -46837,7 +46832,7 @@ snapshots:
       '@fastify/merge-json-schemas': 0.2.1
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
-      fast-uri: 3.1.2
+      fast-uri: 3.1.4
       json-schema-ref-resolver: 3.0.0
       rfdc: 1.4.1
 
@@ -46859,7 +46854,7 @@ snapshots:
     dependencies:
       fast-string-truncated-width: 3.0.3
 
-  fast-uri@3.1.2: {}
+  fast-uri@3.1.4: {}
 
   fast-wrap-ansi@0.2.2:
     dependencies:
@@ -46870,14 +46865,14 @@ snapshots:
       path-expression-matcher: 1.6.2
       xml-naming: 0.1.0
 
-  fast-xml-parser@5.9.3:
+  fast-xml-parser@5.10.1:
     dependencies:
-      '@nodable/entities': 2.2.0
+      '@nodable/entities': 3.0.0
       fast-xml-builder: 1.2.1
-      is-unsafe: 1.0.1
+      is-unsafe: 2.0.0
       path-expression-matcher: 1.6.2
       strnum: 2.4.1
-      xml-naming: 0.1.0
+      xml-naming: 0.3.0
 
   fastest-levenshtein@1.0.16: {}
 
@@ -47494,7 +47489,7 @@ snapshots:
       node-fetch: 2.7.0(encoding@0.1.13)
       object-hash: 3.0.0
       proto3-json-serializer: 2.0.2
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
       retry-request: 7.0.2(encoding@0.1.13)
       uuid: 11.1.1
     transitivePeerDependencies:
@@ -47511,7 +47506,7 @@ snapshots:
       node-fetch: 3.3.2
       object-hash: 3.0.0
       proto3-json-serializer: 3.0.3
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
       retry-request: 8.0.2
       rimraf: 5.0.10
     transitivePeerDependencies:
@@ -48421,7 +48416,7 @@ snapshots:
 
   is-typedarray@1.0.0: {}
 
-  is-unsafe@1.0.1: {}
+  is-unsafe@2.0.0: {}
 
   is-url-superb@4.0.0: {}
 
@@ -48652,7 +48647,7 @@ snapshots:
   json-schema-resolver@3.0.0:
     dependencies:
       debug: 4.4.3
-      fast-uri: 3.1.2
+      fast-uri: 3.1.4
       rfdc: 1.4.1
     transitivePeerDependencies:
       - supports-color
@@ -48743,7 +48738,7 @@ snapshots:
   just-bash@2.14.5:
     dependencies:
       diff: 8.0.4
-      fast-xml-parser: 5.9.3
+      fast-xml-parser: 5.10.1
       file-type: 21.3.4
       ini: 6.0.0
       minimatch: 10.2.5
@@ -49559,7 +49554,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.21
-      dompurify: 3.4.11
+      dompurify: 3.4.12
       es-toolkit: 1.46.1
       katex: 0.16.47
       khroma: 2.1.0
@@ -50088,7 +50083,7 @@ snapshots:
       cbor-x: 1.6.4
       long: 5.3.2
       nice-grpc: 2.1.16
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
       smol-toml: 1.7.0
       uuid: 11.1.1
 
@@ -50580,7 +50575,7 @@ snapshots:
       long: 5.3.2
       onnxruntime-common: 1.24.0-dev.20251116-b39e144322
       platform: 1.3.6
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
 
   open@10.2.0:
     dependencies:
@@ -51707,7 +51702,7 @@ snapshots:
     dependencies:
       postcss: 8.5.16
       postcss-value-parser: 4.2.0
-      svgo: 3.3.3
+      svgo: 3.3.4
 
   postcss-unique-selectors@6.0.4(postcss@8.5.16):
     dependencies:
@@ -51750,7 +51745,7 @@ snapshots:
       '@posthog/core': 1.43.1
       '@posthog/types': 1.397.0
       core-js: 3.49.0
-      dompurify: 3.4.11
+      dompurify: 3.4.12
       fflate: 0.4.8
       preact: 10.29.7
       query-selector-shadow-dom: 1.0.1
@@ -51900,26 +51895,11 @@ snapshots:
 
   proto3-json-serializer@2.0.2:
     dependencies:
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
 
   proto3-json-serializer@3.0.3:
     dependencies:
-      protobufjs: 7.6.3
-
-  protobufjs@7.6.3:
-    dependencies:
-      '@protobufjs/aspromise': 1.1.2
-      '@protobufjs/base64': 1.1.2
-      '@protobufjs/codegen': 2.0.5
-      '@protobufjs/eventemitter': 1.1.1
-      '@protobufjs/fetch': 1.1.1
-      '@protobufjs/float': 1.0.2
-      '@protobufjs/inquire': 1.1.2
-      '@protobufjs/path': 1.1.2
-      '@protobufjs/pool': 1.1.0
-      '@protobufjs/utf8': 1.1.1
-      '@types/node': 22.19.15
-      long: 5.3.2
+      protobufjs: 7.6.5
 
   protobufjs@7.6.5:
     dependencies:
@@ -54005,7 +53985,7 @@ snapshots:
 
   svg-parser@2.0.4: {}
 
-  svgo@3.3.3:
+  svgo@3.3.4:
     dependencies:
       commander: 7.2.0
       css-select: 5.2.2
@@ -55797,6 +55777,8 @@ snapshots:
   xml-name-validator@5.0.0: {}
 
   xml-naming@0.1.0: {}
+
+  xml-naming@0.3.0: {}
 
   xmlchars@2.2.0: {}
 

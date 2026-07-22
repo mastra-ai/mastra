@@ -181,8 +181,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // Not registered yet.
     }
 
-    const token = await github.mintInstallationToken(Number(installation.externalId));
-    if (!token) throw new Error('GitHub token could not be generated for the Factory session');
+    const access = await github.versionControl.getRepositoryAccess({
+      orgId: session.orgId,
+      repositoryId: repository.id,
+    });
+    const token = access.authorization?.token;
+    if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
 
     const sandbox = await fleet.ensureSandbox(
       binding,

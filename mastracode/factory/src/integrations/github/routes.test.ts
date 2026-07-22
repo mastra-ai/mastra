@@ -325,6 +325,10 @@ const githubStub = {
     },
   },
   versionControl: {
+    getRepositoryAccess: vi.fn(async ({ repositoryId }: { orgId: string; repositoryId: string }) => ({
+      cloneUrl: `https://github.com/octo/hello.git`,
+      authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
+    })),
     listPullRequests: async (input: ListPullRequestsInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenPullRequests(
@@ -651,6 +655,7 @@ beforeEach(() => {
   pushBranch.mockClear();
   createPullRequest.mockClear();
   addIssueLabels.mockClear();
+  githubStub.versionControl.getRepositoryAccess.mockClear();
   listRepoOpenIssues.mockClear();
   listRepoOpenPullRequests.mockClear();
 });
@@ -1158,7 +1163,15 @@ describe('ensure (materialize)', () => {
       projectRepositoryId: 'p1',
     });
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
+    expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
+      orgId: 'org1',
+      repositoryId: 'repository-octo/hello',
+    });
+    expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
     expect(materializeRepo).toHaveBeenCalledOnce();
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
+    );
     // A per-user sandbox binding row was created for the caller.
     expect(tables.sandboxes).toHaveLength(1);
     expect(tables.sandboxes[0]).toMatchObject({ projectRepositoryId: 'p1', userId: 'u1' });
@@ -1649,7 +1662,7 @@ describe('push route', () => {
     expect(pushBranch).not.toHaveBeenCalled();
   });
 
-  it('mints a token and pushes the branch', async () => {
+  it('uses repository-scoped access to push the branch', async () => {
     seedMaterializedSession();
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
       branch: 'feat/x',
@@ -1657,11 +1670,16 @@ describe('push route', () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ pushed: true, branch: 'feat/x' });
+    expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
+      orgId: 'org1',
+      repositoryId: 'repository-99',
+    });
+    expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
     expect(pushBranch).toHaveBeenCalledOnce();
     // pushBranch(sandbox, workdir, branch, token, repoFullName)
     const call = pushBranch.mock.calls[0] as unknown as any[];
     expect(call[2]).toBe('feat/x');
-    expect(call[3]).toBe('install-token');
+    expect(call[3]).toBe('repo-token-repository-99');
     expect(call[4]).toBe('octo/hello');
   });
 });
