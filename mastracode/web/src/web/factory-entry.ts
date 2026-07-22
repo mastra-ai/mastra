@@ -29,14 +29,14 @@ import { hasAuthInit } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { observeAgentGitAction } from '@mastra/factory/storage/domains/audit/agent-audit';
 import { AuditDomain } from '@mastra/factory/storage/domains/audit/domain';
-import type { FactoryAuthUser } from './auth.js';
+import type { FactoryAuthUser } from '@mastra/factory/auth';
 import {
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
   getFactoryAuthOrgId,
   getFactoryAuthUserId,
-} from './auth.js';
+} from '@mastra/factory/auth';
 import type {
   FactoryIntegration,
   IntegrationPostToolContext,

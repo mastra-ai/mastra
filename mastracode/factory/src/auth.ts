@@ -1,6 +1,6 @@
 import { MastraAuthWorkos } from '@mastra/auth-workos';
-import { registerApiRoute } from '@mastra/core/server';
 import {
+  registerApiRoute,
   isAuthHttpHandler,
   isCredentialsProvider,
   isOrganizationsProvider,
@@ -10,10 +10,10 @@ import {
 import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/core/server';
 import type { Context, Hono } from 'hono';
 
-import type { RouteAuth } from '@mastra/factory/routes/route';
+import type { RouteAuth } from './routes/route.js';
 
 /**
- * Provider-neutral web auth gating for the MastraCode web server.
+ * Provider-neutral factory auth gating for the MastraCode web server.
  *
  * When an auth provider is active (a `MastraAuthProvider` instance passed to
  * `MastraFactory`'s `auth` slot, or — back-compat for suites/paths that never
@@ -278,10 +278,10 @@ export async function isOrganizationAdmin(
 }
 
 /**
- * Build the web server's implementation of the `@mastra/factory` route auth
- * seam over the resolved provider (`undefined` = auth disabled). Constructed
- * once per boot by `MastraFactory.prepare()` and handed to factory route
- * modules at construction — they never import the web auth module directly.
+ * Build the factory's implementation of the `RouteAuth` seam over the
+ * resolved provider (`undefined` = auth disabled). Constructed once per boot
+ * by `MastraFactory.prepare()` and handed to factory route modules at
+ * construction — they never import the factory auth module directly.
  */
 export function createFactoryRouteAuth(provider: IMastraAuthProvider | undefined): RouteAuth {
   return {
@@ -304,7 +304,7 @@ export function isWorkOSAuth(provider: IMastraAuthProvider | undefined): boolean
  */
 export function getWorkOSProvider(provider: IMastraAuthProvider | undefined): MastraAuthWorkos {
   if (provider instanceof MastraAuthWorkos) return provider;
-  throw new Error('WorkOS provider requested but the active web auth provider is not WorkOS');
+  throw new Error('WorkOS provider requested but the active factory auth provider is not WorkOS');
 }
 
 /**
@@ -666,8 +666,8 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
 }
 
 /**
- * Mount web auth gating onto the web app. No-op when auth is disabled (no
- * provider active).
+ * Mount factory auth gating onto the host app. No-op when auth is disabled
+ * (no provider active).
  *
  * Must be called before the Mastra adapter routes, the `/web/*` routes, and
  * the static UI handlers so the gate covers every request. Composes the shared
