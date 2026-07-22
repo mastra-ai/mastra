@@ -17,7 +17,7 @@ import type {
   LinearConnectionRow,
   LinearStorageHandle,
 } from '@mastra/factory/integrations/linear/storage';
-import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
+import { logPlatformInfo, PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearUser = {
@@ -204,6 +204,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth?: RouteAuth }): void {
     this.#projects = projects;
     this.#auth = auth;
+    logPlatformInfo('Platform Linear integration initialized', { endpointHost: this.#endpointHost });
   }
 
   get authEnabled(): boolean {
@@ -280,7 +281,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
         const returnTo = c.req.query('return_to') || '/';
         const originator = routeBaseUrl(ctx, c.req.url);
-        console.info('[MastraCode Web] Starting Platform Linear connect flow', {
+        logPlatformInfo('Starting Platform Linear connect flow', {
           orgId: tenant.orgId,
           returnTo,
           originator,
