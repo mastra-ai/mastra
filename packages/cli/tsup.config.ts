@@ -18,6 +18,11 @@ export default defineConfig({
     const factoryWebPath = join(dirname(fileURLToPath(import.meta.url)), '../../mastracode/web');
     const factoryUIPath = join(factoryWebPath, 'src/mastra/public/factory');
 
+    // mastracode/web is an independent pnpm workspace and is not installed by the root workspace.
+    await execa('pnpm', ['install', '--frozen-lockfile'], {
+      cwd: factoryWebPath,
+      stdio: 'inherit',
+    });
     await execa('pnpm', ['run', 'build:ui:embedded'], {
       cwd: factoryWebPath,
       stdio: 'inherit',
