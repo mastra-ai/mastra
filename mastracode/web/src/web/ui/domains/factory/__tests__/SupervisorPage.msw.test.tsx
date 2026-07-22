@@ -75,7 +75,12 @@ function emptySse(): Response {
   );
 }
 
-function useChatHandlers(options?: { user?: { userId: string; name?: string }; onMessage?: (body: unknown) => void }) {
+function useChatHandlers(options?: {
+  user?: { userId: string; name?: string };
+  onMessage?: (body: unknown) => void;
+  onSessionRequest?: (kind: 'supervisor' | 'controller') => void;
+  supervisorGate?: Promise<void>;
+}) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({
@@ -96,35 +101,39 @@ function useChatHandlers(options?: { user?: { userId: string; name?: string }; o
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/supervisor/session`, () =>
-      HttpResponse.json({
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/supervisor/session`, async () => {
+      options?.onSessionRequest?.('supervisor');
+      await options?.supervisorGate;
+      return HttpResponse.json({
         session: {
           sessionId: SUPERVISOR_RESOURCE_ID,
           resourceId: SUPERVISOR_RESOURCE_ID,
           threadId: SUPERVISOR_THREAD_ID,
           factoryProjectId: FACTORY_PROJECT_ID,
         },
-      }),
-    ),
-    http.post(`${API}/sessions`, () =>
-      HttpResponse.json({
+      });
+    }),
+    http.post(`${API}/sessions`, () => {
+      options?.onSessionRequest?.('controller');
+      return HttpResponse.json({
         controllerId: 'code',
         resourceId: SUPERVISOR_RESOURCE_ID,
         threadId: SUPERVISOR_THREAD_ID,
-      }),
-    ),
+      });
+    }),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get(`${API}/sessions/:resourceId`, ({ params }) =>
-      HttpResponse.json({
+    http.get(`${API}/sessions/:resourceId`, ({ params }) => {
+      options?.onSessionRequest?.('controller');
+      return HttpResponse.json({
         controllerId: 'code',
         resourceId: params.resourceId,
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
         threadId: SUPERVISOR_THREAD_ID,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
-      }),
-    ),
+      });
+    }),
     http.put(`${API}/sessions/:resourceId/state`, ({ params }) =>
       HttpResponse.json({
         controllerId: 'code',
@@ -135,12 +144,16 @@ function useChatHandlers(options?: { user?: { userId: string; name?: string }; o
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
-    http.get(`${API}/sessions/:resourceId/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
-    http.get(`${API}/sessions/:resourceId/threads`, () =>
-      HttpResponse.json({
+    http.get(`${API}/sessions/:resourceId/permissions`, () => {
+      options?.onSessionRequest?.('controller');
+      return HttpResponse.json({ categories: {}, tools: {} });
+    }),
+    http.get(`${API}/sessions/:resourceId/threads`, () => {
+      options?.onSessionRequest?.('controller');
+      return HttpResponse.json({
         threads: [{ id: SUPERVISOR_THREAD_ID, resourceId: SUPERVISOR_RESOURCE_ID, title: 'Factory Supervisor' }],
-      }),
-    ),
+      });
+    }),
     http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${API}/sessions/:resourceId/stream`, () => emptySse()),
     http.post(`${API}/sessions/:resourceId/messages`, async ({ request }) => {
@@ -153,6 +166,8 @@ function useChatHandlers(options?: { user?: { userId: string; name?: string }; o
 function renderSupervisor(options?: {
   user?: { userId: string; name?: string };
   onMessage?: (body: unknown) => void;
+  onSessionRequest?: (kind: 'supervisor' | 'controller') => void;
+  supervisorGate?: Promise<void>;
   initialEntry?: string;
 }) {
   useChatHandlers(options);
@@ -176,8 +191,21 @@ describe('Factory supervisor page', () => {
         ),
       );
 
-      renderSupervisor();
+      const sessionRequests: Array<'supervisor' | 'controller'> = [];
+      let releaseSupervisor!: () => void;
+      const supervisorGate = new Promise<void>(resolve => {
+        releaseSupervisor = resolve;
+      });
+      renderSupervisor({
+        onSessionRequest: kind => sessionRequests.push(kind),
+        supervisorGate,
+      });
 
+      await waitFor(() => expect(sessionRequests).toContain('supervisor'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const requestsBeforeSupervisorReady = [...sessionRequests];
+      releaseSupervisor();
+      expect(requestsBeforeSupervisorReady).toEqual(['supervisor']);
       expect(await screen.findByRole('heading', { name: 'Factory Supervisor' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Supervisor' })).toHaveAttribute(
         'href',

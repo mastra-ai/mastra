@@ -28,11 +28,15 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
   // routes explicitly (params come back already decoded).
   const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
   const factoryThreadMatch = useMatch('/factories/:factoryId/workspaces/:sessionId/threads/:threadId');
+  // The supervisor page provides its own session context bound to the
+  // deterministic supervisor resource; disable the generic provider so it
+  // cannot claim that resource before the supervisor session is established.
+  const supervisorMatch = useMatch('/factories/:factoryId/supervisor');
   const userScoped = userThreadMatch !== null;
   const threadId = userThreadMatch?.params.threadId ?? factoryThreadMatch?.params.threadId;
 
   return (
-    <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>
+    <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped} disabled={supervisorMatch !== null}>
       <ChatPermissionsProvider>{children}</ChatPermissionsProvider>
     </ChatSessionConfigProvider>
   );

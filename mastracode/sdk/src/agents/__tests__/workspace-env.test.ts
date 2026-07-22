@@ -50,6 +50,22 @@ afterEach(() => {
 });
 
 describe('mastracode workspace sandbox environment', () => {
+  it('provides an isolated workspace for Factory supervisor sessions without a project path', async () => {
+    const requestContext = new RequestContext();
+    const getState = () => ({ factorySupervisor: true });
+    requestContext.set('controller', {
+      modeId: 'build',
+      getState,
+      session: { state: { get: getState } },
+    });
+
+    const { getDynamicWorkspace } = await import('../workspace.js');
+    const workspace = await getDynamicWorkspace({ requestContext: requestContext as any });
+
+    expect(workspace.id).toBe('mastracode-factory-supervisor');
+    expect(workspace.sandbox).toBeUndefined();
+  });
+
   it('passes arbitrary parent environment variables to local subprocesses', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-env-'));
 
