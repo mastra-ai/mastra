@@ -33,7 +33,7 @@ function ok(msg) {
 // 1. Server entry
 const indexMjs = path.join(outputDir, 'index.mjs');
 if (!fs.existsSync(indexMjs)) {
-  fail('.mastra/output/index.mjs not found — run `pnpm web:build` first');
+  fail('.mastra/output/index.mjs not found — run `npm run build` first');
 } else {
   ok('server entry (.mastra/output/index.mjs)');
 }
@@ -41,7 +41,7 @@ if (!fs.existsSync(indexMjs)) {
 // 2. Deploy manifest
 const outputPkgPath = path.join(outputDir, 'package.json');
 if (!fs.existsSync(outputPkgPath)) {
-  fail('.mastra/output/package.json not found — run `pnpm web:build` first');
+  fail('.mastra/output/package.json not found — run `npm run build` first');
 } else {
   const pkg = JSON.parse(fs.readFileSync(outputPkgPath, 'utf8'));
   const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
@@ -60,7 +60,7 @@ if (!fs.existsSync(outputPkgPath)) {
 // 3. SPA
 const spaPath = path.join(outputDir, 'factory', 'index.html');
 if (!fs.existsSync(spaPath)) {
-  fail('SPA index.html not found in .mastra/output/factory/ — run `pnpm web:build` (includes vite build)');
+  fail('SPA index.html not found in .mastra/output/factory/ — run `npm run build` first');
 } else {
   ok(`SPA (${path.relative(outputDir, spaPath)})`);
 }
