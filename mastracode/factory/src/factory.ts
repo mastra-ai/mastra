@@ -125,7 +125,8 @@ export interface MastraFactoryConfig {
    * Browser-facing origin used to build integration OAuth/install callback
    * URLs and to derive the auth redirect URI. On the platform the SPA is
    * hosted separately, so this MUST be the public API origin.
-   * Default: `http://localhost:5173` (the local Factory UI origin).
+   * Default: `http://localhost:4111` (the local Factory server, which also
+   * serves the UI).
    */
   publicUrl?: string;
   /**
@@ -297,7 +298,7 @@ export class MastraFactory {
     if (this.#preparing) throw new Error('MastraFactory.prepare() called twice');
     this.#preparing = true;
 
-    const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:5173').replace(/\/+$/, '');
+    const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:4111').replace(/\/+$/, '');
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
     const storage = this.#config.storage;
     const vector = this.#config.vector;
