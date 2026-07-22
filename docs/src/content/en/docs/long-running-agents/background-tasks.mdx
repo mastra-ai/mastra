@@ -248,9 +248,11 @@ const researchAgent = new Agent({
 })
 ```
 
-When this `researchAgent` is delegated to from a supervisor that has no backgroundTask configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task, and `deepResearchTool` runs in the foreground inside that invocation, instead of dispatching its own nested background task.
+When this `researchAgent` is delegated to from a supervisor that has no background task configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task.
 
-Use this pattern when you want a subagent to behave consistently in the background regardless of which supervisor invokes it. Use the supervisor-side opt-in (above) when you want to tune background behavior centrally per supervisor.
+Mastra supports one nested background-tool level inside a delegated run: a root agent can delegate to a subagent, and that subagent can dispatch an eligible ordinary tool in the background. A second delegated-agent edge runs in the foreground and doesn't receive nested background guidance. This limit is execution-scoped and doesn't mutate the shared subagent configuration.
+
+Use this pattern when you want a subagent to behave consistently regardless of which supervisor invokes it. Use the supervisor-side opt-in above when you want to tune background behavior centrally per supervisor. Arbitrary-depth delegated background work, workflow integration, and Alexandria integration aren't supported by this boundary.
 
 ## Suspending and resuming
 

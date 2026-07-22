@@ -15,6 +15,7 @@ export type ScenarioName =
   | 'api-key-reopen-stored'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
+  | 'background-subagents'
   | 'browser-active-pending-status'
   | 'browser-profile-provider-mismatch'
   | 'browser-settings-persistence'

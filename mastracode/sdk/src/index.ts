@@ -20,6 +20,7 @@ import type { ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import {
   AgentsMDInjector,
+  createBackgroundWorkSignalProcessor,
   isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
@@ -659,6 +660,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     inputProcessors: [
       ...(config?.inputProcessors ?? []),
+      createBackgroundWorkSignalProcessor(),
       new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -1123,6 +1125,7 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
+    backgroundTasks: { enabled: true },
     // Mirror the controller's internal-Mastra construction (which passes
     // `config.pubsub` through): the server-owned Mastra must run its event
     // bus on the same transport so streams/workflows/signals stay

@@ -205,4 +205,77 @@ describe('createBackgroundWorkSignalProcessor', () => {
     expect(sendSignal.mock.calls.filter(([signal]) => signal.tagName === 'work-failed')).toHaveLength(1);
     mastra.__releaseRunScope('run-1');
   });
+
+  it('keeps concurrent caller notifications isolated by origin run', async () => {
+    const firstSendSignal = vi.fn(async signal => ({ ...signal, __isCreatedSignal: true }));
+    const secondSendSignal = vi.fn(async signal => ({ ...signal, __isCreatedSignal: true }));
+    const tool = createTool({ id: 'lookup', description: 'lookup', execute: async () => 'result' });
+    const processor = createBackgroundWorkSignalProcessor();
+    const mastra = new Mastra();
+    mastra.__createRunScope('run-1');
+    mastra.__createRunScope('run-2');
+
+    const first = (await processor.processInputStep!(
+      createProcessorArgs({ mastra, runId: 'run-1', sendSignal: firstSendSignal, tools: { lookup: tool } }),
+    )) as any;
+    const second = (await processor.processInputStep!(
+      createProcessorArgs({ mastra, runId: 'run-2', sendSignal: secondSendSignal, tools: { lookup: tool } }),
+    )) as any;
+
+    await Promise.all([
+      (first.tools!.lookup as typeof tool).execute!({}, {
+        mastra,
+        toolCallId: 'call-1',
+        [BACKGROUND_WORK_CONTEXT]: {
+          originRunId: 'run-1',
+          originToolCallId: 'call-1',
+          taskId: 'task-1',
+          invocationKind: 'agent',
+          disposition: 'deferred',
+        },
+      } as any),
+      (second.tools!.lookup as typeof tool).execute!({}, {
+        mastra,
+        toolCallId: 'call-2',
+        [BACKGROUND_WORK_CONTEXT]: {
+          originRunId: 'run-2',
+          originToolCallId: 'call-2',
+          taskId: 'task-2',
+          invocationKind: 'agent',
+          disposition: 'awaited',
+        },
+      } as any),
+    ]);
+
+    await Promise.all([
+      notifyBackgroundWorkTerminal(mastra, {
+        originRunId: 'run-2',
+        originToolCallId: 'call-2',
+        taskId: 'task-2',
+        invocationKind: 'agent',
+        disposition: 'awaited',
+        status: 'failed',
+      }),
+      notifyBackgroundWorkTerminal(mastra, {
+        originRunId: 'run-1',
+        originToolCallId: 'call-1',
+        taskId: 'task-1',
+        invocationKind: 'agent',
+        disposition: 'deferred',
+        status: 'completed',
+      }),
+    ]);
+
+    expect(firstSendSignal.mock.calls.map(([signal]) => signal.tagName)).toEqual(['work-deferred', 'work-completed']);
+    expect(secondSendSignal.mock.calls.map(([signal]) => signal.tagName)).toEqual(['work-awaited', 'work-failed']);
+    expect(firstSendSignal).not.toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ originRunId: 'run-2' }) }),
+    );
+    expect(secondSendSignal).not.toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ originRunId: 'run-1' }) }),
+    );
+
+    mastra.__releaseRunScope('run-1');
+    mastra.__releaseRunScope('run-2');
+  });
 });
