@@ -52,7 +52,12 @@ function stubBoardEndpoints() {
             id: 'conn-1',
             installationId: 'inst-1',
             repositories: [
-              { id: REPO_ID, branch: 'main', sandboxWorkdir: '/repo', repository: { slug: 'acme/app', defaultBranch: 'main' } },
+              {
+                id: REPO_ID,
+                branch: 'main',
+                sandboxWorkdir: '/repo',
+                repository: { slug: 'acme/app', defaultBranch: 'main' },
+              },
             ],
           },
         ],
@@ -82,9 +87,7 @@ function stubBoardEndpoints() {
       return HttpResponse.json({ issues: [], nextPage: null });
     }),
     // Ambient workspace plumbing kicked off alongside the board queries.
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 
