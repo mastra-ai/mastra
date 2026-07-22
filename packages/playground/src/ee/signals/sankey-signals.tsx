@@ -6,13 +6,12 @@ import type {
   SankeyChartNodeSelection,
   SankeyChartRecord,
 } from '@mastra/playground-ui/components/SankeyChart';
-import { Slider } from '@mastra/playground-ui/components/Slider';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pause, Play } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
+import { useSnapshotPlayback } from './hooks/use-snapshot-playback';
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { useThemePaths } from './hooks/use-theme-paths';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
@@ -25,12 +24,14 @@ import {
   stabilizeThemeFlow,
 } from './sankey-signals-data';
 import { SignalDistributions } from './signal-distributions';
+import { formatSignalName, formatSnapshotWindow, traceLabel } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
+import { SnapshotTimeline } from './snapshot-timeline';
 import { ThemeDetailPanel } from './theme-detail-panel';
 import { buildDrilledThemeFlow, findThemeSelection } from './theme-drilldown-data';
 import type { ThemeSelection } from './theme-drilldown-data';
-import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
+import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { Link } from '@/lib/link';
 
 export interface SankeySignalsProps {
@@ -41,86 +42,6 @@ export interface SankeySignalsProps {
 }
 
 const DRILL_IN_TRACE_LIMIT = 2000;
-
-function formatSignalName(signalName: TraceSignalName) {
-  return signalName.charAt(0).toUpperCase() + signalName.slice(1);
-}
-
-function traceLabel(count: number) {
-  return `${count} ${count === 1 ? 'trace' : 'traces'}`;
-}
-
-function formatSnapshotWindow(startedAt: string, endedAt: string) {
-  const start = new Date(startedAt);
-  const end = new Date(endedAt);
-  const monthDay = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  const day = new Intl.DateTimeFormat('en-US', { day: 'numeric', timeZone: 'UTC' });
-  const year = new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: 'UTC' });
-  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
-  const sameMonth = sameYear && start.getUTCMonth() === end.getUTCMonth();
-  const sameDay = sameMonth && start.getUTCDate() === end.getUTCDate();
-
-  if (sameDay) return `${monthDay.format(start)}, ${year.format(start)}`;
-  if (sameMonth) return `${monthDay.format(start)}–${day.format(end)}, ${year.format(end)}`;
-  if (sameYear) return `${monthDay.format(start)}–${monthDay.format(end)}, ${year.format(end)}`;
-  return `${monthDay.format(start)}, ${year.format(start)}–${monthDay.format(end)}, ${year.format(end)}`;
-}
-
-function SnapshotTimeline({
-  snapshots,
-  selectedIndex,
-  isPlaying,
-  onPlayingChange,
-  onSnapshotChange,
-}: {
-  snapshots: ThemeSnapshot[];
-  selectedIndex: number;
-  isPlaying: boolean;
-  onPlayingChange: (isPlaying: boolean) => void;
-  onSnapshotChange: (index: number) => void;
-}) {
-  const snapshot = snapshots[selectedIndex];
-
-  if (!snapshot) return null;
-
-  return (
-    <section
-      aria-label="Snapshot timeline"
-      className="flex flex-wrap items-center gap-3 rounded-lg border border-border1 bg-surface2 px-3 py-2.5 sm:px-4"
-    >
-      {snapshots.length > 1 ? (
-        <>
-          <Button
-            aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
-            onClick={() => onPlayingChange(!isPlaying)}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-            {isPlaying ? 'Pause' : 'Play'}
-          </Button>
-          <Slider
-            aria-label="Snapshot"
-            className="min-w-32 flex-1"
-            max={snapshots.length - 1}
-            min={0}
-            onValueChange={value => onSnapshotChange(value[0] ?? 0)}
-            step={1}
-            value={[selectedIndex]}
-          />
-        </>
-      ) : null}
-      <p
-        aria-live="polite"
-        className="w-full text-left font-mono text-xs tabular-nums text-neutral4 md:ml-auto md:w-auto md:min-w-72 md:text-right"
-      >
-        Snapshot {snapshot.ordinal}/{snapshot.total} · {formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)} ·{' '}
-        {traceLabel(snapshot.traceCount)}
-      </p>
-    </section>
-  );
-}
 
 function FlowCard({
   columns,
@@ -250,11 +171,13 @@ export function SankeySignals({
   const isPlaybackBlockedByDrillIn = drillIn !== undefined && (pathsQuery.isFetching || pathsQuery.isError);
   const hasActivePathsError = drillIn !== undefined && pathsQuery.isError;
 
-  useEffect(() => {
-    if (!isPlaying || snapshots.length < 2 || isFlowPending || hasFlowError || isPlaybackBlockedByDrillIn) return;
-    const timer = window.setTimeout(() => setSelectedSnapshotOrdinal(nextSnapshotOrdinal), 900);
-    return () => window.clearTimeout(timer);
-  }, [hasFlowError, isFlowPending, isPlaying, isPlaybackBlockedByDrillIn, nextSnapshotOrdinal, snapshots.length]);
+  useSnapshotPlayback({
+    isPlaying,
+    isPlaybackBlocked: isFlowPending || hasFlowError || isPlaybackBlockedByDrillIn,
+    nextSnapshot: nextSnapshotOrdinal,
+    onAdvance: setSelectedSnapshotOrdinal,
+    snapshotCount: snapshots.length,
+  });
 
   const perspectiveMutation = useMutation({
     mutationFn: async (nextSignalNames: TraceSignalName[]) => {

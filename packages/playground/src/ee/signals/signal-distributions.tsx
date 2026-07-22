@@ -5,18 +5,11 @@ import { nodeColor } from '@mastra/playground-ui/components/SankeyChart';
 import { getSignalHue } from '@mastra/playground-ui/ee/signals';
 import { GripVertical } from 'lucide-react';
 
+import { formatSignalName, traceLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeFlowResponse, ThemeNode, TraceSignalName } from './types';
 
 const DRAG_SENSORS = [useMouseSensor, useTouchSensor];
-
-function formatSignalName(signalName: TraceSignalName) {
-  return signalName.charAt(0).toUpperCase() + signalName.slice(1);
-}
-
-function traceLabel(count: number) {
-  return `${count} ${count === 1 ? 'trace' : 'traces'}`;
-}
 
 function SignalDistributionRow({
   color,
