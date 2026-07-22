@@ -1,18 +1,32 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Logo } from '@mastra/playground-ui/components/Logo';
-import { isLocalFactory, selectedRepository, useActiveFactoryContext } from '../../../workspaces';
+import { ChevronDown } from 'lucide-react';
+import { useParams } from 'react-router';
+import { useFactoryQuery } from '../../../../../../shared/hooks/useFactories';
 import { useChatCommands } from '../../context/ChatCommandsProvider';
+import { useChatSessionContext } from '../../context/useChatSessionContext';
 
 const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
 
+function FactoryMetadata({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
+      <dt className="text-icon3">{label}</dt>
+      <dd className="min-w-0 truncate text-icon5">{value}</dd>
+    </div>
+  );
+}
+
 export function EmptyThreadState() {
-  const { activeFactory } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const { data: activeFactory } = useFactoryQuery(factoryId);
+  const { projectPath, resourceId, factorySessionState } = useChatSessionContext();
   const { prefillComposer } = useChatCommands();
   if (!activeFactory) return null;
-  const gitBranch = isLocalFactory(activeFactory)
-    ? activeFactory.binding.gitBranch
-    : selectedRepository(activeFactory)?.gitBranch;
+
+  const repository = activeFactory.repositories.find(repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId);
+  const gitBranch = repository?.gitBranch;
 
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
@@ -54,15 +68,24 @@ export function EmptyThreadState() {
         </Button>
       </div>
 
-      <p className="mt-8 text-ui-sm text-icon3">
-        Working in <span className="font-medium text-icon5">{activeFactory.name}</span>
-        {gitBranch && (
-          <>
-            <span aria-hidden="true"> · </span>
-            <span className="font-mono text-icon5">{gitBranch}</span>
-          </>
-        )}
-      </p>
+      <details className="group mt-8 w-full min-w-0 max-w-lg text-ui-sm text-icon3">
+        <summary className="flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors hover:text-icon5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent1 [&::-webkit-details-marker]:hidden">
+          <span>
+            Working in <span className="font-medium text-icon5">{activeFactory.name}</span>
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            size={14}
+            className="transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
+          />
+        </summary>
+        <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left font-mono leading-relaxed">
+          <FactoryMetadata label="Factory" value={activeFactory.name} />
+          {resourceId && <FactoryMetadata label="Resource ID" value={resourceId} />}
+          {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} />}
+          {projectPath && <FactoryMetadata label="Workspace" value={projectPath} />}
+        </dl>
+      </details>
     </section>
   );
 }

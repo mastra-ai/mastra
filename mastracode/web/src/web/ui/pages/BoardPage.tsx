@@ -25,12 +25,10 @@ import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../shared/api/config';
 import { relativeTime } from '../../../shared/lib/date/relativeTime';
-import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
+import { useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
 import { SkeletonRows } from '../ui/SkeletonRows';
-import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { ConnectRepositoriesPanel } from '../domains/workspaces/components/ConnectRepositoriesPanel';
-import type { FactoryRepository, ServerFactory } from '../domains/workspaces/services/factories';
-import { selectedRepository } from '../domains/workspaces/services/factories';
+import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { FactoryItemActions } from '../domains/factory/components/FactoryItemActions';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
@@ -506,8 +504,8 @@ function FactoryBoardPage({ kind }: { kind: BoardKind }) {
   );
 }
 
-function Board({ factory, kind }: { factory: ServerFactory; kind: BoardKind }) {
-  const repository = selectedRepository(factory);
+function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) {
+  const repository = factory.repositories[0];
   const review = kind === 'review';
 
   if (!repository) {
@@ -545,12 +543,12 @@ function BoardContent({
   repository,
   kind,
 }: {
-  factory: ServerFactory;
-  repository: FactoryRepository;
+  factory: FactoryProject;
+  repository: LinkedRepositoryPayload;
   kind: BoardKind;
 }) {
   const projectRepositoryId = repository.projectRepositoryId;
-  const factoryProjectId = factory.binding.factoryProjectId;
+  const factoryProjectId = factory.id;
   const review = kind === 'review';
   const stages = boardStages(kind);
   const items = useWorkItemsQuery(factoryProjectId);
@@ -611,25 +609,17 @@ function BoardContent({
   const autoPositionedBoardRef = useRef<string | undefined>(undefined);
   const userPositionedBoardRef = useRef<string | undefined>(undefined);
 
-  // Worktrees that still exist. A card's session ref whose worktree was
-  // deleted is stale: its thread is gone (worktree deletion cascades onto its
+  // Workspaces that still exist. A card's session ref whose workspace was
+  // deleted is stale: its thread is gone (workspace deletion cascades onto its
   // threads), so it neither renders a Thread link nor blocks re-running.
-  const workspaces = useWorkspacesQuery(factory);
+  const workspaces = useWorkspacesQuery(projectRepositoryId);
   const liveWorktreePaths = useMemo(
-    () => new Set((workspaces.data?.worktrees ?? []).map(worktree => worktree.worktreePath)),
+    () => new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId)),
     [workspaces.data],
   );
 
-  // Threads are scoped per worktree, so opening a card's thread first makes
-  // its worktree the active workspace — otherwise the thread page can't
-  // resolve the thread in the active scope and bounces away.
-  const selectWorkspace = useSelectWorkspaceMutation(factory, {
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId: factory.resourceId,
-  });
   const openThread = async (session: WorkItemSessionRef) => {
-    await selectWorkspace.mutateAsync(session.sessionId);
-    navigate(`/factories/${factory.id}/threads/${session.threadId}`);
+    navigate(`/factories/${factory.id}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
   const refreshItemAndWorktrees = async (itemId: string) => {
@@ -639,7 +629,7 @@ function BoardContent({
     if (!item) return;
     return {
       item,
-      paths: new Set(refreshedWorkspaces.data.worktrees.map(worktree => worktree.worktreePath)),
+      paths: new Set(refreshedWorkspaces.data.workspaces.map(workspace => workspace.sessionId)),
     };
   };
 
@@ -813,9 +803,7 @@ function BoardContent({
     );
   }
 
-  const mutationError = [start, triage, upsert, transition, update, remove, selectWorkspace].find(
-    m => m.isError,
-  )?.error;
+  const mutationError = [start, triage, upsert, transition, update, remove].find(m => m.isError)?.error;
   const evaluatingItemIds = new Set(transition.pendingItemIds);
   const triagingIssueNumbers = new Set(pendingIssueNumbers);
   const pendingRunRolesByItem = new Map<string, Set<string>>();

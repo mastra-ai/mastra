@@ -3,15 +3,9 @@ import { useEffect, useState } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import {
-  useCreateFactoryMutation,
-  useLinkRepositoryMutation,
-  useLoadFactories,
-} from '../../../../../shared/hooks/useFactories';
+import { useCreateFactoryMutation, useFactoriesQuery, useLinkRepositoryMutation } from '../../../../../shared/hooks/useFactories';
 import { connectLinear } from '../../factory/services/linear';
-import { saveFactories } from '../services/factories';
-import type { Factory, ServerFactory } from '../services/factories';
-import { factoryHomePath } from '../services/factoryPaths';
+import type { FactoryProject, FactoryProjectPayload } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import type { GithubRepo } from '../services/github';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -53,11 +47,11 @@ function errorMessage(error: unknown): string {
 export function EmptyFactoryState() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const persistedFactories = useLoadFactories();
+  const persistedFactories = useFactoriesQuery();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
   const [step, setStep] = useState<Step>(storedStep);
-  const [pendingFactory, setPendingFactory] = useState<Factory | null>(null);
+  const [pendingFactory, setPendingFactory] = useState<FactoryProject | FactoryProjectPayload | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | null>(null);
@@ -101,19 +95,15 @@ export function EmptyFactoryState() {
       setPendingFactory(factory);
       sessionStorage.setItem(FACTORY_KEY, factory.id);
       const linkedRepository = await linkRepository.mutateAsync({
-        factoryProjectId: factory.binding.factoryProjectId,
+        factoryProjectId: factory.id,
         repo,
       });
-      const linkedFactory: ServerFactory = {
+      const linkedFactory: FactoryProject = {
         ...factory,
-        binding: {
-          ...factory.binding,
-          selectedRepositoryId: linkedRepository.projectRepositoryId,
-          repositories: [{ ...linkedRepository, worktrees: [] }],
-        },
+        repositories: [linkedRepository],
       };
       setPendingFactory(linkedFactory);
-      saveFactories([...(persistedFactories.data ?? []).filter(item => item.id !== linkedFactory.id), linkedFactory]);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       goTo('project-management');
     } catch (error) {
       setMutationError(errorMessage(error));
@@ -133,7 +123,7 @@ export function EmptyFactoryState() {
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       sessionStorage.removeItem(STEP_KEY);
       sessionStorage.removeItem(FACTORY_KEY);
-      void navigate(factoryHomePath(pendingFactory));
+      void navigate(`/factories/${pendingFactory.id}`);
     } catch (error) {
       setCompletionError(errorMessage(error));
       setFinishing(false);

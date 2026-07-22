@@ -202,4 +202,42 @@ describe('sandbox option forwarding', () => {
       }),
     );
   });
+
+  it('uses refreshed environment variables for future sandbox commands', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+    const clone = vi.fn(() => ({
+      id: 'derived-1',
+      provider: 'local',
+      executeCommand,
+      _start: vi.fn(async () => {}),
+      getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'derived-1' } })),
+    }));
+    const subject = new SandboxFleet({
+      machine: { id: 'template', name: 'Template', provider: 'local', clone } as unknown as WorkspaceSandbox,
+      workdirBase: '/workspace',
+    });
+    const store = {
+      sandboxId: null as string | null,
+      setSandboxId: vi.fn(async (id: string | null) => {
+        store.sandboxId = id;
+      }),
+      clear: vi.fn(async () => {}),
+    };
+
+    const sandbox = await subject.ensureSandbox(store, { GH_TOKEN: 'initial-token' });
+    await sandbox.executeCommand('gh auth status');
+    sandbox.setEnvironmentVariable?.('GH_TOKEN', 'fresh-token');
+    await sandbox.executeCommand('gh auth status', undefined, { env: { OTHER: 'value' } });
+    await sandbox.executeCommand('gh repo view');
+
+    expect(executeCommand).toHaveBeenNthCalledWith(1, 'gh auth status', undefined, {
+      env: { GH_TOKEN: 'initial-token' },
+    });
+    expect(executeCommand).toHaveBeenNthCalledWith(2, 'gh auth status', undefined, {
+      env: { GH_TOKEN: 'fresh-token', OTHER: 'value' },
+    });
+    expect(executeCommand).toHaveBeenNthCalledWith(3, 'gh repo view', undefined, {
+      env: { GH_TOKEN: 'fresh-token' },
+    });
+  });
 });

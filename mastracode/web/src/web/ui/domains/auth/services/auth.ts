@@ -26,18 +26,11 @@ export interface FactoryAuthState {
   signUpDisabled?: boolean;
 }
 
-/**
- * The user-session resourceId used when auth is disabled (local dev): there is
- * only one operator, so a fixed id keeps their sessions stable across reloads.
- */
-export const LOCAL_USER_RESOURCE_ID = 'local-user';
-
-/**
- * The resourceId under which a user's personal (non-factory) sessions live:
- * the stable WorkOS user id, or a fixed local id when auth is disabled.
- */
+/** The resourceId under which a user's personal (non-factory) sessions live. */
 export function userSessionResourceId(state: FactoryAuthState | undefined): string {
-  return state?.user?.userId ?? LOCAL_USER_RESOURCE_ID;
+  const userId = state?.user?.userId;
+  if (!userId) throw new Error('Authenticated user is missing a user id');
+  return userId;
 }
 
 /**
