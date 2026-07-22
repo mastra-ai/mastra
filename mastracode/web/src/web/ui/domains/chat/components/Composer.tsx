@@ -368,9 +368,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           className="hidden"
           aria-label="Attach images"
         />
-        <ComposerActions className="static w-full justify-between px-3 pb-2">
+        <ComposerActions className="static w-full flex-wrap items-end justify-between px-3 pb-3">
           <StatusLine />
-          <ButtonsGroup spacing="close" aria-label="Composer actions">
+          <ButtonsGroup className="ml-auto" spacing="close" aria-label="Composer actions">
             <Button
               type="button"
               variant="outline"
