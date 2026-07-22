@@ -10,8 +10,6 @@ import { ChatHeader } from '../../chat/components/ChatHeader';
 import type { FactoryProject } from '../../workspaces/services/github';
 
 interface FactoryPageShellProps {
-  title: string;
-  description: string;
   /** Renders the page body once a server-backed factory is active. */
   children: (factory: FactoryProject) => ReactNode;
 }
@@ -24,7 +22,7 @@ interface FactoryPageShellProps {
  * explanatory notice; when a factory links multiple repositories a picker in
  * the header scopes repository-based intake.
  */
-export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
+export function FactoryPageShell({ children }: FactoryPageShellProps) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
 
@@ -39,12 +37,7 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
   const factory = factoryQuery.data;
 
   return (
-    <PageLayout
-      sidebar={<Sidebar />}
-      header={<ChatHeader />}
-      title={factory ? title : undefined}
-      description={factory ? description : undefined}
-    >
+    <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
       {factory ? children(factory) : <Notice variant="destructive">Factory not found.</Notice>}
     </PageLayout>
   );

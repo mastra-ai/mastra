@@ -28,11 +28,7 @@ const DECISION_GROUPS: ReadonlyArray<{
 
 /** Rule decisions and their durable queued effects for the active Factory. */
 export function RulesPage() {
-  return (
-    <FactoryPageShell title="Rules" description="Monitor rule decisions, inspect failures, and retry queued effects.">
-      {project => <RulesContent factoryProjectId={project.id} />}
-    </FactoryPageShell>
-  );
+  return <FactoryPageShell>{project => <RulesContent factoryProjectId={project.id} />}</FactoryPageShell>;
 }
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
