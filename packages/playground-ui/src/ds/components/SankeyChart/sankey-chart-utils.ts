@@ -41,6 +41,29 @@ export type SankeyChartCurveSelection = {
 
 const EMPTY_GRAPH: SankeyChartGraph = { nodes: [], links: [] };
 
+// Approximate glyph width relative to font size. Node labels render in a mono
+// font (~0.6) so we bias slightly higher to guard against under-truncating.
+const SANKEY_LABEL_CHAR_WIDTH_RATIO = 0.62;
+const SANKEY_LABEL_ELLIPSIS = '…';
+
+export function estimateSankeyLabelWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * SANKEY_LABEL_CHAR_WIDTH_RATIO;
+}
+
+export function truncateSankeyLabel(
+  text: string,
+  fontSize: number,
+  maxWidth: number,
+): { text: string; truncated: boolean } {
+  if (!Number.isFinite(maxWidth) || maxWidth <= 0) return { text, truncated: false };
+  if (estimateSankeyLabelWidth(text, fontSize) <= maxWidth) return { text, truncated: false };
+
+  const maxChars = Math.floor(maxWidth / (fontSize * SANKEY_LABEL_CHAR_WIDTH_RATIO));
+  if (maxChars <= 1) return { text: SANKEY_LABEL_ELLIPSIS, truncated: true };
+
+  return { text: `${text.slice(0, maxChars - 1).trimEnd()}${SANKEY_LABEL_ELLIPSIS}`, truncated: true };
+}
+
 export function getSankeyChartValue(value: unknown): string | number | undefined {
   if (typeof value === 'string') {
     const trimmedValue = value.trim();

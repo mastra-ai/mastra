@@ -6,6 +6,7 @@ import {
   getSankeyChartNodeWeights,
   getSankeyChartValue,
   reorderSankeyChartColumns,
+  truncateSankeyLabel,
 } from './sankey-chart-utils';
 
 const columns = [
@@ -131,6 +132,31 @@ describe('SankeyChart utilities', () => {
 
     it('returns an empty graph with fewer than two columns', () => {
       expect(buildSankeyChartGraph([{ source: 'API' }], columns.slice(0, 1))).toEqual({ nodes: [], links: [] });
+    });
+  });
+
+  describe('when a label fits within the available width', () => {
+    it('leaves the label untouched', () => {
+      expect(truncateSankeyLabel('Success', 11, 220)).toEqual({ text: 'Success', truncated: false });
+    });
+
+    it('never truncates when the width is unbounded', () => {
+      const label = 'Repeated Command Calls Without Confirmation';
+      expect(truncateSankeyLabel(label, 11, Number.POSITIVE_INFINITY)).toEqual({ text: label, truncated: false });
+    });
+  });
+
+  describe('when a label is wider than the available width', () => {
+    it('clips it to an ellipsis that fits the width', () => {
+      const result = truncateSankeyLabel('Repeated Command Calls Without Confirmation', 11, 80);
+
+      expect(result.truncated).toBe(true);
+      expect(result.text.endsWith('…')).toBe(true);
+      expect(result.text.length).toBeLessThan('Repeated Command Calls Without Confirmation'.length);
+    });
+
+    it('collapses to a lone ellipsis when there is no room for text', () => {
+      expect(truncateSankeyLabel('Anything', 11, 4)).toEqual({ text: '…', truncated: true });
     });
   });
 

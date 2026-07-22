@@ -1,12 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
-import { getSankeyChartCurveSelection } from './sankey-chart-utils';
+import { getSankeyChartCurveSelection, truncateSankeyLabel } from './sankey-chart-utils';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
+
+const NODE_WIDTH = 7;
+// Horizontal breathing room kept between neighbouring column labels so their
+// centered text can never touch.
+const LABEL_HORIZONTAL_GUTTER = 16;
+const NAME_LABEL_FONT_SIZE = 11;
+const COLUMN_LABEL_FONT_SIZE = 12;
 
 export type SankeyChartProps = {
   height?: CSSProperties['height'];
@@ -23,14 +30,29 @@ export function SankeyChart({
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap } = useSankeyRenderContext();
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   const firstColumnId = enabledColumns[0]?.id;
   const total = graph.links.reduce(
     (sum, link) => (link.sourceNode.column.id === firstColumnId ? sum + link.value : sum),
     0,
   );
 
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+    const measure = () => setContainerWidth(element.offsetWidth);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const maxLabelWidth = getMaxLabelWidth(containerWidth, enabledColumns.length, margin);
+
   return (
-    <div className={cn('min-w-0', className)}>
+    <div ref={containerRef} className={cn('min-w-0', className)}>
       {graph.links.length === 0 ? (
         <div
           className="flex items-center justify-center rounded-md border border-border1 text-ui-sm text-neutral3"
@@ -47,7 +69,7 @@ export function SankeyChart({
           >
             <RechartsSankey
               data={graph}
-              nodeWidth={7}
+              nodeWidth={NODE_WIDTH}
               nodePadding={56}
               margin={margin}
               node={(props: SankeyNodeRendererProps) => {
@@ -62,6 +84,7 @@ export function SankeyChart({
                     columnLabel={node?.column.label}
                     total={total}
                     showColumnLabel={showColumnLabel}
+                    maxLabelWidth={maxLabelWidth}
                     onHoverChange={setHoveredSourceName}
                   />
                 );
@@ -110,11 +133,25 @@ type SankeyLinkRendererProps = {
   payload: { source: { name?: string | number }; target: { name?: string | number } };
 };
 
+function getMaxLabelWidth(
+  containerWidth: number,
+  columnCount: number,
+  margin: ComponentProps<typeof RechartsSankey>['margin'],
+): number {
+  if (containerWidth <= 0 || columnCount < 2) return Number.POSITIVE_INFINITY;
+  const marginLeft = typeof margin?.left === 'number' ? margin.left : 0;
+  const marginRight = typeof margin?.right === 'number' ? margin.right : 0;
+  const plotWidth = containerWidth - marginLeft - marginRight - NODE_WIDTH;
+  const columnGap = plotWidth / (columnCount - 1);
+  return Math.max(0, columnGap - LABEL_HORIZONTAL_GUTTER);
+}
+
 type SankeyNodeProps = SankeyNodeRendererProps & {
   hueMap: Record<string, number>;
   columnLabel?: string;
   total: number;
   showColumnLabel: boolean;
+  maxLabelWidth: number;
   onHoverChange: (sourceName: string | undefined) => void;
 };
 
@@ -128,6 +165,7 @@ function SankeyNode({
   columnLabel,
   total,
   showColumnLabel,
+  maxLabelWidth,
   onHoverChange,
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
@@ -137,12 +175,17 @@ function SankeyNode({
   const labelX = x + width / 2;
   const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
+  const nameLabel = truncateSankeyLabel(name, NAME_LABEL_FONT_SIZE, maxLabelWidth);
+  const columnHeader = columnLabel
+    ? truncateSankeyLabel(columnLabel, COLUMN_LABEL_FONT_SIZE, maxLabelWidth)
+    : undefined;
 
   return (
     <g onMouseEnter={() => onHoverChange(name)} onMouseLeave={() => onHoverChange(undefined)}>
-      {showColumnLabel && columnLabel ? (
+      {showColumnLabel && columnHeader ? (
         <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
-          {columnLabel}
+          {columnHeader.truncated ? <title>{columnLabel}</title> : null}
+          {columnHeader.text}
         </text>
       ) : null}
       <rect x={x} y={y} width={width} height={height} rx={3} fill={nodeColor(hue)} />
@@ -154,7 +197,8 @@ function SankeyNode({
         fontSize={11}
         fontFamily="var(--font-mono)"
       >
-        {name}
+        {nameLabel.truncated ? <title>{name}</title> : null}
+        {nameLabel.text}
       </text>
       <text x={labelX} y={y - 8} textAnchor="middle" fill={Colors.neutral3} fontSize={9.5}>
         {value} ({percentage}%)
