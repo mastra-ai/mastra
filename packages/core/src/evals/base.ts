@@ -36,7 +36,8 @@ import type {
 import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
-import type { JSONValue } from '../stream';
+import type { JSONValue, LanguageModelUsage, MastraOnFinishCallback } from '../stream';
+import type { MastraOnStepFinishCallback } from '../stream/types';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
 import type {
@@ -90,6 +91,10 @@ export interface ScorerJudgeConfig {
   defaultMemoryOptions?: AgentMemoryOption;
   /** Optional callback for observing the internal judge agent stream as soon as it starts. */
   onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
+  /** Optional callback fired after each model step in the internal judge agent. */
+  onStepFinish?: MastraOnStepFinishCallback<unknown>;
+  /** Optional callback fired when an internal judge agent invocation finishes. */
+  onFinish?: MastraOnFinishCallback<unknown>;
   /** Optional maximum number of agentic loop iterations for the internal judge agent. */
   maxSteps?: number;
   /**
@@ -314,6 +319,107 @@ export type ScorerRunResult<
 
   judge?: ScorerJudgeResults;
 } & { runId: string };
+
+const jsonValueSchema: z.ZodType<JSONValue> = z.lazy(() =>
+  z.union([
+    z.null(),
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+
+const scorerJudgeUsageSchema = z.object({
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
+  reasoningTokens: z.number().optional(),
+  cachedInputTokens: z.number().optional(),
+  cacheCreationInputTokens: z.number().optional(),
+});
+
+const scorerJudgeExecutionSchema = z.object({
+  prompt: z.string(),
+  output: jsonValueSchema,
+  judgeModelId: z.string(),
+  judgeProvider: z.string().optional(),
+  usage: scorerJudgeUsageSchema,
+  attemptCount: z.number().int().positive(),
+  modelCallCount: z.number().int().positive(),
+  durationMs: z.number().nonnegative(),
+  cost: z
+    .object({
+      amount: z.number(),
+      unit: z.string(),
+      source: z.string(),
+    })
+    .optional(),
+});
+
+const scorerJudgeStepResultSchema = z.object({
+  executions: z.array(scorerJudgeExecutionSchema),
+});
+
+const scorerJudgeResultsSchema = z.object({
+  preprocess: scorerJudgeStepResultSchema.optional(),
+  analyze: scorerJudgeStepResultSchema.optional(),
+  generateScore: scorerJudgeStepResultSchema.optional(),
+  generateReason: scorerJudgeStepResultSchema.optional(),
+});
+
+const scorerJudgeUsageKeys = [
+  'inputTokens',
+  'outputTokens',
+  'totalTokens',
+  'reasoningTokens',
+  'cachedInputTokens',
+  'cacheCreationInputTokens',
+] as const satisfies readonly (keyof ScorerJudgeUsage)[];
+
+function normalizeScorerJudgeUsage(usage: unknown): ScorerJudgeUsage {
+  if (!usage || typeof usage !== 'object') {
+    return {};
+  }
+
+  const usageRecord = usage as Record<string, unknown>;
+  const inputTokens = usageRecord.inputTokens ?? usageRecord.promptTokens;
+  const outputTokens = usageRecord.outputTokens ?? usageRecord.completionTokens;
+  const totalTokens =
+    usageRecord.totalTokens ??
+    (typeof inputTokens === 'number' || typeof outputTokens === 'number'
+      ? (typeof inputTokens === 'number' ? inputTokens : 0) + (typeof outputTokens === 'number' ? outputTokens : 0)
+      : undefined);
+
+  return {
+    ...(typeof inputTokens === 'number' ? { inputTokens } : {}),
+    ...(typeof outputTokens === 'number' ? { outputTokens } : {}),
+    ...(typeof totalTokens === 'number' ? { totalTokens } : {}),
+    ...(typeof usageRecord.reasoningTokens === 'number' ? { reasoningTokens: usageRecord.reasoningTokens } : {}),
+    ...(typeof usageRecord.cachedInputTokens === 'number' ? { cachedInputTokens: usageRecord.cachedInputTokens } : {}),
+    ...(typeof usageRecord.cacheCreationInputTokens === 'number'
+      ? { cacheCreationInputTokens: usageRecord.cacheCreationInputTokens }
+      : {}),
+  };
+}
+
+function addScorerJudgeUsage(accumulated: ScorerJudgeUsage, usage: ScorerJudgeUsage): void {
+  for (const key of scorerJudgeUsageKeys) {
+    const value = usage[key];
+    if (value !== undefined) {
+      accumulated[key] = (accumulated[key] ?? 0) + value;
+    }
+  }
+}
+
+interface ScorerJudgeTelemetryAccumulator {
+  usage: ScorerJudgeUsage;
+  attemptCount: number;
+  modelCallCount: number;
+  judgeModelId?: string;
+  judgeProvider?: string;
+}
 
 // Conditional type for PromptObject context
 type PromptObjectContext<
@@ -795,7 +901,7 @@ class MastraScorer<
         outputSchema: z.any(),
         execute: async ({ inputData, getInitData, ...rest }) => {
           const observabilityContext = resolveObservabilityContext(rest);
-          const { accumulatedResults = {}, generatedPrompts = {} } = inputData;
+          const { accumulatedResults = {}, generatedPrompts = {}, judge } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
           const context = this.createScorerContext(scorerStep.name, run, accumulatedResults);
@@ -824,6 +930,7 @@ class MastraScorer<
           let stepResult: unknown;
           let prompt: string | undefined;
           let judgeModel: string | undefined;
+          let judgeExecution: ScorerJudgeExecution | undefined;
 
           try {
             await executeWithContext({
@@ -838,6 +945,7 @@ class MastraScorer<
                   stepResult = promptStepResult.result;
                   prompt = promptStepResult.prompt;
                   judgeModel = promptStepResult.judgeModel;
+                  judgeExecution = promptStepResult.execution;
                 } else {
                   stepResult = await this.executeFunctionStep(scorerStep, executionContext);
                 }
@@ -871,11 +979,21 @@ class MastraScorer<
             ...accumulatedResults,
             [`${scorerStep.name}StepResult`]: stepResult,
           };
+          const judgeStepName = scorerStep.name as ScorerJudgeStepName;
+          const newJudge = judgeExecution
+            ? {
+                ...(judge ?? {}),
+                [judgeStepName]: {
+                  executions: [...(judge?.[judgeStepName]?.executions ?? []), judgeExecution],
+                },
+              }
+            : judge;
 
           return {
             stepResult,
             accumulatedResults: newAccumulatedResults,
             generatedPrompts: newGeneratedPrompts,
+            ...(newJudge ? { judge: newJudge } : {}),
           };
         },
       });
@@ -897,6 +1015,7 @@ class MastraScorer<
         analyzePrompt: z.string().optional(),
         generateScorePrompt: z.string().optional(),
         generateReasonPrompt: z.string().optional(),
+        judge: scorerJudgeResultsSchema.optional(),
       }),
       options: {
         validateInputs: false,
@@ -943,7 +1062,8 @@ class MastraScorer<
     scorerStep: ScorerStepDefinition,
     observabilityContext: ObservabilityContext,
     context: any,
-  ): Promise<{ result: unknown; prompt: string; judgeModel?: string }> {
+  ): Promise<{ result: unknown; prompt: string; judgeModel?: string; execution: ScorerJudgeExecution }> {
+    const startedAt = performance.now();
     const originalStep = this.originalPromptObjects.get(scorerStep.name);
     if (!originalStep) {
       throw new Error(`Step "${scorerStep.name}" is not a prompt object`);
@@ -961,6 +1081,8 @@ class MastraScorer<
     const defaultMemoryOptions = this.config.judge?.defaultMemoryOptions;
     const stepMemoryOptions = originalStep.judge?.memory;
     const onStream = originalStep.judge?.onStream ?? this.config.judge?.onStream;
+    const onStepFinish = originalStep.judge?.onStepFinish ?? this.config.judge?.onStepFinish;
+    const onFinish = originalStep.judge?.onFinish ?? this.config.judge?.onFinish;
     const maxSteps = originalStep.judge?.maxSteps ?? this.config.judge?.maxSteps;
     const inputProcessors = originalStep.judge?.inputProcessors ?? this.config.judge?.inputProcessors;
     const outputProcessors = originalStep.judge?.outputProcessors ?? this.config.judge?.outputProcessors;
@@ -998,6 +1120,68 @@ class MastraScorer<
       this.#mastra,
     );
     const judgeModel = resolvedModel.modelId;
+    const telemetry: ScorerJudgeTelemetryAccumulator = {
+      usage: {},
+      attemptCount: 0,
+      modelCallCount: 0,
+      judgeModelId: judgeModel,
+      judgeProvider: resolvedModel.provider,
+    };
+    let pendingStepUsage: ScorerJudgeUsage = {};
+    let pendingStepCount = 0;
+    let completedOnFinishCount = 0;
+    const recordCurrentUsage = (usage: LanguageModelUsage) => {
+      addScorerJudgeUsage(telemetry.usage, normalizeScorerJudgeUsage(usage));
+    };
+    const recordStreamResult = async (result: Awaited<ReturnType<Agent['stream']>>) => {
+      if (typeof result.consumeStream === 'function') {
+        await result.consumeStream();
+      }
+      const [totalUsageResult, stepsResult] = await Promise.allSettled([result.totalUsage, result.steps]);
+      const totalUsage = totalUsageResult.status === 'fulfilled' ? totalUsageResult.value : undefined;
+      const steps = stepsResult.status === 'fulfilled' && Array.isArray(stepsResult.value) ? stepsResult.value : [];
+
+      telemetry.attemptCount += 1;
+      telemetry.modelCallCount += Math.max(steps.length, pendingStepCount, 1);
+      if (totalUsage) {
+        recordCurrentUsage(totalUsage);
+      } else {
+        addScorerJudgeUsage(telemetry.usage, pendingStepUsage);
+      }
+
+      if (completedOnFinishCount < telemetry.attemptCount) {
+        const lastStep = steps.at(-1);
+        const finishEvent = {
+          ...(lastStep ?? {}),
+          steps,
+          totalUsage: totalUsage ?? pendingStepUsage,
+          model: {
+            modelId: telemetry.judgeModelId ?? judgeModel,
+            provider: telemetry.judgeProvider,
+          },
+        } as Parameters<MastraOnFinishCallback<unknown>>[0];
+        completedOnFinishCount += 1;
+        await onFinish?.(finishEvent);
+      }
+
+      pendingStepUsage = {};
+      pendingStepCount = 0;
+    };
+    const recordLegacyUsage = (usage: unknown, steps: unknown) => {
+      telemetry.attemptCount += 1;
+      telemetry.modelCallCount += Array.isArray(steps) ? Math.max(steps.length, 1) : 1;
+      addScorerJudgeUsage(telemetry.usage, normalizeScorerJudgeUsage(usage));
+    };
+    const createExecution = (output: JSONValue): ScorerJudgeExecution => ({
+      prompt,
+      output,
+      judgeModelId: telemetry.judgeModelId ?? judgeModel,
+      ...(telemetry.judgeProvider ? { judgeProvider: telemetry.judgeProvider } : {}),
+      usage: telemetry.usage,
+      attemptCount: Math.max(telemetry.attemptCount, 1),
+      modelCallCount: Math.max(telemetry.modelCallCount, 1),
+      durationMs: performance.now() - startedAt,
+    });
 
     const judge = new Agent({
       id: 'judge',
@@ -1020,6 +1204,30 @@ class MastraScorer<
       ...(maxSteps ? { maxSteps } : {}),
       ...(this.config.judge?.requestContext ? { requestContext: this.config.judge.requestContext } : {}),
     };
+    const createJudgeStreamRunOptions = () => ({
+      ...judgeRunOptions,
+      onStepFinish: async (event: Parameters<MastraOnStepFinishCallback<unknown>>[0]) => {
+        pendingStepCount += 1;
+        addScorerJudgeUsage(pendingStepUsage, normalizeScorerJudgeUsage(event.usage));
+        if (event.model?.modelId) {
+          telemetry.judgeModelId = event.model.modelId;
+        }
+        if (event.model?.provider) {
+          telemetry.judgeProvider = event.model.provider;
+        }
+        await onStepFinish?.(event);
+      },
+      onFinish: async (event: Parameters<MastraOnFinishCallback<unknown>>[0]) => {
+        completedOnFinishCount += 1;
+        if (event.model?.modelId) {
+          telemetry.judgeModelId = event.model.modelId;
+        }
+        if (event.model?.provider) {
+          telemetry.judgeProvider = event.model.provider;
+        }
+        await onFinish?.(event);
+      },
+    });
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
@@ -1030,11 +1238,13 @@ class MastraScorer<
             schema: z.object({ score: z.number() }),
             jsonPromptInjection,
           },
-          ...judgeRunOptions,
+          ...createJudgeStreamRunOptions(),
           ...(onStream ? { onStream } : {}),
+          onStreamFinish: recordStreamResult,
         });
         const object = await result.object;
-        return { result: (object as { score: number }).score, prompt, judgeModel };
+        const score = (object as { score: number }).score;
+        return { result: score, prompt, judgeModel, execution: createExecution(score) };
       } else {
         const schema = z.object({
           score: z.number(),
@@ -1044,19 +1254,25 @@ class MastraScorer<
           output: standardSchemaToJSONSchema(standardSchema),
           ...judgeRunOptions,
         });
-        return { result: (result.object as { score: number }).score, prompt, judgeModel };
+        recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
+        const score = (result.object as { score: number }).score;
+        return { result: score, prompt, judgeModel, execution: createExecution(score) };
       }
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
-      let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await judge.stream(prompt, judgeRunOptions);
+        const result = await judge.stream(prompt, createJudgeStreamRunOptions());
         void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
-      } else {
-        result = await judge.generateLegacy(prompt, judgeRunOptions);
+        const reason = await result.text;
+        await recordStreamResult(result);
+        return { result: reason, prompt, judgeModel, execution: createExecution(reason) };
       }
-      return { result: await result.text, prompt, judgeModel };
+
+      const result = await judge.generateLegacy(prompt, judgeRunOptions);
+      recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
+      const reason = await result.text;
+      return { result: reason, prompt, judgeModel, execution: createExecution(reason) };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
       // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
@@ -1070,17 +1286,20 @@ class MastraScorer<
             schema: standardSchema as any,
             jsonPromptInjection,
           },
-          ...judgeRunOptions,
+          ...createJudgeStreamRunOptions(),
           ...(onStream ? { onStream } : {}),
+          onStreamFinish: recordStreamResult,
         });
-        const object = await result.object;
-        return { result: object, prompt, judgeModel };
+        const object = (await result.object) as JSONValue;
+        return { result: object, prompt, judgeModel, execution: createExecution(object) };
       } else {
         result = await judge.generateLegacy(prompt, {
           output: standardSchemaToJSONSchema(standardSchema),
           ...judgeRunOptions,
         });
-        return { result: result.object, prompt, judgeModel };
+        recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
+        const object = result.object as JSONValue;
+        return { result: object, prompt, judgeModel, execution: createExecution(object) };
       }
     }
   }
@@ -1095,6 +1314,7 @@ class MastraScorer<
     const finalStepResult = workflowResult.result;
     const accumulatedResults = finalStepResult?.accumulatedResults || {};
     const generatedPrompts = finalStepResult?.generatedPrompts || {};
+    const judge = finalStepResult?.judge as ScorerJudgeResults | undefined;
 
     return {
       ...originalInput,
@@ -1106,6 +1326,7 @@ class MastraScorer<
       preprocessPrompt: generatedPrompts.preprocessPrompt,
       analyzeStepResult: accumulatedResults.analyzeStepResult,
       analyzePrompt: generatedPrompts.analyzePrompt,
+      ...(judge && Object.keys(judge).length > 0 ? { judge } : {}),
     };
   }
 }

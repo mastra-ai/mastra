@@ -28,6 +28,11 @@ const createTestData = () => ({
   },
 });
 
+function withoutJudge<T extends { judge?: unknown }>(result: T): Omit<T, 'judge'> {
+  const { judge: _judge, ...legacyResult } = result;
+  return legacyResult;
+}
+
 type JudgeModelResponse = Error | string;
 
 function createJudgeModel(responses: JudgeModelResponse[]) {
@@ -162,7 +167,8 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(result).not.toHaveProperty('judge');
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with reason', async () => {
@@ -170,7 +176,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with preprocess and reason', async () => {
@@ -178,7 +184,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with preprocess and analyze', async () => {
@@ -186,7 +192,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with preprocess only', async () => {
@@ -194,7 +200,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with preprocess, analyze, and reason', async () => {
@@ -202,7 +208,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with analyze only', async () => {
@@ -210,7 +216,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with analyze and reason', async () => {
@@ -218,7 +224,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
   });
 
@@ -228,7 +234,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with preprocess and analyze prompt object', async () => {
@@ -237,7 +243,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with analyze and reason prompt object', async () => {
@@ -246,7 +252,7 @@ describe('createScorer', () => {
 
       expect(runId).toBeDefined();
       expect(typeof result.reason).toBe('string');
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with generate score as prompt object', async () => {
@@ -254,7 +260,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with all steps', async () => {
@@ -262,7 +268,30 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(Object.keys(result.judge ?? {})).toEqual(['preprocess', 'analyze', 'generateReason']);
+
+      const preprocessExecution = result.judge?.preprocess?.executions[0];
+      expect(preprocessExecution).toMatchObject({
+        prompt: 'Test Preprocess prompt',
+        output: {
+          reformattedInput: 'TEST INPUT',
+          reformattedOutput: 'TEST OUTPUT',
+        },
+        judgeModelId: 'mock-model-id',
+        judgeProvider: 'mock-provider',
+        usage: {
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+        },
+        attemptCount: 1,
+        modelCallCount: 1,
+        durationMs: expect.any(Number),
+      });
+      expect(preprocessExecution?.durationMs).toBeGreaterThanOrEqual(0);
+      expect(preprocessExecution).not.toHaveProperty('cost');
+      expect(JSON.parse(JSON.stringify(result.judge))).toEqual(result.judge);
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('forwards judge.jsonPromptInjection to agent.stream', async () => {
@@ -717,6 +746,42 @@ describe('createScorer', () => {
       expect(serializedPrompts.filter(prompt => prompt.includes('explain this score'))).toHaveLength(2);
     });
 
+    it('normalizes successful V1 judge usage and records model identity', async () => {
+      const model = createMockModel({ mockText: { score: 0.75 }, objectGenerationMode: 'json', version: 'v1' });
+      const generateLegacySpy = vi.spyOn(Agent.prototype, 'generateLegacy');
+
+      try {
+        const scorer = createScorer({
+          id: 'v1-judge-telemetry-scorer',
+          description: 'Captures normalized telemetry from a V1 judge',
+          judge: {
+            model,
+            instructions: 'Return a score.',
+          },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        const result = await scorer.run(testData.scoringInput);
+
+        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
+        expect(result.judge?.generateScore?.executions[0]).toMatchObject({
+          prompt: 'score this output',
+          output: 0.75,
+          judgeModelId: 'mock-model-id',
+          judgeProvider: 'mock-provider',
+          usage: {
+            inputTokens: 10,
+            outputTokens: 20,
+            totalTokens: 30,
+          },
+          attemptCount: 1,
+          modelCallCount: 1,
+          durationMs: expect.any(Number),
+        });
+      } finally {
+        generateLegacySpy.mockRestore();
+      }
+    });
+
     it('routes V1 judges through generateLegacy without error processors', async () => {
       const model = createMockModel({ mockText: { score: 1 }, version: 'v1' });
       const errorProcessor = { id: 'v1-error-processor', processAPIError: vi.fn(() => ({ retry: true })) };
@@ -814,6 +879,157 @@ describe('createScorer', () => {
         streamSpy.mockRestore();
       }
     });
+
+    it('aggregates current judge fallback attempts without double-counting usage and preserves callbacks', async () => {
+      const { model, getCallCount } = createJudgeModel(['not valid JSON', JSON.stringify({ score: 1 })]);
+      const onStepFinish = vi.fn(async () => {});
+      const onFinish = vi.fn(async () => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        const scorer = createScorer({
+          id: 'judge-telemetry-fallback-scorer',
+          description: 'Captures judge telemetry across structured output fallback attempts',
+          judge: {
+            model,
+            instructions: 'Return a score.',
+            onStepFinish,
+            onFinish,
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this output',
+        });
+
+        const result = await scorer.run(testData.scoringInput);
+        const execution = result.judge?.generateScore?.executions[0];
+
+        expect(getCallCount()).toBe(2);
+        expect(onStepFinish).toHaveBeenCalledTimes(2);
+        expect(onFinish).toHaveBeenCalledTimes(2);
+        expect(execution).toMatchObject({
+          prompt: 'score this output',
+          output: 1,
+          judgeModelId: 'mock-model-id',
+          judgeProvider: 'mock-provider',
+          usage: {
+            inputTokens: 20,
+            outputTokens: 40,
+            totalTokens: 60,
+          },
+          attemptCount: 2,
+          modelCallCount: 2,
+          durationMs: expect.any(Number),
+        });
+        expect(execution?.usage).not.toHaveProperty('raw');
+        expect(execution).not.toHaveProperty('providerMetadata');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('awaits the caller onFinish callback inside the judge finish callback', async () => {
+      const model = createJudgeModel([JSON.stringify({ score: 1 })]).model;
+      let releaseOnFinish!: () => void;
+      const onFinishGate = new Promise<void>(resolve => {
+        releaseOnFinish = resolve;
+      });
+      const onFinish = vi.fn(async () => {
+        await onFinishGate;
+      });
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockImplementation((async (...args: any[]) => {
+        const options = args[1];
+        let wrapperSettled = false;
+        const wrapperPromise = options
+          .onFinish({
+            model: { modelId: 'mock-model-id', provider: 'mock-provider' },
+          })
+          .then(() => {
+            wrapperSettled = true;
+          });
+
+        await Promise.resolve();
+        expect(wrapperSettled).toBe(false);
+        releaseOnFinish();
+        await wrapperPromise;
+
+        return {
+          object: Promise.resolve({ score: 1 }),
+          consumeStream: vi.fn(),
+          totalUsage: Promise.resolve({ inputTokens: 10, outputTokens: 20, totalTokens: 30 }),
+          steps: Promise.resolve([{}]),
+        } as any;
+      }) as any);
+
+      try {
+        const scorer = createScorer({
+          id: 'judge-on-finish-await-scorer',
+          description: 'Awaits the caller finish callback',
+          judge: { model, instructions: 'Return a score.', onFinish },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        await expect(scorer.run(testData.scoringInput)).resolves.toMatchObject({ score: 1 });
+        expect(onFinish).toHaveBeenCalledTimes(1);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('propagates caller onFinish callback errors from the judge invocation', async () => {
+      const model = createJudgeModel([JSON.stringify({ score: 1 })]).model;
+      const callbackError = new Error('judge finish callback failed');
+      const onFinish = vi.fn(async () => {
+        throw callbackError;
+      });
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockImplementation((async (...args: any[]) => {
+        const options = args[1];
+        await options.onFinish({
+          model: { modelId: 'mock-model-id', provider: 'mock-provider' },
+        });
+        throw new Error('unreachable');
+      }) as any);
+
+      try {
+        const scorer = createScorer({
+          id: 'judge-on-finish-error-scorer',
+          description: 'Propagates caller finish callback errors',
+          judge: { model, instructions: 'Return a score.', onFinish },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        await expect(scorer.run(testData.scoringInput)).rejects.toThrow('judge finish callback failed');
+        expect(onFinish).toHaveBeenCalledTimes(1);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('counts multiple completed model steps within one judge attempt', async () => {
+      const model = createJudgeModel([JSON.stringify({ score: 1 })]).model;
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockResolvedValue({
+        object: Promise.resolve({ score: 1 }),
+        consumeStream: vi.fn(),
+        totalUsage: Promise.resolve({ inputTokens: 15, outputTokens: 25, totalTokens: 40 }),
+        steps: Promise.resolve([{}, {}]),
+      } as any);
+
+      try {
+        const scorer = createScorer({
+          id: 'judge-multiple-model-steps-scorer',
+          description: 'Counts model steps separately from attempts',
+          judge: { model, instructions: 'Return a score.' },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        const result = await scorer.run(testData.scoringInput);
+
+        expect(result.judge?.generateScore?.executions[0]).toMatchObject({
+          attemptCount: 1,
+          modelCallCount: 2,
+          usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
+        });
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
   });
 
   describe('Mixed scorer', () => {
@@ -822,7 +1038,9 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(Object.keys(result.judge ?? {})).toEqual(['analyze']);
+      expect(result.judge?.analyze?.executions).toHaveLength(1);
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with preprocess prompt and analyze function', async () => {
@@ -830,7 +1048,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with reason function and analyze prompt', async () => {
@@ -838,7 +1056,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with reason prompt and analyze function', async () => {
@@ -846,7 +1064,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
   });
 
@@ -856,7 +1074,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with preprocess', async () => {
@@ -864,7 +1082,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with preprocess function and analyze as prompt object', async () => {
@@ -872,7 +1090,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with preprocess prompt object and analyze function', async () => {
@@ -880,7 +1098,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with async createPrompt in preprocess', async () => {
@@ -888,7 +1106,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with async createPrompt in analyze', async () => {
@@ -896,7 +1114,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with async createPrompt in generateScore', async () => {
@@ -904,7 +1122,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with async createPrompt in generateReason', async () => {
@@ -912,7 +1130,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
   });
 
