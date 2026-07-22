@@ -619,16 +619,41 @@ async function processOutputStream<OUTPUT = undefined>({
   };
 
   for await (let chunk of outputStream._getBaseStream()) {
-    // Stop processing chunks if the abort signal has fired.
-    // Some LLM providers continue streaming data after abort (e.g. due to buffering),
-    // so we must check the signal on each iteration to avoid accumulating the full
-    // response into the messageList after the caller has disconnected.
-    if (options?.abortSignal?.aborted) {
-      break;
-    }
-
     if (!chunk) {
       continue;
+    }
+
+    // Stop outward-facing processing once the abort signal has fired, but still
+    // drain already buffered metadata/text so onAbort can report partial text.
+    if (options?.abortSignal?.aborted) {
+      switch (chunk.type) {
+        case 'response-metadata':
+          runState.setState({
+            responseMetadata: {
+              id: chunk.payload.id,
+              timestamp: chunk.payload.timestamp,
+              modelId: chunk.payload.modelId,
+              headers: chunk.payload.headers,
+            },
+          });
+          continue;
+        case 'text-start':
+          if (chunk.payload.providerMetadata) {
+            runState.setState({
+              providerOptions: chunk.payload.providerMetadata,
+            });
+          }
+          continue;
+        case 'text-delta':
+          runState.setState({
+            partialText: `${runState.state.partialText}${chunk.payload.text}`,
+          });
+          continue;
+        default:
+          break;
+      }
+
+      break;
     }
 
     if (!transportSet && transportRef && transportResolver) {
@@ -708,6 +733,13 @@ async function processOutputStream<OUTPUT = undefined>({
             headers: chunk.payload.headers,
           },
         });
+        break;
+
+      case 'text-delta':
+        runState.setState({
+          partialText: `${runState.state.partialText}${chunk.payload.text}`,
+        });
+        safeEnqueue(controller, chunk);
         break;
 
       case 'tool-call-input-streaming-start': {
@@ -1627,6 +1659,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               logger?.debug?.('LLM execution aborted', { runId });
               await options?.onAbort?.({
                 steps: inputData?.output?.steps ?? [],
+                text: runState.state.partialText,
               });
 
               safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
@@ -1747,6 +1780,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             cleanupProviderToolSpans(true);
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
+              text: runState.state.partialText,
             });
 
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });

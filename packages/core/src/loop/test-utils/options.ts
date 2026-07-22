@@ -8034,7 +8034,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     describe('basic abort', () => {
       let result: any;
       let onErrorCalls: Array<{ error: unknown }> = [];
-      let onAbortCalls: Array<{ steps: any[] }> = [];
+      let onAbortCalls: Array<{ steps: any[]; text?: string }> = [];
 
       beforeEach(async () => {
         const messageList = createMessageListWithUserMessage();
@@ -8115,6 +8115,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           [
             {
               "steps": [],
+              "text": "Hello",
             },
           ]
         `);
@@ -8358,38 +8359,15 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         expect(onErrorCalls).toMatchInlineSnapshot(`[]`);
       });
 
-      it.skip('should call onAbort when the abort signal is triggered', async () => {
+      it('should call onAbort when the abort signal is triggered', async () => {
         await result.consumeStream();
-        console.log('onAbortCalls', JSON.stringify(onAbortCalls, null, 2));
         expect(onAbortCalls).toMatchInlineSnapshot(`
           [
             {
               "steps": [
                 DefaultStepResult {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "providerMetadata": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "output": "result1",
-                      "providerExecuted": undefined,
-                      "providerMetadata": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-result",
-                    },
-                  ],
-                  "finishReason": "tool-calls",
+                  "content": [],
+                  "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
                   "response": {
@@ -8403,7 +8381,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                               "value": "value",
                             },
                             "providerExecuted": undefined,
-                            "providerOptions": undefined,
+                            "providerOptions": {
+                              "mastra": {
+                                "createdAt": 1704067200000,
+                              },
+                            },
                             "toolCallId": "call-1",
                             "toolName": "tool1",
                             "type": "tool-call",
@@ -8412,33 +8394,32 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         "role": "assistant",
                       },
                       {
-                        "content": [
-                          {
-                            "output": {
-                              "type": "text",
-                              "value": "result1",
-                            },
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-result",
-                          },
-                        ],
+                        "content": [],
                         "role": "tool",
                       },
                     ],
                     "modelId": "mock-model-id",
+                    "modelProvider": "mock-provider",
+                    "modelVersion": "v2",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
+                  "tripwire": undefined,
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                   "warnings": [],
                 },
               ],
+              "text": "Hello",
             },
           ]
         `);
