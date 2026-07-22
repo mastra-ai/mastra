@@ -39,19 +39,21 @@ afterEach(() => {
   vi.mocked(redirectToLogin).mockClear();
 });
 
-function seedFactory(project?: Factory) {
-  const selectedProject: Factory = project ?? {
-    id: 'project-test',
-    name: 'MastraCode Test',
-    resourceId: RESOURCE_ID,
-    createdAt: 1,
-    binding: {
-      kind: 'local',
-      path: '/tmp/mastracode-test',
+function seedFactories(projects?: Factory[], activeFactoryId?: string) {
+  const selectedProjects: Factory[] = projects ?? [
+    {
+      id: 'project-test',
+      name: 'MastraCode Test',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: {
+        kind: 'local',
+        path: '/tmp/mastracode-test',
+      },
     },
-  };
-  localStorage.setItem('mastracode-factories', JSON.stringify([selectedProject]));
-  localStorage.setItem('mastracode-active-factory', selectedProject.id);
+  ];
+  localStorage.setItem('mastracode-factories', JSON.stringify(selectedProjects));
+  if (activeFactoryId) localStorage.setItem('mastracode-active-factory', activeFactoryId);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -101,16 +103,28 @@ const AUTHENTICATED = () =>
 function renderRoutes(
   initialEntry: string,
   authMe: () => Response | Promise<Response>,
-  options?: { project?: Factory; workItemCount?: number; workItemsReady?: Promise<void>; workItemsError?: boolean },
+  options?: {
+    project?: Factory;
+    projects?: Factory[];
+    activeFactoryId?: string;
+    withFactory?: boolean;
+    workItemCount?: number;
+    workItemsReady?: Promise<void>;
+    workItemsError?: boolean;
+  },
 ) {
-  seedFactory(options?.project);
+  if (options?.withFactory !== false) {
+    const projects = options?.projects ?? (options?.project ? [options.project] : undefined);
+    const activeFactoryId = options?.activeFactoryId ?? projects?.[0]?.id ?? 'project-test';
+    seedFactories(projects, activeFactoryId);
+  }
   useAgentControllerHandlers();
   server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
-  if (options?.project?.binding.kind === 'github') {
+  if (options?.project?.binding.kind === 'factory') {
     const workItems = Array.from({ length: options.workItemCount ?? 0 }, (_, index) => ({ id: `work-${index}` }));
     server.use(
       http.get(
-        `${TEST_BASE_URL}/web/factory/repositories/${options.project.binding.githubProjectId}/work-items`,
+        `${TEST_BASE_URL}/web/factory/projects/${options.project.binding.factoryProjectId}/work-items`,
         async () => {
           await options.workItemsReady;
           if (options.workItemsError) return HttpResponse.json({ error: 'Factory unavailable' }, { status: 500 });
@@ -156,6 +170,31 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
+  it('given no factory, when visiting /new, then the Factory onboarding is shown', async () => {
+    renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Build software with a Factory that knows your work.' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create my first factory' })).toBeInTheDocument();
+  });
+
+  it('given no factory, when onboarding starts, then repository selection replaces the introduction', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: false, connected: false, installations: [], reason: 'missing_config' }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
+
+    await user.click(await screen.findByRole('button', { name: 'Create my first factory' }));
+
+    expect(await screen.findByRole('heading', { name: 'Choose your codebase.' })).toBeInTheDocument();
+    expect(screen.queryByText('Build software with a Factory that knows your work.')).not.toBeInTheDocument();
+  });
+
   it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {
     const { router } = renderRoutes('/', AUTH_DISABLED);
 
@@ -170,15 +209,48 @@ describe('MastraCode web routing', () => {
       resourceId: RESOURCE_ID,
       createdAt: 1,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-project-id',
-        worktrees: [],
+        kind: 'factory',
+        factoryProjectId: 'github-project-id',
+        repositories: [],
       },
     };
     const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
 
     await expectPathname(router, '/factory/board');
-    expect(await screen.findByText(/requires a Factory connected to GitHub/)).toBeInTheDocument();
+    expect(await screen.findByText(/Connect a repository to start intake/)).toBeInTheDocument();
+  });
+
+  it('given Factory hydration is still loading, when refreshing /, then the app waits before choosing a destination', async () => {
+    const project: Factory = {
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'github-project-id',
+        repositories: [],
+      },
+    };
+    let resolveProjects!: () => void;
+    const projectsReady = new Promise<void>(resolve => {
+      resolveProjects = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, async () => {
+        await projectsReady;
+        return HttpResponse.json({ projects: [{ id: 'github-project-id', name: 'mastra-ai/mastra' }] });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/github-project-id/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+    );
+    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
+
+    await screen.findByRole('status', { name: 'Loading Factory board' });
+    expect(router.state.location.pathname).toBe('/');
+    resolveProjects();
+    await expectPathname(router, '/factory/board');
   });
 
   it('given Factory work is still loading, when visiting /, then the app waits before choosing a destination', async () => {
@@ -188,9 +260,9 @@ describe('MastraCode web routing', () => {
       resourceId: RESOURCE_ID,
       createdAt: 1,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-project-id',
-        worktrees: [],
+        kind: 'factory',
+        factoryProjectId: 'github-project-id',
+        repositories: [],
       },
     };
     let resolveWorkItems!: () => void;
@@ -212,9 +284,9 @@ describe('MastraCode web routing', () => {
       resourceId: RESOURCE_ID,
       createdAt: 1,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-project-id',
-        worktrees: [],
+        kind: 'factory',
+        factoryProjectId: 'github-project-id',
+        repositories: [],
       },
     };
     const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemsError: true });
@@ -230,9 +302,9 @@ describe('MastraCode web routing', () => {
       resourceId: RESOURCE_ID,
       createdAt: 1,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-project-id',
-        worktrees: [],
+        kind: 'factory',
+        factoryProjectId: 'github-project-id',
+        repositories: [],
       },
     };
     const { router } = renderRoutes('/', AUTHENTICATED, { project });
@@ -252,14 +324,14 @@ describe('MastraCode web routing', () => {
 
     await expectPathname(router, '/signin');
     expect(router.state.location.search).toBe('?returnTo=%2Fnew');
-    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Continue with GitHub' })).toBeInTheDocument();
     expect(screen.queryByText('What do you want to work on?')).not.toBeInTheDocument();
   });
 
   it('given an unauthenticated user on /signin with a returnTo, when they click Sign in, then they are sent to the hosted login with that returnTo', async () => {
     renderRoutes('/signin?returnTo=%2Fchat', UNAUTHENTICATED);
 
-    await userEvent.click(await screen.findByRole('button', { name: /sign in/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue with GitHub' }));
 
     expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/chat');
     expect(loginUrl(TEST_BASE_URL, '/chat')).toBe(`${TEST_BASE_URL}/auth/login?returnTo=%2Fchat`);
@@ -268,7 +340,7 @@ describe('MastraCode web routing', () => {
   it('given an unauthenticated user on /signin with an unsafe returnTo, when they click Sign in, then it falls back to the app root', async () => {
     renderRoutes('/signin?returnTo=https%3A%2F%2Fevil.example', UNAUTHENTICATED);
 
-    await userEvent.click(await screen.findByRole('button', { name: /sign in/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue with GitHub' }));
 
     expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/');
   });

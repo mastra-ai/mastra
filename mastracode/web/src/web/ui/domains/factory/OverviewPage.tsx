@@ -18,7 +18,8 @@ import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
 import { useWorkspaceActivity } from '../../../../shared/hooks/useWorkspaceActivity';
 import { deriveProjectPath, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import { isGithubFactory, useActiveFactoryContext } from '../workspaces';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { isServerFactory } from '../workspaces/services/factories';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import type { QueueHealthSelection } from './components/QueueHealthChart';
 import { QueueHealthChart, formatAgeSeconds } from './components/QueueHealthChart';
@@ -39,14 +40,14 @@ export function OverviewPage() {
       title="Overview"
       description="The factory at a glance: how much work is in each stage, how old it is, and what's actively running."
     >
-      {project => <OverviewContent githubProjectId={project.binding.githubProjectId} />}
+      {project => <OverviewContent factoryProjectId={project.binding.factoryProjectId} />}
     </FactoryPageShell>
   );
 }
 
-function OverviewContent({ githubProjectId }: { githubProjectId: string }) {
-  const workItemsQuery = useWorkItemsQuery(githubProjectId);
-  const thresholdsQuery = useQueueHealthThresholds(githubProjectId);
+function OverviewContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
+  const workItemsQuery = useWorkItemsQuery(factoryProjectId);
+  const thresholdsQuery = useQueueHealthThresholds(factoryProjectId);
   const activePaths = useActivePaths();
   const [selected, setSelected] = useState<QueueHealthSelection | null>(null);
 
@@ -70,7 +71,7 @@ function OverviewContent({ githubProjectId }: { githubProjectId: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-      <section className="flex flex-col gap-3 rounded-lg border border-border1 bg-surface2 p-3">
+      <section className="flex flex-col gap-3 rounded-lg bg-surface2 p-3">
         <h2 className="m-0 text-ui-md font-medium text-icon5">Queue health</h2>
         {!workItemsQuery.data ? (
           <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
@@ -81,7 +82,7 @@ function OverviewContent({ githubProjectId }: { githubProjectId: string }) {
         )}
       </section>
 
-      <section className="flex flex-col gap-2 rounded-lg border border-border1 bg-surface2 p-3">
+      <section className="flex flex-col gap-2 rounded-lg bg-surface2 p-3">
         <h2 className="m-0 text-ui-md font-medium text-icon5">Tasks</h2>
         <DrillDownList selected={selected} entries={drillDown} />
       </section>
@@ -99,10 +100,10 @@ function useActivePaths(): ReadonlySet<string> {
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isGithubFactory(activeFactory) && projectPath),
+    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory) && projectPath),
   });
   return useMemo(() => new Set(Object.keys(runningByPath).filter(path => runningByPath[path])), [runningByPath]);
 }

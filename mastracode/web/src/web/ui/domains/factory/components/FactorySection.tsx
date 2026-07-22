@@ -1,26 +1,22 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChartLine, LayoutDashboard, ScrollText, SquareKanban } from 'lucide-react';
+import { ChartLine, GitPullRequest, LayoutDashboard, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
 import { useOverlays } from '../../../lib/overlays';
-import { isGithubFactory, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
+import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
 
 /**
  * The Factory menu: Board navigation plus whatever the caller nests under it
- * (the factory Sessions list). Factory work is GitHub-backed, so the section
- * only renders for GitHub factories; the Board link additionally requires the
- * GitHub integration to be enabled and connected, while the nested sessions
- * work off the factory's own worktrees.
+ * (the factory Sessions list). Renders for any server-backed Factory — a
+ * Factory with no linked repositories (or a disconnected GitHub integration)
+ * still has a Board; those states surface connect CTAs inside the pages
+ * instead of hiding the navigation.
  */
 export function FactorySection({ children }: { children?: ReactNode }) {
   const { activeFactory } = useActiveFactoryContext();
-  const isGithub = activeFactory ? isGithubFactory(activeFactory) : false;
-  const { data: status } = useGithubStatusQuery(isGithub);
 
-  if (!isGithub) return null;
-
-  const showBoard = Boolean(status?.enabled && status.connected);
+  if (!activeFactory || !isServerFactory(activeFactory)) return null;
 
   return (
     <nav className="flex flex-col gap-2" aria-label="Factory">
@@ -29,14 +25,13 @@ export function FactorySection({ children }: { children?: ReactNode }) {
           Factory
         </Txt>
       </div>
-      {showBoard && (
-        <div className="flex flex-col gap-1">
-          <FactoryLink to="/factory/overview" icon={LayoutDashboard} label="Overview" />
-          <FactoryLink to="/factory/board" icon={SquareKanban} label="Board" />
-          <FactoryLink to="/factory/metrics" icon={ChartLine} label="Metrics" />
-          <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit" />
-        </div>
-      )}
+      <div className="flex flex-col gap-1">
+        <FactoryLink to="/factory/overview" icon={LayoutDashboard} label="Overview" />
+        <FactoryLink to="/factory/work" icon={SquareKanban} label="Work" />
+        <FactoryLink to="/factory/review" icon={GitPullRequest} label="Review" />
+        <FactoryLink to="/factory/metrics" icon={ChartLine} label="Metrics" />
+        <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit" />
+      </div>
       {children}
     </nav>
   );

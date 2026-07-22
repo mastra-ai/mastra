@@ -10,14 +10,14 @@ import type { AuditEventPage } from '../../web/ui/domains/factory/services/audit
  * UI's action-group filter key; `actions` the concrete action list it maps to
  * (undefined = all actions).
  */
-export function useAuditEvents(githubProjectId: string | undefined, group: string, actions: string[] | undefined) {
+export function useAuditEvents(factoryProjectId: string | undefined, group: string, actions: string[] | undefined) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
-    queryKey: queryKeys.factoryAudit(githubProjectId, group),
-    queryFn: ({ pageParam }) => fetchAuditEvents(baseUrl, githubProjectId!, { actions, before: pageParam }),
+    queryKey: queryKeys.factoryAudit(factoryProjectId, group),
+    queryFn: ({ pageParam }) => fetchAuditEvents(baseUrl, factoryProjectId!, { actions, before: pageParam }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: AuditEventPage) => lastPage.nextCursor,
-    enabled: Boolean(githubProjectId),
+    enabled: Boolean(factoryProjectId),
     staleTime: 15_000,
   });
 }

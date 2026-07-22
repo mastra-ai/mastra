@@ -5,7 +5,7 @@ export type GithubSignalSubscriptionStatus = 'open' | 'closed' | 'merged';
 
 export interface GithubSignalSubscriptionData {
   installationExternalId: string;
-  projectId: string;
+  projectRepositoryId: string;
   repositoryExternalId: string;
   repositorySlug: string;
   changeRequestId: string;
@@ -24,7 +24,7 @@ export type GithubSubscriptionStorage = IntegrationStorageHandle<
 export interface SubscribeToPullRequestInput {
   orgId: string;
   installationExternalId: string;
-  projectId: string;
+  projectRepositoryId: string;
   repositoryExternalId: string;
   repositorySlug: string;
   changeRequestId: string;
@@ -88,7 +88,7 @@ export async function subscribeToPullRequest(
     status: 'open',
     data: {
       installationExternalId: input.installationExternalId,
-      projectId: input.projectId,
+      projectRepositoryId: input.projectRepositoryId,
       repositoryExternalId: input.repositoryExternalId,
       repositorySlug: input.repositorySlug,
       changeRequestId: input.changeRequestId,

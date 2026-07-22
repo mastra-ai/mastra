@@ -1,5 +1,82 @@
 # mastracode
 
+## 0.32.0-alpha.12
+
+### Patch Changes
+
+- Fixed local database cleanup across interactive, ACP, and headless exits. ([#19901](https://github.com/mastra-ai/mastra/pull/19901))
+
+- Updated dependencies [[`6193d6d`](https://github.com/mastra-ai/mastra/commit/6193d6d4ae62ad68daaaf450992198e9e49493f1), [`c7d30cd`](https://github.com/mastra-ai/mastra/commit/c7d30cd86009c407df91105591f03cd6e3d2854d), [`ef03fbc`](https://github.com/mastra-ai/mastra/commit/ef03fbcc556bcbc04c9b3d06fab88771ecaa043c), [`ef03fbc`](https://github.com/mastra-ai/mastra/commit/ef03fbcc556bcbc04c9b3d06fab88771ecaa043c), [`6193d6d`](https://github.com/mastra-ai/mastra/commit/6193d6d4ae62ad68daaaf450992198e9e49493f1), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`4e68363`](https://github.com/mastra-ai/mastra/commit/4e683634f94ebd062d26a3bb6093a8dfc7263d37), [`9251370`](https://github.com/mastra-ai/mastra/commit/9251370ad413af464aa22d7566338bec5613e8de)]:
+  - @mastra/code-sdk@1.0.0-alpha.12
+  - @mastra/core@1.52.0-alpha.11
+  - @mastra/libsql@1.17.0-alpha.3
+
+## 0.32.0-alpha.11
+
+### Minor Changes
+
+- Add browser-based OAuth authentication for HTTP MCP servers to Mastra Code. ([#19467](https://github.com/mastra-ai/mastra/pull/19467))
+
+  When an HTTP MCP server rejects a connection with an authorization error, the
+  `/mcp` selector now shows a "needs auth" badge and an **Authenticate** action.
+  Choosing it opens the provider's consent page in the browser and completes the
+  OAuth 2.1 authorization-code flow (PKCE + Dynamic Client Registration) over a
+  loopback callback server, persists the tokens, and reconnects — no manual
+  configuration required for a bare `{ "url": ... }` server entry. A **Cancel
+  authentication** action aborts an in-flight flow and returns the server to the
+  needs-auth state.
+
+  The server manager gains `authenticateServer(name)` and
+  `cancelServerAuthentication(name)`, `McpServerStatus` gains an optional
+  `needsAuth` flag, and the OAuth `redirectUrl` in MCP server config is now
+  optional (it defaults to a stable loopback URL). The config also accepts
+  `callbackPort` as a shorthand that synthesizes
+  `http://localhost:<callbackPort>/callback`, the Claude Code / Codex
+  convention, so configs written for those clients (like Slack's official MCP
+  plugin config) work verbatim. `callbackPort` and `redirectUrl` are mutually
+  exclusive.
+
+  ```ts
+  const server = manager.getServerStatuses().find(s => s.name === 'supabase');
+  if (server?.needsAuth) {
+    // Opens the consent page in the browser, completes the OAuth flow, and
+    // resolves with the reconnected server status.
+    const status = await manager.authenticateServer('supabase', {
+      onAuthorizationUrl: url => openInBrowser(url),
+    });
+    console.log(status.connected);
+
+    // Abort an abandoned browser flow and return the server to needs-auth:
+    // await manager.cancelServerAuthentication('supabase')
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6341b72`](https://github.com/mastra-ai/mastra/commit/6341b720fa80e65731cbbd7d88d1088f4c5b9914)]:
+  - @mastra/code-sdk@1.0.0-alpha.11
+
+## 0.31.1-alpha.10
+
+### Patch Changes
+
+- dependencies updates: ([#19813](https://github.com/mastra-ai/mastra/pull/19813))
+  - Updated dependency [`@ai-sdk/amazon-bedrock@^3.0.107` ↗︎](https://www.npmjs.com/package/@ai-sdk/amazon-bedrock/v/3.0.107) (from `^3.0.105`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.98` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.98) (from `^3.0.96`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.86` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.86) (from `^3.0.84`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai-compatible@^2.0.62` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai-compatible/v/2.0.62) (from `^2.0.59`, in `dependencies`)
+  - Updated dependency [`ai@^6.0.230` ↗︎](https://www.npmjs.com/package/ai/v/6.0.230) (from `^6.0.225`, in `dependencies`)
+
+- Preserved Mastra Code's displayed active goal time across pauses, approval waits, and thread reloads. ([#19837](https://github.com/mastra-ai/mastra/pull/19837))
+
+- Updated dependencies [[`41a5392`](https://github.com/mastra-ai/mastra/commit/41a5392d9f6c5e18d6b227f0fc0ddf49c50774e9), [`41a5392`](https://github.com/mastra-ai/mastra/commit/41a5392d9f6c5e18d6b227f0fc0ddf49c50774e9), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`da009e1`](https://github.com/mastra-ai/mastra/commit/da009e1aacd89ed94b8d1b2af09c9d4fe7c4db49), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`35c2181`](https://github.com/mastra-ai/mastra/commit/35c2181e6a50e47c90ba36260db7c9723d54696f), [`232fcbc`](https://github.com/mastra-ai/mastra/commit/232fcbc14fce625dd672ba043329c0b732c62be2), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`6deac4a`](https://github.com/mastra-ai/mastra/commit/6deac4a520750d807a2154333bf1b91a2df958a5), [`c328769`](https://github.com/mastra-ai/mastra/commit/c3287698ff8ef98dba86d415faa566fa3e5f4d56), [`232fcbc`](https://github.com/mastra-ai/mastra/commit/232fcbc14fce625dd672ba043329c0b732c62be2), [`3491666`](https://github.com/mastra-ai/mastra/commit/34916663c4fdd43b48c21f4ab2d5fb6dcccc94f9)]:
+  - @mastra/code-sdk@1.0.0-alpha.10
+  - @mastra/core@1.52.0-alpha.10
+  - @mastra/libsql@1.17.0-alpha.2
+  - @mastra/pg@1.17.0-alpha.2
+  - @mastra/observability@1.16.2-alpha.1
+  - @mastra/mcp@1.15.0-alpha.0
+
 ## 0.31.1-alpha.9
 
 ### Patch Changes

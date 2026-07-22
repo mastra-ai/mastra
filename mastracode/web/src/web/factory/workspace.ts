@@ -3,8 +3,26 @@ import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDynamicWorkspace } from '@mastra/code-sdk/agents/workspace';
 import type { WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace';
-import { LocalSkillSource } from '@mastra/core/workspace';
-import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
+import { LocalSandbox, LocalSkillSource } from '@mastra/core/workspace';
+import { Workspace, type SkillSource, type SkillSourceEntry, type SkillSourceStat } from '@mastra/core/workspace';
+import type { MastraFactorySandboxConfig } from '../factory-entry';
+import { MASTRACODE_WORKSPACE_TOOLS } from '@mastra/code-sdk/agents/tool-availability';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
+import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
+import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
+import { checkoutSessionBranch, materializeRepo, runWorktreeSetup } from '../github/sandbox';
+import { getSeededGithubIntegration } from '../runtime-config';
+import { computeLocalSessionSandboxWorkdir, ensureSandbox } from '../sandbox/fleet';
+import type { SandboxBindingStore } from '../sandbox/fleet';
+import type { WebAuthUser } from '../auth';
+
+const WORKSPACE_ID_PREFIX = 'mfw';
+const SESSION_CHECKPOINT_PREFIX = 'mastracode-session';
+
+export function checkpointNameForSession(sessionId: string): string {
+  return `${SESSION_CHECKPOINT_PREFIX}-${sessionId}`;
+}
 
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
@@ -15,7 +33,7 @@ const FACTORY_SKILLS_SOURCE_PATH =
     bundledFactorySkillsPath,
   ].find(existsSync) ?? bundledFactorySkillsPath;
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
-const FACTORY_SKILL_NAMES = new Set(['understand-issue', 'understand-pr']);
+const FACTORY_SKILL_NAMES = new Set(['configure-factory-rules', 'understand-issue', 'understand-pr']);
 
 class FactorySkillSource implements SkillSource {
   readonly #factorySource = new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH });
@@ -78,8 +96,112 @@ const factorySkillExtension: WorkspaceSkillExtension = {
   createSource: (fallback, fallbackSkillRoots) => new FactorySkillSource(fallback, fallbackSkillRoots),
 };
 
-type DynamicWorkspaceContext = Omit<Parameters<typeof getDynamicWorkspace>[0], 'skillExtension'>;
+type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
 
-export function getFactoryWorkspace(context: DynamicWorkspaceContext) {
-  return getDynamicWorkspace({ ...context, skillExtension: factorySkillExtension });
+export function createWorkspaceFactory(sandboxConfig?: MastraFactorySandboxConfig) {
+  const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
+
+  return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
+    const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
+    const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+    const github = getSeededGithubIntegration();
+    const session = ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
+
+    if (!session) {
+      if (sandboxConfig && !isLocalSandbox) {
+        throw new Error('A Factory session ID is required to create a remote sandbox workspace');
+      }
+      return getDynamicWorkspace({ requestContext, mastra, skillExtension: effectiveSkillExtension });
+    }
+
+    const user = requestContext.get('user') as WebAuthUser | undefined;
+    if (!user?.organizationId || !user.workosId || user.organizationId !== session.orgId || user.workosId !== session.userId) {
+      throw new Error(`Factory session ${session.sessionId} is not available to the current user`);
+    }
+    if (!sandboxConfig || !github) {
+      throw new Error('GitHub and sandbox providers are required to create a Factory session workspace');
+    }
+
+    const storage = github.sourceControlStorage;
+    const projectRepository = await storage.projectRepositories.get({
+      orgId: session.orgId,
+      id: session.projectRepositoryId,
+    });
+    if (!projectRepository) throw new Error(`Repository link ${session.projectRepositoryId} was not found`);
+    const connection = await storage.connections.get({ orgId: session.orgId, id: projectRepository.connectionId });
+    const repository = await storage.repositories.get({ orgId: session.orgId, id: projectRepository.repositoryId });
+    if (!connection || !repository) throw new Error(`Repository link ${session.projectRepositoryId} is incomplete`);
+    const installation = await storage.installations.get({ orgId: session.orgId, id: connection.installationId });
+    if (!installation) throw new Error(`GitHub installation ${connection.installationId} was not found`);
+    const repoFullName = repository.slug;
+
+    const workdir = isLocalSandbox
+      ? computeLocalSessionSandboxWorkdir(repoFullName, session.id)
+      : (session.sandboxWorkdir ?? projectRepository.sandboxWorkdir);
+    const binding: SandboxBindingStore = {
+      sandboxId: session.sandboxId,
+      checkpointName: checkpointNameForSession(session.id),
+      setSandboxId: async id => {
+        await storage.sessions.setSandbox({ id: session.id, sandboxId: id, sandboxWorkdir: workdir });
+        session.sandboxId = id;
+        session.sandboxWorkdir = workdir;
+      },
+      clear: async () => {
+        await storage.sessions.setSandbox({ id: session.id, sandboxId: null, sandboxWorkdir: workdir });
+        session.sandboxId = null;
+      },
+    };
+
+    const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
+    const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
+    const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
+    try {
+      const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
+      if (existing) {
+        existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
+        return existing;
+      }
+    } catch {
+      // Not registered yet.
+    }
+
+    const token = await github.mintInstallationToken(Number(installation.externalId));
+    if (!token) throw new Error('GitHub token could not be generated for the Factory session');
+
+    const sandbox = await ensureSandbox(
+      binding,
+      { GH_TOKEN: token },
+      undefined,
+      isLocalSandbox ? { workingDirectory: workdir } : {},
+    );
+    await materializeRepo(
+      { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
+      { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
+      sandbox,
+      token,
+      storage.sessions,
+    );
+    await checkoutSessionBranch(sandbox, workdir, {
+      branch: session.branch,
+      baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
+      token,
+      repoFullName: repoFullName,
+    });
+    if (projectRepository.setupCommand) await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
+
+    const filesystem = new SandboxFilesystem({ sandbox, workdir });
+    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+    const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
+    return new Workspace({
+      id: workspaceId,
+      name: 'Mastra Code Factory Session Workspace',
+      filesystem,
+      sandbox: sandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
+      tools: MASTRACODE_WORKSPACE_TOOLS,
+      skills: skillPaths,
+      skillSource: effectiveSkillExtension?.createSource(filesystem, projectSkillPaths) ?? filesystem,
+    });
+  };
 }
+
+export const getFactoryWorkspace = createWorkspaceFactory();

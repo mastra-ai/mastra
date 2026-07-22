@@ -18,7 +18,7 @@ import {
 } from './fixtures/theme-flow';
 import { server } from '@/test/msw-server';
 
-const BASE_URL = 'http://localhost:3100';
+const BASE_URL = window.location.origin;
 
 class ChartResizeObserver implements ResizeObserver {
   constructor(private readonly callback: ResizeObserverCallback) {}
@@ -52,8 +52,6 @@ function renderSankeySignals() {
 }
 
 beforeEach(() => {
-  window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = BASE_URL;
-  window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
   vi.stubGlobal('ResizeObserver', ChartResizeObserver);
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(680);
@@ -62,8 +60,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = undefined;
-  window.MASTRA_PLATFORM_PROJECT_ID = undefined;
 });
 
 describe('SankeySignals', () => {

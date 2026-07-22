@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -6,6 +6,7 @@ import {
   createWorkItem,
   deleteWorkItem,
   listWorkItems,
+  transitionWorkItem,
   updateWorkItem,
 } from '../../web/ui/domains/factory/services/workItems';
 import type {
@@ -15,12 +16,15 @@ import type {
 } from '../../web/ui/domains/factory/services/workItems';
 
 /** The org's persisted work items (kanban cards) for a project. */
-export function useWorkItemsQuery(githubProjectId: string | undefined) {
+export function useWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.workItems(githubProjectId),
-    queryFn: () => listWorkItems(baseUrl, githubProjectId!),
-    enabled: Boolean(githubProjectId),
+    queryKey: queryKeys.workItems(factoryProjectId),
+    queryFn: () => listWorkItems(baseUrl, factoryProjectId!),
+    enabled: Boolean(factoryProjectId),
+    // Relationships can be created by GitHub ingestion or another open tab.
+    // Keep thread-page counterpart links current without requiring a reload.
+    refetchInterval: 5_000,
   });
 }
 
@@ -28,13 +32,13 @@ export function useWorkItemsQuery(githubProjectId: string | undefined) {
  * Materialize a work item (the server upserts on `sourceKey`, so acting twice
  * on the same issue reuses the card). The list cache is patched in place.
  */
-export function useUpsertWorkItemMutation(githubProjectId: string | undefined) {
+export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateWorkItemInput) => createWorkItem(baseUrl, githubProjectId!, input),
+    mutationFn: (input: CreateWorkItemInput) => createWorkItem(baseUrl, factoryProjectId!, input),
     onSuccess: item => {
-      queryClient.setQueryData<WorkItem[]>(queryKeys.workItems(githubProjectId), existing => {
+      queryClient.setQueryData<WorkItem[]>(queryKeys.workItems(factoryProjectId), existing => {
         const rest = (existing ?? []).filter(i => i.id !== item.id);
         return [item, ...rest];
       });
@@ -42,24 +46,20 @@ export function useUpsertWorkItemMutation(githubProjectId: string | undefined) {
   });
 }
 
-/**
- * Patch a work item (stage moves, session/metadata merges). Stage moves apply
- * optimistically — the card jumps columns immediately and rolls back if the
- * server rejects the patch.
- */
-export function useUpdateWorkItemMutation(githubProjectId: string | undefined) {
+/** Patch non-stage work-item fields. Stage movement uses the transition authority below. */
+export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const listKey = queryKeys.workItems(githubProjectId);
+  const listKey = queryKeys.workItems(factoryProjectId);
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: UpdateWorkItemInput }) => updateWorkItem(baseUrl, id, patch),
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueryData<WorkItem[]>(listKey);
-      if (previous && patch.stages) {
+      if (previous && patch.parentWorkItemId !== undefined) {
         queryClient.setQueryData<WorkItem[]>(
           listKey,
-          previous.map(item => (item.id === id ? { ...item, stages: patch.stages! } : item)),
+          previous.map(item => (item.id === id ? { ...item, parentWorkItemId: patch.parentWorkItemId ?? null } : item)),
         );
       }
       return { previous };
@@ -75,11 +75,77 @@ export function useUpdateWorkItemMutation(githubProjectId: string | undefined) {
   });
 }
 
-/** Remove a work item from the board, dropping it from the cache optimistically. */
-export function useDeleteWorkItemMutation(githubProjectId: string | undefined) {
+type TransitionWorkItemVariables = {
+  item: WorkItem;
+  board: 'work' | 'review';
+  stage: string;
+};
+
+export function useTransitionWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const listKey = queryKeys.workItems(githubProjectId);
+  const listKey = queryKeys.workItems(factoryProjectId);
+  const mutationKey = ['factory', 'transition-work-item', factoryProjectId] as const;
+  const mutation = useMutation({
+    mutationKey,
+    mutationFn: ({ item, board, stage }: TransitionWorkItemVariables) =>
+      transitionWorkItem(baseUrl, factoryProjectId!, item.id, {
+        board,
+        stage: stage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+        expectedRevision: item.revision,
+        requestId: crypto.randomUUID(),
+        cause: 'board_drag',
+      }),
+    onMutate: async ({ item, stage }) => {
+      await queryClient.cancelQueries({ queryKey: listKey });
+      const previousItem = queryClient.getQueryData<WorkItem[]>(listKey)?.find(candidate => candidate.id === item.id);
+      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
+        (existing ?? []).map(candidate => (candidate.id === item.id ? { ...candidate, stages: [stage] } : candidate)),
+      );
+      return { previousItem };
+    },
+    onError: (_error, variables, context) => {
+      const previousItem = context?.previousItem;
+      if (!previousItem) return;
+      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
+        (existing ?? []).map(item => {
+          if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
+          return previousItem;
+        }),
+      );
+    },
+    onSuccess: (result, variables, context) => {
+      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
+        (existing ?? []).map(item => {
+          if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
+          if (result.status === 'rejected') return context?.previousItem ?? item;
+          if (result.revision <= item.revision) return item;
+          return { ...item, stages: [result.stage], revision: result.revision };
+        }),
+      );
+      void queryClient.invalidateQueries({ queryKey: listKey });
+    },
+  });
+  const pendingItemIds = useMutationState({
+    filters: { mutationKey, status: 'pending' },
+    select: pending => {
+      const variables = pending.state.variables;
+      return isTransitionWorkItemVariables(variables) ? variables.item.id : undefined;
+    },
+  }).filter(id => id !== undefined);
+  return { ...mutation, pendingItemIds };
+}
+
+function isTransitionWorkItemVariables(value: unknown): value is TransitionWorkItemVariables {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return 'item' in value && typeof value.item === 'object' && value.item !== null && 'id' in value.item;
+}
+
+/** Remove a work item from the board, dropping it from the cache optimistically. */
+export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const listKey = queryKeys.workItems(factoryProjectId);
   return useMutation({
     mutationFn: (id: string) => deleteWorkItem(baseUrl, id),
     onMutate: async id => {

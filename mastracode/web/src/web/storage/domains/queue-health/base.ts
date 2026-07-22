@@ -70,12 +70,12 @@ export const QUEUE_HEALTH_SETTINGS_SCHEMA: CollectionSchema = {
   columns: {
     id: { type: 'uuid-pk' },
     org_id: { type: 'text' },
-    github_project_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
     config: { type: 'json' },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
   },
-  uniqueIndexes: [{ name: 'queue_health_settings_org_project_unique', columns: ['org_id', 'github_project_id'] }],
+  uniqueIndexes: [{ name: 'queue_health_settings_org_project_unique', columns: ['org_id', 'factory_project_id'] }],
 };
 
 /**
@@ -100,18 +100,18 @@ export class QueueHealthStorage extends FactoryStorageDomain {
   }
 
   /** Read the project's queue-health config, falling back to {@link DEFAULT_QUEUE_HEALTH_CONFIG}. */
-  async getConfig(orgId: string, githubProjectId: string): Promise<QueueHealthConfig> {
+  async getConfig(orgId: string, factoryProjectId: string): Promise<QueueHealthConfig> {
     const row = await this.#db.findOne<{ config: unknown }>('queue_health_settings', {
       org_id: orgId,
-      github_project_id: githubProjectId,
+      factory_project_id: factoryProjectId,
     });
     return structuredClone(parseQueueHealthConfig(row?.config) ?? DEFAULT_QUEUE_HEALTH_CONFIG);
   }
 
   /** Upsert the project's queue-health config (`created_at` is preserved on update). */
-  async saveConfig(orgId: string, githubProjectId: string, config: QueueHealthConfig): Promise<void> {
+  async saveConfig(orgId: string, factoryProjectId: string, config: QueueHealthConfig): Promise<void> {
     assertValidThresholds(config);
-    const where = { org_id: orgId, github_project_id: githubProjectId };
+    const where = { org_id: orgId, factory_project_id: factoryProjectId };
     const updateExisting = () =>
       this.#db.updateAtomic('queue_health_settings', where, () => ({ config, updated_at: new Date() }));
     if (await updateExisting()) return;

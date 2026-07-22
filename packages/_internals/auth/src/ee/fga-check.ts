@@ -4,17 +4,12 @@
  * @license Mastra Enterprise License - see ee/LICENSE
  */
 
-import type { FGACheckContext, IFGAProvider } from './interfaces/fga';
+import type { ActorSignal, FGACheckContext, IFGAProvider } from './interfaces/fga';
 import type { MastraFGAPermissionInput } from './interfaces/permissions.generated';
 import { getSafeLicenseSummary } from './license';
 import { captureEEEvent, getEETelemetryFallbackDistinctId } from './telemetry';
 
-export type ActorSignal =
-  | true
-  | {
-      actorKind: 'system';
-      sourceWorkflow?: string;
-    };
+export type { ActorSignal };
 
 export interface CheckFGAOptions {
   fgaProvider: IFGAProvider | undefined;
@@ -127,10 +122,24 @@ export async function requireFGA(options: RequireFGAOptions): Promise<void> {
         ? fgaContext.metadata['sourceWorkflow']
         : undefined);
 
+    // Provider-aware least privilege: if the provider opts in by implementing
+    // requireActor, it decides whether this system actor may perform the action
+    // (and throws FGADeniedError to deny). When it is not implemented, the
+    // legacy trusted-actor bypass is preserved exactly — zero behavior change.
+    const providerEnforced = typeof fgaProvider.requireActor === 'function';
+    if (providerEnforced) {
+      await fgaProvider.requireActor!(actor, {
+        resource,
+        permission,
+        ...(fgaContext ? { context: fgaContext } : {}),
+      });
+    }
+
     try {
       captureEEEvent('ee_feature_used', license.anonymousId || getEETelemetryFallbackDistinctId(), {
         feature: 'fga',
         actor_kind: 'system',
+        actor_authorized_by: providerEnforced ? 'provider' : 'bypass',
         resource_type: resource.type,
         resource_id: resource.id,
         permission,

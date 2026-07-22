@@ -9,20 +9,16 @@ import {
 interface AgentControllerThreadMutationArgs {
   agentControllerId: string;
   resourceId: string;
-  projectPath?: string;
+  scope?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
 
-function useThreadMutationInvalidation({
-  agentControllerId,
-  resourceId,
-  projectPath,
-}: AgentControllerThreadMutationArgs) {
+function useThreadMutationInvalidation({ agentControllerId, resourceId, scope }: AgentControllerThreadMutationArgs) {
   const queryClient = useQueryClient();
   return () =>
     queryClient.invalidateQueries({
-      queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, projectPath),
+      queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, scope),
       exact: true,
     });
 }
@@ -70,7 +66,7 @@ export function useCloneAgentControllerThreadMutation(args: AgentControllerThrea
 }
 
 export function useSwitchAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { agentControllerId, resourceId, projectPath } = args;
+  const { agentControllerId, resourceId, scope } = args;
   const queryClient = useQueryClient();
   const { session } = createAgentControllerClient(args);
 
@@ -80,10 +76,7 @@ export function useSwitchAgentControllerThreadMutation(args: AgentControllerThre
       return requireAgentControllerSession(session).state();
     },
     onSuccess: state => {
-      queryClient.setQueryData(
-        queryKeys.agentControllerConnectionState(agentControllerId, resourceId, projectPath),
-        state,
-      );
+      queryClient.setQueryData(queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope), state);
     },
   });
 }

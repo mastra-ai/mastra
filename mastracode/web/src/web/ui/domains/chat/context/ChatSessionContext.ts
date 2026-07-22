@@ -1,10 +1,17 @@
 import { createContext } from 'react';
 
+export interface FactorySessionState {
+  factoryProjectId: string;
+  projectRepositoryId?: string;
+  sandboxId?: string;
+  sandboxWorkdir?: string;
+}
+
 export interface ChatSessionContextApi {
   resourceId: string;
   sessionEnabled: boolean;
   projectPath?: string;
-  projectState?: Record<string, unknown>;
+  factorySessionState?: FactorySessionState;
   baseUrl: string;
   /**
    * 'factory' — org-scoped session bound to a factory worktree of a GitHub

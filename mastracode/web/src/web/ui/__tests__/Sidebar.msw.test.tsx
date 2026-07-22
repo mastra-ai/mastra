@@ -2,13 +2,14 @@
  * BDD coverage for the propless `Sidebar`.
  *
  * The sidebar consumes the domain contexts directly (`useActiveFactoryContext`,
- * focused chat hooks, `useOverlays`, `useToast`, `useWebAuth`) instead of a
+ * focused chat hooks, `useOverlays`, toast feedback, and `useWebAuth`) instead of a
  * drilled prop bag, so the spec drives it end-to-end: real fetch transport,
  * MSW at the network boundary, assertions on the requests the thread actions
  * produce.
  */
 import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
@@ -22,9 +23,9 @@ import { redirectToLogout } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
 import type { Factory } from '../domains/workspaces';
 import { ActiveFactoryProvider } from '../domains/workspaces';
+import { SettingsNavigationProvider } from '../domains/settings/context/SettingsNavigationProvider';
 import { OverlaysProvider } from '../lib/overlays';
 import { Sidebar } from '../Sidebar';
-import { ToastProvider } from '../ui';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
 // service-level navigation helper is stubbed; `fetchAuthState` stays real.
@@ -59,21 +60,27 @@ const secondLocalProject: Factory = {
   },
 };
 
+const githubRepository = {
+  projectRepositoryId: 'pr-mastra-1',
+  slug: 'mastra-ai/mastra',
+  gitBranch: 'main',
+  sandboxWorkdir: '/sandbox/mastra',
+  selectedWorktreePath: '/sandbox/mastra',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+};
+
 const githubProject: Factory = {
   id: 'p-github',
   name: 'Mastra',
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: 'gh-project-1',
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra',
-    worktrees: [
-      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-    ],
+    kind: 'factory',
+    factoryProjectId: 'fp-github-project-1',
+    repositories: [githubRepository],
   },
 };
 
@@ -207,16 +214,17 @@ function renderSidebar() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/chat']}>
       <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
-        <ToastProvider>
-          <ActiveFactoryProvider>
-            <ChatSessionProvider>
-              <OverlaysProvider>
+        <ActiveFactoryProvider>
+          <ChatSessionProvider>
+            <OverlaysProvider>
+              <SettingsNavigationProvider>
                 <Sidebar />
                 <LocationProbe />
-              </OverlaysProvider>
-            </ChatSessionProvider>
-          </ActiveFactoryProvider>
-        </ToastProvider>
+              </SettingsNavigationProvider>
+            </OverlaysProvider>
+          </ChatSessionProvider>
+        </ActiveFactoryProvider>
+        <Toaster position="bottom-right" />
       </MainSidebarProvider>
     </MemoryRouter>,
   );
@@ -253,9 +261,79 @@ describe('Sidebar', () => {
       expect(await within(navigation).findByText('First thread')).toBeInTheDocument();
       const footerNavigation = within(account).getByRole('list');
       expect(within(footerNavigation).getByRole('button', { name: 'Sign out' })).toHaveTextContent('Ada Lovelace');
-      expect(within(footerNavigation).getByRole('button', { name: 'Open settings' })).toHaveTextContent('Settings');
+      const settingsTrigger = within(footerNavigation).getByRole('button', { name: 'Settings' });
+      expect(settingsTrigger).toHaveTextContent('Settings');
+      expect(settingsTrigger).toHaveAttribute('id', 'settings-trigger');
+      expect(settingsTrigger).not.toHaveAttribute('aria-current');
       expect(projectSwitcher.compareDocumentPosition(navigation)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
       expect(navigation.compareDocumentPosition(account)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
+    it('replaces the main navigation with settings sections and restores it from the back button or footer', async () => {
+      const user = userEvent.setup();
+      seedFactory();
+      useAuthHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      expect(await screen.findByText('First thread')).toBeInTheDocument();
+      const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
+
+      await user.click(settingsTrigger);
+
+      const settingsNavigation = screen.getByRole('navigation', { name: 'Settings sections' });
+      const generalButton = within(settingsNavigation).getByRole('button', { name: 'General' });
+      const backButton = within(settingsNavigation).getByRole('button', { name: 'Back to app' });
+      const behaviorButton = within(settingsNavigation).getByRole('button', { name: 'Behavior' });
+      expect(settingsTrigger).toHaveAttribute('aria-current', 'page');
+      expect(generalButton).toHaveAttribute('aria-current', 'page');
+      expect(screen.queryByRole('region', { name: 'Factory switcher' })).not.toBeInTheDocument();
+      expect(backButton.compareDocumentPosition(generalButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+      await user.click(behaviorButton);
+      expect(behaviorButton).toHaveAttribute('aria-current', 'page');
+      expect(generalButton).not.toHaveAttribute('aria-current');
+
+      await user.click(backButton);
+
+      expect(settingsTrigger).not.toHaveAttribute('aria-current');
+      expect(await screen.findByText('First thread')).toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
+
+      await user.click(settingsTrigger);
+      expect(
+        within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('button', { name: 'General' }),
+      ).toHaveAttribute('aria-current', 'page');
+
+      await user.click(settingsTrigger);
+      expect(settingsTrigger).not.toHaveAttribute('aria-current');
+      expect(await screen.findByText('First thread')).toBeInTheDocument();
+    });
+
+    it('filters settings sections by section names and control keywords', async () => {
+      const user = userEvent.setup();
+      seedFactory();
+      useAuthHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      expect(await screen.findByText('First thread')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Settings' }));
+
+      const settingsNavigation = screen.getByRole('navigation', { name: 'Settings sections' });
+      const search = within(settingsNavigation).getByRole('searchbox', { name: 'Search settings' });
+
+      await user.type(search, 'notifications');
+
+      expect(within(settingsNavigation).getByRole('button', { name: 'Behavior' })).toBeInTheDocument();
+      expect(within(settingsNavigation).queryByRole('button', { name: 'General' })).not.toBeInTheDocument();
+
+      await user.clear(search);
+      expect(within(settingsNavigation).getByRole('button', { name: 'General' })).toBeInTheDocument();
+
+      await user.type(search, 'not a setting');
+      expect(within(settingsNavigation).getByRole('status')).toHaveTextContent('No settings found.');
+      expect(within(settingsNavigation).getByRole('button', { name: 'Back to app' })).toBeInTheDocument();
     });
 
     it('navigates to the thread page when a thread is clicked', async () => {
@@ -291,12 +369,11 @@ describe('Sidebar', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
 
-      expect(await screen.findByRole('menuitem', { name: 'Mastra' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Create factory from local folder' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Create/connect factory from GitHub' })).toBeInTheDocument();
+      expect(await screen.findByRole('menuitem', { name: /^Mastra\b/ })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Create Factory' })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /remove/i })).not.toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: /^Beta\b/ }));
 
       await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBe(secondLocalProject.id));
       expect(await screen.findByText('Beta')).toBeInTheDocument();
@@ -304,7 +381,7 @@ describe('Sidebar', () => {
   });
 
   describe('when a GitHub factory is active', () => {
-    it('expands factory Sessions as a navigation item without showing the repo root', async () => {
+    it('lists Factory sessions directly without showing the repository root', async () => {
       seedFactory(githubProject);
       useAuthHandler();
       useGithubStatusHandler();
@@ -312,22 +389,19 @@ describe('Sidebar', () => {
       renderSidebar();
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
-      const sessions = within(factory).getByRole('button', { name: 'Sessions' });
-      expect(sessions).toHaveAttribute('aria-expanded', 'false');
-      expect(within(factory).queryByRole('button', { name: 'feat-ui' })).not.toBeInTheDocument();
-
-      await userEvent.click(sessions);
-
-      expect(sessions).toHaveAttribute('aria-expanded', 'true');
-      // Only feature worktrees are sessions: the repo-root checkout is not one.
-      expect(within(factory).getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
+      const workSessions = within(factory).getByRole('region', { name: 'Work Sessions' });
+      expect(within(workSessions).getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
       expect(within(factory).queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
     });
 
-    it('explains how factory Sessions are created when none exist', async () => {
+    it('hides role-based Factory session sections when none exist', async () => {
       seedFactory({
         ...githubProject,
-        binding: { ...githubProject.binding, worktrees: [githubProject.binding.worktrees[0]!] },
+        binding: {
+          kind: 'factory',
+          factoryProjectId: 'fp-github-project-1',
+          repositories: [{ ...githubRepository, worktrees: [githubRepository.worktrees[0]!] }],
+        },
       });
       useAuthHandler();
       useGithubStatusHandler();
@@ -335,9 +409,8 @@ describe('Sidebar', () => {
       renderSidebar();
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
-      await userEvent.click(within(factory).getByRole('button', { name: 'Sessions' }));
-
-      expect(within(factory).getByText('Sessions appear when work starts from the Factory board.')).toBeInTheDocument();
+      expect(within(factory).queryByRole('region', { name: 'Work Sessions' })).not.toBeInTheDocument();
+      expect(within(factory).queryByRole('region', { name: 'Review Sessions' })).not.toBeInTheDocument();
     });
 
     it('renders the User Sessions section and no thread list', async () => {
@@ -350,7 +423,6 @@ describe('Sidebar', () => {
       expect(await screen.findByRole('region', { name: 'User sessions' })).toBeInTheDocument();
       // Each worktree holds a single conversation, so GitHub projects have no
       // thread list — neither nested nor flat.
-      await userEvent.click(screen.getByRole('button', { name: 'Sessions' }));
       await screen.findByRole('button', { name: 'feat-ui' });
       expect(screen.queryByText('First thread')).not.toBeInTheDocument();
     });

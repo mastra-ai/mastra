@@ -177,6 +177,13 @@ export const GithubIcon = ({ size = 16, className }: IconProps) => (
   </svg>
 );
 
+/** Linear mark (fill-based; inherits currentColor). */
+export const LinearIcon = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M3.04 7.51a10.5 10.5 0 0 0 13.45 13.45L3.04 7.51Zm-.96 3.13a10.5 10.5 0 0 0 11.28 11.28L2.08 10.64Zm2.04-5.42 14.66 14.66a10.56 10.56 0 0 0 1.39-1.67L5.79 3.83a10.56 10.56 0 0 0-1.67 1.39ZM12 1.5c-1.3 0-2.54.24-3.68.67l13.51 13.51A10.5 10.5 0 0 0 12 1.5Z" />
+  </svg>
+);
+
 export const BellIcon = ({ size = 15, className }: IconProps) =>
   svg(
     <>

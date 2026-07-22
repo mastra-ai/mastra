@@ -145,6 +145,25 @@ function useAgentControllerHandlers({
     http.get(`${TEST_BASE_URL}/web/github/status`, () =>
       HttpResponse.json({ enabled: true, connected: false, installations: [] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
+      const sessionId = String(params.sessionId);
+      return HttpResponse.json({
+        session: {
+          id: `session-${sessionId}`,
+          sessionId,
+          projectRepositoryId: 'pr-github-thread',
+          orgId: 'org-test',
+          userId: 'user-test',
+          branch: 'user/thread-session',
+          baseBranch: 'main',
+          sandboxId: null,
+          sandboxWorkdir: null,
+          materializedAt: null,
+          createdAt: '2026-06-01T00:00:00.000Z',
+          updatedAt: '2026-06-01T00:00:00.000Z',
+        },
+      });
+    }),
     http.post(`${API}/sessions`, () => {
       captured.sessionsCreated += 1;
       return HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: bound });
@@ -245,14 +264,20 @@ describe('MastraCode thread pages', () => {
       resourceId: RESOURCE_ID,
       createdAt: 2,
       binding: {
-        kind: 'github',
-        githubProjectId: 'github-thread',
-        worktrees: [
+        kind: 'factory',
+        factoryProjectId: 'fp-github-thread',
+        repositories: [
           {
-            branch: 'user/thread-session',
-            worktreePath: '/tmp/thread-project-session',
-            baseBranch: 'main',
-            threadId: threadOne.id,
+            projectRepositoryId: 'pr-github-thread',
+            slug: 'mastra-ai/thread-project',
+            worktrees: [
+              {
+                branch: 'user/thread-session',
+                worktreePath: '/tmp/thread-project-session',
+                baseBranch: 'main',
+                threadId: threadOne.id,
+              },
+            ],
           },
         ],
       },

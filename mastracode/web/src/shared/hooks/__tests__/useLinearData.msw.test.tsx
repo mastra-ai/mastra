@@ -82,7 +82,7 @@ describe('useLinearIssuesQuery', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useLinearIssuesQuery(true));
+    const { result } = renderHookWithProviders(() => useLinearIssuesQuery('github-project-1'));
 
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.data).toEqual([issue]);
@@ -105,7 +105,7 @@ describe('useLinearIssuesQuery', () => {
       }),
     );
 
-    const { result, client } = renderHookWithProviders(() => useLinearIssuesQuery(false));
+    const { result, client } = renderHookWithProviders(() => useLinearIssuesQuery(undefined));
 
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(result.current.fetchStatus).toBe('idle');
@@ -117,7 +117,7 @@ describe('useLinearIssuesQuery', () => {
       http.get(ISSUES_URL, () => HttpResponse.json({ error: 'linear_fetch_failed', message: 'boom' }, { status: 502 })),
     );
 
-    const { result } = renderHookWithProviders(() => useLinearIssuesQuery(true));
+    const { result } = renderHookWithProviders(() => useLinearIssuesQuery('github-project-1'));
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect((result.current.error as Error).message).toBe('boom');

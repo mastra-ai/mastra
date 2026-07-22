@@ -1,9 +1,14 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router';
 
-import { OverlaysProvider } from '../../lib/overlays';
-import { ActiveFactoryProvider } from '../workspaces';
+import { PageLayoutMainViewProvider } from '../../ui/PageLayout';
+import { OverlaysProvider, useOverlays } from '../../lib/overlays';
+import { SettingsPanel } from '../settings/components/SettingsPanel';
+import { SettingsHeader } from '../settings/components/SettingsHeader';
+import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
+import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
@@ -15,13 +20,13 @@ import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
 export default function Chat() {
   return (
     <MainSidebarProvider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
-        <ChatSessionRouteProvider>
-          <OverlaysProvider>
+      <ChatSessionRouteProvider>
+        <OverlaysProvider>
+          <SettingsNavigationProvider>
             <ChatShell />
-          </OverlaysProvider>
-        </ChatSessionRouteProvider>
-      </ActiveFactoryProvider>
+          </SettingsNavigationProvider>
+        </OverlaysProvider>
+      </ChatSessionRouteProvider>
     </MainSidebarProvider>
   );
 }
@@ -43,9 +48,40 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 }
 
 function ChatShell() {
+  const overlays = useOverlays();
+  const { activeFactory, factories, factoriesPending } = useActiveFactoryContext();
+  const { isMobile } = useMainSidebar();
+  const factorySetupRequired = factories.length === 0 && !factoriesPending;
+  const factoriesOpen = overlays.isOpen('factories');
+  const settingsOpen = overlays.isOpen('settings');
+
+  const closeFactories = () => {
+    overlays.close('factories');
+    const focusTargetId = isMobile ? 'mobile-navigation-trigger' : 'factory-switcher-trigger';
+    requestAnimationFrame(() => document.getElementById(focusTargetId)?.focus());
+  };
+
+  const mainView = settingsOpen ? (
+    <SettingsPanel />
+  ) : factoriesOpen ? (
+    <FactoriesPanel onClose={factorySetupRequired ? undefined : closeFactories} />
+  ) : undefined;
+
   return (
     <>
-      <Outlet />
+      {!activeFactory && mainView !== undefined ? (
+        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">
+          {settingsOpen && isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined}
+          {mainView}
+        </main>
+      ) : (
+        <PageLayoutMainViewProvider
+          view={mainView}
+          mobileHeader={settingsOpen ? <SettingsHeader autoFocus={isMobile} placement="mobile" /> : undefined}
+        >
+          <Outlet />
+        </PageLayoutMainViewProvider>
+      )}
       <ChatOverlays />
     </>
   );

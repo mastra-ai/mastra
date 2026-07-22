@@ -48,7 +48,7 @@ overrides:
   js-yaml: ^3.15.0
   glob@<=10.5.0: 10.5.0
   '@mastra/memory>image-size': 1.2.1
-  body-parser@<=2.2.1: 2.2.2
+  body-parser@<=2.2.1: 2.3.0
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.7.1
   langsmith@<0.6.0: ^0.6.0
@@ -58,11 +58,11 @@ overrides:
   simple-git@<3.36.0: 3.36.0
   axios@>=1.0.0 <1.16.0: 1.18.0
   protobufjs@>=7.0.0 <7.6.3: 7.6.3
-  protobufjs@>=8.0.0 <8.6.0: 8.6.0
+  protobufjs@>=8.0.0 <8.6.0: 8.6.6
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
   ws@>=8.0.0 <8.21.0: 8.21.0
-  webpack-dev-server@<5.2.5: 5.2.5
+  webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.15.2: 6.15.2
   fast-uri@<3.1.2: 3.1.2
   form-data@<2.5.6: 2.5.6
@@ -84,7 +84,7 @@ overrides:
   '@opentelemetry/exporter-prometheus@<0.217.0': 0.217.0
   uuid@>=13.0.0 <13.0.1: 13.0.1
   uuid@<11.1.1: 11.1.1
-  tar@<7.5.16: 7.5.16
+  tar@<7.5.16: 7.5.19
   http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
   launch-editor@<2.14.1: 2.14.1
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
@@ -474,6 +474,9 @@ importers:
 
   auth/better-auth:
     dependencies:
+      '@libsql/kysely-libsql':
+        specifier: ^0.4.1
+        version: 0.4.1(bufferutil@4.1.0)(kysely@0.28.17)
       better-auth:
         specifier: ^1.6.13
         version: 1.6.23(@cloudflare/workers-types@4.20260511.1)(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260511.1)(@libsql/client@0.17.4(bufferutil@4.1.0))(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(@upstash/redis@1.38.0)(kysely@0.28.17)(mysql2@3.22.4(@types/node@22.19.15))(pg@8.21.0)(sql.js@1.14.1)(sqlite3@5.1.7))(mongodb@7.2.0(@aws-sdk/credential-providers@3.1006.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.9))(mysql2@3.22.4(@types/node@22.19.15))(pg@8.21.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vitest@4.1.10)
@@ -2190,6 +2193,40 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+
+  mastracode/mastra-factory:
+    dependencies:
+      '@clack/prompts':
+        specifier: ^1.7.0
+        version: 1.7.0
+      commander:
+        specifier: ^14.0.3
+        version: 14.0.3
+      picocolors:
+        specifier: ^1.1.1
+        version: 1.1.1
+      posthog-node:
+        specifier: ^5.37.0
+        version: 5.37.0(rxjs@7.8.2)
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      eslint:
+        specifier: ^10.4.1
+        version: 10.7.0(jiti@2.7.0)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.9(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.7.0)(postcss@8.5.16)(tsx@4.23.1)(typescript@6.0.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   mastracode/sdk:
     dependencies:
@@ -4413,6 +4450,9 @@ importers:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   packages/deployer:
     dependencies:
@@ -4720,8 +4760,8 @@ importers:
         specifier: ^2.0.3
         version: 2.0.3
       tar:
-        specifier: 7.5.16
-        version: 7.5.16
+        specifier: 7.5.19
+        version: 7.5.19
     devDependencies:
       '@internal/ai-sdk-v4':
         specifier: workspace:*
@@ -14509,12 +14549,28 @@ packages:
   '@libsql/client@0.17.4':
     resolution: {integrity: sha512-lYayFWasDV78A+TjlEhr6ubb3odBV6OHjb+wdp8VQcyWWAEIjuwbCHaraEUS4m4yWoo0BvZo96It4VdzZRmRWw==}
 
+  '@libsql/client@0.8.1':
+    resolution: {integrity: sha512-xGg0F4iTDFpeBZ0r4pA6icGsYa5rG6RAG+i/iLDnpCAnSuTqEWMDdPlVseiq4Z/91lWI9jvvKKiKpovqJ1kZWA==}
+
   '@libsql/core@0.17.4':
     resolution: {integrity: sha512-LqF9gIvnJ38nmAH1y/ChizHqDO/MO1wLgA96XrraulEEbqXxLjleSH92YWTolbuJKgPUmGu4aJk9W3UnAcxLOQ==}
+
+  '@libsql/core@0.8.1':
+    resolution: {integrity: sha512-u6nrj6HZMTPsgJ9EBhLzO2uhqhlHQJQmVHV+0yFLvfGf3oSP8w7TjZCNUgu1G8jHISx6KFi7bmcrdXW9lRt++A==}
+
+  '@libsql/darwin-arm64@0.3.19':
+    resolution: {integrity: sha512-rmOqsLcDI65zzxlUOoEiPJLhqmbFsZF6p4UJQ2kMqB+Kc0Rt5/A1OAdOZ/Wo8fQfJWjR1IbkbpEINFioyKf+nQ==}
+    cpu: [arm64]
+    os: [darwin]
 
   '@libsql/darwin-arm64@0.5.29':
     resolution: {integrity: sha512-K+2RIB1OGFPYQbfay48GakLhqf3ArcbHqPFu7EZiaUcRgFcdw8RoltsMyvbj5ix2fY0HV3Q3Ioa/ByvQdaSM0A==}
     cpu: [arm64]
+    os: [darwin]
+
+  '@libsql/darwin-x64@0.3.19':
+    resolution: {integrity: sha512-q9O55B646zU+644SMmOQL3FIfpmEvdWpRpzubwFc2trsa+zoBlSkHuzU9v/C+UNoPHQVRMP7KQctJ455I/h/xw==}
+    cpu: [x64]
     os: [darwin]
 
   '@libsql/darwin-x64@0.5.29':
@@ -14525,8 +14581,20 @@ packages:
   '@libsql/hrana-client@0.10.0':
     resolution: {integrity: sha512-OoA4EMqRAC7kn7V2P6EQqRcpZf2W+AjsNIyCizBg339Tq/aMC7sRnzs3SklderhmQWAqEzvv8A2vhxVmWpkVvw==}
 
+  '@libsql/hrana-client@0.6.2':
+    resolution: {integrity: sha512-MWxgD7mXLNf9FXXiM0bc90wCjZSpErWKr5mGza7ERy2FJNNMXd7JIOv+DepBA1FQTIfI8TFO4/QDYgaQC0goNw==}
+
+  '@libsql/isomorphic-fetch@0.2.5':
+    resolution: {integrity: sha512-8s/B2TClEHms2yb+JGpsVRTPBfy1ih/Pq6h6gvyaNcYnMVJvgQRY7wAa8U2nD0dppbCuDU5evTNMEhrQ17ZKKg==}
+    engines: {node: '>=18.0.0'}
+
   '@libsql/isomorphic-ws@0.1.5':
     resolution: {integrity: sha512-DtLWIH29onUYR00i0GlQ3UdcTRC6EP4u9w/h9LxpUZJWRMARk6dQwZ6Jkd+QdwVpuAOrdxt18v0K2uIYR3fwFg==}
+
+  '@libsql/kysely-libsql@0.4.1':
+    resolution: {integrity: sha512-mCTa6OWgoME8LNu22COM6XjKBmcMAvNtIO6DYM10jSAFq779fVlrTKQEmXIB8TwJVU65dA5jGCpT8gkDdWS0HQ==}
+    peerDependencies:
+      kysely: '*'
 
   '@libsql/linux-arm-gnueabihf@0.5.29':
     resolution: {integrity: sha512-CD4n4zj7SJTHso4nf5cuMoWoMSS7asn5hHygsDuhRl8jjjCTT3yE+xdUvI4J7zsyb53VO5ISh4cwwOtf6k2UhQ==}
@@ -14538,8 +14606,18 @@ packages:
     cpu: [arm]
     os: [linux]
 
+  '@libsql/linux-arm64-gnu@0.3.19':
+    resolution: {integrity: sha512-mgeAUU1oqqh57k7I3cQyU6Trpdsdt607eFyEmH5QO7dv303ti+LjUvh1pp21QWV6WX7wZyjeJV1/VzEImB+jRg==}
+    cpu: [arm64]
+    os: [linux]
+
   '@libsql/linux-arm64-gnu@0.5.29':
     resolution: {integrity: sha512-gURBqaiXIGGwFNEaUj8Ldk7Hps4STtG+31aEidCk5evMMdtsdfL3HPCpvys+ZF/tkOs2MWlRWoSq7SOuCE9k3w==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@libsql/linux-arm64-musl@0.3.19':
+    resolution: {integrity: sha512-VEZtxghyK6zwGzU9PHohvNxthruSxBEnRrX7BSL5jQ62tN4n2JNepJ6SdzXp70pdzTfwroOj/eMwiPt94gkVRg==}
     cpu: [arm64]
     os: [linux]
 
@@ -14548,8 +14626,18 @@ packages:
     cpu: [arm64]
     os: [linux]
 
+  '@libsql/linux-x64-gnu@0.3.19':
+    resolution: {integrity: sha512-2t/J7LD5w2f63wGihEO+0GxfTyYIyLGEvTFEsMO16XI5o7IS9vcSHrxsvAJs4w2Pf907uDjmc7fUfMg6L82BrQ==}
+    cpu: [x64]
+    os: [linux]
+
   '@libsql/linux-x64-gnu@0.5.29':
     resolution: {integrity: sha512-y14V0vY0nmMC6G0pHeJcEarcnGU2H6cm21ZceRkacWHvQAEhAG0latQkCtoS2njFOXiYIg+JYPfAoWKbi82rkg==}
+    cpu: [x64]
+    os: [linux]
+
+  '@libsql/linux-x64-musl@0.3.19':
+    resolution: {integrity: sha512-BLsXyJaL8gZD8+3W2LU08lDEd9MIgGds0yPy5iNPp8tfhXx3pV/Fge2GErN0FC+nzt4DYQtjL+A9GUMglQefXQ==}
     cpu: [x64]
     os: [linux]
 
@@ -14557,6 +14645,11 @@ packages:
     resolution: {integrity: sha512-gquqwA/39tH4pFl+J9n3SOMSymjX+6kZ3kWgY3b94nXFTwac9bnFNMffIomgvlFaC4ArVqMnOZD3nuJ3H3VO1w==}
     cpu: [x64]
     os: [linux]
+
+  '@libsql/win32-x64-msvc@0.3.19':
+    resolution: {integrity: sha512-ay1X9AobE4BpzG0XPw1gplyLZPGHIgJOovvW23gUrukRegiUP62uzhpRbKNogLlUOynyXeq//prHgPXiebUfWg==}
+    cpu: [x64]
+    os: [win32]
 
   '@libsql/win32-x64-msvc@0.5.29':
     resolution: {integrity: sha512-4/0CvEdhi6+KjMxMaVbFM2n2Z44escBRoEYpR+gZg64DdetzGnYm8mcNLcoySaDJZNaBd6wz5DNdgRmcI4hXcg==}
@@ -20855,8 +20948,8 @@ packages:
   bluebird@3.7.2:
     resolution: {integrity: sha512-XpNj6GDQzdfW+r2Wnn7xiSAd7TM3jzkxGXBGTtWKuSXv1xUV+azxAm8jdWZN06QTQk+2N2XB9jRDkvbmQmcRtg==}
 
-  body-parser@2.2.2:
-    resolution: {integrity: sha512-oP5VkATKlNwcgvxi0vM0p/D3n2C3EReYVX+DNYs5TjZFn/oQt2j+4sVJtSMr18pdRr8wjTcBl6LoV+FUwzPmNA==}
+  body-parser@2.3.0:
+    resolution: {integrity: sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==}
     engines: {node: '>=18'}
 
   bonjour-service@1.3.0:
@@ -24771,6 +24864,11 @@ packages:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
 
+  libsql@0.3.19:
+    resolution: {integrity: sha512-Aj5cQ5uk/6fHdmeW0TiXK42FqUlwx7ytmMLPSaUQPin5HKKKuUPD62MAbN4OEweGBBI7q1BekoEN4gPUEL6MZA==}
+    cpu: [x64, arm64, wasm32]
+    os: [darwin, linux, win32]
+
   libsql@0.5.29:
     resolution: {integrity: sha512-8lMP8iMgiBzzoNbAPQ59qdVcj6UaE/Vnm+fiwX4doX4Narook0a4GPKWBEv+CR8a1OwbfkgL18uBfBjWdF0Fzg==}
     cpu: [x64, arm64, wasm32, arm]
@@ -27275,8 +27373,8 @@ packages:
     resolution: {integrity: sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==}
     engines: {node: '>=12.0.0'}
 
-  protobufjs@8.6.0:
-    resolution: {integrity: sha512-PIOO89BMGMXGz2333TVv/OqPNVWm7w30ll/4FtLbtLBaonzJMYwTbAZSSlobjIy9MoUgIAxSVUpK7aP7EpTtkg==}
+  protobufjs@8.6.6:
+    resolution: {integrity: sha512-RkLIhE+Tdc2Kpq1F4Uw6OnpAXPca7B+GSDov/GqGCqNBpVyDskQ9yReZfgM+C7xw9AAix873iQZXbBWXj6NzYQ==}
     engines: {node: '>=12.0.0'}
 
   proxy-addr@2.0.7:
@@ -28863,8 +28961,8 @@ packages:
   tar-stream@3.2.0:
     resolution: {integrity: sha512-ojzvCvVaNp6aOTFmG7jaRD0meowIAuPc3cMMhSgKiVWws1GyHbGd/xvnyuRKcKlMpt3qvxx6r0hreCNITP9hIg==}
 
-  tar@7.5.16:
-    resolution: {integrity: sha512-56adEpPMouktRlBLXiaYFFzZ/3+JXa8P9n7WbR+ibIjtviN55mEaOkiysCnPnWm+7kkui1Dn8J9l+g6zV8731w==}
+  tar@7.5.19:
+    resolution: {integrity: sha512-4LeEWl96twnS2Q7Bz4MGqgazLqO+hJN63GZxXoIqh1T3VweYD997gbU1ItNsQafqqXTXd5WFyFdReLtwvRBNiw==}
     engines: {node: '>=18'}
 
   tarn@3.0.2:
@@ -29931,8 +30029,8 @@ packages:
       webpack:
         optional: true
 
-  webpack-dev-server@5.2.5:
-    resolution: {integrity: sha512-4wZtCquSuv9CKX8oybo+mqxtxZqWz47uM1Ch94lxowBztOhWCbhqvRbfC/mODOwxgV2brY+JGZpHq58/SuVFYg==}
+  webpack-dev-server@5.2.6:
+    resolution: {integrity: sha512-HNLRmamRvVavZQ+avceZifmv8hmdUjg43t6MI4SqJDwFdW7RPQwH5vzGhDRZSX59SgfbeHhLnq3g+uooWo7pVw==}
     engines: {node: '>= 18.12.0'}
     hasBin: true
     peerDependencies:
@@ -34117,7 +34215,7 @@ snapshots:
       isomorphic-ws: 5.0.0(ws@8.21.0(bufferutil@4.1.0))
       pathe: 2.0.3
       shell-quote: 1.10.0
-      tar: 7.5.16
+      tar: 7.5.19
       tslib: 2.8.1
     transitivePeerDependencies:
       - debug
@@ -34335,7 +34433,7 @@ snapshots:
       update-notifier: 6.0.2
       webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
       webpack-bundle-analyzer: 4.10.2(bufferutil@4.1.0)
-      webpack-dev-server: 5.2.5(bufferutil@4.1.0)(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
+      webpack-dev-server: 5.2.6(bufferutil@4.1.0)(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
       webpack-merge: 6.0.1
     optionalDependencies:
       '@docusaurus/faster': 3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16)
@@ -37112,11 +37210,32 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  '@libsql/client@0.8.1(bufferutil@4.1.0)':
+    dependencies:
+      '@libsql/core': 0.8.1
+      '@libsql/hrana-client': 0.6.2(bufferutil@4.1.0)
+      js-base64: 3.8.0
+      libsql: 0.3.19
+      promise-limit: 2.7.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@libsql/core@0.17.4':
     dependencies:
       js-base64: 3.8.0
 
+  '@libsql/core@0.8.1':
+    dependencies:
+      js-base64: 3.8.0
+
+  '@libsql/darwin-arm64@0.3.19':
+    optional: true
+
   '@libsql/darwin-arm64@0.5.29':
+    optional: true
+
+  '@libsql/darwin-x64@0.3.19':
     optional: true
 
   '@libsql/darwin-x64@0.5.29':
@@ -37130,10 +37249,30 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  '@libsql/hrana-client@0.6.2(bufferutil@4.1.0)':
+    dependencies:
+      '@libsql/isomorphic-fetch': 0.2.5
+      '@libsql/isomorphic-ws': 0.1.5(bufferutil@4.1.0)
+      js-base64: 3.8.0
+      node-fetch: 3.3.2
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@libsql/isomorphic-fetch@0.2.5': {}
+
   '@libsql/isomorphic-ws@0.1.5(bufferutil@4.1.0)':
     dependencies:
       '@types/ws': 8.18.1
       ws: 8.21.0(bufferutil@4.1.0)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@libsql/kysely-libsql@0.4.1(bufferutil@4.1.0)(kysely@0.28.17)':
+    dependencies:
+      '@libsql/client': 0.8.1(bufferutil@4.1.0)
+      kysely: 0.28.17
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -37144,16 +37283,31 @@ snapshots:
   '@libsql/linux-arm-musleabihf@0.5.29':
     optional: true
 
+  '@libsql/linux-arm64-gnu@0.3.19':
+    optional: true
+
   '@libsql/linux-arm64-gnu@0.5.29':
+    optional: true
+
+  '@libsql/linux-arm64-musl@0.3.19':
     optional: true
 
   '@libsql/linux-arm64-musl@0.5.29':
     optional: true
 
+  '@libsql/linux-x64-gnu@0.3.19':
+    optional: true
+
   '@libsql/linux-x64-gnu@0.5.29':
     optional: true
 
+  '@libsql/linux-x64-musl@0.3.19':
+    optional: true
+
   '@libsql/linux-x64-musl@0.5.29':
+    optional: true
+
+  '@libsql/win32-x64-msvc@0.3.19':
     optional: true
 
   '@libsql/win32-x64-msvc@0.5.29':
@@ -38929,7 +39083,7 @@ snapshots:
       '@opentelemetry/sdk-logs': 0.217.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.7.1(@opentelemetry/api@1.9.1)
-      protobufjs: 8.6.0
+      protobufjs: 8.6.6
 
   '@opentelemetry/otlp-transformer@0.218.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -44002,10 +44156,10 @@ snapshots:
 
   bluebird@3.7.2: {}
 
-  body-parser@2.2.2:
+  body-parser@2.3.0:
     dependencies:
       bytes: 3.1.2
-      content-type: 1.0.5
+      content-type: 2.0.0
       debug: 4.4.3
       http-errors: 2.0.1
       iconv-lite: 0.7.3
@@ -44227,7 +44381,7 @@ snapshots:
       promise-inflight: 1.0.1
       rimraf: 3.0.2
       ssri: 14.0.0
-      tar: 7.5.16
+      tar: 7.5.19
       unique-filename: 1.1.1
     transitivePeerDependencies:
       - bluebird
@@ -44592,7 +44746,7 @@ snapshots:
       node-api-headers: 1.8.0
       rc: 1.2.8
       semver: 7.8.5
-      tar: 7.5.16
+      tar: 7.5.19
       url-join: 4.0.1
       which: 6.0.1
       yargs: 17.7.3
@@ -45704,7 +45858,7 @@ snapshots:
       glob: 11.1.0
       openapi-fetch: 0.14.1
       platform: 1.3.6
-      tar: 7.5.16
+      tar: 7.5.19
       undici: 7.28.0
 
   eastasianwidth@0.2.0: {}
@@ -46401,7 +46555,7 @@ snapshots:
     dependencies:
       accepts: 1.3.8
       array-flatten: '@socketregistry/array-flatten@1.0.11'
-      body-parser: 2.2.2
+      body-parser: 2.3.0
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 1.1.1
@@ -46437,7 +46591,7 @@ snapshots:
     dependencies:
       accepts: 1.3.8
       array-flatten: '@socketregistry/array-flatten@1.0.11'
-      body-parser: 2.2.2
+      body-parser: 2.3.0
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 1.1.1
@@ -46472,7 +46626,7 @@ snapshots:
   express@5.2.1:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.2.2
+      body-parser: 2.3.0
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 1.1.1
@@ -47937,7 +48091,7 @@ snapshots:
       adm-zip: 0.5.18
       debug: 4.4.3
       node-fetch: 2.7.0(encoding@0.1.13)
-      tar: 7.5.16
+      tar: 7.5.19
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -48608,6 +48762,19 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
       type-check: 0.4.0
+
+  libsql@0.3.19:
+    dependencies:
+      '@neon-rs/load': 0.0.4
+      detect-libc: 2.0.2
+    optionalDependencies:
+      '@libsql/darwin-arm64': 0.3.19
+      '@libsql/darwin-x64': 0.3.19
+      '@libsql/linux-arm64-gnu': 0.3.19
+      '@libsql/linux-arm64-musl': 0.3.19
+      '@libsql/linux-x64-gnu': 0.3.19
+      '@libsql/linux-x64-musl': 0.3.19
+      '@libsql/win32-x64-msvc': 0.3.19
 
   libsql@0.5.29:
     dependencies:
@@ -50067,7 +50234,7 @@ snapshots:
       npmlog: 6.0.2
       rimraf: 3.0.2
       semver: 7.8.5
-      tar: 7.5.16
+      tar: 7.5.19
       which: 2.0.2
     transitivePeerDependencies:
       - bluebird
@@ -51644,7 +51811,7 @@ snapshots:
       '@types/node': 22.19.15
       long: 5.3.2
 
-  protobufjs@8.6.0:
+  protobufjs@8.6.6:
     dependencies:
       long: 5.3.2
 
@@ -53360,7 +53527,7 @@ snapshots:
       bindings: 1.5.0
       node-addon-api: 7.1.1
       prebuild-install: 7.1.3
-      tar: 7.5.16
+      tar: 7.5.19
     optionalDependencies:
       node-gyp: 8.4.1
     transitivePeerDependencies:
@@ -53838,7 +54005,7 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  tar@7.5.16:
+  tar@7.5.19:
     dependencies:
       '@isaacs/fs-minipass': 4.0.1
       chownr: 3.0.0
@@ -55107,7 +55274,7 @@ snapshots:
     transitivePeerDependencies:
       - tslib
 
-  webpack-dev-server@5.2.5(bufferutil@4.1.0)(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16)):
+  webpack-dev-server@5.2.6(bufferutil@4.1.0)(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16)):
     dependencies:
       '@types/bonjour': 3.5.13
       '@types/connect-history-api-fallback': 1.5.4

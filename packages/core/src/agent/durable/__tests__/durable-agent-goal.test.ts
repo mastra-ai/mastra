@@ -19,6 +19,7 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
+import { GOAL_STATE_TYPE } from '../../goal';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
@@ -372,12 +373,15 @@ describe('DurableAgent goal step', () => {
       model: createTextModel('Hello!') as LanguageModelV2,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const storage = new InMemoryStore();
     new Mastra({
       agents: { 'no-goal-agent': durableAgent as any },
       logger: false,
-      storage: new InMemoryStore(),
+      storage,
       pubsub,
     });
+    const threadState = await storage.getStore('threadState');
+    const getState = vi.spyOn(threadState!, 'getState');
 
     const result = await durableAgent.stream('Hello', {
       maxSteps: 1,
@@ -389,6 +393,8 @@ describe('DurableAgent goal step', () => {
     // No goal chunks should be emitted
     const goalChunks = chunks.filter((c: any) => c.type === 'goal');
     expect(goalChunks).toHaveLength(0);
+    const goalReads = getState.mock.calls.filter(([options]) => options.type === GOAL_STATE_TYPE);
+    expect(goalReads).toHaveLength(0);
   });
 
   it('no-ops when no active objective exists on the thread', async () => {

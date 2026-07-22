@@ -1,20 +1,19 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { SkeletonRows } from '../../../ui';
-import { userSessionResourceId } from '../../auth/services/auth';
 import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
-import { findUserSessionByThreadId, isGithubFactory } from '../../workspaces/services/factories';
+import { isServerFactory, selectedRepository } from '../../workspaces/services/factories';
+import { getUserSession } from '../../workspaces/services/github';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
-import { ChatPermissionsProvider } from './ChatPermissionsProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatSessionContext } from './useChatSessionContext';
@@ -38,33 +37,38 @@ export function ChatSessionConfigProvider({
   userScoped?: boolean;
 }) {
   const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
-  const auth = useWebAuth();
   const { baseUrl } = useApiConfig();
-  const projectPath = deriveProjectPath(activeFactory);
-  const userSession = userScoped && threadId ? findUserSessionByThreadId(threadId) : undefined;
-  const githubFactory = activeFactory && isGithubFactory(activeFactory) ? activeFactory : undefined;
-  const projectSessionEnabled = sessionEnabled && (!githubFactory || Boolean(projectPath));
-  const value = userScoped
-    ? {
-        resourceId: userSessionResourceId(auth.data),
-        sessionEnabled: !auth.isPending && Boolean(userSession),
-        projectPath: userSession?.worktree.worktreePath,
-        baseUrl,
-        kind: 'user' as const,
-        threadBasePath: '/user/threads' as const,
-      }
-    : {
-        resourceId,
-        sessionEnabled: projectSessionEnabled,
-        projectPath,
-        // Session state consumed server-side: GitHub PR auto-subscription,
-        // the subscribe tools, and agent git-action auditing all gate on
-        // `githubProjectId` being present in session state.
-        projectState: githubFactory ? { githubProjectId: githubFactory.binding.githubProjectId } : undefined,
-        baseUrl,
-        kind: githubFactory ? ('factory' as const) : ('user' as const),
-        threadBasePath: '/threads' as const,
-      };
+  const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
+  const repository = serverFactory ? selectedRepository(serverFactory) : undefined;
+  const sessionQuery = useQuery({
+    queryKey: ['factory-session', threadId],
+    queryFn: () => getUserSession(baseUrl, threadId!),
+    enabled: Boolean(threadId) && (userScoped || Boolean(serverFactory)),
+    retry: false,
+  });
+  const storedSession = sessionQuery.data;
+  const resolvingStoredSession = Boolean(threadId && serverFactory) && sessionQuery.isPending;
+  const projectPath = storedSession || resolvingStoredSession ? undefined : deriveProjectPath(activeFactory);
+  const projectSessionEnabled =
+    !resolvingStoredSession &&
+    (storedSession ? sessionEnabled : sessionEnabled && (!repository || Boolean(projectPath)));
+  const value = {
+    resourceId: storedSession?.sessionId ?? resourceId,
+    sessionEnabled: userScoped ? Boolean(storedSession) && !sessionQuery.isPending : projectSessionEnabled,
+    projectPath,
+    factorySessionState:
+      serverFactory && repository
+        ? {
+            factoryProjectId: serverFactory.binding.factoryProjectId,
+            projectRepositoryId: repository.projectRepositoryId,
+            sandboxId: storedSession?.sandboxId ?? repository.sandboxId,
+            sandboxWorkdir: storedSession?.sandboxWorkdir ?? repository.sandboxWorkdir,
+          }
+        : undefined,
+    baseUrl,
+    kind: userScoped ? ('user' as const) : serverFactory ? ('factory' as const) : ('user' as const),
+    threadBasePath: userScoped ? ('/user/threads' as const) : ('/threads' as const),
+  };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;
 }
@@ -86,7 +90,7 @@ export function ChatSessionBoundary({
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     threadId,
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),
@@ -106,6 +110,9 @@ export function ChatSessionBoundary({
       key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.isPending ? 'loading' : 'ready'}`}
       threadId={threadId}
       initialMessages={messagesQuery.data}
+      hasMoreHistory={messagesQuery.hasMore}
+      isLoadingMoreHistory={messagesQuery.isLoadingMore}
+      loadMoreHistory={messagesQuery.loadMore}
     >
       <ChatModesProvider>
         <ChatModelsProvider>
