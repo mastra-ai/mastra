@@ -65,7 +65,6 @@ function seedFactory(source: 'local' | 'github' = 'local') {
           },
         };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(modeId = 'build'): AgentControllerSessionState {
@@ -105,6 +104,20 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], delayed
   const onMode = vi.fn();
   let activeModeId = 'build';
   server.use(
+    // Mount-driven sandbox materialization for the github-backed factory
+    // variant: `/ensure` must succeed before the session is allowed to bind.
+    http.post(`${TEST_BASE_URL}/web/github/projects/pr-test/ensure`, () => {
+      const done = {
+        resourceId: RESOURCE_ID,
+        factoryProjectId: 'fp-test',
+        projectRepositoryId: 'pr-test',
+        sandboxId: 'sbx-test',
+        sandboxWorkdir: '/tmp/mastracode-test',
+      };
+      return new HttpResponse(`event: done\ndata: ${JSON.stringify(done)}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }),
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
     ),
@@ -156,12 +169,12 @@ function omProgress(overrides: Partial<AgentControllerOMProgress> = {}): AgentCo
 
 function renderStatusLine() {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+    <MemoryRouter initialEntries={[`/factories/project-test/threads/${THREAD_ID}`]}>
       <Routes>
         <Route
-          path="/threads/:threadId"
+          path="/factories/:factoryId/threads/:threadId"
           element={
-            <ActiveFactoryProvider>
+            <ActiveFactoryProvider factoryId="project-test">
               <ChatSessionProvider>
                 <StatusLine />
               </ChatSessionProvider>
@@ -546,6 +559,41 @@ describe('StatusLine', () => {
       await waitFor(() => expect(screen.getByText('GPT-4o Mini')).toBeInTheDocument());
       expect(screen.queryByText('pursuing goal')).not.toBeInTheDocument();
       expect(screen.queryByText('goal paused')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when the active thread belongs to a Factory pull request', () => {
+    it('shows the pull request link from canonical rule metadata', async () => {
+      seedFactory('github');
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-test/work-items`, () =>
+          HttpResponse.json({
+            workItems: [
+              {
+                id: 'work-item-pr-34',
+                source: 'github-pr',
+                sessions: {
+                  review: {
+                    projectPath: '/tmp/mastracode-test-worktree',
+                    branch: 'factory/pr-34',
+                    threadId: THREAD_ID,
+                    startedBy: 'user-1',
+                  },
+                },
+                metadata: { githubPullRequestNumber: 34 },
+              },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
+      );
+      renderStatusLine();
+
+      expect(await screen.findByRole('link', { name: 'Open open octo/hello pull request 34' })).toHaveAttribute(
+        'href',
+        'https://github.com/octo/hello/pull/34',
+      );
     });
   });
 

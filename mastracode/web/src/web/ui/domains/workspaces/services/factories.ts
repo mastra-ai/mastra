@@ -19,7 +19,6 @@ import { deleteFactoryProject, listFactoryProjects } from './github';
 import type { MaterializeResult } from './github';
 
 const STORAGE_KEY = 'mastracode-factories';
-const ACTIVE_KEY = 'mastracode-active-factory';
 
 /**
  * A workspace (git worktree) inside a linked repository's sandbox. Each
@@ -584,31 +583,4 @@ export async function removeFactory(baseUrl: string, id: string): Promise<void> 
   }
   const factories = loadFactories().filter(factory => factory.id !== id);
   saveFactories(factories);
-  if (loadActiveFactoryId() === id) clearActiveFactoryId();
-}
-
-/**
- * The id of the factory that was active when the app was last used. Restored on
- * reload so the session reconnects (and its threads reappear) without the user
- * having to re-select the factory.
- */
-export function loadActiveFactoryId(): string | null {
-  try {
-    return localStorage.getItem(ACTIVE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function saveActiveFactoryId(id: string | null): void {
-  try {
-    if (id) localStorage.setItem(ACTIVE_KEY, id);
-    else localStorage.removeItem(ACTIVE_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-function clearActiveFactoryId(): void {
-  saveActiveFactoryId(null);
 }

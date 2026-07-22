@@ -111,14 +111,24 @@ describe('workspaces query hooks', () => {
   it('creates a workspace, upserts it, selects it, and refreshes consumers', async () => {
     saveFactory(rootFactory);
     server.use(
-      http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree`, async ({ request }) => {
+      http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, async ({ request }) => {
         const body = (await request.json()) as { branch: string };
         expect(body.branch).toBe('feat-docs');
         return HttpResponse.json({
-          branch: 'feat-docs',
-          worktreePath: '/sandbox/mastra-worktrees/feat-docs',
-          baseBranch: 'main',
-          resourceId: 'resource-server',
+          session: {
+            id: 'stored-feat-docs',
+            sessionId: 'session-feat-docs',
+            projectRepositoryId: PROJECT_REPOSITORY_ID,
+            orgId: 'org-1',
+            userId: 'user-1',
+            branch: 'feat-docs',
+            baseBranch: 'main',
+            sandboxId: null,
+            sandboxWorkdir: null,
+            materializedAt: null,
+            createdAt: '2026-07-22T00:00:00.000Z',
+            updatedAt: '2026-07-22T00:00:00.000Z',
+          },
         });
       }),
     );
@@ -137,7 +147,7 @@ describe('workspaces query hooks', () => {
     });
     await waitForMutationsIdle(client);
 
-    expect(storedSelectedWorktreePath()).toBe('/sandbox/mastra-worktrees/feat-docs');
+    expect(storedSelectedWorktreePath()).toBe('session-feat-docs');
     expect(storedWorktreeBranches()).toEqual(
       expect.arrayContaining(['feat-ui', 'feat-api', 'feat-docs', 'user/alice-notes']),
     );
@@ -146,11 +156,9 @@ describe('workspaces query hooks', () => {
   it('deletes a workspace, cascades threads, and falls back selection', async () => {
     saveFactory(rootFactory);
     server.use(
-      http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree/delete`, async ({ request }) => {
-        const body = (await request.json()) as { branch: string };
-        expect(body.branch).toBe('feat-ui');
-        return HttpResponse.json({ ok: true });
-      }),
+      http.delete(`${ORIGIN}/web/user-sessions/${encodeURIComponent('/sandbox/mastra-worktrees/feat-ui')}`, () =>
+        HttpResponse.json({ removed: true }),
+      ),
     );
 
     const listThreads = vi

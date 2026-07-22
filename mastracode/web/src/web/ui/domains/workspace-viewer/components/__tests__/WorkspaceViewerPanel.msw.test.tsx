@@ -135,16 +135,14 @@ describe('WorkspaceViewerPanel', () => {
     expect(await screen.findByText('summary.md')).toBeInTheDocument();
   });
 
-  it('closes the file viewer before collapsing the files panel', async () => {
+  it('returns from the file viewer to the file browser', async () => {
     installHandlers();
-    const onCollapse = vi.fn();
     const onExpandedChange = vi.fn();
     const user = userEvent.setup();
     renderWithProviders(
       <WorkspaceViewerPanel
         workspacePath={WORKSPACE}
         renderedPaths={renderedPaths}
-        onCollapse={onCollapse}
         onExpandedChange={onExpandedChange}
       />,
     );
@@ -155,14 +153,10 @@ describe('WorkspaceViewerPanel', () => {
 
     expect(await screen.findByLabelText('Workspace file viewer')).toBeInTheDocument();
     expect(onExpandedChange).toHaveBeenLastCalledWith(true);
-    await user.click(screen.getByRole('button', { name: 'Close workspace file viewer' }));
+    await user.click(screen.getByRole('button', { name: 'Back to workspace files' }));
 
     expect(screen.queryByLabelText('Workspace file viewer')).not.toBeInTheDocument();
     expect(onExpandedChange).toHaveBeenLastCalledWith(false);
-    expect(onCollapse).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole('button', { name: 'Close workspace files' }));
-    expect(onCollapse).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes the current listing', async () => {

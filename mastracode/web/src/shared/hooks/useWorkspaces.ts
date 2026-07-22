@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { createWorktree, deleteWorktree } from '../../web/ui/domains/workspaces/services/github';
+import { createUserSession, deleteUserSession } from '../../web/ui/domains/workspaces/services/github';
 import type { Factory, Worktree } from '../../web/ui/domains/workspaces/services/factories';
 import {
   boardSessionWorktrees,
@@ -109,11 +109,12 @@ export function useCreateWorkspaceMutation(factory: Factory | null | undefined, 
       if (!factory || !isServerFactory(factory)) throw new Error('No server-backed factory selected');
       const repository = selectedRepository(factory);
       if (!repository) throw new Error('Connect a repository before creating a workspace');
-      const result = await createWorktree(baseUrl, repository.projectRepositoryId, trimmedBranch);
+      const result = await createUserSession(baseUrl, repository.projectRepositoryId, trimmedBranch);
       const worktree: Worktree = {
         branch: result.branch,
-        worktreePath: result.worktreePath,
+        worktreePath: result.sessionId,
         baseBranch: result.baseBranch,
+        threadId: result.sessionId,
       };
       return selectWorktree(upsertWorktree(latestFactory(factory), worktree), worktree.worktreePath);
     },
@@ -143,7 +144,7 @@ export function useDeleteWorkspaceMutation(
       if (!factory || !isServerFactory(factory)) throw new Error('No server-backed factory selected');
       const repository = selectedRepository(factory);
       if (!repository) throw new Error('Connect a repository before deleting a workspace');
-      await deleteWorktree(baseUrl, repository.projectRepositoryId, worktree.branch);
+      await deleteUserSession(baseUrl, worktree.worktreePath);
 
       // Cascade: delete the threads scoped to this worktree. Re-list between
       // rounds since the page size caps each fetch; bail after a sane number

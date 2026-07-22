@@ -5,18 +5,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import type { LocalFactory, ServerFactory } from '../../../web/ui/domains/workspaces/services/factories';
-import {
-  loadActiveFactoryId,
-  loadFactories,
-  saveActiveFactoryId,
-  saveFactories,
-} from '../../../web/ui/domains/workspaces/services/factories';
+import { loadFactories, saveFactories } from '../../../web/ui/domains/workspaces/services/factories';
 import { useActiveFactory } from '../useActiveFactory';
 import {
   useAddFactoryMutation,
   useCreateFactoryMutation,
   useFactoriesQuery,
   useLinkRepositoryMutation,
+  useLoadFactories,
   useRemoveFactoryMutation,
 } from '../useFactories';
 
@@ -69,13 +65,45 @@ beforeEach(() => {
 });
 
 describe('factories query hooks', () => {
+  it('loads persisted factories asynchronously through React Query', async () => {
+    saveFactories([localFactory]);
+
+    const { result } = renderHookWithProviders(() => useLoadFactories());
+
+    expect(result.current.isPending).toBe(true);
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(result.current.data?.[0]).toMatchObject({ id: 'factory-local', name: 'Mastra' });
+  });
+
+  it('stays pending until Factory hydration resolves', async () => {
+    let resolveProjects!: () => void;
+    const projectsReady = new Promise<void>(resolve => {
+      resolveProjects = resolve;
+    });
+    server.use(
+      http.get(`${ORIGIN}/web/factory/projects`, async () => {
+        await projectsReady;
+        return HttpResponse.json({ projects: [] });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useFactoriesQuery());
+
+    expect(result.current.isPending).toBe(true);
+    expect(result.current.data).toBeUndefined();
+
+    resolveProjects();
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.data).toEqual([]);
+  });
+
   it('reads persisted factories through React Query', async () => {
     saveFactories([localFactory]);
 
     const { result } = renderHookWithProviders(() => useFactoriesQuery());
 
     await waitFor(() => expect(result.current.data).toHaveLength(1));
-    expect(result.current.data[0]).toMatchObject({ id: 'factory-local', name: 'Mastra' });
+    expect(result.current.data?.[0]).toMatchObject({ id: 'factory-local', name: 'Mastra' });
   });
 
   it('hydrates server factories from the Factory project list while preserving browser identity', async () => {
@@ -183,7 +211,7 @@ describe('factories query hooks', () => {
     expect(stored).not.toHaveProperty('rootPath');
     expect(stored).not.toHaveProperty('gitUrl');
     await waitFor(() =>
-      expect(result.current.factories.data.map(factory => factory.name)).toEqual(['Mastra', 'New App']),
+      expect(result.current.factories.data?.map(factory => factory.name)).toEqual(['Mastra', 'New App']),
     );
   });
 
@@ -211,7 +239,7 @@ describe('factories query hooks', () => {
     expect(created).toBeDefined();
     expect(created!.id).not.toBe('fp-1');
     expect(created!.binding).toEqual({ kind: 'factory', factoryProjectId: 'fp-1', repositories: [] });
-    await waitFor(() => expect(result.current.factories.data.map(factory => factory.name)).toEqual(['Acme Product']));
+    await waitFor(() => expect(result.current.factories.data?.map(factory => factory.name)).toEqual(['Acme Product']));
 
     // Re-creating the same project keeps the existing browser factory.
     let second: ServerFactory | undefined;
@@ -269,7 +297,7 @@ describe('factories query hooks', () => {
     await waitForMutationsIdle(client);
 
     await waitFor(() => {
-      const factory = result.current.factories.data.find(candidate => candidate.id === 'factory-server');
+      const factory = result.current.factories.data?.find(candidate => candidate.id === 'factory-server');
       expect(factory?.binding.kind === 'factory' && factory.binding.repositories).toEqual([
         {
           projectRepositoryId: 'pr-1',
@@ -284,9 +312,8 @@ describe('factories query hooks', () => {
     });
   });
 
-  it('removes the active factory, clears active id, and refreshes factory query consumers', async () => {
+  it('removes a factory and refreshes factory query consumers', async () => {
     saveFactories([localFactory, { ...serverFactory, resourceId: 'resource-server' }]);
-    saveActiveFactoryId(localFactory.id);
     server.use(...factoryProjectListHandlers(() => []));
 
     const { result, client } = renderHookWithProviders(() => {
@@ -303,8 +330,7 @@ describe('factories query hooks', () => {
     await waitForMutationsIdle(client);
 
     expect(loadFactories().map(factory => factory.id)).toEqual(['factory-server']);
-    expect(loadActiveFactoryId()).toBeNull();
-    await waitFor(() => expect(result.current.factories.data.map(factory => factory.id)).toEqual(['factory-server']));
+    await waitFor(() => expect(result.current.factories.data?.map(factory => factory.id)).toEqual(['factory-server']));
   });
 
   it('deletes the Factory project from the backend before removing its browser factory', async () => {
@@ -363,23 +389,20 @@ describe('factories query hooks', () => {
     expect(loadFactories()).toEqual([]);
   });
 
-  it('keeps active factory selection across reloads when stored under the new key', async () => {
+  it('resolves the active factory from the route factoryId', async () => {
     saveFactories([localFactory]);
-    saveActiveFactoryId(localFactory.id);
 
-    const { result } = renderHookWithProviders(() => useActiveFactory());
+    const { result } = renderHookWithProviders(() => useActiveFactory(localFactory.id));
     await waitFor(() => expect(result.current.activeFactory?.id).toBe('factory-local'));
-    expect(loadActiveFactoryId()).toBe('factory-local');
   });
 
-  it('does not clear a persisted backend selection when repository hydration fails', async () => {
-    saveActiveFactoryId('factory-server');
+  it('resolves no active factory when repository hydration fails for a server factoryId', async () => {
     server.use(http.get(`${ORIGIN}/web/factory/projects`, () => new HttpResponse(null, { status: 503 })));
 
-    const { result } = renderHookWithProviders(() => useActiveFactory());
+    const { result } = renderHookWithProviders(() => useActiveFactory('factory-server'));
 
     await waitFor(() => expect(result.current.factoriesPending).toBe(false));
     expect(result.current.activeFactory).toBeNull();
-    expect(loadActiveFactoryId()).toBe('factory-server');
+    expect(result.current.sessionEnabled).toBe(false);
   });
 });

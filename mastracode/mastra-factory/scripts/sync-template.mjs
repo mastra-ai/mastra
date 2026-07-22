@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Produces the Mastra Software Factory template tree from `mastracode/web`.
+ * Produces the Mastra Factory template tree from `mastracode/web`.
  *
  * The template is the web project minus monorepo coupling:
  *   - `link:` deps           -> caret ranges on published versions (verified on npm)
@@ -183,7 +183,7 @@ function transformPackageJson() {
   manifest.name = 'mastra-software-factory';
   manifest.version = '0.1.0';
   manifest.description =
-    'Mastra Software Factory: an agent-powered software delivery environment. Intake GitHub/Linear issues, work them with coding agents, and ship pull requests — all from your own deployable web app.';
+    'Mastra Factory: an agent-powered software delivery environment. Intake GitHub/Linear issues, work them with coding agents, and ship pull requests — all from your own deployable web app.';
   manifest.private = true;
   manifest.license = 'Apache-2.0';
 
@@ -239,6 +239,7 @@ function transformPackageJson() {
   // skips automatic peer installation. Most peers are already direct deps;
   // these transitive runtime peers are not, so declare them explicitly.
   // (In the monorepo dev setup pnpm's auto-install-peers provides them.)
+  manifest.dependencies['@mastra/memory'] = manifest.dependencies['@mastra/core']; // peer of @mastra/playground-ui
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
 
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -313,7 +314,7 @@ function writeEnvExample() {
     .replace(/\n{3,}/g, '\n\n')
     .trimStart();
   const header = [
-    '# Mastra Software Factory environment.',
+    '# Mastra Factory environment.',
     '# Copied to .env by `npm create factory`; every value is optional —',
     '# features light up as their variables are set (see README.md).',
     '# Validation source of truth: .env.schema (varlock).',

@@ -4,9 +4,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeft, Brain, GitBranch, Key, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Link, useLocation } from 'react-router';
 
-import { useSetSettingsSection, useSettingsSection, type SettingsSection } from '../context/SettingsNavigationProvider';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
 import { useCloseSettings } from '../hooks/useCloseSettings';
+import { useSettingsSection } from '../hooks/useSettingsSection';
+import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
 
 const SETTINGS_SECTIONS: {
   id: SettingsSection;
@@ -16,33 +19,43 @@ const SETTINGS_SECTIONS: {
 }[] = [
   {
     id: 'general',
-    label: 'General',
+    label: SETTINGS_SECTION_LABELS.general,
     icon: Palette,
     searchText: 'general theme appearance color scheme completion sound',
   },
   {
     id: 'source-control',
-    label: 'Source Control',
+    label: SETTINGS_SECTION_LABELS['source-control'],
     icon: GitBranch,
     searchText: 'source control git branches repositories remotes factories',
   },
   {
     id: 'model',
-    label: 'Model',
+    label: SETTINGS_SECTION_LABELS.model,
     icon: Search,
     searchText: 'model thinking level factory default model packs packs',
   },
-  { id: 'memory', label: 'Memory', icon: Brain, searchText: 'memory observational recall working memory' },
+  {
+    id: 'memory',
+    label: SETTINGS_SECTION_LABELS.memory,
+    icon: Brain,
+    searchText: 'memory observational recall working memory',
+  },
   {
     id: 'behavior',
-    label: 'Behavior',
+    label: SETTINGS_SECTION_LABELS.behavior,
     icon: SlidersHorizontal,
     searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
   },
-  { id: 'providers', label: 'API Keys', icon: Key, searchText: 'api keys providers credentials' },
+  {
+    id: 'providers',
+    label: SETTINGS_SECTION_LABELS.providers,
+    icon: Key,
+    searchText: 'api keys providers credentials',
+  },
   {
     id: 'custom-providers',
-    label: 'Custom',
+    label: SETTINGS_SECTION_LABELS['custom-providers'],
     icon: Server,
     searchText: 'custom providers endpoints base url',
   },
@@ -50,7 +63,8 @@ const SETTINGS_SECTIONS: {
 
 export function SettingsNavigation() {
   const section = useSettingsSection();
-  const setSection = useSetSettingsSection();
+  const { activeFactory } = useActiveFactoryContext();
+  const location = useLocation();
   const closeSettings = useCloseSettings();
   const { state } = useMainSidebar();
   const [query, setQuery] = useState('');
@@ -96,15 +110,15 @@ export function SettingsNavigation() {
                 isActive={isActive}
                 link={{ name: label, url: '#', icon: <Icon /> }}
               >
-                <button
-                  type="button"
+                <Link
+                  to={settingsSectionPath(activeFactory!.id, id)}
+                  state={location.state}
                   aria-label={label}
                   aria-current={isActive ? 'page' : undefined}
-                  onClick={() => setSection(id)}
                 >
                   <Icon aria-hidden="true" />
                   <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
-                </button>
+                </Link>
               </MainSidebar.NavLink>
             );
           })}

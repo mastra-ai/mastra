@@ -17,3 +17,4 @@ export * from '../../../../shared/hooks/useFactories';
 export * from '../../../../shared/hooks/useWorkspaces';
 export * from './services/github';
 export * from './services/factories';
+export * from './services/factoryPaths';

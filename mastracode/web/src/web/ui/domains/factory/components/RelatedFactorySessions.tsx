@@ -15,7 +15,7 @@ import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
   return Object.values(item.sessions)
-    .filter(session => livePaths.has(session.projectPath))
+    .filter(session => livePaths.has(session.sessionId))
     .at(-1);
 }
 
@@ -51,7 +51,7 @@ export function FactorySessionHeader() {
   const activeProjectPath = deriveProjectPath(activeFactory);
   const currentItem = allItems.find(item =>
     Object.values(item.sessions).some(
-      session => session.threadId === threadId && (!activeProjectPath || session.projectPath === activeProjectPath),
+      session => session.threadId === threadId && (!activeProjectPath || session.sessionId === activeProjectPath),
     ),
   );
   if (!currentItem) return null;
@@ -61,11 +61,11 @@ export function FactorySessionHeader() {
   const destinations = relatedItems.map(item => ({ item, session: latestLiveSession(item, livePaths) }));
   const isReview = currentItem.source === 'github-pr';
   const section = isReview ? 'Review' : 'Work';
-  const sectionPath = isReview ? '/factory/review' : '/factory/work';
+  const sectionPath = isReview ? `/factories/${activeFactory?.id}/review` : `/factories/${activeFactory?.id}/work`;
 
   const openSession = async (session: WorkItemSessionRef) => {
-    await selectWorkspace.mutateAsync(session.projectPath);
-    void navigate(`/threads/${session.threadId}`);
+    await selectWorkspace.mutateAsync(session.sessionId);
+    void navigate(`/factories/${activeFactory?.id}/threads/${session.threadId}`);
   };
 
   return (
@@ -88,7 +88,7 @@ export function FactorySessionHeader() {
                 return (
                   <Link
                     key={item.id}
-                    to={relationshipPath(item)}
+                    to={relationshipPath(item, activeFactory?.id ?? '')}
                     className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6"
                     aria-label={`Open ${label}: ${item.title}`}
                   >

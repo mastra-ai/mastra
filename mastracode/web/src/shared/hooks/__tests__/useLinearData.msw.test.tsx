@@ -82,7 +82,7 @@ describe('useLinearIssuesQuery', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useLinearIssuesQuery(true));
+    const { result } = renderHookWithProviders(() => useLinearIssuesQuery('github-project-1'));
 
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.data).toEqual([issue]);
@@ -105,7 +105,7 @@ describe('useLinearIssuesQuery', () => {
       }),
     );
 
-    const { result, client } = renderHookWithProviders(() => useLinearIssuesQuery(false));
+    const { result, client } = renderHookWithProviders(() => useLinearIssuesQuery(undefined));
 
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(result.current.fetchStatus).toBe('idle');
@@ -117,7 +117,7 @@ describe('useLinearIssuesQuery', () => {
       http.get(ISSUES_URL, () => HttpResponse.json({ error: 'linear_fetch_failed', message: 'boom' }, { status: 502 })),
     );
 
-    const { result } = renderHookWithProviders(() => useLinearIssuesQuery(true));
+    const { result } = renderHookWithProviders(() => useLinearIssuesQuery('github-project-1'));
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect((result.current.error as Error).message).toBe('boom');
@@ -137,8 +137,8 @@ describe('useLinearProjectsQuery', () => {
 
 describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
   const config: IntakeConfig = {
-    github: { enabled: true, repositoryIds: null },
-    linear: { enabled: true, projectIds: null },
+    github: { enabled: true, sourceIds: null },
+    linear: { enabled: true, sourceIds: null },
   };
 
   it('given a saved config, when the query resolves, then it exposes the config', async () => {
@@ -152,8 +152,8 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
 
   it('given a save, when it succeeds, then the config cache updates and linear issues invalidate', async () => {
     const updated: IntakeConfig = {
-      github: { enabled: false, repositoryIds: null },
-      linear: { enabled: true, projectIds: ['proj-1'] },
+      github: { enabled: false, sourceIds: null },
+      linear: { enabled: true, sourceIds: ['proj-1'] },
     };
     let putBody: unknown;
     server.use(

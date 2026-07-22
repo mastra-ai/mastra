@@ -51,7 +51,6 @@ function seedLocalFactory() {
       },
     ]),
   );
-  localStorage.setItem('mastracode-active-factory', 'factory-local');
 }
 
 function seedServerFactory() {
@@ -71,12 +70,27 @@ function seedServerFactory() {
       },
     ]),
   );
-  localStorage.setItem('mastracode-active-factory', 'factory-server');
+  // Mounting the provider on a server factory triggers mount-driven sandbox
+  // materialization; stub `/ensure` so it settles quietly.
+  server.use(
+    http.post(`${TEST_BASE_URL}/web/github/projects/pr-1/ensure`, () => {
+      const done = {
+        resourceId: 'resource-server',
+        factoryProjectId: 'fp-1',
+        projectRepositoryId: 'pr-1',
+        sandboxId: 'sbx-1',
+        sandboxWorkdir: '/sandbox/hello',
+      };
+      return new HttpResponse(`event: done\ndata: ${JSON.stringify(done)}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }),
+  );
 }
 
-function renderSection() {
+function renderSection(factoryId = 'factory-missing') {
   return renderWithProviders(
-    <ActiveFactoryProvider>
+    <ActiveFactoryProvider factoryId={factoryId}>
       <SourceControlSection />
     </ActiveFactoryProvider>,
   );
@@ -95,7 +109,7 @@ describe('SourceControlSection', () => {
   it('given an active local factory, when rendered, then it shows the bound path without a repository panel', async () => {
     seedLocalFactory();
 
-    renderSection();
+    renderSection('factory-local');
 
     expect(await screen.findByText('/tmp/local')).toBeInTheDocument();
     expect(screen.queryByLabelText('Connect repositories')).not.toBeInTheDocument();
@@ -109,7 +123,7 @@ describe('SourceControlSection', () => {
       http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [availableRepo] })),
     );
 
-    renderSection();
+    renderSection('factory-server');
 
     expect(await screen.findByText('Linked repositories')).toBeInTheDocument();
     expect(await screen.findByText('octo/hello')).toBeInTheDocument();
@@ -130,12 +144,12 @@ describe('SourceControlSection', () => {
     );
     const user = userEvent.setup();
 
-    renderSection();
+    renderSection('factory-server');
 
     await user.click(await screen.findByRole('button', { name: 'Remove My Factory' }));
 
     await waitFor(() => expect(deleted).toEqual(['fp-1']));
+    // The route's factory no longer resolves, so the section falls back to the prompt.
     await screen.findByText('Select a factory to manage its source control.');
-    expect(localStorage.getItem('mastracode-active-factory')).toBeNull();
   });
 });

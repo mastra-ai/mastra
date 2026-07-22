@@ -5,7 +5,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { MoreHorizontal, Plus } from 'lucide-react';
+import { Copy, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
@@ -93,6 +93,7 @@ function useThreadHookArgs() {
 function ThreadListHeader({ threadCount }: { threadCount: number }) {
   const overlays = useOverlays();
   const navigate = useNavigate();
+  const { factoryId } = useParams<{ factoryId: string }>();
 
   return (
     <div className="flex items-center justify-between px-1">
@@ -110,7 +111,7 @@ function ThreadListHeader({ threadCount }: { threadCount: number }) {
         aria-label="New thread"
         onClick={() => {
           overlays.close('sidebar');
-          void navigate('/new');
+          void navigate(`/factories/${factoryId}/new`);
         }}
       >
         <Plus size={15} />
@@ -165,37 +166,38 @@ function ThreadRow({
   const hookArgs = useThreadHookArgs();
   const overlays = useOverlays();
   const navigate = useNavigate();
-  const { threadId: routeThreadId } = useParams<{ threadId: string }>();
+  const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
 
   const deleteThreadMutation = useDeleteAgentControllerThreadMutation(hookArgs);
   const cloneThreadMutation = useCloneAgentControllerThreadMutation(hookArgs);
 
   const openThread = () => {
-    void navigate(`/threads/${thread.id}`);
+    void navigate(`/factories/${factoryId}/threads/${thread.id}`);
     overlays.close('sidebar');
   };
 
   const cloneThread = async () => {
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
     toast.success('Thread cloned');
-    void navigate(`/threads/${clonedThread.id}`);
+    void navigate(`/factories/${factoryId}/threads/${clonedThread.id}`);
   };
 
   const deleteThread = async () => {
     await deleteThreadMutation.mutateAsync(thread.id);
     toast('Thread deleted');
     if (thread.id === routeThreadId) {
-      void navigate('/new');
+      void navigate(`/factories/${factoryId}/new`);
     }
   };
 
   return (
-    <div role="listitem" className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
-      <button
-        type="button"
-        className="flex w-full flex-col gap-0.5 rounded-md px-2 py-2 text-left"
-        onClick={openThread}
-      >
+    <div
+      role="listitem"
+      className={`group relative rounded-md ${
+        active ? 'bg-[var(--sidebar-nav-active)]' : 'hover:bg-[var(--sidebar-nav-hover)]'
+      }`}
+    >
+      <button type="button" className="flex w-full flex-col rounded-md px-2 py-1.5 text-left" onClick={openThread}>
         <span className="truncate text-ui-sm text-icon6">{thread.title || 'Untitled thread'}</span>
         <span className="text-ui-xs text-icon3">{relativeTime(thread.updatedAt ?? thread.createdAt ?? '')}</span>
       </button>
@@ -214,10 +216,17 @@ function ThreadRow({
               </Button>
             }
           />
-          <DropdownMenu.Content align="end" className="min-w-28">
-            <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
-            <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
+          <DropdownMenu.Content align="end">
+            <DropdownMenu.Item onClick={onStartRename}>
+              <Pencil />
+              Rename
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onClick={() => void cloneThread()}>
+              <Copy />
+              Clone
+            </DropdownMenu.Item>
             <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
+              <Trash2 />
               Delete
             </DropdownMenu.Item>
           </DropdownMenu.Content>
