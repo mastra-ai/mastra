@@ -163,11 +163,14 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
       };
 
     case 'finish': {
+      // Normal model runs carry usage at payload.output.usage (full FinishPayload).
+      // Synthesized finish chunks from #broadcastPersistedSignal carry usage directly
+      // at payload.usage without an output wrapper. Resolve defensively to support both.
       return {
         type: 'finish',
         finishReason: normalizeFinishReason(chunk.payload.stepResult.reason) as FinishReason,
         ...(includeRawFinishReason ? { rawFinishReason: chunk.payload.stepResult.reason } : {}),
-        totalUsage: normalizeUsage(chunk.payload.output.usage),
+        totalUsage: normalizeUsage(chunk.payload.output?.usage ?? chunk.payload.usage),
       };
     }
     case 'reasoning-start':
@@ -311,7 +314,9 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'step-finish': {
-      const { request: _request, providerMetadata, ...rest } = chunk.payload.metadata;
+      // Defensive: synthesized chunks (e.g. from #broadcastPersistedSignal) may omit
+      // payload.metadata and carry usage at payload.usage instead of payload.output.usage.
+      const { request: _request, providerMetadata, ...rest } = chunk.payload.metadata ?? {};
       return {
         type: 'finish-step',
         response: {
@@ -320,7 +325,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           modelId: (rest.modelId as string) || '',
           ...rest,
         },
-        usage: normalizeUsage(chunk.payload.output.usage),
+        usage: normalizeUsage(chunk.payload.output?.usage ?? chunk.payload.usage),
         finishReason: normalizeFinishReason(chunk.payload.stepResult.reason) as FinishReason,
         ...(includeRawFinishReason ? { rawFinishReason: chunk.payload.stepResult.reason } : {}),
         providerMetadata,
