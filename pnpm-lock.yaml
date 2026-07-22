@@ -2196,6 +2196,9 @@ importers:
 
   mastracode/factory:
     dependencies:
+      '@mastra/auth-workos':
+        specifier: workspace:*
+        version: link:../../auth/workos
       '@mastra/code-sdk':
         specifier: workspace:*
         version: link:../sdk

@@ -29,7 +29,7 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { WorkOS } from '@workos-inc/node';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { WorkOSAuditIntegration } from '../web/audit/workos-integration.js';
+import { WorkOSAuditIntegration } from '@mastra/factory/integrations/workos/integration';
 import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '@mastra/factory/integrations/base';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';

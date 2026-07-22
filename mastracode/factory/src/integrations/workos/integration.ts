@@ -3,9 +3,8 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { ensureFactoryAuthUser, factoryAuthTenant } from '../auth';
-import type { AuditEventRow } from '@mastra/factory/storage/domains/audit/base';
-import type { FactoryIntegration } from '@mastra/factory/integrations/base';
+import type { AuditEventRow } from '../../storage/domains/audit/base';
+import type { FactoryIntegration, IntegrationContext } from '../base';
 
 type WorkOSClient = ConstructorParameters<typeof WorkOSAdminPortal>[0];
 
@@ -79,14 +78,15 @@ export class WorkOSAuditIntegration implements FactoryIntegration {
     }
   }
 
-  routes(): ApiRoute[] {
+  routes(ctx: IntegrationContext): ApiRoute[] {
+    const { auth } = ctx;
     return [
       registerApiRoute('/web/audit/portal-link', {
         method: 'GET',
         handler: async cc => {
           const c = loose(cc);
-          await ensureFactoryAuthUser(c);
-          const tenant = factoryAuthTenant(c);
+          await auth.ensureUser(c);
+          const tenant = auth.tenant(c);
           if (!tenant) return c.json({ error: 'unauthorized' }, 401);
           if (!tenant.orgId) {
             return c.json(

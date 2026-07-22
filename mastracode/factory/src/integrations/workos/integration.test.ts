@@ -1,12 +1,17 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AuditEventRow } from '@mastra/factory/storage/domains/audit/base';
-import { mountApiRoutes } from '../test-utils';
-import { toWorkOSEvent, WorkOSAuditIntegration } from './workos-integration';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils';
+import type { AuditEventRow } from '../../storage/domains/audit/base';
+import type { IntegrationContext } from '../base';
+import { toWorkOSEvent, WorkOSAuditIntegration } from './integration';
 
 const createEvent = vi.fn(async () => undefined);
 const generateLink = vi.fn(async () => ({ link: 'https://portal.workos.test/link' }));
+
+function makeContext(): IntegrationContext {
+  return { auth: fakeRouteAuth() } as IntegrationContext;
+}
 
 function makeApp(integration: WorkOSAuditIntegration, user?: { workosId: string; organizationId?: string }) {
   const app = new Hono();
@@ -14,7 +19,7 @@ function makeApp(integration: WorkOSAuditIntegration, user?: { workosId: string;
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as never, integration.routes());
+  mountApiRoutes(app as never, integration.routes(makeContext()));
   return app;
 }
 
@@ -74,7 +79,7 @@ describe('WorkOSAuditIntegration', () => {
     await integration.audit({ event: row });
 
     expect(createEvent).toHaveBeenCalledWith('org_123', toWorkOSEvent(row));
-    expect(integration.routes().map(route => route.path)).toEqual(['/web/audit/portal-link']);
+    expect(integration.routes(makeContext()).map(route => route.path)).toEqual(['/web/audit/portal-link']);
   });
 
   it('swallows WorkOS forwarding failures', async () => {

@@ -51,6 +51,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "dependencies": {
+    "@mastra/auth-workos": "workspace:*",
     "@mastra/code-sdk": "workspace:*",
     "@mastra/core": "workspace:*",
     "@octokit/auth-app": "^8.0.0",
