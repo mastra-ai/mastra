@@ -160,7 +160,8 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'mastra' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.github.sourceIds).toEqual(['ghp-1']);
+      // The board and intake integrations key GitHub sources by repo slug (owner/name).
+      expect(saved[0]!.github.sourceIds).toEqual(['mastra']);
       expect(saved[0]).not.toHaveProperty('github.repositoryIds');
     });
   });
