@@ -1,18 +1,19 @@
 /**
  * BDD coverage for the propless `FactorySwitcher` (`domains/workspaces/components`).
  *
- * The switcher reads the active Factory from context and opens the in-layout
- * creation surface through `useOverlays`. Opening it also closes the mobile
- * sidebar drawer.
+ * The switcher reads the active Factory from context and navigates to the
+ * factory-scoped `/factories/:factoryId/create` page for the Create Factory
+ * action. Opening it also closes the mobile sidebar drawer.
  */
 import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
-import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
+import { OverlaysProvider } from '../../../../lib/overlays';
 import type { Factory } from '../../services/factories';
 import { FactorySwitcher } from '../FactorySwitcher';
 
@@ -42,11 +43,11 @@ function seedFactory(project: Factory = PROJECT) {
 }
 
 function StateProbe() {
-  const overlays = useOverlays();
+  const location = useLocation();
   const { openMobile, setOpenMobile } = useMainSidebar();
   return (
     <div>
-      <output data-testid="factories-open">{overlays.isOpen('factories') ? 'yes' : 'no'}</output>
+      <output data-testid="pathname">{location.pathname}</output>
       <output data-testid="sidebar-open">{openMobile ? 'yes' : 'no'}</output>
       <button onClick={() => setOpenMobile(true)}>Open mobile sidebar</button>
     </div>
@@ -67,12 +68,12 @@ function renderSwitcher() {
 }
 
 describe('FactorySwitcher', () => {
-  it('given an active factory, then its name and path render', async () => {
+  it('given an active factory, then its name renders without its path in the trigger', async () => {
     seedFactory();
     renderSwitcher();
 
     await waitFor(() => expect(screen.getByText('MastraCode Test')).toBeInTheDocument());
-    expect(screen.getByText('/tmp/mastracode-test')).toBeInTheDocument();
+    expect(screen.queryByText('/tmp/mastracode-test')).not.toBeInTheDocument();
   });
 
   it('given no selection, then the placeholder renders', () => {
@@ -81,17 +82,18 @@ describe('FactorySwitcher', () => {
     expect(screen.getByText('Select a factory…')).toBeInTheDocument();
   });
 
-  it('when the switcher is clicked, then the inline project menu opens without opening the project picker', async () => {
+  it('when the switcher is clicked, then the menu shows each factory path without navigating', async () => {
     seedFactory();
     renderSwitcher();
 
     await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
 
-    expect(await screen.findByRole('menuitem', { name: /MastraCode Test/ })).toBeInTheDocument();
-    expect(screen.getByTestId('factories-open')).toHaveTextContent('no');
+    const factoryItem = await screen.findByRole('menuitem', { name: /MastraCode Test/ });
+    expect(within(factoryItem).getByText('/tmp/mastracode-test')).toBeInTheDocument();
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/new');
   });
 
-  it('when Create Factory is selected on mobile, then the layout view opens and the sidebar closes', async () => {
+  it('when Create Factory is selected on mobile, then it navigates to the factory-scoped create page and the sidebar closes', async () => {
     vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
       matches: true,
       media: query,
@@ -111,7 +113,7 @@ describe('FactorySwitcher', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
 
-    expect(screen.getByTestId('factories-open')).toHaveTextContent('yes');
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/project-test/create');
     expect(screen.getByTestId('sidebar-open')).toHaveTextContent('no');
   });
 });

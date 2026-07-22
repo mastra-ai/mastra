@@ -43,7 +43,6 @@ export function ThreadPage() {
       </div>
     );
   }
-
   return (
     <ChatLayout
       sidebar={<Sidebar />}

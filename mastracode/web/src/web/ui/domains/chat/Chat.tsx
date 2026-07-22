@@ -5,8 +5,8 @@ import { Outlet, useLocation, useParams } from 'react-router';
 import { PageLayoutMainViewProvider } from '../../ui/PageLayout';
 import { OverlaysProvider, useOverlays } from '../../lib/overlays';
 import { SettingsPanel } from '../settings/components/SettingsPanel';
+import { SettingsHeader } from '../settings/components/SettingsHeader';
 import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
-import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
@@ -46,29 +46,24 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 
 function ChatShell() {
   const overlays = useOverlays();
-  const { activeFactory, factories, factoriesPending } = useActiveFactoryContext();
+  const { activeFactory } = useActiveFactoryContext();
   const { isMobile } = useMainSidebar();
-  const factorySetupRequired = factories.length === 0 && !factoriesPending;
-  const factoriesOpen = overlays.isOpen('factories');
+  const settingsOpen = overlays.isOpen('settings');
 
-  const closeFactories = () => {
-    overlays.close('factories');
-    const focusTargetId = isMobile ? 'mobile-navigation-trigger' : 'factory-switcher-trigger';
-    requestAnimationFrame(() => document.getElementById(focusTargetId)?.focus());
-  };
-
-  const mainView = overlays.isOpen('settings') ? (
-    <SettingsPanel />
-  ) : factoriesOpen ? (
-    <FactoriesPanel onClose={factorySetupRequired ? undefined : closeFactories} />
-  ) : undefined;
+  const mainView = settingsOpen ? <SettingsPanel /> : undefined;
 
   return (
     <>
       {!activeFactory && mainView !== undefined ? (
-        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">{mainView}</main>
+        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">
+          {settingsOpen && isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined}
+          {mainView}
+        </main>
       ) : (
-        <PageLayoutMainViewProvider view={mainView}>
+        <PageLayoutMainViewProvider
+          view={mainView}
+          mobileHeader={settingsOpen ? <SettingsHeader autoFocus={isMobile} placement="mobile" /> : undefined}
+        >
           <Outlet />
         </PageLayoutMainViewProvider>
       )}

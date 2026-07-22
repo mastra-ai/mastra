@@ -4,6 +4,8 @@ import { Navigate, Outlet, useLocation } from 'react-router';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
 
 export const RootGuards = () => {
+  // ActiveFactoryProvider mounts in ActiveFactoryLayout under
+  // `/factories/:factoryId`, so guards only handle auth + onboarding.
   return <AuthGuard />;
 };
 

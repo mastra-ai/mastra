@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocationProbe } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -24,12 +24,14 @@ const rootListing: DirectoryListing = {
 };
 
 function renderFactories() {
-  return renderWithProviders(
+  const onClose = vi.fn();
+  const view = renderWithProviders(
     <OverlayTestProviders>
-      <FactoriesPanel />
+      <FactoriesPanel onClose={onClose} />
       <LocationProbe />
     </OverlayTestProviders>,
   );
+  return { onClose, ...view };
 }
 
 beforeEach(() => {
@@ -58,7 +60,8 @@ describe('FactoriesPanel', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Factory name')).toHaveFocus();
   });
-  it('creates a named server-backed Factory as the primary path', async () => {
+
+  it('creates a named server-backed Factory as the primary path, then lands on its work board', async () => {
     let received: unknown;
     server.use(
       http.post(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
@@ -81,13 +84,13 @@ describe('FactoriesPanel', () => {
       ]);
     });
     expect(received).toEqual({ name: 'Mastra' });
-    // Selecting the created factory navigates to its factory-scoped URL.
+    // Creating navigates to the new factory's scoped work board.
     await waitFor(() =>
-      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${loadFactories()[0]?.id}`),
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${loadFactories()[0]?.id}/work`),
     );
   });
 
-  it('binds a local folder through the secondary path', async () => {
+  it('binds a local folder through the secondary path, then lands on its draft composer', async () => {
     const user = userEvent.setup();
     renderFactories();
 
@@ -108,7 +111,18 @@ describe('FactoriesPanel', () => {
       ]);
     });
     await waitFor(() =>
-      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${loadFactories()[0]?.id}`),
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${loadFactories()[0]?.id}/new`),
     );
+  });
+
+  it('calls onClose from the Cancel button and from Escape', async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderFactories();
+
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });

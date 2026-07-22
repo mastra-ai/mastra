@@ -361,11 +361,11 @@ describe('Sidebar', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
 
-      expect(await screen.findByRole('menuitem', { name: 'Mastra' })).toBeInTheDocument();
+      expect(await screen.findByRole('menuitem', { name: /^Mastra\b/ })).toBeInTheDocument();
       expect(screen.getByRole('menuitem', { name: 'Create Factory' })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /remove/i })).not.toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: /^Beta\b/ }));
 
       await waitFor(() =>
         expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${secondLocalProject.id}`),

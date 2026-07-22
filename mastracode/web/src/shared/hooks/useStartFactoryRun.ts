@@ -3,14 +3,12 @@ import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { prepareWorkspaceSkill } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveFactoryContext } from '../../web/ui/domains/workspaces/context/ActiveFactoryProvider';
-import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
 import { useFactoryBasePath } from './useFactoryBasePath';
-import type { Factory } from '../../web/ui/domains/workspaces/services/factories';
-import { isServerFactory } from '../../web/ui/domains/workspaces/services/factories';
+import { isServerFactory, selectedRepository } from '../../web/ui/domains/workspaces/services/factories';
+import { createUserSession } from '../../web/ui/domains/workspaces/services/github';
 import { startFactoryRun } from '../../web/ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../../web/ui/domains/factory/services/workItems';
 
@@ -62,7 +60,7 @@ export interface StartFactoryRunInput {
 }
 
 /**
- * Materialize the worktree in the browser, then hand session/thread creation,
+ * Create the durable Factory session, then hand session/thread creation,
  * binding, board persistence, and kickoff delivery to the server coordinator.
  * The coordinator commits exact authority before it dispatches any message.
  */
@@ -73,50 +71,32 @@ export function useStartFactoryRun() {
   const basePath = useFactoryBasePath();
   const queryClient = useQueryClient();
 
-  const createWorkspace = useCreateWorkspaceMutation(activeFactory, {
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-  });
-
   const mutation = useMutation({
     mutationKey: factoryRunMutationKey(resourceId, activeFactory?.id),
     mutationFn: async ({ branch, threadTitle, threadTags, invocation, workItem }: StartFactoryRunInput) => {
-      const updatedFactory = await createWorkspace.mutateAsync(branch);
-      queryClient.setQueryData(queryKeys.factories(), (factories: Factory[] | undefined) =>
-        factories?.map(factory => (factory.id === updatedFactory.id ? updatedFactory : factory)),
-      );
-      const projectPath = deriveProjectPath(updatedFactory);
-      if (!projectPath) throw new Error('Could not resolve the new worktree path');
+      const repository = activeFactory ? selectedRepository(activeFactory) : undefined;
+      if (!repository) throw new Error('Select a repository before starting a Factory run');
       const factoryProjectId =
         activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
       if (!factoryProjectId || !workItem) throw new Error('Factory run requires a board work item');
 
-      let kickoffMessage: string | null = null;
-      if (invocation?.type === 'skill') {
-        const skillArguments = `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Worktree: ${projectPath}\n- Branch: ${branch}`;
-        const prepared = await prepareWorkspaceSkill({
-          agentControllerId: AGENT_CONTROLLER_ID,
-          resourceId,
-          scope: projectPath,
-          name: invocation.skillName,
-          arguments: skillArguments,
-          baseUrl,
-        });
-        kickoffMessage = prepared.message;
-      } else if (invocation) {
-        kickoffMessage = invocation.prompt;
-      }
-
+      const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, branch);
+      const sessionId = userSession.sessionId;
       const desiredStage = workItem.stages.length === 1 ? workItem.stages[0] : undefined;
       if (!desiredStage) throw new Error('Factory runs require one exclusive destination stage');
+
       const prepared = await startFactoryRun(baseUrl, factoryProjectId, {
-        resourceId,
-        projectPath,
-        branch,
+        sessionId,
         threadTitle,
         threadTags,
         kickoffKey: crypto.randomUUID(),
-        kickoffMessage,
+        invocation:
+          invocation?.type === 'skill'
+            ? {
+                ...invocation,
+                arguments: `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Session: ${sessionId}\n- Branch: ${userSession.branch}`,
+              }
+            : invocation,
         destinationStage: desiredStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
         workItem: {
           id: workItem.id,
@@ -135,7 +115,7 @@ export function useStartFactoryRun() {
 
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
+          queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId, undefined),
         }),
         queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) }),
       ]);

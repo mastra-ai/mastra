@@ -240,7 +240,7 @@ describe('Factory Overview page', () => {
     useOverviewHandlers({
       workItems: [
         inStage('wi-1', 'Active build', 'execute', 1 * HOUR_S, {
-          sessions: { work: { projectPath: WORKTREE, branch: 'main', threadId: 'thread-run', startedBy: 'user-1' } },
+          sessions: { work: { sessionId: WORKTREE, branch: 'main', threadId: 'thread-run', startedBy: 'user-1' } },
         }),
       ],
       activityThreads: [{ id: 'thread-run', tags: { projectPath: WORKTREE }, state: 'active' }],

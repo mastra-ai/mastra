@@ -2,11 +2,11 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 
 import { useAddFactoryMutation, useCreateFactoryMutation } from '../../../../../shared/hooks/useFactories';
 import { useKeyDown } from '../../../lib/hooks';
 import { CloseIcon } from '../../../ui/icons';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { DirectoryBrowser } from './DirectoryPicker';
 
 function mutationError(error: unknown): string | null {
@@ -15,13 +15,13 @@ function mutationError(error: unknown): string | null {
 }
 
 /**
- * In-layout Factory creation surface. The primary path is name-first: create
- * a server-backed Factory project, then connect repositories from the Board or
- * Factory settings. Binding a local folder remains a secondary path for
- * terminal-shared, org-less workflows.
+ * Factory creation surface (rendered on the `/factories/create` page). The
+ * primary path is name-first: create a server-backed Factory project, then
+ * connect repositories from the Board or Factory settings. Binding a local
+ * folder remains a secondary path for terminal-shared, org-less workflows.
  */
-export function FactoriesPanel({ onClose }: { onClose?: () => void }) {
-  const { selectFactory } = useActiveFactoryContext();
+export function FactoriesPanel({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate();
   const createFactory = useCreateFactoryMutation();
   const addLocalFactory = useAddFactoryMutation();
   const [name, setName] = useState('');
@@ -30,15 +30,16 @@ export function FactoriesPanel({ onClose }: { onClose?: () => void }) {
   const createError = mutationError(createFactory.error);
   const localError = mutationError(addLocalFactory.error);
 
-  useKeyDown({ escape: () => onClose?.() });
+  useKeyDown({ escape: onClose });
 
   const handleCreate = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
     try {
       const factory = await createFactory.mutateAsync({ name: trimmed });
-      await selectFactory(factory);
-      onClose?.();
+      // The factory is brand new, so build its URL directly (the route param
+      // still points at the previous factory, if any).
+      void navigate(`/factories/${factory.id}/work`);
     } catch {
       // Mutation state owns the rendered error.
     }
@@ -47,8 +48,7 @@ export function FactoriesPanel({ onClose }: { onClose?: () => void }) {
   const handlePickFolder = async (path: string, folderName: string) => {
     try {
       const factory = await addLocalFactory.mutateAsync({ name: folderName || path, path });
-      await selectFactory(factory);
-      onClose?.();
+      void navigate(`/factories/${factory.id}/new`);
     } catch {
       // Mutation state owns the rendered error.
     }
@@ -60,11 +60,9 @@ export function FactoriesPanel({ onClose }: { onClose?: () => void }) {
         <Txt as="h1" variant="header-sm" id="create-factory-title" className="text-icon6">
           Create Factory
         </Txt>
-        {onClose && (
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Close factory creation" onClick={onClose}>
-            <CloseIcon size={16} />
-          </Button>
-        )}
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Close factory creation" onClick={onClose}>
+          <CloseIcon size={16} />
+        </Button>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
@@ -98,11 +96,9 @@ export function FactoriesPanel({ onClose }: { onClose?: () => void }) {
               </Txt>
             )}
             <div className="flex items-center justify-end gap-2">
-              {onClose && (
-                <Button variant="ghost" size="sm" type="button" onClick={onClose}>
-                  Cancel
-                </Button>
-              )}
+              <Button variant="ghost" size="sm" type="button" onClick={onClose}>
+                Cancel
+              </Button>
               <Button variant="primary" size="sm" type="submit" disabled={!name.trim() || createFactory.isPending}>
                 {createFactory.isPending ? 'Creating…' : 'Create Factory'}
               </Button>

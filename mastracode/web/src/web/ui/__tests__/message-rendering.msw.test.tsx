@@ -16,6 +16,7 @@ import { NewPage } from '../domains/chat/NewPage';
 import { ThreadPage } from '../domains/chat/ThreadPage';
 import type { Factory } from '../domains/workspaces';
 import { ActiveFactoryLayout } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { CreateFactoryPage } from '../pages/CreateFactoryPage';
 import { createAppRoutes } from '../router';
 
 /**
@@ -24,7 +25,7 @@ import { createAppRoutes } from '../router';
  * resolving the active factory from the URL param.
  * Auth guards are intentionally bypassed — these specs stub /auth/me directly.
  */
-function renderChat() {
+function renderChat(initialEntry = '/threads/thread-test') {
   const router = createMemoryRouter(
     [
       {
@@ -36,6 +37,7 @@ function renderChat() {
             children: [
               { path: 'new', element: <NewPage /> },
               { path: 'threads/:threadId', element: <ThreadPage /> },
+              { path: 'create', element: <CreateFactoryPage /> },
             ],
           },
         ],
@@ -43,7 +45,7 @@ function renderChat() {
     ],
     // The transcript only renders on the thread's own page now — /new is the
     // draft composer and hides the bound thread's history.
-    { initialEntries: ['/factories/project-test/threads/thread-test'] },
+    { initialEntries: [`/factories/project-test${initialEntry}`] },
   );
   return renderWithProviders(<RouterProvider router={router} />);
 }
@@ -486,7 +488,7 @@ describe('MastraCode message rendering', () => {
     expect(streamRequests).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the running conversation mounted while Create Factory is open in the layout', async () => {
+  it('recovers the running conversation after navigating to Create Factory and back', async () => {
     const user = userEvent.setup();
     seedProject();
     const stream = delayedSse({
@@ -510,21 +512,23 @@ describe('MastraCode message rendering', () => {
     expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
     await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
 
-    const factorySwitcher = screen.getByRole('button', { name: 'Select factory' });
-    await user.click(factorySwitcher);
+    await user.click(screen.getByRole('button', { name: 'Select factory' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
 
+    // Create Factory is now a dedicated page inside the chat layout.
     const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
     expect(factorySurface.closest('main')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
 
     await stream.emit();
+    // Close navigates back to the thread page the user came from.
     await user.click(screen.getByRole('button', { name: 'Close factory creation' }));
 
     expect(await screen.findByText('Streaming while factory creation is open')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
-    await waitFor(() => expect(factorySwitcher).toHaveFocus());
-    expect(streamRequests).toHaveBeenCalledTimes(1);
+    // Leaving the thread route drops the session's threadId, so returning
+    // re-subscribes (same as any thread → /new → thread navigation).
+    expect(streamRequests).toHaveBeenCalledTimes(2);
   });
 
   it('redirects to first-run onboarding after empty backend hydration', async () => {

@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../../chat/context/ChatSessionTestProvider';
 import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
 import { OverlaysProvider } from '../../../../lib/overlays';
 import { SettingsPanel } from '../../index';
@@ -161,9 +161,18 @@ function useAgentControllerHandlers(): CapturedRequests {
       return HttpResponse.json({ ok: true });
     }),
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
+    http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => sse()),
     // The Model tab hosts the packs section now, so opening it loads the catalog.
     http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json({ packs: [], activePackId: null })),
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+      HttpResponse.json({
+        config: { github: { enabled: true, repositoryIds: [] }, linear: { enabled: false, projectIds: [] } },
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+      HttpResponse.json({ enabled: false, connected: false, workspace: null }),
+    ),
   );
 
   return captured;
@@ -214,28 +223,30 @@ function Harness({ children }: { children: ReactNode }) {
   );
 }
 
-function renderSettingsPanel() {
+async function renderSettingsPanel() {
   seedFactory();
   const captured = useAgentControllerHandlers();
-  renderWithProviders(
+  const rendered = renderWithProviders(
     <Harness>
       <SettingsPanel />
     </Harness>,
   );
+  await waitForMutationsIdle(rendered.client);
   return captured;
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   localStorage.clear();
 });
 
 describe('SettingsPanel', () => {
   describe('when rendered', () => {
-    it('exposes a focused, labelled in-layout section without dialog semantics', () => {
-      renderSettingsPanel();
+    it('exposes a focused, labelled in-layout section without dialog semantics', async () => {
+      await renderSettingsPanel();
 
       const settings = screen.getByRole('region', { name: 'Settings' });
-      const heading = within(settings).getByRole('heading', { name: 'Settings' });
+      const heading = within(settings).getByRole('heading', { name: 'General' });
 
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(within(settings).queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
@@ -246,11 +257,11 @@ describe('SettingsPanel', () => {
   describe('when changing general preferences', () => {
     it('updates the theme from the real theme provider and omits density controls', async () => {
       const user = userEvent.setup();
-      renderSettingsPanel();
+      await renderSettingsPanel();
 
       await user.click(screen.getByRole('button', { name: 'Light' }));
 
-      expect(screen.getByTestId('theme-value')).toHaveTextContent('light');
+      await waitFor(() => expect(screen.getByTestId('theme-value')).toHaveTextContent('light'));
       expect(screen.queryByText('Density')).not.toBeInTheDocument();
       expect(screen.queryByText('Spacing between messages and controls')).not.toBeInTheDocument();
     });
@@ -258,7 +269,7 @@ describe('SettingsPanel', () => {
     it('persists the completion sound choice and previews it', async () => {
       const user = userEvent.setup();
       vi.mocked(playDoneSound).mockClear();
-      renderSettingsPanel();
+      await renderSettingsPanel();
 
       const soundGroup = screen.getByRole('group', { name: 'Completion sound' });
       await user.click(within(soundGroup).getByRole('button', { name: 'Arcade' }));
@@ -274,7 +285,7 @@ describe('SettingsPanel', () => {
   describe('when managing source control', () => {
     it('removes the active factory and reconciles the factory selection', async () => {
       const user = userEvent.setup();
-      renderSettingsPanel();
+      await renderSettingsPanel();
 
       await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
       expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
@@ -288,7 +299,7 @@ describe('SettingsPanel', () => {
 
     it('keeps the factory visible and reports storage failures', async () => {
       const user = userEvent.setup();
-      renderSettingsPanel();
+      await renderSettingsPanel();
       await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
       const storageError = new Error('Factory storage is unavailable');
       const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
@@ -306,7 +317,7 @@ describe('SettingsPanel', () => {
   describe('when changing model preferences', () => {
     it('persists the thinking level and updates the selected button', async () => {
       const user = userEvent.setup();
-      const captured = renderSettingsPanel();
+      const captured = await renderSettingsPanel();
 
       await user.click(screen.getByRole('button', { name: 'Show model settings' }));
       const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
@@ -321,7 +332,7 @@ describe('SettingsPanel', () => {
 
     it('reports an acknowledged but unpersisted update and restores the selected button', async () => {
       const user = userEvent.setup();
-      renderSettingsPanel();
+      await renderSettingsPanel();
 
       await user.click(screen.getByRole('button', { name: 'Show model settings' }));
       const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
@@ -336,7 +347,7 @@ describe('SettingsPanel', () => {
 
     it('hosts model packs inside the Model settings section', async () => {
       const user = userEvent.setup();
-      renderSettingsPanel();
+      await renderSettingsPanel();
 
       expect(screen.queryByText('Model packs')).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Show model settings' }));
@@ -351,7 +362,7 @@ describe('SettingsPanel', () => {
   describe('when changing behavior preferences', () => {
     it('updates session settings and permission categories through chat providers', async () => {
       const user = userEvent.setup();
-      const captured = renderSettingsPanel();
+      const captured = await renderSettingsPanel();
 
       await user.click(screen.getByRole('button', { name: 'Show behavior settings' }));
       const notifications = await screen.findByRole('group', { name: 'Notifications' });
@@ -361,6 +372,19 @@ describe('SettingsPanel', () => {
 
       await waitFor(() => expect(captured.stateUpdates).toContainEqual({ notifications: 'system' }));
       await waitFor(() => expect(captured.permissions).toContainEqual({ category: 'read', policy: 'allow' }));
+    });
+
+    it('keeps notification delivery separate from completion sound previews', async () => {
+      const user = userEvent.setup();
+      await renderSettingsPanel();
+
+      await user.click(screen.getByRole('button', { name: 'Show behavior settings' }));
+      const notifications = await screen.findByRole('group', { name: 'Notifications' });
+
+      expect(screen.queryByRole('button', { name: 'Preview notification sound' })).not.toBeInTheDocument();
+
+      await user.click(within(notifications).getByRole('button', { name: 'System' }));
+      expect(screen.queryByRole('button', { name: 'Preview notification sound' })).not.toBeInTheDocument();
     });
   });
 });

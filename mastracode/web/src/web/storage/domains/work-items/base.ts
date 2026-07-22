@@ -45,7 +45,7 @@ export interface WorkItemStageEntry {
 }
 
 export interface WorkItemSessionRef {
-  projectPath: string;
+  sessionId: string;
   branch: string;
   threadId: string;
   startedBy: string;
@@ -145,7 +145,7 @@ export interface FactoryRunBindingSessionAddress {
   factoryProjectId: string;
   threadId: string;
   resourceId: string;
-  projectPath: string;
+  sessionId: string;
 }
 
 export interface FactoryRunBindingAddress extends FactoryRunBindingSessionAddress {
@@ -167,7 +167,7 @@ export interface FactoryRunBindingRecord {
   role: string;
   threadId: string;
   resourceId: string;
-  projectPath: string;
+  sessionId: string;
   branch: string;
   status: 'active' | 'revoked';
   createdAt: Date;
@@ -254,7 +254,7 @@ export interface PrepareFactoryRunStartResult {
 
 /** Session ref as accepted from clients — `startedBy` is stamped server-side. */
 export interface WorkItemSessionInput {
-  projectPath: string;
+  sessionId: string;
   branch: string;
   threadId: string;
 }
@@ -582,7 +582,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       role: { type: 'text' },
       thread_id: { type: 'text' },
       resource_id: { type: 'text' },
-      project_path: { type: 'text' },
+      session_id: { type: 'text' },
       branch: { type: 'text' },
       status: { type: 'text' },
       created_at: { type: 'timestamp' },
@@ -645,7 +645,7 @@ function toBinding(row: GovernanceDbRow): FactoryRunBindingRecord {
     role: String(row.role),
     threadId: String(row.thread_id),
     resourceId: String(row.resource_id),
-    projectPath: String(row.project_path),
+    sessionId: String(row.session_id),
     branch: String(row.branch),
     status: row.status as FactoryRunBindingRecord['status'],
     createdAt: row.created_at,
@@ -1272,7 +1272,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       factory_project_id: address.factoryProjectId,
       thread_id: address.threadId,
       resource_id: address.resourceId,
-      project_path: address.projectPath,
+      session_id: address.sessionId,
       status: 'active',
     });
     return row ? toBinding(row) : null;
@@ -1284,7 +1284,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       factory_project_id: address.factoryProjectId,
       thread_id: address.threadId,
       resource_id: address.resourceId,
-      project_path: address.projectPath,
+      session_id: address.sessionId,
     });
     if (new Set(rows.map(row => row.org_id)).size !== 1) return null;
     const row = rows.sort((left, right) => {
@@ -1462,7 +1462,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           role: input.role,
           thread_id: input.session.threadId,
           resource_id: input.resourceId,
-          project_path: input.session.projectPath,
+          session_id: input.session.sessionId,
           branch: input.session.branch,
           status: 'active',
           created_at: now,

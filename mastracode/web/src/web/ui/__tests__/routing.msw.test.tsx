@@ -204,6 +204,14 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByText('Build software with a Factory that knows your work.')).not.toBeInTheDocument();
   });
 
+  it('given auth is disabled and a factory exists, when visiting /factories/create, then the Create Factory page renders scoped to the first factory', async () => {
+    const { router } = renderRoutes('/factories/create', AUTH_DISABLED);
+
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/create`);
+    expect(await screen.findByRole('region', { name: 'Create Factory' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('given auth is disabled, when visiting /, then the user is redirected to the factory draft composer', async () => {
     const { router } = renderRoutes('/', AUTH_DISABLED);
 

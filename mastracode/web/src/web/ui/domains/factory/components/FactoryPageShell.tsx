@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -8,12 +9,11 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
 import { Sidebar } from '../../../Sidebar';
-import { PageLayout } from '../../../ui';
+import { PageLayout } from '../../../ui/PageLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { useActiveFactoryContext } from '../../workspaces';
-import type { ServerFactory } from '../../workspaces';
-import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import type { ServerFactory } from '../../workspaces/services/factories';
+import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces/services/factories';
 
 interface FactoryPageShellProps {
   title: string;
@@ -41,7 +41,6 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
       </div>
     );
   }
-
   return (
     <PageLayout
       sidebar={<Sidebar />}

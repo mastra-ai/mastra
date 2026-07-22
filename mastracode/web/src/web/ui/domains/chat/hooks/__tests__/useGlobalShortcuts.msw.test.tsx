@@ -3,8 +3,9 @@
  *
  * The hook is now zero-args: it observes `useOverlays()`,
  * `useChatTranscript()` (busy + abort), and `useActiveFactoryContext()` (zero
- * projects force the Factory creation view open) directly. Specs preserve the
- * `?` shortcuts toggle unless typing, and the Escape priority cascade.
+ * factories disable the Escape cascade during onboarding) directly. Specs
+ * preserve the `?` shortcuts toggle unless typing, and the Escape priority
+ * cascade.
  */
 import type { AgentControllerEvent } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
@@ -29,7 +30,7 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 
-const OVERLAYS: OverlayName[] = ['sidebar', 'settings', 'shortcuts', 'factories'];
+const OVERLAYS: OverlayName[] = ['sidebar', 'settings', 'shortcuts'];
 
 afterEach(() => {
   localStorage.clear();
@@ -189,22 +190,8 @@ describe('useGlobalShortcuts', () => {
     expectOverlay('sidebar', 'closed');
   });
 
-  it('given the Factory creation view is open, when Escape is pressed, then the global handler yields to it', async () => {
-    seedFactory();
-    useAgentControllerHandlers();
-    renderProbe(THREAD_ID);
-    await ready();
-
-    await userEvent.click(screen.getByRole('button', { name: 'open factories' }));
-    await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
-
-    await userEvent.keyboard('{Escape}');
-    expectOverlay('factories', 'open');
-    expectOverlay('settings', 'open');
-  });
-
-  it('given zero factories (forced creation view), when Escape is pressed, then it is a no-op even with overlays open', async () => {
-    // No seedFactory(): Factory creation is forced open by derivation.
+  it('given zero factories (onboarding), when Escape is pressed, then it is a no-op even with overlays open', async () => {
+    // No seedFactory(): the Escape cascade is disabled during onboarding.
     useAgentControllerHandlers();
     renderProbe(undefined);
 

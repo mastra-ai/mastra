@@ -7,47 +7,97 @@ import { FactoryTransitionService } from './transition-service';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-function makeController(sendMessage = vi.fn(async () => {}), threads: Array<{ id: string; updatedAt: Date }> = []) {
+function makeController(sendMessage = vi.fn(async () => {})) {
   let threadId: string | undefined;
   const session = {
     thread: {
-      list: vi.fn(async () => threads),
+      list: vi.fn(async () => []),
       switch: vi.fn(async ({ threadId: id }: { threadId: string }) => {
         threadId = id;
       }),
       create: vi.fn(async () => {
-        threadId = 'thread-1';
+        threadId = 'unexpected-thread';
         return { id: threadId };
       }),
+      rename: vi.fn(async () => {}),
       setSetting: vi.fn(async () => {}),
       requireId: vi.fn(() => {
         if (!threadId) throw new Error('missing thread');
         return threadId;
       }),
     },
+    getWorkspace: vi.fn(() => ({ skills: undefined })),
     sendMessage,
   };
   return {
-    controller: { createSession: vi.fn(async () => session) },
+    controller: {
+      createSession: vi.fn(async ({ threadId: exactThreadId }: { threadId: string }) => {
+        threadId = exactThreadId;
+        return session;
+      }),
+    },
     session,
     sendMessage,
   };
 }
 
+function makeSourceControl() {
+  const sessions = new Map([
+    [
+      'session-1',
+      {
+        id: 'source-session-1',
+        sessionId: 'session-1',
+        projectRepositoryId: 'project-repository-1',
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: 'factory/issue-1',
+        baseBranch: 'main',
+      },
+    ],
+    [
+      'session-2',
+      {
+        id: 'source-session-2',
+        sessionId: 'session-2',
+        projectRepositoryId: 'project-repository-2',
+        orgId: 'org-2',
+        userId: 'user-1',
+        branch: 'factory/issue-2',
+        baseBranch: 'main',
+      },
+    ],
+  ]);
+  return {
+    sessions: { getBySessionId: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? null) },
+    projectRepositories: {
+      get: vi.fn(async ({ id }: { id: string }) => ({ id, connectionId: `connection-${id}` })),
+    },
+    connections: { get: vi.fn(async () => ({ factoryProjectId: PROJECT_ID })) },
+  };
+}
+
 function startRequest(
-  overrides: Partial<{ kickoffKey: string; role: string; kickoffMessage: string | null; id: string }> = {},
+  overrides: Partial<{
+    sessionId: string;
+    kickoffKey: string;
+    role: string;
+    kickoffMessage: string | null;
+    id: string;
+  }> = {},
 ) {
   return {
     orgId: 'org-1',
     userId: 'user-1',
     factoryProjectId: PROJECT_ID,
-    resourceId: 'resource-1',
-    projectPath: '/worktrees/issue-1',
-    branch: 'factory/issue-1',
+    sessionId: overrides.sessionId ?? 'session-1',
     threadTitle: 'Investigate issue 1',
     threadTags: { role: overrides.role ?? 'work' },
     kickoffKey: overrides.kickoffKey ?? 'kickoff-1',
-    kickoffMessage: overrides.kickoffMessage === undefined ? 'Start work' : overrides.kickoffMessage,
+    invocation:
+      overrides.kickoffMessage === null
+        ? undefined
+        : { type: 'prompt' as const, prompt: overrides.kickoffMessage ?? 'Start work' },
     destinationStage: 'intake' as const,
     workItem: {
       id: overrides.id,
@@ -68,25 +118,32 @@ function startRequest(
 }
 
 describe('FactoryStartCoordinator', () => {
-  it('commits the item session, exact binding, and durable pending start without dispatching inline', async () => {
+  it('commits the item session, exact binding, and durable pending start', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller, sendMessage } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
 
     const prepared = await coordinator.prepare(startRequest());
 
     expect(prepared).toMatchObject({
-      threadId: 'thread-1',
+      threadId: 'session-1',
+      resourceId: 'session-1',
+      sessionId: 'session-1',
       kickoffStatus: 'pending',
       replayed: false,
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
-    expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
     expect(sendMessage).not.toHaveBeenCalled();
     const item = await storage.get({ orgId: 'org-1', id: prepared.workItemId });
     expect(item?.sessions.work).toMatchObject({
-      threadId: 'thread-1',
-      projectPath: '/worktrees/issue-1',
+      threadId: 'session-1',
+      sessionId: 'session-1',
+      branch: 'factory/issue-1',
       startedBy: 'user-1',
     });
   });
@@ -112,7 +169,12 @@ describe('FactoryStartCoordinator', () => {
       }),
     });
     const { controller, sendMessage } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, transitionService);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      transitionService,
+      makeSourceControl() as never,
+    );
 
     const prepared = await coordinator.prepare({ ...startRequest(), destinationStage: 'execute' });
 
@@ -123,29 +185,36 @@ describe('FactoryStartCoordinator', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
   });
 
-  it('reuses the newest server-resolved tagged thread instead of creating one in the browser', async () => {
+  it('binds the controller session to the exact Factory session thread', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
-    const { controller, session } = makeController(
-      vi.fn(async () => {}),
-      [
-        { id: 'thread-old', updatedAt: new Date('2026-01-01T00:00:00Z') },
-        { id: 'thread-new', updatedAt: new Date('2026-02-01T00:00:00Z') },
-      ],
+    const { controller, session } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
     );
-    const coordinator = new FactoryStartCoordinator(controller as never, storage);
 
     const prepared = await coordinator.prepare(startRequest({ kickoffMessage: null }));
 
-    expect(prepared.threadId).toBe('thread-new');
-    expect(session.thread.list).toHaveBeenCalledWith({ metadata: { projectPath: '/worktrees/issue-1' } });
-    expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-new' });
+    expect(prepared).toMatchObject({ threadId: 'session-1', resourceId: 'session-1', sessionId: 'session-1' });
+    expect(controller.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'session-1', resourceId: 'session-1', threadId: 'session-1' }),
+    );
+    expect(session.thread.list).not.toHaveBeenCalled();
+    expect(session.thread.switch).not.toHaveBeenCalled();
     expect(session.thread.create).not.toHaveBeenCalled();
   });
 
-  it('reuses one work-item thread across roles and converges every session ref', async () => {
+  it('reuses the exact Factory session thread across roles', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
 
     const triage = await coordinator.prepare(
       startRequest({ role: 'triage', kickoffKey: 'triage-1', kickoffMessage: null }),
@@ -154,9 +223,10 @@ describe('FactoryStartCoordinator', () => {
       startRequest({ id: triage.workItemId, role: 'plan', kickoffKey: 'plan-1', kickoffMessage: null }),
     );
 
+    expect(plan.threadId).toBe('session-1');
     expect(plan.threadId).toBe(triage.threadId);
-    expect(session.thread.create).toHaveBeenCalledTimes(1);
-    expect(session.thread.switch).toHaveBeenCalledWith({ threadId: triage.threadId });
+    expect(session.thread.create).not.toHaveBeenCalled();
+    expect(session.thread.switch).not.toHaveBeenCalled();
     expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'factoryWorkItemId', value: triage.workItemId });
     const item = await storage.get({ orgId: 'org-1', id: triage.workItemId });
     expect(item?.sessions.triage?.threadId).toBe(triage.threadId);
@@ -175,7 +245,12 @@ describe('FactoryStartCoordinator', () => {
       }),
     });
     const { controller, sendMessage } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, transitionService);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      transitionService,
+      makeSourceControl() as never,
+    );
 
     await expect(coordinator.prepare({ ...startRequest(), destinationStage: 'execute' })).rejects.toMatchObject({
       result: { status: 'rejected', code: 'forbidden' },
@@ -190,7 +265,12 @@ describe('FactoryStartCoordinator', () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     vi.spyOn(storage, 'prepareRunStart').mockRejectedValueOnce(new Error('commit failed'));
     const { controller, sendMessage } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
 
     await expect(coordinator.prepare(startRequest())).rejects.toThrow('commit failed');
     expect(sendMessage).not.toHaveBeenCalled();
@@ -199,7 +279,12 @@ describe('FactoryStartCoordinator', () => {
   it('replays the same durable pending kickoff and binding without dispatching it inline', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller, sendMessage } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
     const input = startRequest();
 
     const first = await coordinator.prepare(input);
@@ -214,7 +299,12 @@ describe('FactoryStartCoordinator', () => {
   it('revokes only the prior binding for the same item role', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
     const first = await coordinator.prepare(startRequest({ kickoffMessage: null }));
 
     await coordinator.prepare(
@@ -228,10 +318,15 @@ describe('FactoryStartCoordinator', () => {
   it('scopes kickoff idempotency to tenant and project', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
     const first = await coordinator.prepare(startRequest({ kickoffMessage: null }));
     const second = await coordinator.prepare({
-      ...startRequest({ kickoffMessage: null }),
+      ...startRequest({ sessionId: 'session-2', kickoffMessage: null }),
       orgId: 'org-2',
       workItem: {
         ...startRequest().workItem,

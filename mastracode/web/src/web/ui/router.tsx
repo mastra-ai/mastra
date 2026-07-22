@@ -29,6 +29,7 @@ import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
 import { OverviewPage } from './domains/factory/OverviewPage';
 import { RootGuards } from './domains/auth/components/RootGuards';
+import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { ActiveFactoryLayout } from './domains/workspaces';
 import { isServerFactory } from './domains/workspaces/services/factories';
@@ -122,6 +123,9 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'metrics', element: <MetricsPage /> },
                 { path: 'audit', element: <AuditPage /> },
+                // Dedicated Create Factory page, kept inside the factory-scoped
+                // chat shell so the sidebar and session providers stay mounted.
+                { path: 'create', element: <CreateFactoryPage /> },
                 // Compatibility routes from the former combined Board.
                 { path: 'board', element: <Navigate to="../work" replace /> },
                 { path: 'intake', element: <Navigate to="../work" replace /> },
@@ -129,6 +133,9 @@ export function createAppRoutes(): RouteObject[] {
             },
           ],
         },
+        // Static segment outranks `:factoryId`, so `/factories/create` deep
+        // links land here and are re-scoped to the first factory's create page.
+        { path: 'factories/create', element: <LegacyFactoryRedirect suffix="/create" /> },
         // Legacy deep links from before factory-scoped URLs.
         { path: 'factory/*', element: <LegacyFactorySubpageRedirect /> },
         { path: 'new', element: <LegacyFactoryRedirect suffix="/new" /> },

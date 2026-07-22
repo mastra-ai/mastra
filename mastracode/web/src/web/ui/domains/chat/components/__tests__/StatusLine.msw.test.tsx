@@ -551,7 +551,7 @@ describe('StatusLine', () => {
                 source: 'github-pr',
                 sessions: {
                   review: {
-                    projectPath: '/tmp/mastracode-test-worktree',
+                    sessionId: '/tmp/mastracode-test-worktree',
                     branch: 'factory/pr-34',
                     threadId: THREAD_ID,
                     startedBy: 'user-1',
