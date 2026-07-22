@@ -9,9 +9,6 @@ import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { resolveModel } from './model.js';
 
-let cachedMemory: Memory | null = null;
-let cachedMemoryKey: string | null = null;
-
 /**
  * Read controller state from requestContext.
  * Used by both the memory factory and the OM model functions.
@@ -78,6 +75,11 @@ Drop caveman for: security warnings, irreversible action confirmations, multi-st
  * Model functions also read from requestContext (no mutable bridge needed).
  */
 export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
+  // Cache is scoped per storage instance (per getDynamicMemory call) so a
+  // Memory bound to one storage is never reused after storage changes.
+  let cachedMemory: Memory | null = null;
+  let cachedMemoryKey: string | null = null;
+
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getAgentControllerState(requestContext);
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
