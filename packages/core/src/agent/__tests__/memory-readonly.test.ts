@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
@@ -54,7 +53,7 @@ describe('Memory readOnly option', () => {
    * no messages are saved to memory.
    */
   it('should NOT save messages when memory.options.readOnly is true in stream()', async () => {
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'user-readonly-test';
 
     const mockMemory = new MockMemory();
@@ -99,7 +98,7 @@ describe('Memory readOnly option', () => {
    * Same test but for generate() method
    */
   it('should NOT save messages when memory.options.readOnly is true in generate()', async () => {
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'user-readonly-test-generate';
 
     const mockMemory = new MockMemory();
@@ -142,7 +141,7 @@ describe('Memory readOnly option', () => {
    * Verify that without readOnly, messages ARE saved (control test)
    */
   it('should save messages when memory.options.readOnly is NOT set', async () => {
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'user-save-test';
 
     const mockMemory = new MockMemory();
@@ -181,7 +180,7 @@ describe('Memory readOnly option', () => {
    * Verify that readOnly: true still allows reading from memory
    */
   it('should still read from memory when options.readOnly is true', async () => {
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'user-readonly-read-test';
 
     const mockMemory = new MockMemory();
@@ -237,7 +236,7 @@ describe('Memory readOnly option', () => {
    * Verify that savePerStep also respects readOnly flag
    */
   it('should NOT save messages with savePerStep when memory.options.readOnly is true', async () => {
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'user-readonly-savePerStep';
 
     const mockMemory = new MockMemory();

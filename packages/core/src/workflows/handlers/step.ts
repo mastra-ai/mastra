@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
@@ -96,7 +95,7 @@ export async function executeStep(
   } = params;
   const observabilityContext = resolveObservabilityContext(rest);
 
-  const stepCallId = randomUUID();
+  const stepCallId = crypto.randomUUID();
 
   const { inputData, validationError: inputValidationError } = await validateStepInput({
     prevOutput,
