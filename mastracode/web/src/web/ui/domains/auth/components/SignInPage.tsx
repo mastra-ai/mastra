@@ -161,8 +161,8 @@ export function SignInPage() {
             variant="ui-lg"
             className="mt-6 max-w-lg text-[clamp(1.0625rem,1.65vw,1.375rem)] leading-[1.36] tracking-[0.015em] text-neutral3"
           >
-            Turn a repository into a working factory. Agents pick up scoped work, collaborate, and ship changes you
-            can review.
+            Turn a repository into a working factory. Agents pick up scoped work, collaborate, and ship changes you can
+            review.
           </Txt>
 
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">

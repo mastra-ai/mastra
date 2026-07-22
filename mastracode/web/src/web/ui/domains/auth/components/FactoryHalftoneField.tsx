@@ -111,8 +111,7 @@ export function FactoryHalftoneField() {
           const horizontalProgress = column / Math.max(columns - 1, 1);
           const lane = Math.min(3, Math.floor(horizontalProgress * 4));
           const laneProgress = (horizontalProgress * 4) % 1;
-          const laneInset =
-            smoothstep(0.035, 0.095, laneProgress) * (1 - smoothstep(0.9, 0.97, laneProgress));
+          const laneInset = smoothstep(0.035, 0.095, laneProgress) * (1 - smoothstep(0.9, 0.97, laneProgress));
           const density = densityAt(lane, laneProgress, verticalProgress, time) * laneInset;
           const threshold = (BAYER_8[row % 8][column % 8] + 0.5) / 64;
 
@@ -211,10 +210,7 @@ export function FactoryHalftoneField() {
   }, []);
 
   return (
-    <div
-      ref={containerRef}
-      className="factory-halftone-field relative min-h-96 min-w-0 overflow-hidden lg:min-h-150"
-    >
+    <div ref={containerRef} className="factory-halftone-field relative min-h-96 min-w-0 overflow-hidden lg:min-h-150">
       <div
         className="pointer-events-none absolute top-6 right-0 left-0 z-2 grid grid-cols-4 lg:top-11"
         aria-hidden="true"
