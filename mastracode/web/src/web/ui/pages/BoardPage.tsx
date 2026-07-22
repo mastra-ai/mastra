@@ -61,6 +61,7 @@ import {
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from '../domains/factory/services/workItems';
 import { BOARD_STAGES, stageLabel } from '../domains/factory/stages';
 import type { BoardStageId } from '../domains/factory/stages';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
 const NEEDS_APPROVAL_LABEL = 'needs-approval';
@@ -791,7 +792,6 @@ function BoardContent({
     })();
   };
 
-  if (items.isPending) return <SkeletonRows label="Loading board" rows={4} rowClassName="h-24 w-full" />;
   if (items.isError) {
     return (
       <Notice variant="destructive">
@@ -847,6 +847,7 @@ function BoardContent({
               label={stage.label}
               taskCount={stageContentCount(stage.id, stages, workItems, candidates)}
               totalTaskCount={totalTaskCount}
+              loading={loadingStages.has(stage.id)}
               laneRef={element => {
                 if (element) laneRefs.current.set(stage.id, element);
                 else laneRefs.current.delete(stage.id);
@@ -1140,6 +1141,7 @@ function BoardColumn({
   label,
   taskCount,
   totalTaskCount,
+  loading = false,
   laneRef,
   onDrop,
   headerAction,
@@ -1150,6 +1152,8 @@ function BoardColumn({
   label: string;
   taskCount: number;
   totalTaskCount: number;
+  /** While loading, the task badge is hidden so a false "0/0" never flashes. */
+  loading?: boolean;
   laneRef: (element: HTMLElement | null) => void;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   headerAction?: React.ReactNode;
@@ -1192,7 +1196,11 @@ function BoardColumn({
           <Txt as="h2" variant="ui-smd" className="m-0 truncate font-semibold text-icon3">
             {label}
           </Txt>
-          <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
+          {loading ? (
+            <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
+          ) : (
+            <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
+          )}
         </div>
         {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
       </div>
