@@ -21,11 +21,22 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
   const timelineLabel = `Visible from ${formatBoundaryDate(firstTick.date)} through ${formatBoundaryDate(lastTick.date)}. Available from ${formatBoundaryDate(min)} through ${formatBoundaryDate(max)}`;
 
   if (firstTick.date === lastTick.date) {
+    const date = formatBoundaryDate(firstTick.date);
+    // Only claim "Created today" when the whole available domain is a single
+    // day; a zoomed viewport can hold one tick for any date, so stay neutral.
+    const singleLabel =
+      firstTick.date === min && firstTick.date === max
+        ? `Created today · ${date}`
+        : firstTick.date === min
+          ? `Created · ${date}`
+          : firstTick.date === max
+            ? `Today · ${date}`
+            : date;
     return (
       <div role="group" aria-label={timelineLabel} className="flex h-10 items-start justify-center pt-2">
         {/* TODO(ds): Txt needs a muted timeline-axis variant. */}
         <Txt as="span" variant="ui-sm" className="text-neutral3">
-          Created today · {formatBoundaryDate(firstTick.date)}
+          {singleLabel}
         </Txt>
       </div>
     );

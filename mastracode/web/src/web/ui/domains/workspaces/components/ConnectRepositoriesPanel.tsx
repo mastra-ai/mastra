@@ -46,18 +46,23 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
 
   return (
     <div className="flex flex-col gap-4" aria-label="Connect repositories">
+      {/* Re-run the install flow: GitHub's own page adds/removes accounts and
+          repo access; the callback re-syncs installations here. Kept available
+          whenever connected — including with zero linked/accessible repos, so
+          the user can always grant access — never hidden behind the list. */}
+      {connected && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => manageGithubConnection(baseUrl)}>
+            Manage GitHub connection
+          </Button>
+        </div>
+      )}
+
       {linked.length > 0 && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-3">
-            <Txt as="h3" variant="ui-sm" className="font-medium text-icon5">
-              Linked repositories
-            </Txt>
-            {/* Re-run the install flow: GitHub's own page adds/removes accounts
-                and repo access; the callback re-syncs installations here. */}
-            <Button variant="outline" size="sm" onClick={() => manageGithubConnection(baseUrl)}>
-              Manage GitHub connection
-            </Button>
-          </div>
+          <Txt as="h3" variant="ui-sm" className="font-medium text-icon5">
+            Linked repositories
+          </Txt>
           {linked.map(repo => (
             <div
               key={repo.projectRepositoryId}

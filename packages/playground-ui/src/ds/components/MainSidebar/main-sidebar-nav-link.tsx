@@ -133,7 +133,7 @@ export function MainSidebarNavLink({
       ) : (
         (interactiveEl ?? children)
       )}
-      {!isCollapsed && action}
+      {!isCollapsed && action && <div className="absolute top-1/2 right-1 -translate-y-1/2">{action}</div>}
       {!isCollapsed && subItems}
     </li>
   );

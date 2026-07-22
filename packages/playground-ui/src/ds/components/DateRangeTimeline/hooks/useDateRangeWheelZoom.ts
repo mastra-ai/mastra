@@ -15,8 +15,9 @@ interface UseDateRangeWheelZoomInput {
 export function useDateRangeWheelZoom({ rootRef, trackRef, disabled, onZoom }: UseDateRangeWheelZoomInput) {
   const handleWheel = useEffectEvent((event: WheelEvent) => {
     if (!event.ctrlKey) return;
-    event.preventDefault();
+    // Bail before preventDefault when disabled so native browser zoom still works.
     if (disabled) return;
+    event.preventDefault();
 
     const trackRect = trackRef.current?.getBoundingClientRect();
     const anchor =

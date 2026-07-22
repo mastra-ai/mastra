@@ -19,7 +19,9 @@ export function useDateRangeBoundaryLayout(
     if (!container) return;
 
     function updateWidth(width: number) {
-      if (width <= 0) return;
+      // Accept 0 (collapsed container) so stale positions don't linger; reject
+      // only invalid measurements. resolveDateRangeBoundaryLayout handles 0.
+      if (!Number.isFinite(width) || width < 0) return;
       setContainerWidth(current => (current === width ? current : width));
     }
 

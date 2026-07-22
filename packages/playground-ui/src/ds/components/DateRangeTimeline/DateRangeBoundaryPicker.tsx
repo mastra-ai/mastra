@@ -33,19 +33,21 @@ export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }:
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          aria-label={`Choose ${boundaryLabel}, ${formattedDate}`}
-          aria-expanded={open}
-          size="xs"
-          className="h-11 w-full min-w-0 justify-between gap-2 overflow-hidden px-3 sm:h-8"
-        >
-          <Txt as="span" variant="ui-sm" className="truncate text-neutral5 tabular-nums">
-            {formattedDate}
-          </Txt>
-          <CalendarDaysIcon className="size-3.5 shrink-0 text-neutral3" aria-hidden="true" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger
+        render={
+          <Button
+            aria-label={`Choose ${boundaryLabel}, ${formattedDate}`}
+            aria-expanded={open}
+            size="xs"
+            className="h-11 w-full min-w-0 justify-between gap-2 overflow-hidden px-3 sm:h-8"
+          >
+            <Txt as="span" variant="ui-sm" className="truncate text-neutral5 tabular-nums">
+              {formattedDate}
+            </Txt>
+            <CalendarDaysIcon className="size-3.5 shrink-0 text-neutral3" aria-hidden="true" />
+          </Button>
+        }
+      />
       <PopoverContent align={isFrom ? 'start' : 'end'} className="w-auto p-0" sideOffset={6}>
         <DatePicker
           mode="single"
