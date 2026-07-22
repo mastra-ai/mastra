@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
-import { queryKeys } from '../../../../../shared/api/keys';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatModes } from '../context/useChatModes';
@@ -152,9 +152,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         ],
       },
     };
-    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [
-      message,
-    ]);
+    queryClient.setQueryData(
+      queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId, INITIAL_THREAD_MESSAGE_LIMIT),
+      [message],
+    );
   };
 
   const addImageFiles = async (fileList: Iterable<File>) => {

@@ -10,7 +10,7 @@ import type { FormEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { queryKeys } from '../../../../../shared/api/keys';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
 import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
 import { userSessionResourceId } from '../../auth/services/auth';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
@@ -131,7 +131,12 @@ export function UserSessionsSection() {
       });
       // A fresh thread has no messages; seed the cache to skip the skeleton.
       queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, userResourceId, thread.id),
+        queryKeys.agentControllerThreadMessages(
+          AGENT_CONTROLLER_ID,
+          userResourceId,
+          thread.id,
+          INITIAL_THREAD_MESSAGE_LIMIT,
+        ),
         [],
       );
       return thread.id;

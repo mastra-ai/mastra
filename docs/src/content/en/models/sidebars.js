@@ -128,6 +128,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aki-io',
+          label: 'AKI.IO',
+        },
+        {
+          type: 'doc',
           id: 'providers/alibaba',
           label: 'Alibaba',
         },
