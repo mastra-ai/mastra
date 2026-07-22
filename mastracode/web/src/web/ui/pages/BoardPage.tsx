@@ -1121,6 +1121,26 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
   );
 }
 
+const BOARD_CARD_SELECTOR = '[data-testid="work-item-card"], [data-testid="candidate-card"]';
+const BOARD_CARD_GAP_PX = 10;
+
+function dropLinePosition(cardList: HTMLDivElement, pointerY: number): number {
+  const cards = cardList.querySelectorAll<HTMLElement>(BOARD_CARD_SELECTOR);
+  if (cards.length === 0) return 0;
+
+  for (let index = 0; index < cards.length; index += 1) {
+    const card = cards.item(index);
+    if (!card) continue;
+    const bounds = card.getBoundingClientRect();
+    if (pointerY < bounds.top + bounds.height / 2) {
+      return Math.max(0, card.offsetTop - (index === 0 ? 0 : BOARD_CARD_GAP_PX / 2));
+    }
+  }
+
+  const lastCard = cards.item(cards.length - 1);
+  return lastCard ? lastCard.offsetTop + lastCard.offsetHeight + BOARD_CARD_GAP_PX / 2 : 0;
+}
+
 function BoardColumn({
   stage,
   label,
@@ -1144,6 +1164,8 @@ function BoardColumn({
   children: React.ReactNode;
 }) {
   const [dragOver, setDragOver] = useState(false);
+  const [dropLineTop, setDropLineTop] = useState(0);
+  const cardListRef = useRef<HTMLDivElement>(null);
 
   return (
     <section
@@ -1156,8 +1178,13 @@ function BoardColumn({
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
         setDragOver(true);
+        const cardList = cardListRef.current;
+        if (cardList) setDropLineTop(dropLinePosition(cardList, event.clientY));
       }}
-      onDragLeave={() => setDragOver(false)}
+      onDragLeave={event => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        setDragOver(false);
+      }}
       onDrop={event => {
         event.preventDefault();
         setDragOver(false);
@@ -1177,16 +1204,19 @@ function BoardColumn({
       </div>
       {headerExtras}
       {/* Cards scroll inside the swimlane; the page stays fixed. */}
-      <div className="relative min-h-16 flex-1">
-        <div
-          aria-hidden
-          className={cn(
-            'pointer-events-none absolute inset-x-0 top-0 z-10 h-0.5 rounded-full bg-accent1 transition-opacity motion-reduce:transition-none',
-            dragOver ? 'opacity-100' : 'opacity-0',
-          )}
-        />
+      <div className="min-h-16 flex-1">
         <ScrollArea className="h-full">
-          <div className="flex flex-col gap-2.5">{children}</div>
+          <div ref={cardListRef} className="relative flex flex-col gap-2.5 pb-2">
+            {children}
+            <div
+              aria-hidden
+              style={{ top: dropLineTop }}
+              className={cn(
+                'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
+                dragOver ? 'opacity-100' : 'opacity-0',
+              )}
+            />
+          </div>
         </ScrollArea>
       </div>
     </section>
@@ -1377,7 +1407,7 @@ function WorkItemCard({
         if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
       }}
       className={cn(
-        'group flex flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 transition-colors hover:bg-surface3',
+        'group flex flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 outline-none transition-colors hover:bg-surface3',
         evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
       )}
     >
@@ -1574,7 +1604,7 @@ function CandidateCard({
           },
         })
       }
-      className="group flex cursor-grab flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 transition-colors hover:bg-surface3 active:cursor-grabbing"
+      className="group flex cursor-grab flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 outline-none transition-colors hover:bg-surface3 active:cursor-grabbing"
     >
       <div className="flex min-w-0 flex-col gap-1.5">
         <span className="block truncate text-ui-xs text-icon2">{candidate.meta}</span>
