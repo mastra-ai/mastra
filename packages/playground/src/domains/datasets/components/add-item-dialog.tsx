@@ -8,6 +8,7 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { DatasetItemScorerSelector } from './dataset-detail/dataset-item-scorer-selector';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
@@ -65,6 +66,8 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
   const [groundTruth, setGroundTruth] = useState('');
   const [expectedTrajectory, setExpectedTrajectory] = useState('');
   const [toolMocks, setToolMocks] = useState('');
+  const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(false);
+  const [selectedScorerIds, setSelectedScorerIds] = useState<string[]>([]);
   const [requestContext, setRequestContext] = useState('');
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
   const { addItem } = useDatasetMutations();
@@ -136,6 +139,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
         groundTruth: parsedGroundTruth,
         expectedTrajectory: parsedTrajectory,
         toolMocks: parsedToolMocks,
+        scorerIds: scorerOverrideEnabled ? selectedScorerIds : undefined,
         requestContext: parsedRequestContext,
       });
 
@@ -147,6 +151,8 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       setGroundTruth('');
       setExpectedTrajectory('');
       setToolMocks('');
+      setScorerOverrideEnabled(false);
+      setSelectedScorerIds([]);
       setRequestContext('');
       onOpenChange(false);
 
@@ -191,6 +197,8 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
     setGroundTruth('');
     setExpectedTrajectory('');
     setToolMocks('');
+    setScorerOverrideEnabled(false);
+    setSelectedScorerIds([]);
     setRequestContext('');
     setValidationErrors(null);
     onOpenChange(false);
@@ -247,6 +255,14 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
                 <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
               )}
             </div>
+
+            <DatasetItemScorerSelector
+              overrideEnabled={scorerOverrideEnabled}
+              onOverrideEnabledChange={setScorerOverrideEnabled}
+              selectedScorerIds={selectedScorerIds}
+              onSelectedScorerIdsChange={setSelectedScorerIds}
+              disabled={addItem.isPending}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="item-request-context">Request Context (JSON, optional)</Label>
