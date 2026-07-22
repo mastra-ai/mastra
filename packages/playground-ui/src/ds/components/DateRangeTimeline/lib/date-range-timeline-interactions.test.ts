@@ -5,8 +5,8 @@ import {
   moveTimelineSelectionFromKey,
   resizeTimelineSelectionFromKey,
   resolveTimelineGestureSelection,
-  type TimelinePointerGesture,
 } from './date-range-timeline-interactions';
+import type { TimelinePointerGesture } from './date-range-timeline-interactions';
 
 const VIEWPORT = { from: 10, to: 40 };
 

@@ -5,8 +5,8 @@ import {
   formatDateRangeValueText,
   getTimelinePosition,
   toDateRange,
-  type TimelineState,
 } from './date-range-timeline';
+import type { TimelineState } from './date-range-timeline';
 
 export function createDateRangeBoundaryModel(state: TimelineState) {
   const range = toDateRange(state);
