@@ -5,7 +5,7 @@ import type { SankeyChartColumn, SankeyChartRecord } from '@mastra/playground-ui
 import { Slider } from '@mastra/playground-ui/components/Slider';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 import { Pause, Play } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
@@ -272,6 +272,12 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   const flowQuery = flowQueries[selectedSnapshotIndex];
   const isFlowPending = flowQueries.some(query => query.isPending);
   const hasFlowError = flowQueries.some(query => query.isError);
+  const flow = flowQuery?.data;
+  const windowFlows = useMemo(() => flowQueries.flatMap(query => (query.data ? [query.data] : [])), [flowQueries]);
+  const graphSummary = useMemo(
+    () => (flow ? buildSignalGraphSummary(stabilizeThemeFlow(flow, windowFlows)) : undefined),
+    [flow, windowFlows],
+  );
 
   useEffect(() => {
     if (!isPlaying || snapshots.length < 2 || isFlowPending || hasFlowError) return;
@@ -297,13 +303,10 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
 
   if (isFlowPending) return <SignalsLoadingSkeleton />;
 
-  const flow = flowQuery?.data;
   const populatedStageCount = flow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
 
-  if (!flow || populatedStageCount < 2) return <SignalsEmptyState LinkComponent={Link} />;
+  if (!flow || !graphSummary || populatedStageCount < 2) return <SignalsEmptyState LinkComponent={Link} />;
 
-  const windowFlows = flowQueries.flatMap(query => (query.data ? [query.data] : []));
-  const graphSummary = buildSignalGraphSummary(stabilizeThemeFlow(flow, windowFlows));
   const stages = flow.stages;
   const themeCount = stages.reduce(
     (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
