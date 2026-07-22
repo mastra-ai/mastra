@@ -48,7 +48,7 @@
     "@octokit/auth-app": "^8.0.0",
     "@octokit/rest": "^22.0.1",
     "@tanstack/react-query": "^5.90.21",
-    "@workos-inc/node": "8.8.0",
+    "@workos-inc/node": "8.13.0",
     "date-fns": "^4.4.0",
     "debug": "^4.4.3",
     "drizzle-orm": "^0.45.0",
