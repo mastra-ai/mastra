@@ -21,7 +21,7 @@ import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { redirectToLogout } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
-import type { Factory } from '../domains/workspaces';
+import type { Factory, FactoryUserSession } from '../domains/workspaces';
 import { ActiveFactoryProvider } from '../domains/workspaces';
 import { OverlaysProvider } from '../lib/overlays';
 import { Sidebar } from '../Sidebar';
@@ -81,6 +81,21 @@ const githubProject: Factory = {
     factoryProjectId: 'fp-github-project-1',
     repositories: [githubRepository],
   },
+};
+
+const userSession: FactoryUserSession = {
+  id: 'user-session-1',
+  sessionId: 'user-session-1',
+  projectRepositoryId: githubRepository.projectRepositoryId,
+  orgId: 'org-1',
+  userId: 'user-1',
+  branch: 'user/alice-notes',
+  baseBranch: 'main',
+  sandboxId: 'sandbox-1',
+  sandboxWorkdir: '/sandbox/mastra-worktrees/user-alice-notes',
+  materializedAt: null,
+  createdAt: '2026-06-05T00:00:00.000Z',
+  updatedAt: '2026-06-05T00:00:00.000Z',
 };
 
 const threadOne: AgentControllerThreadInfo = {
@@ -424,9 +439,18 @@ describe('Sidebar', () => {
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-github-project-1/work-items`, () =>
+          HttpResponse.json({ workItems: [] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/github/projects/${githubRepository.projectRepositoryId}/sessions`, () =>
+          HttpResponse.json({ sessions: [userSession] }),
+        ),
+      );
       renderSidebar();
 
-      expect(await screen.findByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+      const userSessions = await screen.findByRole('region', { name: 'User sessions' });
+      expect(await within(userSessions).findByRole('button', { name: 'alice-notes' })).toBeInTheDocument();
       // Each worktree holds a single conversation, so GitHub projects have no
       // thread list — neither nested nor flat.
       await screen.findByRole('button', { name: 'feat-ui' });

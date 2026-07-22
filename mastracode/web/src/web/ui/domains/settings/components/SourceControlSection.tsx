@@ -25,16 +25,11 @@ export function SourceControlSection() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <Txt variant="ui-lg" className="font-medium">
-          Source Control
-        </Txt>
-        <Txt variant="ui-sm">
-          {serverFactory
-            ? `Link the repositories ${activeFactory.name} works on. Intake, sessions, and worktrees are scoped per repository.`
-            : `${activeFactory.name} is bound to a local folder — repository linking is available for server-backed Factories.`}
-        </Txt>
-      </div>
+      <Txt variant="ui-sm">
+        {serverFactory
+          ? `Link the repositories ${activeFactory.name} works on. Intake, sessions, and worktrees are scoped per repository.`
+          : `${activeFactory.name} is bound to a local folder — repository linking is available for server-backed Factories.`}
+      </Txt>
 
       {serverFactory ? (
         <ConnectRepositoriesPanel factory={serverFactory} />

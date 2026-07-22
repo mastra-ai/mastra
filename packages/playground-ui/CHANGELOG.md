@@ -1,5 +1,33 @@
 # @mastra/playground-ui
 
+## 42.0.0-alpha.14
+
+### Minor Changes
+
+- Added compact sizing, custom interactive elements, and trailing actions to sidebar navigation items. ([#19959](https://github.com/mastra-ai/mastra/pull/19959))
+
+  ```tsx
+  <MainSidebar.NavLink
+    // Compact density for dense lists
+    size="sm"
+    // Bring your own interactive element (e.g. a router Link or button)
+    render={<Link to="/sessions/feature-work">Feature work</Link>}
+    // Trailing control rendered beside the row, independently clickable
+    action={
+      <Button size="icon-sm" variant="ghost" onClick={onDelete}>
+        <TrashIcon />
+      </Button>
+    }
+  />
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`d7385ad`](https://github.com/mastra-ai/mastra/commit/d7385ad9e88f9e4f33d15c0ec0bfebedde0cbc2e), [`3d6e539`](https://github.com/mastra-ai/mastra/commit/3d6e539272eb2ea0407034605ee1906b3be06b39), [`35865a5`](https://github.com/mastra-ai/mastra/commit/35865a53e194aa9634d6a70a97010e7a6b9d58b1), [`70687f7`](https://github.com/mastra-ai/mastra/commit/70687f7e495a322a02070b4a67cb0c77a5ca91ec), [`3d6e539`](https://github.com/mastra-ai/mastra/commit/3d6e539272eb2ea0407034605ee1906b3be06b39)]:
+  - @mastra/core@1.52.0-alpha.12
+  - @mastra/client-js@1.33.0-alpha.12
+  - @mastra/react@1.3.0-alpha.12
+
 ## 42.0.0-alpha.13
 
 ### Minor Changes

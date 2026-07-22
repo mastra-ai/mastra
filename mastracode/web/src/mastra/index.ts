@@ -99,11 +99,7 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
-const PLATFORM_SANDBOX_ENV_KEYS = [
-  'MASTRA_ENVIRONMENT_ID',
-  'MASTRA_PROJECT_ID',
-  'MASTRA_PLATFORM_SECRET_KEY',
-] as const;
+const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
 const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
 
 // Use PlatformSandbox only when its complete identity is configured. Otherwise

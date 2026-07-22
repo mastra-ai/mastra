@@ -540,7 +540,9 @@ describe('Factory workflow routing', () => {
       const { router } = renderAt(route);
 
       await waitFor(() => expect(router.state.location.pathname).toBe('/factory/work'));
-      expect(await screen.findByRole('heading', { name: 'Work' })).toBeInTheDocument();
+      // The page title renders in both the mobile header and desktop content column
+      // (responsive `hidden md:*` pair); either accessible copy confirms the page.
+      expect((await screen.findAllByRole('heading', { name: 'Work' }))[0]).toBeInTheDocument();
     },
   );
 
@@ -548,7 +550,7 @@ describe('Factory workflow routing', () => {
     useBoardHandlers({ pullRequests });
     const { router } = renderAt('/factory/review');
 
-    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Review' }))[0]).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/factory/review');
   });
 
@@ -578,7 +580,7 @@ describe('Factory Work and Review intake candidates', () => {
     const state = useBoardHandlers({ issues, pullRequests });
     renderAt('/factory/work');
 
-    expect(await screen.findByRole('heading', { name: 'Work' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Work' }))[0]).toBeInTheDocument();
     await waitFor(() => expect(state.issueRequests).toEqual(expect.arrayContaining([null, 'auto-triaged'])));
     const intake = await screen.findByTestId('board-column-intake');
     expect(await within(intake).findByText('Fix flaky test')).toBeInTheDocument();
@@ -601,7 +603,7 @@ describe('Factory Work and Review intake candidates', () => {
     const state = useBoardHandlers({ issues, pullRequests });
     renderAt('/factory/review');
 
-    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Review' }))[0]).toBeInTheDocument();
     const intake = await screen.findByTestId('board-column-intake');
     expect(await within(intake).findByText('Add factory pages')).toBeInTheDocument();
     expect(within(intake).queryByText('Fix flaky test')).not.toBeInTheDocument();
@@ -1050,7 +1052,7 @@ describe('Factory Board — persisted cards', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Factory' });
     await userEvent.click(within(nav).getByRole('link', { name: 'Review' }));
-    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Review' }))[0]).toBeInTheDocument();
     const reviewCard = within(column('review')).getByTestId('work-item-card');
     expect(within(reviewCard).getByText('PR Review:')).toBeInTheDocument();
     expect(within(reviewCard).queryByText('Issue:')).not.toBeInTheDocument();
