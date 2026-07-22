@@ -12,11 +12,13 @@ import { connectLinear } from '../../factory/services/linear';
 import type { FactoryProject, FactoryProjectPayload } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import type { GithubRepo } from '../services/github';
-import { FactorySetupShell } from './FactorySetupShell';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { useNavigate } from 'react-router';
+import '@fontsource-variable/mona-sans/standard.css';
 
 export type Step = 'initial' | 'vcs' | 'project-management';
 
@@ -133,43 +135,80 @@ export function EmptyFactoryState() {
     }
   };
 
+  const stepIndex = ['initial', 'vcs', 'project-management'].indexOf(step);
+
   return (
-    <FactorySetupShell>
-      <FactorySetupShell.Header title={STEP_META[step].title} description={STEP_META[step].description}>
-        <FactorySetupShell.Progress steps={['initial', 'vcs', 'project-management']} current={step} />
-      </FactorySetupShell.Header>
-      <FactorySetupShell.Step stepKey={step}>
-        {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
-        {step === 'vcs' && (
-          <VcsFactoryStep
-            connectingRepositoryId={connectingRepositoryId}
-            githubRedirecting={githubRedirecting}
-            mutationPending={createFactory.isPending || linkRepository.isPending}
-            mutationError={mutationError}
-            onConnect={() => {
-              setGithubRedirecting(true);
-              persistBeforeRedirect('vcs');
-              connectGithub(baseUrl);
-            }}
-            onManageConnection={() => {
-              persistBeforeRedirect('vcs');
-              manageGithubConnection(baseUrl);
-            }}
-            onSelectRepository={repo => void chooseRepository(repo)}
-          />
-        )}
-        {step === 'project-management' && (
-          <ProjectManagementFactoryStep
-            completionError={completionError}
-            finishing={finishing}
-            onConnect={() => {
-              persistBeforeRedirect('project-management');
-              connectLinear(baseUrl);
-            }}
-            onFinish={() => void finish()}
-          />
-        )}
-      </FactorySetupShell.Step>
-    </FactorySetupShell>
+    <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
+      <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
+        <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
+          <div className="w-full max-w-2xl">
+            <ol className="mb-9 flex gap-2" aria-label="Factory setup progress">
+              {(['initial', 'vcs', 'project-management'] as const).map((item, index) => (
+                <li
+                  key={item}
+                  aria-current={step === item ? 'step' : undefined}
+                  className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-surface4'}`}
+                >
+                  <span className="sr-only">Step {index + 1}</span>
+                </li>
+              ))}
+            </ol>
+
+            <h1 className="max-w-xl text-[clamp(2rem,3.9vw,3.25rem)] leading-[1.1] font-[520] tracking-[0.01em] text-balance [font-stretch:112%]">
+              {STEP_META[step].title}
+            </h1>
+            {STEP_META[step].description && (
+              <Txt
+                as="p"
+                variant="ui-lg"
+                className="mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em] text-neutral3"
+              >
+                {STEP_META[step].description}
+              </Txt>
+            )}
+
+            <div
+              key={step}
+              className="mt-11 w-full animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none"
+            >
+              {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
+              {step === 'vcs' && (
+                <VcsFactoryStep
+                  connectingRepositoryId={connectingRepositoryId}
+                  githubRedirecting={githubRedirecting}
+                  mutationPending={createFactory.isPending || linkRepository.isPending}
+                  mutationError={mutationError}
+                  onConnect={() => {
+                    setGithubRedirecting(true);
+                    persistBeforeRedirect('vcs');
+                    connectGithub(baseUrl);
+                  }}
+                  onManageConnection={() => {
+                    persistBeforeRedirect('vcs');
+                    manageGithubConnection(baseUrl);
+                  }}
+                  onSelectRepository={repo => void chooseRepository(repo)}
+                />
+              )}
+              {step === 'project-management' && (
+                <ProjectManagementFactoryStep
+                  completionError={completionError}
+                  finishing={finishing}
+                  onConnect={() => {
+                    persistBeforeRedirect('project-management');
+                    connectLinear(baseUrl);
+                  }}
+                  onFinish={() => void finish()}
+                />
+              )}
+            </div>
+          </div>
+        </section>
+
+        <div className="hidden lg:grid">
+          <FactoryHalftoneField />
+        </div>
+      </div>
+    </main>
   );
 }
