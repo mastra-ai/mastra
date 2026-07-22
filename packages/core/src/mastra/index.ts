@@ -4587,6 +4587,11 @@ export class Mastra<
         }
         case 'workflow': {
           const w = e as Extract<RefEntry, { type: 'workflow' }>;
+          if (w.id !== w.workflowId) {
+            throw new Error(
+              `Nested workflow step id "${w.id}" must match workflowId "${w.workflowId}". Use "${w.workflowId}" for both fields.`,
+            );
+          }
           workflows.push({ stepId: w.id, workflowId: w.workflowId });
           return;
         }

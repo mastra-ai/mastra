@@ -54,6 +54,7 @@ export type WorkflowDraftValidationIssueCode =
   | 'missing-step-id'
   | 'duplicate-step-id'
   | 'missing-reference'
+  | 'invalid-nested-workflow-id'
   | 'invalid-map-config'
   | 'invalid-parallel'
   | 'invalid-foreach'
@@ -275,6 +276,13 @@ function validateStep(
       }
       return;
     case 'workflow':
+      if (step.id !== step.workflowId) {
+        issues.push({
+          code: 'invalid-nested-workflow-id',
+          path: `${path}.id`,
+          message: `Nested workflow step id "${step.id}" must match workflowId "${step.workflowId}". Use "${step.workflowId}" for both fields.`,
+        });
+      }
       if (context?.workflowCatalog === 'unavailable') {
         issues.push({
           code: 'workflow-catalog-unavailable',

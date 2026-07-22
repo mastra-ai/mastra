@@ -1054,6 +1054,24 @@ describe('nested-workflow round-trip', () => {
     ).rejects.toThrow(/ghost-wf/);
   });
 
+  it('addStoredWorkflow rejects a nested workflow call-site id that differs from workflowId', async () => {
+    const inner = makeInnerWorkflow('shared-child');
+    const mastra = new Mastra({
+      storage: new InMemoryStore(),
+      workflows: { 'shared-child': inner },
+      tools: { 'plus-one': plusOneTool as any },
+    });
+
+    await expect(
+      mastra.addStoredWorkflow({
+        id: 'outer-mismatched-child',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
+        outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
+        graph: [{ type: 'workflow', id: 'local-child', workflowId: 'shared-child' }],
+      }),
+    ).rejects.toThrow('Nested workflow step id "local-child" must match workflowId "shared-child"');
+  });
+
   it('addStoredWorkflow rejects self-referencing (cycle)', async () => {
     const mastra = new Mastra({
       storage: new InMemoryStore(),
@@ -1190,7 +1208,7 @@ describe('nested-workflow round-trip', () => {
       inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       graph: [
-        { type: 'workflow', id: 'leaf-ref', workflowId: 'leaf-stored' },
+        { type: 'workflow', id: 'leaf-stored', workflowId: 'leaf-stored' },
         { type: 'tool', id: 'double', toolId: 'double-tool' },
       ],
     } as any);

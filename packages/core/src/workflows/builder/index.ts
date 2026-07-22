@@ -121,7 +121,7 @@ Every adjacent step must compose exactly: the previous output shape must satisfy
 
 Mapping entries must be top-level linear steps. Parallel and conditional children, foreach bodies, and loop bodies may be agent, tool, or nested workflow entries; do not place mappings or nested containers inside them. Parallel and conditional children all receive the same preceding output. Foreach requires an array input and passes each array item directly to its body. Loop bodies must accept both the preceding output and their own output on later iterations. Use a nested workflow when a branch or foreach item needs its own input-shaping mapping. Conditional predicates align by index with their branch steps. Loop and conditional predicates must use the declarative predicate DSL.
 
-Use dependency IDs returned by discovery. Never invent agent, tool, or workflow IDs. Keep workflow IDs, step IDs, schemas, mapping configs, options, predicates, and metadata JSON-safe.`;
+Nested workflow entries must use the referenced workflowId as their step id because persisted runtime rehydration cannot preserve a separate call-site identity. Use dependency IDs returned by discovery. Never invent agent, tool, or workflow IDs. Keep workflow IDs, step IDs, schemas, mapping configs, options, predicates, and metadata JSON-safe.`;
 
 function normalizeJsonValue(value: unknown, path: string, seen: Set<object>): WorkflowBuilderJsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
@@ -158,6 +158,16 @@ function normalizeEntry(entry: Record<string, unknown>): WorkflowBuilderGraphEnt
       normalized.mapConfig ?? (normalized.output === undefined ? undefined : { output: normalized.output });
     if (mapConfig !== undefined) normalized.mapConfig = JSON.stringify(mapConfig);
     delete normalized.output;
+  }
+  if (
+    normalized.type === 'workflow' &&
+    typeof normalized.id === 'string' &&
+    typeof normalized.workflowId === 'string' &&
+    normalized.id !== normalized.workflowId
+  ) {
+    throw new TypeError(
+      `Nested workflow step id "${normalized.id}" must match workflowId "${normalized.workflowId}". Use "${normalized.workflowId}" for both fields.`,
+    );
   }
   if ((normalized.type === 'parallel' || normalized.type === 'conditional') && Array.isArray(normalized.steps)) {
     normalized.steps = normalized.steps.map(step =>

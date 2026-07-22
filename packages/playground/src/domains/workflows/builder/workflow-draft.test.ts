@@ -72,6 +72,30 @@ describe('workflow draft', () => {
     });
   });
 
+  describe('when nested workflow call-site ids differ from their referenced workflow ids', () => {
+    it('returns a repairable issue for nested entries inside containers', () => {
+      const draft = createValidDraft();
+      draft.graph = [
+        {
+          type: 'parallel',
+          steps: [{ type: 'workflow', id: 'greeting-step', workflowId: 'greetingWorkflow' }],
+        },
+      ];
+
+      expect(validateWorkflowDraft(draft)).toEqual({
+        ok: false,
+        issues: [
+          {
+            code: 'invalid-nested-workflow-id',
+            path: 'graph.0.steps.0.id',
+            message:
+              'Nested workflow step id "greeting-step" must match workflowId "greetingWorkflow". Use "greetingWorkflow" for both fields.',
+          },
+        ],
+      });
+    });
+  });
+
   describe('when a mapping contains an unsupported expression', () => {
     it('rejects the mapping before the workflow can be finalized', () => {
       const draft = createValidDraft();
@@ -426,7 +450,7 @@ describe('workflow draft', () => {
     it('accepts a nested workflow checkpoint but blocks finalization', () => {
       const initial = createWorkflowDraftAuthoringState('nested-flow');
       const nested = createWorkflowDraft('nested-flow');
-      nested.graph = [{ type: 'workflow', id: 'child', workflowId: 'child-flow' }];
+      nested.graph = [{ type: 'workflow', id: 'child-flow', workflowId: 'child-flow' }];
       const checkpoint = checkpointWorkflowDraft(initial, 0, nested, { workflowCatalog: 'unavailable' });
       if (!checkpoint.ok) throw new Error(checkpoint.error);
 

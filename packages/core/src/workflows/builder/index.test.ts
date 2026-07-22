@@ -45,6 +45,22 @@ describe('workflow builder authoring contract', () => {
     expect(normalizeWorkflowBuilderDefinition(normalized)).toEqual(expected);
   });
 
+  it('rejects nested workflow call-site ids that differ from the referenced workflow id', () => {
+    expect(() =>
+      normalizeWorkflowBuilderDefinition({
+        id: 'outer-flow',
+        inputSchema: {},
+        outputSchema: {},
+        graph: [
+          {
+            type: 'parallel',
+            steps: [{ type: 'workflow', id: 'local-child', workflowId: 'shared-child' }],
+          },
+        ],
+      }),
+    ).toThrow('Nested workflow step id "local-child" must match workflowId "shared-child"');
+  });
+
   it('rejects function-bearing definitions', () => {
     expect(() =>
       normalizeWorkflowBuilderDefinition({
