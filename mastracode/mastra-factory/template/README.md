@@ -86,7 +86,9 @@ Create a Linear OAuth app (Linear → Settings → API → OAuth applications �
 
 ## Versions
 
-The Mastra packages are pinned to `latest`, so `npm install` pulls the current published release. Upgrade them together by re-running `npm install` (or by rescaffolding).
+The Mastra packages are pinned to `alpha`, so `npm install` pulls the current published prerelease. Upgrade them together by re-running `npm install` (or by rescaffolding).
+
+The included `.npmrc` sets `legacy-peer-deps=true` so npm accepts the internally-consistent prerelease peer graph; you can delete it once the packages ship stable releases.
 
 ## License
 

@@ -3,19 +3,20 @@
  * Produces the Mastra Factory template tree from `mastracode/web`.
  *
  * The template is the web project minus monorepo coupling:
- *   - `link:` deps           -> `"latest"` (matches the templates/* pattern)
+ *   - `link:` deps           -> `"alpha"` (Mastra packages ship as a set)
  *   - monorepo tsconfig      -> standalone tsconfig
  *   - contributor README     -> checked-in template/README.md
  *   - e2e/tests/test deps    -> stripped
  *   - monorepo-only scripts  -> user-facing scripts (dev/build/start/deploy)
  *   - .env.schema            -> also emitted as .env.example (decorators stripped)
  *
- * Versions: every `link:` dep becomes `"latest"`, matching the monorepo's
- * other templates (templates/*). We do not pin the current monorepo version
- * because pinning a mid-train alpha would make the template uninstallable
- * whenever the alpha has not been published yet, and it forces peer-range
- * relaxation for prereleases. `"latest"` floats to whatever is currently on
- * the `latest` dist-tag, which is exactly what create-mastra scaffolds do.
+ * Versions: every `link:` dep becomes `"alpha"`. The Mastra Factory sources on
+ * `main` are built against the alpha release train, not the stable `latest`
+ * tag — several packages the template needs (notably `@mastra/factory`) only
+ * exist as prereleases today, and pinning individual packages to `latest`
+ * while the rest are alphas breaks peer resolution. Floating to the `alpha`
+ * dist-tag keeps the whole install internally consistent; once the packages
+ * cut stable releases we can switch this back to `"latest"`.
  *
  * Usage:
  *   node scripts/sync-template.mjs [--out <dir>]
@@ -139,7 +140,7 @@ function copyTree(srcDir, destDir, relBase = '') {
 /**
  * Verify the linked package exists in the monorepo and its manifest name
  * matches the dependency key. This is a source-of-truth check only — no
- * version is read from it; the template pins `"latest"` from npm.
+ * version is read from it; the template pins `"alpha"` from npm.
  */
 function assertLinkedPackage(name, relPath) {
   const pkgJsonPath = path.join(monorepoRoot, relPath, 'package.json');
@@ -173,18 +174,20 @@ function transformPackageJson() {
     check: 'tsc --noEmit && tsc --noEmit -p src/web/ui/tsconfig.json',
   };
 
-  // Every `link:` dep becomes `"latest"`, matching the monorepo's other
-  // templates (templates/*). We still resolve the link target so an invalid
-  // `link:` spec (typo, deleted package) fails the sync loudly.
-  console.log('sync-template: rewriting link: deps to "latest"...');
+  // Every `link:` dep becomes `"alpha"`. The Mastra Factory sources are built
+  // against the alpha release train, so the template floats to the same
+  // dist-tag rather than mixing `latest` and `alpha` across the Mastra set.
+  // We still resolve the link target so an invalid `link:` spec (typo,
+  // deleted package) fails the sync loudly.
+  console.log('sync-template: rewriting link: deps to "alpha"...');
   for (const section of ['dependencies', 'devDependencies']) {
     const deps = manifest[section];
     if (!deps) continue;
     for (const [name, spec] of Object.entries(deps)) {
       if (!spec.startsWith('link:')) continue;
       assertLinkedPackage(name, linkSpecToRelPath(spec));
-      deps[name] = 'latest';
-      console.log(`  ✓ ${name}@latest`);
+      deps[name] = 'alpha';
+      console.log(`  ✓ ${name}@alpha`);
     }
   }
 
@@ -204,7 +207,7 @@ function transformPackageJson() {
   // Transitive runtime peers that must be declared as direct deps so npm
   // resolves them without needing pnpm's auto-install-peers behavior.
   // (In the monorepo dev setup pnpm provides them automatically.)
-  manifest.dependencies['@mastra/memory'] = 'latest'; // peer of @mastra/playground-ui
+  manifest.dependencies['@mastra/memory'] = 'alpha'; // peer of @mastra/playground-ui
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
 
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -303,6 +306,23 @@ src/mastra/public/ui/
   );
 }
 
+/**
+ * Emit `.npmrc` with `legacy-peer-deps=true`.
+ *
+ * The Mastra packages ship as an internally-consistent alpha release train:
+ * peer-dependency *ranges* are correctly stated across the set, but npm 7+
+ * enforces peer resolution strictly and rejects prerelease versions that
+ * satisfy a peer range but not a concrete peer pin. In the monorepo pnpm
+ * relaxes this automatically; downstream `npm install` needs the equivalent
+ * knob or every scaffolded template fails on install.
+ *
+ * When the packages cut stable releases and the template pins `"latest"`
+ * again, this file can be removed.
+ */
+function writeNpmrc() {
+  fs.writeFileSync(path.join(outDir, '.npmrc'), 'legacy-peer-deps=true\n');
+}
+
 /** Copy the checked-in user-facing README verbatim. */
 function writeReadme() {
   const source = path.join(pkgRoot, 'template', 'README.md');
@@ -335,6 +355,7 @@ writeTsconfig();
 stripTestingTypesFromUiTsconfig();
 writeEnvExample();
 writeGitignore();
+writeNpmrc();
 writeReadme();
 
 console.log(`sync-template: done. Template written to ${outDir}`);
