@@ -14,6 +14,7 @@ export function useThemeFlows(
       queryKey: ['entity-learning', entityType, entityId, 'theme-flow', signalNames, snapshotId],
       queryFn: () => fetchThemeFlow(entityId, entityType, signalNames, snapshotId),
       enabled: signalNames.length >= 2,
+      staleTime: 30_000,
     })),
   });
 }
