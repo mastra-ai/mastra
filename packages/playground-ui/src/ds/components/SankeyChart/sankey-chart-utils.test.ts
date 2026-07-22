@@ -176,9 +176,16 @@ describe('SankeyChart utilities', () => {
         record => Number(record.layoutCount),
       );
 
-      const geometry = buildFixedSankeyGeometry(graph, { top: 0, bottom: 200, nodePadding: 20 });
+      const geometry = buildFixedSankeyGeometry(graph, {
+        top: 0,
+        bottom: 200,
+        left: 100,
+        right: 500,
+        nodePadding: 20,
+      });
       const sourceA = geometry.nodes.get(graph.nodes.find(node => node.name === 'A')?.id ?? '');
       const sourceB = geometry.nodes.get(graph.nodes.find(node => node.name === 'B')?.id ?? '');
+      const targetX = geometry.nodes.get(graph.nodes.find(node => node.name === 'X')?.id ?? '');
       const aToX = geometry.links.get(
         graph.links.find(link => link.sourceNode.name === 'A' && link.targetNode.name === 'X')?.id ?? '',
       );
@@ -189,6 +196,9 @@ describe('SankeyChart utilities', () => {
         graph.links.find(link => link.sourceNode.name === 'B' && link.targetNode.name === 'X')?.id ?? '',
       );
 
+      expect(sourceA?.x).toBe(100);
+      expect(sourceB?.x).toBe(100);
+      expect(targetX?.x).toBe(500);
       expect(sourceA?.centerY).toBe(45);
       expect(sourceB?.centerY).toBe(155);
       expect(sourceA?.height).toBe(54);

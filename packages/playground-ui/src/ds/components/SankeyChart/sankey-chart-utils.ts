@@ -31,6 +31,7 @@ export type SankeyChartGraph = {
 };
 
 export type FixedSankeyNodeGeometry = {
+  x: number;
   centerY: number;
   y: number;
   height: number;
@@ -199,7 +200,13 @@ export function buildSankeyChartGraph(
 
 export function buildFixedSankeyGeometry(
   graph: SankeyChartGraph,
-  { top, bottom, nodePadding }: { top: number; bottom: number; nodePadding: number },
+  {
+    top,
+    bottom,
+    left,
+    right,
+    nodePadding,
+  }: { top: number; bottom: number; left: number; right: number; nodePadding: number },
 ): FixedSankeyGeometry {
   const nodes = new Map<string, FixedSankeyNodeGeometry>();
   const nodesByColumn = new Map<string, SankeyChartNode[]>();
@@ -211,7 +218,8 @@ export function buildFixedSankeyGeometry(
     nodesByColumn.set(node.column.id, columnNodes);
   }
 
-  for (const columnNodes of nodesByColumn.values()) {
+  const columns = [...nodesByColumn.values()];
+  columns.forEach((columnNodes, columnIndex) => {
     const slotHeight = Math.max(
       0,
       (bottom - top - nodePadding * Math.max(0, columnNodes.length - 1)) / columnNodes.length,
@@ -220,14 +228,15 @@ export function buildFixedSankeyGeometry(
       1,
       ...columnNodes.map(node => node.displayValue ?? currentNodeWeights.get(node.id) ?? 0),
     );
+    const x = columns.length > 1 ? left + ((right - left) * columnIndex) / (columns.length - 1) : left;
 
     columnNodes.forEach((node, index) => {
       const value = node.displayValue ?? currentNodeWeights.get(node.id) ?? 0;
       const centerY = top + index * (slotHeight + nodePadding) + slotHeight / 2;
       const height = value > 0 ? Math.max(slotHeight * 0.08, slotHeight * 0.6 * (value / maximumValue)) : 0;
-      nodes.set(node.id, { centerY, y: centerY - height / 2, height });
+      nodes.set(node.id, { x, centerY, y: centerY - height / 2, height });
     });
-  }
+  });
 
   const links = new Map<string, FixedSankeyLinkGeometry>();
   const outgoingTotals = new Map<string, number>();

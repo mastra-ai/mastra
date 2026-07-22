@@ -29,6 +29,7 @@ export function SankeyChart({
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState(typeof height === 'number' ? height : 320);
+  const [measuredWidth, setMeasuredWidth] = useState(800);
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const [focusedSourceName, setFocusedSourceName] = useState<string>();
   const activeSourceName = hoveredSourceName ?? focusedSourceName;
@@ -43,12 +44,13 @@ export function SankeyChart({
   useEffect(() => {
     const element = chartContainerRef.current;
     if (!element) return;
-    const updateHeight = () => {
+    const updateDimensions = () => {
       if (element.offsetHeight > 0) setMeasuredHeight(element.offsetHeight);
+      if (element.offsetWidth > 0) setMeasuredWidth(element.offsetWidth);
     };
-    updateHeight();
+    updateDimensions();
     if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(updateHeight);
+    const observer = new ResizeObserver(updateDimensions);
     observer.observe(element);
     return () => observer.disconnect();
   }, [height]);
@@ -58,10 +60,12 @@ export function SankeyChart({
         ? buildFixedSankeyGeometry(graph, {
             top: Number(margin?.top ?? 64),
             bottom: measuredHeight - Number(margin?.bottom ?? 12),
+            left: Number(margin?.left ?? 160),
+            right: measuredWidth - Number(margin?.right ?? 160) - 7,
             nodePadding: 8,
           })
         : undefined,
-    [graph, margin?.bottom, margin?.top, measuredHeight, usesFixedGeometry],
+    [graph, margin?.bottom, margin?.left, margin?.right, margin?.top, measuredHeight, measuredWidth, usesFixedGeometry],
   );
 
   return (
@@ -94,6 +98,7 @@ export function SankeyChart({
                 return (
                   <SankeyNode
                     {...props}
+                    x={nodeGeometry?.x ?? props.x}
                     y={nodeGeometry?.y ?? props.y}
                     height={nodeGeometry?.height ?? props.height}
                     hueMap={hueMap}
