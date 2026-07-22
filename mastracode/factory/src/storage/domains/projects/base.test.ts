@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createFactoryStorageForTests } from '../../test-utils';
+import { createFactoryStorageForTests } from '../../test-utils.js';
 
 describe('FactoryProjectsStorage', () => {
   it('creates an org-owned project without any integration or repository', async () => {

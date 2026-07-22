@@ -1,8 +1,8 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { IntegrationStorage } from './base';
-import type { IntegrationStorageHandle } from './base';
+import { IntegrationStorage } from './base.js';
+import type { IntegrationStorageHandle } from './base.js';
 
 interface TestConnection {
   accessToken: string;

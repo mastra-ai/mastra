@@ -18,15 +18,18 @@
  */
 
 import { createHash } from 'node:crypto';
-import { reportProgress } from '../../sandbox/fleet';
+import { reportProgress } from '../../sandbox/fleet.js';
 import type {
   MaterializationSandbox,
   ProgressFn,
   SandboxBindingStore,
   SandboxCommandResult,
   SandboxFleet,
-} from '../../sandbox/fleet';
-import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../../storage/domains/source-control/base';
+} from '../../sandbox/fleet.js';
+import type {
+  ProjectRepositorySandbox,
+  SourceControlStorageHandle,
+} from '../../storage/domains/source-control/base.js';
 
 type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
 type MaterializationStore = Pick<SourceControlSandboxStorage, 'markMaterialized'>;

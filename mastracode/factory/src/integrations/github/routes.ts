@@ -18,22 +18,22 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import type { RouteAuth } from '../../routes/route';
-import { SandboxBudgetError } from '../../sandbox/fleet';
-import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet';
-import type { StateSigner } from '../../state-signing';
-import type { AuditEmitter } from '../../storage/domains/audit/domain';
-import type { FactoryProjectsStorage } from '../../storage/domains/projects/base';
+import type { RouteAuth } from '../../routes/route.js';
+import { SandboxBudgetError } from '../../sandbox/fleet.js';
+import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
+import type { StateSigner } from '../../state-signing.js';
+import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   ProjectRepositorySandbox,
   ProjectSourceControlConnection,
   SourceControlInstallation,
   SourceControlRepository,
-} from '../../storage/domains/source-control/base';
-import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config';
-import type { GithubIntegration } from './integration';
-import { withProjectLock } from './project-lock';
+} from '../../storage/domains/source-control/base.js';
+import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
+import type { GithubIntegration } from './integration.js';
+import { withProjectLock } from './project-lock.js';
 
 import {
   commitAll,
@@ -45,11 +45,11 @@ import {
   pushBranch,
   teardownProjectSandbox,
   WorktreeError,
-} from './sandbox';
-import type { GitIdentity } from './sandbox';
-import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions';
-import { handleGithubWebhook } from './webhook';
-import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook';
+} from './sandbox.js';
+import type { GitIdentity } from './sandbox.js';
+import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions.js';
+import { handleGithubWebhook } from './webhook.js';
+import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook.js';
 
 /**
  * Loose Hono context accepted by the shared GitHub route helpers. The

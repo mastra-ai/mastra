@@ -2,8 +2,8 @@ import path from 'node:path';
 
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
-import { resolveContainedLocalWorkdir, SandboxFleet } from './fleet';
-import type { MaterializationSandbox } from './fleet';
+import { resolveContainedLocalWorkdir, SandboxFleet } from './fleet.js';
+import type { MaterializationSandbox } from './fleet.js';
 
 /** Minimal cloneable template sandbox standing in for Railway/Local instances. */
 function templateSandbox(

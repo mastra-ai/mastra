@@ -5,7 +5,7 @@
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context, Hono } from 'hono';
 
-import type { RouteAuth } from './route';
+import type { RouteAuth } from './route.js';
 
 /**
  * Register a list of Mastra `ApiRoute` entries onto a plain Hono app. In

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { SandboxFleet } from '../../sandbox/fleet.js';
-import { createStateSigner } from '../../state-signing';
+import { createStateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubIntegration, normalizePrivateKey } from './integration.js';
 

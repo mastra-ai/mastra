@@ -239,6 +239,7 @@ function transformPackageJson() {
   // skips automatic peer installation. Most peers are already direct deps;
   // these transitive runtime peers are not, so declare them explicitly.
   // (In the monorepo dev setup pnpm's auto-install-peers provides them.)
+  manifest.dependencies['@mastra/memory'] = manifest.dependencies['@mastra/core']; // peer of @mastra/playground-ui
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
 
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);

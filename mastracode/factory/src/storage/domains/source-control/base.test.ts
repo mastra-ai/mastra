@@ -1,9 +1,9 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { FactoryProjectsStorage } from '../projects/base';
-import { SourceControlStorage } from './base';
-import type { ProjectRepository, SourceControlStorageHandle } from './base';
+import { FactoryProjectsStorage } from '../projects/base.js';
+import { SourceControlStorage } from './base.js';
+import type { ProjectRepository, SourceControlStorageHandle } from './base.js';
 
 const repositoryInput = {
   externalId: 'repository-34',

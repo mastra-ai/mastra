@@ -6,7 +6,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
-import { WorkItemRelationError, WorkItemsStorage } from './base';
+import { WorkItemRelationError, WorkItemsStorage } from './base.js';
 
 const input = {
   externalSource: {

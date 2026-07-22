@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { WorkItemsStorage } from '../storage/domains/work-items/base';
-import { createFactoryStorageForTests } from '../storage/test-utils';
-import { defaultFactoryRules } from './defaults';
-import { FactoryTransitionService } from './transition-service';
-import type { FactoryRuleBoard, FactoryRuleStage } from './types';
-import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { defaultFactoryRules } from './defaults.js';
+import { FactoryTransitionService } from './transition-service.js';
+import type { FactoryRuleBoard, FactoryRuleStage } from './types.js';
+import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 

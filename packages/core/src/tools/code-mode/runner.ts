@@ -78,6 +78,10 @@ function __emit(frame) {
   process.stdout.write(FRAME_PREFIX + JSON.stringify(frame) + '\\n');
 }
 
+function __emitDoneAndExit(frame) {
+  process.stdout.write(FRAME_PREFIX + JSON.stringify(frame) + '\\n', () => process.exit(0));
+}
+
 // ---- console capture -------------------------------------------------------
 for (const level of ['log', 'info', 'warn', 'error']) {
   console[level] = (...args) => {
@@ -143,16 +147,14 @@ async function __main() {
 
 __main()
   .then((result) => {
-    __emit({ type: 'done', ok: true, result });
-    process.exit(0);
+    __emitDoneAndExit({ type: 'done', ok: true, result });
   })
   .catch((error) => {
-    __emit({
+    __emitDoneAndExit({
       type: 'done',
       ok: false,
       error: { message: error?.message ?? String(error), name: error?.name },
     });
-    process.exit(0);
   });
 `;
 }

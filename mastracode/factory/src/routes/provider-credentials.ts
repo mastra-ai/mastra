@@ -16,8 +16,12 @@
 
 import type { Context } from 'hono';
 
-import type { CredentialRecord, LoginSessionKind, ModelCredentialsStorage } from '../storage/domains/credentials/base';
-import type { RouteAuth } from './route';
+import type {
+  CredentialRecord,
+  LoginSessionKind,
+  ModelCredentialsStorage,
+} from '../storage/domains/credentials/base.js';
+import type { RouteAuth } from './route.js';
 
 /**
  * OAuth credentials are stored under the auth provider id, which differs from

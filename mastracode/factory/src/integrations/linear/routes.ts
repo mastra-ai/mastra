@@ -15,12 +15,12 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { RouteAuth } from '../../routes/route';
-import type { StateSigner } from '../../state-signing';
-import type { IntakeStorage } from '../../storage/domains/intake/base';
-import type { IntegrationHooks } from '../base';
-import type { LinearIntegration } from './integration';
-import { LinearReauthRequiredError } from './integration';
+import type { RouteAuth } from '../../routes/route.js';
+import type { StateSigner } from '../../state-signing.js';
+import type { IntakeStorage } from '../../storage/domains/intake/base.js';
+import type { IntegrationHooks } from '../base.js';
+import type { LinearIntegration } from './integration.js';
+import { LinearReauthRequiredError } from './integration.js';
 
 type RouteContext = Context;
 

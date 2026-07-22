@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CreatePullRequestInput } from '../../capabilities/version-control';
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils';
-import type { SandboxFleet } from '../../sandbox/fleet';
-import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory';
-import { buildGithubRoutes } from './routes';
+import type { CreatePullRequestInput } from '../../capabilities/version-control.js';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
+import type { SandboxFleet } from '../../sandbox/fleet.js';
+import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
+import { buildGithubRoutes } from './routes.js';
 
 // ── Scenario tests (S1, S2) ──────────────────────────────────────────────
 // These exercise the *composition* of the real Phase 4 git route handlers

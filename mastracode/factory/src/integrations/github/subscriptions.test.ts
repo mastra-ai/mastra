@@ -1,8 +1,8 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { IntegrationStorage } from '../../storage/domains/integrations/base';
-import type { GithubSubscriptionStorage, SubscribeToPullRequestInput } from './subscriptions';
+import { IntegrationStorage } from '../../storage/domains/integrations/base.js';
+import type { GithubSubscriptionStorage, SubscribeToPullRequestInput } from './subscriptions.js';
 
 describe('GitHub signal subscription store', () => {
   let backend: LibSQLFactoryStorage;
@@ -36,7 +36,7 @@ describe('GitHub signal subscription store', () => {
   });
 
   it('creates a subscription with repository metadata', async () => {
-    const { listPullRequestSubscriptionsForThread, subscribeToPullRequest } = await import('./subscriptions');
+    const { listPullRequestSubscriptionsForThread, subscribeToPullRequest } = await import('./subscriptions.js');
     const created = await subscribeToPullRequest(baseInput, storage);
 
     expect(created.data).toMatchObject({
@@ -48,7 +48,7 @@ describe('GitHub signal subscription store', () => {
   });
 
   it('returns the existing row for duplicate subscriptions', async () => {
-    const { listPullRequestSubscriptionsForThread, subscribeToPullRequest } = await import('./subscriptions');
+    const { listPullRequestSubscriptionsForThread, subscribeToPullRequest } = await import('./subscriptions.js');
     const first = await subscribeToPullRequest(baseInput, storage);
     const second = await subscribeToPullRequest(baseInput, storage);
 
@@ -57,7 +57,7 @@ describe('GitHub signal subscription store', () => {
   });
 
   it('reactivates a retained terminal subscription when subscribing again', async () => {
-    const { retirePullRequestSubscription, subscribeToPullRequest } = await import('./subscriptions');
+    const { retirePullRequestSubscription, subscribeToPullRequest } = await import('./subscriptions.js');
     const first = await subscribeToPullRequest(baseInput, storage);
     await retirePullRequestSubscription(first.id, 'closed', storage);
 
@@ -69,7 +69,7 @@ describe('GitHub signal subscription store', () => {
 
   it('unsubscribes idempotently', async () => {
     const { listPullRequestSubscriptionsForThread, subscribeToPullRequest, unsubscribeFromPullRequest } =
-      await import('./subscriptions');
+      await import('./subscriptions.js');
     await subscribeToPullRequest(baseInput, storage);
     await unsubscribeFromPullRequest(baseInput, storage);
     await unsubscribeFromPullRequest(baseInput, storage);
@@ -79,7 +79,7 @@ describe('GitHub signal subscription store', () => {
 
   it('supports reverse lookup by change request and by scoped thread', async () => {
     const { listPullRequestSubscriptions, listPullRequestSubscriptionsForThread, subscribeToPullRequest } =
-      await import('./subscriptions');
+      await import('./subscriptions.js');
     await subscribeToPullRequest(baseInput, storage);
     await subscribeToPullRequest(
       { ...baseInput, sessionId: 'session-b', threadId: 'thread-b', sessionScope: '/workspace/b' },
@@ -96,7 +96,7 @@ describe('GitHub signal subscription store', () => {
 
   it('supports webhook lookup and per-target retirement', async () => {
     const { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription, subscribeToPullRequest } =
-      await import('./subscriptions');
+      await import('./subscriptions.js');
     const first = await subscribeToPullRequest(baseInput, storage);
     const second = await subscribeToPullRequest(
       { ...baseInput, sessionId: 'session-c', threadId: 'thread-c' },
@@ -117,7 +117,7 @@ describe('GitHub signal subscription store', () => {
 
   it('retires all subscriptions for one change request', async () => {
     const { listPullRequestSubscriptions, retirePullRequestSubscriptions, subscribeToPullRequest } =
-      await import('./subscriptions');
+      await import('./subscriptions.js');
     await subscribeToPullRequest(baseInput, storage);
     await subscribeToPullRequest({ ...baseInput, changeRequestId: '43' }, storage);
 
@@ -128,7 +128,7 @@ describe('GitHub signal subscription store', () => {
   });
 
   it('isolates reverse lookups by organization', async () => {
-    const { listPullRequestSubscriptions, subscribeToPullRequest } = await import('./subscriptions');
+    const { listPullRequestSubscriptions, subscribeToPullRequest } = await import('./subscriptions.js');
     await subscribeToPullRequest(baseInput, storage);
 
     expect(await listPullRequestSubscriptions({ ...baseInput, orgId: 'org-b' }, storage)).toEqual([]);

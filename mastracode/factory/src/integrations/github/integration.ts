@@ -28,7 +28,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
-import type { IntegrationConnection } from '../../capabilities/connection';
+import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
   GetIntakeIssueInput,
@@ -36,15 +36,15 @@ import type {
   IntakeIssue,
   IntakeIssueDetail,
   ListIntakeIssuesInput,
-} from '../../capabilities/intake';
+} from '../../capabilities/intake.js';
 import type {
   PullRequest,
   PullRequestComment,
   Review,
   ReviewComment,
   VersionControl,
-} from '../../capabilities/version-control';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base';
+} from '../../capabilities/version-control.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { runGithubIssueTriage } from './issue-triage.js';
 import { buildGithubRoutes } from './routes.js';
 import {
