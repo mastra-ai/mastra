@@ -1,4 +1,4 @@
-import { FactoryStorageDomain } from '@mastra/core/storage';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 /**
@@ -111,14 +111,14 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     if (previousProviderId && previousProviderId !== input.providerId) {
       await this.#db.deleteMany('custom_providers', { org_id: orgId, provider_id: previousProviderId });
     }
-    const existing = await this.#db.findOne<CustomProviderDbRow>('custom_providers', {
-      org_id: orgId,
-      provider_id: input.providerId,
-    });
-    if (existing) {
-      const row = await this.#db.updateAtomic<CustomProviderDbRow>(
+    // Update-first, then insert-and-catch-unique-violation (see `queue_health`):
+    // concurrent creates of the same provider both succeed (last write wins on
+    // the single row) instead of one failing on the unique index, and a row
+    // deleted mid-flight is recreated rather than reported as a stale success.
+    const updateExisting = () =>
+      this.#db.updateAtomic<CustomProviderDbRow>(
         'custom_providers',
-        { org_id: orgId, id: existing.id },
+        { org_id: orgId, provider_id: input.providerId },
         () => ({
           name: input.name,
           url: input.url,
@@ -127,20 +127,30 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
           updated_at: now,
         }),
       );
-      return toRecord(row ?? existing);
+
+    const updated = await updateExisting();
+    if (updated) return toRecord(updated);
+
+    try {
+      const row = await this.#db.insertOne<CustomProviderDbRow>('custom_providers', {
+        org_id: orgId,
+        created_by: userId,
+        provider_id: input.providerId,
+        name: input.name,
+        url: input.url,
+        api_key: input.apiKey ?? null,
+        models: input.models,
+        created_at: now,
+        updated_at: now,
+      });
+      return toRecord(row);
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      // Lost the insert race — apply this write to the winning row.
+      const row = await updateExisting();
+      if (!row) throw error;
+      return toRecord(row);
     }
-    const row = await this.#db.insertOne<CustomProviderDbRow>('custom_providers', {
-      org_id: orgId,
-      created_by: userId,
-      provider_id: input.providerId,
-      name: input.name,
-      url: input.url,
-      api_key: input.apiKey ?? null,
-      models: input.models,
-      created_at: now,
-      updated_at: now,
-    });
-    return toRecord(row);
   }
 
   async list({ orgId }: { orgId: string }): Promise<CustomProviderRecord[]> {

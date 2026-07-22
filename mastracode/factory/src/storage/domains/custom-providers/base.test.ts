@@ -31,6 +31,30 @@ describe('CustomProvidersStorage', () => {
     expect(await seed.customProviders.list({ orgId: 'other-org' })).toEqual([]);
   });
 
+  it('resolves concurrent creates of the same provider without either failing', async () => {
+    const seed = await createFactoryStorageForTests();
+    const input = (url: string) => ({
+      providerId: 'my-llm',
+      name: 'My LLM',
+      url,
+      apiKey: 'sk-secret',
+      models: ['fast'],
+    });
+
+    const [a, b] = await Promise.all([
+      seed.customProviders.upsert({ orgId: 'org-1', userId: 'user-1', input: input('https://a.example.com') }),
+      seed.customProviders.upsert({ orgId: 'org-1', userId: 'user-2', input: input('https://b.example.com') }),
+    ]);
+
+    // Both writes succeed against the single row; the insert-race loser
+    // lands as an update on the winning row.
+    expect(a.providerId).toBe('my-llm');
+    expect(b.providerId).toBe('my-llm');
+    const rows = await seed.customProviders.list({ orgId: 'org-1' });
+    expect(rows).toHaveLength(1);
+    expect(['https://a.example.com', 'https://b.example.com']).toContain(rows[0]!.url);
+  });
+
   it('upserts by (org, providerId) with wholesale replace — absent apiKey clears the key', async () => {
     const seed = await createFactoryStorageForTests();
 
