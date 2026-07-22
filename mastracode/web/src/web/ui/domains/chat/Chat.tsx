@@ -1,4 +1,4 @@
-import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import type { ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router';
 
@@ -6,8 +6,7 @@ import { PageLayoutMainViewProvider } from '../../ui/PageLayout';
 import { OverlaysProvider, useOverlays } from '../../lib/overlays';
 import { SettingsPanel } from '../settings/components/SettingsPanel';
 import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
-import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
@@ -48,22 +47,9 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 
 function ChatShell() {
   const overlays = useOverlays();
-  const { activeFactory, factories, factoriesPending } = useActiveFactoryContext();
-  const { isMobile } = useMainSidebar();
-  const factorySetupRequired = factories.length === 0 && !factoriesPending;
-  const factoriesOpen = overlays.isOpen('factories');
+  const { activeFactory } = useActiveFactoryContext();
 
-  const closeFactories = () => {
-    overlays.close('factories');
-    const focusTargetId = isMobile ? 'mobile-navigation-trigger' : 'factory-switcher-trigger';
-    requestAnimationFrame(() => document.getElementById(focusTargetId)?.focus());
-  };
-
-  const mainView = overlays.isOpen('settings') ? (
-    <SettingsPanel />
-  ) : factoriesOpen ? (
-    <FactoriesPanel onClose={factorySetupRequired ? undefined : closeFactories} />
-  ) : undefined;
+  const mainView = overlays.isOpen('settings') ? <SettingsPanel /> : undefined;
 
   return (
     <>
