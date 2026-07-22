@@ -164,6 +164,23 @@ describe('DatasetsInMemory', () => {
       expect(item.updatedAt).toBeInstanceOf(Date);
     });
 
+    it('addItem round-trips scorerIds through item reads', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { prompt: 'hello' },
+        scorerIds: ['quality', 'safety'],
+      });
+
+      expect(item.scorerIds).toEqual(['quality', 'safety']);
+      await expect(storage.getItemById({ id: item.id })).resolves.toMatchObject({
+        scorerIds: ['quality', 'safety'],
+      });
+
+      const listed = await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } });
+      expect(listed.items[0]?.scorerIds).toEqual(['quality', 'safety']);
+    });
+
     it('addItem rejects circular payloads before idempotency comparison', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       await storage.addItem({ datasetId: dataset.id, externalId: 'cyclic-item', input: { prompt: 'safe' } });
@@ -313,6 +330,33 @@ describe('DatasetsInMemory', () => {
       expect(items.items).toHaveLength(1);
     });
 
+    it('includes scorerIds in externalId idempotency checks', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const first = await storage.addItem({
+        datasetId: dataset.id,
+        externalId: 'scored-item',
+        input: { prompt: 'hello' },
+        scorerIds: ['quality'],
+      });
+
+      const retry = await storage.addItem({
+        datasetId: dataset.id,
+        externalId: 'scored-item',
+        input: { prompt: 'hello' },
+        scorerIds: ['quality'],
+      });
+      expect(retry.id).toBe(first.id);
+
+      await expect(
+        storage.addItem({
+          datasetId: dataset.id,
+          externalId: 'scored-item',
+          input: { prompt: 'hello' },
+          scorerIds: ['safety'],
+        }),
+      ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_CONFLICT' });
+    });
+
     it('addItem throws for non-existent dataset', async () => {
       await expect(storage.addItem({ datasetId: 'non-existent', input: {} })).rejects.toThrow('Dataset not found');
     });
@@ -342,6 +386,40 @@ describe('DatasetsInMemory', () => {
 
       expect(updated.input).toEqual({ a: 2 });
       expect(updated.groundTruth).toEqual({ b: 3 });
+    });
+
+    it('updateItem preserves, replaces, disables, and clears scorerIds', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { a: 1 },
+        scorerIds: ['quality', 'safety'],
+      });
+
+      const preserved = await storage.updateItem({ id: item.id, datasetId: dataset.id, metadata: { kept: true } });
+      expect(preserved.scorerIds).toEqual(['quality', 'safety']);
+
+      const replaced = await storage.updateItem({
+        id: item.id,
+        datasetId: dataset.id,
+        scorerIds: ['relevance'],
+      });
+      expect(replaced.scorerIds).toEqual(['relevance']);
+
+      const disabled = await storage.updateItem({ id: item.id, datasetId: dataset.id, scorerIds: [] });
+      expect(disabled.scorerIds).toEqual([]);
+
+      const cleared = await storage.updateItem({ id: item.id, datasetId: dataset.id, scorerIds: null });
+      expect(cleared.scorerIds).toBeUndefined();
+
+      const history = await storage.getItemHistory(item.id);
+      expect(history.map(row => row.scorerIds)).toEqual([
+        undefined,
+        [],
+        ['relevance'],
+        ['quality', 'safety'],
+        ['quality', 'safety'],
+      ]);
     });
 
     it('updateItem throws for non-existent item', async () => {
@@ -449,7 +527,7 @@ describe('DatasetsInMemory', () => {
 
     it('deleteItem creates tombstone row with isDeleted=true (T3.9)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 }, scorerIds: ['quality'] });
 
       await storage.deleteItem({ id: item.id, datasetId: dataset.id });
 
@@ -460,6 +538,7 @@ describe('DatasetsInMemory', () => {
       expect(history[0].datasetVersion).toBe(2);
       expect(history[0].validTo).toBeNull();
       expect(history[0].isDeleted).toBe(true);
+      expect(history[0].scorerIds).toEqual(['quality']);
 
       // Old row closed
       expect(history[1].validTo).toBe(2);
@@ -477,19 +556,26 @@ describe('DatasetsInMemory', () => {
 
     it('getItemById with datasetVersion returns exact row (T3.13)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 }, scorerIds: ['quality'] });
 
-      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
+      await storage.updateItem({
+        id: item.id,
+        datasetId: dataset.id,
+        input: { n: 2 },
+        scorerIds: ['safety'],
+      });
 
       // Version 1 — original data
       const atV1 = await storage.getItemById({ id: item.id, datasetVersion: 1 });
       expect(atV1).not.toBeNull();
       expect(atV1?.input).toEqual({ n: 1 });
+      expect(atV1?.scorerIds).toEqual(['quality']);
 
       // Version 2 — updated data
       const atV2 = await storage.getItemById({ id: item.id, datasetVersion: 2 });
       expect(atV2).not.toBeNull();
       expect(atV2?.input).toEqual({ n: 2 });
+      expect(atV2?.scorerIds).toEqual(['safety']);
 
       // Version 99 — doesn't exist
       const atV99 = await storage.getItemById({ id: item.id, datasetVersion: 99 });
@@ -638,6 +724,16 @@ describe('DatasetsInMemory', () => {
 
       expect(items[0].datasetVersion).toBe(1);
       expect(items[1].datasetVersion).toBe(1);
+    });
+
+    it('batchInsertItems preserves scorerIds including explicit empty overrides', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const items = await storage.batchInsertItems({
+        datasetId: dataset.id,
+        items: [{ input: { n: 1 }, scorerIds: ['quality'] }, { input: { n: 2 }, scorerIds: [] }, { input: { n: 3 } }],
+      });
+
+      expect(items.map(item => item.scorerIds)).toEqual([['quality'], [], undefined]);
     });
 
     it('batchDeleteItems increments dataset.version once (T3.20)', async () => {
