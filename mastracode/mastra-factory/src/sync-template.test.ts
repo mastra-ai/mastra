@@ -7,8 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
  * Validates the output of scripts/sync-template.mjs — the artifact users
- * actually receive. Runs the real script offline: a fake `npm` on PATH
- * answers the version-verification calls so no network is needed.
+ * actually receive. Runs the real script with no network dependency: the
+ * script no longer shells out to npm, so the emitted template is entirely
+ * derived from local monorepo state.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -18,15 +19,11 @@ const script = path.join(pkgRoot, 'scripts', 'sync-template.mjs');
 
 let workDir: string;
 let outDir: string;
-let fakeBinDir: string;
 let sentinel: string;
 
 function runSync(args: string[]): { status: number; stderr: string } {
   try {
-    execFileSync(process.execPath, [script, ...args], {
-      stdio: 'pipe',
-      env: { ...process.env, PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}` },
-    });
+    execFileSync(process.execPath, [script, ...args], { stdio: 'pipe' });
     return { status: 0, stderr: '' };
   } catch (err) {
     const e = err as { status?: number; stderr?: Buffer };
@@ -37,11 +34,6 @@ function runSync(args: string[]): { status: number; stderr: string } {
 beforeAll(() => {
   workDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sf-sync-test-')));
   outDir = path.join(workDir, 'out');
-
-  // Fake npm: satisfies `npm view <pkg>@<version> version` offline.
-  fakeBinDir = path.join(workDir, 'bin');
-  fs.mkdirSync(fakeBinDir);
-  fs.writeFileSync(path.join(fakeBinDir, 'npm'), '#!/bin/sh\necho "9.9.9"\n', { mode: 0o755 });
 
   // Sentinel env file in the source tree — must never reach the template.
   sentinel = path.join(webRoot, '.env.test-sentinel');
@@ -80,13 +72,11 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(fs.existsSync(path.join(outDir, 'README.md'))).toBe(true);
     expect(fs.existsSync(path.join(outDir, 'tsconfig.json'))).toBe(true);
 
-    // README is the checked-in template with version tokens filled (no bare {{tokens}} left).
+    // README is the checked-in template copied verbatim (no build-time tokens).
     const readme = fs.readFileSync(path.join(outDir, 'README.md'), 'utf8');
     expect(readme).toContain('# Mastra Factory');
     expect(readme).toContain('npm create factory');
     expect(readme).not.toMatch(/\{\{[^}]+\}\}/);
-    expect(readme).toMatch(/@mastra\/core@\d/);
-    expect(readme).toMatch(/@mastra\/code-sdk@\d/);
 
     // The dev script is a direct mapping of the web project's own dev flow —
     // no generated wrapper script.
@@ -96,16 +86,18 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     const envExample = fs.readFileSync(path.join(outDir, '.env.example'), 'utf8');
     expect(envExample).not.toMatch(/^[A-Z][A-Z0-9_]*=\s*$/m);
 
-    // package.json: monorepo coupling removed, mastra deps float via caret.
+    // package.json: monorepo coupling removed; every Mastra dep pins `latest`.
     const pkg = JSON.parse(fs.readFileSync(path.join(outDir, 'package.json'), 'utf8'));
     const allDeps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies };
     for (const [name, spec] of Object.entries(allDeps)) {
-      expect(spec, `${name} must not use a link:/workspace: spec`).not.toMatch(/^(link|workspace|catalog):/);
+      expect(spec, `${name} must not use a link:/workspace: spec`).not.toMatch(/^(link|workspace|catalog|file):/);
       if (name === 'mastra' || name.startsWith('@mastra/')) {
-        expect(spec, `${name} must use a caret range`).toMatch(/^\^/);
+        expect(spec, `${name} must be pinned to "latest"`).toBe('latest');
       }
     }
-    expect(pkg.dependencies['@mastra/memory']).toMatch(/^\^/);
+    expect(pkg.dependencies['@mastra/memory']).toBe('latest');
+    // Legacy artifact from the caret-pinning era must not appear anymore.
+    expect(fs.existsSync(path.join(outDir, '.npmrc'))).toBe(false);
 
     // Tests and their dependencies are stripped.
     expect(allDeps.vitest).toBeUndefined();
