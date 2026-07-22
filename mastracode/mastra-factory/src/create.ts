@@ -179,8 +179,7 @@ export async function create(args: CreateArgs): Promise<void> {
     `${color.cyan('cd')} ${projectName}`,
     color.cyan(`${packageManager} run dev`),
     '',
-    `Factory UI     ${color.underline('http://localhost:5173')}`,
-    `Mastra Studio  ${color.underline('http://localhost:4111')}`,
+    `Factory UI     ${color.underline('http://localhost:4111')}`,
     '',
   ];
   if (platformResult) {

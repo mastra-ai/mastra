@@ -160,19 +160,16 @@ function transformPackageJson() {
   manifest.private = true;
   manifest.license = 'Apache-2.0';
 
-  // Direct mapping of the web project's own scripts (web:dev / web:build /
-  // web:start), minus monorepo-only bits (prebuild, monorepo-deps.mjs).
+  // Use the Factory server's integrated UI instead of running a separate
+  // Vite process. Keep standalone validation and lifecycle scripts.
   manifest.scripts = {
-    dev: 'concurrently --kill-others-on-fail --names server,ui "MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra factory dev --dir src/mastra" "vite --config src/web/vite.config.ts"',
-    'dev:prod':
-      'npm run build:ui && PORT=5173 MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra factory dev --dir src/mastra',
+    dev: 'mastra factory dev --dir src/mastra',
     'db:up': 'docker compose up -d --wait',
     'db:down': 'docker compose down',
-    build: 'mastra build --dir src/mastra',
-    'build:ui': 'vite --config src/web/vite.config.ts build',
-    start: 'varlock run -- mastra start',
-    deploy: 'npm run build && node scripts/validate-output.mjs && mastra deploy --skip-build',
     check: 'tsc --noEmit && tsc --noEmit -p src/web/ui/tsconfig.json',
+    build: 'mastra build --dir src/mastra',
+    start: 'varlock run -- mastra start',
+    deploy: 'mastra deploy',
   };
 
   // Every `link:` dep becomes `"alpha"`. The Mastra Factory sources are built
@@ -223,6 +220,9 @@ function transformPackageJson() {
   // `typescript-paths` (or whatever @mastra/deployer uses) supports tsgo.
   if (manifest.devDependencies?.typescript) {
     manifest.devDependencies.typescript = '^5.9.2';
+  }
+  if (manifest.devDependencies?.concurrently) {
+    delete manifest.devDependencies.concurrently;
   }
 
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);

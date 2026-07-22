@@ -153,8 +153,11 @@ describe('create --no-platform', () => {
     expect(cliAuth.getToken).not.toHaveBeenCalled();
     expect(platform.createServerProject).not.toHaveBeenCalled();
 
-    // Next steps shown.
+    // Next steps show the integrated Factory UI on the Mastra server port.
     expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Your Mastra Factory is ready!'), 'Next steps');
+    expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('http://localhost:4111'), 'Next steps');
+    expect(clack.note).not.toHaveBeenCalledWith(expect.stringContaining('http://localhost:5173'), 'Next steps');
+    expect(clack.note).not.toHaveBeenCalledWith(expect.stringContaining('Mastra Studio'), 'Next steps');
   });
 
   it('fails the run when the template clone fails, without a success outro', async () => {
