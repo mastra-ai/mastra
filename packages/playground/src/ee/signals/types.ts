@@ -1,4 +1,6 @@
 export type {
+  NoiseExamplesResponse,
+  NoiseResponse,
   ThemeDetailResponse,
   ThemeEntitiesResponse,
   ThemeExamplesResponse,

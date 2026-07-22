@@ -1,4 +1,6 @@
 import type {
+  NoiseExamplesResponse,
+  NoiseResponse,
   ThemeDetailResponse,
   ThemeEntitiesResponse,
   ThemeExamplesResponse,
@@ -82,6 +84,29 @@ export function fetchThemeHistory(
   return learningJson<ThemeHistoryResponse>(themePath(entityId, themeId, `/history?${query}`));
 }
 
+export function fetchNoise(entityId: string, entityType: string, signalName: TraceSignalName, snapshotId: string) {
+  const query = new URLSearchParams({ entityType, signalName, snapshotId });
+  return learningJson<NoiseResponse>(noisePath(entityId, `?${query}`));
+}
+
+export function fetchNoiseExamples(
+  entityId: string,
+  entityType: string,
+  signalName: TraceSignalName,
+  snapshotId: string,
+  limit = 20,
+  offset = 0,
+) {
+  const query = new URLSearchParams({
+    entityType,
+    signalName,
+    snapshotId,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return learningJson<NoiseExamplesResponse>(noisePath(entityId, `/examples?${query}`));
+}
+
 export async function fetchThemePaths(
   entityId: string,
   entityType: string,
@@ -124,6 +149,10 @@ function fetchThemePathsPage(
 
 function themePath(entityId: string, themeId: string, suffix: string) {
   return `/api/learning/entities/${encodeURIComponent(entityId)}/themes/${encodeURIComponent(themeId)}${suffix}`;
+}
+
+function noisePath(entityId: string, suffix: string) {
+  return `/api/learning/entities/${encodeURIComponent(entityId)}/noise${suffix}`;
 }
 
 async function learningJson<T>(path: string): Promise<T> {

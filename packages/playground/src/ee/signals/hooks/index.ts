@@ -1,3 +1,5 @@
+export { useNoise } from './use-noise';
+export { useNoiseExamples } from './use-noise-examples';
 export { useThemeDetail } from './use-theme-detail';
 export { useThemeEntities } from './use-theme-entities';
 export { useThemeExamples } from './use-theme-examples';

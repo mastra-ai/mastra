@@ -1,4 +1,6 @@
 import type {
+  NoiseExamplesResponse,
+  NoiseResponse,
   ThemeDetailResponse,
   ThemeExamplesResponse,
   ThemeFlowResponse,
@@ -213,6 +215,25 @@ export const secondThemeExamplesResponse = {
     },
   ],
 } satisfies ThemeExamplesResponse;
+
+export const noiseResponse = {
+  snapshot,
+  noise: {
+    signalName: 'behavior',
+    traceCount: 2,
+    coverage: 2 / 3,
+  },
+} satisfies NoiseResponse;
+
+export const noiseExamplesResponse = {
+  examples: [
+    {
+      traceId: 'trace-2',
+      extractedTraceId: 'extracted-2',
+      signalText: 'The agent retried a fetch without establishing a recurring behavior pattern.',
+    },
+  ],
+} satisfies NoiseExamplesResponse;
 
 export const themeHistoryResponse = {
   theme: {

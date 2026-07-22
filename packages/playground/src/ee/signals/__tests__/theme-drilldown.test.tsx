@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +17,8 @@ import {
   largeThemeFlowResponse,
   missingSelectedThemePathsResponse,
   missingThemeDetailResponse,
+  noiseExamplesResponse,
+  noiseResponse,
   nonNumericThemeFlowResponse,
   olderDrilldownThemeFlowResponse,
   pathsWithCollapsedOutcomeResponse,
@@ -374,7 +376,8 @@ describe('SankeySignals drill-in', () => {
 
       fireEvent.click(themeNode);
 
-      expect(await screen.findByText('Drill-in: Goal = "Add transcript"')).not.toBeNull();
+      expect(await screen.findByText('Add transcript')).not.toBeNull();
+      expect(screen.queryByText('Drill-in: Goal = "Add transcript"')).toBeNull();
       expect(await screen.findByText('2 traces analyzed')).not.toBeNull();
       expect(screen.getAllByTitle('Other')).toHaveLength(2);
       expect(pathsRequestCount).toBe(2);
@@ -417,6 +420,56 @@ describe('SankeySignals drill-in', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Next examples' }));
       expect(await screen.findByText('Save the transcript with the project.')).not.toBeNull();
+    });
+  });
+
+  describe('when a Noise row is selected', () => {
+    it('shows Noise for every signal and opens its definition and summary examples', async () => {
+      useFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, ({ request }) => {
+          expectExactQuery(new URL(request.url), {
+            entityType: 'agent',
+            signalName: 'behavior',
+            snapshotId: 'opaque-snapshot-cursor',
+          });
+          return HttpResponse.json(noiseResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/noise/examples`, ({ request }) => {
+          expectExactQuery(new URL(request.url), {
+            entityType: 'agent',
+            signalName: 'behavior',
+            snapshotId: 'opaque-snapshot-cursor',
+            limit: '5',
+            offset: '0',
+          });
+          return HttpResponse.json(noiseExamplesResponse);
+        }),
+      );
+      renderSignals();
+
+      const distributions = await screen.findByLabelText('Signal distributions');
+      for (const signalName of ['Goal', 'Outcome', 'Behavior']) {
+        expect(
+          within(within(distributions).getByLabelText(`${signalName} distribution`)).getByRole('button', {
+            name: `View Noise details for ${signalName}`,
+          }),
+        ).not.toBeNull();
+      }
+
+      fireEvent.click(screen.getByRole('button', { name: 'View Noise details for Behavior' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Noise' });
+      expect(
+        within(dialog).getByText(
+          'Noise contains signal summaries that did not consistently match a recurring theme in this snapshot.',
+        ),
+      ).not.toBeNull();
+      expect(await within(dialog).findByText('2')).not.toBeNull();
+      expect(within(dialog).getByText('67%')).not.toBeNull();
+      expect(
+        await within(dialog).findByText('The agent retried a fetch without establishing a recurring behavior pattern.'),
+      ).not.toBeNull();
     });
   });
 
@@ -477,7 +530,7 @@ describe('SankeySignals drill-in', () => {
         </QueryClientProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      await screen.findByText('Drill-in: Goal = "Add transcript"');
+      await screen.findByText('Add transcript');
 
       result.rerender(
         <QueryClientProvider client={queryClient}>

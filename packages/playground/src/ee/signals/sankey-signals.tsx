@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { useThemePaths } from './hooks/use-theme-paths';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
+import { NoiseDetailPanel } from './noise-detail-panel';
 import {
   buildSignalGraphSummary,
   getSignalRecordNodeId,
@@ -165,19 +166,62 @@ function SignalDistributionRow({
   return <li className="flex min-w-0 items-center justify-between gap-3 text-xs">{content}</li>;
 }
 
+function NoiseDistributionRow({
+  color,
+  signalName,
+  traceCount,
+  stageShare,
+  onViewNoiseDetails,
+}: {
+  color: string;
+  signalName: TraceSignalName;
+  traceCount: number;
+  stageShare: number;
+  onViewNoiseDetails: (signalName: TraceSignalName) => void;
+}) {
+  const signalLabel = formatSignalName(signalName);
+
+  return (
+    <li>
+      <button
+        aria-label={`View Noise details for ${signalLabel}`}
+        className="flex w-full min-w-0 items-center justify-between gap-3 rounded-sm text-left text-xs outline-hidden hover:bg-surface3 focus-visible:ring-1 focus-visible:ring-border2"
+        onClick={() => onViewNoiseDetails(signalName)}
+        type="button"
+      >
+        <span className="flex min-w-0 items-center gap-2 text-neutral5">
+          <span
+            aria-hidden="true"
+            className="size-2 shrink-0 rounded-[2px]"
+            style={{ backgroundColor: color, opacity: 0.35 }}
+          />
+          <span>Noise</span>
+        </span>
+        <span className="shrink-0 font-mono text-neutral3">
+          {traceCount} · {Math.round(stageShare * 100)}%
+        </span>
+      </button>
+    </li>
+  );
+}
+
 function SignalDistribution({
   signalName,
   traceCount,
   nodes,
   onViewThemeDetails,
+  onViewNoiseDetails,
 }: {
   signalName: TraceSignalName;
   traceCount: number;
   nodes: ThemeNode[];
   onViewThemeDetails: (selection: ThemeSelection) => void;
+  onViewNoiseDetails: (signalName: TraceSignalName) => void;
 }) {
   const label = formatSignalName(signalName);
   const color = nodeColor(getSignalHue(signalName));
+  const displayNodes = nodes.filter(node => node.kind !== 'noise');
+  const noiseNode = nodes.find(node => node.kind === 'noise');
 
   return (
     <Card aria-label={`${label} distribution`} as="article" className="min-w-0" elevation="elevated">
@@ -207,8 +251,8 @@ function SignalDistribution({
           ))}
         </div>
         <ul className="space-y-2.5">
-          {nodes.length > 0 ? (
-            nodes.map((node, index) => (
+          {displayNodes.length > 0 ? (
+            displayNodes.map((node, index) => (
               <SignalDistributionRow
                 key={node.nodeId}
                 color={color}
@@ -221,6 +265,13 @@ function SignalDistribution({
           ) : (
             <li className="text-xs text-neutral3">No themes detected</li>
           )}
+          <NoiseDistributionRow
+            color={color}
+            signalName={signalName}
+            traceCount={noiseNode?.traceCount ?? 0}
+            stageShare={noiseNode?.stageShare ?? 0}
+            onViewNoiseDetails={onViewNoiseDetails}
+          />
         </ul>
       </CardContent>
     </Card>
@@ -230,9 +281,11 @@ function SignalDistribution({
 function SignalDistributions({
   stages,
   onViewThemeDetails,
+  onViewNoiseDetails,
 }: {
   stages: ThemeFlowResponse['stages'];
   onViewThemeDetails: (selection: ThemeSelection) => void;
+  onViewNoiseDetails: (signalName: TraceSignalName) => void;
 }) {
   return (
     <section aria-label="Signal distributions" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -243,6 +296,7 @@ function SignalDistributions({
           traceCount={stage.traceCount}
           nodes={stage.nodes}
           onViewThemeDetails={onViewThemeDetails}
+          onViewNoiseDetails={onViewNoiseDetails}
         />
       ))}
     </section>
@@ -329,6 +383,7 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   const [isPlaying, setIsPlaying] = useState(false);
   const [drillIn, setDrillIn] = useState<ThemeSelection>();
   const [detailSelection, setDetailSelection] = useState<ThemeSelection>();
+  const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.snapshotId === selectedSnapshotId);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : snapshots.length - 1;
   const snapshot = snapshots[selectedSnapshotIndex];
@@ -474,12 +529,13 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
       </header>
       {drillIn ? (
         <nav aria-label="Active theme drill-in" className="flex flex-wrap items-center gap-2 text-sm text-neutral4">
-          <span>
-            Drill-in: {formatSignalName(drillIn.signalName)} = &quot;{drillIn.label}&quot;
-          </span>
+          <span className="text-base font-semibold text-neutral6">{drillIn.label}</span>
           <Button
             aria-label={`View theme details for ${drillIn.label}`}
-            onClick={() => setDetailSelection(drillIn)}
+            onClick={() => {
+              setNoiseSignalName(undefined);
+              setDetailSelection(drillIn);
+            }}
             size="sm"
             type="button"
             variant="outline"
@@ -522,7 +578,17 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
         onSnapshotChange={selectSnapshot}
       />
       {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
-        <SignalDistributions stages={stages} onViewThemeDetails={setDetailSelection} />
+        <SignalDistributions
+          stages={stages}
+          onViewThemeDetails={selection => {
+            setNoiseSignalName(undefined);
+            setDetailSelection(selection);
+          }}
+          onViewNoiseDetails={signalName => {
+            setDetailSelection(undefined);
+            setNoiseSignalName(signalName);
+          }}
+        />
       )}
       <ThemeDetailPanel
         key={`${snapshot.snapshotId}:${detailSelection?.signalName ?? ''}:${detailSelection?.themeId ?? ''}`}
@@ -532,6 +598,14 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
         snapshotTotal={snapshot.total}
         selection={detailSelection}
         onClose={() => setDetailSelection(undefined)}
+      />
+      <NoiseDetailPanel
+        key={`${snapshot.snapshotId}:${noiseSignalName ?? ''}`}
+        entityId={entityId}
+        entityType={entityType}
+        snapshotId={snapshot.snapshotId}
+        signalName={noiseSignalName}
+        onClose={() => setNoiseSignalName(undefined)}
       />
     </main>
   );
