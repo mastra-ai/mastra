@@ -528,7 +528,7 @@ export class ReflectorRunner {
       extractors: activeExtractors,
       memory: temporaryMemory?.options,
       priorExtractedValues,
-      requestContext,
+      requestContext: internalRequestContext,
       observabilityContext,
       abortSignal,
     });
