@@ -35,7 +35,7 @@ export function VcsFactoryStep({
   const repos = useGithubReposQuery(query || undefined, connected);
 
   return (
-    <section aria-label="GitHub repository" className="mx-auto max-w-2xl text-left">
+    <section aria-label="GitHub repository" className="max-w-2xl text-left">
       {githubStatus.isPending ? (
         <SkeletonRows label="Loading GitHub status" rows={3} rowClassName="h-12 w-full rounded-xl" />
       ) : !connected ? (

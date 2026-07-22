@@ -7,7 +7,7 @@ export interface InitialFactoryStepProps {
 export function InitialFactoryStep({ onContinue }: InitialFactoryStepProps) {
   return (
     <>
-      <div className="mx-auto w-full max-w-2xl text-left" aria-hidden="true">
+      <div className="w-full max-w-2xl text-left" aria-hidden="true">
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-xl border border-border1 bg-surface2/80 p-3">
             <div className="mb-3 flex items-center gap-2 text-ui-xs font-medium text-icon3">
