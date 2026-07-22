@@ -33,11 +33,13 @@ const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) 
     const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
     if (!metadata) continue;
 
-    const metadataSources = [
-      metadata.pendingToolApprovals,
-      metadata.requireApprovalMetadata,
-      metadata.suspendedTools,
-    ] as Array<Record<string, { toolCallId?: unknown }> | undefined>;
+    // Only explicit `requireApproval` gates are pending approvals. `suspendedTools`
+    // covers generic runtime `context.agent.suspend()` suspensions, which have no
+    // approve/decline UI and auto-resume from a follow-up message — treating them as
+    // pending approvals wrongly parks the composer in an "awaiting approval" state.
+    const metadataSources = [metadata.pendingToolApprovals, metadata.requireApprovalMetadata] as Array<
+      Record<string, { toolCallId?: unknown }> | undefined
+    >;
 
     for (const source of metadataSources) {
       if (!source || typeof source !== 'object') continue;
@@ -436,12 +438,19 @@ export const useChat = ({
         }
       }
 
-      if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+      if (chunk.type === 'tool-call-approval') {
         const toolCallId = chunk.payload?.toolCallId;
         if (typeof toolCallId === 'string') {
           pendingToolApprovalIdsRef.current.add(toolCallId);
           setIsAwaitingToolApproval(true);
         }
+        setIsRunning(false);
+      }
+
+      // A generic runtime `context.agent.suspend()` ends the run without an approval gate.
+      // Stop the run indicator but do not enter the awaiting-approval state — the user
+      // resumes it by sending a follow-up message, which auto-resumes server-side.
+      if (chunk.type === 'tool-call-suspended') {
         setIsRunning(false);
       }
 

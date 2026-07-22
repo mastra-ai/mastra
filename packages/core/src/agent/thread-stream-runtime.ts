@@ -382,6 +382,45 @@ export class AgentThreadStreamRuntime {
     return state.suspendedRunIds.has(runId) || this.#isApprovalSuspendedRun(state, runId);
   }
 
+  /**
+   * A "generic" suspension is a runtime `context.agent.suspend()` from inside a tool's
+   * `execute` (kind `generic-tool`), as opposed to a `requireApproval` gate (kind
+   * `approval`). A generic suspension ends the run's agentic loop, so — unlike an approval
+   * gate that resumes through approve/decline — a follow-up user message is expected to
+   * auto-resume it (with `autoResumeSuspendedTools`) via a fresh run reading persisted memory.
+   */
+  #isGenericSuspendedRun(state: AgentThreadRuntimeState, runId: string) {
+    if (this.#isApprovalSuspendedRun(state, runId)) return false;
+    if (!state.suspendedRunIds.has(runId)) return false;
+    return state.suspensionMetadataByRunId.get(runId)?.kind === 'generic-tool';
+  }
+
+  /**
+   * Detaches a generic-suspended run from its thread so a follow-up user message can start a
+   * fresh auto-resuming run instead of being queued onto a run whose loop already ended.
+   * Only clears in-memory runtime tracking and releases the thread lease — the persisted
+   * `suspendedTools` memory metadata is left intact so the fresh run can auto-resume from it.
+   */
+  #releaseSuspendedRunForResume(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+  ) {
+    this.#clearSuspendedRun(state, runId);
+    if (state.activeThreadRunIds.get(key) === runId) {
+      state.activeThreadRunIds.delete(key);
+    }
+    state.activeThreadStreamIds.delete(key);
+    state.threadKeysByRunId.delete(runId);
+    const record = state.threadRunsById.get(runId);
+    if (record) {
+      record.lifecycle = 'completed';
+      record.suspension = undefined;
+    }
+    this.#releaseThreadLease(pubsub, key, runId);
+  }
+
   #isThreadBlockingRun(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
     return (
       record.output.status === 'running' ||
@@ -1746,6 +1785,25 @@ export class AgentThreadStreamRuntime {
       activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
       if (activeRecord && !this.#isThreadBlockingRun(state, activeRecord)) {
         state.activeThreadRunIds.delete(key);
+        activeRecord = undefined;
+      }
+
+      // A generic (non-approval) tool suspension via `context.agent.suspend()` ends the run's
+      // agentic loop: it publishes `run-suspended` and never drains queued thread work on its
+      // own. When the same agent receives a follow-up user message for such a thread, resume it
+      // the way the non-subscription transport does — start a fresh run that auto-resumes the
+      // suspended tool from persisted memory (with `autoResumeSuspendedTools`). Detach the
+      // parked run so the message falls through to the idle-start path below instead of being
+      // queued onto a run that will never resume itself. Approval suspensions are intentionally
+      // left blocking so they resume only through approve/decline.
+      if (
+        activeRecord &&
+        activeRecord.agent.id === agent.id &&
+        signal.type === 'user' &&
+        idleBehavior === 'wake' &&
+        this.#isGenericSuspendedRun(state, activeRecord.runId)
+      ) {
+        this.#releaseSuspendedRunForResume(state, pubsub, key, activeRecord.runId);
         activeRecord = undefined;
       }
 
