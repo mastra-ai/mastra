@@ -578,7 +578,16 @@ export class MessageList {
               part.toolInvocation?.state === 'result' &&
               part.providerMetadata?.mastra &&
               typeof part.providerMetadata.mastra === 'object' &&
-              'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
+              'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>) &&
+              // Only override with a real stored output. A tool's `toModelOutput` can
+              // return `undefined` (e.g. a text-only result), which the durable
+              // llm-mapping step still persists as `mastra: { modelOutput: undefined }`
+              // (key present, value nullish). Without this guard the override below
+              // clobbers the already-correct converted `output` with `undefined`,
+              // producing a tool-result whose `output` is missing — which then throws
+              // in providers that read `output.type` (e.g. @openrouter/ai-sdk-provider)
+              // and aborts the whole request.
+              (part.providerMetadata.mastra as Record<string, unknown>).modelOutput != null
             ) {
               storedModelOutputs.set(
                 part.toolInvocation.toolCallId,
