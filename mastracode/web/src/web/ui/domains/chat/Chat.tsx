@@ -48,10 +48,10 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 
 function ChatShell() {
   const overlays = useOverlays();
-  const { factories, factoriesPending } = useActiveFactoryContext();
+  const { activeFactory, factories, factoriesPending } = useActiveFactoryContext();
   const { isMobile } = useMainSidebar();
   const factorySetupRequired = factories.length === 0 && !factoriesPending;
-  const factoriesOpen = overlays.isOpen('factories') || factorySetupRequired;
+  const factoriesOpen = overlays.isOpen('factories');
 
   const closeFactories = () => {
     overlays.close('factories');
@@ -67,9 +67,13 @@ function ChatShell() {
 
   return (
     <>
-      <PageLayoutMainViewProvider view={mainView}>
-        <Outlet />
-      </PageLayoutMainViewProvider>
+      {!activeFactory && mainView !== undefined ? (
+        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">{mainView}</main>
+      ) : (
+        <PageLayoutMainViewProvider view={mainView}>
+          <Outlet />
+        </PageLayoutMainViewProvider>
+      )}
       <ChatOverlays />
     </>
   );

@@ -1,18 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
+import type { AgentControllerMutationArgs } from './agentControllerMutationArgs';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,
 } from '../../web/ui/domains/chat/services/agentControllerClient';
-
-interface AgentControllerMutationArgs {
-  agentControllerId: string;
-  resourceId: string;
-  scope?: string;
-  baseUrl?: string;
-  enabled?: boolean;
-}
 
 export function useSetAgentControllerStateMutation({
   agentControllerId,

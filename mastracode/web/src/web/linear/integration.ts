@@ -640,6 +640,7 @@ export class LinearIntegration implements FactoryIntegration {
       linear: this,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
+      hooks: ctx.hooks,
     });
   }
 

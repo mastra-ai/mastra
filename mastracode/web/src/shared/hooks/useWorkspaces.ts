@@ -1,9 +1,9 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { useToast } from '../../web/ui/ui/toast';
-import { createWorktree, deleteWorktree } from '../../web/ui/domains/workspaces/services/github';
+import { createWorktree, deleteWorktree, listWorktrees } from '../../web/ui/domains/workspaces/services/github';
 import type { Factory, Worktree } from '../../web/ui/domains/workspaces/services/factories';
 import {
   boardSessionWorktrees,
@@ -13,6 +13,7 @@ import {
   selectedRepository,
   selectedWorktree,
   selectWorktree,
+  updateFactory,
   upsertWorktree,
 } from '../../web/ui/domains/workspaces/services/factories';
 
@@ -49,17 +50,25 @@ export function deriveProjectPath(factory: Factory | null | undefined): string {
   return factory.binding.path;
 }
 
-function invalidateWorkspaceQueries(
+async function invalidateWorkspaceQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   factory: Factory,
   scope?: AgentControllerThreadsScope,
 ) {
-  const projectPath = deriveProjectPath(latestFactory(factory));
-  void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces(factory.id) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-  void queryClient.invalidateQueries({
-    queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, projectPath),
-  });
+  const current = latestFactory(factory);
+  const cached = queryClient.getQueryData<Factory[]>(queryKeys.factories());
+  queryClient.setQueryData<Factory[]>(
+    queryKeys.factories(),
+    cached?.map(candidate => (candidate.id === current.id ? current : candidate)) ?? loadFactories(),
+  );
+  const projectPath = deriveProjectPath(current);
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.workspaces(factory.id) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, projectPath),
+    }),
+  ]);
 }
 
 function workspacesData(factory: Factory): WorkspacesData {
@@ -73,15 +82,51 @@ function workspacesData(factory: Factory): WorkspacesData {
 }
 
 export function useWorkspacesQuery(factory: Factory | null | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
   const serverFactory = factory && isServerFactory(factory) ? factory : undefined;
   return useQuery({
     queryKey: queryKeys.workspaces(factory?.id),
     queryFn: async (): Promise<WorkspacesData> => {
       if (!serverFactory) throw new Error('Workspaces query requires a server-backed factory');
-      return workspacesData(serverFactory);
+      const current = latestFactory(serverFactory);
+      if (!isServerFactory(current)) throw new Error('Workspaces query requires a server-backed factory');
+      const repository = selectedRepository(current);
+      if (!repository) return workspacesData(current);
+
+      const persisted = await listWorktrees(baseUrl, repository.projectRepositoryId);
+      const localByPath = new Map(repository.worktrees.map(worktree => [worktree.worktreePath, worktree]));
+      const worktrees = persisted.map(worktree => {
+        const threadId = localByPath.get(worktree.worktreePath)?.threadId;
+        return threadId ? { ...worktree, threadId } : worktree;
+      });
+      const selectedWorktreePath = worktrees.some(worktree => worktree.worktreePath === repository.selectedWorktreePath)
+        ? repository.selectedWorktreePath
+        : worktrees.find(worktree => worktree.branch.startsWith('factory/'))?.worktreePath;
+      const updated: Factory = {
+        ...current,
+        binding: {
+          ...current.binding,
+          repositories: current.binding.repositories.map(candidate =>
+            candidate.projectRepositoryId === repository.projectRepositoryId
+              ? { ...candidate, worktrees, selectedWorktreePath }
+              : candidate,
+          ),
+        },
+      };
+      if (
+        repository.selectedWorktreePath !== selectedWorktreePath ||
+        JSON.stringify(repository.worktrees) !== JSON.stringify(worktrees)
+      ) {
+        updateFactory(updated);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.userSessions(current.id) });
+      }
+      return workspacesData(updated);
     },
     enabled: !!serverFactory,
     initialData: serverFactory ? () => workspacesData(serverFactory) : undefined,
+    refetchInterval: 3_000,
   });
 }
 
@@ -102,7 +147,6 @@ export function useSelectWorkspaceMutation(factory: Factory | null | undefined, 
 export function useCreateWorkspaceMutation(factory: Factory | null | undefined, scope?: AgentControllerThreadsScope) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (branch: string) => {
@@ -119,7 +163,7 @@ export function useCreateWorkspaceMutation(factory: Factory | null | undefined, 
       return selectWorktree(upsertWorktree(latestFactory(factory), worktree), worktree.worktreePath);
     },
     onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
-    onError: error => toast(error instanceof Error ? error.message : 'Failed to create workspace', 'error'),
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to create workspace'),
   });
 }
 
@@ -138,7 +182,6 @@ export function useDeleteWorkspaceMutation(
 ) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (worktree: Worktree) => {
@@ -172,6 +215,6 @@ export function useDeleteWorkspaceMutation(
       });
       toast('Workspace deleted');
     },
-    onError: error => toast(error instanceof Error ? error.message : 'Failed to delete workspace', 'error'),
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to delete workspace'),
   });
 }

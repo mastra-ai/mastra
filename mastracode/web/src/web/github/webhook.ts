@@ -18,6 +18,7 @@ export interface GithubWebhookHandlerOptions {
   /** Integration providing webhook-secret verification + collaborator permission checks. */
   github: GithubIntegration;
   runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
+  ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
 
 const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
@@ -487,16 +488,20 @@ export async function handleGithubWebhook(
   const metadata = normalizeGithubWebhookMetadata(parsed);
   console.log('[GitHub Webhook]', metadata);
 
-  const issueTriageRun = getIssueTriageRunInput(parsed);
-  if (issueTriageRun && options.runIssueTriage) {
-    void options.runIssueTriage(issueTriageRun).catch((error: unknown) => {
-      console.error('[GitHub Webhook] Failed to run issue triage', {
-        deliveryId: metadata.deliveryId,
-        repository: metadata.repository,
-        issueNumber: metadata.issueNumber,
-        error: error instanceof Error ? error.message : String(error),
+  if (options.ingestFactoryEvent) {
+    await options.ingestFactoryEvent(parsed);
+  } else {
+    const issueTriageRun = getIssueTriageRunInput(parsed);
+    if (issueTriageRun && options.runIssueTriage) {
+      void options.runIssueTriage(issueTriageRun).catch((error: unknown) => {
+        console.error('[GitHub Webhook] Failed to run issue triage', {
+          deliveryId: metadata.deliveryId,
+          repository: metadata.repository,
+          issueNumber: metadata.issueNumber,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
-    });
+    }
   }
 
   if (!options.controller) {

@@ -1,42 +1,42 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { GitBranch } from 'lucide-react';
 import { useLocation } from 'react-router';
 
-import { FolderIcon, PageLayout } from '../../ui';
-import type { Factory } from '../workspaces';
-import { isLocalFactory, selectedRepository, useActiveFactoryContext } from '../workspaces';
+import { Sidebar } from '../../Sidebar';
+import { ChatLayout } from '../../ui/ChatLayout';
+import { FolderIcon } from '../../ui/icons';
+import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { isLocalFactory, selectedRepository } from '../workspaces/services/factories';
+import type { Factory } from '../workspaces/services/factories';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
+import { ChatHeader } from './components/ChatHeader';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
+import { ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useChatTranscript } from './context/useChatTranscript';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { ChatSessionBoundary } from './context/ChatSessionProvider';
-
-import { ChatHeader } from './components/ChatHeader';
-import { Sidebar } from '../../Sidebar';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
-  const { factoriesPending, activeFactory } = useActiveFactoryContext();
+  const { activeFactory } = useActiveFactoryContext();
 
-  if (factoriesPending) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+  if (!activeFactory) {
+    return <EmptyFactoryState />;
   }
 
-  if (!activeFactory) return <div>No active factory</div>;
-
   return (
-    <ChatSessionBoundary>
-      <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
-        <NewPageContent activeFactory={activeFactory} />
-      </PageLayout>
-    </ChatSessionBoundary>
+    <ChatLayout
+      sidebar={<Sidebar />}
+      header={<ChatHeader />}
+      main={
+        <ChatSessionBoundary>
+          <NewPageContent activeFactory={activeFactory} />
+        </ChatSessionBoundary>
+      }
+    />
   );
 }
 
@@ -96,23 +96,27 @@ function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
     ? activeFactory.binding.gitBranch
     : selectedRepository(activeFactory)?.gitBranch;
   return (
-    <p className="m-0 flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
-      <FolderIcon size={13} className="shrink-0 text-icon2" />
-      <span className="shrink-0 font-medium">{activeFactory.name}</span>
+    <div className="flex max-w-full flex-col items-center gap-1 text-ui-sm text-icon3">
+      <div className="flex max-w-full items-center justify-center gap-1.5">
+        <FolderIcon size={13} className="shrink-0 text-icon2" />
+        <span className="shrink-0 font-medium">{activeFactory.name}</span>
+        {projectPath && (
+          <>
+            <span className="shrink-0 text-icon2">·</span>
+            <span className="min-w-0 truncate text-icon2" title={projectPath}>
+              {projectPath}
+            </span>
+          </>
+        )}
+      </div>
       {gitBranch && (
-        <>
-          <span className="shrink-0 text-icon2">·</span>
-          <span className="shrink-0">{gitBranch}</span>
-        </>
-      )}
-      {projectPath && (
-        <>
-          <span className="shrink-0 text-icon2">·</span>
-          <span className="min-w-0 truncate text-icon2" title={projectPath}>
-            {projectPath}
+        <div className="flex max-w-full items-center justify-center gap-1.5">
+          <GitBranch size={13} aria-hidden className="shrink-0 text-icon2" />
+          <span className="min-w-0 truncate" title={gitBranch}>
+            {gitBranch}
           </span>
-        </>
+        </div>
       )}
-    </p>
+    </div>
   );
 }

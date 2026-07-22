@@ -519,16 +519,15 @@ describe('MastraCode message rendering', () => {
     expect(streamRequests).toHaveBeenCalledTimes(1);
   });
 
-  it('shows required first-run Factory creation in the layout after empty backend hydration', async () => {
+  it('shows the first-run welcome screen after empty backend hydration', async () => {
     useAgentControllerHandlers();
     server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
 
     renderChat();
 
-    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
-    expect(factorySurface.closest('main')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory from local folder' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Close factory creation' })).not.toBeInTheDocument();
   });
 
   it('does not show first-run Factory creation after a remote Factory hydrates', async () => {
@@ -892,18 +891,15 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      const buildButton = await screen.findByRole('button', { name: 'Build' });
-      const planButton = screen.getByRole('button', { name: 'Plan' });
+      const modeSelector = await screen.findByRole('combobox', { name: 'Session mode' });
       const composer = screen.getByPlaceholderText(/Ask Mastra Code/);
 
       // Switcher lives after the composer in DOM order (below it), not in the header.
-      expect(composer.compareDocumentPosition(buildButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(composer.compareDocumentPosition(planButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(composer.compareDocumentPosition(modeSelector) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-      const header = document.querySelector('header');
-      expect(header).not.toBeNull();
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Plan' })).not.toBeInTheDocument();
+      const header = document.querySelector<HTMLElement>('header');
+      if (!header) throw new Error('Expected chat header');
+      expect(within(header).queryByRole('combobox', { name: 'Session mode' })).not.toBeInTheDocument();
     });
 
     // Detailed mode selection/switching behavior is specified in
@@ -914,7 +910,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       expect(screen.queryByLabelText('Toggle theme')).not.toBeInTheDocument();
     });
@@ -924,7 +920,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       const header = document.querySelector('header');
       expect(header).not.toBeNull();
@@ -943,7 +939,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       const header = document.querySelector<HTMLElement>('header');
       if (!header) throw new Error('Expected the chat header to be rendered');
@@ -957,7 +953,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       const statusLine = screen.getByLabelText('Session status line');
       expect(within(statusLine).queryByText('MastraCode Test')).not.toBeInTheDocument();

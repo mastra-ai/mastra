@@ -170,22 +170,22 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
-  it('given no factory, when visiting /new, then the create factory modal is shown', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
-        HttpResponse.json({
-          root: '/projects',
-          path: '/projects',
-          parent: null,
-          entries: [],
-        }),
-      ),
-    );
-
+  it('given no factory, when visiting /new, then the first-run welcome screen is shown', async () => {
     renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
 
-    const dialog = await screen.findByRole('dialog', { name: 'Create Factory' });
-    expect(within(dialog).getByLabelText('Factory name')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory from local folder' })).toBeInTheDocument();
+  });
+
+  it('given no factory, when local factory creation is opened, then the creation panel replaces the welcome screen', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
+
+    await user.click(await screen.findByRole('button', { name: 'Create factory from local folder' }));
+
+    const creationPanel = await screen.findByRole('region', { name: 'Create Factory' });
+    expect(within(creationPanel).getByRole('button', { name: 'Bind a local folder instead' })).toBeInTheDocument();
+    expect(screen.queryByText('Welcome to MastraCode')).not.toBeInTheDocument();
   });
 
   it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {

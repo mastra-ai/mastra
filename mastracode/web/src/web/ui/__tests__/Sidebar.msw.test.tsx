@@ -2,13 +2,14 @@
  * BDD coverage for the propless `Sidebar`.
  *
  * The sidebar consumes the domain contexts directly (`useActiveFactoryContext`,
- * focused chat hooks, `useOverlays`, `useToast`, `useWebAuth`) instead of a
+ * focused chat hooks, `useOverlays`, toast feedback, and `useWebAuth`) instead of a
  * drilled prop bag, so the spec drives it end-to-end: real fetch transport,
  * MSW at the network boundary, assertions on the requests the thread actions
  * produce.
  */
 import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
@@ -25,7 +26,6 @@ import { ActiveFactoryProvider } from '../domains/workspaces';
 import { SettingsNavigationProvider } from '../domains/settings/context/SettingsNavigationProvider';
 import { OverlaysProvider } from '../lib/overlays';
 import { Sidebar } from '../Sidebar';
-import { ToastProvider } from '../ui';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
 // service-level navigation helper is stubbed; `fetchAuthState` stays real.
@@ -214,18 +214,17 @@ function renderSidebar() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/chat']}>
       <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
-        <ToastProvider>
-          <ActiveFactoryProvider>
-            <ChatSessionProvider>
-              <OverlaysProvider>
-                <SettingsNavigationProvider>
-                  <Sidebar />
-                  <LocationProbe />
-                </SettingsNavigationProvider>
-              </OverlaysProvider>
-            </ChatSessionProvider>
-          </ActiveFactoryProvider>
-        </ToastProvider>
+        <ActiveFactoryProvider>
+          <ChatSessionProvider>
+            <OverlaysProvider>
+              <SettingsNavigationProvider>
+                <Sidebar />
+                <LocationProbe />
+              </SettingsNavigationProvider>
+            </OverlaysProvider>
+          </ChatSessionProvider>
+        </ActiveFactoryProvider>
+        <Toaster position="bottom-right" />
       </MainSidebarProvider>
     </MemoryRouter>,
   );
@@ -395,7 +394,7 @@ describe('Sidebar', () => {
       expect(within(factory).queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
     });
 
-    it('explains how Work and Review sessions are created when none exist', async () => {
+    it('hides role-based Factory session sections when none exist', async () => {
       seedFactory({
         ...githubProject,
         binding: {
@@ -410,8 +409,8 @@ describe('Sidebar', () => {
       renderSidebar();
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
-      expect(within(factory).getByText('Work sessions appear when work starts.')).toBeInTheDocument();
-      expect(within(factory).getByText('Review sessions appear when a PR review starts.')).toBeInTheDocument();
+      expect(within(factory).queryByRole('region', { name: 'Work Sessions' })).not.toBeInTheDocument();
+      expect(within(factory).queryByRole('region', { name: 'Review Sessions' })).not.toBeInTheDocument();
     });
 
     it('renders the User Sessions section and no thread list', async () => {
