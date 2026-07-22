@@ -325,6 +325,10 @@ const githubStub = {
     },
   },
   versionControl: {
+    getRepositoryAccess: vi.fn(async ({ repositoryId }: { orgId: string; repositoryId: string }) => ({
+      cloneUrl: `https://github.com/octo/hello.git`,
+      authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
+    })),
     listPullRequests: async (input: ListPullRequestsInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenPullRequests(
@@ -651,6 +655,7 @@ beforeEach(() => {
   pushBranch.mockClear();
   createPullRequest.mockClear();
   addIssueLabels.mockClear();
+  githubStub.versionControl.getRepositoryAccess.mockClear();
   listRepoOpenIssues.mockClear();
   listRepoOpenPullRequests.mockClear();
 });
@@ -1158,7 +1163,15 @@ describe('ensure (materialize)', () => {
       projectRepositoryId: 'p1',
     });
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
+    expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
+      orgId: 'org1',
+      repositoryId: 'repository-octo/hello',
+    });
+    expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
     expect(materializeRepo).toHaveBeenCalledOnce();
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
+    );
     // A per-user sandbox binding row was created for the caller.
     expect(tables.sandboxes).toHaveLength(1);
     expect(tables.sandboxes[0]).toMatchObject({ projectRepositoryId: 'p1', userId: 'u1' });
