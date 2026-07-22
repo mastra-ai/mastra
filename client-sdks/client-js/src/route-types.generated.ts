@@ -2617,6 +2617,7 @@ type Shared_Type_116 = {
   expectedTrajectory?: unknown | undefined;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  scorerIds?: string[] | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -17021,6 +17022,8 @@ export type PostDatasetsDatasetIdItems_Body = {
   expectedTrajectory?: (Shared_Type_131 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  /** IDs of scorers selected for this item */
+  scorerIds?: string[] | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17072,6 +17075,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     expectedTrajectory?: (Shared_Type_131 | undefined) | null;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: Shared_Type_114[] | undefined;
+    scorerIds?: string[] | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -17191,6 +17195,8 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   expectedTrajectory?: (Shared_Type_131 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  /** IDs of scorers selected for this item */
+  scorerIds?: (string[] | undefined) | null;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17310,6 +17316,7 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     expectedTrajectory?: unknown | undefined;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: Shared_Type_114[] | undefined;
+    scorerIds?: string[] | undefined;
     metadata?:
       | {
           [key: string]: unknown;
