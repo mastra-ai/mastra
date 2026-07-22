@@ -73,7 +73,12 @@ export function SignalsOverviewPage() {
     <>
       <AgentSelector entities={entities} selectedEntityId={entity.entityId} onEntityChange={setSelectedEntityId} />
       {signalNames.length >= 2 ? (
-        <SankeySignals key={entity.entityId} entityId={entity.entityId} entityType="agent" signalNames={signalNames} />
+        <SankeySignals
+          key={`${entity.entityId}:${signalNames.join(',')}`}
+          entityId={entity.entityId}
+          entityType="agent"
+          signalNames={signalNames}
+        />
       ) : (
         <section
           className="m-4 rounded-lg border border-border1 bg-surface2 p-6 lg:m-6"
