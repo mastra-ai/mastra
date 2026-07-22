@@ -18,6 +18,7 @@ import { InitialFactoryStep } from './InitialFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { useNavigate } from 'react-router';
+import '@fontsource-variable/mona-sans/standard.css';
 
 export type Step = 'initial' | 'vcs' | 'project-management';
 
@@ -134,36 +135,41 @@ export function EmptyFactoryState() {
     }
   };
 
+  const stepIndex = ['initial', 'vcs', 'project-management'].indexOf(step);
+
   return (
-    <main className="relative min-h-dvh overflow-hidden bg-surface1 text-neutral6">
-      <FactoryHalftoneField variant="backdrop" />
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-6 py-8 sm:px-10 lg:px-16">
-        <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col text-center">
-          <div className="pt-2 sm:pt-4">
-            <ol className="mb-6 flex justify-center gap-2" aria-label="Factory setup progress">
+    <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
+      <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
+        <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
+          <div className="w-full max-w-2xl">
+            <ol className="mb-9 flex gap-2" aria-label="Factory setup progress">
               {(['initial', 'vcs', 'project-management'] as const).map((item, index) => (
                 <li
                   key={item}
                   aria-current={step === item ? 'step' : undefined}
-                  className={`h-1 w-14 rounded-full ${index <= ['initial', 'vcs', 'project-management'].indexOf(step) ? 'bg-accent1' : 'bg-surface4'}`}
+                  className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-surface4'}`}
                 >
                   <span className="sr-only">Step {index + 1}</span>
                 </li>
               ))}
             </ol>
-            <h1 className="mx-auto max-w-2xl text-3xl leading-tight font-semibold tracking-[-0.035em] text-balance sm:text-4xl lg:text-5xl">
+
+            <h1 className="max-w-xl text-[clamp(2rem,3.9vw,3.25rem)] leading-[1.1] font-[520] tracking-[0.01em] text-balance [font-stretch:112%]">
               {STEP_META[step].title}
             </h1>
             {STEP_META[step].description && (
-              <Txt as="p" variant="ui-lg" className="mx-auto mt-6 max-w-2xl leading-7 text-neutral3 sm:text-lg">
+              <Txt
+                as="p"
+                variant="ui-lg"
+                className="mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em] text-neutral3"
+              >
                 {STEP_META[step].description}
               </Txt>
             )}
-          </div>
-          <div className="flex flex-1 items-start justify-center pt-16">
+
             <div
               key={step}
-              className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none"
+              className="mt-11 w-full animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none"
             >
               {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
               {step === 'vcs' && (
@@ -198,6 +204,10 @@ export function EmptyFactoryState() {
             </div>
           </div>
         </section>
+
+        <div className="hidden lg:grid">
+          <FactoryHalftoneField />
+        </div>
       </div>
     </main>
   );
