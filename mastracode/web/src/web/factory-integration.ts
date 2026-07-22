@@ -23,6 +23,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { AuditEmitter } from './audit/domain.js';
+import type { ParsedGithubWebhook } from './github/webhook.js';
 import type { AuditEventRow } from './storage/domains/audit/base.js';
 import type { StateSigner } from './state-signing.js';
 import type { IntegrationStorageHandle } from './storage/domains/integrations/base.js';
@@ -30,9 +31,36 @@ import type { Intake } from './capabilities/intake.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import type { SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 
+export interface LinearIssueIngress {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+  state: string;
+  stateType: string;
+  priorityLabel: string;
+  assignee: string | null;
+  team: string | null;
+  labels: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
+  ingestGithubEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  ingestLinearIssues?: (input: {
+    orgId: string;
+    userId: string;
+    factoryProjectId: string;
+    issues: LinearIssueIngress[];
+  }) => Promise<unknown>;
+  revokeFactoryBindingsForProjectPath?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    projectPath: string;
+  }) => Promise<void>;
 }
 
 /**

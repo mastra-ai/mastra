@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -75,12 +75,20 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
   });
 }
 
+type TransitionWorkItemVariables = {
+  item: WorkItem;
+  board: 'work' | 'review';
+  stage: string;
+};
+
 export function useTransitionWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItems(factoryProjectId);
-  return useMutation({
-    mutationFn: ({ item, board, stage }: { item: WorkItem; board: 'work' | 'review'; stage: string }) =>
+  const mutationKey = ['factory', 'transition-work-item', factoryProjectId] as const;
+  const mutation = useMutation({
+    mutationKey,
+    mutationFn: ({ item, board, stage }: TransitionWorkItemVariables) =>
       transitionWorkItem(baseUrl, factoryProjectId!, item.id, {
         board,
         stage: stage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
@@ -90,20 +98,47 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       }),
     onMutate: async ({ item, stage }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
-      const previous = queryClient.getQueryData<WorkItem[]>(listKey);
+      const previousItem = queryClient.getQueryData<WorkItem[]>(listKey)?.find(candidate => candidate.id === item.id);
       queryClient.setQueryData<WorkItem[]>(listKey, existing =>
         (existing ?? []).map(candidate => (candidate.id === item.id ? { ...candidate, stages: [stage] } : candidate)),
       );
-      return { previous };
+      return { previousItem };
     },
-    onError: (_error, _variables, context) => {
-      if (context?.previous) queryClient.setQueryData(listKey, context.previous);
+    onError: (_error, variables, context) => {
+      const previousItem = context?.previousItem;
+      if (!previousItem) return;
+      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
+        (existing ?? []).map(item => {
+          if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
+          return previousItem;
+        }),
+      );
     },
-    onSuccess: (result, _variables, context) => {
-      if (result.status === 'rejected' && context?.previous) queryClient.setQueryData(listKey, context.previous);
+    onSuccess: (result, variables, context) => {
+      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
+        (existing ?? []).map(item => {
+          if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
+          if (result.status === 'rejected') return context?.previousItem ?? item;
+          if (result.revision <= item.revision) return item;
+          return { ...item, stages: [result.stage], revision: result.revision };
+        }),
+      );
       void queryClient.invalidateQueries({ queryKey: listKey });
     },
   });
+  const pendingItemIds = useMutationState({
+    filters: { mutationKey, status: 'pending' },
+    select: pending => {
+      const variables = pending.state.variables;
+      return isTransitionWorkItemVariables(variables) ? variables.item.id : undefined;
+    },
+  }).filter(id => id !== undefined);
+  return { ...mutation, pendingItemIds };
+}
+
+function isTransitionWorkItemVariables(value: unknown): value is TransitionWorkItemVariables {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return 'item' in value && typeof value.item === 'object' && value.item !== null && 'id' in value.item;
 }
 
 /** Remove a work item from the board, dropping it from the cache optimistically. */

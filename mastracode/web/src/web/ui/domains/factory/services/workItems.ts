@@ -125,12 +125,12 @@ export async function createWorkItem(
 
 export async function transitionWorkItem(
   baseUrl: string,
-  githubProjectId: string,
+  factoryProjectId: string,
   id: string,
   input: { board: FactoryBoard; stage: FactoryStage; expectedRevision: number; requestId: string; cause: string },
 ): Promise<FactoryTransitionResult> {
   const res = await fetch(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
     {
       method: 'POST',
       headers: { Accept: 'application/json', 'content-type': 'application/json' },
@@ -182,11 +182,11 @@ export interface StartFactoryRunPrepared {
 
 export async function startFactoryRun(
   baseUrl: string,
-  githubProjectId: string,
+  factoryProjectId: string,
   input: StartFactoryRunRequest,
 ): Promise<StartFactoryRunPrepared> {
   const data = await requestJson<{ prepared: StartFactoryRunPrepared }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/runs/start`,
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/runs/start`,
     { method: 'POST', body: JSON.stringify(input) },
   );
   return data.prepared;

@@ -1,6 +1,8 @@
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleLeaf,
+  FactoryLinearEventName,
+  FactoryLinearRuleLeaf,
   FactoryRuleBoard,
   FactoryRuleHandler,
   FactoryRuleSource,
@@ -45,6 +47,13 @@ export function resolveFactoryGithubRule(
   event: FactoryGithubEventName,
 ): FactoryGithubRuleLeaf['onEvent'] {
   return rules.github[event]?.onEvent;
+}
+
+export function resolveFactoryLinearRule(
+  rules: FactoryRules,
+  event: FactoryLinearEventName,
+): FactoryLinearRuleLeaf['onEvent'] {
+  return rules.linear[event]?.onEvent;
 }
 
 export type ResolvedFactoryToolRule = FactoryRuleHandler<FactoryToolResultRuleContext>;

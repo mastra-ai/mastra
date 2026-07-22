@@ -65,10 +65,11 @@ export interface FactoryRuleIngressRecord {
 export interface CommitFactoryRuleEvaluationInput {
   orgId: string;
   factoryProjectId: string;
-  workItemId: string;
+  workItemId: string | null;
   ingress: { identity: string; triggerType: string };
   ruleSetVersion: string;
-  expectedRevision: number;
+  expectedRevision: number | null;
+  actor: Record<string, unknown> | null;
   outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string };
   decisions: Record<string, unknown>[];
   causalChain: Array<{ ingressId: string; decisionType: string }>;
@@ -92,9 +93,9 @@ export interface FactoryToolResultCursorRecord {
 export interface FactoryRuleEvaluationRecord {
   id: string;
   ingressId: string;
-  workItemId: string;
+  workItemId: string | null;
   ruleSetVersion: string;
-  expectedRevision: number;
+  expectedRevision: number | null;
   outcome: 'accepted' | 'rejected';
   code: string | null;
   reason: string | null;
@@ -104,16 +105,30 @@ export interface FactoryRuleEvaluationRecord {
 
 export type FactoryDispatchStatus = 'pending' | 'leased' | 'retry' | 'succeeded' | 'failed';
 
+export interface FactoryDeferredDecisionPageInput {
+  orgId: string;
+  factoryProjectId: string;
+  statuses?: FactoryDispatchStatus[];
+  before?: { createdAt: Date; id: string };
+  limit: number;
+}
+
+export interface FactoryDeferredDecisionPage {
+  decisions: FactoryDeferredDecisionRecord[];
+  hasMore: boolean;
+}
+
 export interface FactoryDeferredDecisionRecord {
   id: string;
   orgId: string;
   factoryProjectId: string;
   evaluationId: string;
-  workItemId: string;
+  workItemId: string | null;
   idempotencyKey: string;
   effectOrdinal: number;
   effectHash: string;
   causalChain: Array<{ ingressId: string; decisionType: string }>;
+  actor: Record<string, unknown> | null;
   decision: Record<string, unknown>;
   status: FactoryDispatchStatus;
   attempts: number;
@@ -516,9 +531,9 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
     columns: {
       id: { type: 'uuid-pk' },
       ingress_id: { type: 'text' },
-      work_item_id: { type: 'text' },
+      work_item_id: { type: 'text', nullable: true },
       rule_set_version: { type: 'text' },
-      expected_revision: { type: 'integer' },
+      expected_revision: { type: 'integer', nullable: true },
       outcome: { type: 'text' },
       code: { type: 'text', nullable: true },
       reason: { type: 'text', nullable: true },
@@ -533,11 +548,12 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       org_id: { type: 'text' },
       factory_project_id: { type: 'text' },
       evaluation_id: { type: 'text' },
-      work_item_id: { type: 'text' },
+      work_item_id: { type: 'text', nullable: true },
       idempotency_key: { type: 'text' },
       effect_ordinal: { type: 'integer' },
       effect_hash: { type: 'text' },
       causal_chain: { type: 'json' },
+      actor: { type: 'json', nullable: true },
       decision: { type: 'json' },
       status: { type: 'text' },
       attempts: { type: 'integer' },
@@ -642,11 +658,12 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     orgId: row.org_id,
     factoryProjectId: String(row.factory_project_id),
     evaluationId: String(row.evaluation_id),
-    workItemId: String(row.work_item_id),
+    workItemId: row.work_item_id === null || row.work_item_id === undefined ? null : String(row.work_item_id),
     idempotencyKey: String(row.idempotency_key),
     effectOrdinal: Number(row.effect_ordinal),
     effectHash: String(row.effect_hash),
     causalChain: (row.causal_chain as FactoryDeferredDecisionRecord['causalChain']) ?? [],
+    actor: (row.actor as Record<string, unknown> | null) ?? null,
     decision: row.decision as Record<string, unknown>,
     status: row.status as FactoryDispatchStatus,
     attempts: Number(row.attempts),
@@ -975,6 +992,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 effect_ordinal: index,
                 effect_hash: factoryDecisionHash(decision),
                 causal_chain: input.causalChain,
+                actor: null,
                 decision,
                 status: 'pending',
                 attempts: 0,
@@ -1000,72 +1018,135 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult> {
-    return this.storage.withTransaction(async ops => {
-      const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
-        org_id: input.orgId,
-        factory_project_id: input.factoryProjectId,
-        identity: input.ingress.identity,
-      });
-      if (prior) return { status: 'replayed' as const, result: prior.result as Record<string, unknown> };
-      const itemRow = await ops.findOne<WorkItemDbRow>('work_items', {
-        id: input.workItemId,
-        org_id: input.orgId,
-        factory_project_id: input.factoryProjectId,
-      });
-      if (!itemRow) return { status: 'missing' as const };
-      const item = toRow(itemRow);
-      const stale = item.revision !== input.expectedRevision;
-      const outcome = stale ? 'rejected' : input.outcome.status;
-      const code = stale ? 'stale' : (input.outcome.code ?? null);
-      const reason = stale
-        ? 'The work item changed before this rule evaluation committed.'
-        : (input.outcome.reason ?? null);
-      const decisions = outcome === 'accepted' ? input.decisions : [];
-      const result = { status: outcome, itemId: item.id, revision: item.revision, code, reason, decisions };
-      const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
-        org_id: input.orgId,
-        factory_project_id: input.factoryProjectId,
-        identity: input.ingress.identity,
-        trigger_type: input.ingress.triggerType,
-        transition_id: input.ingress.identity,
-        result,
-        created_at: input.now,
-      });
-      const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
-        ingress_id: ingress.id,
-        work_item_id: item.id,
-        rule_set_version: input.ruleSetVersion,
-        expected_revision: input.expectedRevision,
-        outcome,
-        code,
-        reason,
-        causal_chain: input.causalChain,
-        created_at: input.now,
-      });
-      for (const [effectOrdinal, decision] of decisions.entries()) {
-        await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
+    const commit = () =>
+      this.storage.withTransaction<CommitFactoryRuleEvaluationResult>(async ops => {
+        const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
-          evaluation_id: evaluation.id,
-          work_item_id: item.id,
-          idempotency_key: String(decision.idempotencyKey),
-          effect_ordinal: effectOrdinal,
-          effect_hash: factoryDecisionHash(decision),
-          causal_chain: input.causalChain,
-          decision,
-          status: 'pending',
-          attempts: 0,
-          available_at: input.now,
-          lease_owner: null,
-          lease_expires_at: null,
-          last_error: null,
-          completed_at: null,
-          created_at: new Date(input.now.getTime() + effectOrdinal),
-          updated_at: input.now,
+          identity: input.ingress.identity,
         });
-      }
-      return { status: 'committed' as const, result };
-    });
+        if (prior) {
+          const result = prior.result as Record<string, unknown>;
+          const decisions = Array.isArray(result.decisions) ? result.decisions : [];
+          const evaluation = await ops.findOne<GovernanceDbRow>('factory_rule_evaluations', { ingress_id: prior.id });
+          for (const decision of decisions) {
+            if (
+              !evaluation ||
+              !decision ||
+              typeof decision !== 'object' ||
+              (decision as Record<string, unknown>).type !== 'upsertLinkedWorkItem' ||
+              typeof (decision as Record<string, unknown>).sourceKey !== 'string' ||
+              typeof (decision as Record<string, unknown>).idempotencyKey !== 'string'
+            ) {
+              continue;
+            }
+            const materialization = decision as Record<string, unknown> & { sourceKey: string; idempotencyKey: string };
+            const item = await ops.findOne<WorkItemDbRow>('work_items', {
+              org_id: input.orgId,
+              factory_project_id: input.factoryProjectId,
+              source_key: materialization.sourceKey,
+            });
+            if (item) continue;
+            await ops.updateAtomic<GovernanceDbRow>(
+              'factory_deferred_decisions',
+              {
+                org_id: input.orgId,
+                factory_project_id: input.factoryProjectId,
+                evaluation_id: evaluation.id,
+                idempotency_key: materialization.idempotencyKey,
+              },
+              current =>
+                current.status === 'succeeded'
+                  ? {
+                      status: 'retry',
+                      attempts: 0,
+                      available_at: input.now,
+                      lease_owner: null,
+                      lease_expires_at: null,
+                      last_error: null,
+                      completed_at: null,
+                      updated_at: input.now,
+                    }
+                  : null,
+            );
+          }
+          return { status: 'replayed' as const, result };
+        }
+        const itemRow = input.workItemId
+          ? await ops.findOne<WorkItemDbRow>('work_items', {
+              id: input.workItemId,
+              org_id: input.orgId,
+              factory_project_id: input.factoryProjectId,
+            })
+          : null;
+        if (input.workItemId !== null && !itemRow) return { status: 'missing' as const };
+        const item = itemRow ? toRow(itemRow) : null;
+        const stale = item !== null && item.revision !== input.expectedRevision;
+        const outcome = stale ? 'rejected' : input.outcome.status;
+        const code = stale ? 'stale' : (input.outcome.code ?? null);
+        const reason = stale
+          ? 'The work item changed before this rule evaluation committed.'
+          : (input.outcome.reason ?? null);
+        const decisions = outcome === 'accepted' ? input.decisions : [];
+        const result = {
+          status: outcome,
+          itemId: item?.id ?? null,
+          revision: item?.revision ?? null,
+          code,
+          reason,
+          decisions,
+        };
+        const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
+          org_id: input.orgId,
+          factory_project_id: input.factoryProjectId,
+          identity: input.ingress.identity,
+          trigger_type: input.ingress.triggerType,
+          transition_id: input.ingress.identity,
+          result,
+          created_at: input.now,
+        });
+        const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
+          ingress_id: ingress.id,
+          work_item_id: item?.id ?? null,
+          rule_set_version: input.ruleSetVersion,
+          expected_revision: input.expectedRevision,
+          outcome,
+          code,
+          reason,
+          causal_chain: input.causalChain,
+          created_at: input.now,
+        });
+        for (const [effectOrdinal, decision] of decisions.entries()) {
+          await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            evaluation_id: evaluation.id,
+            work_item_id: item?.id ?? null,
+            idempotency_key: String(decision.idempotencyKey),
+            effect_ordinal: effectOrdinal,
+            effect_hash: factoryDecisionHash(decision),
+            causal_chain: input.causalChain,
+            actor: input.actor,
+            decision,
+            status: 'pending',
+            attempts: 0,
+            available_at: input.now,
+            lease_owner: null,
+            lease_expires_at: null,
+            last_error: null,
+            completed_at: null,
+            created_at: new Date(input.now.getTime() + effectOrdinal),
+            updated_at: input.now,
+          });
+        }
+        return { status: 'committed' as const, result };
+      });
+    return this.storage.withDistributedLock
+      ? this.storage.withDistributedLock(
+          `factory-ingress:${input.orgId}:${input.factoryProjectId}:${input.ingress.identity}`,
+          commit,
+        )
+      : commit();
   }
 
   async getToolResultCursor(
@@ -1113,6 +1194,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     ).map(toDeferredDecision);
   }
 
+  /** Read a bounded newest-first status page without exposing another tenant. */
+  async listDeferredDecisionPage(input: FactoryDeferredDecisionPageInput): Promise<FactoryDeferredDecisionPage> {
+    const rows = await this.#db.findMany<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        ...(input.statuses ? { status: { in: input.statuses } } : {}),
+      },
+      {
+        orderBy: [
+          ['created_at', 'desc'],
+          ['id', 'desc'],
+        ],
+        limit: input.limit + 1,
+        ...(input.before ? { cursor: { values: [input.before.createdAt, input.before.id] } } : {}),
+      },
+    );
+    return { decisions: rows.slice(0, input.limit).map(toDeferredDecision), hasMore: rows.length > input.limit };
+  }
+
   async claimDeferredDecisions(input: FactoryLeaseClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
     return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision);
   }
@@ -1132,6 +1234,35 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
     return row ? toDeferredDecision(row) : null;
+  }
+
+  /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */
+  async retryDeferredDecision(
+    orgId: string,
+    factoryProjectId: string,
+    decisionId: string,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let retried = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+      current => {
+        if (current.status !== 'failed') return null;
+        retried = true;
+        return {
+          status: 'retry',
+          attempts: 0,
+          available_at: now,
+          lease_owner: null,
+          lease_expires_at: null,
+          last_error: null,
+          completed_at: null,
+          updated_at: now,
+        };
+      },
+    );
+    return retried && row ? toDeferredDecision(row) : null;
   }
 
   /** Resolve exact active agent authority; partial session matches never authorize. */

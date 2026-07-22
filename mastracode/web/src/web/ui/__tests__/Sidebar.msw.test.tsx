@@ -394,7 +394,7 @@ describe('Sidebar', () => {
       expect(within(factory).queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
     });
 
-    it('explains how Work and Review sessions are created when none exist', async () => {
+    it('hides role-based Factory session sections when none exist', async () => {
       seedFactory({
         ...githubProject,
         binding: {
@@ -409,8 +409,8 @@ describe('Sidebar', () => {
       renderSidebar();
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
-      expect(within(factory).getByText('Work sessions appear when work starts.')).toBeInTheDocument();
-      expect(within(factory).getByText('Review sessions appear when a PR review starts.')).toBeInTheDocument();
+      expect(within(factory).queryByRole('region', { name: 'Work Sessions' })).not.toBeInTheDocument();
+      expect(within(factory).queryByRole('region', { name: 'Review Sessions' })).not.toBeInTheDocument();
     });
 
     it('renders the User Sessions section and no thread list', async () => {
