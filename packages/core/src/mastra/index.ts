@@ -4595,8 +4595,10 @@ export class Mastra<
     };
     def.graph.forEach(visit);
 
-    const registeredAgents = new Set(Object.keys(this.listAgents() ?? {}));
-    const registeredTools = new Set(Object.keys(this.listTools() ?? {}));
+    const registeredAgents = new Set(
+      Object.entries(this.listAgents() ?? {}).flatMap(([key, agent]) => [key, agent.id]),
+    );
+    const registeredTools = new Set(Object.entries(this.listTools() ?? {}).flatMap(([key, tool]) => [key, tool.id]));
     const registeredWorkflows = new Set(Object.keys(this.#workflows as Record<string, AnyWorkflow>));
     const pendingWorkflows = opts?.allowPendingWorkflowIds ?? new Set<string>();
     const errors: string[] = [];

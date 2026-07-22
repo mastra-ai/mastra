@@ -20,8 +20,19 @@ const mappingStepSchema = z.object({
   id: z.string().min(1),
   mapConfig: z.string().min(1),
 });
+const mappingStepInputSchema = z.object({
+  type: z.literal('mapping'),
+  id: z.string().min(1),
+  mapConfig: z.union([z.string().min(1), jsonSchema]).optional(),
+  output: jsonSchema.optional(),
+});
 const parallelChildSchema = z.union([agentStepSchema, toolStepSchema, mappingStepSchema]);
+const parallelChildInputSchema = z.union([agentStepSchema, toolStepSchema, mappingStepInputSchema]);
 const parallelStepSchema = z.object({ type: z.literal('parallel'), steps: z.array(parallelChildSchema).min(1) });
+const parallelStepInputSchema = z.object({
+  type: z.literal('parallel'),
+  steps: z.array(parallelChildInputSchema).min(1),
+});
 const foreachStepSchema = z.object({
   type: z.literal('foreach'),
   step: z.union([agentStepSchema, toolStepSchema]),
@@ -46,6 +57,47 @@ const workflowStepSchema = z.discriminatedUnion('type', [
   sleepStepSchema,
   sleepUntilStepSchema,
 ]);
+const workflowStepInputSchema = z.discriminatedUnion('type', [
+  agentStepSchema,
+  toolStepSchema,
+  mappingStepInputSchema,
+  parallelStepInputSchema,
+  foreachStepSchema,
+  sleepStepSchema,
+  sleepUntilStepSchema,
+]);
+
+function normalizeWorkflowStep(step: unknown): unknown {
+  if (!step || typeof step !== 'object' || !('type' in step)) return step;
+
+  if (step.type === 'agent' && !('agentId' in step) && 'agent' in step && typeof step.agent === 'string') {
+    return { ...step, agentId: step.agent };
+  }
+
+  if (step.type === 'mapping') {
+    const mapConfig =
+      'mapConfig' in step && step.mapConfig !== undefined
+        ? step.mapConfig
+        : 'output' in step && step.output !== undefined
+          ? { output: step.output }
+          : undefined;
+    return {
+      ...step,
+      mapConfig:
+        typeof mapConfig === 'string' ? mapConfig : mapConfig === undefined ? mapConfig : JSON.stringify(mapConfig),
+    };
+  }
+
+  if (step.type === 'parallel' && 'steps' in step && Array.isArray(step.steps)) {
+    return { ...step, steps: step.steps.map(normalizeWorkflowStep) };
+  }
+
+  return step;
+}
+
+function parseWorkflowStep(step: unknown) {
+  return workflowStepSchema.safeParse(normalizeWorkflowStep(step));
+}
 
 export interface WorkflowDraftToolStore {
   getDraft: () => WorkflowDraft;
@@ -87,31 +139,46 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
       inputSchema: z.object({
         inputSchema: jsonSchema,
         outputSchema: jsonSchema,
-        stateSchema: jsonSchema.optional(),
-        requestContextSchema: jsonSchema.optional(),
+        stateSchema: jsonSchema.nullish(),
+        requestContextSchema: jsonSchema.nullish(),
       }),
       outputSchema: resultSchema,
       execute: async (input: {
         inputSchema: WorkflowDraft['inputSchema'];
         outputSchema: WorkflowDraft['outputSchema'];
-        stateSchema?: WorkflowDraft['stateSchema'];
-        requestContextSchema?: WorkflowDraft['requestContextSchema'];
-      }) => executeMutation({ type: 'set-schemas', ...input }),
+        stateSchema?: WorkflowDraft['stateSchema'] | null;
+        requestContextSchema?: WorkflowDraft['requestContextSchema'] | null;
+      }) =>
+        executeMutation({
+          type: 'set-schemas',
+          ...input,
+          stateSchema: input.stateSchema ?? undefined,
+          requestContextSchema: input.requestContextSchema ?? undefined,
+        }),
     }),
     'add-workflow-step': createTool({
       id: 'add-workflow-step',
       description:
-        'Add one supported static workflow step: agent, tool, mapping, parallel, foreach, sleep, or sleepUntil.',
-      inputSchema: z.object({ step: workflowStepSchema, index: z.number().int().nonnegative().optional() }),
+        'Add one supported static workflow step. Agent steps must use { type: "agent", id, agentId }; use agentId, never agent. Tool steps must use { type: "tool", id, toolId }. Also supports mapping, parallel, foreach, sleep, and sleepUntil.',
+      inputSchema: z.object({ step: workflowStepInputSchema, index: z.number().int().nonnegative().optional() }),
       outputSchema: resultSchema,
-      execute: async ({ step, index }) => executeMutation({ type: 'add-step', step, index }),
+      execute: async ({ step, index }) => {
+        const parsedStep = parseWorkflowStep(step);
+        if (!parsedStep.success) return { success: false, error: z.prettifyError(parsedStep.error) };
+        return executeMutation({ type: 'add-step', step: parsedStep.data, index });
+      },
     }),
     'update-workflow-step': createTool({
       id: 'update-workflow-step',
-      description: 'Update an existing workflow step by id using a supported static step definition.',
-      inputSchema: z.object({ stepId: z.string().min(1), step: workflowStepSchema }),
+      description:
+        'Update an existing workflow step by id. Agent steps must use agentId, never agent; tool steps must use toolId.',
+      inputSchema: z.object({ stepId: z.string().min(1), step: workflowStepInputSchema }),
       outputSchema: resultSchema,
-      execute: async ({ stepId, step }) => executeMutation({ type: 'update-step', stepId, step }),
+      execute: async ({ stepId, step }) => {
+        const parsedStep = parseWorkflowStep(step);
+        if (!parsedStep.success) return { success: false, error: z.prettifyError(parsedStep.error) };
+        return executeMutation({ type: 'update-step', stepId, step: parsedStep.data });
+      },
     }),
     'remove-workflow-step': createTool({
       id: 'remove-workflow-step',

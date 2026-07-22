@@ -77,7 +77,7 @@ function buildMastra() {
     logger: false,
     storage,
     tools: { 'echo-tool': echoTool, 'inc-tool': incTool } as any,
-    agents: { summarizer: summarizerAgent } as any,
+    agents: { summarizerRegistration: summarizerAgent } as any,
   });
 
   return mastra;

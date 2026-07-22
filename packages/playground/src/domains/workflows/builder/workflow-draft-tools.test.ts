@@ -29,9 +29,65 @@ describe('workflow draft client tools', () => {
       await executeTool(tools['add-workflow-step'], {
         step: { type: 'tool', id: 'fetch-data', toolId: 'report-data' },
       });
+      await executeTool(tools['add-workflow-step'], {
+        step: { type: 'agent', id: 'summarize-data', agent: 'summary-agent', input: { prompt: '{{input.prompt}}' } },
+      });
 
       expect(draft.id).toBe('daily-report');
-      expect(draft.graph).toEqual([{ type: 'tool', id: 'fetch-data', toolId: 'report-data' }]);
+      expect(draft.graph).toEqual([
+        { type: 'tool', id: 'fetch-data', toolId: 'report-data' },
+        { type: 'agent', id: 'summarize-data', agentId: 'summary-agent' },
+      ]);
+    });
+
+    it('normalizes object mapping configuration emitted by providers', async () => {
+      let draft = createWorkflowDraft('test-workflow');
+      const tools = createWorkflowDraftTools({
+        getDraft: () => draft,
+        setDraft: nextDraft => {
+          draft = nextDraft;
+        },
+      });
+
+      const result = await executeTool(tools['add-workflow-step'], {
+        step: {
+          type: 'mapping',
+          id: 'test-output',
+          mapConfig: { output: { ok: true } },
+        },
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(draft.graph).toEqual([
+        {
+          type: 'mapping',
+          id: 'test-output',
+          mapConfig: JSON.stringify({ output: { ok: true } }),
+        },
+      ]);
+    });
+  });
+
+  describe('when the assistant omits optional schemas with null values', () => {
+    it('normalizes them to omitted draft schemas', async () => {
+      let draft = createWorkflowDraft('daily-report');
+      const tools = createWorkflowDraftTools({
+        getDraft: () => draft,
+        setDraft: nextDraft => {
+          draft = nextDraft;
+        },
+      });
+
+      const result = await executeTool(tools['set-workflow-schemas'], {
+        inputSchema: {},
+        outputSchema: {},
+        stateSchema: null,
+        requestContextSchema: null,
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(draft.stateSchema).toBeUndefined();
+      expect(draft.requestContextSchema).toBeUndefined();
     });
   });
 

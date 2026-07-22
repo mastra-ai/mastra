@@ -2662,6 +2662,64 @@ describe('Agent.processStreamResponse client-tool synthetic chunks', () => {
     });
   });
 
+  it('uses streamed tool arguments when the final tool-call chunk has empty arguments', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent-id');
+    const onToolCall = vi.fn().mockResolvedValue({ ok: true });
+
+    const stream = makeStreamingResponse([
+      { type: 'step-start', runId: 'run-streamed-call', payload: { messageId: 'msg-streamed-call' } },
+      {
+        type: 'tool-call-input-streaming-start',
+        runId: 'run-streamed-call',
+        payload: {
+          toolCallId: 'tool-call-streamed',
+          toolName: 'testTool',
+          args: {},
+        },
+      },
+      {
+        type: 'tool-call-delta',
+        runId: 'run-streamed-call',
+        payload: {
+          toolCallId: 'tool-call-streamed',
+          toolName: 'testTool',
+          argsTextDelta: '{"step":{"type":"agent","id":"answer","agentId":"support-agent"}}',
+        },
+      },
+      {
+        type: 'tool-call',
+        runId: 'run-streamed-call',
+        payload: {
+          toolCallId: 'tool-call-streamed',
+          toolName: 'testTool',
+          args: {},
+        },
+      },
+      { type: 'finish', runId: 'run-streamed-call', payload: { stepResult: { reason: 'tool-calls' } } },
+    ]).body!;
+
+    const updates: any[] = [];
+    await (agent as any).processChatResponse_vNext({
+      stream,
+      update: (update: any) => updates.push(update),
+      onToolCall,
+      lastMessage: undefined,
+    });
+
+    expect(onToolCall).toHaveBeenCalledWith({
+      toolCall: expect.objectContaining({
+        toolCallId: 'tool-call-streamed',
+        toolName: 'testTool',
+        args: { step: { type: 'agent', id: 'answer', agentId: 'support-agent' } },
+      }),
+    });
+    expect(updates.at(-1).message.toolInvocations[0]).toMatchObject({
+      state: 'result',
+      args: { step: { type: 'agent', id: 'answer', agentId: 'support-agent' } },
+      result: { ok: true },
+    });
+  });
+
   it('does not treat final tool-call chunks as streaming partial tool calls', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent-id');
 
