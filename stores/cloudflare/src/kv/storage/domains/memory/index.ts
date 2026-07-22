@@ -17,9 +17,11 @@ import {
   normalizePerPage,
   calculatePagination,
   serializeDate,
+  storageMessageMatchesMetadataFilter,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
 import type { CloudflareDomainConfig } from '../../types';
@@ -829,6 +831,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     const perPage = normalizePerPage(perPageInput, 40);
     // When perPage is false (get all), ignore page offset
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       if (page < 0) {
@@ -901,6 +904,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         filteredThreadMessages,
         msg => new Date(msg.createdAt),
         filter?.dateRange,
+      );
+
+      filteredThreadMessages = filteredThreadMessages.filter(message =>
+        storageMessageMatchesMetadataFilter(message.content, metadataFilter),
       );
 
       // Get total count for pagination
@@ -1006,15 +1013,16 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       );
       const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
-      // Calculate hasMore based on pagination window
-      // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
-        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+        finalMessages
+          .filter(message => message.threadId && threadIdSet.has(message.threadId))
+          .map(message => message.id),
       );
-      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + paginatedCount < total;
+      const hasMore =
+        perPageInput !== false &&
+        (metadataFilter || returnedThreadMessageIds.size < total) &&
+        offset + paginatedCount < total;
 
       return {
         messages: finalMessages,

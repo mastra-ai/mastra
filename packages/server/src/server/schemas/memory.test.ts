@@ -167,6 +167,19 @@ describe('Memory Schema Query Parsing', () => {
         }
       });
 
+      it('should parse shallow scalar metadata filters from JSON strings', () => {
+        const metadata = { category: 'billing', priority: 2, active: true, deletedAt: null };
+        const result = listMessagesQuerySchema.parse({ filter: JSON.stringify({ metadata }) });
+        expect(result.filter).toEqual({ metadata });
+      });
+
+      it.each([
+        ['invalid key', { metadata: { 'bad-key': 'nope' } }],
+        ['object value', { metadata: { nested: { value: 'nope' } } }],
+      ])('should reject metadata filters with %s', (_name, filterObj) => {
+        expect(listMessagesQuerySchema.safeParse({ filter: filterObj }).success).toBe(false);
+      });
+
       it('should reject malformed JSON in include parameter', () => {
         const result = listMessagesQuerySchema.safeParse({
           threadId: 'test-thread',

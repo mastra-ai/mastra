@@ -10,6 +10,8 @@ import {
   TABLE_THREADS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -354,6 +356,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -466,26 +469,30 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       let paginatedMessages: MastraDBMessage[] = [];
       let total = 0;
-      // Ids of thread messages matching the active filters (resourceId/dateRange). Used for hasMore:
-      // included context can pull in messages outside the filters, which must not count toward total.
       const filteredMessageIds = new Set<string>();
-
-      if (threadIds.length > 1) {
+      if (threadIds.length > 1 || metadataFilter) {
         // DynamoDB can't query multiple partitions in one request. For multi-thread calls,
         // fall back to per-thread fetch + merge/sort in memory to preserve correctness.
+        // Metadata filters must also use the full candidate set because ElectroDB can't
+        // filter nested JSON content metadata before pagination/counting.
         const threadResults = await Promise.all(
           threadIds.map(async tid => {
             const q = applyQueryFilters(
               this.service.entities.message.query.byThread({ entity: 'message', threadId: tid }),
             );
-            const countResult = await q.go({ pages: 'all', attributes: ['id'] });
             const results = await q.go({ pages: 'all', order });
-            return { ids: countResult.data.map((item: any) => item.id), messages: parseQueryMessages(results.data) };
+            let messages = parseQueryMessages(results.data);
+            if (metadataFilter) {
+              messages = messages.filter(message =>
+                storageMessageMatchesMetadataFilter(message.content, metadataFilter),
+              );
+            }
+            return { ids: messages.map(message => message.id), messages };
           }),
         );
 
-        for (const r of threadResults) {
-          for (const id of r.ids) filteredMessageIds.add(id);
+        for (const result of threadResults) {
+          for (const id of result.ids) filteredMessageIds.add(id);
         }
         total = threadResults.reduce((sum, r) => sum + r.ids.length, 0);
         const merged = threadResults.flatMap(r => r.messages);
@@ -549,15 +556,13 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Sort all messages (paginated + included) for final output
       finalMessages = this._sortMessages(finalMessages, field, direction);
 
-      // Calculate hasMore based on pagination window
-      // If all filter-matching thread messages have been returned (through pagination or include),
-      // hasMore = false. Otherwise, check if there are more pages in the pagination window.
-      // Only count messages matching the active filters: include can add messages outside them.
       const returnedFilteredMessageIds = new Set(
-        finalMessages.filter(m => filteredMessageIds.has(m.id)).map(m => m.id),
+        finalMessages.filter(message => filteredMessageIds.has(message.id)).map(message => message.id),
       );
-      const allFilteredMessagesReturned = returnedFilteredMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allFilteredMessagesReturned && offset + perPage < total;
+      const hasMore =
+        perPageInput !== false &&
+        (metadataFilter || returnedFilteredMessageIds.size < total) &&
+        offset + perPage < total;
 
       return {
         messages: finalMessages,

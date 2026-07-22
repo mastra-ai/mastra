@@ -267,6 +267,24 @@ const { messages } = await memory.recall({
 })
 ```
 
+Filter by shallow message metadata:
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: 'thread-123',
+  filter: {
+    metadata: {
+      category: 'billing',
+      escalated: true,
+      priority: 2,
+      archivedAt: null,
+    },
+  },
+})
+```
+
+Metadata filters match shallow scalar values only: `string`, finite `number`, `boolean`, and `null`. All specified metadata keys must match with AND semantics, and `null` matches an explicit `null` value, not a missing metadata key. Metadata keys must start with a letter or underscore, may contain only alphanumeric characters and underscores, must be 128 characters or fewer, and can't use reserved prototype keys such as `__proto__`, `constructor`, or `prototype`. Performance depends on the storage backend. Some backends can push parts of the filter into the database, while others scan candidate messages after thread, resource, and date constraints are applied but before pagination.
+
 Fetch a single message by ID:
 
 ```typescript
