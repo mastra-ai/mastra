@@ -6,7 +6,7 @@ import { Card, CardLink } from './Card';
 
 const StubLink = forwardRef<HTMLAnchorElement, React.AnchorHTMLAttributes<HTMLAnchorElement>>(
   function StubLink(props, ref) {
-    return <a ref={ref} {...props} />;
+    return <a ref={ref} data-stub-link="true" {...props} />;
   },
 );
 
@@ -25,6 +25,7 @@ describe('Card', () => {
 
       const link = screen.getByRole('link', { name: 'Research Agent' });
 
+      expect(link.getAttribute('data-stub-link')).toBe('true');
       expect(link.getAttribute('href')).toBe('/agents/researcher');
       expect(link.getAttribute('role')).toBeNull();
       expect(link.getAttribute('tabindex')).toBeNull();
@@ -40,17 +41,14 @@ describe('Card', () => {
     });
   });
 
-  describe('when an interactive card renders as a button', () => {
-    it('preserves native button semantics', () => {
-      render(
-        <Card as="button" interactive>
-          Run agent
-        </Card>,
-      );
+  describe('when an interactive card uses its default renderer', () => {
+    it('renders with native button semantics', () => {
+      render(<Card interactive>Run agent</Card>);
 
       const button = screen.getByRole('button', { name: 'Run agent' });
 
       expect(button.tagName).toBe('BUTTON');
+      expect(button.getAttribute('type')).toBe('button');
       expect(button.getAttribute('role')).toBeNull();
       expect(button.getAttribute('tabindex')).toBeNull();
     });

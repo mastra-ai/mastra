@@ -51,10 +51,15 @@ export type CardProps = React.HTMLAttributes<HTMLDivElement> &
 
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
   ({ className, appearance, elevation, interactive, as, ...props }, ref) => {
-    const Component = as || 'div';
+    const Component = as || (interactive ? 'button' : 'div');
 
     return (
-      <Component ref={ref} className={cn(cardVariants({ appearance, elevation, interactive }), className)} {...props} />
+      <Component
+        ref={ref}
+        type={Component === 'button' ? 'button' : undefined}
+        className={cn(cardVariants({ appearance, elevation, interactive }), className)}
+        {...props}
+      />
     );
   },
 );
