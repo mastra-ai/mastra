@@ -15,7 +15,6 @@ import { toast } from 'sonner';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import {
-  getWorkflowBuilderThreadId,
   useWorkflowBuilderAccess,
   useWorkflowDraft,
   WorkflowChatProvider,
@@ -23,8 +22,13 @@ import {
   WorkflowDefinitionGraphView,
 } from '@/domains/workflows/builder';
 import type { WorkflowDraftStepSchema, WorkflowDraftValidationContext } from '@/domains/workflows/builder';
+import {
+  getWorkflowConversationThreadId,
+  rememberWorkflowConversationThread,
+} from '@/domains/workflows/builder/workflow-conversation-thread';
 import { useDeleteStoredWorkflow, useStoredWorkflow } from '@/domains/workflows/hooks/use-stored-workflows';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 const EMPTY_MESSAGES: MastraDBMessage[] = [];
 const WORKFLOW_BUILDER_ROUTE = '/workflow-builder';
@@ -79,6 +83,9 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
     [agentsQuery.data, toolsQuery.data, workflowCatalogUnavailable, workflowsQuery.data],
   );
   const workflowDraft = useWorkflowDraft(workflowQuery.data, initialWorkflowId, validationContext);
+  const [threadId] = useState(() => getWorkflowConversationThreadId(initialWorkflowId));
+  const conversationQuery = useAgentMessages({ agentId: 'workflow-builder', threadId, memory: true });
+  const initialMessages = conversationQuery.data?.messages ?? EMPTY_MESSAGES;
   const deleteWorkflow = useDeleteStoredWorkflow();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -95,7 +102,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
       </div>
     );
   }
-  if (!create && workflowQuery.isLoading) {
+  if ((!create && workflowQuery.isLoading) || conversationQuery.isLoading) {
     return <div className="grid h-full place-items-center text-ui-sm text-neutral3">Loading workflow…</div>;
   }
   if (!create && workflowQuery.error) {
@@ -109,6 +116,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   const handleSave = async () => {
     try {
       const saved = await workflowDraft.save();
+      rememberWorkflowConversationThread(saved.id, threadId);
       toast.success('Workflow saved');
       if (create) await navigate(`/workflow-builder/${encodeURIComponent(saved.id)}`, { replace: true });
     } catch (error) {
@@ -118,7 +126,10 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
 
   const handleRun = async () => {
     try {
-      if (access.canWrite) await workflowDraft.save();
+      if (access.canWrite) {
+        const saved = await workflowDraft.save();
+        rememberWorkflowConversationThread(saved.id, threadId);
+      }
       await navigate(`/workflows/${encodeURIComponent(workflowDraft.draft.id)}/graph`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save workflow before running');
@@ -135,14 +146,12 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
     }
   };
 
-  const threadId = getWorkflowBuilderThreadId('studio', workflowDraft.draft.id);
-
   return (
     <WorkflowChatProvider
       threadId={threadId}
       authoringState={workflowDraft.authoringState}
       validationContext={validationContext}
-      initialMessages={EMPTY_MESSAGES}
+      initialMessages={initialMessages}
       createTools={workflowDraft.createTools}
     >
       <PageLayout className="h-full px-4 md:px-8">
