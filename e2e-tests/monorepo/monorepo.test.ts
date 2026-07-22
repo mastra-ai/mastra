@@ -448,10 +448,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         let proc: ReturnType<typeof execaNode> | undefined;
 
         try {
-          await writeFile(
-            mastraConfigPath,
-            originalMastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true'),
-          );
+          await writeFile(mastraConfigPath, originalMastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true'));
 
           await runBuild(isolatedFixturePath);
 
