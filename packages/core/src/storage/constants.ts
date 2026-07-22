@@ -556,6 +556,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   source: { type: 'jsonb', nullable: true },
   expectedTrajectory: { type: 'jsonb', nullable: true },
   toolMocks: { type: 'jsonb', nullable: true },
+  timeout: { type: 'integer', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };

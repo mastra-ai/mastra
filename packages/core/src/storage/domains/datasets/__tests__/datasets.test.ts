@@ -164,6 +164,33 @@ describe('DatasetsInMemory', () => {
       expect(item.updatedAt).toBeInstanceOf(Date);
     });
 
+    it('persists timeout and includes it in item identity', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const first = await storage.addItem({
+        datasetId: dataset.id,
+        externalId: 'timeout-item',
+        input: { prompt: 'hello' },
+        timeout: 1_000,
+      });
+      const retry = await storage.addItem({
+        datasetId: dataset.id,
+        externalId: 'timeout-item',
+        input: { prompt: 'hello' },
+        timeout: 1_000,
+      });
+
+      expect(first.timeout).toBe(1_000);
+      expect(retry.id).toBe(first.id);
+      await expect(
+        storage.addItem({
+          datasetId: dataset.id,
+          externalId: 'timeout-item',
+          input: { prompt: 'hello' },
+          timeout: 2_000,
+        }),
+      ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_CONFLICT' });
+    });
+
     it('addItem rejects circular payloads before idempotency comparison', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       await storage.addItem({ datasetId: dataset.id, externalId: 'cyclic-item', input: { prompt: 'safe' } });
@@ -445,6 +472,23 @@ describe('DatasetsInMemory', () => {
       expect(history[1].datasetVersion).toBe(1);
       expect(history[1].validTo).toBe(2);
       expect(history[1].input).toEqual({ n: 1 });
+    });
+
+    it('preserves timeout across updates, versions, and tombstones', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 }, timeout: 1_000 });
+
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, timeout: 2_000 });
+
+      expect((await storage.getItemsByVersion({ datasetId: dataset.id, version: 1 }))[0]?.timeout).toBe(1_000);
+      expect((await storage.getItemsByVersion({ datasetId: dataset.id, version: 2 }))[0]?.timeout).toBe(1_000);
+      expect((await storage.getItemsByVersion({ datasetId: dataset.id, version: 3 }))[0]?.timeout).toBe(2_000);
+
+      await storage.deleteItem({ id: item.id, datasetId: dataset.id });
+      const history = await storage.getItemHistory(item.id);
+      expect(history.map(row => row.timeout)).toEqual([2_000, 2_000, 1_000, 1_000]);
+      expect(history[0]?.isDeleted).toBe(true);
     });
 
     it('deleteItem creates tombstone row with isDeleted=true (T3.9)', async () => {
