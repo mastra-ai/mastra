@@ -32,6 +32,7 @@ export class PlatformApiError extends Error {
 export interface PlatformApiRequestOptions {
   signal?: AbortSignal;
   logErrorDetail?: boolean;
+  actingUserId?: string;
 }
 
 export class PlatformApiClient {
@@ -100,6 +101,12 @@ export class PlatformApiClient {
       accept: 'application/json',
       authorization: `Bearer ${this.#accessToken}`,
     };
+    // Acting end-user for platform GitHub writes: the platform resolves this
+    // user's GitHub OAuth connection (org-scoped) so issues/PRs are authored
+    // by the human instead of the App bot. Ignored by older platforms.
+    if (options?.actingUserId) {
+      headers['x-acting-user-id'] = options.actingUserId;
+    }
     const timeoutSignal = AbortSignal.timeout(15_000);
     const init: RequestInit = {
       method,
@@ -158,11 +165,15 @@ export function logPlatformInfo(message: string, fields?: Record<string, unknown
   writePlatformLog('info', message, fields);
 }
 
+export function logPlatformWarn(message: string, fields?: Record<string, unknown>): void {
+  writePlatformLog('warn', message, fields);
+}
+
 export function logPlatformError(message: string, fields?: Record<string, unknown>): void {
   writePlatformLog('error', message, fields);
 }
 
-function writePlatformLog(level: 'info' | 'error', message: string, fields?: Record<string, unknown>): void {
+function writePlatformLog(level: 'info' | 'warn' | 'error', message: string, fields?: Record<string, unknown>): void {
   const metadata = fields ? ` ${JSON.stringify(stripUndefined(fields))}` : '';
   process.stderr.write(`[MastraCode Web] ${level.toUpperCase()} ${message}${metadata}\n`);
 }

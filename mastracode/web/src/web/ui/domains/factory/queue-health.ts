@@ -1,11 +1,11 @@
 /**
- * Client-side aggregation for the Factory Overview queue-health chart.
+ * Client-side aggregation for the Metrics page's queue-health chart.
  *
  * Pure, DB-free functions over `work_items` rows — mirrors the discipline of
  * the server-side `computeFactoryMetrics`, but lives in the UI layer because
  * its `activePaths` input (which worktrees currently have an active agent
  * session) is only available in the browser via `useWorkspaceActivity`. The
- * Overview page feeds it the polled activity map; this module takes all inputs
+ * queue-health section feeds it the polled activity map; this module takes all inputs
  * and returns a plain shape, so it is unit-testable without a network or DOM.
  */
 

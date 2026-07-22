@@ -65,7 +65,7 @@ if (redisUrl) {
 
 // Factory dev is auth-less by default. Production can opt out explicitly;
 // otherwise MastraFactory installs its platform-backed auth provider.
-const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1' || process.env.MASTRA_FACTORY_DEV === 'true';
+const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 let auth: IMastraAuthProvider | null | undefined;
 
 if (authDisabled) {

@@ -74,7 +74,7 @@ export function SettingsNavigation() {
   return (
     <>
       <MainSidebar.NavList>
-        <MainSidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+        <MainSidebar.NavLink asChild size="default" link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
             <ArrowLeft aria-hidden="true" />
             <MainSidebar.NavLabel>Back to app</MainSidebar.NavLabel>
@@ -82,7 +82,7 @@ export function SettingsNavigation() {
         </MainSidebar.NavLink>
       </MainSidebar.NavList>
       {state === 'default' && (
-        <div className="px-1 py-2">
+        <div className="py-2">
           <InputGroup variant="outline">
             <InputGroupAddon>
               <Search aria-hidden="true" />
@@ -105,6 +105,7 @@ export function SettingsNavigation() {
               <MainSidebar.NavLink
                 key={id}
                 asChild
+                size="default"
                 isActive={isActive}
                 link={{ name: label, url: '#', icon: <Icon /> }}
               >
