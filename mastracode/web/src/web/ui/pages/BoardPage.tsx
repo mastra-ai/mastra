@@ -16,18 +16,17 @@ import {
   GitPullRequest,
   Link2,
   Plus,
-  SquareKanban,
   Stethoscope,
 } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../shared/api/config';
 import { relativeTime } from '../../../shared/lib/date/relativeTime';
 import { useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
 import { SkeletonRows } from '../ui/SkeletonRows';
-import { ConnectRepositoriesPanel } from '../domains/workspaces/components/ConnectRepositoriesPanel';
+import { GithubIcon } from '../ui/icons';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { FactoryItemActions } from '../domains/factory/components/FactoryItemActions';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
@@ -509,28 +508,26 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
   const review = kind === 'review';
 
   if (!repository) {
-    const EmptyIcon = review ? GitPullRequest : SquareKanban;
-
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center-safe overflow-y-auto py-8">
-        <section
-          aria-label="Connect a repository"
-          className="w-full max-w-2xl rounded-2xl border border-border1 bg-surface2/80"
-        >
-          <EmptyState
-            as="h2"
-            iconSlot={<EmptyIcon className="size-10 text-icon3" />}
-            titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
-            descriptionSlot={
-              review
-                ? 'Choose a GitHub repository below. Its pull requests will appear in Intake, ready to move through review.'
-                : 'Choose a GitHub repository below. Its issues will appear in Intake, ready to move through planning and build.'
-            }
-          />
-          <div className="border-t border-border1 px-6 pt-5 pb-6">
-            <ConnectRepositoriesPanel factory={factory} />
-          </div>
-        </section>
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto py-8">
+        <EmptyState
+          as="h2"
+          iconSlot={<GithubIcon size={40} className="text-icon3" />}
+          titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
+          descriptionSlot={
+            review
+              ? 'Link a GitHub repository in Source Control settings. Its pull requests will appear in Intake, ready to move through review.'
+              : 'Link a GitHub repository in Source Control settings. Its issues will appear in Intake, ready to move through planning and build.'
+          }
+          actionSlot={
+            <Link
+              to={`/factories/${factory.id}/settings/source-control`}
+              className={buttonVariants({ variant: 'primary' })}
+            >
+              Open Source Control settings
+            </Link>
+          }
+        />
       </div>
     );
   }
