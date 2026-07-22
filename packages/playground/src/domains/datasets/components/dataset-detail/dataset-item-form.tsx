@@ -1,17 +1,38 @@
 'use client';
 
+import type { DatasetItem, DatasetItemToolMock } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { Pencil } from 'lucide-react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
-/** Schema validation error from API */
-export interface SchemaValidationError {
+interface SchemaValidationError {
   field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
 }
 
-/** Displays field-level validation errors */
+function parseValidationError(error: unknown): SchemaValidationError | null {
+  if (!(error instanceof Error)) return null;
+
+  const match = error.message.match(/- ({.*})$/);
+  if (!match) return null;
+
+  try {
+    const parsed = JSON.parse(match[1]);
+    if (parsed.field && Array.isArray(parsed.errors)) {
+      return { field: parsed.field, errors: parsed.errors };
+    }
+  } catch {
+    // Not valid JSON
+  }
+  return null;
+}
+
 function ValidationErrors({ field, errors }: { field: string; errors: Array<{ path: string; message: string }> }) {
   if (!errors.length) return null;
 
@@ -30,9 +51,6 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
   );
 }
 
-/**
- * Editable form view for updating dataset item
- */
 export interface EditModeContentProps {
   inputValue: string;
   setInputValue: (value: string) => void;
@@ -50,6 +68,7 @@ export interface EditModeContentProps {
   onSave: () => void;
   onCancel: () => void;
   isSaving: boolean;
+  children?: ReactNode;
 }
 
 export function EditModeContent({
@@ -69,6 +88,7 @@ export function EditModeContent({
   onSave,
   onCancel,
   isSaving,
+  children,
 }: EditModeContentProps) {
   return (
     <>
@@ -126,6 +146,8 @@ export function EditModeContent({
           )}
         </div>
 
+        {children}
+
         <div className="space-y-2">
           <Label>Request Context (JSON, optional)</Label>
           <CodeEditor
@@ -156,5 +178,189 @@ export function EditModeContent({
         </div>
       </div>
     </>
+  );
+}
+
+const formatOptionalJson = (value: unknown) => (value == null ? '' : JSON.stringify(value, null, 2));
+
+export interface DatasetItemEditFormProps {
+  item: DatasetItem;
+  onSuccess: () => void;
+  onCancel: () => void;
+}
+
+export function DatasetItemEditForm({ item, onSuccess, onCancel }: DatasetItemEditFormProps) {
+  const [inputValue, setInputValue] = useState(() => JSON.stringify(item.input, null, 2));
+  const [groundTruthValue, setGroundTruthValue] = useState(() => formatOptionalJson(item.groundTruth));
+  const [metadataValue, setMetadataValue] = useState(() => formatOptionalJson(item.metadata));
+  const [trajectoryValue, setTrajectoryValue] = useState(() => formatOptionalJson(item.expectedTrajectory));
+  const [toolMocksValue, setToolMocksValue] = useState(() =>
+    item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '',
+  );
+  const [timeoutValue, setTimeoutValue] = useState(() => item.timeout?.toString() ?? '');
+  const [requestContextValue, setRequestContextValue] = useState(() => formatOptionalJson(item.requestContext));
+  const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
+  const { updateItem } = useDatasetMutations();
+
+  const handleSave = async () => {
+    let parsedInput: unknown;
+    try {
+      parsedInput = JSON.parse(inputValue);
+    } catch {
+      toast.error('Input must be valid JSON');
+      return;
+    }
+
+    let parsedGroundTruth: unknown | undefined;
+    if (groundTruthValue.trim()) {
+      try {
+        parsedGroundTruth = JSON.parse(groundTruthValue);
+      } catch {
+        toast.error('Ground Truth must be valid JSON');
+        return;
+      }
+    }
+
+    let parsedMetadata: Record<string, unknown> | undefined;
+    if (metadataValue.trim()) {
+      try {
+        parsedMetadata = JSON.parse(metadataValue);
+      } catch {
+        toast.error('Metadata must be valid JSON');
+        return;
+      }
+    }
+
+    let parsedTrajectory: unknown | null = null;
+    if (trajectoryValue.trim()) {
+      try {
+        parsedTrajectory = JSON.parse(trajectoryValue);
+      } catch {
+        toast.error('Expected Trajectory must be valid JSON');
+        return;
+      }
+    }
+
+    let parsedToolMocks: DatasetItemToolMock[] | undefined;
+    if (toolMocksValue.trim()) {
+      try {
+        const parsed = JSON.parse(toolMocksValue);
+        if (!Array.isArray(parsed)) {
+          toast.error('Tool Mocks must be a JSON array');
+          return;
+        }
+        parsedToolMocks = parsed;
+      } catch {
+        toast.error('Tool Mocks must be valid JSON');
+        return;
+      }
+    } else {
+      parsedToolMocks = [];
+    }
+
+    let parsedTimeout: number | undefined;
+    if (timeoutValue.trim()) {
+      const timeout = Number(timeoutValue);
+      if (!Number.isFinite(timeout) || !Number.isInteger(timeout) || timeout <= 0) {
+        toast.error('Item timeout must be a positive whole number');
+        return;
+      }
+      parsedTimeout = timeout;
+    } else if (item.timeout !== undefined) {
+      toast.error('An existing item timeout cannot be cleared; enter a positive whole number');
+      return;
+    }
+
+    let parsedRequestContext: Record<string, unknown> | undefined;
+    if (requestContextValue.trim()) {
+      try {
+        parsedRequestContext = JSON.parse(requestContextValue);
+      } catch {
+        toast.error('Request Context must be valid JSON');
+        return;
+      }
+    }
+
+    try {
+      await updateItem.mutateAsync({
+        datasetId: item.datasetId,
+        itemId: item.id,
+        input: parsedInput,
+        groundTruth: parsedGroundTruth,
+        metadata: parsedMetadata,
+        expectedTrajectory: parsedTrajectory,
+        toolMocks: parsedToolMocks,
+        timeout: parsedTimeout,
+        requestContext: parsedRequestContext,
+      });
+
+      toast.success('Item updated successfully');
+      setValidationErrors(null);
+      onSuccess();
+    } catch (error) {
+      const schemaError = parseValidationError(error);
+      if (schemaError) {
+        setValidationErrors(schemaError);
+      } else {
+        toast.error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  };
+
+  const handleInputValueChange = (value: string) => {
+    setInputValue(value);
+    if (validationErrors?.field === 'input') {
+      setValidationErrors(null);
+    }
+  };
+
+  const handleGroundTruthValueChange = (value: string) => {
+    setGroundTruthValue(value);
+    if (validationErrors?.field === 'groundTruth') {
+      setValidationErrors(null);
+    }
+  };
+
+  const handleToolMocksValueChange = (value: string) => {
+    setToolMocksValue(value);
+    if (validationErrors?.field === 'toolMocks') {
+      setValidationErrors(null);
+    }
+  };
+
+  return (
+    <EditModeContent
+      inputValue={inputValue}
+      setInputValue={handleInputValueChange}
+      groundTruthValue={groundTruthValue}
+      setGroundTruthValue={handleGroundTruthValueChange}
+      metadataValue={metadataValue}
+      setMetadataValue={setMetadataValue}
+      trajectoryValue={trajectoryValue}
+      setTrajectoryValue={setTrajectoryValue}
+      toolMocksValue={toolMocksValue}
+      setToolMocksValue={handleToolMocksValueChange}
+      requestContextValue={requestContextValue}
+      setRequestContextValue={setRequestContextValue}
+      validationErrors={validationErrors}
+      onSave={handleSave}
+      onCancel={onCancel}
+      isSaving={updateItem.isPending}
+    >
+      <div className="space-y-2">
+        <Label htmlFor="edit-item-timeout">Item timeout (ms, optional)</Label>
+        <p className="text-xs text-muted-foreground">
+          Overrides the experiment-level item timeout. Enter a positive whole number of milliseconds.
+        </p>
+        <Input
+          id="edit-item-timeout"
+          type="number"
+          min={1}
+          step={1}
+          value={timeoutValue}
+          onChange={event => setTimeoutValue(event.target.value)}
+        />
+      </div>
+    </EditModeContent>
   );
 }
