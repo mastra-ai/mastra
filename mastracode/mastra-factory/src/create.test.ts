@@ -86,6 +86,7 @@ beforeEach(() => {
     { id: 'org_123', name: 'Acme', role: 'admin', isCurrent: true },
     { id: 'org_456', name: 'Beta', role: 'member', isCurrent: false },
   ]);
+  clack.select.mockResolvedValue('eu');
   platform.createServerProject.mockResolvedValue({ id: 'proj_abc', slug: 'my-factory', name: 'my-factory' });
   platform.mintOrgApiKey.mockResolvedValue('sk_live_test');
   platform.attachNeonDatabase.mockResolvedValue({ id: 'db_1', status: 'provisioning', error: null });
@@ -231,22 +232,31 @@ describe('create (platform provisioning)', () => {
     // Platform pipeline hit in order.
     expect(cliAuth.getToken).toHaveBeenCalledTimes(1);
     expect(cliAuth.resolveCurrentOrg).toHaveBeenCalledWith('wos-token', { forcePrompt: true });
+    expect(clack.select).toHaveBeenCalledWith({
+      message: 'Where should your Factory project run?',
+      options: [
+        { value: 'eu', label: '🇪🇺 eu' },
+        { value: 'us', label: '🇺🇸 us' },
+      ],
+    });
     expect(platform.createServerProject).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       name: 'my-factory',
+      region: 'eu',
     });
     expect(platform.mintOrgApiKey).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       keyName: 'create-factory: my-factory',
     });
-    expect(platform.attachNeonDatabase).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectId: 'proj_abc',
-        name: 'my-factory',
-      }),
-    );
+    expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
+      token: 'wos-token',
+      orgId: 'org_123',
+      projectId: 'proj_abc',
+      name: 'my-factory',
+      regionId: 'aws-eu-central-1',
+    });
 
     // Success outro summarizes the provisioned infra so the user isn't
     // surprised by what now exists in their platform org.
@@ -300,15 +310,37 @@ describe('create (platform provisioning)', () => {
     expect(note).toContain('still provisioning');
   });
 
-  it('passes --region through to the Neon attach', async () => {
+  it('passes --region to project creation and skips the region picker', async () => {
     await create({
       projectName: 'my-factory',
       template: TEMPLATE_REPO,
-      region: 'aws-us-east-2',
+      region: 'us',
       analytics,
     });
 
-    expect(platform.attachNeonDatabase).toHaveBeenCalledWith(expect.objectContaining({ regionId: 'aws-us-east-2' }));
+    expect(clack.select).not.toHaveBeenCalled();
+    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ region: 'us' }));
+    expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
+      token: 'wos-token',
+      orgId: 'org_123',
+      projectId: 'proj_abc',
+      name: 'my-factory',
+      regionId: 'aws-us-west-2',
+    });
+  });
+
+  it('rejects unsupported --region values before scaffolding', async () => {
+    await expect(
+      create({
+        projectName: 'my-factory',
+        template: TEMPLATE_REPO,
+        region: 'aws-us-east-2',
+        analytics,
+      }),
+    ).rejects.toThrow('Invalid --region "aws-us-east-2". Expected one of: eu, us.');
+
+    expect(tinyexec.x).not.toHaveBeenCalled();
+    expect(platform.createServerProject).not.toHaveBeenCalled();
   });
 
   it('--org <name> skips the interactive picker and resolves via fetchOrgs', async () => {
