@@ -38,8 +38,6 @@ import { LinearIntegration } from '@mastra/factory/integrations/linear/integrati
 import { PlatformGithubIntegration } from '@mastra/factory/integrations/platform/github/integration';
 import { PlatformLinearIntegration } from '@mastra/factory/integrations/platform/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { MastraAuthWorkos } from '@mastra/auth-workos';
-import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -74,23 +72,10 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-// Web auth: MastraFactory installs `MastraAuthStudio` by default (identity
-// proxied to the shared Mastra platform API — reads `MASTRA_SHARED_API_URL`,
-// `MASTRA_ORGANIZATION_ID`, and `MASTRA_COOKIE_DOMAIN` from env). Set
-// `MASTRACODE_AUTH_DISABLED=1` to boot with no auth provider (open server,
-// bare local dev).
-const workosConfigured = Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
-const betterAuthSecret = process.env.BETTER_AUTH_SECRET;
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 let auth: IMastraAuthProvider | null | undefined;
-if (workosConfigured) {
-  auth = new MastraAuthWorkos({ redirectUri: process.env.WORKOS_REDIRECT_URI, fetchMemberships: true });
-} else if (betterAuthSecret) {
-  auth = new MastraAuthBetterAuth({
-    secret: betterAuthSecret,
-    signUpEnabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED !== '1',
-  });
-} else if (authDisabled) {
+
+if (authDisabled) {
   auth = null;
 }
 
@@ -100,9 +85,9 @@ if (workosConfigured) {
 const workosAuditApiKey = process.env.WORKOS_AUDIT_API_KEY;
 const workosAudit = workosAuditApiKey
   ? new WorkOSAuditIntegration({
-      client: new WorkOS(workosAuditApiKey),
-      returnUrl: `${(process.env.MASTRACODE_PUBLIC_URL ?? 'http://localhost:4111').replace(/\/+$/, '')}/factory/audit`,
-    })
+    client: new WorkOS(workosAuditApiKey),
+    returnUrl: `${(process.env.MASTRACODE_PUBLIC_URL ?? 'http://localhost:4111').replace(/\/+$/, '')}/factory/audit`,
+  })
   : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
@@ -191,7 +176,7 @@ if (sandboxKind === 'platform') {
   if (!railwayToken) {
     throw new Error(
       'MASTRACODE_SANDBOX_PROVIDER=railway requires RAILWAY_API_TOKEN — set the token, or unset the ' +
-        'provider to fall back to the local sandbox (single-user dev only).',
+      'provider to fall back to the local sandbox (single-user dev only).',
     );
   }
   sandbox = new RailwaySandbox({
@@ -227,7 +212,7 @@ function envGroup<K extends string>(
   if (missing.length > 0) {
     throw new Error(
       `${integration} integration is partially configured — missing ${missing.join(', ')}. ` +
-        'Set the remaining variable(s) to enable it, or unset the group to disable it.',
+      'Set the remaining variable(s) to enable it, or unset the group to disable it.',
     );
   }
   return Object.fromEntries(entries) as Record<K, string>;
@@ -288,15 +273,15 @@ if (!appDatabaseUrl && !localDevelopmentMode) {
 }
 const storage = appDatabaseUrl
   ? new PgFactoryStorage({
-      id: 'mastra-code-storage',
-      connectionString: appDatabaseUrl,
-      retention: DEFAULT_RETENTION,
-    })
+    id: 'mastra-code-storage',
+    connectionString: appDatabaseUrl,
+    retention: DEFAULT_RETENTION,
+  })
   : new LibSQLFactoryStorage({
-      id: 'mastra-code-storage',
-      url: `file:${getDatabasePath()}`,
-      retention: DEFAULT_RETENTION,
-    });
+    id: 'mastra-code-storage',
+    url: `file:${getDatabasePath()}`,
+    retention: DEFAULT_RETENTION,
+  });
 const vector = appDatabaseUrl
   ? new PgVector({ id: 'mastra-code-vectors', connectionString: appDatabaseUrl })
   : undefined;
