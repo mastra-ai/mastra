@@ -45,10 +45,10 @@ const SERVER_PREFIXES = ['/api', '/web', '/auth'];
 /**
  * Locate the built SPA (a dir containing `index.html`). Checked in order:
  *   1. `MASTRACODE_UI_DIST` — explicit override for custom layouts.
- *   2. `ui/` next to the bundled server module — vite builds into
- *      `src/mastra/public/ui` and `mastra build` copies `public/` into
+ *   2. `factory/` next to the bundled server module — vite builds into
+ *      `src/mastra/public/factory` and `mastra build` copies `public/` into
  *      `.mastra/output/`, so the build output is self-contained.
- *   3. `src/mastra/public/ui` under cwd — the vite outDir when running from
+ *   3. `src/mastra/public/factory` under cwd — the vite outDir when running from
  *      the package root before `mastra build`.
  * Returns `undefined` when no build is found (e.g. plain `mastra dev` without
  * a prior vite build), in which case the middleware is simply not mounted.
@@ -56,8 +56,8 @@ const SERVER_PREFIXES = ['/api', '/web', '/auth'];
 export function resolveUiDistDir(): string | undefined {
   const candidates = [
     process.env.MASTRACODE_UI_DIST,
-    join(dirname(fileURLToPath(import.meta.url)), 'ui'),
-    resolve(process.cwd(), 'src/mastra/public/ui'),
+    join(dirname(fileURLToPath(import.meta.url)), 'factory'),
+    resolve(process.cwd(), 'src/mastra/public/factory'),
   ];
   for (const candidate of candidates) {
     if (candidate && existsSync(join(candidate, 'index.html'))) return resolve(candidate);

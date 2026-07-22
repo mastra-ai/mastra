@@ -113,5 +113,14 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(pkg.scripts.dev).toContain('vite');
     expect(pkg.scripts.prebuild).toBeUndefined();
     expect(JSON.stringify(pkg.scripts)).not.toContain('monorepo-deps');
+    // The build script delegates SPA building to `mastra build` (which calls
+    // `build:ui` via the Factory UI build step), not a chained `npm run build:ui`.
+    expect(pkg.scripts.build).toBe('mastra build --dir src/mastra');
+    expect(pkg.scripts['build:ui']).toBe('vite --config src/web/vite.config.ts build');
+    expect(pkg.scripts['build:server']).toBeUndefined();
+    // The generated .gitignore ignores the Vite output directory.
+    const gitignore = fs.readFileSync(path.join(outDir, '.gitignore'), 'utf8');
+    expect(gitignore).toContain('src/mastra/public/factory/');
+    expect(gitignore).not.toContain('src/mastra/public/ui/');
   });
 });

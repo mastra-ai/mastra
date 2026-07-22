@@ -73,10 +73,12 @@ Create a Linear OAuth app (Linear → Settings → API → OAuth applications �
 | --------------------------- | ---------------------------------------------------------------------------------------------- |
 | `npm run dev`               | API server (:4111) + Factory UI (:5173) with live reload                                       |
 | `npm run db:up` / `db:down` | Start/stop local Postgres + Redis (Docker)                                                     |
-| `npm run build`             | Build the SPA and bundle the server to `.mastra/output`                                        |
+| `npm run build`             | Build the SPA (`build:ui`) and bundle the server to `.mastra/output`                          |
 | `npm run start`             | Run the production build                                                                       |
 | `npm run deploy`            | Build, validate, and deploy to [Mastra Cloud](https://mastra.ai/docs/mastra-platform/overview) |
 | `npm run check`             | Typecheck server and UI                                                                        |
+
+`mastra build` and `mastra deploy` detect the Factory entry automatically and run `build:ui` (Vite) before bundling. The SPA is copied to `.mastra/output/factory/` and a `mastra-project.json` manifest is emitted alongside it.
 
 ## Requirements
 

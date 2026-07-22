@@ -1,7 +1,7 @@
 {
   "name": "mastracode-web",
   "version": "0.1.0",
-  "description": "MastraCode web surface: API routes, deployable Mastra entry, and the SPA UI. Standalone pnpm project consuming monorepo packages via link: — run pnpm install at the monorepo root first; `pnpm prebuild` builds the linked packages (web:build / web:ui:build run it automatically).",
+  "description": "MastraCode web surface: API routes, deployable Mastra entry, and the SPA UI. Standalone pnpm project consuming monorepo packages via link: — run pnpm install at the monorepo root first; `pnpm prebuild` builds the linked packages (web:build / build:ui run it automatically).",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,8 +12,8 @@
     "prebuild": "cd ../.. && pnpm turbo build --filter ./mastracode/sdk --filter ./mastracode/factory --filter ./packages/playground-ui --filter ./client-sdks/client-js --filter ./client-sdks/react --filter ./stores/libsql --filter ./stores/pg --filter ./auth/better-auth --filter ./auth/workos --filter ./auth/studio --filter ./server-adapters/hono --filter ./workspaces/platform-workspace --filter ./workspaces/railway --filter ./pubsub/redis-streams --filter ./packages/cli",
     "web:dev": "concurrently --kill-others-on-fail --names server,ui \"PORT=4111 MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra dev --dir src/mastra\" \"vite --config src/web/vite.config.ts\"",
     "web:dev:github": "pnpm db:up && pnpm web:dev",
-    "web:ui:build": "pnpm run prebuild && node scripts/copy-factory-skills.mjs && vite --config src/web/vite.config.ts build",
-    "web:build": "pnpm run web:ui:build && node scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra",
+    "build:ui": "pnpm run prebuild && node scripts/copy-factory-skills.mjs && vite --config src/web/vite.config.ts build",
+    "web:build": "node scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra",
     "web:deploy": "pnpm run web:build && node scripts/validate-output.mjs && mastra deploy --skip-build",
     "deps:pin": "node scripts/monorepo-deps.mjs pin",
     "deps:link": "node scripts/monorepo-deps.mjs link",

@@ -61,7 +61,7 @@ function runtimeConfigPlugin(mode: string): Plugin {
  * `src/mastra/index.ts` on :4111) and Vite (:5173) side by side; API paths are
  * proxied to that server so the browser uses same-origin requests in dev.
  *
- * The production build outputs the static SPA to `src/mastra/public/ui`.
+ * The production build outputs the static SPA to `src/mastra/public/factory`.
  * `mastra build` copies the `public/` dir next to the Mastra entry into
  * `.mastra/output/` automatically, so the build output is self-contained and
  * the API server serves the SPA same-origin at `/` (see @mastra/factory/spa-static).
@@ -78,7 +78,7 @@ export default defineConfig(({ mode }) => ({
     dedupe: ['react', 'react-dom', '@tanstack/react-query'],
   },
   build: {
-    outDir: resolve(here, '../mastra/public/ui'),
+    outDir: resolve(here, '../mastra/public/factory'),
     emptyOutDir: true,
   },
   server: {

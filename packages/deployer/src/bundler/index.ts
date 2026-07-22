@@ -198,6 +198,29 @@ export abstract class Bundler extends MastraBundler {
     }
   }
 
+  /**
+   * Writes the `mastra-project.json` deployment marker for Software Factory
+   * projects after public assets have been copied. Verifies that the Factory
+   * SPA (`factory/index.html`) exists in the output before emitting the marker.
+   */
+  protected async writeFactoryMarker(outputDirectory: string): Promise<void> {
+    const outputDir = join(outputDirectory, this.outputDir);
+    const factoryIndex = join(outputDir, 'factory', 'index.html');
+    if (!existsSync(factoryIndex)) {
+      throw new MastraError({
+        id: 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING',
+        text: 'Software Factory project detected but factory/index.html was not found in the build output. Make sure your build:ui script produces src/mastra/public/factory/index.html.',
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.SYSTEM,
+      });
+    }
+    await writeFile(
+      join(outputDir, 'mastra-project.json'),
+      JSON.stringify({ schemaVersion: 1, projectType: 'factory', assets: { ui: 'factory' } }, null, 2),
+    );
+    this.logger.info('Wrote mastra-project.json for Software Factory project');
+  }
+
   protected async getBundlerOptions(
     serverFile: string,
     mastraEntryFile: string,
@@ -422,6 +445,12 @@ export const tools = [${toolsExports.join(', ')}]`,
       this.logger.info('Copying public files');
       await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
       this.logger.info('Done copying public files');
+
+      // For Software Factory projects, write a deterministic deployment marker
+      // after public assets (including the SPA) have been copied.
+      if (analyzedBundleInfo.projectType === 'factory') {
+        await this.writeFactoryMarker(outputDirectory);
+      }
 
       this.logger.info('Copying .npmrc file');
       await this.copyDOTNPMRC({ outputDirectory, rootDir: projectRoot });
