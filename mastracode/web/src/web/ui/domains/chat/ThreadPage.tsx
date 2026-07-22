@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 
-import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui/ChatLayout';
 import { renderedPaths } from '../workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
-import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
@@ -24,8 +22,7 @@ const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
-  const overlays = useOverlays();
-  const { activeFactory, factoriesPending, factories } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending } = useActiveFactoryContext();
   const { threadId } = useParams();
   const location = useLocation();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
@@ -45,12 +42,6 @@ export function ThreadPage() {
         <Spinner />
       </div>
     );
-  }
-
-  const noFactories = factories.length === 0;
-
-  if (noFactories || !activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
   }
 
   return (

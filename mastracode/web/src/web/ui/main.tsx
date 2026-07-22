@@ -11,6 +11,7 @@ import { createAppRouter } from './router';
 import '@mastra/playground-ui/style.css';
 import './tailwind.css';
 import { ToastProvider } from './ui';
+import { ActiveFactoryProvider } from './domains/workspaces/context/ActiveFactoryProvider';
 
 // The web app talks to the Mastra server same-origin (`baseUrl=""`): in prod
 // the server serves this build itself, and in dev Vite proxies `/api` + `/auth`
@@ -33,7 +34,9 @@ createRoot(document.getElementById('root')!).render(
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider baseUrl="">
             <ToastProvider>
-              <RouterProvider router={router} />
+              <ActiveFactoryProvider>
+                <RouterProvider router={router} />
+              </ActiveFactoryProvider>
             </ToastProvider>
           </ApiConfigProvider>
         </QueryClientProvider>

@@ -39,19 +39,21 @@ afterEach(() => {
   vi.mocked(redirectToLogin).mockClear();
 });
 
-function seedFactory(project?: Factory) {
-  const selectedProject: Factory = project ?? {
-    id: 'project-test',
-    name: 'MastraCode Test',
-    resourceId: RESOURCE_ID,
-    createdAt: 1,
-    binding: {
-      kind: 'local',
-      path: '/tmp/mastracode-test',
+function seedFactories(projects?: Factory[], activeFactoryId?: string) {
+  const selectedProjects: Factory[] = projects ?? [
+    {
+      id: 'project-test',
+      name: 'MastraCode Test',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: {
+        kind: 'local',
+        path: '/tmp/mastracode-test',
+      },
     },
-  };
-  localStorage.setItem('mastracode-factories', JSON.stringify([selectedProject]));
-  localStorage.setItem('mastracode-active-factory', selectedProject.id);
+  ];
+  localStorage.setItem('mastracode-factories', JSON.stringify(selectedProjects));
+  if (activeFactoryId) localStorage.setItem('mastracode-active-factory', activeFactoryId);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -103,13 +105,19 @@ function renderRoutes(
   authMe: () => Response | Promise<Response>,
   options?: {
     project?: Factory;
+    projects?: Factory[];
+    activeFactoryId?: string;
     withFactory?: boolean;
     workItemCount?: number;
     workItemsReady?: Promise<void>;
     workItemsError?: boolean;
   },
 ) {
-  if (options?.withFactory !== false) seedFactory(options?.project);
+  if (options?.withFactory !== false) {
+    const projects = options?.projects ?? (options?.project ? [options.project] : undefined);
+    const activeFactoryId = options?.activeFactoryId ?? projects?.[0]?.id ?? 'project-test';
+    seedFactories(projects, activeFactoryId);
+  }
   useAgentControllerHandlers();
   server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
   if (options?.project?.binding.kind === 'factory') {
@@ -203,6 +211,39 @@ describe('MastraCode web routing', () => {
 
     await expectPathname(router, '/factory/board');
     expect(await screen.findByText(/Connect a repository to start intake/)).toBeInTheDocument();
+  });
+
+  it('given Factory hydration is still loading, when refreshing /, then the app waits before choosing a destination', async () => {
+    const project: Factory = {
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'github-project-id',
+        repositories: [],
+      },
+    };
+    let resolveProjects!: () => void;
+    const projectsReady = new Promise<void>(resolve => {
+      resolveProjects = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, async () => {
+        await projectsReady;
+        return HttpResponse.json({ projects: [{ id: 'github-project-id', name: 'mastra-ai/mastra' }] });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/github-project-id/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+    );
+    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
+
+    await screen.findByRole('status', { name: 'Loading Factory board' });
+    expect(router.state.location.pathname).toBe('/');
+    resolveProjects();
+    await expectPathname(router, '/factory/board');
   });
 
   it('given Factory work is still loading, when visiting /, then the app waits before choosing a destination', async () => {

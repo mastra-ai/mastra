@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useCreateFactoryMutation, useLinkRepositoryMutation, useLoadFactories } from '../../../../../shared/hooks/useFactories';
+import {
+  useCreateFactoryMutation,
+  useLinkRepositoryMutation,
+  useLoadFactories,
+} from '../../../../../shared/hooks/useFactories';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { connectLinear } from '../../factory/services/linear';
 import { saveFactories } from '../services/factories';
@@ -26,11 +30,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 }
 
-export interface EmptyFactoryStateProps {
-  onOpenFactories?: () => void;
-}
-
-export function EmptyFactoryState(_props: EmptyFactoryStateProps) {
+export function EmptyFactoryState() {
   const { baseUrl } = useApiConfig();
   const { selectFactory } = useActiveFactoryContext();
   const persistedFactories = useLoadFactories();

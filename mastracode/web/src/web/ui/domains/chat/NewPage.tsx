@@ -2,16 +2,12 @@ import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useLocation } from 'react-router';
 
-import { useOverlays } from '../../lib/overlays';
-import { Sidebar } from '../../Sidebar';
-import { ChatLayout, FolderIcon } from '../../ui';
+import { FolderIcon } from '../../ui';
 import type { Factory } from '../workspaces';
-import { EmptyFactoryState, isLocalFactory, selectedRepository, useActiveFactoryContext } from '../workspaces';
+import { isLocalFactory, selectedRepository, useActiveFactoryContext } from '../workspaces';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
-import { ChatHeader } from './components/ChatHeader';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
-import { ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useChatTranscript } from './context/useChatTranscript';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -19,8 +15,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
-  const overlays = useOverlays();
-  const { activeFactory, factoriesPending, factories } = useActiveFactoryContext();
+  const { factoriesPending, activeFactory } = useActiveFactoryContext();
 
   if (factoriesPending) {
     return (
@@ -30,23 +25,9 @@ export function NewPage() {
     );
   }
 
-  const noFactories = factories.length === 0;
+  if (!activeFactory) return <div>No active factory</div>;
 
-  if (noFactories || !activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
-  }
-
-  return (
-    <ChatLayout
-      sidebar={<Sidebar />}
-      header={<ChatHeader />}
-      main={
-        <ChatSessionBoundary>
-          <NewPageContent activeFactory={activeFactory} />
-        </ChatSessionBoundary>
-      }
-    />
-  );
+  return <NewPageContent activeFactory={activeFactory} />;
 }
 
 function NewPageContent({ activeFactory }: { activeFactory: Factory }) {

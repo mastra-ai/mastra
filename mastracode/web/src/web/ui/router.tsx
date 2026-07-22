@@ -13,7 +13,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { createBrowserRouter, Navigate, Outlet, useLocation, useSearchParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import { safeReturnTo, SignInPage, useWebAuth } from './domains/auth';
+import { SignInPage } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
@@ -24,6 +24,7 @@ import { AuditPage } from './domains/factory/AuditPage';
 import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
 import { OverviewPage } from './domains/factory/OverviewPage';
+import { RootGuards } from './domains/auth/components/RootGuards';
 
 /**
  * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
@@ -41,42 +42,18 @@ function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string })
   );
 }
 
-/**
- * Root layout guard. Shows a skeleton while the auth state resolves (one
- * cached query, shared with the sidebar identity UI) so the app neither
- * flashes protected content nor bounces through /signin on refresh.
- */
-function RequireAuth() {
-  const auth = useWebAuth();
-  const location = useLocation();
-  if (auth.isPending) return <AuthPendingSkeleton />;
-  const state = auth.data;
-  if (state?.authEnabled && !state.authenticated) {
-    const returnTo = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
-  }
-  return <Outlet />;
-}
-
-/** Inverse guard for /signin: only unauthenticated (auth-enabled) users stay. */
-function SignInGate() {
-  const auth = useWebAuth();
-  const [searchParams] = useSearchParams();
-  if (auth.isPending) return <AuthPendingSkeleton />;
-  const state = auth.data;
-  if (!state?.authEnabled || state.authenticated) {
-    return <Navigate to={safeReturnTo(searchParams.get('returnTo') ?? undefined)} replace />;
-  }
-  return <SignInPage />;
-}
-
 function RootLanding() {
-  const { activeFactory } = useActiveFactory();
+  const { activeFactory, factoriesPending } = useActiveFactory();
+
   const factoryProjectId =
     activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
+
   const workItems = useWorkItemsQuery(factoryProjectId);
 
-  if (factoryProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;
+  if (factoriesPending || (factoryProjectId && workItems.isPending)) {
+    return <AuthPendingSkeleton label="Loading Factory board" />;
+  }
+
   if (factoryProjectId && workItems.isError) {
     return (
       <div className="flex h-dvh w-full items-center justify-center bg-surface1 p-4">
@@ -100,9 +77,10 @@ export function createAppRoutes(): RouteObject[] {
   return [
     {
       path: '/',
-      element: <RequireAuth />,
+      element: <RootGuards />,
       children: [
         { index: true, element: <RootLanding /> },
+        { path: 'onboarding', element: <NewPage /> },
         {
           // Pathless layout: <Chat /> (providers, session, SSE stream) stays
           // mounted while navigating between thread URLs, so thread navigation
@@ -128,7 +106,7 @@ export function createAppRoutes(): RouteObject[] {
         { path: '*', element: <RedirectToDraftThread /> },
       ],
     },
-    { path: '/signin', element: <SignInGate /> },
+    { path: '/signin', element: <SignInPage /> },
   ];
 }
 

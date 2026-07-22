@@ -33,7 +33,6 @@ export function useFactoriesQuery() {
   return useQuery({
     queryKey: queryKeys.factories(),
     queryFn: () => loadFactoriesWithResolvedIds(baseUrl),
-    initialData: [],
   });
 }
 
