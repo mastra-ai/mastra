@@ -88,14 +88,40 @@ const results = await store.query({
     isOptional: true,
     description: 'Interval in milliseconds for database sync (Turso specific)',
   },
+  {
+    name: 'journalMode',
+    type: "'wal' | 'delete'",
+    isOptional: true,
+    defaultValue: "'wal'",
+    description:
+      'Journal mode for local file databases. `wal` uses a write-ahead log. `delete` uses a rollback journal and removes it after each transaction.',
+  },
 ]}
 />
+
+## Local journal modes
+
+`journalMode` applies only to local file databases. Remote and in-memory databases use their existing connection behavior.
+
+The default `wal` mode supports more concurrent read and write activity. Set `journalMode: 'delete'` when you need rollback journaling without persistent write-ahead log (WAL) sidecar files:
+
+```typescript
+const store = new LibSQLVector({
+  id: 'libsql-vector',
+  url: 'file:./vectors.db',
+  journalMode: 'delete',
+})
+```
+
+DELETE mode allows one writer at a time, so write-heavy workloads may have lower throughput. The selected mode is established before vector operations run. An operation fails if SQLite can't switch a local file to DELETE mode, for example when another process holds an incompatible lock.
+
+Call `close()` when the vector store is no longer needed. Closing a local WAL store checkpoints its pending writes and transitions the file to DELETE mode before releasing the client. A vector store configured for DELETE mode closes the client without running a WAL checkpoint. Repeated `close()` calls are safe.
 
 ## Methods
 
 ### `createIndex()`
 
-Creates a new vector collection. The index name must start with a letter or underscore and can only contain letters, numbers, and underscores. The dimension must be a positive integer.
+Creates a new vector collection. The index name must start with a letter or underscore and can only contain letters, numbers, and underscore characters. The dimension must be a positive integer.
 
 <PropertiesTable
   content={[

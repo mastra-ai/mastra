@@ -1483,6 +1483,8 @@
         "gemini-3.1-flash-lite",
         "gemini-3.1-pro-preview",
         "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.6-flash",
         "gemini-pro-latest",
         "gemma-4-26b-a4b-it",
         "gemma-4-31b-it",
@@ -2103,6 +2105,7 @@
       "models": [
         "JetBrains/Mellum2-12B-A2.5B-Instruct",
         "MiniMaxAI/MiniMax-M2.5",
+        "MiniMaxAI/MiniMax-M3",
         "OpenPipe/Qwen3-14B-Instruct",
         "Qwen/Qwen3-30B-A3B-Instruct-2507",
         "Qwen/Qwen3-Coder-480B-A35B-Instruct",
@@ -3949,6 +3952,22 @@
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
     },
+    "aki-io": {
+      "url": "https://aki.io/v1",
+      "apiKeyEnvVar": "AKI_IO_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "AKI.IO",
+      "models": [
+        "gemma4-26b",
+        "gpt-oss-120b",
+        "kimi-k2.7-code-1100b",
+        "minimax-m2.5-230b",
+        "mistral4-119b",
+        "qwen3.6-35b"
+      ],
+      "docUrl": "https://aki.io/docs/",
+      "gateway": "models.dev"
+    },
     "kilo": {
       "url": "https://api.kilo.ai/api/gateway",
       "apiKeyEnvVar": "KILO_API_KEY",
@@ -4665,6 +4684,8 @@
         "perplexity/sonar-reasoning-pro",
         "poolside/laguna-m.1",
         "poolside/laguna-m.1:free",
+        "poolside/laguna-s-2.1",
+        "poolside/laguna-s-2.1:free",
         "poolside/laguna-xs-2.1",
         "poolside/laguna-xs-2.1:free",
         "qwen/qwen-2.5-72b-instruct",
@@ -5885,11 +5906,11 @@
       "name": "InferX",
       "models": [
         "google/gemma-4-31b-it-fp8",
-        "qwen/qwen3-coder-next-fp8",
-        "qwen/qwen3-coder-next-fp8-1m",
         "qwen/qwen3.5-122b-a10b-nvfp4",
         "qwen/qwen3.6-27b-fp8",
-        "qwen/qwen3.6-35b-a3b-fp8"
+        "qwen/qwen3.6-35b-a3b-fp8",
+        "qwen3-coder-next-fp8",
+        "qwen3-coder-next-fp8-1m"
       ],
       "docUrl": "https://model.inferx.net/endpoints",
       "gateway": "models.dev"
@@ -7925,6 +7946,8 @@
       "gemini-3.1-flash-lite",
       "gemini-3.1-pro-preview",
       "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.6-flash",
       "gemini-pro-latest",
       "gemma-4-26b-a4b-it",
       "gemma-4-31b-it",
@@ -8340,6 +8363,7 @@
     "wandb": [
       "JetBrains/Mellum2-12B-A2.5B-Instruct",
       "MiniMaxAI/MiniMax-M2.5",
+      "MiniMaxAI/MiniMax-M3",
       "OpenPipe/Qwen3-14B-Instruct",
       "Qwen/Qwen3-30B-A3B-Instruct-2507",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct",
@@ -9484,6 +9508,14 @@
       "claude-sonnet-4-6",
       "claude-sonnet-5"
     ],
+    "aki-io": [
+      "gemma4-26b",
+      "gpt-oss-120b",
+      "kimi-k2.7-code-1100b",
+      "minimax-m2.5-230b",
+      "mistral4-119b",
+      "qwen3.6-35b"
+    ],
     "kilo": [
       "ai21/jamba-large-1.7",
       "aion-labs/aion-1.0",
@@ -10143,6 +10175,8 @@
       "perplexity/sonar-reasoning-pro",
       "poolside/laguna-m.1",
       "poolside/laguna-m.1:free",
+      "poolside/laguna-s-2.1",
+      "poolside/laguna-s-2.1:free",
       "poolside/laguna-xs-2.1",
       "poolside/laguna-xs-2.1:free",
       "qwen/qwen-2.5-72b-instruct",
@@ -11156,11 +11190,11 @@
     ],
     "inferx": [
       "google/gemma-4-31b-it-fp8",
-      "qwen/qwen3-coder-next-fp8",
-      "qwen/qwen3-coder-next-fp8-1m",
       "qwen/qwen3.5-122b-a10b-nvfp4",
       "qwen/qwen3.6-27b-fp8",
-      "qwen/qwen3.6-35b-a3b-fp8"
+      "qwen/qwen3.6-35b-a3b-fp8",
+      "qwen3-coder-next-fp8",
+      "qwen3-coder-next-fp8-1m"
     ],
     "poe": [
       "anthropic/claude-haiku-3",

@@ -96,6 +96,7 @@ const localProject: Factory = {
 const relatedWorkItems: WorkItem[] = [
   {
     id: 'work-issue-24',
+    revision: 1,
     orgId: 'org-1',
     createdBy: 'user-1',
     githubProjectId: GITHUB_PROJECT_ID,
@@ -120,6 +121,7 @@ const relatedWorkItems: WorkItem[] = [
   },
   {
     id: 'review-pr-25',
+    revision: 1,
     orgId: 'org-1',
     createdBy: 'user-1',
     githubProjectId: GITHUB_PROJECT_ID,
@@ -264,7 +266,7 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     expect(await screen.findByText('Work Sessions')).toBeInTheDocument();
-    expect(screen.getByText('Review Sessions')).toBeInTheDocument();
+    expect(await screen.findByText('Review Sessions')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'feat-api' })).toHaveAttribute('aria-current', 'true');
     expect(await screen.findByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('button', { name: 'factory/issue-99' })).toBeInTheDocument();
@@ -280,7 +282,7 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     const workGroup = await screen.findByRole('region', { name: 'Work Sessions' });
-    const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
+    const reviewGroup = await screen.findByRole('region', { name: 'Review Sessions' });
     expect(screen.queryByRole('button', { name: 'Work Sessions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review Sessions' })).not.toBeInTheDocument();
     expect(await within(workGroup).findByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
@@ -301,6 +303,7 @@ describe('WorkspacesSection', () => {
       const review = worktree.branch.startsWith('review-');
       return {
         id: `item-${index}`,
+        revision: 1,
         orgId: 'org-1',
         createdBy: 'user-1',
         githubProjectId: GITHUB_PROJECT_ID,
@@ -357,7 +360,7 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     const workGroup = await screen.findByRole('region', { name: 'Work Sessions' });
-    const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
+    const reviewGroup = await screen.findByRole('region', { name: 'Review Sessions' });
     await within(reviewGroup).findByRole('button', { name: 'review-5' });
     await waitFor(() => {
       expect(within(workGroup).getByRole('button', { name: 'work-0' })).toHaveAttribute('aria-current', 'true');
@@ -696,7 +699,11 @@ describe('WorkspacesSection', () => {
     let deletedBranch: unknown;
     const deletedThreads: string[] = [];
     let listRequests = 0;
+    let persistedWorktrees = storedRepository().worktrees;
     server.use(
+      http.get(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktrees`, () =>
+        HttpResponse.json({ worktrees: persistedWorktrees }),
+      ),
       http.get(`${API}/sessions/:resourceId/threads`, ({ request }) => {
         const url = new URL(request.url);
         // The cascade lists threads scoped to the deleted worktree; return one
@@ -715,6 +722,7 @@ describe('WorkspacesSection', () => {
       }),
       http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree/delete`, async ({ request }) => {
         deletedBranch = ((await request.json()) as { branch: string }).branch;
+        persistedWorktrees = persistedWorktrees.filter(worktree => worktree.branch !== deletedBranch);
         return HttpResponse.json({
           removed: true,
           branch: 'feat-ui',

@@ -1,5 +1,13 @@
 # @mastra/playground-ui
 
+## 42.0.0-alpha.11
+
+### Patch Changes
+
+- Fixed composer inputs to show one scrollbar for long messages. Added a `maxHeight` prop for configuring the scrolling viewport. ([#19876](https://github.com/mastra-ai/mastra/pull/19876))
+
+- Exported the shared toast API through the Toaster component entry point. ([#19876](https://github.com/mastra-ai/mastra/pull/19876))
+
 ## 42.0.0-alpha.10
 
 ### Patch Changes

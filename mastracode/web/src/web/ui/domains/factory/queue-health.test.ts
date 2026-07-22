@@ -26,6 +26,7 @@ function makeItem(overrides: Partial<QueueHealthWorkItem> = {}): QueueHealthWork
     stageHistory: [],
     sessions: {},
     metadata: {},
+    revision: 1,
     createdAt: new Date(NOW.getTime() - 1000),
     updatedAt: NOW,
     ...overrides,

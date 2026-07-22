@@ -25,15 +25,18 @@ import {
   useStartIssueTriageMutation,
 } from '../../../../shared/hooks/useFactoryData';
 import { useIntakeConfigQuery } from '../../../../shared/hooks/useIntakeConfig';
+import { useFactoryDecisionStatus, useRetryFactoryDecision } from '../../../../shared/hooks/useFactoryDecisions';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../shared/hooks/useLinearData';
 import { useStartFactoryRun } from '../../../../shared/hooks/useStartFactoryRun';
 import type { FactoryRunInvocation } from '../../../../shared/hooks/useStartFactoryRun';
 import {
   useDeleteWorkItemMutation,
+  useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
 } from '../../../../shared/hooks/useWorkItems';
 import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
+import type { FactoryDecisionStatus, FactoryDecisionSummary } from './services/decisions';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import { connectLinear, isLinearReauthError } from './services/linear';
@@ -122,34 +125,27 @@ function itemAppearsInStage(item: WorkItem, stage: BoardStageId, stages: Readonl
   return stage === 'intake' && !stages.some(candidate => item.stages.includes(candidate.id));
 }
 
+function githubNumberForItem(item: WorkItem): number | undefined {
+  const metadataKey = item.source === 'github-issue' ? 'githubIssueNumber' : 'githubPullRequestNumber';
+  const itemNumber = item.metadata[metadataKey] ?? item.metadata.number;
+  if (typeof itemNumber !== 'number' || !Number.isInteger(itemNumber) || itemNumber <= 0) return;
+  return itemNumber;
+}
+
+function candidateSourceKeyForItem(item: WorkItem): string | undefined {
+  const itemNumber = githubNumberForItem(item);
+  if (itemNumber === undefined) return;
+  if (item.source === 'github-issue') return `github-issue:${itemNumber}`;
+  if (item.source === 'github-pr') return `github-pr:${itemNumber}`;
+  return;
+}
+
 function itemStageOptions(item: WorkItem): ReadonlyArray<{ id: BoardStageId; label: string }> {
   return boardStages(item.source === 'github-pr' ? 'review' : 'work');
 }
 
 function itemStageLabel(item: WorkItem, stage: string): string {
   return itemStageOptions(item).find(candidate => candidate.id === stage)?.label ?? stageLabel(stage);
-}
-
-/**
- * Stage list after moving a card out of `from` into `to`. Other concurrent
- * stages are kept — except `done`, which replaces everything (the item is
- * finished, all open stages exit).
- */
-function stagesAfterMove(stages: string[], from: string | null, to: string): string[] {
-  if (to === 'done') return ['done'];
-  const rest = stages.filter(stage => stage !== from && stage !== to && stage !== 'done');
-  return [...rest, to];
-}
-
-/** Pre-work stages a card exits when a run starts on it. */
-const PRE_RUN_STAGES: string[] = ['intake', 'triage', 'planning'];
-
-function stagesAfterRunStart(stages: string[], to: string): string[] {
-  return stagesAfterMove(
-    stages.filter(stage => !PRE_RUN_STAGES.includes(stage)),
-    null,
-    to,
-  );
 }
 
 /**
@@ -337,13 +333,14 @@ interface ItemRunSpec {
  */
 function itemRunSpec(item: WorkItem): ItemRunSpec | null {
   const meta = item.metadata;
-  if (item.source === 'github-issue' && typeof meta.number === 'number') {
+  const githubNumber = githubNumberForItem(item);
+  if (item.source === 'github-issue' && githubNumber !== undefined) {
     const labels = metadataLabels(meta);
     const needsApproval = hasLabel(labels, NEEDS_APPROVAL_LABEL);
-    const ref = `GitHub issue #${meta.number}${item.url ? ` (${item.url})` : ''}`;
+    const ref = `GitHub issue #${githubNumber}${item.url ? ` (${item.url})` : ''}`;
     return {
-      branch: `factory/issue-${meta.number}`,
-      threadTitle: needsApproval ? `Triage #${meta.number}: ${item.title}` : `Issue #${meta.number}: ${item.title}`,
+      branch: `factory/issue-${githubNumber}`,
+      threadTitle: needsApproval ? `Triage #${githubNumber}: ${item.title}` : `Issue #${githubNumber}: ${item.title}`,
       actions: needsApproval
         ? [
             {
@@ -354,7 +351,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
                 type: 'prompt',
                 prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
               },
-              threadTags: issueTriageThreadTags(meta.number),
+              threadTags: issueTriageThreadTags(githubNumber),
             },
           ]
         : issueRunActions(ref),
@@ -369,12 +366,13 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
       actions: issueRunActions(ref, { context: fetchHint }),
     };
   }
-  if (item.source === 'github-pr' && typeof meta.number === 'number' && typeof meta.headBranch === 'string') {
-    const ref = `GitHub pull request #${meta.number}${item.url ? ` (${item.url})` : ''}`;
-    const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${meta.number}\`. Expected head branch: ${meta.headBranch}.`;
+  if (item.source === 'github-pr' && githubNumber !== undefined) {
+    const ref = `GitHub pull request #${githubNumber}${item.url ? ` (${item.url})` : ''}`;
+    const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${githubNumber}\`.`;
+    const headBranch = typeof meta.headBranch === 'string' ? ` Expected head branch: ${meta.headBranch}.` : '';
     return {
-      branch: `factory/pr-${meta.number}`,
-      threadTitle: `PR #${meta.number}: ${item.title}`,
+      branch: `factory/pr-${githubNumber}`,
+      threadTitle: `PR #${githubNumber}: ${item.title}`,
       actions: [
         {
           label: 'Review',
@@ -383,7 +381,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
           invocation: {
             type: 'skill',
             skillName: 'understand-pr',
-            arguments: `${ref}\n\n${checkout}`,
+            arguments: `${ref}\n\n${checkout}${headBranch}`,
           },
         },
       ],
@@ -414,6 +412,7 @@ function externalLinkLabel(source: WorkItemSource): string {
 // ── Drag & drop (native HTML5; the card menus are the accessible fallback) ──
 
 const CARD_MIME = 'application/x-factory-card';
+const ACTIVE_DECISION_STATUSES: FactoryDecisionStatus[] = ['pending', 'leased', 'retry', 'failed'];
 
 type DragPayload =
   | { kind: 'work-item'; id: string; fromStage: string }
@@ -506,6 +505,15 @@ function BoardContent({
   const review = kind === 'review';
   const stages = boardStages(kind);
   const items = useWorkItemsQuery(factoryProjectId);
+  const decisionStatus = useFactoryDecisionStatus(factoryProjectId, ACTIVE_DECISION_STATUSES);
+  const retryDecision = useRetryFactoryDecision(factoryProjectId);
+  const decisionByItem = useMemo(() => {
+    const byItem = new Map<string, FactoryDecisionSummary>();
+    for (const decision of decisionStatus.data?.decisions ?? []) {
+      if (decision.workItemId && !byItem.has(decision.workItemId)) byItem.set(decision.workItemId, decision);
+    }
+    return byItem;
+  }, [decisionStatus.data]);
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
 
@@ -538,9 +546,11 @@ function BoardContent({
   const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? projectRepositoryId : undefined);
   const triageIssues = useProjectIssuesQuery(!review ? projectRepositoryId : undefined, AUTO_TRIAGED_LABEL);
   const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? projectRepositoryId : undefined);
-  const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
+  const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear' ? factoryProjectId : undefined);
 
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
+  const transition = useTransitionWorkItemMutation(factoryProjectId);
+  const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const update = useUpdateWorkItemMutation(factoryProjectId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const { start, pendingRuns, enabled: runEnabled } = useStartFactoryRun();
@@ -573,12 +583,82 @@ function BoardContent({
     navigate(`/threads/${session.threadId}`);
   };
 
+  const refreshItemAndWorktrees = async (itemId: string) => {
+    const [refreshedWorkspaces, refreshedItems] = await Promise.all([workspaces.refetch(), items.refetch()]);
+    if (!refreshedWorkspaces.isSuccess || !refreshedItems.isSuccess) return;
+    const item = refreshedItems.data.find(candidate => candidate.id === itemId);
+    if (!item) return;
+    return {
+      item,
+      paths: new Set(refreshedWorkspaces.data.worktrees.map(worktree => worktree.worktreePath)),
+    };
+  };
+
+  const openOrCreateSession = async (item: WorkItem, destinationStage: string) => {
+    const refreshed = await refreshItemAndWorktrees(item.id);
+    if (!refreshed) return;
+    const liveSessions = Object.fromEntries(
+      Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.projectPath)),
+    );
+    const existingSession = itemThreadSession(liveSessions);
+    if (existingSession) {
+      await openThread(existingSession);
+      return;
+    }
+    const spec = itemSessionSpec(refreshed.item);
+    start.mutate({
+      branch: spec.branch,
+      threadTitle: spec.threadTitle,
+      workItem: {
+        id: refreshed.item.id,
+        role: 'chat',
+        stages: [destinationStage],
+        source: refreshed.item.source,
+        sourceKey: refreshed.item.sourceKey,
+        title: refreshed.item.title,
+      },
+    });
+  };
+
+  const openOrStartRun = async (item: WorkItem, role: RunAction['role']) => {
+    const refreshed = await refreshItemAndWorktrees(item.id);
+    if (!refreshed) return;
+    const existingSession = refreshed.item.sessions[role];
+    if (existingSession && refreshed.paths.has(existingSession.projectPath)) {
+      await openThread(existingSession);
+      return;
+    }
+    const spec = itemRunSpec(refreshed.item);
+    const action = spec?.actions.find(candidate => candidate.role === role);
+    if (!spec || !action) return;
+    start.mutate({
+      branch: spec.branch,
+      threadTitle: spec.threadTitle,
+      threadTags: action.threadTags,
+      invocation: action.invocation,
+      workItem: {
+        id: refreshed.item.id,
+        role: action.role,
+        existingRoles: Object.keys(refreshed.item.sessions),
+        stages: [action.stage],
+        source: refreshed.item.source,
+        sourceKey: refreshed.item.sourceKey,
+        title: refreshed.item.title,
+      },
+    });
+  };
+
   const allWorkItems = useMemo(() => items.data ?? [], [items.data]);
   const workItems = allWorkItems.filter(item => belongsToBoard(item, kind));
 
   // Live candidates minus anything already persisted in either workflow.
   const candidates = useMemo(() => {
-    const known = new Set(allWorkItems.map(item => item.sourceKey).filter(Boolean));
+    const known = new Set<string>();
+    for (const item of allWorkItems) {
+      if (item.sourceKey) known.add(item.sourceKey);
+      const candidateSourceKey = candidateSourceKeyForItem(item);
+      if (candidateSourceKey) known.add(candidateSourceKey);
+    }
     const intakeIssues = (activeIntakeSource === 'github' ? (issues.data ?? []) : []).filter(
       issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL),
     );
@@ -617,14 +697,34 @@ function BoardContent({
     container.scrollTo?.({ left: Math.max(0, lane.offsetLeft - container.offsetLeft), behavior: 'auto' });
   }, [boardDataPending, boardPositionKey, candidates, stages, workItems]);
 
-  const moveItem = (id: string, fromStage: string | null, toStage: string) => {
+  const requestTransition = (item: WorkItem, toStage: string) => {
+    setTransitionReasons(current => {
+      if (!(item.id in current)) return current;
+      const next = { ...current };
+      delete next[item.id];
+      return next;
+    });
+    transition.mutate(
+      { item, board: review ? 'review' : 'work', stage: toStage },
+      {
+        onSuccess: result => {
+          if (result.status !== 'rejected') return;
+          setTransitionReasons(current => ({ ...current, [item.id]: result.reason }));
+        },
+        onError: error => {
+          setTransitionReasons(current => ({
+            ...current,
+            [item.id]: error instanceof Error ? error.message : 'The transition could not be evaluated.',
+          }));
+        },
+      },
+    );
+  };
+
+  const moveItem = (id: string, _fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
-    if (!item) return;
-    const allowedStages = new Set<string>(stages.map(stage => stage.id));
-    const currentStages = item.stages.filter(stage => allowedStages.has(stage));
-    const next = stagesAfterMove(currentStages, fromStage, toStage);
-    if (next.length === item.stages.length && next.every(stage => item.stages.includes(stage))) return;
-    update.mutate({ id, patch: { stages: next } });
+    if (!item || (item.stages.length === 1 && item.stages[0] === toStage)) return;
+    requestTransition(item, toStage);
   };
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId) => {
@@ -636,7 +736,18 @@ function BoardContent({
     // Filing a candidate never starts a run — it only creates the card.
     const { source, sourceKey, title, url, metadata } = payload.candidate;
     const parentWorkItemId = source === 'github-pr' ? inferredParentWorkItemId(metadata, allWorkItems) : undefined;
-    upsert.mutate({ source, sourceKey, parentWorkItemId, title, url, stages: [toStage], metadata });
+    void (async () => {
+      const item = await upsert.mutateAsync({
+        source,
+        sourceKey,
+        parentWorkItemId,
+        title,
+        url,
+        stages: ['intake'],
+        metadata,
+      });
+      if (toStage !== 'intake') requestTransition(item, toStage);
+    })();
   };
 
   if (items.isPending) return <SkeletonRows label="Loading board" rows={4} rowClassName="h-24 w-full" />;
@@ -648,7 +759,9 @@ function BoardContent({
     );
   }
 
-  const mutationError = [start, triage, upsert, update, remove, selectWorkspace].find(m => m.isError)?.error;
+  const mutationError = [start, triage, upsert, transition, update, remove, selectWorkspace].find(
+    m => m.isError,
+  )?.error;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -732,44 +845,15 @@ function BoardContent({
                     // for a perfectly live thread. Hold run/create actions until
                     // liveness is known.
                     runDisabled={!runEnabled || !workspaces.isSuccess}
+                    evaluating={transition.pendingItemIds.includes(item.id)}
+                    transitionReason={transitionReasons[item.id]}
+                    decision={decisionByItem.get(item.id)}
+                    retryingDecisionId={retryDecision.isPending ? retryDecision.variables : undefined}
+                    onRetryDecision={decisionId => retryDecision.mutate(decisionId)}
                     pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
                     onOpenThread={session => void openThread(session)}
-                    onCreateSession={spec =>
-                      start.mutate({
-                        branch: spec.branch,
-                        threadTitle: spec.threadTitle,
-                        workItem: {
-                          id: item.id,
-                          // File only the neutral chat role. The title is a
-                          // create button only when every existing role ref is
-                          // stale (worktree gone); repointing those roles here
-                          // would make them look live again and hide the card's
-                          // run actions even though no run happened.
-                          role: 'chat',
-                          stages: item.stages,
-                          source: item.source,
-                          sourceKey: item.sourceKey,
-                          title: item.title,
-                        },
-                      })
-                    }
-                    onStartRun={(spec, action) =>
-                      start.mutate({
-                        branch: spec.branch,
-                        threadTitle: spec.threadTitle,
-                        threadTags: action.threadTags,
-                        invocation: action.invocation,
-                        workItem: {
-                          id: item.id,
-                          role: action.role,
-                          existingRoles: Object.keys(item.sessions),
-                          stages: stagesAfterRunStart(item.stages, action.stage),
-                          source: item.source,
-                          sourceKey: item.sourceKey,
-                          title: item.title,
-                        },
-                      })
-                    }
+                    onCreateSession={() => void openOrCreateSession(item, stage.id)}
+                    onStartRun={(_spec, action) => void openOrStartRun(item, action.role)}
                     onMove={toStage => moveItem(item.id, stage.id, toStage)}
                     onRemove={() => remove.mutate(item.id)}
                   />
@@ -933,12 +1017,24 @@ function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkIt
   return refs.at(-1) ?? null;
 }
 
+function decisionStatusText(decision: FactoryDecisionSummary): string {
+  if (decision.status === 'pending') return `Rule effect pending · ${decision.type}`;
+  if (decision.status === 'leased') return `Rule effect dispatching · ${decision.type} · attempt ${decision.attempts}`;
+  if (decision.status === 'retry') return `Rule effect retrying · ${decision.type} · attempt ${decision.attempts}`;
+  return decision.lastError ? `Rule effect failed: ${decision.lastError}` : `Rule effect failed · ${decision.type}`;
+}
+
 function WorkItemCard({
   item,
   columnStage,
   allItems,
   liveWorktreePaths,
   runDisabled,
+  evaluating,
+  transitionReason,
+  decision,
+  retryingDecisionId,
+  onRetryDecision,
   pendingRunRoles,
   onOpenThread,
   onCreateSession,
@@ -952,6 +1048,11 @@ function WorkItemCard({
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
+  evaluating: boolean;
+  transitionReason?: string;
+  decision?: FactoryDecisionSummary;
+  retryingDecisionId?: string;
+  onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlySet<string>;
   onOpenThread: (session: WorkItemSessionRef) => void;
   /** Title click when the card has no live session: open an empty session (no run). */
@@ -975,12 +1076,17 @@ function WorkItemCard({
 
   return (
     <article
-      draggable
+      draggable={!evaluating}
       aria-label={item.title}
+      aria-busy={evaluating || undefined}
       data-testid="work-item-card"
       data-related={relatedItems.length > 0 ? 'true' : undefined}
-      onDragStart={event => setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage })}
-      className="flex cursor-grab flex-col gap-1.5 rounded-md border border-border1 bg-surface4 p-2 active:cursor-grabbing"
+      onDragStart={event => {
+        if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
+      }}
+      className={`flex flex-col gap-1.5 rounded-md border border-border1 bg-surface4 p-2 ${
+        evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing'
+      }`}
     >
       <div className="flex items-start gap-2">
         <Icon size={14} className={`mt-0.5 shrink-0 ${iconClassName}`} aria-hidden />
@@ -1020,7 +1126,13 @@ function WorkItemCard({
         <DropdownMenu>
           <DropdownMenu.Trigger
             render={
-              <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${item.title}`}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={evaluating}
+                aria-label={`Actions for ${item.title}`}
+              >
                 <EllipsisVertical size={13} aria-hidden />
               </Button>
             }
@@ -1081,6 +1193,37 @@ function WorkItemCard({
             </span>
           ))}
         </div>
+      )}
+      {evaluating && (
+        <span role="status" aria-live="polite" className="text-ui-xs text-icon4">
+          Evaluating…
+        </span>
+      )}
+      {!evaluating && decision !== undefined && (
+        <div className="flex items-center justify-between gap-2">
+          <span
+            role={decision.status === 'failed' ? 'alert' : 'status'}
+            className={`text-ui-xs ${decision.status === 'failed' ? 'text-error' : 'text-icon4'}`}
+          >
+            {decisionStatusText(decision)}
+          </span>
+          {decision.status === 'failed' ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={retryingDecisionId === decision.id}
+              onClick={() => onRetryDecision(decision.id)}
+            >
+              {retryingDecisionId === decision.id ? 'Retrying…' : 'Retry'}
+            </Button>
+          ) : null}
+        </div>
+      )}
+      {!evaluating && transitionReason !== undefined && (
+        <span role="alert" className="text-ui-xs text-error">
+          {transitionReason}
+        </span>
       )}
     </article>
   );

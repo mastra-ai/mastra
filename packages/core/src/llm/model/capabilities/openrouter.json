@@ -381,6 +381,8 @@
     "perplexity/sonar-reasoning-pro",
     "poolside/laguna-m.1",
     "poolside/laguna-m.1:free",
+    "poolside/laguna-s-2.1",
+    "poolside/laguna-s-2.1:free",
     "poolside/laguna-xs-2.1",
     "poolside/laguna-xs-2.1:free",
     "qwen/qwen-2.5-72b-instruct",
