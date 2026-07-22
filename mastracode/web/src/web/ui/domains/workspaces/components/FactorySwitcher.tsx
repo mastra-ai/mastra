@@ -5,14 +5,14 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, ChevronsUpDown, Factory as FactoryIcon, Folder, Plus } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
-import { useFactoryBasePath } from '../../../../../shared/hooks/useFactoryBasePath';
+import { factorySwitchPath, useFactoryBasePath } from '../../../../../shared/hooks/useFactoryBasePath';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { isServerFactory } from '../services/factories';
 
 /** Inline factory selection with a single Create Factory action. */
 export function FactorySwitcher() {
-  const { factories, activeFactory, selectFactory } = useActiveFactoryContext();
+  const { factories, activeFactory } = useActiveFactoryContext();
   const navigate = useNavigate();
   const location = useLocation();
   const basePath = useFactoryBasePath();
@@ -42,9 +42,12 @@ export function FactorySwitcher() {
           const projectPath = deriveProjectPath(factory);
 
           return (
-            // selectFactory navigates to `/factories/:id` and preserves the
-            // current sub-page, so no explicit destination is needed here.
-            <DropdownMenu.Item key={factory.id} onSelect={() => selectFactory(factory)}>
+            // Switching is plain navigation: `/factories/:id` with the
+            // current sub-page preserved when it applies to any factory.
+            <DropdownMenu.Item
+              key={factory.id}
+              onSelect={() => void navigate(factorySwitchPath(factory.id, location.pathname))}
+            >
               {isServerFactory(factory) ? <FactoryIcon /> : <Folder />}
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">{factory.name}</span>

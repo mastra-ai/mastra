@@ -25,7 +25,9 @@ import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-rou
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
-import { useActiveFactoryContext } from '../../../workspaces';
+import { useLocation, useNavigate } from 'react-router';
+
+import { factorySwitchPath } from '../../../../../../shared/hooks/useFactoryBasePath';
 import { ChatMessageList } from '../../components/ChatMessageList';
 import { ModesSelection } from '../../components/StatusLine/ModesSelection';
 import { ChatMessageBoundary } from '../ChatSessionProvider';
@@ -193,7 +195,8 @@ function Probe() {
   const { status, threadId } = useChatConnection();
   const { transcript, busy, showWorkingIndicator, localUser } = useChatTranscript();
   const { usage, followUpCount, omPhase, goal } = useChatRuntime();
-  const { selectFactory } = useActiveFactoryContext();
+  const navigate = useNavigate();
+  const location = useLocation();
   const messageText = transcript.entries
     .filter(entry => entry.kind === 'message')
     .flatMap(entry => entry.message.content.parts)
@@ -215,7 +218,9 @@ function Probe() {
       <span data-testid="om-phase">{omPhase}</span>
       <span data-testid="goal-objective">{goal?.objective ?? '(none)'}</span>
       <button onClick={() => localUser('Hello')}>send local message</button>
-      <button onClick={() => void selectFactory(nextProject)}>switch project</button>
+      <button onClick={() => void navigate(factorySwitchPath(nextProject.id, location.pathname))}>
+        switch project
+      </button>
     </div>
   );
 }

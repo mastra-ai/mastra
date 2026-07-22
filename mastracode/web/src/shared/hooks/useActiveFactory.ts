@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import { queryKeys } from '../api/keys';
 import {
@@ -20,29 +20,15 @@ export interface PreparingState {
 }
 
 /**
- * Sub-pages that make sense for any factory; preserved when switching the
- * active factory. Thread routes are scope-specific, so switching falls back
- * to the draft composer.
- */
-const PRESERVED_SUBPAGES = new Set(['overview', 'work', 'review', 'metrics', 'audit', 'new']);
-
-function switchSuffix(pathname: string): string {
-  const match = /^\/factories\/[^/]+\/([^/]+)$/.exec(pathname);
-  if (match && PRESERVED_SUBPAGES.has(match[1])) return `/${match[1]}`;
-  return '/new';
-}
-
-/**
  * The active factory is resolved from the `/factories/:factoryId` URL param —
  * the URL is the single source of truth (nothing is persisted in storage).
- * "Selecting" a factory navigates to its URL; repository materialization for
- * server-backed factories runs as an effect reacting to the param, so deep
- * links and reloads prepare the sandbox too.
+ * Switching factories is plain navigation on the caller side (see
+ * `factorySwitchPath`); repository materialization for server-backed
+ * factories runs as an effect reacting to the param, so deep links and
+ * reloads prepare the sandbox too.
  */
 export function useActiveFactory() {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
   const { data: factories, isPending: factoriesPending } = useFactoriesQuery();
   const factoryList = factories ?? [];
@@ -119,26 +105,12 @@ export function useActiveFactory() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFactoryId, activeRepositoryId]);
 
-  /**
-   * Navigate to the factory's URL (the sub-page is preserved when it applies
-   * to any factory, otherwise the draft composer). `null` leaves the factory
-   * scope entirely.
-   */
-  const selectFactory = (factory: Factory | null) => {
-    if (!factory) {
-      navigate('/');
-      return;
-    }
-    navigate(`/factories/${factory.id}${switchSuffix(pathname)}`);
-  };
-
   return {
     factories: factoryList,
     factoriesPending,
     activeFactory,
     resourceId,
     sessionEnabled,
-    selectFactory,
     /** Non-null while a factory repository is being provisioned/cloned. */
     preparing,
     /** Last materialization failure (carries the server's `code`), if any. */

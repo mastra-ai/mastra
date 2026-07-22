@@ -1,8 +1,8 @@
 /**
  * Regression: after creating a factory, the switcher must reflect it — both as
  * the active selection and in its dropdown. `useCreateFactoryMutation` refetches
- * the factories query before resolving, so the panel's post-create
- * `selectFactory` + navigate always sees the fresh list.
+ * the factories query before resolving, so the panel's post-create navigation
+ * always sees the fresh list.
  */
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor } from '@testing-library/react';

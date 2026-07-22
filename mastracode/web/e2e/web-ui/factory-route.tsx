@@ -27,7 +27,7 @@ export function LocationProbe() {
  * - `routePath` is the route pattern under `/factories/:factoryId/` (defaults
  *   to `*` so any sub-page matches; pass e.g. `threads/:threadId` when the
  *   children need that param resolved).
- * - Navigations that leave the factory scope (e.g. `selectFactory(null)` → `/`)
+ * - Navigations that leave the factory scope (e.g. navigating to `/`)
  *   land on a fallback route that renders a `data-testid="location"` probe.
  */
 export function FactoryRouteHarness({

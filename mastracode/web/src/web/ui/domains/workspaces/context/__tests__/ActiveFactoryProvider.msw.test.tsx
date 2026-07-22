@@ -4,17 +4,19 @@
  * The provider exposes the existing `useActiveFactory()` hook through context.
  * The active factory is resolved from the `/factories/:factoryId` URL param —
  * the URL is the single source of truth (nothing is persisted in storage) and
- * `selectFactory` navigates. Server factories with a selected repository are
+ * switching factories is plain navigation on the caller side (via
+ * `factorySwitchPath`). Server factories with a selected repository are
  * materialized into their cloud sandbox by an effect reacting to the param
  * (the `/ensure` SSE route); only the network is mocked (MSW).
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { FactoryRouteHarness, LocationProbe } from '../../../../../../../e2e/web-ui/factory-route';
+import { factorySwitchPath } from '../../../../../../shared/hooks/useFactoryBasePath';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import type { MaterializeResult } from '../../services/github';
@@ -72,7 +74,9 @@ function seedFactories(factories: Factory[]) {
 
 function Probe({ selectTarget }: { selectTarget?: Factory }) {
   const api = useActiveFactoryContext();
-  const { factories, activeFactory, resourceId, sessionEnabled, selectFactory, preparing, prepareError } = api;
+  const { factories, activeFactory, resourceId, sessionEnabled, preparing, prepareError } = api;
+  const navigate = useNavigate();
+  const location = useLocation();
   return (
     <div>
       <span data-testid="factory-count">{factories.length}</span>
@@ -83,8 +87,12 @@ function Probe({ selectTarget }: { selectTarget?: Factory }) {
       <span data-testid="session-enabled">{sessionEnabled ? 'yes' : 'no'}</span>
       <span data-testid="preparing">{preparing?.message ?? '(idle)'}</span>
       <span data-testid="prepare-error">{prepareError?.message ?? '(none)'}</span>
-      <button onClick={() => void selectFactory(null)}>clear selection</button>
-      {selectTarget && <button onClick={() => void selectFactory(selectTarget)}>select target</button>}
+      <button onClick={() => void navigate('/')}>clear selection</button>
+      {selectTarget && (
+        <button onClick={() => void navigate(factorySwitchPath(selectTarget.id, location.pathname))}>
+          select target
+        </button>
+      )}
     </div>
   );
 }
@@ -123,7 +131,7 @@ describe('ActiveFactoryProvider', () => {
     expect(screen.getByTestId('session-enabled')).toHaveTextContent('no');
   });
 
-  it('given an active factory, when selectFactory(null) is called, then it navigates out of the factory scope', async () => {
+  it('given an active factory, when navigating out of the factory scope, then no factory selection lingers', async () => {
     seedFactories([LOCAL_FACTORY]);
     renderProbe({ factoryId: LOCAL_FACTORY.id });
 
