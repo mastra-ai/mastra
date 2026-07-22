@@ -1,6 +1,6 @@
 'use client';
 
-import type { DatasetItem, DatasetItemToolMock } from '@mastra/client-js';
+import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
@@ -21,35 +21,10 @@ import {
   Trash2,
   WrenchIcon,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { EditModeContent } from '../dataset-detail/dataset-item-form';
+import { DatasetItemEditForm } from '../dataset-detail/dataset-item-form';
 import { useLinkComponent } from '@/lib/framework';
-
-/** Schema validation error from API */
-interface SchemaValidationError {
-  field: 'input' | 'groundTruth' | 'toolMocks';
-  errors: Array<{ path: string; message: string }>;
-}
-
-/** Parses API error message to extract schema validation details */
-function parseValidationError(error: unknown): SchemaValidationError | null {
-  if (!(error instanceof Error)) return null;
-
-  // API error format: "HTTP error! status: 400 - {\"error\":\"...\",\"field\":\"...\",\"errors\":[...]}"
-  const match = error.message.match(/- ({.*})$/);
-  if (!match) return null;
-
-  try {
-    const parsed = JSON.parse(match[1]);
-    if (parsed.field && Array.isArray(parsed.errors)) {
-      return { field: parsed.field, errors: parsed.errors };
-    }
-  } catch {
-    // Not valid JSON
-  }
-  return null;
-}
 
 export interface DatasetItemPanelProps {
   datasetId: string;
@@ -65,171 +40,16 @@ export interface DatasetItemPanelProps {
  */
 export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose }: DatasetItemPanelProps) {
   const { Link } = useLinkComponent();
-  const { updateItem, deleteItem } = useDatasetMutations();
-
-  // Edit mode state
+  const { deleteItem } = useDatasetMutations();
   const [isEditing, setIsEditing] = useState(false);
-  const [inputValue, setInputValue] = useState('');
-  const [groundTruthValue, setGroundTruthValue] = useState('');
-  const [metadataValue, setMetadataValue] = useState('');
-  const [trajectoryValue, setTrajectoryValue] = useState('');
-  const [toolMocksValue, setToolMocksValue] = useState('');
-  const [requestContextValue, setRequestContextValue] = useState('');
-
-  // Validation error state
-  const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
-
-  // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  // Reset form state when item changes (navigation or prop update)
-  useEffect(() => {
-    if (item) {
-      setInputValue(JSON.stringify(item.input, null, 2));
-      setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
-      setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
-      setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
-      setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
-      setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
-      setIsEditing(false); // Exit edit mode on item change
-      setShowDeleteConfirm(false); // Reset delete state on item change
-      setValidationErrors(null); // Reset validation errors on item change
-    }
-    // Intentionally depends on item.id only — re-running on every new `item` object
-    // reference would clobber in-progress edits whenever the parent refetches.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.id]);
 
   const currentIndex = items.findIndex(i => i.id === item.id);
   const onPrevious = currentIndex > 0 ? () => onItemChange(items[currentIndex - 1].id) : undefined;
   const onNext =
     currentIndex >= 0 && currentIndex < items.length - 1 ? () => onItemChange(items[currentIndex + 1].id) : undefined;
 
-  // Form handlers
-  const handleSave = async () => {
-    // Validate input JSON
-    let parsedInput: unknown;
-    try {
-      parsedInput = JSON.parse(inputValue);
-    } catch {
-      toast.error('Input must be valid JSON');
-      return;
-    }
-
-    // Parse groundTruth if provided
-    let parsedGroundTruth: unknown | undefined;
-    if (groundTruthValue.trim()) {
-      try {
-        parsedGroundTruth = JSON.parse(groundTruthValue);
-      } catch {
-        toast.error('Ground Truth must be valid JSON');
-        return;
-      }
-    }
-
-    // Parse metadata if provided
-    let parsedMetadata: Record<string, unknown> | undefined;
-    if (metadataValue.trim()) {
-      try {
-        parsedMetadata = JSON.parse(metadataValue);
-      } catch {
-        toast.error('Metadata must be valid JSON');
-        return;
-      }
-    }
-
-    // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
-    let parsedTrajectory: unknown | null = null;
-    if (trajectoryValue.trim()) {
-      try {
-        parsedTrajectory = JSON.parse(trajectoryValue);
-      } catch {
-        toast.error('Expected Trajectory must be valid JSON');
-        return;
-      }
-    }
-
-    // Parse toolMocks: empty string means clear, otherwise must be a JSON array
-    let parsedToolMocks: DatasetItemToolMock[] | undefined;
-    if (toolMocksValue.trim()) {
-      try {
-        const parsed = JSON.parse(toolMocksValue);
-        if (!Array.isArray(parsed)) {
-          toast.error('Tool Mocks must be a JSON array');
-          return;
-        }
-        parsedToolMocks = parsed as DatasetItemToolMock[];
-      } catch {
-        toast.error('Tool Mocks must be valid JSON');
-        return;
-      }
-    } else {
-      parsedToolMocks = [];
-    }
-
-    // Parse requestContext if provided
-    let parsedRequestContext: Record<string, unknown> | undefined;
-    if (requestContextValue.trim()) {
-      try {
-        parsedRequestContext = JSON.parse(requestContextValue);
-      } catch {
-        toast.error('Request Context must be valid JSON');
-        return;
-      }
-    }
-
-    try {
-      await updateItem.mutateAsync({
-        datasetId,
-        itemId: item.id,
-        input: parsedInput,
-        groundTruth: parsedGroundTruth,
-        metadata: parsedMetadata,
-        expectedTrajectory: parsedTrajectory,
-        toolMocks: parsedToolMocks,
-        requestContext: parsedRequestContext,
-      });
-
-      toast.success('Item updated successfully');
-      setIsEditing(false);
-      setValidationErrors(null);
-    } catch (error) {
-      // Check for schema validation error from API
-      const schemaError = parseValidationError(error);
-      if (schemaError) {
-        setValidationErrors(schemaError);
-      } else {
-        toast.error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    }
-  };
-
-  const handleCancel = () => {
-    // Reset to original values
-    setInputValue(JSON.stringify(item.input, null, 2));
-    setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
-    setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
-    setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
-    setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
-    setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
-    setIsEditing(false);
-    setValidationErrors(null);
-  };
-
-  // Clear validation errors on field change
-  const handleInputValueChange = (value: string) => {
-    setInputValue(value);
-    if (validationErrors?.field === 'input') {
-      setValidationErrors(null);
-    }
-  };
-
-  const handleGroundTruthValueChange = (value: string) => {
-    setGroundTruthValue(value);
-    if (validationErrors?.field === 'groundTruth') {
-      setValidationErrors(null);
-    }
-  };
+  const closeEditor = () => setIsEditing(false);
 
   const handleDeleteConfirm = async () => {
     try {
@@ -296,24 +116,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
 
         <DataPanel.Content>
           {isEditing ? (
-            <EditModeContent
-              inputValue={inputValue}
-              setInputValue={handleInputValueChange}
-              groundTruthValue={groundTruthValue}
-              setGroundTruthValue={handleGroundTruthValueChange}
-              metadataValue={metadataValue}
-              setMetadataValue={setMetadataValue}
-              trajectoryValue={trajectoryValue}
-              setTrajectoryValue={setTrajectoryValue}
-              toolMocksValue={toolMocksValue}
-              setToolMocksValue={setToolMocksValue}
-              requestContextValue={requestContextValue}
-              setRequestContextValue={setRequestContextValue}
-              validationErrors={validationErrors}
-              onSave={handleSave}
-              onCancel={handleCancel}
-              isSaving={updateItem.isPending}
-            />
+            <DatasetItemEditForm item={item} onSuccess={closeEditor} onCancel={closeEditor} />
           ) : (
             <>
               <DataKeysAndValues>
@@ -326,6 +129,12 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                 </DataKeysAndValues.ValueWithCopyBtn>
                 <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
                 <DataKeysAndValues.Value>v{item.datasetVersion}</DataKeysAndValues.Value>
+                {item.timeout !== undefined && (
+                  <>
+                    <DataKeysAndValues.Key>Item timeout</DataKeysAndValues.Key>
+                    <DataKeysAndValues.Value>{item.timeout.toLocaleString()} ms</DataKeysAndValues.Value>
+                  </>
+                )}
                 <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
                 <DataKeysAndValues.Value>
                   {format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa')}
