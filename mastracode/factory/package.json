@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "factory-skills",
     "CHANGELOG.md"
   ],
   "main": "dist/index.js",
@@ -51,6 +52,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "dependencies": {
+    "@mastra/auth-studio": "workspace:*",
     "@mastra/auth-workos": "workspace:*",
     "@mastra/code-sdk": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -62,6 +64,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/libsql": "workspace:*",
+    "@mastra/pg": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",

@@ -2196,6 +2196,9 @@ importers:
 
   mastracode/factory:
     dependencies:
+      '@mastra/auth-studio':
+        specifier: workspace:*
+        version: link:../../auth/studio
       '@mastra/auth-workos':
         specifier: workspace:*
         version: link:../../auth/workos
@@ -2227,6 +2230,9 @@ importers:
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@mastra/pg':
+        specifier: workspace:*
+        version: link:../../stores/pg
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

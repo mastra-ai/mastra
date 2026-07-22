@@ -1,16 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import type * as authStudioModule from '@mastra/auth-studio';
+import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
+
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import type { VersionControl } from '@mastra/factory/capabilities/version-control';
 import { PgVector } from '@mastra/pg';
-import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
-import { MastraFactory } from './factory-entry.js';
-import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from '@mastra/factory/rules/defaults';
-import { getFactoryWorkspace } from './factory/workspace.js';
-import type { FactoryIntegration, IntegrationContext } from '@mastra/factory/integrations/base';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { VersionControl } from './capabilities/version-control';
+import { MastraFactory } from './factory';
+import type { FactoryIntegration, IntegrationContext } from './integrations/base';
+import type * as surfaceModule from './routes/surface';
+import type * as tenantCredentialsModule from './routes/tenant-credentials';
+import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults';
+import { getFactoryWorkspace } from './workspace';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
@@ -41,7 +44,7 @@ vi.mock('@mastra/code-sdk', () => ({
 // tests observe the resolved default provider directly.
 const studioInstances = vi.hoisted(() => [] as unknown[]);
 vi.mock('@mastra/auth-studio', async importOriginal => {
-  const mod = (await importOriginal()) as typeof import('@mastra/auth-studio');
+  const mod = (await importOriginal()) as typeof authStudioModule;
   class TrackedMastraAuthStudio extends mod.MastraAuthStudio {
     constructor(...args: ConstructorParameters<typeof mod.MastraAuthStudio>) {
       super(...args);
@@ -65,8 +68,8 @@ function lastStudioProvider():
 // in local/auth-disabled mode would force model calls through an empty tenant
 // store and break chat with "Not logged in", so the factory must gate it.
 const registerTenantCredentialResolverMock = vi.fn();
-vi.mock('@mastra/factory/routes/tenant-credentials', async importOriginal => {
-  const actual = await importOriginal<typeof import('@mastra/factory/routes/tenant-credentials')>();
+vi.mock('./routes/tenant-credentials', async importOriginal => {
+  const actual = await importOriginal<typeof tenantCredentialsModule>();
   return { ...actual, registerTenantCredentialResolver: () => registerTenantCredentialResolverMock() };
 });
 
@@ -74,8 +77,8 @@ vi.mock('@mastra/factory/routes/tenant-credentials', async importOriginal => {
 // the factory threads into it (e.g. the resolved Factory rules) — there is no
 // service locator to read them back from anymore.
 const assembleFactoryApiRoutesSpy = vi.fn();
-vi.mock('@mastra/factory/routes/surface', async importOriginal => {
-  const actual = await importOriginal<typeof import('@mastra/factory/routes/surface')>();
+vi.mock('./routes/surface', async importOriginal => {
+  const actual = await importOriginal<typeof surfaceModule>();
   return {
     ...actual,
     assembleFactoryApiRoutes: (deps: Parameters<typeof actual.assembleFactoryApiRoutes>[0]) => {

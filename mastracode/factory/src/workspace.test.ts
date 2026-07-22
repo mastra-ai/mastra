@@ -44,14 +44,7 @@ describe('getFactoryWorkspace', () => {
   });
 
   it('keeps the reserved skill list aligned with packaged Factory assets', async () => {
-    const assetRoot = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '..',
-      '..',
-      'mastra',
-      'public',
-      'factory-skills',
-    );
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const assetNames = (await fs.readdir(assetRoot)).sort();
 
     expect(assetNames).toEqual(['understand-issue', 'understand-pr']);

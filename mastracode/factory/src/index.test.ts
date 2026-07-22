@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { FACTORY_MODULE } from './index.js';
+import { MastraFactory } from './index.js';
 
-describe('@mastra/factory', () => {
-  it('exports the module marker', () => {
-    expect(FACTORY_MODULE).toBe('@mastra/factory');
+describe('@mastra/factory package root', () => {
+  it('exports the MastraFactory entry point', () => {
+    expect(typeof MastraFactory).toBe('function');
   });
 });

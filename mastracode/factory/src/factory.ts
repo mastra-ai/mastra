@@ -1,10 +1,10 @@
 /**
- * `MastraFactory` — the single entry point to the whole MastraCode web factory.
+ * `MastraFactory` — the single entry point to the whole Mastra Software Factory.
  *
- * The deploy entry (`src/mastra/index.ts`) is the ONE place deployment env is
- * read: it constructs config instances (auth adapter, pubsub) and passes them
- * here explicitly. The factory itself never reads deployment env vars and
- * never constructs providers on the caller's behalf.
+ * The consumer's deploy entry is the ONE place deployment env is read: it
+ * constructs config instances (auth adapter, pubsub) and passes them here
+ * explicitly. The factory itself never reads deployment env vars and never
+ * constructs providers on the caller's behalf.
  *
  * `prepare()` resolves feature readiness, threads every dependency explicitly,
  * assembles the web routes/middleware, and returns the constructor args for
@@ -18,56 +18,49 @@
  * and the storage domains those capabilities require.
  */
 
+import { MastraAuthStudio } from '@mastra/auth-studio';
+import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { FactoryStorage } from '@mastra/core/storage';
-import type { MastraVector } from '@mastra/core/vector';
-import { prepareAgentControllerMount } from '@mastra/code-sdk';
-import { MastraAuthStudio } from '@mastra/auth-studio';
 import { hasAuthInit } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { observeAgentGitAction } from '@mastra/factory/storage/domains/audit/agent-audit';
-import { AuditDomain } from '@mastra/factory/storage/domains/audit/domain';
-import type { FactoryAuthUser } from '@mastra/factory/auth';
+import type { FactoryStorage } from '@mastra/core/storage';
+import type { MastraVector } from '@mastra/core/vector';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import type { FactoryAuthUser } from './auth';
 import {
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
   getFactoryAuthOrgId,
   getFactoryAuthUserId,
-} from '@mastra/factory/auth';
-import type {
-  FactoryIntegration,
-  IntegrationPostToolContext,
-  IntegrationTools,
-} from '@mastra/factory/integrations/base';
-import { builtInFactoryRules } from '@mastra/factory/rules/defaults';
-import type { FactoryRules } from '@mastra/factory/rules/types';
-import { assertFactoryRules } from '@mastra/factory/rules/validation';
-import { getFactoryWorkspace } from './factory/workspace.js';
-import { ProjectRoutes } from '@mastra/factory/routes/projects';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { SandboxFleet } from '@mastra/factory/sandbox/fleet';
-import { registerSandboxReattach } from './sandbox-reattach-registration.js';
-import { AuditStorage } from '@mastra/factory/storage/domains/audit/base';
-import { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
-import { ModelPacksStorage } from '@mastra/factory/storage/domains/model-packs/base';
-import {
-  createTenantCredentialPrimer,
-  registerTenantCredentialResolver,
-} from '@mastra/factory/routes/tenant-credentials';
-import { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
-import { IntegrationStorage } from '@mastra/factory/storage/domains/integrations/base';
-import { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
-import { QueueHealthStorage } from '@mastra/factory/storage/domains/queue-health/base';
-import { SourceControlStorage } from '@mastra/factory/storage/domains/source-control/base';
-import { WorkItemsStorage } from '@mastra/factory/storage/domains/work-items/base';
-import { handleServerError } from './server-error.js';
-import { createStateSigner } from '@mastra/factory/state-signing';
-import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
-import { assembleFactoryApiRoutes, buildIntegrationContext } from '@mastra/factory/routes/surface';
-import type { FactoryApiRoutesDeps } from '@mastra/factory/routes/surface';
+} from './auth';
+import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base';
+import { ProjectRoutes } from './routes/projects';
+import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface';
+import type { FactoryApiRoutesDeps } from './routes/surface';
+import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './routes/tenant-credentials';
+import { builtInFactoryRules } from './rules/defaults';
+import type { FactoryRules } from './rules/types';
+import { assertFactoryRules } from './rules/validation';
+import { SandboxFleet } from './sandbox/fleet';
+import { registerSandboxReattach } from './sandbox/reattach';
+import { handleServerError } from './server-error';
+import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static';
+import { createStateSigner } from './state-signing';
+import { observeAgentGitAction } from './storage/domains/audit/agent-audit';
+import { AuditStorage } from './storage/domains/audit/base';
+import { AuditDomain } from './storage/domains/audit/domain';
+import { ModelCredentialsStorage } from './storage/domains/credentials/base';
+import { IntakeStorage } from './storage/domains/intake/base';
+import { IntegrationStorage } from './storage/domains/integrations/base';
+import { ModelPacksStorage } from './storage/domains/model-packs/base';
+import { FactoryProjectsStorage } from './storage/domains/projects/base';
+import { QueueHealthStorage } from './storage/domains/queue-health/base';
+import { SourceControlStorage } from './storage/domains/source-control/base';
+import { WorkItemsStorage } from './storage/domains/work-items/base';
+import { getFactoryWorkspace } from './workspace';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
 

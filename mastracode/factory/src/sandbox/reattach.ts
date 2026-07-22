@@ -6,7 +6,7 @@
  * the fleet is constructed.
  */
 import { registerSandboxReattach as registerOnCore } from '@mastra/code-sdk/agents/sandbox-reattach';
-import type { SandboxFleet } from '@mastra/factory/sandbox/fleet';
+import type { SandboxFleet } from './fleet';
 
 export function registerSandboxReattach(fleet: SandboxFleet): void {
   registerOnCore(providerSandboxId => fleet.reattachSandbox(providerSandboxId));

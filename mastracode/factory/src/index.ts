@@ -1,1 +1,2 @@
-export const FACTORY_MODULE = '@mastra/factory';
+export { MastraFactory } from './factory';
+export type { MastraArgs, MastraFactoryConfig } from './factory';
