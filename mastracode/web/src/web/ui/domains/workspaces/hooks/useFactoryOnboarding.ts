@@ -30,6 +30,7 @@ function persistState(state: FactoryOnboardingState): FactoryOnboardingState {
 export function useFactoryOnboarding() {
   const queryClient = useQueryClient();
   const factoriesQuery = useLoadFactories();
+  const setState = useFactoryOnboardingSetState();
   const onboardingQuery = useQuery({
     queryKey: queryKeys.factoryOnboarding(),
     enabled: !factoriesQuery.isPending,
@@ -41,7 +42,6 @@ export function useFactoryOnboarding() {
       return { step, pendingFactory } satisfies FactoryOnboardingState;
     },
   });
-  const setState = useFactoryOnboardingSetState();
 
   const complete = useMutation({
     mutationFn: async () => {
@@ -70,6 +70,6 @@ export const useFactoryOnboardingSetState = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (state: FactoryOnboardingState) => Promise.resolve(persistState(state)),
-    onSuccess: state => queryClient.invalidateQueries({ queryKey: queryKeys.factoryOnboarding() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.factoryOnboarding() }),
   });
 };

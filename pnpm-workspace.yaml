@@ -1,6 +1,7 @@
 packages:
   - mastracode/sdk
   - mastracode/tui
+  - mastracode/factory
   - mastracode/mastra-factory
   - docs
   - packages/_vendored/*

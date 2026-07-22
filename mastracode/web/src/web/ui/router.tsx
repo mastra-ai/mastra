@@ -2,7 +2,7 @@
  * SPA route table (React Router v7, data mode).
  *
  * Auth gating happens in React layout components, not loaders: `RequireAuth`
- * wraps the app routes and reads `/auth/me` through the `useWebAuth` custom
+ * wraps the app routes and reads `/auth/me` through the `useFactoryAuth` custom
  * React Query hook (shared cache key with the rest of the UI), redirecting
  * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to

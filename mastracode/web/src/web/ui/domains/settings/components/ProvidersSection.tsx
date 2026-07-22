@@ -10,7 +10,7 @@ import {
   useProvidersQuery,
   useStartProviderOAuth,
 } from '../../../../../shared/hooks/use-providers';
-import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
+import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ProviderOAuthDialog } from './ProviderOAuthDialog';
 import { ProviderRow } from './ProviderRow';
@@ -25,7 +25,7 @@ const API_KEY_LIST_MAX_HEIGHT = 280;
 /** Provider OAuth and API-key management for local and tenant-scoped web deployments. */
 export function ProvidersSection() {
   const providersQuery = useProvidersQuery();
-  const authQuery = useWebAuth();
+  const authQuery = useFactoryAuth();
   const startOAuthMutation = useStartProviderOAuth();
   const cancelOAuthMutation = useCancelProviderOAuth();
   const [search, setSearch] = useState('');
