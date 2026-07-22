@@ -960,6 +960,27 @@ export class ContextLengthHandler implements Processor {
 
 Mastra includes a built-in [`PrefillErrorHandler`](/reference/processors/prefill-error-handler) that automatically handles the Anthropic "assistant message prefill" error. This processor is auto-injected and requires no configuration.
 
+## Receive background work notifications
+
+Use `createBackgroundWorkSignalProcessor()` to retain the active caller's signal capability for eligible background tool calls:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { createBackgroundWorkSignalProcessor } from '@mastra/core/processors'
+
+const agent = new Agent({
+  id: 'background-agent',
+  name: 'Background agent',
+  instructions: 'Complete tasks using the available tools.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  inputProcessors: [createBackgroundWorkSignalProcessor()],
+})
+```
+
+Mastra's background runtime remains responsible for execution, persistence, retries, result reconciliation, and continuation. The processor only retains caller-scoped notification access. It emits `work-completed` or `work-failed` after the authoritative tool result is reconciled.
+
+Notifications are process-local and best-effort. If the originating run has ended, the task resumes on another process, or signal delivery fails, Mastra preserves the authoritative result without recreating the run or retrying the notification. Foreground calls don't emit background work notifications.
+
 ## Related documentation
 
 - [Guardrails](/docs/agents/guardrails): Security and validation processors

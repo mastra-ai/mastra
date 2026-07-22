@@ -4164,6 +4164,7 @@ export class Agent<
         const memory = await this.getMemory({ requestContext });
         const result = await runner.runProcessInputStep({
           messageList,
+          runId,
           stepNumber,
           steps: [],
           ...observabilityContext,

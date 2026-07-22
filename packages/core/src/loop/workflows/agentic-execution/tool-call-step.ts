@@ -6,6 +6,7 @@ import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
+import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
@@ -927,6 +928,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     // tool pauses the bg-task run instead.
                     return resolvedTool.execute!(bgArgs, {
                       ...toolOptions,
+                      [BACKGROUND_WORK_CONTEXT]: {
+                        originRunId: runId,
+                        originToolCallId: inputData.toolCallId,
+                        invocationKind: isAgentTool ? 'agent' : 'tool',
+                        disposition: 'deferred',
+                      },
                       ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
                       suspend: async (data?: unknown, options?: SuspendOptions) => {
                         await toolOptions.suspend?.(data, options);
@@ -1186,6 +1193,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       );
                     }
                   }
+
+                  await notifyBackgroundWorkTerminal(mastra, {
+                    originRunId: runId,
+                    originToolCallId: params.toolCallId,
+                    ...(params.runId !== runId ? { executorRunId: params.runId } : {}),
+                    taskId: params.taskId,
+                    invocationKind: isAgentTool ? 'agent' : 'tool',
+                    disposition: 'deferred',
+                    status: params.status === 'failed' ? 'failed' : 'completed',
+                  });
                 },
                 // Execution injector — records background task lifecycle metadata on the
                 // assistant message without changing the model-visible tool result.
