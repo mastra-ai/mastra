@@ -215,6 +215,19 @@ interface BoardCandidate {
   issue?: GithubIssue;
 }
 
+function stageContentCount(
+  stage: BoardStageId,
+  stages: ReadonlyArray<{ id: BoardStageId }>,
+  workItems: readonly WorkItem[],
+  candidates: readonly BoardCandidate[],
+): number {
+  let count = candidates.filter(candidate => candidate.column === stage).length;
+  for (const item of workItems) {
+    if (itemAppearsInStage(item, stage, stages)) count += 1;
+  }
+  return count;
+}
+
 /** Investigate (understand → Planning) + Build (implement → Building) runs for an issue. */
 function issueRunActions(ref: string, extra?: { context?: string }): RunAction[] {
   const context = extra?.context ? `\n\n${extra.context}` : '';
@@ -813,6 +826,7 @@ function BoardContent({
       else pendingRunRolesBySource.set(run.sourceKey, new Set([run.role]));
     }
   }
+  const totalTaskCount = workItems.length + candidates.length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -824,7 +838,7 @@ function BoardContent({
       <ScrollArea
         viewportRef={boardContainerRef}
         orientation="horizontal"
-        className="min-h-0 flex-1"
+        className="min-h-0 flex-1 [&_[data-hovering]:not([data-scrolling])]:opacity-0"
         viewPortClassName="pb-2 *:h-full"
         aria-label="Board columns"
         onPointerDown={() => {
@@ -840,6 +854,8 @@ function BoardContent({
               key={stage.id}
               stage={stage.id}
               label={stage.label}
+              taskCount={stageContentCount(stage.id, stages, workItems, candidates)}
+              totalTaskCount={totalTaskCount}
               laneRef={element => {
                 if (element) laneRefs.current.set(stage.id, element);
                 else laneRefs.current.delete(stage.id);
@@ -966,6 +982,9 @@ function BoardContent({
                     onTriage={candidate.issue ? () => triage.mutate(candidate.issue!) : undefined}
                   />
                 ))}
+              {!boardDataPending && stageContentCount(stage.id, stages, workItems, candidates) === 0 && (
+                <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={activeIntakeSource !== null} />
+              )}
               {stage.id === 'intake' && (
                 <IntakeColumnExtras
                   source={activeIntakeSource}
@@ -984,9 +1003,129 @@ function BoardContent({
 
 // ── Columns ─────────────────────────────────────────────────────────────────
 
+interface BoardColumnEmptyCopy {
+  title: string;
+  description: string;
+}
+
+function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSource: boolean): BoardColumnEmptyCopy {
+  switch (stage) {
+    case 'intake':
+      if (!hasIntakeSource) {
+        return {
+          title: 'No intake sources',
+          description: 'Choose GitHub or Linear in Settings to feed this column.',
+        };
+      }
+      return kind === 'review'
+        ? {
+            title: 'No pull requests waiting',
+            description: 'Open pull requests from this repository appear here.',
+          }
+        : {
+            title: 'Intake is clear',
+            description: 'New issues from your connected sources appear here.',
+          };
+    case 'triage':
+      return {
+        title: 'Nothing to triage',
+        description: 'Drag an intake item here when it needs investigation.',
+      };
+    case 'planning':
+      return {
+        title: 'Nothing in planning',
+        description: 'Drag triaged work here when it is ready to plan.',
+      };
+    case 'execute':
+      return {
+        title: 'Nothing being built',
+        description: 'Drag planned work here when implementation starts.',
+      };
+    case 'review':
+      return kind === 'review'
+        ? {
+            title: 'No active reviews',
+            description: 'Drag a pull request here when review starts.',
+          }
+        : {
+            title: 'Nothing awaiting review',
+            description: 'Drag built work here when it is ready for review.',
+          };
+    case 'done':
+      return kind === 'review'
+        ? {
+            title: 'No completed reviews',
+            description: 'Drag a reviewed pull request here when it is complete.',
+          }
+        : {
+            title: 'Nothing completed yet',
+            description: 'Drag finished work here to close it out.',
+          };
+    case 'canceled':
+      return {
+        title: 'Nothing canceled',
+        description: 'Drag work here when it should leave the active flow.',
+      };
+  }
+}
+
+function BoardColumnEmptyState({
+  stage,
+  kind,
+  hasIntakeSource,
+}: {
+  stage: BoardStageId;
+  kind: BoardKind;
+  hasIntakeSource: boolean;
+}) {
+  const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource);
+  return (
+    <div className="flex min-h-24 flex-col justify-center rounded-lg border border-dashed border-border1 px-4 py-4">
+      <Txt as="p" variant="ui-sm" className="m-0 font-medium text-icon4">
+        {copy.title}
+      </Txt>
+      <Txt as="p" variant="ui-xs" className="mt-1 mb-0 max-w-60 leading-5 text-icon3">
+        {copy.description}
+      </Txt>
+    </div>
+  );
+}
+
+function ColumnTaskBadge({ count, total, label }: { count: number; total: number; label: string }) {
+  const circumference = 2 * Math.PI * 5;
+  const ratio = total === 0 ? 0 : Math.min(count / total, 1);
+  const dashOffset = circumference * (1 - ratio);
+
+  return (
+    <span
+      aria-label={`${count} of ${total} visible board tasks in ${label}`}
+      title={`${count} of ${total} visible board tasks`}
+      className="flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full border border-border1 bg-surface2 px-2 text-ui-xs font-medium tabular-nums text-icon4"
+    >
+      <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90" aria-hidden>
+        <circle cx="7" cy="7" r="5" fill="none" strokeWidth="2" className="stroke-border1" />
+        <circle
+          cx="7"
+          cy="7"
+          r="5"
+          fill="none"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          className="stroke-icon5 transition-[stroke-dashoffset] motion-reduce:transition-none"
+        />
+      </svg>
+      <span aria-hidden>{count}</span>
+    </span>
+  );
+}
+
 function BoardColumn({
   stage,
   label,
+  taskCount,
+  totalTaskCount,
   laneRef,
   onDrop,
   headerAction,
@@ -995,6 +1134,8 @@ function BoardColumn({
 }: {
   stage: BoardStageId;
   label: string;
+  taskCount: number;
+  totalTaskCount: number;
   laneRef: (element: HTMLElement | null) => void;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   headerAction?: React.ReactNode;
@@ -1009,10 +1150,7 @@ function BoardColumn({
       ref={laneRef}
       aria-label={label}
       data-testid={`board-column-${stage}`}
-      className={cn(
-        'flex min-h-0 w-80 shrink-0 flex-col gap-4 rounded-xl transition-colors',
-        dragOver ? 'bg-surface3 ring-1 ring-accent1' : 'bg-transparent',
-      )}
+      className="flex min-h-0 w-80 shrink-0 flex-col gap-4"
       onDragOver={event => {
         if (!event.dataTransfer.types.includes(CARD_MIME)) return;
         event.preventDefault();
@@ -1033,14 +1171,24 @@ function BoardColumn({
           <Txt as="h2" variant="ui-smd" className="m-0 truncate font-semibold text-icon3">
             {label}
           </Txt>
+          <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
         </div>
         {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
       </div>
       {headerExtras}
       {/* Cards scroll inside the swimlane; the page stays fixed. */}
-      <ScrollArea className="min-h-16 flex-1">
-        <div className="flex flex-col gap-2.5">{children}</div>
-      </ScrollArea>
+      <div className="relative min-h-16 flex-1">
+        <div
+          aria-hidden
+          className={cn(
+            'pointer-events-none absolute inset-x-0 top-0 z-10 h-0.5 rounded-full bg-accent1 transition-opacity motion-reduce:transition-none',
+            dragOver ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+        <ScrollArea className="h-full">
+          <div className="flex flex-col gap-2.5">{children}</div>
+        </ScrollArea>
+      </div>
     </section>
   );
 }

@@ -694,6 +694,7 @@ describe('Factory Work and Review intake candidates', () => {
     expect(await within(intake).findByText('Fix flaky test')).toBeInTheDocument();
     expect(within(intake).getByText('Improve docs')).toBeInTheDocument();
     expect(within(intake).getAllByTestId('candidate-card')).toHaveLength(2);
+    expect(within(intake).getByLabelText('2 of 2 visible board tasks in Intake')).toBeInTheDocument();
     // Candidates link out to GitHub via the external-link icon (the title
     // opens the session) and surface their user-facing labels as card chips.
     const flakyCandidate = within(intake).getByRole('article', { name: 'Fix flaky test' });
@@ -761,6 +762,21 @@ describe('Factory Work and Review intake candidates', () => {
       target: '_blank',
       rel: 'noopener noreferrer',
     });
+  });
+
+  it('given an empty Work board, when every feed settles, then each column explains its next action', async () => {
+    useBoardHandlers();
+    renderAt('work');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    expect(await within(intake).findByText('Intake is clear')).toBeInTheDocument();
+    expect(within(column('triage')).getByText('Nothing to triage')).toBeInTheDocument();
+    expect(within(column('planning')).getByText('Nothing in planning')).toBeInTheDocument();
+    expect(within(column('execute')).getByText('Nothing being built')).toBeInTheDocument();
+    expect(within(column('review')).getByText('Nothing awaiting review')).toBeInTheDocument();
+    expect(within(column('done')).getByText('Nothing completed yet')).toBeInTheDocument();
+    expect(within(column('canceled')).getByText('Nothing canceled')).toBeInTheDocument();
+    expect(within(intake).getByLabelText('0 of 0 visible board tasks in Intake')).toBeInTheDocument();
   });
 
   it('given GitHub Intake is unavailable, when the Board renders, then issue creation is hidden', async () => {
