@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
-import { queryKeys } from '../api/keys';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../api/keys';
 import { useChatConnection } from '../../web/ui/domains/chat/context/useChatConnection';
 import { useChatSessionContext } from '../../web/ui/domains/chat/context/useChatSessionContext';
 import { useChatTranscript } from '../../web/ui/domains/chat/context/useChatTranscript';
@@ -18,14 +18,14 @@ export function useRouteThreadSync() {
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
   const switchThreadMutation = useSwitchAgentControllerThreadMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
@@ -34,13 +34,14 @@ export function useRouteThreadSync() {
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
   const latestRouteThreadId = useRef<string | undefined>(undefined);
-  const previousScope = useRef<string | undefined>(undefined);
-  const scope = `${resourceId}:${projectPath ?? ''}`;
+  const previousSessionKey = useRef<string | undefined>(undefined);
+  const sessionKey = `${resourceId}:${projectPath ?? ''}`;
 
   const switchToRouteThread = useEffectEvent((targetThreadId: string, fallbackForScopeChange: boolean) => {
     latestRouteThreadId.current = targetThreadId;
@@ -56,8 +57,13 @@ export function useRouteThreadSync() {
       if (fallbackForScopeChange && latest) {
         const warm = session
           ? queryClient.prefetchQuery({
-              queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, latest.id),
-              queryFn: () => session.listMessages(latest.id),
+              queryKey: queryKeys.agentControllerThreadMessages(
+                AGENT_CONTROLLER_ID,
+                resourceId,
+                latest.id,
+                INITIAL_THREAD_MESSAGE_LIMIT,
+              ),
+              queryFn: () => session.listMessages(latest.id, INITIAL_THREAD_MESSAGE_LIMIT),
             })
           : Promise.resolve();
         void warm.finally(() => {
@@ -81,11 +87,11 @@ export function useRouteThreadSync() {
   });
 
   useEffect(() => {
-    const scopeChanged = previousScope.current !== undefined && previousScope.current !== scope;
-    previousScope.current = scope;
+    const sessionKeyChanged = previousSessionKey.current !== undefined && previousSessionKey.current !== sessionKey;
+    previousSessionKey.current = sessionKey;
     latestRouteThreadId.current = routeThreadId;
     if (!routeThreadId || status !== 'ready' || !threadsQuery.isSuccess) return;
     if (threadId === routeThreadId) return;
-    switchToRouteThread(routeThreadId, scopeChanged);
-  }, [routeThreadId, scope, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
+    switchToRouteThread(routeThreadId, sessionKeyChanged);
+  }, [routeThreadId, sessionKey, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
 }

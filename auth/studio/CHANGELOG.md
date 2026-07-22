@@ -1,5 +1,13 @@
 # @mastra/auth-studio
 
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- `MastraAuthStudio` now automatically creates a personal organization for users who don't belong to one yet, and can check whether a user is an organization admin — matching the behavior already available in `MastraAuthWorkos` and `MastraAuthBetterAuth`. This lets hosts like a self-hosted MastraCode deployment authorize organization-level actions without users needing to manually set up an organization first. ([#19858](https://github.com/mastra-ai/mastra/pull/19858))
+
+- `MastraAuthStudio.ensureOrganization` now dedupes concurrent bootstraps for the same user, so parallel tabs or requests for a brand-new sign-in no longer end up creating duplicate personal organizations. ([#19858](https://github.com/mastra-ai/mastra/pull/19858))
+
 ## 1.3.1
 
 ### Patch Changes

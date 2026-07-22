@@ -84,7 +84,8 @@ describe('AuditStorage', () => {
       actorId: 'user:alice',
       action: 'a.one',
       targets: [],
-      githubProjectId: 'p1',
+      factoryProjectId: 'p1',
+      projectRepositoryId: 'pr1',
     });
     await storage.record({ orgId: 'org1', actorId: 'user:bob', action: 'a.two', targets: [] });
     await storage.record({
@@ -95,7 +96,7 @@ describe('AuditStorage', () => {
       targets: [],
     });
 
-    const byProject = await storage.list({ orgId: 'org1', githubProjectId: 'p1' });
+    const byProject = await storage.list({ orgId: 'org1', factoryProjectId: 'p1' });
     expect(byProject.events.map(e => e.action)).toEqual(['a.one']);
 
     const byActions = await storage.list({ orgId: 'org1', actions: ['a.two', 'a.three'] });

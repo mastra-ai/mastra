@@ -1,4 +1,3 @@
-import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
@@ -14,7 +13,9 @@ import {
   useRemoveModelPack,
   useSaveModelPack,
 } from '../../../../../shared/hooks/use-model-packs';
+import type { AvailableModelOption } from '../../../../../shared/hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { ModelCombobox } from './ModelCombobox';
 
 interface DraftPack {
   name: string;
@@ -24,13 +25,6 @@ interface DraftPack {
 }
 
 const EMPTY_DRAFT: DraftPack = { name: '', build: '', plan: '', fast: '' };
-
-// Native <select> kept here (styled with DS tokens) rather than the DS
-// Select: the draft form has three model pickers and the native control keeps
-// the markup/keyboard model simple. The DS Select is a portalled popup with no
-// UX gain for this dense form.
-const SELECT_CLASS =
-  'h-form-default w-full rounded-full border border-border1 bg-surface-overlay-soft px-3 text-ui-md text-neutral6 outline-hidden focus-visible:border-neutral5/50';
 
 interface ModelAssignmentProps {
   description: string;
@@ -69,17 +63,20 @@ function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignm
  * Model packs. Mirrors the TUI's `/models-pack` command: a pack assigns a model
  * to each mode (build / plan / fast). Built-in packs are gated by provider
  * access; custom packs are user-defined. Activating a pack seeds the current
- * session's per-mode models — so it needs the active factory's resourceId.
+ * session's per-mode models — so it needs the active factory's resourceId (and
+ * the session scope the web chat session was registered under).
  */
 export function ModelPacksSection({
   resourceId,
+  scope,
   models,
 }: {
   resourceId?: string;
-  models: AgentControllerAvailableModel[];
+  scope?: string;
+  models: AvailableModelOption[];
 }) {
-  const packsQuery = useModelPacksQuery(resourceId);
-  const activateMutation = useActivateModelPack(resourceId);
+  const packsQuery = useModelPacksQuery(resourceId, scope);
+  const activateMutation = useActivateModelPack(resourceId, scope);
   const removeMutation = useRemoveModelPack();
   const saveMutation = useSaveModelPack();
 
@@ -130,18 +127,8 @@ export function ModelPacksSection({
     }
   };
 
-  const modelOptions = models.map(m => m.id);
-
   const modelSelect = (value: string, onChange: (v: string) => void) => (
-    <select className={SELECT_CLASS} value={value} onChange={e => onChange(e.target.value)}>
-      <option value="">Select model…</option>
-      {value && !modelOptions.includes(value) && <option value={value}>{value}</option>}
-      {modelOptions.map(id => (
-        <option key={id} value={id}>
-          {id}
-        </option>
-      ))}
-    </select>
+    <ModelCombobox models={models} value={value} onValueChange={onChange} />
   );
 
   return (
