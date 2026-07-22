@@ -11,6 +11,8 @@ import { resolveModel } from './model.js';
 
 let cachedMemory: Memory | null = null;
 let cachedMemoryKey: string | null = null;
+let cachedStorage: MastraCompositeStore | null = null;
+let cachedVector: MastraVector | undefined;
 
 /**
  * Read controller state from requestContext.
@@ -89,7 +91,10 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments;
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}`;
-    if (cachedMemory && cachedMemoryKey === cacheKey) {
+    // The cache key must also pin the storage/vector instances: the module-level
+    // cache outlives a single controller in-process (e.g. sequential e2e runs),
+    // and a Memory bound to a previous run's storage would read the wrong DB.
+    if (cachedMemory && cachedMemoryKey === cacheKey && cachedStorage === storage && cachedVector === vector) {
       return cachedMemory;
     }
 
@@ -135,6 +140,8 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       },
     });
     cachedMemoryKey = cacheKey;
+    cachedStorage = storage;
+    cachedVector = vector;
 
     return cachedMemory;
   };
