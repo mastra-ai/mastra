@@ -1002,6 +1002,24 @@ export async function wireSessionConcerns(
   });
 }
 
+function isSqliteDatabaseLockedError(error: unknown, depth = 0): boolean {
+  if (!error || depth > 5) return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown; errors?: unknown };
+  if (typeof candidate.code === 'string' && /^(SQLITE_BUSY|SQLITE_LOCKED)/.test(candidate.code)) return true;
+  if (
+    typeof candidate.message === 'string' &&
+    /(SQLITE_BUSY|SQLITE_LOCKED|database is locked)/i.test(candidate.message)
+  )
+    return true;
+  if (candidate.cause && isSqliteDatabaseLockedError(candidate.cause, depth + 1)) return true;
+  if (
+    Array.isArray(candidate.errors) &&
+    candidate.errors.some((nested: unknown) => isSqliteDatabaseLockedError(nested, depth + 1))
+  )
+    return true;
+  return false;
+}
+
 /**
  * Case 3 (AgentController local + TUI/headless): build the controller, let it stand up its
  * own internal Mastra via `init()`, and mint the single eager session that all
@@ -1026,12 +1044,19 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
       () => (base.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close?.(),
     ];
     await Promise.allSettled(stopWork.map(stop => Promise.resolve().then(stop)));
+    let startupFailure = error;
     try {
       await base.storageMaintenance.closeStorage?.();
     } catch (closeError) {
-      throw new AggregateError([error, closeError], 'Mastra Code startup and storage cleanup failed');
+      startupFailure = new AggregateError([error, closeError], 'Mastra Code startup and storage cleanup failed');
     }
-    throw error;
+    if (isSqliteDatabaseLockedError(startupFailure)) {
+      throw new Error(
+        'Mastra Code could not switch local storage to safe journaling because another process still has the database open. Close all running Mastra Code sessions once, then restart Mastra Code.',
+        { cause: startupFailure },
+      );
+    }
+    throw startupFailure;
   }
 }
 

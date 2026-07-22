@@ -414,6 +414,47 @@ describe('createMastraCode', () => {
     expect(closeVector).toHaveBeenCalledOnce();
   }, 10_000);
 
+  it('explains how to recover when another process locks local storage during startup', async () => {
+    const startupError = Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' });
+    createStorageMock.mockReturnValue({ storage: { close: vi.fn(async () => undefined) }, backend: 'memory' });
+    createOwnedVectorStoreMock.mockReturnValue({ vector: {}, close: vi.fn(async () => undefined) });
+    controllerInitMock.mockRejectedValueOnce(startupError);
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(createMastraCode()).rejects.toThrow(
+      'Close all running Mastra Code sessions once, then restart Mastra Code.',
+    );
+  }, 10_000);
+
+  it('detects a local storage lock wrapped by failed startup cleanup', async () => {
+    const startupError = new Error('storage init failed');
+    const lockError = Object.assign(new Error('database is locked'), { code: 'SQLITE_LOCKED_SHAREDCACHE' });
+    const closeStorage = vi.fn(async () => {
+      throw new AggregateError([lockError], 'Failed to close storage');
+    });
+    createStorageMock.mockReturnValue({ storage: { close: closeStorage }, backend: 'memory' });
+    createOwnedVectorStoreMock.mockReturnValue({ vector: {}, close: vi.fn(async () => undefined) });
+    controllerInitMock.mockRejectedValueOnce(startupError);
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(createMastraCode()).rejects.toThrow(
+      'Close all running Mastra Code sessions once, then restart Mastra Code.',
+    );
+  }, 10_000);
+
+  it('preserves the aggregate error for unrelated startup cleanup failures', async () => {
+    const startupError = new Error('storage init failed');
+    const closeStorage = vi.fn(async () => {
+      throw new Error('close failed');
+    });
+    createStorageMock.mockReturnValue({ storage: { close: closeStorage }, backend: 'memory' });
+    createOwnedVectorStoreMock.mockReturnValue({ vector: {}, close: vi.fn(async () => undefined) });
+    controllerInitMock.mockRejectedValueOnce(startupError);
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(createMastraCode()).rejects.toThrow('Mastra Code startup and storage cleanup failed');
+  }, 10_000);
+
   it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {
     const { createMastraCode } = await import('../index.js');
     const subagent = { id: 'review', name: 'Review', instructions: 'Review changes' };
