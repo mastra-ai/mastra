@@ -1,8 +1,12 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
-import { getSankeyChartCurveSelection, getSankeyChartNodeWeights } from './sankey-chart-utils';
+import {
+  buildFixedSankeyGeometry,
+  getSankeyChartCurveSelection,
+  getSankeyChartNodeWeights,
+} from './sankey-chart-utils';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
@@ -22,7 +26,9 @@ export function SankeyChart({
   margin = { top: 64, right: 160, bottom: 12, left: 160 },
   onCurveClick,
 }: SankeyChartProps) {
-  const { graph, enabledColumns, hueMap } = useSankeyRenderContext();
+  const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [measuredHeight, setMeasuredHeight] = useState(typeof height === 'number' ? height : 320);
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const [focusedSourceName, setFocusedSourceName] = useState<string>();
   const activeSourceName = hoveredSourceName ?? focusedSourceName;
@@ -33,6 +39,29 @@ export function SankeyChart({
     (sum, node) =>
       node.column.id === firstColumnId ? sum + (node.displayValue ?? nodeWeights.get(node.id) ?? 0) : sum,
     0,
+  );
+  useEffect(() => {
+    const element = chartContainerRef.current;
+    if (!element) return;
+    const updateHeight = () => {
+      if (element.offsetHeight > 0) setMeasuredHeight(element.offsetHeight);
+    };
+    updateHeight();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [height]);
+  const fixedGeometry = useMemo(
+    () =>
+      usesFixedGeometry
+        ? buildFixedSankeyGeometry(graph, {
+            top: Number(margin?.top ?? 64),
+            bottom: measuredHeight - Number(margin?.bottom ?? 12),
+            nodePadding: 8,
+          })
+        : undefined,
+    [graph, margin?.bottom, margin?.top, measuredHeight, usesFixedGeometry],
   );
 
   return (
@@ -45,7 +74,7 @@ export function SankeyChart({
           Select at least two columns with data to display a flow
         </div>
       ) : (
-        <div style={{ height }}>
+        <div ref={chartContainerRef} style={{ height }}>
           <ResponsiveContainer
             width="100%"
             height="100%"
@@ -61,14 +90,17 @@ export function SankeyChart({
                 const showColumnLabel = node
                   ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
                   : false;
+                const nodeGeometry = node ? fixedGeometry?.nodes.get(node.id) : undefined;
                 return (
                   <SankeyNode
                     {...props}
+                    y={nodeGeometry?.y ?? props.y}
+                    height={nodeGeometry?.height ?? props.height}
                     hueMap={hueMap}
                     columnLabel={node?.column.label}
                     label={node?.label}
                     nodeValue={node?.displayValue}
-                    layoutValue={node ? nodeWeights.get(node.id) : undefined}
+                    layoutValue={nodeGeometry ? undefined : node ? nodeWeights.get(node.id) : undefined}
                     total={total}
                     showColumnLabel={showColumnLabel}
                     isFirstColumn={node?.column.id === firstColumnId}
@@ -80,9 +112,14 @@ export function SankeyChart({
               }}
               link={(props: SankeyLinkRendererProps) => {
                 const link = graph.links[props.index];
+                const linkGeometry = link ? fixedGeometry?.links.get(link.id) : undefined;
                 return (
                   <SankeyLink
                     {...props}
+                    sourceY={linkGeometry?.sourceY ?? props.sourceY}
+                    targetY={linkGeometry?.targetY ?? props.targetY}
+                    sourceWidth={linkGeometry?.sourceWidth}
+                    targetWidth={linkGeometry?.targetWidth}
                     hueMap={hueMap}
                     highlighted={String(props.payload.source.name ?? '') === activeSourceName}
                     displayValue={link?.displayValue}
@@ -280,6 +317,8 @@ type SankeyLinkProps = SankeyLinkRendererProps & {
   highlighted: boolean;
   displayValue?: number;
   layoutValue?: number;
+  sourceWidth?: number;
+  targetWidth?: number;
   clickable: boolean;
   onHoverChange: (sourceName: string | undefined) => void;
   onSelect: () => void;
@@ -299,17 +338,20 @@ function SankeyLink({
   highlighted,
   displayValue,
   layoutValue,
+  sourceWidth,
+  targetWidth,
   clickable,
   onHoverChange,
   onSelect,
 }: SankeyLinkProps) {
   const visibleWidth = scaleSankeyDimension(linkWidth, displayValue, layoutValue);
-  const halfWidth = Math.max(0, visibleWidth) / 2;
+  const sourceHalfWidth = Math.max(0, sourceWidth ?? visibleWidth) / 2;
+  const targetHalfWidth = Math.max(0, targetWidth ?? visibleWidth) / 2;
   const path = [
-    `M${sourceX},${sourceY - halfWidth}`,
-    `C${sourceControlX},${sourceY - halfWidth} ${targetControlX},${targetY - halfWidth} ${targetX},${targetY - halfWidth}`,
-    `L${targetX},${targetY + halfWidth}`,
-    `C${targetControlX},${targetY + halfWidth} ${sourceControlX},${sourceY + halfWidth} ${sourceX},${sourceY + halfWidth}`,
+    `M${sourceX},${sourceY - sourceHalfWidth}`,
+    `C${sourceControlX},${sourceY - sourceHalfWidth} ${targetControlX},${targetY - targetHalfWidth} ${targetX},${targetY - targetHalfWidth}`,
+    `L${targetX},${targetY + targetHalfWidth}`,
+    `C${targetControlX},${targetY + targetHalfWidth} ${sourceControlX},${sourceY + sourceHalfWidth} ${sourceX},${sourceY + sourceHalfWidth}`,
     'Z',
   ].join(' ');
   const sourceName = String(payload.source.name ?? '');

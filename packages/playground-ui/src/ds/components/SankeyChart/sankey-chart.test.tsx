@@ -130,7 +130,10 @@ describe('SankeyChart', () => {
     it('changes bar height without moving its center', async () => {
       const renderFrame = (count: number) => (
         <Sankey
-          data={[{ channel: 'Search', channelCount: count, region: 'EU', regionCount: count, count, layoutCount: 10 }]}
+          data={[
+            { channel: 'Search', channelCount: count, region: 'EU', regionCount: count, count, layoutCount: 10 },
+            { channel: 'Referral', channelCount: 8, region: 'US', regionCount: 8, count: 8, layoutCount: 10 },
+          ]}
           columns={columns.slice(0, 2)}
           getRecordWeight={record => Number(record.count)}
           getRecordLayoutWeight={record => Number(record.layoutCount)}

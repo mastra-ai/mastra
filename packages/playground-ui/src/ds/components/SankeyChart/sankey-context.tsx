@@ -34,6 +34,7 @@ type SankeyRenderContext = {
   graph: SankeyChartGraph;
   enabledColumns: Array<SankeyChartColumn>;
   hueMap: Record<string, number>;
+  usesFixedGeometry: boolean;
 };
 
 const SankeyControlsContext = createContext<SankeyControls | undefined>(undefined);
@@ -107,7 +108,11 @@ export function Sankey({
 
   return (
     <SankeyControlsContext.Provider value={{ columns: controlColumns, toggleColumn, reorderColumns }}>
-      <SankeyRenderContext.Provider value={{ graph, enabledColumns, hueMap }}>{children}</SankeyRenderContext.Provider>
+      <SankeyRenderContext.Provider
+        value={{ graph, enabledColumns, hueMap, usesFixedGeometry: getRecordLayoutWeight !== undefined }}
+      >
+        {children}
+      </SankeyRenderContext.Provider>
     </SankeyControlsContext.Provider>
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildFixedSankeyGeometry,
   buildSankeyChartGraph,
   getSankeyChartCurveSelection,
   getSankeyChartNodeWeights,
@@ -156,6 +157,47 @@ describe('SankeyChart utilities', () => {
 
       expect(graph.links[0]).toMatchObject({ value: 5, displayValue: 2 });
       expect(graph.nodes.map(node => node.displayValue)).toEqual([0, 3]);
+    });
+  });
+
+  describe('when fixed theme slots render current values', () => {
+    it('keeps node centers fixed and packs ribbons contiguously inside resized bars', () => {
+      const graph = buildSankeyChartGraph(
+        [
+          { source: 'A', sourceCount: 8, model: 'X', modelCount: 8, count: 6, layoutCount: 10 },
+          { source: 'A', sourceCount: 8, model: 'Y', modelCount: 2, count: 2, layoutCount: 10 },
+          { source: 'B', sourceCount: 2, model: 'X', modelCount: 8, count: 2, layoutCount: 10 },
+        ],
+        columns.slice(0, 2),
+        record => Number(record.count),
+        undefined,
+        undefined,
+        (record, column) => Number(record[`${column.id}Count`]),
+        record => Number(record.layoutCount),
+      );
+
+      const geometry = buildFixedSankeyGeometry(graph, { top: 0, bottom: 200, nodePadding: 20 });
+      const sourceA = geometry.nodes.get(graph.nodes.find(node => node.name === 'A')?.id ?? '');
+      const sourceB = geometry.nodes.get(graph.nodes.find(node => node.name === 'B')?.id ?? '');
+      const aToX = geometry.links.get(
+        graph.links.find(link => link.sourceNode.name === 'A' && link.targetNode.name === 'X')?.id ?? '',
+      );
+      const aToY = geometry.links.get(
+        graph.links.find(link => link.sourceNode.name === 'A' && link.targetNode.name === 'Y')?.id ?? '',
+      );
+      const bToX = geometry.links.get(
+        graph.links.find(link => link.sourceNode.name === 'B' && link.targetNode.name === 'X')?.id ?? '',
+      );
+
+      expect(sourceA?.centerY).toBe(45);
+      expect(sourceB?.centerY).toBe(155);
+      expect(sourceA?.height).toBeGreaterThan(sourceB?.height ?? 0);
+      expect((aToX?.sourceY ?? 0) + (aToX?.sourceWidth ?? 0) / 2).toBeCloseTo(
+        (aToY?.sourceY ?? 0) - (aToY?.sourceWidth ?? 0) / 2,
+      );
+      expect((aToX?.targetY ?? 0) + (aToX?.targetWidth ?? 0) / 2).toBeCloseTo(
+        (bToX?.targetY ?? 0) - (bToX?.targetWidth ?? 0) / 2,
+      );
     });
   });
 

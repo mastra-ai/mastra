@@ -30,6 +30,24 @@ export type SankeyChartGraph = {
   links: Array<SankeyChartLink>;
 };
 
+export type FixedSankeyNodeGeometry = {
+  centerY: number;
+  y: number;
+  height: number;
+};
+
+export type FixedSankeyLinkGeometry = {
+  sourceY: number;
+  targetY: number;
+  sourceWidth: number;
+  targetWidth: number;
+};
+
+export type FixedSankeyGeometry = {
+  nodes: Map<string, FixedSankeyNodeGeometry>;
+  links: Map<string, FixedSankeyLinkGeometry>;
+};
+
 export type SankeyChartCurveSelection = {
   source: {
     column: SankeyChartColumn;
@@ -179,6 +197,71 @@ export function buildSankeyChartGraph(
   return { nodes, links: [...linksById.values()] };
 }
 
+export function buildFixedSankeyGeometry(
+  graph: SankeyChartGraph,
+  { top, bottom, nodePadding }: { top: number; bottom: number; nodePadding: number },
+): FixedSankeyGeometry {
+  const nodes = new Map<string, FixedSankeyNodeGeometry>();
+  const nodesByColumn = new Map<string, SankeyChartNode[]>();
+  const currentNodeWeights = getSankeyChartCurrentNodeWeights(graph);
+
+  for (const node of graph.nodes) {
+    const columnNodes = nodesByColumn.get(node.column.id) ?? [];
+    columnNodes.push(node);
+    nodesByColumn.set(node.column.id, columnNodes);
+  }
+
+  for (const columnNodes of nodesByColumn.values()) {
+    const slotHeight = Math.max(
+      0,
+      (bottom - top - nodePadding * Math.max(0, columnNodes.length - 1)) / columnNodes.length,
+    );
+    const maximumValue = Math.max(
+      1,
+      ...columnNodes.map(node => node.displayValue ?? currentNodeWeights.get(node.id) ?? 0),
+    );
+
+    columnNodes.forEach((node, index) => {
+      const value = node.displayValue ?? currentNodeWeights.get(node.id) ?? 0;
+      const centerY = top + index * (slotHeight + nodePadding) + slotHeight / 2;
+      const height = value > 0 ? Math.max(slotHeight * 0.1, slotHeight * 0.94 * (value / maximumValue)) : 0;
+      nodes.set(node.id, { centerY, y: centerY - height / 2, height });
+    });
+  }
+
+  const links = new Map<string, FixedSankeyLinkGeometry>();
+  const outgoingTotals = new Map<string, number>();
+  const incomingTotals = new Map<string, number>();
+  for (const link of graph.links) {
+    outgoingTotals.set(link.sourceNode.id, (outgoingTotals.get(link.sourceNode.id) ?? 0) + link.displayValue);
+    incomingTotals.set(link.targetNode.id, (incomingTotals.get(link.targetNode.id) ?? 0) + link.displayValue);
+  }
+  const sourceOffsets = new Map([...nodes].map(([id, geometry]) => [id, geometry.y]));
+  const targetOffsets = new Map([...nodes].map(([id, geometry]) => [id, geometry.y]));
+
+  for (const link of graph.links) {
+    const sourceGeometry = nodes.get(link.sourceNode.id);
+    const targetGeometry = nodes.get(link.targetNode.id);
+    if (!sourceGeometry || !targetGeometry) continue;
+    const sourceTotal = outgoingTotals.get(link.sourceNode.id) ?? 0;
+    const targetTotal = incomingTotals.get(link.targetNode.id) ?? 0;
+    const sourceWidth = sourceTotal > 0 ? sourceGeometry.height * (link.displayValue / sourceTotal) : 0;
+    const targetWidth = targetTotal > 0 ? targetGeometry.height * (link.displayValue / targetTotal) : 0;
+    const sourceOffset = sourceOffsets.get(link.sourceNode.id) ?? sourceGeometry.y;
+    const targetOffset = targetOffsets.get(link.targetNode.id) ?? targetGeometry.y;
+    links.set(link.id, {
+      sourceY: sourceOffset + sourceWidth / 2,
+      targetY: targetOffset + targetWidth / 2,
+      sourceWidth,
+      targetWidth,
+    });
+    sourceOffsets.set(link.sourceNode.id, sourceOffset + sourceWidth);
+    targetOffsets.set(link.targetNode.id, targetOffset + targetWidth);
+  }
+
+  return { nodes, links };
+}
+
 export function getSankeyChartNodeWeights(graph: SankeyChartGraph): Map<string, number> {
   const incomingWeights = new Map<string, number>();
   const outgoingWeights = new Map<string, number>();
@@ -186,6 +269,20 @@ export function getSankeyChartNodeWeights(graph: SankeyChartGraph): Map<string, 
   for (const link of graph.links) {
     outgoingWeights.set(link.sourceNode.id, (outgoingWeights.get(link.sourceNode.id) ?? 0) + link.value);
     incomingWeights.set(link.targetNode.id, (incomingWeights.get(link.targetNode.id) ?? 0) + link.value);
+  }
+
+  return new Map(
+    graph.nodes.map(node => [node.id, Math.max(incomingWeights.get(node.id) ?? 0, outgoingWeights.get(node.id) ?? 0)]),
+  );
+}
+
+function getSankeyChartCurrentNodeWeights(graph: SankeyChartGraph): Map<string, number> {
+  const incomingWeights = new Map<string, number>();
+  const outgoingWeights = new Map<string, number>();
+
+  for (const link of graph.links) {
+    outgoingWeights.set(link.sourceNode.id, (outgoingWeights.get(link.sourceNode.id) ?? 0) + link.displayValue);
+    incomingWeights.set(link.targetNode.id, (incomingWeights.get(link.targetNode.id) ?? 0) + link.displayValue);
   }
 
   return new Map(
