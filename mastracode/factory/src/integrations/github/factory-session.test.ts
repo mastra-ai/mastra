@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createFactoryStorageForTests } from '../../storage/test-utils';
-import { ensureFactoryRuleSession } from './factory-session';
-import type { GithubIntegration } from './integration';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { ensureFactoryRuleSession } from './factory-session.js';
+import type { GithubIntegration } from './integration.js';
 
 describe('ensureFactoryRuleSession', () => {
   it('creates a source-control session for the Factory rule branch', async () => {

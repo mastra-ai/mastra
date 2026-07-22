@@ -7,8 +7,8 @@
  * testable and lets the route stay a thin shell.
  */
 
-import { isAutomationActor } from './base';
-import type { WorkItemRow, WorkItemStageEntry } from './base';
+import { isAutomationActor } from './base.js';
+import type { WorkItemRow, WorkItemStageEntry } from './base.js';
 
 /** Windows the metrics endpoint accepts; anything else clamps to the default. */
 export const METRICS_WINDOWS = [7, 30, 90] as const;

@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils';
-import type { AuditEventRow } from '../../storage/domains/audit/base';
-import type { IntegrationContext } from '../base';
-import { toWorkOSEvent, WorkOSAuditIntegration } from './integration';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
+import type { AuditEventRow } from '../../storage/domains/audit/base.js';
+import type { IntegrationContext } from '../base.js';
+import { toWorkOSEvent, WorkOSAuditIntegration } from './integration.js';
 
 const createEvent = vi.fn(async () => undefined);
 const generateLink = vi.fn(async () => ({ link: 'https://portal.workos.test/link' }));

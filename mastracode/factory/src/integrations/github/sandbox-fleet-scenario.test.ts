@@ -134,12 +134,12 @@ const tables: Tables = {
   sandboxes: [],
 };
 
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils';
-import { SandboxBudgetError, SandboxFleet } from '../../sandbox/fleet';
-import type { MaterializationSandbox } from '../../sandbox/fleet';
-import type { ProjectRepositorySandbox } from '../../storage/domains/source-control/base';
-import type * as RoutesModule from './routes';
-import { ensureProjectSandbox, teardownProjectSandbox } from './sandbox';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
+import { SandboxBudgetError, SandboxFleet } from '../../sandbox/fleet.js';
+import type { MaterializationSandbox } from '../../sandbox/fleet.js';
+import type { ProjectRepositorySandbox } from '../../storage/domains/source-control/base.js';
+import type * as RoutesModule from './routes.js';
+import { ensureProjectSandbox, teardownProjectSandbox } from './sandbox.js';
 
 /** Minimal fake sandbox VM that records lifecycle calls. */
 class FakeSandbox implements MaterializationSandbox {
@@ -353,7 +353,7 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
     // a recordable sandbox instead of hitting Railway.
     fleet.setFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? 'fresh'));
 
-    ({ buildGithubRoutes } = await import('./routes'));
+    ({ buildGithubRoutes } = await import('./routes.js'));
   });
 
   afterEach(() => {

@@ -4,8 +4,8 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { RouteAuth } from '../../../routes/route';
-import type { FactoryProjectsStorage } from '../projects/base';
+import type { RouteAuth } from '../../../routes/route.js';
+import type { FactoryProjectsStorage } from '../projects/base.js';
 import type {
   AuditContext,
   AuditEventPage,
@@ -14,7 +14,7 @@ import type {
   AuditTarget,
   ListAuditEventsInput,
   RecordAuditEventInput,
-} from './base';
+} from './base.js';
 
 export interface EmitAuditInput {
   action: string;

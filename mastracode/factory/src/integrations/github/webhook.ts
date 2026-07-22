@@ -2,10 +2,10 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
-import type { GithubIntegration } from './integration';
-import type { GithubIssueTriageInput, GithubIssueTriageResult } from './issue-triage';
-import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions';
-import type { GithubSignalSubscriptionRow, GithubWebhookPullRequestTarget } from './subscriptions';
+import type { GithubIntegration } from './integration.js';
+import type { GithubIssueTriageInput, GithubIssueTriageResult } from './issue-triage.js';
+import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
+import type { GithubSignalSubscriptionRow, GithubWebhookPullRequestTarget } from './subscriptions.js';
 
 export type GithubIssueTriageRunInput = GithubIssueTriageInput;
 export type GithubIssueTriageRunResult = GithubIssueTriageResult;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WorkItemsStorage } from '../storage/domains/work-items/base';
-import { createFactoryStorageForTests } from '../storage/test-utils';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 

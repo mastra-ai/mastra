@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GithubIntegration } from './integration';
-import type { GithubSignalSubscriptionRow } from './subscriptions';
+import type { GithubIntegration } from './integration.js';
+import type { GithubSignalSubscriptionRow } from './subscriptions.js';
 
 const getRepositoryCollaboratorPermission = vi.fn<
   (
@@ -12,8 +12,8 @@ const getRepositoryCollaboratorPermission = vi.fn<
 >(async () => 'write');
 // Stub integration: dispatch consumes the injected instance for permission checks.
 const githubStub = { getRepositoryCollaboratorPermission } as unknown as GithubIntegration;
-import { classifyGithubWebhook, dispatchGithubWebhook } from './webhook';
-import type { ParsedGithubWebhook } from './webhook';
+import { classifyGithubWebhook, dispatchGithubWebhook } from './webhook.js';
+import type { ParsedGithubWebhook } from './webhook.js';
 
 function parsed(event: string, action: string, extra: Record<string, unknown> = {}): ParsedGithubWebhook {
   return {

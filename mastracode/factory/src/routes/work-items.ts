@@ -15,15 +15,15 @@ import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
   FactoryStartRequest,
-} from '../rules/start-coordinator';
-import { FactoryStartTransitionError } from '../rules/start-coordinator';
-import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service';
-import type { FactoryRuleBoard, FactoryRuleStage } from '../rules/types';
-import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from '../rules/types';
-import type { AuditEmitter } from '../storage/domains/audit/domain';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base';
-import type { QueueHealthStorage } from '../storage/domains/queue-health/base';
-import { thresholdsOrDefault } from '../storage/domains/queue-health/base';
+} from '../rules/start-coordinator.js';
+import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
+import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
+import type { FactoryRuleBoard, FactoryRuleStage } from '../rules/types.js';
+import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from '../rules/types.js';
+import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
+import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
 import type {
   CreateWorkItemInput,
   ExternalWorkItemSource,
@@ -35,11 +35,11 @@ import type {
   WorkItemSessionInput,
   WorkItemStage,
   WorkItemsStorage,
-} from '../storage/domains/work-items/base';
-import { WorkItemRelationError } from '../storage/domains/work-items/base';
-import { clampMetricsWindow, computeFactoryMetrics } from '../storage/domains/work-items/metrics';
-import type { RouteDependencies } from './route';
-import { Route } from './route';
+} from '../storage/domains/work-items/base.js';
+import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
+import { clampMetricsWindow, computeFactoryMetrics } from '../storage/domains/work-items/metrics.js';
+import type { RouteDependencies } from './route.js';
+import { Route } from './route.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;

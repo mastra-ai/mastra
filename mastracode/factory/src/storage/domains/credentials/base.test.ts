@@ -8,7 +8,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { ModelCredentialsStorage } from './base';
+import { ModelCredentialsStorage } from './base.js';
 
 const oauth = (tag: string, expires: number) => ({
   type: 'oauth' as const,

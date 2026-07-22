@@ -10,12 +10,12 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSandbox, LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
-import { getFactoryAuthUserId } from './auth';
-import type { FactoryAuthUser } from './auth';
-import type { MastraFactorySandboxConfig } from './factory';
-import type { GithubIntegration } from './integrations/github/integration';
-import { checkoutSessionBranch, materializeRepo, runWorktreeSetup } from './integrations/github/sandbox';
-import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet';
+import { getFactoryAuthUserId } from './auth.js';
+import type { FactoryAuthUser } from './auth.js';
+import type { MastraFactorySandboxConfig } from './factory.js';
+import type { GithubIntegration } from './integrations/github/integration.js';
+import { checkoutSessionBranch, materializeRepo, runWorktreeSetup } from './integrations/github/sandbox.js';
+import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 const SESSION_CHECKPOINT_PREFIX = 'mastracode-session';

@@ -6,8 +6,8 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyStageTransition, isAutomationActor, WorkItemRelationError, WorkItemsStorage } from './base';
-import type { WorkItemStageEntry } from './base';
+import { applyStageTransition, isAutomationActor, WorkItemRelationError, WorkItemsStorage } from './base.js';
+import type { WorkItemStageEntry } from './base.js';
 
 const input = {
   externalSource: {

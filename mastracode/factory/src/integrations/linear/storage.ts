@@ -14,7 +14,7 @@
  * by `LinearIntegration`'s connection lifecycle methods.
  */
 
-import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base';
+import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 
 /** Linear's slice of the generic integration storage domain. */
 export type LinearStorageHandle = IntegrationStorageHandle<LinearConnectionData>;

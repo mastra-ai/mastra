@@ -2,11 +2,11 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { Intake, IntakeItem } from '../capabilities/intake';
-import type { AuditEmitter } from '../storage/domains/audit/domain';
-import type { IntakeConfig, IntakeStorage } from '../storage/domains/intake/base';
-import type { RouteDependencies } from './route';
-import { Route } from './route';
+import type { Intake, IntakeItem } from '../capabilities/intake.js';
+import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { IntakeConfig, IntakeStorage } from '../storage/domains/intake/base.js';
+import type { RouteDependencies } from './route.js';
+import { Route } from './route.js';
 
 export interface IntakeIntegration {
   id: string;

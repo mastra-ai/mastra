@@ -3,20 +3,20 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { GitBranch } from 'lucide-react';
 import { Navigate, useLocation } from 'react-router';
 
-import { Sidebar } from '../../Sidebar';
-import { ChatLayout } from '../../ui/ChatLayout';
-import { FolderIcon } from '../../ui/icons';
-import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
-import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
-import { isLocalFactory, isServerFactory, selectedRepository } from '../workspaces/services/factories';
-import type { Factory } from '../workspaces/services/factories';
-import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
-import { ChatHeader } from './components/ChatHeader';
-import { ComposerPanel } from './components/ComposerPanel';
-import { TranscriptEntries } from './components/Transcript';
-import { ChatSessionBoundary } from './context/ChatSessionProvider';
-import { useChatTranscript } from './context/useChatTranscript';
-import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { Sidebar } from '../Sidebar';
+import { ChatLayout } from '../ui/ChatLayout';
+import { FolderIcon } from '../ui/icons';
+import { EmptyFactoryState } from '../domains/workspaces/components/EmptyFactoryState';
+import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { isLocalFactory, isServerFactory, selectedRepository } from '../domains/workspaces/services/factories';
+import type { Factory } from '../domains/workspaces/services/factories';
+import { deriveProjectPath } from '../../../shared/hooks/useWorkspaces';
+import { ChatHeader } from '../domains/chat/components/ChatHeader';
+import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
+import { TranscriptEntries } from '../domains/chat/components/Transcript';
+import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
+import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
+import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 

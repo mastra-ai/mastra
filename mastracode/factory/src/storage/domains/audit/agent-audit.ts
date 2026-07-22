@@ -9,7 +9,7 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { AuditAgentEmitter } from './domain';
+import type { AuditAgentEmitter } from './domain.js';
 
 type FactorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 

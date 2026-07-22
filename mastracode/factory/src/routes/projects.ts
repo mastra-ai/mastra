@@ -6,15 +6,15 @@ import type {
   CreateFactoryProjectInput,
   FactoryProjectsStorage,
   UpdateFactoryProjectInput,
-} from '../storage/domains/projects/base';
+} from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlStorage,
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
-} from '../storage/domains/source-control/base';
-import type { RouteDependencies } from './route';
-import { Route } from './route';
+} from '../storage/domains/source-control/base.js';
+import type { RouteDependencies } from './route.js';
+import { Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;

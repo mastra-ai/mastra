@@ -2,10 +2,10 @@ import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
-import { SkillRoutes } from './skills';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils';
-import type { TestAuthUser } from './test-utils';
+import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
+import { SkillRoutes } from './skills.js';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+import type { TestAuthUser } from './test-utils.js';
 
 const skill: Skill = {
   name: 'understand-pr',
