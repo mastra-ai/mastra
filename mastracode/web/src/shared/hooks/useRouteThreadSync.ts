@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
-import { queryKeys } from '../api/keys';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../api/keys';
 import { useChatConnection } from '../../web/ui/domains/chat/context/useChatConnection';
 import { useChatSessionContext } from '../../web/ui/domains/chat/context/useChatSessionContext';
 import { useChatTranscript } from '../../web/ui/domains/chat/context/useChatTranscript';
@@ -57,8 +57,13 @@ export function useRouteThreadSync() {
       if (fallbackForScopeChange && latest) {
         const warm = session
           ? queryClient.prefetchQuery({
-              queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, latest.id),
-              queryFn: () => session.listMessages(latest.id),
+              queryKey: queryKeys.agentControllerThreadMessages(
+                AGENT_CONTROLLER_ID,
+                resourceId,
+                latest.id,
+                INITIAL_THREAD_MESSAGE_LIMIT,
+              ),
+              queryFn: () => session.listMessages(latest.id, INITIAL_THREAD_MESSAGE_LIMIT),
             })
           : Promise.resolve();
         void warm.finally(() => {

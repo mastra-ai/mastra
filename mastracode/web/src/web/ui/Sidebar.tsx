@@ -60,7 +60,7 @@ export function Sidebar() {
           </div>
         )}
       </MainSidebar.Nav>
-      <MainSidebar.Bottom role="region" aria-label="Account and settings" className="pb-3">
+      <MainSidebar.Bottom role="region" aria-label="Account and settings">
         <SidebarFooter />
       </MainSidebar.Bottom>
     </MainSidebar>
@@ -83,32 +83,29 @@ function SidebarFooter() {
   };
 
   return (
-    <>
-      <MainSidebar.NavSeparator />
-      <MainSidebar.NavList>
-        <SidebarAuth />
-        <MainSidebar.NavLink
-          asChild
-          link={{
-            name: 'Settings',
-            url: '#',
-            icon: <Settings />,
-          }}
-          isActive={settingsOpen}
+    <MainSidebar.NavList>
+      <SidebarAuth />
+      <MainSidebar.NavLink
+        asChild
+        link={{
+          name: 'Settings',
+          url: '#',
+          icon: <Settings />,
+        }}
+        isActive={settingsOpen}
+      >
+        <button
+          id="settings-trigger"
+          type="button"
+          onClick={toggleSettings}
+          aria-label="Settings"
+          aria-current={settingsOpen ? 'page' : undefined}
         >
-          <button
-            id="settings-trigger"
-            type="button"
-            onClick={toggleSettings}
-            aria-label="Settings"
-            aria-current={settingsOpen ? 'page' : undefined}
-          >
-            <Settings />
-            <MainSidebar.NavLabel>Settings</MainSidebar.NavLabel>
-          </button>
-        </MainSidebar.NavLink>
-      </MainSidebar.NavList>
-    </>
+          <Settings />
+          <MainSidebar.NavLabel>Settings</MainSidebar.NavLabel>
+        </button>
+      </MainSidebar.NavLink>
+    </MainSidebar.NavList>
   );
 }
 
