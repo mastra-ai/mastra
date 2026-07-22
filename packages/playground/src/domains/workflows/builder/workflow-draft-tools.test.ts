@@ -1,8 +1,15 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { normalizeWorkflowBuilderDefinition } from '@mastra/core/workflows/builder';
 import { describe, expect, it } from 'vitest';
 
 import { createWorkflowDraft } from './workflow-draft';
 import type { WorkflowDraft } from './workflow-draft';
-import { createWorkflowDraftTools } from './workflow-draft-tools';
+import { createWorkflowDraftTools, parseWorkflowDefinitionInput } from './workflow-draft-tools';
+
+const canonicalFixtures = JSON.parse(
+  readFileSync(resolve(process.cwd(), '../../test-fixtures/workflow-builder-canonical/definitions.json'), 'utf8'),
+) as Array<{ name: string; input: unknown; expected: unknown }>;
 
 const executeTool = async (tool: unknown, input: unknown) => {
   if (!tool || typeof tool !== 'object' || !('execute' in tool) || typeof tool.execute !== 'function') {
@@ -12,6 +19,16 @@ const executeTool = async (tool: unknown, input: unknown) => {
 };
 
 describe('workflow draft client tools', () => {
+  describe('when a complete definition reaches the Studio adapter', () => {
+    it.each(canonicalFixtures)(
+      'normalizes the $name fixture identically to the shared contract',
+      ({ input, expected }) => {
+        expect(parseWorkflowDefinitionInput(input)).toEqual(expected);
+        expect(parseWorkflowDefinitionInput(input)).toEqual(normalizeWorkflowBuilderDefinition(input));
+      },
+    );
+  });
+
   describe('when the assistant invokes constrained workflow mutations', () => {
     it('mutates the authoritative draft through typed operations', async () => {
       let draft = createWorkflowDraft('new-workflow');

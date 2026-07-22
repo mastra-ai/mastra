@@ -1,16 +1,32 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS, WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES } from './index';
+import {
+  normalizeWorkflowBuilderDefinition,
+  WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS,
+  WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES,
+} from './index';
+
+const fixtures = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL('../../../../../test-fixtures/workflow-builder-canonical/definitions.json', import.meta.url)),
+    'utf8',
+  ),
+) as Array<{ name: string; input: unknown; expected: unknown }>;
 
 describe('workflow builder authoring contract', () => {
-  it('publishes the seven persisted graph entry types', () => {
+  it('publishes all ten persisted graph families', () => {
     expect(WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES).toEqual([
       'agent',
       'tool',
       'mapping',
+      'workflow',
       'parallel',
       'foreach',
       'sleep',
       'sleepUntil',
+      'conditional',
+      'loop',
     ]);
   });
 
@@ -18,8 +34,25 @@ describe('workflow builder authoring contract', () => {
     expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain(
       'previous output shape must satisfy the next input schema',
     );
-    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('Parallel children must be single-step');
-    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('body may only be an agent or tool');
-    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('Never invent agent or tool IDs');
+    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('nested workflow');
+    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('declarative predicate DSL');
+    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('Never invent agent, tool, or workflow IDs');
+  });
+
+  it.each(fixtures)('normalizes the $name fixture deterministically', ({ input, expected }) => {
+    const normalized = normalizeWorkflowBuilderDefinition(input);
+    expect(normalized).toEqual(expected);
+    expect(normalizeWorkflowBuilderDefinition(normalized)).toEqual(expected);
+  });
+
+  it('rejects function-bearing definitions', () => {
+    expect(() =>
+      normalizeWorkflowBuilderDefinition({
+        id: 'closure-flow',
+        inputSchema: {},
+        outputSchema: {},
+        graph: [{ type: 'mapping', id: 'map', mapConfig: () => ({}) }],
+      }),
+    ).toThrow('must be JSON-safe');
   });
 });
