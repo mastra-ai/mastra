@@ -674,6 +674,39 @@ describe('Agent Routes Authorization', () => {
     });
   });
 
+  describe('agent model serialization', () => {
+    it('lists an agent whose dynamic model is not selected without logging a warning', async () => {
+      mockAgent = new Agent({
+        id: 'dynamic-model-agent',
+        name: 'dynamic-model-agent',
+        instructions: 'test-instructions',
+        model: () => {
+          throw new Error('No model selected. Use /models to select a model first.');
+        },
+      });
+
+      mastra = new Mastra({
+        agents: { 'dynamic-model-agent': mockAgent },
+        logger: false,
+      });
+      const warn = vi.fn();
+      vi.spyOn(mastra, 'getLogger').mockReturnValue({ warn, error: vi.fn() } as any);
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        mastra,
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result['dynamic-model-agent']).toMatchObject({
+        id: 'dynamic-model-agent',
+        name: 'dynamic-model-agent',
+      });
+      expect(result['dynamic-model-agent']?.provider).toBeUndefined();
+      expect(result['dynamic-model-agent']?.modelId).toBeUndefined();
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
+
   describe('GENERATE_AGENT_ROUTE', () => {
     it('should return 403 when memory option specifies thread owned by different resource', async () => {
       // Create a thread owned by user-b

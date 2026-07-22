@@ -685,11 +685,16 @@ async function formatAgentList({
     logger.warn('Error listing tools for agent', { agentName: agent.name, error });
   }
 
+  const hasDynamicModel = typeof agent.model === 'function';
   let llm: Awaited<ReturnType<Agent['getLLM']>> | undefined;
   try {
     llm = await agent.getLLM({ requestContext });
   } catch (error) {
-    logger.warn('Error getting LLM for agent', { agentName: agent.name, error });
+    // Dynamic models can be intentionally unresolved until session context
+    // selects one. Agent listing should omit model metadata without warning.
+    if (!hasDynamicModel) {
+      logger.warn('Error getting LLM for agent', { agentName: agent.name, error });
+    }
   }
 
   let defaultGenerateOptionsLegacy: Awaited<ReturnType<Agent['getDefaultGenerateOptionsLegacy']>> | undefined;
@@ -778,7 +783,9 @@ async function formatAgentList({
   try {
     models = await agent.getModelList(requestContext);
   } catch (error) {
-    logger.warn('Error getting model list for agent', { agentName: agent.name, error });
+    if (!hasDynamicModel) {
+      logger.warn('Error getting model list for agent', { agentName: agent.name, error });
+    }
   }
   const modelList = models?.map(md => ({
     ...md,
