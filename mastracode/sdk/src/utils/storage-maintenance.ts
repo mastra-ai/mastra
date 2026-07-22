@@ -286,24 +286,13 @@ export function createStorageMaintenance(opts: {
   closeVector?: () => Promise<void>;
 }): StorageMaintenance {
   const { storage, backend, retention, localDbFiles, closeVector } = opts;
-  let closePromise: Promise<void> | undefined;
   return {
     backend,
     retention,
     prune: options => storage.prune(options),
-    closeStorage: () => {
-      closePromise ??= (async () => {
-        const results = await Promise.allSettled([
-          Promise.resolve().then(() => storage.close?.()),
-          Promise.resolve().then(() => closeVector?.()),
-        ]);
-        const errors = results
-          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-          .map(result => result.reason);
-        if (errors.length === 1) throw errors[0];
-        if (errors.length > 1) throw new AggregateError(errors, 'Failed to close Mastra Code storage');
-      })();
-      return closePromise;
+    closeStorage: async () => {
+      await storage.close?.();
+      await closeVector?.();
     },
     ...(backend === 'libsql' && localDbFiles.length > 0
       ? {

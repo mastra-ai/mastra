@@ -9,7 +9,7 @@
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
 
 export interface WorkItemSessionRef {
-  projectPath: string;
+  sessionId: string;
   branch: string;
   threadId: string;
   /** WorkOS user id whose sandbox the session runs in (stamped server-side). */
@@ -44,7 +44,7 @@ export interface WorkItem {
 
 /** Session ref as sent by the client — `startedBy` is stamped server-side. */
 export interface WorkItemSessionInput {
-  projectPath: string;
+  sessionId: string;
   branch: string;
   threadId: string;
 }
@@ -153,13 +153,11 @@ export async function updateWorkItem(baseUrl: string, id: string, patch: UpdateW
 }
 
 export interface StartFactoryRunRequest {
-  resourceId: string;
-  projectPath: string;
-  branch: string;
+  sessionId: string;
   threadTitle: string;
   threadTags?: Record<string, string>;
   kickoffKey: string;
-  kickoffMessage: string | null;
+  invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
   destinationStage: FactoryStage;
   workItem: {
     id?: string;
@@ -173,10 +171,10 @@ export interface StartFactoryRunPrepared {
   bindingId: string;
   threadId: string;
   resourceId: string;
-  projectPath: string;
+  sessionId: string;
   branch: string;
   revision: number;
-  kickoffStatus: 'pending' | 'sent' | 'failed';
+  kickoffStatus: 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
   replayed: boolean;
 }
 

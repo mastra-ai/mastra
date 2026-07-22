@@ -147,7 +147,7 @@ function useOverviewHandlers({ workItems, activityThreads = [], thresholds }: Ov
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
-        config: { github: { enabled: true, projectIds: [] }, linear: { enabled: false, projectIds: [] } },
+        config: { github: { enabled: true, sourceIds: [] }, linear: { enabled: false, sourceIds: [] } },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
@@ -239,7 +239,7 @@ describe('Factory Overview page', () => {
     useOverviewHandlers({
       workItems: [
         inStage('wi-1', 'Active build', 'execute', 1 * HOUR_S, {
-          sessions: { work: { projectPath: WORKTREE, branch: 'main', threadId: 'thread-run', startedBy: 'user-1' } },
+          sessions: { work: { sessionId: WORKTREE, branch: 'main', threadId: 'thread-run', startedBy: 'user-1' } },
         }),
       ],
       activityThreads: [{ id: 'thread-run', tags: { projectPath: WORKTREE }, state: 'active' }],

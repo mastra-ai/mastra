@@ -9,7 +9,7 @@
  * and returns a plain shape, so it is unit-testable without a network or DOM.
  */
 
-import type { QueueHealthConfig } from '../../../storage/domains/queue-health/base';
+import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
 import type { WorkItem, WorkItemStageEntry } from './services/workItems';
 import { BOARD_STAGES } from './stages';
 
@@ -145,7 +145,7 @@ export function computeQueueHealth(
     if (inFlightStages.length === 0) continue;
 
     const open = openEntries(item);
-    const active = Object.values(item.sessions).some(ref => activePaths.has(ref.projectPath));
+    const active = Object.values(item.sessions).some(ref => activePaths.has(ref.sessionId));
 
     for (const stage of inFlightStages) {
       const stageAgg = byStage.get(stage);

@@ -57,7 +57,7 @@ Every deploy that runs on a platform environment with a workspace receives these
 
 | Variable | Contents |
 | - | - |
-| `MASTRA_PLATFORM_ACCESS_TOKEN` | Access token scoped to the deploy. Used by the workspace providers to authenticate. |
+| `MASTRA_PLATFORM_SECRET_KEY` | Secret key scoped to the deploy. Used by the workspace providers to authenticate. `MASTRA_PLATFORM_ACCESS_TOKEN` is also injected as a deprecated alias. |
 | `MASTRA_PROJECT_ID` | Project the deploy belongs to. |
 | `MASTRA_ENVIRONMENT_ID` | Environment the deploy belongs to. Selects which sandbox pool the platform uses. |
 | `MASTRA_PLATFORM_BUCKET_NAME` | Bucket name attached to the environment. Selects which bucket `PlatformFilesystem` reads and writes. |
@@ -69,7 +69,7 @@ These names are reserved. If your project sets any of them explicitly, the platf
 Reuse the same providers locally by putting the four variables in your `.env` file. Get the values from your project's Workspaces tab:
 
 ```bash title=".env"
-MASTRA_PLATFORM_ACCESS_TOKEN=your-access-token
+MASTRA_PLATFORM_SECRET_KEY=your-secret-key
 MASTRA_PROJECT_ID=your-project-id
 MASTRA_ENVIRONMENT_ID=your-environment-id
 MASTRA_PLATFORM_BUCKET_NAME=your-bucket-name

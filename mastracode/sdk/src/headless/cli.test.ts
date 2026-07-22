@@ -1,65 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-import { cleanupHeadless, hasHeadlessFlag, parseHeadlessArgs } from './cli.js';
+import { hasHeadlessFlag, parseHeadlessArgs } from './cli.js';
 import { buildParseArgsOptions, FLAGS, renderFlagUsage } from './flags.js';
 
 function argv(...rest: string[]): string[] {
   return ['node', 'main.js', ...rest];
 }
-
-describe('cleanupHeadless', () => {
-  it('stops work before closing storage and preserves a successful exit', async () => {
-    const events: string[] = [];
-    const closeStorage = vi.fn(async () => {
-      events.push('storage');
-    });
-    const releaseLocks = vi.fn(() => {
-      events.push('locks');
-    });
-
-    const exitCode = await cleanupHeadless({
-      stopWork: [
-        async () => {
-          events.push('stop');
-        },
-      ],
-      closeStorage,
-      releaseLocks,
-      exitCode: 0,
-      onStorageError: vi.fn(),
-    });
-
-    expect(exitCode).toBe(0);
-    expect(events).toEqual(['stop', 'storage', 'locks']);
-    expect(closeStorage).toHaveBeenCalledOnce();
-  });
-
-  it('reports storage failure without masking an earlier nonzero exit', async () => {
-    const error = new Error('close failed');
-    const onStorageError = vi.fn();
-    const releaseLocks = vi.fn();
-
-    const failedSuccess = await cleanupHeadless({
-      stopWork: [vi.fn().mockRejectedValue(new Error('stop failed'))],
-      closeStorage: vi.fn().mockRejectedValue(error),
-      releaseLocks,
-      exitCode: 0,
-      onStorageError,
-    });
-    const existingFailure = await cleanupHeadless({
-      stopWork: [],
-      closeStorage: vi.fn().mockRejectedValue(error),
-      releaseLocks,
-      exitCode: 2,
-      onStorageError,
-    });
-
-    expect(failedSuccess).toBe(1);
-    expect(existingFailure).toBe(2);
-    expect(onStorageError).toHaveBeenCalledWith(error);
-    expect(releaseLocks).toHaveBeenCalledTimes(2);
-  });
-});
 
 describe('hasHeadlessFlag', () => {
   it('detects --prompt', () => {

@@ -1,18 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-import { createClient } from '@libsql/client';
-import { PgVector } from '@mastra/pg';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('getStorageConfig', () => {
   const originalEnv = { ...process.env };
-  let appDataDir: string;
 
   beforeEach(() => {
-    appDataDir = mkdtempSync(join(tmpdir(), 'mastracode-storage-config-'));
-    process.env.MASTRA_APP_DATA_DIR = appDataDir;
     // Clear storage-related env vars
     delete process.env.MASTRA_STORAGE_BACKEND;
     delete process.env.MASTRA_DB_URL;
@@ -27,7 +18,6 @@ describe('getStorageConfig', () => {
   });
 
   afterEach(() => {
-    rmSync(appDataDir, { recursive: true, force: true });
     process.env = { ...originalEnv };
   });
 
@@ -143,18 +133,6 @@ describe('getStorageConfig', () => {
 });
 
 describe('createStorage', () => {
-  let appDataDir: string;
-
-  beforeEach(() => {
-    appDataDir = mkdtempSync(join(tmpdir(), 'mastracode-create-storage-'));
-    process.env.MASTRA_APP_DATA_DIR = appDataDir;
-  });
-
-  afterEach(() => {
-    rmSync(appDataDir, { recursive: true, force: true });
-    delete process.env.MASTRA_APP_DATA_DIR;
-  });
-
   it('creates LibSQLStore for libsql backend', async () => {
     const { createStorage } = await import('../storage-factory.js');
     const result = await createStorage({
@@ -166,50 +144,6 @@ describe('createStorage', () => {
     expect(result.storage.constructor.name).toBe('LibSQLStore');
     expect(result.backend).toBe('libsql');
     expect(result.warning).toBeUndefined();
-  });
-
-  it('uses DELETE journals for local main and vector databases', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mastracode-storage-'));
-    const mainUrl = `file:${join(dir, 'main.db')}`;
-    const vectorUrl = `file:${join(dir, 'vectors.db')}`;
-    const { createStorage, createVectorStore } = await import('../storage-factory.js');
-    const result = await createStorage({ backend: 'libsql', url: mainUrl, vectorUrl, isRemote: false });
-    const vector = await createVectorStore({ backend: 'libsql', url: mainUrl, vectorUrl, isRemote: false });
-
-    try {
-      await result.storage.init();
-      await vector!.listIndexes();
-
-      for (const url of [mainUrl, vectorUrl]) {
-        const client = createClient({ url });
-        try {
-          const journal = await client.execute('PRAGMA journal_mode');
-          expect(String(journal.rows[0]?.journal_mode).toLowerCase()).toBe('delete');
-        } finally {
-          client.close();
-        }
-      }
-    } finally {
-      await result.storage.close?.();
-      await (vector as { close?: () => Promise<void> })?.close?.();
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it('closes the owned PostgreSQL vector pool', async () => {
-    const disconnect = vi.spyOn(PgVector.prototype, 'disconnect').mockResolvedValue();
-    const { createOwnedVectorStore } = await import('../storage-factory.js');
-    const ownedVector = await createOwnedVectorStore({
-      backend: 'pg',
-      connectionString: 'postgresql://user:pass@localhost:5432/testdb',
-    });
-
-    try {
-      await ownedVector?.close?.();
-      expect(disconnect).toHaveBeenCalledOnce();
-    } finally {
-      disconnect.mockRestore();
-    }
   });
 
   it('falls back to LibSQL with warning when pg has no connection info', async () => {

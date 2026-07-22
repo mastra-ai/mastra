@@ -1,12 +1,10 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useEffect, useRef } from 'react';
 
 import { useKeyDown } from '../../../lib/hooks';
-import { CloseIcon } from '../../../ui/icons';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
@@ -20,6 +18,7 @@ import {
 } from '../../../../../shared/hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
+import { SettingsHeader } from './SettingsHeader';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
@@ -42,16 +41,17 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 export function SettingsPanel() {
   const section = useSettingsSection();
   const closeSettings = useCloseSettings();
-  const titleRef = useRef<HTMLElement>(null);
   const { theme, setTheme } = useTheme();
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
+  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
+    scope: sessionScope,
     baseUrl,
-    enabled: sessionEnabled,
+    enabled: resourceEnabled,
   };
   // Session-independent: pickers (Factory default model, packs, OM) need the
   // catalog even before any chat session exists.
@@ -60,14 +60,7 @@ export function SettingsPanel() {
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  const sessionResourceId = sessionEnabled ? resourceId : undefined;
-  // Web chat sessions register under (resourceId, scope=projectPath); the
-  // session-scoped config routes need the same pair to find the session.
-  const sessionScope = sessionEnabled ? projectPath : undefined;
-
-  useEffect(() => {
-    titleRef.current?.focus();
-  }, []);
+  const sessionResourceId = resourceEnabled ? resourceId : undefined;
 
   useKeyDown({ escape: closeSettings });
 
@@ -80,18 +73,10 @@ export function SettingsPanel() {
   };
 
   return (
-    <section aria-labelledby="settings-title" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border1 px-5 py-4">
-        <Txt as="h1" variant="header-sm" id="settings-title" tabIndex={-1} ref={titleRef} className="text-icon6">
-          Settings
-        </Txt>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Close settings" onClick={closeSettings}>
-          <CloseIcon size={16} />
-        </Button>
-      </header>
-
+    <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
         <div className="mx-auto grid w-full max-w-4xl py-3">
+          {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
           {section === 'general' && (
             <>
               <GeneralSettings theme={theme} onThemeChange={setTheme} />

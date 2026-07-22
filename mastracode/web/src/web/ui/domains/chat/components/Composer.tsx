@@ -8,6 +8,7 @@ import {
   ComposerBox,
   ComposerInput,
 } from '@mastra/playground-ui/components/Composer';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -28,8 +29,9 @@ import {
 import { useCreateAgentControllerThreadMutation } from '../../../../../shared/hooks/useAgentControllerThreadMutations';
 import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { getModeBorderColorClass } from './mode-colors';
+import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
+import { useComposerSpotlight } from './useComposerSpotlight';
 
 type ComposerVariant = 'inline' | 'textarea';
 
@@ -83,7 +85,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { busy, localUser, reset } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
   const { composerCommandName, clearComposerCommand, runComposerCommand } = useChatCommands();
-  const modeBorderColorClass = getModeBorderColorClass(activeModeId ?? modes[0]?.id);
+  const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -101,6 +103,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const [images, setImages] = useState<PendingImage[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const spotlightRef = useComposerSpotlight();
   const appliedCommandNameRef = useRef<string | null>(null);
   const modeSwitchPendingRef = useRef(false);
   const suggestions = matchCommands(draft);
@@ -315,7 +318,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerBox className={modeBorderColorClass}>
+      <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
+        <div aria-hidden="true" className="composer-spotlight-surface" />
         {images.length > 0 && (
           <ComposerAttachments className="mx-3 mt-3 flex max-w-none justify-start gap-2 pb-0">
             {images.map(img => (
@@ -358,7 +362,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               <button
                 key={cmd.name}
                 type="button"
-                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-ui-sm ${index === activeSuggestion ? 'bg-surface4 text-icon6' : 'text-icon3'}`}
+                className={cn(
+                  'flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-ui-sm',
+                  index === activeSuggestion ? 'bg-surface4 text-icon6' : 'text-icon3',
+                )}
                 onMouseDown={e => {
                   e.preventDefault();
                   applyCommand(cmd.name);

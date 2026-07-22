@@ -1184,6 +1184,13 @@ export function createDurableToolCallStep() {
           ...(approvalGrant ?? {}),
         };
       } catch (error) {
+        // Re-throw FGA authorization errors instead of swallowing them —
+        // an authorization denial must fail the run, not be serialized as a
+        // recoverable tool error for the LLM to retry (mirrors the
+        // non-durable tool-call step).
+        if (error instanceof Error && error.name === 'FGADeniedError') {
+          throw error;
+        }
         const toolError = serializeError(error);
 
         // Emit tool-error chunk (non-fatal — error result is returned regardless)

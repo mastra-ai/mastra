@@ -107,6 +107,18 @@ mastra dev
 These are forwarded to the Mastra model router and will work with any `"openai/..."`
 or `"anthropic/..."` model selections.
 
+## `mastra factory dev`
+
+Starts a development server for [Agent Builder](/docs/agent-builder/overview) development. It uses the same dev runtime and flags as [`mastra dev`](#mastra-dev) and writes to the same `.mastra/output` directory.
+
+```bash
+npx mastra factory dev
+```
+
+Both commands share the same dev lock, so `mastra dev` and `mastra factory dev` can't run simultaneously in the same project. If one is already running, the other exits with a duplicate development server error.
+
+Use `mastra factory dev` when developing Agent Builder features. It accepts the same flags as [`mastra dev`](#mastra-dev), including `--https`, `--inspect`, `--inspect-brk`, `--custom-args`, and `--request-context-presets`.
+
 ## `mastra build`
 
 The `mastra build` command bundles your Mastra project into a production-ready Hono server. [Hono](https://hono.dev/) is a lightweight, type-safe web framework that makes it straightforward to deploy Mastra agents as HTTP endpoints with middleware support.
@@ -821,6 +833,20 @@ Use the [`list`](#list) command to get the correct ID.
 ### `list`
 
 List all available scorer templates. Use the ID for the `add` command.
+
+## `mastra create`
+
+Create a standalone Mastra project with the same project-creation flow as [`create-mastra`](/reference/cli/create-mastra).
+
+```bash npm2yarn
+npx mastra@latest create
+```
+
+Providing both the project name and `--llm` skips the interactive setup prompts. Use `--template [template]` for an arbitrary template or `--empty` for a minimal provider-free scaffold.
+
+The command installs Mastra skills for detected coding assistants and initializes Git when appropriate. Use `--no-skills` or `--no-git` to opt out.
+
+See the [`create-mastra` reference](/reference/cli/create-mastra) for mode behavior, conflicts, validation, and complete flag descriptions.
 
 ## `mastra init`
 
