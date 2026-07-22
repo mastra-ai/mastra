@@ -10,6 +10,7 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import type { GithubIntegration } from './integration.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
+import { injectGithubToken } from './token-refresh.js';
 
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 
@@ -151,12 +152,33 @@ export async function unsubscribeCurrentSessionFromPullRequest(
   return number;
 }
 
+export async function refreshGithubToken(requestContext: RequestContext, github: GithubIntegration): Promise<void> {
+  const target = await resolveSessionTarget(requestContext, github);
+  const access = await github.versionControl.getRepositoryAccess({
+    orgId: target.orgId,
+    repositoryId: target.repository.id,
+  });
+  const token = access.authorization?.token;
+  if (!token) throw new Error('Repository access did not include a bearer token for the Factory session.');
+  injectGithubToken(requestContext, token);
+}
+
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   const user = requestContext.get('user') as SessionAuthUser | undefined;
   if (!context?.getState().projectRepositoryId || !sessionOrgId(user) || !sessionUserId(user)) return {};
 
   return {
+    github_refresh_token: createTool({
+      id: 'github_refresh_token',
+      description:
+        'Mint a fresh GitHub installation token and inject it as GH_TOKEN for future commands in the active Factory sandbox. Use this when gh reports that authentication has expired or is invalid.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        await refreshGithubToken(requestContext, github);
+        return { refreshed: true };
+      },
+    }),
     github_subscribe_pr: createTool({
       id: 'github_subscribe_pr',
       description:

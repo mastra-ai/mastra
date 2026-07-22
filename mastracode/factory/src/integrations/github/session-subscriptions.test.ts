@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(async (_input: { sessionScope: string }) => ({ created: true })),
   unsubscribe: vi.fn(async (_input: { sessionScope: string }) => ({ removed: true })),
   getPullRequest: vi.fn(async () => ({ data: { base: { repo: { id: 99 } } } })),
+  getRepositoryAccess: vi.fn(async () => ({
+    cloneUrl: 'https://github.com/mastra-ai/mastra.git',
+    authorization: { scheme: 'bearer' as const, token: 'fresh-gh-token' },
+  })),
 }));
 
 vi.mock('./subscriptions', () => ({
@@ -44,15 +48,20 @@ const githubStub = {
       get: vi.fn(async () => ({ id: 'installation-1', externalId: '7' })),
     },
   },
+  versionControl: {
+    getRepositoryAccess: mocks.getRepositoryAccess,
+  },
   getInstallationOctokit: () => ({ pulls: { get: mocks.getPullRequest } }),
 } as unknown as GithubIntegration;
 
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
+  refreshGithubToken,
   subscribeCurrentSessionToPullRequest,
   unsubscribeCurrentSessionFromPullRequest,
 } from './session-subscriptions.js';
+import { registerGithubTokenInjector } from './token-refresh.js';
 
 function authenticatedRequestContext(scope = '/worktrees/a') {
   const requestContext = new RequestContext();
@@ -123,6 +132,17 @@ describe('GitHub subscription entry points', () => {
     requestContext.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
 
     expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
+  });
+
+  it('mints repository access and injects the fresh token into the active sandbox', async () => {
+    const requestContext = authenticatedRequestContext();
+    const inject = vi.fn();
+    registerGithubTokenInjector(requestContext, inject);
+
+    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
+
+    expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
+    expect(inject).toHaveBeenCalledWith('fresh-gh-token');
   });
 
   it('silently skips auto-subscription outside repository sessions', async () => {
