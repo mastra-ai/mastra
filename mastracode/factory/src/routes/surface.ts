@@ -1,32 +1,31 @@
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-
-import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import type { MastraCodeState } from '@mastra/code-sdk/schema';
-
 import type { FactoryStorage } from '@mastra/core/storage';
-import type { AuditEmitter } from '@mastra/factory/storage/domains/audit/domain';
-import type { FactoryIntegration, IntegrationContext } from '@mastra/factory/integrations/base';
-import { getGithubFeatureDiagnostics } from '@mastra/factory/integrations/github/config';
-import type { SandboxFleet } from '@mastra/factory/sandbox/fleet';
-import { WorkItemRoutes } from '@mastra/factory/routes/work-items';
-import { buildFsRoutes } from '@mastra/factory/routes/fs';
-import { IntakeRoutes } from '@mastra/factory/routes/intake';
-import { OAuthRoutes } from '@mastra/factory/routes/oauth';
-import { SkillRoutes } from '@mastra/factory/routes/skills';
-import type { RouteAuth } from '@mastra/factory/routes/route';
-import type { StateSigner } from '@mastra/factory/state-signing';
-import { invalidateTenantCredentialSnapshots } from '@mastra/factory/routes/tenant-credentials';
-import { ConfigRoutes } from '@mastra/factory/routes/config';
-import type { IntegrationStorage } from '@mastra/factory/storage/domains/integrations/base';
-import type { SourceControlStorage } from '@mastra/factory/storage/domains/source-control/base';
-import type { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
-import type { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
-import type { ModelPacksStorage } from '@mastra/factory/storage/domains/model-packs/base';
-import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
-import type { QueueHealthStorage } from '@mastra/factory/storage/domains/queue-health/base';
-import type { WorkItemsStorage } from '@mastra/factory/storage/domains/work-items/base';
+
+import type { FactoryIntegration, IntegrationContext } from '../integrations/base';
+import { getGithubFeatureDiagnostics } from '../integrations/github/config';
+import type { SandboxFleet } from '../sandbox/fleet';
+import type { StateSigner } from '../state-signing';
+import type { AuditEmitter } from '../storage/domains/audit/domain';
+import type { ModelCredentialsStorage } from '../storage/domains/credentials/base';
+import type { IntakeStorage } from '../storage/domains/intake/base';
+import type { IntegrationStorage } from '../storage/domains/integrations/base';
+import type { ModelPacksStorage } from '../storage/domains/model-packs/base';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base';
+import type { QueueHealthStorage } from '../storage/domains/queue-health/base';
+import type { SourceControlStorage } from '../storage/domains/source-control/base';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base';
+import { ConfigRoutes } from './config';
+import { buildFsRoutes } from './fs';
+import { IntakeRoutes } from './intake';
+import { OAuthRoutes } from './oauth';
+import type { RouteAuth } from './route';
+import { SkillRoutes } from './skills';
+import { invalidateTenantCredentialSnapshots } from './tenant-credentials';
+import { WorkItemRoutes } from './work-items';
 
 export interface IntegrationRegistration {
   integration: FactoryIntegration;
@@ -34,7 +33,7 @@ export interface IntegrationRegistration {
   ensureReady: () => Promise<void>;
 }
 
-export interface WebApiRoutesDeps {
+export interface FactoryApiRoutesDeps {
   controllerId: string;
   controller: AgentController<MastraCodeState>;
   /** Request-auth seam threaded from the host (no service locator). */
@@ -114,17 +113,17 @@ function guardIntegrationRoutes({
 /**
  * Build the {@link IntegrationContext} handed to an integration when the
  * factory collects its capabilities (routes, workers). One shape everywhere:
- * `assembleWebApiRoutes` uses it per registration, and `MastraFactory` uses it
+ * `assembleFactoryApiRoutes` uses it per registration, and `MastraFactory` uses it
  * when collecting integration workers at finalize.
  */
 export function buildIntegrationContext(
   deps: Pick<
-    WebApiRoutesDeps,
+    FactoryApiRoutesDeps,
     'controller' | 'publicOrigin' | 'auth' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
-    domains: Pick<WebApiRoutesDeps['domains'], 'projects' | 'intake'>;
+    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake'>;
   },
   integrationId: string,
 ): IntegrationContext {
@@ -151,7 +150,7 @@ export function buildIntegrationContext(
  * integration is absent (or not ready) the status contract must still hold.
  * Unknown custom ids get no stub — the SPA doesn't poll them.
  */
-function disabledIntegrationStatusRoutes(deps: WebApiRoutesDeps, id: string, configured = false): ApiRoute[] {
+function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string, configured = false): ApiRoute[] {
   if (id === 'github') {
     return [
       registerApiRoute('/web/github/status', {
@@ -204,7 +203,7 @@ function disabledIntegrationStatusRoutes(deps: WebApiRoutesDeps, id: string, con
  *   - every registered integration's `routes()` surface (full set when ready,
  *     disabled-status stub otherwise), plus stubs for absent known ids
  */
-export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
+export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[] {
   const emitAudit: AuditEmitter['emit'] = args => deps.audit.emit(args);
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');

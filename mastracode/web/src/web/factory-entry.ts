@@ -63,10 +63,10 @@ import { WorkItemsStorage } from '@mastra/factory/storage/domains/work-items/bas
 import { handleServerError } from './server-error.js';
 import { createStateSigner } from '@mastra/factory/state-signing';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
-import { assembleWebApiRoutes, buildIntegrationContext } from './web-surface.js';
-import type { WebApiRoutesDeps } from './web-surface.js';
+import { assembleFactoryApiRoutes, buildIntegrationContext } from '@mastra/factory/routes/surface';
+import type { FactoryApiRoutesDeps } from '@mastra/factory/routes/surface';
 
-type BuildApiRoutesDeps = Pick<WebApiRoutesDeps, 'controller' | 'authStorage'>;
+type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
 
 /** Constructor args for the `new Mastra(...)` literal in the deploy entry. */
 export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
@@ -528,7 +528,7 @@ export class MastraFactory {
         // skips `/auth/*`.
         ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
         // Custom `/web/*` routes (fs / config / integrations / factory / audit).
-        ...assembleWebApiRoutes({
+        ...assembleFactoryApiRoutes({
           controllerId: CONTROLLER_ID,
           controller,
           auth: routeAuth,
