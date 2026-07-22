@@ -31,6 +31,9 @@ import { observeAgentGitAction } from './audit/agent-audit.js';
 import { AuditDomain } from './audit/domain.js';
 import { buildAuthRoutes, createWebAuthGate, isWebAuthEnabled } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './factory-integration.js';
+import { builtInFactoryRules } from './factory/rules/defaults.js';
+import type { FactoryRules } from './factory/rules/types.js';
+import { assertFactoryRules } from './factory/rules/validation.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
 import { ProjectDomain } from './projects/domain.js';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
@@ -124,6 +127,13 @@ export interface MastraFactoryConfig {
    * never mount, its tools never register, and the server boots fine.
    */
   integrations?: FactoryIntegration[];
+  /**
+   * Authoritative Factory board, tool-result, and GitHub-event rules. Construct
+   * with `defaultFactoryRules({ version, overrides })` so deployment policy has
+   * an explicit version and exact handler leaves replace rather than compose.
+   * Omitted → conservative built-in rules for the current deployment.
+   */
+  rules?: FactoryRules;
 }
 
 export interface MastraFactorySandboxConfig {
@@ -282,6 +292,9 @@ export class MastraFactory {
       }
       integrationIds.add(integration.id);
     }
+    const rules = this.#config.rules ?? builtInFactoryRules();
+    assertFactoryRules(rules);
+
     // FactoryStorage owns every app-table domain and initializes them through
     // the same lifecycle as the backend connection.
     storage.registerDomain(new IntakeStorage());
@@ -341,6 +354,7 @@ export class MastraFactory {
       storage,
       vector,
       integrations,
+      rules,
       publicUrl: publicOrigin,
       authProvider: auth,
       stateSigner,

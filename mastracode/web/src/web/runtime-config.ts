@@ -16,6 +16,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { FactoryIntegration } from './factory-integration.js';
+import type { FactoryRules } from './factory/rules/types.js';
 import type { GithubIntegration } from './github/integration.js';
 import type { LinearIntegration } from './linear/integration.js';
 import type { StateSigner } from './state-signing.js';
@@ -56,6 +57,8 @@ export interface WebRuntimeConfig {
   sandbox?: WebSandboxRuntime;
   /** Registered integrations (GitHub, Linear, third-party), keyed by their stable id. */
   integrations?: FactoryIntegration[];
+  /** Resolved authoritative Factory rules for this deployment. */
+  rules?: FactoryRules;
   /** Shared OAuth state signer created by the factory (see `./state-signing.ts`). */
   stateSigner?: StateSigner;
 }
@@ -116,6 +119,11 @@ export function getSeededAuthProvider(): IMastraAuthProvider | undefined {
  */
 export function getSeededSandbox(): WebSandboxRuntime | undefined {
   return seeded?.sandbox;
+}
+
+/** Resolved Factory rules seeded by the factory, if preparation has run. */
+export function getSeededFactoryRules(): FactoryRules | undefined {
+  return seeded?.rules;
 }
 
 /** Look up a registered integration by its stable id. */
