@@ -1,6 +1,7 @@
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, ChevronsUpDown, Factory as FactoryIcon, Folder, Plus } from 'lucide-react';
 
@@ -22,22 +23,17 @@ export function FactorySwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
-        render={
-          <Button
-            id="factory-switcher-trigger"
-            type="button"
-            variant="ghost"
-            aria-label="Select factory"
-            className="w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0"
-          >
-            <Folder size={16} className="shrink-0 text-icon3" />
-            <Txt as="span" variant="ui-sm" className="min-w-0 flex-1 truncate text-icon6">
-              {activeFactory?.name ?? 'Select a factory…'}
-            </Txt>
-            <ChevronsUpDown size={13} className="shrink-0 text-icon3" />
-          </Button>
-        }
-      />
+        id="factory-switcher-trigger"
+        type="button"
+        aria-label="Select factory"
+        className={cn(buttonVariants({ variant: 'ghost' }), 'w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0')}
+      >
+        <Folder size={16} className="shrink-0 text-icon3" />
+        <Txt as="span" variant="ui-sm" className="min-w-0 flex-1 truncate text-icon6">
+          {activeFactory?.name ?? 'Select a factory…'}
+        </Txt>
+        <ChevronsUpDown size={13} className="shrink-0 text-icon3" />
+      </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => {
           const projectPath = deriveProjectPath(factory);

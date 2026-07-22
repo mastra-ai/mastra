@@ -9,6 +9,7 @@ import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceVi
 import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
+import type { Factory } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
 import { FactorySessionHeader } from '../factory/components/RelatedFactorySessions';
 import { ChatMessageList } from './components/ChatMessageList';
@@ -38,16 +39,6 @@ export function ThreadPage() {
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
 
-  if (!activeFactory) {
-    return (
-      <ChatLayout
-        sidebar={<Sidebar />}
-        header={<ChatHeader />}
-        main={<EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />}
-      />
-    );
-  }
-
   return (
     <ChatLayout
       sidebar={<Sidebar />}
@@ -68,11 +59,31 @@ export function ThreadPage() {
         ) : undefined
       }
       main={
-        <ChatSessionBoundary threadId={threadId}>
-          <ThreadPageMain />
-        </ChatSessionBoundary>
+        <ThreadPageBody
+          activeFactory={activeFactory ?? undefined}
+          threadId={threadId}
+          onOpenFactories={() => overlays.open('factories')}
+        />
       }
     />
+  );
+}
+
+function ThreadPageBody({
+  activeFactory,
+  threadId,
+  onOpenFactories,
+}: {
+  activeFactory: Factory | undefined;
+  threadId: string | undefined;
+  onOpenFactories: () => void;
+}) {
+  if (!activeFactory) return <EmptyFactoryState onOpenFactories={onOpenFactories} />;
+
+  return (
+    <ChatSessionBoundary threadId={threadId}>
+      <ThreadPageMain />
+    </ChatSessionBoundary>
   );
 }
 

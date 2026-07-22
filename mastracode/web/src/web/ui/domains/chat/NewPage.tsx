@@ -25,26 +25,30 @@ export function NewPage() {
   const overlays = useOverlays();
   const { activeFactory } = useActiveFactoryContext();
 
-  if (!activeFactory) {
-    return (
-      <ChatLayout
-        sidebar={<Sidebar />}
-        header={<ChatHeader />}
-        main={<EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />}
-      />
-    );
-  }
-
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       main={
-        <ChatSessionBoundary>
-          <NewPageContent activeFactory={activeFactory} />
-        </ChatSessionBoundary>
+        <NewPageBody activeFactory={activeFactory ?? undefined} onOpenFactories={() => overlays.open('factories')} />
       }
     />
+  );
+}
+
+function NewPageBody({
+  activeFactory,
+  onOpenFactories,
+}: {
+  activeFactory: Factory | undefined;
+  onOpenFactories: () => void;
+}) {
+  if (!activeFactory) return <EmptyFactoryState onOpenFactories={onOpenFactories} />;
+
+  return (
+    <ChatSessionBoundary>
+      <NewPageContent activeFactory={activeFactory} />
+    </ChatSessionBoundary>
   );
 }
 

@@ -5,7 +5,8 @@ import {
   useFactoryProjectQuery,
   useSetFactoryDefaultModelMutation,
 } from '../../../../../shared/hooks/useFactoryDefaultModel';
-import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import { isServerFactory } from '../../workspaces/services/factories';
 import { ModelCombobox } from './ModelCombobox';
 
 const SESSION_DEFAULT_OPTION = [{ label: 'Session default', value: '' }];

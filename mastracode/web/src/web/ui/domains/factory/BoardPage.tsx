@@ -3,17 +3,18 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight, CircleDot, EllipsisVertical, ExternalLink, GitCompareArrows, Link2, Plus } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../shared/api/config';
+import { relativeTime } from '../../../../shared/lib/date/relativeTime';
 import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
-import { relativeTime } from '../../../../shared/lib/date';
-import { SkeletonRows } from '../../ui';
+import { SkeletonRows } from '../../ui/SkeletonRows';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import { ConnectRepositoriesPanel } from '../workspaces';
+import { ConnectRepositoriesPanel } from '../workspaces/components/ConnectRepositoriesPanel';
 import type { FactoryRepository, ServerFactory } from '../workspaces/services/factories';
 import { selectedRepository } from '../workspaces/services/factories';
 import { FactoryItemActions } from './components/FactoryItemActions';
@@ -102,6 +103,7 @@ const INTAKE_SOURCES = [
   { id: 'github-prs', label: 'PRs' },
   { id: 'linear', label: 'Linear' },
 ] as const;
+const EMPTY_PENDING_RUN_ROLES = new Set<string>();
 
 type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
 type BoardKind = 'work' | 'review';
@@ -762,6 +764,22 @@ function BoardContent({
   const mutationError = [start, triage, upsert, transition, update, remove, selectWorkspace].find(
     m => m.isError,
   )?.error;
+  const evaluatingItemIds = new Set(transition.pendingItemIds);
+  const triagingIssueNumbers = new Set(pendingIssueNumbers);
+  const pendingRunRolesByItem = new Map<string, Set<string>>();
+  const pendingRunRolesBySource = new Map<string, Set<string>>();
+  for (const run of pendingRuns) {
+    if (run.id !== undefined) {
+      const roles = pendingRunRolesByItem.get(run.id);
+      if (roles) roles.add(run.role);
+      else pendingRunRolesByItem.set(run.id, new Set([run.role]));
+    }
+    if (run.sourceKey !== null) {
+      const roles = pendingRunRolesBySource.get(run.sourceKey);
+      if (roles) roles.add(run.role);
+      else pendingRunRolesBySource.set(run.sourceKey, new Set([run.role]));
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -817,11 +835,12 @@ function BoardContent({
                         type="button"
                         aria-pressed={activeIntakeSource === source.id}
                         onClick={() => setIntakeSource(source.id)}
-                        className={`rounded-full border px-2.5 py-0.5 text-ui-xs transition ${
+                        className={cn(
+                          'rounded-full border px-2.5 py-0.5 text-ui-xs transition',
                           activeIntakeSource === source.id
                             ? 'border-accent1 bg-surface4 text-icon6'
-                            : 'border-border1 bg-transparent text-icon3 hover:text-icon5'
-                        }`}
+                            : 'border-border1 bg-transparent text-icon3 hover:text-icon5',
+                        )}
                       >
                         {source.label}
                       </button>
@@ -845,12 +864,12 @@ function BoardContent({
                     // for a perfectly live thread. Hold run/create actions until
                     // liveness is known.
                     runDisabled={!runEnabled || !workspaces.isSuccess}
-                    evaluating={transition.pendingItemIds.includes(item.id)}
+                    evaluating={evaluatingItemIds.has(item.id)}
                     transitionReason={transitionReasons[item.id]}
                     decision={decisionByItem.get(item.id)}
                     retryingDecisionId={retryDecision.isPending ? retryDecision.variables : undefined}
                     onRetryDecision={decisionId => retryDecision.mutate(decisionId)}
-                    pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
+                    pendingRunRoles={pendingRunRolesByItem.get(item.id) ?? EMPTY_PENDING_RUN_ROLES}
                     onOpenThread={session => void openThread(session)}
                     onCreateSession={() => void openOrCreateSession(item, stage.id)}
                     onStartRun={(_spec, action) => void openOrStartRun(item, action.role)}
@@ -864,12 +883,8 @@ function BoardContent({
                   <CandidateCard
                     key={candidate.sourceKey}
                     candidate={candidate}
-                    pendingRunRoles={
-                      new Set(pendingRuns.filter(run => run.sourceKey === candidate.sourceKey).map(run => run.role))
-                    }
-                    triageStarting={
-                      candidate.issue !== undefined && pendingIssueNumbers.includes(candidate.issue.number)
-                    }
+                    pendingRunRoles={pendingRunRolesBySource.get(candidate.sourceKey) ?? EMPTY_PENDING_RUN_ROLES}
+                    triageStarting={candidate.issue !== undefined && triagingIssueNumbers.has(candidate.issue.number)}
                     disabled={!runEnabled}
                     onRun={(action, prompt) =>
                       start.mutate({
@@ -961,9 +976,10 @@ function BoardColumn({
       ref={laneRef}
       aria-label={label}
       data-testid={`board-column-${stage}`}
-      className={`flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg border p-2 transition ${
-        dragOver ? 'border-accent1 bg-surface3' : 'border-border1 bg-surface2'
-      }`}
+      className={cn(
+        'flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg border p-2 transition',
+        dragOver ? 'border-accent1 bg-surface3' : 'border-border1 bg-surface2',
+      )}
       onDragOver={event => {
         if (!event.dataTransfer.types.includes(CARD_MIME)) return;
         event.preventDefault();
@@ -1084,12 +1100,13 @@ function WorkItemCard({
       onDragStart={event => {
         if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
       }}
-      className={`flex flex-col gap-1.5 rounded-md border border-border1 bg-surface4 p-2 ${
-        evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing'
-      }`}
+      className={cn(
+        'flex flex-col gap-1.5 rounded-md border border-border1 bg-surface4 p-2',
+        evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
+      )}
     >
       <div className="flex items-start gap-2">
-        <Icon size={14} className={`mt-0.5 shrink-0 ${iconClassName}`} aria-hidden />
+        <Icon size={14} className={cn('mt-0.5 shrink-0', iconClassName)} aria-hidden />
         {threadSession !== null ? (
           <a
             href={`/threads/${threadSession.threadId}`}
@@ -1203,7 +1220,7 @@ function WorkItemCard({
         <div className="flex items-center justify-between gap-2">
           <span
             role={decision.status === 'failed' ? 'alert' : 'status'}
-            className={`text-ui-xs ${decision.status === 'failed' ? 'text-error' : 'text-icon4'}`}
+            className={cn('text-ui-xs', decision.status === 'failed' ? 'text-error' : 'text-icon4')}
           >
             {decisionStatusText(decision)}
           </span>
@@ -1276,7 +1293,7 @@ function CandidateCard({
       className="group flex cursor-grab flex-col gap-1 rounded-md border border-border1 border-dashed bg-surface3 p-2 active:cursor-grabbing"
     >
       <div className="flex items-start gap-2">
-        <Icon size={14} className={`mt-0.5 shrink-0 ${candidate.iconClassName}`} aria-hidden />
+        <Icon size={14} className={cn('mt-0.5 shrink-0', candidate.iconClassName)} aria-hidden />
         <div className="flex min-w-0 flex-1 flex-col">
           <button
             type="button"
@@ -1294,7 +1311,7 @@ function CandidateCard({
           target="_blank"
           rel="noreferrer"
           aria-label={externalLinkLabel(candidate.source)}
-          className="mt-0.5 shrink-0 -translate-x-1 translate-y-1 text-icon3 opacity-0 transition-[opacity,translate] group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 hover:text-icon5 focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 motion-reduce:transition-none"
+          className="mt-0.5 shrink-0 text-icon3 transition-[opacity,translate] hover:text-icon5 focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100 motion-reduce:transition-none"
         >
           <ArrowUpRight size={12} aria-hidden />
         </a>

@@ -3,12 +3,13 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ScrollText } from 'lucide-react';
 import { useState } from 'react';
 
 import { useAuditEvents, useAuditPortalLink } from '../../../../shared/hooks/useAuditEvents';
 import { useFactoryDecisionHistory, useRetryFactoryDecision } from '../../../../shared/hooks/useFactoryDecisions';
-import { relativeTime } from '../../../../shared/lib/date';
+import { relativeTime } from '../../../../shared/lib/date/relativeTime';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import type { AuditEvent } from './services/audit';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from './services/decisions';
@@ -222,13 +223,10 @@ function DecisionRow({
     <li className="rounded-lg border border-border1 bg-surface2 px-3 py-2">
       <div className="flex items-baseline gap-3">
         <span
-          className={`inline-flex w-fit rounded-md px-1.5 py-0.5 text-ui-xs ${
-            decision.status === 'failed'
-              ? 'bg-surface4 text-error'
-              : active
-                ? 'bg-surface4 text-accent1'
-                : 'bg-surface4 text-icon5'
-          }`}
+          className={cn(
+            'inline-flex w-fit rounded-md bg-surface4 px-1.5 py-0.5 text-ui-xs',
+            decision.status === 'failed' ? 'text-error' : active ? 'text-accent1' : 'text-icon5',
+          )}
         >
           {decision.status}
         </span>

@@ -12,7 +12,8 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, Volume2 } from 'lucide-react';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Check } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
@@ -114,7 +115,6 @@ export function BehaviorSettings({
   setPermissionForCategory,
 }: BehaviorSettingsProps) {
   const notificationMode = settings?.notifications ?? 'off';
-  const canPreviewNotification = notificationMode === 'bell' || notificationMode === 'both';
   return (
     <>
       <FieldRowGroup>
@@ -135,27 +135,13 @@ export function BehaviorSettings({
           />
         </FieldRow>
         <FieldRow label="Notifications" hint="How completion alerts are delivered">
-          <div className="flex items-center gap-2">
-            <Segmented
-              ariaLabel="Notifications"
-              value={notificationMode}
-              disabled={!settings || updating}
-              options={NOTIFICATION_MODES}
-              onChange={v => onBehaviorChange({ notifications: v })}
-            />
-            {canPreviewNotification && (
-              <Button
-                variant="outline"
-                size="sm"
-                aria-label="Preview notification sound"
-                disabled={!settings || updating}
-                onClick={() => playDoneSound(loadDoneSound())}
-              >
-                <Volume2 size={13} aria-hidden="true" />
-                Preview
-              </Button>
-            )}
-          </div>
+          <Segmented
+            ariaLabel="Notifications"
+            value={notificationMode}
+            disabled={!settings || updating}
+            options={NOTIFICATION_MODES}
+            onChange={v => onBehaviorChange({ notifications: v })}
+          />
         </FieldRow>
       </FieldRowGroup>
       <PermissionsSection
@@ -345,7 +331,11 @@ function ModelPicker({
                   type="button"
                   role="option"
                   aria-selected={m.id === currentModelId}
-                  className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left ${i === active ? 'bg-surface4' : ''} ${m.hasApiKey ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left',
+                    i === active && 'bg-surface4',
+                    m.hasApiKey ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
+                  )}
                   disabled={!m.hasApiKey}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => choose(m)}

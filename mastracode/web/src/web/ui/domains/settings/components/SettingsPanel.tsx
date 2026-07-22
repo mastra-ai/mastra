@@ -3,7 +3,6 @@ import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useEffect } from 'react';
 
 import { useKeyDown } from '../../../lib/hooks';
 
@@ -65,10 +64,6 @@ export function SettingsPanel() {
   // session-scoped config routes need the same pair to find the session.
   const sessionScope = sessionEnabled ? projectPath : undefined;
 
-  useEffect(() => {
-    document.getElementById(isMobile ? 'settings-title-mobile' : 'settings-title')?.focus();
-  }, [isMobile]);
-
   useKeyDown({ escape: closeSettings });
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
@@ -83,7 +78,7 @@ export function SettingsPanel() {
     <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
         <div className="mx-auto grid w-full max-w-4xl py-3">
-          <SettingsHeader titleId="settings-title" placement="desktop" />
+          {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
           {section === 'general' && (
             <>
               <GeneralSettings theme={theme} onThemeChange={setTheme} />

@@ -54,7 +54,7 @@ function ChatShell() {
   const { factories, factoriesPending } = useActiveFactoryContext();
   const { isMobile } = useMainSidebar();
   const factorySetupRequired = factories.length === 0 && !factoriesPending;
-  const factoriesOpen = overlays.isOpen('factories') || factorySetupRequired;
+  const factoriesOpen = overlays.isOpen('factories');
   const settingsOpen = overlays.isOpen('settings');
 
   const closeFactories = () => {
@@ -73,7 +73,7 @@ function ChatShell() {
     <>
       <PageLayoutMainViewProvider
         view={mainView}
-        mobileHeader={settingsOpen ? <SettingsHeader titleId="settings-title-mobile" placement="mobile" /> : undefined}
+        mobileHeader={settingsOpen ? <SettingsHeader autoFocus={isMobile} placement="mobile" /> : undefined}
       >
         <Outlet />
       </PageLayoutMainViewProvider>

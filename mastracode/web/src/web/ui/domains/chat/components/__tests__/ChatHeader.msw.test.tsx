@@ -4,6 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PageLayoutMainViewProvider } from '../../../../ui/PageLayout';
+import { OverlaysProvider } from '../../../../lib/overlays';
+import { SettingsHeader } from '../../../settings/components/SettingsHeader';
+import { SettingsNavigationProvider } from '../../../settings/context/SettingsNavigationProvider';
 import { ChatHeader } from '../ChatHeader';
 
 function SidebarStateProbe() {
@@ -31,53 +34,65 @@ function mockMobileViewport(matches: boolean) {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  window.localStorage.clear();
+  window.localStorage.removeItem('chat-header-test');
+  window.localStorage.removeItem('chat-header-desktop-test');
 });
 
-describe('ChatHeader', () => {
-  describe('when the user clicks the sidebar toggle', () => {
-    it('opens the design-system mobile sidebar', async () => {
-      mockMobileViewport(true);
-
-      render(
-        <PageLayoutMainViewProvider mobileHeader={<h1>Settings</h1>}>
-          <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
+function renderMobileHeader() {
+  mockMobileViewport(true);
+  render(
+    <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
+      <OverlaysProvider>
+        <SettingsNavigationProvider>
+          <PageLayoutMainViewProvider mobileHeader={<SettingsHeader autoFocus placement="mobile" />}>
             <ChatHeader />
             <SidebarStateProbe />
-          </MainSidebarProvider>
-        </PageLayoutMainViewProvider>,
-      );
+          </PageLayoutMainViewProvider>
+        </SettingsNavigationProvider>
+      </OverlaysProvider>
+    </MainSidebarProvider>,
+  );
+}
 
-      expect(screen.getByTestId('sidebar-state')).toHaveTextContent('closed');
-      expect(within(screen.getByRole('banner')).getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+describe('ChatHeader', () => {
+  it('renders and focuses the mobile settings header', () => {
+    renderMobileHeader();
 
-      await userEvent.click(screen.getByLabelText('Open navigation menu'));
-      expect(screen.getByTestId('sidebar-state')).toHaveTextContent('open');
-    });
+    const mobileHeader = screen.getByRole('banner');
+    expect(within(mobileHeader).getByRole('heading', { name: 'General' })).toHaveFocus();
+    expect(within(mobileHeader).getByRole('button', { name: 'Close settings' })).toBeInTheDocument();
+  });
 
-    it('reopens a fully collapsed desktop sidebar from the top-left toggle', async () => {
-      mockMobileViewport(false);
+  it('opens the design-system mobile sidebar', async () => {
+    renderMobileHeader();
 
-      render(
-        <MainSidebarProvider
-          defaultState="collapsed"
-          storageKey="chat-header-desktop-test"
-          collapsedWidth={0}
-          mobileBreakpoint={768}
-        >
-          <ChatHeader />
-          <DesktopSidebarStateProbe />
-        </MainSidebarProvider>,
-      );
+    expect(screen.getByTestId('sidebar-state')).toHaveTextContent('closed');
+    await userEvent.click(screen.getByLabelText('Open navigation menu'));
+    expect(screen.getByTestId('sidebar-state')).toHaveTextContent('open');
+  });
 
-      const trigger = screen.getByRole('button', { name: 'Toggle sidebar' });
-      expect(trigger).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('collapsed');
+  it('reopens a fully collapsed desktop sidebar from the top-left toggle', async () => {
+    mockMobileViewport(false);
 
-      await userEvent.click(trigger);
+    render(
+      <MainSidebarProvider
+        defaultState="collapsed"
+        storageKey="chat-header-desktop-test"
+        collapsedWidth={0}
+        mobileBreakpoint={768}
+      >
+        <ChatHeader />
+        <DesktopSidebarStateProbe />
+      </MainSidebarProvider>,
+    );
 
-      expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('default');
-      expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
-    });
+    const trigger = screen.getByRole('button', { name: 'Toggle sidebar' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('collapsed');
+
+    await userEvent.click(trigger);
+
+    expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('default');
+    expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });
 });

@@ -9,11 +9,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useOverlays } from '../../../lib/overlays';
 import { Sidebar } from '../../../Sidebar';
-import { PageLayout } from '../../../ui';
+import { PageLayout } from '../../../ui/PageLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { EmptyFactoryState, useActiveFactoryContext } from '../../workspaces';
-import type { ServerFactory } from '../../workspaces';
-import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces';
+import { EmptyFactoryState } from '../../workspaces/components/EmptyFactoryState';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import type { Factory, ServerFactory } from '../../workspaces/services/factories';
+import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces/services/factories';
 
 interface FactoryPageShellProps {
   title: string;
@@ -35,14 +36,6 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
   const { activeFactory } = useActiveFactoryContext();
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
 
-  if (!activeFactory) {
-    return (
-      <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
-        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-      </PageLayout>
-    );
-  }
-
   return (
     <PageLayout
       sidebar={<Sidebar />}
@@ -51,16 +44,36 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
       description={activeFactory ? description : undefined}
       actions={serverFactory ? <RepositoryPicker factory={serverFactory} /> : undefined}
     >
-      {serverFactory ? (
-        children(serverFactory)
-      ) : (
-        <Notice variant="info">
-          Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder —
-          create a Factory from the switcher to use the Board.
-        </Notice>
-      )}
+      <FactoryPageBody
+        activeFactory={activeFactory ?? undefined}
+        onOpenFactories={() => overlays.open('factories')}
+        renderServerFactory={children}
+      />
     </PageLayout>
   );
+}
+
+function FactoryPageBody({
+  activeFactory,
+  onOpenFactories,
+  renderServerFactory,
+}: {
+  activeFactory: Factory | undefined;
+  onOpenFactories: () => void;
+  renderServerFactory: (factory: ServerFactory) => ReactNode;
+}) {
+  if (!activeFactory) return <EmptyFactoryState onOpenFactories={onOpenFactories} />;
+
+  if (!isServerFactory(activeFactory)) {
+    return (
+      <Notice variant="info">
+        Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder —
+        create a Factory from the switcher to use the Board.
+      </Notice>
+    );
+  }
+
+  return renderServerFactory(activeFactory);
 }
 
 /**
