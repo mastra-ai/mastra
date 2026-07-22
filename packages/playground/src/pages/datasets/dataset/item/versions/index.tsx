@@ -27,6 +27,7 @@ function versionToText(version: DatasetItemVersion): string {
     {
       input: version.input ?? null,
       groundTruth: version.groundTruth ?? null,
+      scorerIds: version.scorerIds ?? null,
       metadata: version.metadata ?? null,
     },
     null,
@@ -226,6 +227,7 @@ function CompareVersionColumn({
         datasetVersion: version.datasetVersion,
         input: version.input,
         groundTruth: version.groundTruth,
+        scorerIds: version.scorerIds,
         metadata: version.metadata,
         createdAt: version.createdAt,
         updatedAt: version.updatedAt,
