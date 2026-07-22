@@ -337,34 +337,6 @@ export const testWorkflow = createWorkflow({
 - Use optional fields in the `inputSchema` when the next step needs to handle multiple possible branches
 - Conditions are evaluated in the order they're defined
 
-### Declarative predicates
-
-Branch conditions can also be written as a structural JSON expression instead of a JS closure by passing `{ predicate }` in place of the function. Declarative predicates are the only form that can be persisted through the workflow storage APIs (`Mastra.addStoredWorkflow`, `POST /stored/workflows`), so use them when the workflow is authored as data — for example by the `mastracode` workflow builder or by a Studio-driven CRUD UI.
-
-```typescript title="src/mastra/workflows/test-workflow.ts"
-import type { Predicate } from '@mastra/core/workflows'
-
-export const testWorkflow = createWorkflow({
-  inputSchema: z.object({ value: z.number() }),
-  outputSchema: z.object({ result: z.string() }),
-})
-  .then(step1)
-  .branch([
-    [{ predicate: { op: 'gt', left: { path: 'inputData.value' }, right: 10 } }, highValueStep],
-    [{ predicate: { op: 'lte', left: { path: 'inputData.value' }, right: 10 } }, lowValueStep],
-  ])
-  .commit()
-```
-
-Predicates support the comparison operators `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `notIn`, `exists`, `notExists`, `truthy`, `falsy`, and the logical combinators `and`, `or`, `not`. Values are either literals or `{ path: '<scope>.<field>...' }` references to workflow data:
-
-- `inputData.<field>` — the previous step's output.
-- `initData.<field>` — the workflow's initial input, valid from any step.
-- `stepResults.<id>[.<path>]` — a named earlier step's output; scalar results resolve with no subpath.
-- `state.<field>` — the workflow state slot.
-
-Missing paths resolve to `undefined` rather than throwing, so `exists` / `notExists` behave the way you'd expect. Closure-based `.branch()` conditions continue to work unchanged; the two forms can be mixed inside the same `.branch([...])` call.
-
 ## Input data mapping
 
 When using `.then()`, `.parallel()`, or `.branch()`, it's sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
@@ -483,21 +455,6 @@ export const testWorkflow = createWorkflow({})
   .dowhile(step2, async ({ inputData: { number } }) => number < 10)
   .commit();
 ```
-
-#### Declarative predicates for loops
-
-`.dowhile()` and `.dountil()` accept the same `{ predicate }` object form as `.branch()`. Use it when the loop needs to survive workflow storage (`Mastra.addStoredWorkflow`, `POST /stored/workflows`) — closure-based loop conditions remain live-only and are rejected at persistence time.
-
-```typescript title="src/mastra/workflows/test-workflow.ts"
-export const testWorkflow = createWorkflow({})
-  .then(step1)
-  .dountil(step2, {
-    predicate: { op: 'gte', left: { path: 'inputData.number' }, right: 10 },
-  })
-  .commit()
-```
-
-The predicate shape and available path scopes match [Declarative predicates](#declarative-predicates) above.
 
 ### Looping with `.foreach()`
 
@@ -834,25 +791,6 @@ const pipelineB = createWorkflow({...}).then(step3).then(step4).commit();
 
 workflow.parallel([pipelineA, pipelineB])
 ```
-
-### Nested workflows in stored graphs
-
-Nested workflows are a first-class step type in the serialized graph — they can be referenced by id from JSON `WorkflowDefinition`s persisted through `Mastra.addStoredWorkflow` or `POST /stored/workflows`. Instead of inlining the sub-workflow's steps, the stored graph carries a compact reference:
-
-```json
-{
-  "type": "workflow",
-  "id": "call-child",
-  "workflowId": "child-workflow-id",
-  "description": "Optional description shown in Studio."
-}
-```
-
-The `workflow` entry can appear anywhere a step is expected — at the top level of the graph, or inside `parallel` / `conditional` / `foreach` / `dowhile` / `dountil`. At rehydration time, `workflowId` is resolved against the registered workflows on the `Mastra` instance; missing references are rejected with an actionable error.
-
-Cross-workflow references between stored workflows are supported. `Mastra.addStoredWorkflow` runs a pre-flight `collectRefs` check that also considers workflows currently being seeded, and boot-time loading uses a two-pass topological sort so stored workflows can depend on other stored workflows regardless of storage order. Cycles (including self-reference) are detected and rejected.
-
-Code-defined nested workflows (`.then(subWorkflow)`, `.parallel([subA, subB])`, `.foreach(subWorkflow)`, etc.) serialize to the same `type: 'workflow'` variant, so Studio and consumers of `serializedStepGraph` see one consistent shape whether the parent workflow was authored in code or seeded from JSON. The live `stepFlow` is unchanged; only the serialized/stored representation carries the new variant.
 
 ### Chaining patterns
 
