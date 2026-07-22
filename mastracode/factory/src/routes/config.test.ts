@@ -317,7 +317,7 @@ describe('GET /web/config/models', () => {
     });
   });
 
-  it('includes models reachable through tenant OAuth credentials', async () => {
+  it('includes models reachable through tenant credentials or the controller catalog', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
       type: 'oauth',
@@ -328,7 +328,8 @@ describe('GET /web/config/models', () => {
     const controller = {
       listAvailableModels: async () => [
         { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
-        { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: false },
+        { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: true },
+        { id: 'google/gemini', modelName: 'gemini', provider: 'google', hasApiKey: false },
       ],
     };
     const app = new Hono();
@@ -344,7 +345,10 @@ describe('GET /web/config/models', () => {
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
+      models: [
+        { id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true },
+        { id: 'openai/gpt-5.6', provider: 'openai', modelName: 'gpt-5.6', hasApiKey: true },
+      ],
     });
   });
 });
@@ -395,9 +399,10 @@ describe('model pack routes with a tenant', () => {
     expect(res.status).toBe(401);
   });
 
-  it('includes builtin packs reachable through tenant OAuth credentials', async () => {
+  it('includes builtin packs reachable through tenant credentials or the controller catalog', async () => {
     const controllerWithoutEnv = makeAgentController([
       { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
+      { provider: 'openai', hasApiKey: true, apiKeyEnvVar: 'OPENAI_API_KEY' },
     ]);
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
       type: 'oauth',
@@ -425,6 +430,10 @@ describe('model pack routes with a tenant', () => {
     const { packs } = await listed.json();
     expect(packs.find((p: { id: string }) => p.id === 'anthropic')).toMatchObject({
       name: 'Anthropic',
+      custom: false,
+    });
+    expect(packs.find((p: { id: string }) => p.id === 'openai')).toMatchObject({
+      name: 'OpenAI',
       custom: false,
     });
   });

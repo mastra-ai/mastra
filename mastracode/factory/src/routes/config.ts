@@ -240,9 +240,7 @@ export async function buildProviderAccess({
   tenantCredentials?: CredentialRecord[];
 }): Promise<ProviderAccess> {
   const models = await controller.listAvailableModels();
-  const usingTenantCredentials = tenantCredentials !== undefined;
-  const hasModelKey = (provider: string) =>
-    !usingTenantCredentials && models.some(m => m.provider === provider && m.hasApiKey);
+  const hasModelKey = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
   const accessLevel = (provider: string): ProviderAccessLevel => {
     const authProviderId = getAuthProviderId(provider);
     if (tenantCredentials) {
@@ -251,7 +249,7 @@ export async function buildProviderAccess({
       const credential = userRec?.credential ?? orgRec?.credential;
       if (credential?.type === 'oauth') return 'oauth';
       if (credential?.type === 'api_key' && credential.key.trim().length > 0) return 'apikey';
-      return false;
+      return hasModelKey(provider) ? 'apikey' : false;
     }
 
     const oauthCredential = authStorage?.get(authProviderId);

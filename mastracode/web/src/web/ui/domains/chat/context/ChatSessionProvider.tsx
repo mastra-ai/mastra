@@ -37,7 +37,7 @@ export function ChatSessionConfigProvider({
   threadId?: string;
   userScoped?: boolean;
 }) {
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const { activeFactory, resourceId, sessionEnabled: activeResourceEnabled } = useActiveFactoryContext();
   const auth = useFactoryAuth();
   const { baseUrl } = useApiConfig();
   const projectPath = deriveProjectPath(activeFactory);
@@ -46,11 +46,13 @@ export function ChatSessionConfigProvider({
   const repository = serverFactory ? selectedRepository(serverFactory) : undefined;
   // A repo-less server factory still chats against the factory resource, so
   // only repo-backed sessions wait on a worktree path.
-  const projectSessionEnabled = sessionEnabled && (!repository || Boolean(projectPath));
+  const projectSessionEnabled = activeResourceEnabled && (!repository || Boolean(projectPath));
+  const userSessionEnabled = !auth.isPending && Boolean(userSession);
   const value = userScoped
     ? {
         resourceId: userSessionResourceId(auth.data),
-        sessionEnabled: !auth.isPending && Boolean(userSession),
+        sessionEnabled: userSessionEnabled,
+        resourceEnabled: userSessionEnabled,
         projectPath: userSession?.worktree.worktreePath,
         baseUrl,
         kind: 'user' as const,
@@ -59,6 +61,7 @@ export function ChatSessionConfigProvider({
     : {
         resourceId,
         sessionEnabled: projectSessionEnabled,
+        resourceEnabled: activeResourceEnabled,
         projectPath,
         factorySessionState:
           serverFactory && repository
