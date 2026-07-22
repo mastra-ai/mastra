@@ -319,8 +319,12 @@ export async function ensureSandbox(
   maybeOptions: EnsureSandboxOptions = {},
 ): Promise<MaterializationSandbox> {
   const env = typeof envOrProgress === 'function' ? undefined : envOrProgress;
-  const onProgress = typeof envOrProgress === 'function' ? envOrProgress : (progressOrOptions as ProgressFn | undefined);
-  const options = typeof envOrProgress === 'function' ? (progressOrOptions as EnsureSandboxOptions | undefined) ?? {} : maybeOptions;
+  const onProgress =
+    typeof envOrProgress === 'function' ? envOrProgress : (progressOrOptions as ProgressFn | undefined);
+  const options =
+    typeof envOrProgress === 'function'
+      ? ((progressOrOptions as EnsureSandboxOptions | undefined) ?? {})
+      : maybeOptions;
   const idleTimeoutMinutes = getSandboxIdleMinutes();
   const checkpointName = store.checkpointName;
 

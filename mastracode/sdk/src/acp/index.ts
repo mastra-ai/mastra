@@ -5,27 +5,6 @@ import { releaseAllThreadLocks } from '../utils/thread-lock.js';
 import { setAutoApprove } from './event-mapper.js';
 import { runAcpServer } from './server.js';
 
-export function createAcpCleanup(options: {
-  stopWork: Array<() => Promise<unknown> | unknown>;
-  closeStorage: () => Promise<void> | void;
-  releaseLocks: () => void;
-  restoreConsole: () => void;
-}): () => Promise<void> {
-  let cleanupPromise: Promise<void> | undefined;
-  return () => {
-    cleanupPromise ??= (async () => {
-      try {
-        await Promise.allSettled(options.stopWork.map(stop => Promise.resolve().then(stop)));
-        await options.closeStorage();
-      } finally {
-        options.releaseLocks();
-        options.restoreConsole();
-      }
-    })();
-    return cleanupPromise;
-  };
-}
-
 /**
  * Entry point for ACP server mode.
  * Initializes mastracode and runs the ACP protocol over stdio.
@@ -51,7 +30,7 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
       disableHooks: false,
     });
 
-    const { controller, githubSignals, mcpManager, signalsPubSub, storageMaintenance } = result;
+    const { controller, mcpManager, signalsPubSub } = result;
 
     // Default modes (same as createMastraCode defaults)
     const modes: AgentControllerMode[] = [
@@ -61,31 +40,25 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
     ];
 
     // Cleanup function (mirrors main.ts asyncCleanup)
-    const cleanup = createAcpCleanup({
-      stopWork: [
-        () => mcpManager?.disconnect(),
-        () => controller?.getMastra()?.stopWorkers(),
-        () => controller?.stopIntervals(),
-        () => githubSignals?.stopAllPolling(),
-        () => (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close?.(),
-      ],
-      closeStorage: () => storageMaintenance.closeStorage?.(),
-      releaseLocks: releaseAllThreadLocks,
-      restoreConsole: () => {
-        // eslint-disable-next-line no-console
-        console.log = originalConsoleLog;
-      },
-    });
+    const cleanup = async () => {
+      releaseAllThreadLocks();
+      const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+      await Promise.allSettled([
+        mcpManager?.disconnect(),
+        controller?.getMastra()?.stopWorkers(),
+        controller?.stopIntervals(),
+        closeSignalsPubSub?.(),
+      ]);
+
+      // Restore console.log
+      // eslint-disable-next-line no-console
+      console.log = originalConsoleLog;
+    };
 
     // Handle signals
     const handleSignal = async () => {
-      try {
-        await cleanup();
-        process.exit(0);
-      } catch (error) {
-        process.stderr.write(`[acp] Storage cleanup failed: ${error}\n`);
-        process.exit(1);
-      }
+      await cleanup();
+      process.exit(0);
     };
 
     process.on('SIGINT', handleSignal);

@@ -1,9 +1,9 @@
 /**
  * BDD coverage for the propless `FactorySwitcher` (`domains/workspaces/components`).
  *
- * The switcher reads the active Factory from context and opens the in-layout
- * creation surface through `useOverlays`. Opening it also closes the mobile
- * sidebar drawer.
+ * The switcher reads the active Factory from context and navigates to the
+ * dedicated `/factories/create` page for the Create Factory action. Opening it
+ * also closes the mobile sidebar drawer.
  */
 import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor, within } from '@testing-library/react';
@@ -12,7 +12,6 @@ import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
-import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
 import type { Factory } from '../../services/factories';
 import { FactorySwitcher } from '../FactorySwitcher';
@@ -39,14 +38,12 @@ function seedFactory(project: Factory = PROJECT) {
 }
 
 function StateProbe() {
-  const overlays = useOverlays();
-  const { openMobile, setOpenMobile } = useMainSidebar();
   const location = useLocation();
+  const { openMobile, setOpenMobile } = useMainSidebar();
   return (
     <div>
-      <output data-testid="factories-open">{overlays.isOpen('factories') ? 'yes' : 'no'}</output>
+      <output data-testid="pathname">{location.pathname}</output>
       <output data-testid="sidebar-open">{openMobile ? 'yes' : 'no'}</output>
-      <output data-testid="location">{location.pathname}</output>
       <button onClick={() => setOpenMobile(true)}>Open mobile sidebar</button>
     </div>
   );
@@ -57,10 +54,8 @@ function renderSwitcher() {
     <MemoryRouter initialEntries={['/new']}>
       <MainSidebarProvider storageKey="factory-switcher-test" mobileBreakpoint={768}>
         <ActiveFactoryProvider>
-          <OverlaysProvider>
-            <FactorySwitcher />
-            <StateProbe />
-          </OverlaysProvider>
+          <FactorySwitcher />
+          <StateProbe />
         </ActiveFactoryProvider>
       </MainSidebarProvider>
     </MemoryRouter>,
@@ -82,7 +77,7 @@ describe('FactorySwitcher', () => {
     expect(screen.getByText('Select a factory…')).toBeInTheDocument();
   });
 
-  it('when the switcher is clicked, then the menu shows each factory path without opening the project picker', async () => {
+  it('when the switcher is clicked, then the menu shows each factory path without navigating', async () => {
     seedFactory();
     renderSwitcher();
 
@@ -90,7 +85,7 @@ describe('FactorySwitcher', () => {
 
     const factoryItem = await screen.findByRole('menuitem', { name: /MastraCode Test/ });
     expect(within(factoryItem).getByText('/tmp/mastracode-test')).toBeInTheDocument();
-    expect(screen.getByTestId('factories-open')).toHaveTextContent('no');
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/new');
   });
 
   it('when a server-backed Factory is selected from /new, then the user is taken to Work', async () => {
@@ -111,10 +106,10 @@ describe('FactorySwitcher', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: /Server Factory/ }));
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/factory/work'));
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factory/work'));
   });
 
-  it('when Create Factory is selected on mobile, then the layout view opens and the sidebar closes', async () => {
+  it('when Create Factory is selected on mobile, then it navigates to /factories/create and the sidebar closes', async () => {
     vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
       matches: true,
       media: query,
@@ -134,7 +129,7 @@ describe('FactorySwitcher', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
 
-    expect(screen.getByTestId('factories-open')).toHaveTextContent('yes');
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/create');
     expect(screen.getByTestId('sidebar-open')).toHaveTextContent('no');
   });
 });

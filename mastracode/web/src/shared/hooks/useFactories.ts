@@ -21,6 +21,15 @@ function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
 }
 
+/**
+ * Refetch the factories query after a mutation that changes the factory list.
+ * Returned from `onSuccess` so `mutateAsync` resolves only once the list is
+ * fresh — callers navigate/select right after, and must see the new factory.
+ */
+function refetchFactories(queryClient: ReturnType<typeof useQueryClient>) {
+  return queryClient.refetchQueries({ queryKey: queryKeys.factories() });
+}
+
 export function useLoadFactories() {
   return useQuery({
     queryKey: queryKeys.persistedFactories(),
@@ -42,7 +51,7 @@ export function useAddFactoryMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ name, path }: { name: string; path: string }) => addLocalFactory(baseUrl, name, path),
-    onSuccess: () => invalidateFactories(queryClient),
+    onSuccess: () => refetchFactories(queryClient),
   });
 }
 
@@ -57,7 +66,7 @@ export function useCreateFactoryMutation() {
   return useMutation({
     mutationFn: async ({ name, description }: { name: string; description?: string }) =>
       addServerFactory(await createFactoryProject(baseUrl, name, description)),
-    onSuccess: () => invalidateFactories(queryClient),
+    onSuccess: () => refetchFactories(queryClient),
   });
 }
 

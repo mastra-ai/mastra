@@ -234,7 +234,10 @@ export async function checkoutSessionBranch(
   const current = await sh(sandbox, `git -C ${shellQuote(workdir)} branch --show-current`);
   if (current.exitCode === 0 && current.stdout.trim() === branch) return;
 
-  const local = await sh(sandbox, `git -C ${shellQuote(workdir)} show-ref --verify --quiet refs/heads/${shellQuote(branch)}`);
+  const local = await sh(
+    sandbox,
+    `git -C ${shellQuote(workdir)} show-ref --verify --quiet refs/heads/${shellQuote(branch)}`,
+  );
   if (local.exitCode === 0) {
     const checkout = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout ${shellQuote(branch)}`);
     if (checkout.exitCode !== 0) throw classifyGitFailure(checkout, 'clone-failed');

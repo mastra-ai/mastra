@@ -19,6 +19,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/rende
 import { loginUrl, redirectToLogin } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
 import type { Factory } from '../domains/workspaces';
+import { ActiveFactoryProvider } from '../domains/workspaces/context/ActiveFactoryProvider';
 import { createAppRoutes } from '../router';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
@@ -133,7 +134,12 @@ function renderRoutes(
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
-  renderWithProviders(<RouterProvider router={router} />, client);
+  renderWithProviders(
+    <ActiveFactoryProvider>
+      <RouterProvider router={router} />
+    </ActiveFactoryProvider>,
+    client,
+  );
   return { router, client };
 }
 
@@ -187,6 +193,14 @@ describe('MastraCode web routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Choose your codebase.' })).toBeInTheDocument();
     expect(screen.queryByText('Build software with a Factory that knows your work.')).not.toBeInTheDocument();
+  });
+
+  it('given auth is disabled and a factory exists, when visiting /factories/create, then the Create Factory page renders', async () => {
+    const { router } = renderRoutes('/factories/create', AUTH_DISABLED);
+
+    expect(await screen.findByRole('region', { name: 'Create Factory' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/create');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {

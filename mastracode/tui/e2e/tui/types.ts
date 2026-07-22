@@ -128,7 +128,6 @@ export type ScenarioName =
   | 'shell-passthrough-nonpersistent'
   | 'skills-command-activation'
   | 'skills-symlink-dedupe'
-  | 'storage-delete-mode'
   | 'storage-fallback-history-reload'
   | 'storage-settings'
   | 'storage-startup-pg-fallback'

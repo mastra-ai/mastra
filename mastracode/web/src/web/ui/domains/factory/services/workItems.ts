@@ -157,9 +157,7 @@ export interface StartFactoryRunRequest {
   threadTitle: string;
   threadTags?: Record<string, string>;
   kickoffKey: string;
-  invocation?:
-    | { type: 'prompt'; prompt: string }
-    | { type: 'skill'; skillName: string; arguments: string };
+  invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
   destinationStage: FactoryStage;
   workItem: {
     id?: string;
