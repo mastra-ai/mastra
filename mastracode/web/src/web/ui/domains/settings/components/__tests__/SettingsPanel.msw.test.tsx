@@ -42,6 +42,18 @@ const project: Factory = {
   },
 };
 
+const serverProjectWithoutWorktree: Factory = {
+  id: 'server-project-settings-panel',
+  name: 'Server Settings Panel Project',
+  resourceId: RESOURCE_ID,
+  createdAt: 2,
+  binding: {
+    kind: 'factory',
+    factoryProjectId: 'factory-project-settings-panel',
+    repositories: [{ projectRepositoryId: 'repo-settings-panel', slug: 'acme/repo', worktrees: [] }],
+  },
+};
+
 interface CapturedRequests {
   modelIds: string[];
   stateUpdates: Record<string, unknown>[];
@@ -178,9 +190,9 @@ function useAgentControllerHandlers(): CapturedRequests {
   return captured;
 }
 
-function seedFactory() {
-  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
+function seedFactory(factory: Factory = project) {
+  localStorage.setItem('mastracode-factories', JSON.stringify([factory]));
+  localStorage.setItem('mastracode-active-factory', factory.id);
 }
 
 function ThemeProbe() {
@@ -224,8 +236,8 @@ function Harness({ children }: { children: ReactNode }) {
   );
 }
 
-async function renderSettingsPanel() {
-  seedFactory();
+async function renderSettingsPanel(factory?: Factory) {
+  seedFactory(factory);
   const captured = useAgentControllerHandlers();
   const rendered = renderWithProviders(
     <Harness>
@@ -358,6 +370,48 @@ describe('SettingsPanel', () => {
       expect(screen.getByRole('button', { name: /New pack/ })).toBeInTheDocument();
       // A local factory has no server-side project, so no default-model picker.
       expect(screen.queryByLabelText('Factory default model')).not.toBeInTheDocument();
+    });
+
+    it('keeps session settings and pack activation available when an active server factory has no worktree selected', async () => {
+      const user = userEvent.setup();
+      let activateBody: unknown;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/factory-project-settings-panel`, () =>
+          HttpResponse.json({
+            project: { id: 'factory-project-settings-panel', name: 'Server Settings Panel Project', defaultModelId: null },
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
+          HttpResponse.json({
+            packs: [
+              {
+                id: 'openai',
+                name: 'OpenAI',
+                description: 'OpenAI models',
+                models: { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6', fast: 'openai/gpt-5.4-mini' },
+                custom: false,
+                active: false,
+              },
+            ],
+            activePackId: null,
+          }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/config/model-packs/openai/activate`, async ({ request }) => {
+          activateBody = await request.json();
+          return HttpResponse.json({ ok: true, activePackId: 'openai' });
+        }),
+      );
+      await renderSettingsPanel(serverProjectWithoutWorktree);
+
+      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
+      const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
+      await waitFor(() => expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).toBePressed());
+      expect(within(thinkingLevel).getByRole('button', { name: 'High' })).toBeEnabled();
+
+      const activate = await screen.findByRole('button', { name: 'Activate' });
+      expect(activate).toBeEnabled();
+      await user.click(activate);
+      await waitFor(() => expect(activateBody).toEqual({ resourceId: RESOURCE_ID }));
     });
   });
 
