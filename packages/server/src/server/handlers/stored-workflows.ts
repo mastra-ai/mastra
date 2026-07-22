@@ -102,10 +102,16 @@ export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
   handler: async ({ mastra, ...def }) => {
     try {
       // The Zod schema output is structurally compatible with
-      // StoredWorkflowGraph but TS can't prove it — `foreach.opts` is optional
-      // in the discriminated-union schema but required (with optional inner
-      // fields) on SerializedStepFlowEntry. `addStoredWorkflow` runs a full
-      // registry pre-flight before rehydration; the cast documents the boundary.
+      // StoredWorkflowGraph but TS can't prove every arm:
+      //   - loop.step is a SingleStepEntry on the wire, SerializedStep on
+      //     the runtime type; the rehydrator handles both.
+      //   - sleepUntil.date is an ISO string on the wire, Date on the
+      //     runtime type; the rehydrator parses it via `new Date(...)`.
+      //   - conditional/loop's `serializedConditions`/`serializedCondition`
+      //     debug labels are emitted by the fluent builder at rehydration
+      //     time; clients don't send them.
+      // `addStoredWorkflow` runs a full registry pre-flight before
+      // rehydration; the cast documents this boundary.
       await (mastra as Mastra).addStoredWorkflow(def as Parameters<Mastra['addStoredWorkflow']>[0]);
       return { ok: true as const, id: def.id };
     } catch (error) {

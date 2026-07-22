@@ -4,8 +4,10 @@ import { z } from 'zod/v4';
 // Serialized graph — discriminated union mirroring core's SerializedStepFlowEntry.
 // Duplicated locally rather than imported from @mastra/core/workflows because
 // this file's peer-dependency floor predates that export. Structurally
-// compatible with `Mastra.addStoredWorkflow`'s input; the handler casts to
-// bridge the Zod-inferred optional-vs-required drift on `foreach.opts`.
+// compatible with `Mastra.addStoredWorkflow`'s input; the handler casts once
+// to bridge the remaining wire-vs-runtime divergences (loop.step shape,
+// sleepUntil.date as ISO string, fluent-builder-only debug labels) that the
+// core rehydrator handles at runtime.
 // ============================================================================
 
 const stepOptionsSchema = z
@@ -52,7 +54,8 @@ const agentEntrySchema = z.object({
   type: z.literal('agent'),
   id: z.string(),
   agentId: z.string(),
-  outputSchema: z.unknown().optional(),
+  description: z.string().optional(),
+  outputSchema: z.record(z.string(), z.unknown()).optional(),
   options: stepOptionsSchema,
 });
 
@@ -60,6 +63,7 @@ const toolEntrySchema = z.object({
   type: z.literal('tool'),
   id: z.string(),
   toolId: z.string(),
+  description: z.string().optional(),
   options: stepOptionsSchema,
 });
 
@@ -73,7 +77,7 @@ const workflowEntrySchema = z.object({
   type: z.literal('workflow'),
   id: z.string(),
   workflowId: z.string(),
-  options: stepOptionsSchema,
+  description: z.string().optional(),
 });
 
 const singleStepEntrySchema = z.discriminatedUnion('type', [
@@ -159,12 +163,14 @@ export const upsertStoredWorkflowBodySchema = z.object({
   id: z.string().describe('Workflow id — kebab-case, descriptive'),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  // Schemas + graph are loose by design: the agent constructs them and this
-  // is the same shape `mastra.addStoredWorkflow` expects.
-  inputSchema: z.unknown().describe('JSON Schema (Draft 2020-12) for the workflow input'),
-  outputSchema: z.unknown().describe('JSON Schema (Draft 2020-12) for the workflow output'),
-  stateSchema: z.unknown().optional(),
-  requestContextSchema: z.unknown().optional(),
+  // Schemas are loose object bags by design: different JSON Schema producers
+  // emit slightly different shapes and core's `JsonSchema` type is
+  // `Record<string, any>`. Using `z.record` here aligns with that shape so
+  // no cast is needed at the handler boundary.
+  inputSchema: z.record(z.string(), z.unknown()).describe('JSON Schema (Draft 2020-12) for the workflow input'),
+  outputSchema: z.record(z.string(), z.unknown()).describe('JSON Schema (Draft 2020-12) for the workflow output'),
+  stateSchema: z.record(z.string(), z.unknown()).optional(),
+  requestContextSchema: z.record(z.string(), z.unknown()).optional(),
   graph: z
     .array(graphEntrySchema)
     .describe('Static workflow graph — ordered array of serialized step entries with all refs as ids.'),
