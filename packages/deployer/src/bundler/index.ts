@@ -465,6 +465,10 @@ export const tools = [${toolsExports.join(', ')}]`,
       await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
       this.logger.info('Done generating package-lock.json');
     } catch (error) {
+      if (error instanceof MastraError && error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING') {
+        throw error;
+      }
+
       const message = error instanceof Error ? error.message : String(error);
       throw new MastraError(
         {
