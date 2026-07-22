@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { FactorySupervisorNotificationRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryTransitionApprovalService } from './approval-service.js';
 import { defaultFactoryRules, requireSupervisorApproval } from './defaults.js';
@@ -118,6 +118,111 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce();
 
     expect(reconcileToolResults).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries durable supervisor approval notifications and marks them succeeded after delivery', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const rules = defaultFactoryRules({
+      version: 'rules-v1',
+      overrides: {
+        work: {
+          intake: {
+            issue: {
+              onExit: context => requireSupervisorApproval(context, { reason: 'Supervisor approval required.' }),
+            },
+          },
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, rules });
+    const result = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: item.revision,
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'work' },
+      ingress: { type: 'agent', identity: 'tool:approval-1' },
+      cause: 'test',
+    });
+    expect(result.status).toBe('pending_approval');
+
+    const dispatchSupervisorNotification = vi
+      .fn<(record: FactorySupervisorNotificationRecord) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('temporary delivery failure'))
+      .mockResolvedValue(undefined);
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'dispatcher-1',
+      dispatchSupervisorNotification,
+    });
+    const firstNow = new Date('2030-01-01T00:00:00.000Z');
+
+    await dispatcher.runOnce(firstNow);
+    expect(await storage.listSupervisorNotifications('org-1', PROJECT_ID)).toEqual([
+      expect.objectContaining({ status: 'retry', attempts: 1, lastError: 'temporary delivery failure' }),
+    ]);
+
+    await dispatcher.runOnce(new Date(firstNow.getTime() + 2_000));
+    expect(dispatchSupervisorNotification).toHaveBeenCalledTimes(2);
+    expect(await storage.listSupervisorNotifications('org-1', PROJECT_ID)).toEqual([
+      expect.objectContaining({ status: 'succeeded', attempts: 2, completedAt: expect.any(Date) }),
+    ]);
+  });
+
+  it('allows only one concurrent poller to claim a supervisor notification', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: {
+          work: {
+            intake: {
+              issue: {
+                onExit: context => requireSupervisorApproval(context, { reason: 'Supervisor approval required.' }),
+              },
+            },
+          },
+        },
+      }),
+    });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: item.revision,
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'work' },
+      ingress: { type: 'agent', identity: 'tool:approval-lease' },
+      cause: 'test',
+    });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    const claim = (ownerId: string) =>
+      storage.claimSupervisorNotifications({
+        ownerId,
+        now,
+        leaseExpiresAt: new Date(now.getTime() + 30_000),
+        limit: 1,
+      });
+
+    const [left, right] = await Promise.all([claim('left'), claim('right')]);
+    expect(left.length + right.length).toBe(1);
+    const [claimed] = left.length ? left : right;
+    const staleOwner = left.length ? 'right' : 'left';
+    await expect(
+      storage.completeSupervisorNotification(
+        { id: claimed!.id, orgId: 'org-1', factoryProjectId: PROJECT_ID, ownerId: staleOwner },
+        now,
+      ),
+    ).resolves.toBeNull();
   });
 
   it('allows only one concurrent lease owner to claim a decision', async () => {
@@ -357,11 +462,16 @@ describe('FactoryDecisionDispatcher', () => {
       expect(resolution.status).toBe(terminalStatus);
 
       const { controller, delivered } = createSession();
+      const supervisorEvents: string[] = [];
+      const dispatchSupervisorNotification = vi.fn(async (record: FactorySupervisorNotificationRecord) => {
+        supervisorEvents.push(record.event);
+      });
       const firstDispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
         transitionService,
         storage,
         ownerId: 'before-restart',
+        dispatchSupervisorNotification,
       });
       await firstDispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
       const secondDispatcher = new FactoryDecisionDispatcher({
@@ -369,6 +479,7 @@ describe('FactoryDecisionDispatcher', () => {
         transitionService,
         storage,
         ownerId: 'after-restart',
+        dispatchSupervisorNotification,
       });
       await secondDispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
       await secondDispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
@@ -380,6 +491,11 @@ describe('FactoryDecisionDispatcher', () => {
       );
       expect(
         (await storage.listDeferredDecisions('org-1', PROJECT_ID)).every(record => record.status === 'succeeded'),
+      ).toBe(true);
+      expect(supervisorEvents.sort()).toEqual([`approval_${terminalStatus}`, 'approval_requested'].sort());
+      expect(dispatchSupervisorNotification).toHaveBeenCalledTimes(2);
+      expect(
+        (await storage.listSupervisorNotifications('org-1', PROJECT_ID)).every(record => record.status === 'succeeded'),
       ).toBe(true);
     },
   );

@@ -43,6 +43,13 @@ export interface FactoryTransitionServiceOptions {
   rules: FactoryRules;
   storage: WorkItemsStorage;
   timeoutMs?: number;
+  onCommitted?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    actor: FactoryRuleActor;
+    result: FactoryTransitionResult;
+  }) => Promise<void>;
 }
 
 function rejection(
@@ -112,11 +119,13 @@ export class FactoryTransitionService {
   readonly #rules: FactoryRules;
   readonly #storage: WorkItemsStorage;
   readonly #timeoutMs: number;
+  readonly #onCommitted?: FactoryTransitionServiceOptions['onCommitted'];
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#rules = options.rules;
     this.#storage = options.storage;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
+    this.#onCommitted = options.onCommitted;
   }
 
   get ruleSetVersion(): string {
@@ -336,6 +345,18 @@ export class FactoryTransitionService {
     if (committed.status === 'missing') {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');
     }
-    return committed.result as unknown as FactoryTransitionResult;
+    const result = committed.result as unknown as FactoryTransitionResult;
+    try {
+      await this.#onCommitted?.({
+        orgId: request.orgId,
+        factoryProjectId: request.factoryProjectId,
+        workItemId: request.workItemId,
+        actor: request.actor,
+        result,
+      });
+    } catch (error) {
+      console.warn('[factory] Supervisor state refresh failed after transition:', error);
+    }
+    return result;
   }
 }

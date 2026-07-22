@@ -16,7 +16,11 @@ beforeEach(async () => {
   projectId = (await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory project' } })).id;
 });
 
-function appFor(authUser: typeof user | null, service: { ensureSession: Function; getState: Function }) {
+function appFor(
+  authUser: typeof user | null,
+  service: { ensureSession: Function; getState: Function },
+  signals?: { refresh: Function },
+) {
   const app = new Hono();
   const requestContext = new RequestContext();
   app.use('*', async (context, next) => {
@@ -26,7 +30,12 @@ function appFor(authUser: typeof user | null, service: { ensureSession: Function
   });
   mountApiRoutes(
     app as never,
-    new SupervisorRoutes({ auth: fakeRouteAuth(), projects: seed.projects, service: service as never }).routes(),
+    new SupervisorRoutes({
+      auth: fakeRouteAuth(),
+      projects: seed.projects,
+      service: service as never,
+      signals: signals as never,
+    }).routes(),
   );
   return { app, requestContext };
 }
@@ -39,7 +48,8 @@ describe('Factory supervisor routes', () => {
       sessionId: `${input.factoryProjectId}-supervisor`,
       threadId: `${input.factoryProjectId}-supervisor`,
     }));
-    const { app, requestContext } = appFor(user, { ensureSession, getState: vi.fn() });
+    const refresh = vi.fn(async () => {});
+    const { app, requestContext } = appFor(user, { ensureSession, getState: vi.fn() }, { refresh });
     const response = await app.request(`/web/factory/projects/${projectId}/supervisor/session`, { method: 'POST' });
 
     expect(response.status).toBe(200);
@@ -57,6 +67,7 @@ describe('Factory supervisor routes', () => {
       factoryProjectId: projectId,
       requestContext,
     });
+    expect(refresh).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1', factoryProjectId: projectId });
   });
 
   it('returns the bounded state summary', async () => {

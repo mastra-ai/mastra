@@ -5,7 +5,7 @@ import { FACTORY_SUPERVISOR_INSTRUCTIONS } from './instructions.js';
 import { buildFactorySupervisorState } from './state.js';
 
 function item(id: string, stages: string[], type: 'issue' | 'pull-request' = 'issue'): WorkItemRow {
-  return { id, stages, externalSource: { type } } as WorkItemRow;
+  return { id, title: `Title ${id}`, stages, externalSource: { type } } as WorkItemRow;
 }
 
 function approval(index: number): FactoryApprovalRecord {
@@ -35,11 +35,12 @@ describe('Factory supervisor contract', () => {
     const state = buildFactorySupervisorState(
       'project-1',
       [
-        item('one', ['intake', 'planning']),
+        item('item-0', ['intake', 'planning']),
         item('two', ['intake']),
         item('three', ['intake', 'review'], 'pull-request'),
       ],
       Array.from({ length: 60 }, (_, index) => approval(index)),
+      new Date('2026-07-22T00:01:00.000Z'),
     );
 
     expect(state).toMatchObject({
@@ -50,6 +51,12 @@ describe('Factory supervisor contract', () => {
         byStage: { planning: 1, intake: 1, review: 1 },
       },
     });
+    expect(state.pendingApprovalCount).toBe(60);
     expect(state.pendingApprovals).toHaveLength(50);
+    expect(state.pendingApprovals[0]).toMatchObject({
+      workItemTitle: 'Title item-0',
+      ageSeconds: 60,
+    });
+    expect(state.snapshotAt).toBe('2026-07-22T00:01:00.000Z');
   });
 });

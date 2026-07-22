@@ -142,7 +142,9 @@ describe('FactorySupervisorService', () => {
       factoryProjectId: PROJECT_ID,
       totalItems: 0,
       counts: { byBoard: {}, byStage: {} },
+      pendingApprovalCount: 0,
       pendingApprovals: [],
+      snapshotAt: expect.any(String),
     });
   });
 });
