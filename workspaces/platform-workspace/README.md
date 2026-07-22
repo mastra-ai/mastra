@@ -14,10 +14,12 @@ All options can be passed to the constructor or read from environment variables:
 
 | Option          | Env var                        | Required         |
 | --------------- | ------------------------------ | ---------------- |
-| `accessToken`   | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes              |
+| `accessToken`   | `MASTRA_PLATFORM_SECRET_KEY`   | Yes              |
 | `projectId`     | `MASTRA_PROJECT_ID`            | Yes              |
 | `environmentId` | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
 | `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
+
+`MASTRA_PLATFORM_ACCESS_TOKEN` is still read as a deprecated fallback for `accessToken`.
 
 The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
 

@@ -6,7 +6,7 @@
  * sidebar drawer.
  */
 import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,12 +63,12 @@ function renderSwitcher() {
 }
 
 describe('FactorySwitcher', () => {
-  it('given an active factory, then its name and path render', async () => {
+  it('given an active factory, then its name renders without its path in the trigger', async () => {
     seedFactory();
     renderSwitcher();
 
     await waitFor(() => expect(screen.getByText('MastraCode Test')).toBeInTheDocument());
-    expect(screen.getByText('/tmp/mastracode-test')).toBeInTheDocument();
+    expect(screen.queryByText('/tmp/mastracode-test')).not.toBeInTheDocument();
   });
 
   it('given no selection, then the placeholder renders', () => {
@@ -77,13 +77,14 @@ describe('FactorySwitcher', () => {
     expect(screen.getByText('Select a factory…')).toBeInTheDocument();
   });
 
-  it('when the switcher is clicked, then the inline project menu opens without opening the project picker', async () => {
+  it('when the switcher is clicked, then the menu shows each factory path without opening the project picker', async () => {
     seedFactory();
     renderSwitcher();
 
     await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
 
-    expect(await screen.findByRole('menuitem', { name: /MastraCode Test/ })).toBeInTheDocument();
+    const factoryItem = await screen.findByRole('menuitem', { name: /MastraCode Test/ });
+    expect(within(factoryItem).getByText('/tmp/mastracode-test')).toBeInTheDocument();
     expect(screen.getByTestId('factories-open')).toHaveTextContent('no');
   });
 

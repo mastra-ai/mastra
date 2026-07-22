@@ -1,0 +1,98 @@
+@reference '../../../tailwind.css';
+
+/* Session modes share one color token between labels and the composer glow.
+ * Mode values stay in CSS so components only select a semantic mode class. */
+.chat-mode-build {
+  --chat-mode-color: #087a32;
+}
+
+.chat-mode-plan {
+  --chat-mode-color: #6d28d9;
+}
+
+.chat-mode-fast {
+  --chat-mode-color: #8a4400;
+}
+
+@variant dark {
+  .chat-mode-build {
+    --chat-mode-color: #4ade80;
+  }
+
+  .chat-mode-plan {
+    --chat-mode-color: #c4b5fd;
+  }
+
+  .chat-mode-fast {
+    --chat-mode-color: #fdba74;
+  }
+}
+
+.chat-mode-text {
+  color: var(--chat-mode-color, var(--neutral4));
+}
+
+.composer-spotlight {
+  --composer-spotlight: var(--chat-mode-color, var(--accent1));
+  --composer-spotlight-x: 50%;
+  --composer-spotlight-y: 50%;
+
+  @apply isolate border-0 ring-1 ring-inset ring-border2/40;
+}
+
+.composer-spotlight:focus-within {
+  @apply ring-border2;
+}
+
+.composer-spotlight::before,
+.composer-spotlight-surface::before {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    200px circle at var(--composer-spotlight-x) var(--composer-spotlight-y),
+    color-mix(in srgb, var(--composer-spotlight) 80%, transparent),
+    transparent 75%
+  );
+  filter: blur(12px);
+  opacity: 0;
+  transition: opacity 200ms;
+  content: '';
+}
+
+.composer-spotlight::before {
+  z-index: 0;
+  border-radius: inherit;
+}
+
+.composer-spotlight-surface {
+  pointer-events: none;
+  position: absolute;
+  inset: 1px;
+  z-index: -10;
+  overflow: hidden;
+  border-radius: 21px;
+  background: var(--surface3);
+}
+
+.composer-spotlight-surface::before {
+  background: radial-gradient(
+    200px circle at var(--composer-spotlight-x) var(--composer-spotlight-y),
+    color-mix(in srgb, var(--composer-spotlight) 5%, transparent),
+    transparent 75%
+  );
+}
+
+@media (hover: hover) {
+  .composer-spotlight:hover::before,
+  .composer-spotlight:hover .composer-spotlight-surface::before {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-spotlight::before,
+  .composer-spotlight-surface::before {
+    transition: none;
+  }
+}

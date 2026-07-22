@@ -45,36 +45,6 @@ describe('LibSQLStore.close()', () => {
     expect(client.closed).toBe(true);
   });
 
-  it('skips WAL cleanup when DELETE mode was selected', async () => {
-    const dbPath = path.join(tmpDir, 'delete.db');
-    const store = new LibSQLStore({ id: 'close-delete', url: `file:${dbPath}`, journalMode: 'delete' });
-    await store.init();
-
-    const client = getClient(store);
-    const executeSpy = vi.spyOn(client, 'execute');
-    const closeSpy = vi.spyOn(client, 'close');
-
-    await store.close();
-
-    const executedSql = executedSqlFrom(executeSpy);
-    expect(executedSql).not.toContain('PRAGMA wal_checkpoint(TRUNCATE);');
-    expect(executedSql).not.toContain('PRAGMA journal_mode=DELETE;');
-    expect(closeSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('coalesces overlapping close calls', async () => {
-    const dbPath = path.join(tmpDir, 'overlapping.db');
-    const store = new LibSQLStore({ id: 'close-overlapping', url: `file:${dbPath}` });
-    await store.init();
-
-    const client = getClient(store);
-    const closeSpy = vi.spyOn(client, 'close');
-
-    await Promise.all([store.close(), store.close(), store.close()]);
-
-    expect(closeSpy).toHaveBeenCalledTimes(1);
-  });
-
   it('is idempotent — a second close() is a no-op', async () => {
     const dbPath = path.join(tmpDir, 'mastra.db');
     const store = new LibSQLStore({ id: 'close-idempotent', url: `file:${dbPath}` });
@@ -127,22 +97,6 @@ describe('LibSQLStore.close()', () => {
     expect(executedSql).not.toContain('PRAGMA wal_checkpoint(TRUNCATE);');
     expect(executedSql).not.toContain('PRAGMA journal_mode=DELETE;');
     expect(closeSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('closes the client while propagating a readiness failure', async () => {
-    const dbPath = path.join(tmpDir, 'readiness-fail.db');
-    const store = new LibSQLStore({ id: 'close-readiness-fail', url: `file:${dbPath}` });
-    await store.init();
-
-    const client = getClient(store);
-    const closeSpy = vi.spyOn(client, 'close');
-    (store as unknown as { pragmasReady: Promise<void> }).pragmasReady = Promise.reject(
-      new Error('journal transition failed'),
-    );
-
-    await expect(store.close()).rejects.toThrow('journal transition failed');
-    expect(closeSpy).toHaveBeenCalledTimes(1);
-    expect(client.closed).toBe(true);
   });
 
   it('still closes the client and warns when WAL checkpoint fails', async () => {

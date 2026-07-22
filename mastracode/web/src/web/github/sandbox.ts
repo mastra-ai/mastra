@@ -23,6 +23,13 @@ import type { MaterializationSandbox, ProgressFn, SandboxBindingStore, SandboxCo
 import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
 
 type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
+type MaterializationStore = Pick<SourceControlSandboxStorage, 'markMaterialized'>;
+
+interface RepoMaterializationBinding {
+  id: string;
+  sandboxWorkdir: string;
+  materializedAt: Date | null;
+}
 
 /** Adapt a per-(project,user) sandbox binding row to the fleet's persistence seam. */
 function bindingStore(row: ProjectRepositorySandbox, storage: SourceControlSandboxStorage): SandboxBindingStore {
@@ -128,11 +135,11 @@ export interface RepoMaterializeInfo {
  * @param token      a freshly minted, short-lived installation access token
  */
 export async function materializeRepo(
-  sandboxRow: ProjectRepositorySandbox,
+  sandboxRow: RepoMaterializationBinding,
   repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,
-  storage: SourceControlSandboxStorage,
+  storage: MaterializationStore,
   onProgress?: ProgressFn,
 ): Promise<void> {
   const workdir = sandboxRow.sandboxWorkdir;
@@ -207,6 +214,45 @@ export async function materializeRepo(
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
   await storage.markMaterialized({ id: sandboxRow.id });
+}
+
+/** Check out a session's branch inside its isolated repository clone. */
+export async function checkoutSessionBranch(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  {
+    branch,
+    baseBranch,
+    token,
+    repoFullName,
+  }: { branch: string; baseBranch: string; token: string; repoFullName: string },
+): Promise<void> {
+  if (!isValidGitRef(branch) || !isValidGitRef(baseBranch)) {
+    throw new MaterializeError('Refusing to create a session from an invalid branch name.', 'clone-failed');
+  }
+
+  const current = await sh(sandbox, `git -C ${shellQuote(workdir)} branch --show-current`);
+  if (current.exitCode === 0 && current.stdout.trim() === branch) return;
+
+  const local = await sh(sandbox, `git -C ${shellQuote(workdir)} show-ref --verify --quiet refs/heads/${shellQuote(branch)}`);
+  if (local.exitCode === 0) {
+    const checkout = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout ${shellQuote(branch)}`);
+    if (checkout.exitCode !== 0) throw classifyGitFailure(checkout, 'clone-failed');
+    return;
+  }
+
+  const authUrl = tokenUrl(repoFullName, token);
+  try {
+    const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
+    if (setUrl.exitCode !== 0) throw classifyGitFailure(setUrl, 'pull-failed');
+    const fetch = await sh(
+      sandbox,
+      `git -C ${shellQuote(workdir)} fetch origin ${shellQuote(baseBranch)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
+    );
+    if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'clone-failed');
+  } finally {
+    await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`);
+  }
 }
 
 /**

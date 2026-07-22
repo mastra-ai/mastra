@@ -56,11 +56,6 @@ export interface IntegrationHooks {
     factoryProjectId: string;
     issues: LinearIssueIngress[];
   }) => Promise<unknown>;
-  revokeFactoryBindingsForProjectPath?: (input: {
-    orgId: string;
-    factoryProjectId: string;
-    projectPath: string;
-  }) => Promise<void>;
 }
 
 /**

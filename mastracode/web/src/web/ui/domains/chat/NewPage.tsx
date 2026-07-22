@@ -26,7 +26,6 @@ export function NewPage() {
   if (!activeFactory) {
     return <EmptyFactoryState />;
   }
-
   return (
     <ChatLayout
       sidebar={<Sidebar />}

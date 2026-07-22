@@ -88,11 +88,11 @@ function parseSessions(value: unknown): Record<string, WorkItemSessionInput> | u
   const out: Record<string, WorkItemSessionInput> = {};
   for (const [role, session] of Object.entries(value)) {
     if (!role || role.length > 64 || !isRecord(session)) return undefined;
-    const { projectPath, branch, threadId } = session;
-    if (typeof projectPath !== 'string' || projectPath.length === 0 || projectPath.length > 2048) return undefined;
+    const { sessionId, branch, threadId } = session;
+    if (typeof sessionId !== 'string' || sessionId.length === 0 || sessionId.length > 512) return undefined;
     if (typeof branch !== 'string' || branch.length === 0 || branch.length > 512) return undefined;
     if (typeof threadId !== 'string' || threadId.length === 0 || threadId.length > 512) return undefined;
-    out[role] = { projectPath, branch, threadId };
+    out[role] = { sessionId, branch, threadId };
   }
   return out;
 }
