@@ -6,8 +6,7 @@ import { useNavigate } from 'react-router';
 
 import { useAddFactoryMutation, useCreateFactoryMutation } from '../../../../../shared/hooks/useFactories';
 import { useKeyDown } from '../../../lib/hooks';
-import { CloseIcon } from '../../../ui/icons';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
+import { factoryHomePath } from '../services/factoryPaths';
 import { DirectoryBrowser } from './DirectoryPicker';
 
 function mutationError(error: unknown): string | null {
@@ -22,7 +21,6 @@ function mutationError(error: unknown): string | null {
  * folder remains a secondary path for terminal-shared, org-less workflows.
  */
 export function FactoriesPanel({ onClose }: { onClose: () => void }) {
-  const { selectFactory } = useActiveFactoryContext();
   const navigate = useNavigate();
   const createFactory = useCreateFactoryMutation();
   const addLocalFactory = useAddFactoryMutation();
@@ -39,8 +37,7 @@ export function FactoriesPanel({ onClose }: { onClose: () => void }) {
     if (!trimmed) return;
     try {
       const factory = await createFactory.mutateAsync({ name: trimmed });
-      await selectFactory(factory);
-      void navigate('/factory/board');
+      void navigate(factoryHomePath(factory));
     } catch {
       // Mutation state owns the rendered error.
     }
@@ -49,8 +46,7 @@ export function FactoriesPanel({ onClose }: { onClose: () => void }) {
   const handlePickFolder = async (path: string, folderName: string) => {
     try {
       const factory = await addLocalFactory.mutateAsync({ name: folderName || path, path });
-      await selectFactory(factory);
-      void navigate('/new');
+      void navigate(factoryHomePath(factory));
     } catch {
       // Mutation state owns the rendered error.
     }
@@ -58,17 +54,13 @@ export function FactoriesPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <section aria-labelledby="create-factory-title" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border1 px-5 py-4">
-        <Txt as="h1" variant="header-sm" id="create-factory-title" className="text-icon6">
-          Create Factory
-        </Txt>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Close factory creation" onClick={onClose}>
-          <CloseIcon size={16} />
-        </Button>
-      </header>
-
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
-        <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col py-5">
+        <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col py-3">
+          <div className="mt-6 mb-6 flex items-center">
+            <Txt as="h1" variant="header-sm" id="create-factory-title" tabIndex={-1} className="text-icon6">
+              Create Factory
+            </Txt>
+          </div>
           <form
             className="flex w-full max-w-lg flex-col gap-3"
             onSubmit={event => {

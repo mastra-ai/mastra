@@ -69,6 +69,7 @@ const HOUR = 3_600_000;
 function makeMetrics(overrides: Partial<FactoryMetrics> = {}): FactoryMetrics {
   return {
     windowDays: 30,
+    earliestItemAt: '2026-05-01T00:00:00.000Z',
     throughput: [
       { date: '2026-07-14', count: 2 },
       { date: '2026-07-15', count: 1 },
@@ -128,12 +129,17 @@ function sessionState() {
 }
 
 interface MetricsState {
-  /** `days` query params of every metrics request, in order. */
-  requestedDays: string[];
+  /** `from`/`to` query params of every metrics request, in order. */
+  requestedRanges: { from: string; to: string }[];
+}
+
+/** Whole-day span of a requested range. */
+function spanDays(range: { from: string; to: string }): number {
+  return Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
 }
 
 function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsState {
-  const state: MetricsState = { requestedDays: [] };
+  const state: MetricsState = { requestedRanges: [] };
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
@@ -157,19 +163,22 @@ function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsSta
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/metrics`, ({ request }) => {
-      const days = new URL(request.url).searchParams.get('days') ?? '';
-      state.requestedDays.push(days);
-      return HttpResponse.json({ metrics: { ...metrics, windowDays: Number(days) || metrics.windowDays } });
+      const url = new URL(request.url);
+      const range = { from: url.searchParams.get('from') ?? '', to: url.searchParams.get('to') ?? '' };
+      state.requestedRanges.push(range);
+      const days = spanDays(range);
+      return HttpResponse.json({
+        metrics: { ...metrics, windowDays: Number.isFinite(days) ? days : metrics.windowDays },
+      });
     }),
   );
   return state;
 }
 
-function renderAt(initialEntry: string, project: Factory = githubProject) {
+function renderAt(project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${project.id}/metrics`] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -192,12 +201,12 @@ describe('Factory Metrics page', () => {
         wipTotal: 4,
       }),
     );
-    renderAt('/factory/metrics');
+    renderAt();
 
-    expect(await screen.findByRole('heading', { name: 'Metrics' })).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Date range timeline' })).toBeInTheDocument();
 
     // Stat cards: throughput total, cycle time (with p90 hint), WIP, live agents.
-    const completed = (await screen.findByText('Completed (30d)')).parentElement!;
+    const completed = (await screen.findByText('Completed')).parentElement!;
     expect(within(completed).getByText('3')).toBeInTheDocument();
     const cycle = screen.getByText('Median cycle time').parentElement!;
     expect(within(cycle).getByText('3h')).toBeInTheDocument();
@@ -234,7 +243,7 @@ describe('Factory Metrics page', () => {
 
   it('given mixed automation, when the page renders, then the automated-moves stat and per-stage rows appear', async () => {
     useMetricsHandlers();
-    renderAt('/factory/metrics');
+    renderAt();
 
     // Global stat: total - human automated moves, with the window total as hint.
     const automatedMoves = (await screen.findByText('Automated moves (30d)')).parentElement!;
@@ -254,17 +263,17 @@ describe('Factory Metrics page', () => {
     expect(within(section).queryByText('Canceled')).not.toBeInTheDocument();
   });
 
-  it('given the default window, when the user switches to 7d, then metrics are refetched with days=7', async () => {
+  it('given the default window, when the page renders, then the timeline drives a 30-day fetch', async () => {
     const state = useMetricsHandlers();
-    renderAt('/factory/metrics');
+    renderAt();
 
-    expect(await screen.findByText('Completed (30d)')).toBeInTheDocument();
-    expect(state.requestedDays).toEqual(['30']);
-
-    await userEvent.click(screen.getByRole('button', { name: '7d' }));
-
-    await waitFor(() => expect(state.requestedDays).toContain('7'));
-    expect(await screen.findByText('Completed (7d)')).toBeInTheDocument();
+    expect(await screen.findByText('Completed')).toBeInTheDocument();
+    // The draggable date-range timeline is the window control.
+    expect(screen.getByRole('group', { name: 'Date range timeline' })).toBeInTheDocument();
+    // Initial fetch covers the default last-30-days window (inclusive end-of-day).
+    expect(state.requestedRanges).toHaveLength(1);
+    expect(spanDays(state.requestedRanges[0])).toBeGreaterThanOrEqual(30);
+    expect(spanDays(state.requestedRanges[0])).toBeLessThanOrEqual(31);
   });
 
   it('given an empty board, when the page renders, then friendly empty states appear', async () => {
@@ -281,7 +290,7 @@ describe('Factory Metrics page', () => {
         stageAutomation: [],
       }),
     );
-    renderAt('/factory/metrics');
+    renderAt();
 
     expect(await screen.findByText('Nothing in flight — the board is clear.')).toBeInTheDocument();
     expect(screen.getByText('No items created in this window.')).toBeInTheDocument();
@@ -297,10 +306,10 @@ describe('Factory Metrics page', () => {
 
   it('given a local project, when visiting Metrics, then the server-factory notice renders instead of the dashboard', async () => {
     useMetricsHandlers();
-    renderAt('/factory/metrics', localProject);
+    renderAt(localProject);
 
     expect(
-      await screen.findByText(/Board, metrics, and audit are available for server-backed Factories/),
+      await screen.findByText(/Board, metrics, rules, and audit are available for server-backed Factories/),
     ).toBeInTheDocument();
     expect(screen.queryByText('Median cycle time')).not.toBeInTheDocument();
   });

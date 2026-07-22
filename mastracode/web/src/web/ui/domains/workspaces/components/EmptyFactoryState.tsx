@@ -1,15 +1,17 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
+import { queryKeys } from '../../../../../shared/api/keys';
 import {
   useCreateFactoryMutation,
   useLinkRepositoryMutation,
   useLoadFactories,
 } from '../../../../../shared/hooks/useFactories';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { connectLinear } from '../../factory/services/linear';
 import { saveFactories } from '../services/factories';
 import type { Factory, ServerFactory } from '../services/factories';
+import { factoryHomePath } from '../services/factoryPaths';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import type { GithubRepo } from '../services/github';
 import { InitialFactoryStep } from './InitialFactoryStep';
@@ -33,7 +35,7 @@ function errorMessage(error: unknown): string {
 
 export function EmptyFactoryState() {
   const { baseUrl } = useApiConfig();
-  const { selectFactory } = useActiveFactoryContext();
+  const queryClient = useQueryClient();
   const persistedFactories = useLoadFactories();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
@@ -104,13 +106,17 @@ export function EmptyFactoryState() {
   };
 
   const finish = async () => {
+    if (!pendingFactory) {
+      setCompletionError('Your pending Factory could not be found. Choose a repository again.');
+      return;
+    }
     setCompletionError(null);
     setFinishing(true);
     try {
-      await selectFactory(pendingFactory);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       sessionStorage.removeItem(STEP_KEY);
       sessionStorage.removeItem(FACTORY_KEY);
-      void navigate('/factory/work');
+      void navigate(factoryHomePath(pendingFactory));
     } catch (error) {
       setCompletionError(errorMessage(error));
       setFinishing(false);

@@ -129,7 +129,7 @@ export function PullRequestLinks({
   if (links.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="ml-auto flex items-center gap-2">
       {links.map(subscription => (
         <a
           key={subscription.id}

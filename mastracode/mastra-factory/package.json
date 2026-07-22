@@ -1,14 +1,13 @@
 {
   "name": "create-factory",
-  "version": "0.0.3-alpha.0",
-  "description": "Create a Mastra Software Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create factory` to scaffold and get started.",
+  "version": "0.0.3-alpha.2",
+  "description": "Create a Mastra Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create factory` to scaffold and get started.",
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
-    "create-factory": "./bin/cli.mjs"
+    "create-factory": "./dist/index.js"
   },
   "files": [
-    "bin",
     "dist",
     "CHANGELOG.md"
   ],
@@ -20,7 +19,7 @@
     "lint": "eslint ."
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   },
   "repository": {
     "type": "git",
@@ -45,7 +44,8 @@
     "commander": "^14.0.3",
     "mastra": "workspace:*",
     "picocolors": "^1.1.1",
-    "posthog-node": "^5.37.0"
+    "posthog-node": "^5.37.0",
+    "tinyexec": "^1.2.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

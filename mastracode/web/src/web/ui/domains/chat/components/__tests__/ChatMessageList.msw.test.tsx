@@ -38,7 +38,6 @@ function seedProject() {
     createdAt: 1,
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -90,12 +89,12 @@ function renderMessageList() {
   // Mounted on the thread's own page: /chat is the draft composer and hides
   // the bound thread's transcript.
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+    <MemoryRouter initialEntries={[`/factories/project-test/threads/${THREAD_ID}`]}>
       <Routes>
         <Route
-          path="/threads/:threadId"
+          path="/factories/:factoryId/threads/:threadId"
           element={
-            <ActiveFactoryProvider>
+            <ActiveFactoryProvider factoryId="project-test">
               <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatMessageList />
                 <TaskPanel />
@@ -109,20 +108,27 @@ function renderMessageList() {
 }
 
 describe('ChatMessageList', () => {
-  it('given an empty thread, then it shows the welcome state with the project metadata', async () => {
+  it('given an empty thread, then it shows conversation starters with current project context', async () => {
     seedProject();
     useAgentControllerHandlers();
     renderMessageList();
 
-    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
-    expect(screen.getByText('Factory')).toBeInTheDocument();
-    expect(screen.getByText('MastraCode Test')).toBeInTheDocument();
-    expect(screen.getByText('Resource ID')).toBeInTheDocument();
-    expect(screen.getByText(RESOURCE_ID)).toBeInTheDocument();
-    expect(screen.getByText('Branch')).toBeInTheDocument();
-    expect(screen.getByText('main')).toBeInTheDocument();
-    expect(screen.getByText('Workspace')).toBeInTheDocument();
-    expect(screen.getByText('/tmp/mastracode-test')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'What can I help you build?' })).toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText('Mastra Code')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Explore this codebase' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Plan a feature' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review recent changes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Debug an issue' })).toBeInTheDocument();
+
+    expect(screen.getByText(/Working in/)).toBeVisible();
+    expect(screen.getByText('MastraCode Test')).toBeVisible();
+    expect(screen.getByText('main')).toBeVisible();
+    expect(screen.queryByText('Resource ID')).not.toBeInTheDocument();
+    expect(screen.queryByText(RESOURCE_ID)).not.toBeInTheDocument();
+    expect(screen.queryByText('Workspace')).not.toBeInTheDocument();
+    expect(screen.queryByText('/tmp/mastracode-test')).not.toBeInTheDocument();
   });
 
   it('given streamed assistant text, then it renders the transcript entry', async () => {

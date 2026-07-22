@@ -9,7 +9,7 @@ import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
-import { DEFAULT_SETTINGS_PATH } from './domains/settings/settingsSections';
+import { settingsSectionPath } from './domains/settings/settingsSections';
 import {
   isServerFactory,
   FactorySwitcher,
@@ -20,7 +20,7 @@ import {
 
 function useSettingsOpen() {
   const { pathname } = useLocation();
-  return pathname.startsWith('/settings');
+  return /^\/factories\/[^/]+\/settings(?:\/|$)/.test(pathname);
 }
 
 /**
@@ -40,7 +40,7 @@ export function Sidebar() {
   const settingsOpen = useSettingsOpen();
 
   return (
-    <MainSidebar className="bg-transparent h-full">
+    <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         {settingsOpen ? (
           <SettingsNavigation />
@@ -72,6 +72,7 @@ export function Sidebar() {
 }
 
 function SidebarFooter() {
+  const { activeFactory } = useActiveFactoryContext();
   const settingsOpen = useSettingsOpen();
   const closeSettings = useCloseSettings();
   const navigate = useNavigate();
@@ -82,7 +83,9 @@ function SidebarFooter() {
       closeSettings();
       return;
     }
-    void navigate(DEFAULT_SETTINGS_PATH, { state: { from: location } });
+    if (activeFactory) {
+      void navigate(settingsSectionPath(activeFactory.id, 'general'), { state: { from: location } });
+    }
   };
 
   return (

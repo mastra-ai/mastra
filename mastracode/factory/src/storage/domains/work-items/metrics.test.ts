@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import type { WorkItemRow, WorkItemStageEntry } from './base.js';
-import { clampMetricsWindow, computeFactoryMetrics } from './metrics.js';
+import { computeFactoryMetrics, parseMetricsRange } from './metrics.js';
 
 /** Fixed "now" so every duration in the specs is deterministic. */
 const NOW = new Date('2026-07-15T12:00:00.000Z');
+/** Exclusive end of NOW's UTC day. */
+const END_OF_TODAY = Date.parse('2026-07-16T00:00:00.000Z');
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
+
+/** A UTC calendar window of `days` ending at NOW. */
+function lastDays(days: number): { windowStart: number; windowEnd: number } {
+  const todayStart = Date.parse(`${NOW.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  return { windowStart: todayStart - (days - 1) * DAY, windowEnd: NOW.getTime() };
+}
 
 /** ISO timestamp `hours` before NOW. */
 function hoursAgo(hours: number): string {
@@ -47,23 +55,81 @@ function doneItem(id: string, createdHoursAgo: number, doneHoursAgo: number): Wo
   });
 }
 
-describe('clampMetricsWindow', () => {
-  it('accepts supported windows and clamps everything else to 30', () => {
-    expect(clampMetricsWindow('7')).toBe(7);
-    expect(clampMetricsWindow('30')).toBe(30);
-    expect(clampMetricsWindow('90')).toBe(90);
-    expect(clampMetricsWindow('14')).toBe(30);
-    expect(clampMetricsWindow('abc')).toBe(30);
-    expect(clampMetricsWindow(undefined)).toBe(30);
-    expect(clampMetricsWindow('-7')).toBe(30);
+describe('parseMetricsRange', () => {
+  it('defaults to the last 30 days when from/to are absent', () => {
+    expect(parseMetricsRange(undefined, undefined, NOW)).toEqual({
+      windowStart: Date.parse('2026-06-16T00:00:00.000Z'),
+      windowEnd: END_OF_TODAY,
+    });
+  });
+
+  it('accepts explicit ISO from/to', () => {
+    const from = '2026-07-01T00:00:00.000Z';
+    const to = '2026-07-10T00:00:00.000Z';
+    expect(parseMetricsRange(from, to, NOW)).toEqual({
+      windowStart: Date.parse(from),
+      windowEnd: Date.parse(to),
+    });
+  });
+
+  it('treats a date-only to bound as the end of that UTC calendar day', () => {
+    const range = parseMetricsRange('2026-07-01', '2026-07-10', NOW);
+
+    expect(range).toEqual({
+      windowStart: Date.parse('2026-07-01T00:00:00.000Z'),
+      windowEnd: Date.parse('2026-07-11T00:00:00.000Z'),
+    });
+    expect(computeFactoryMetrics([], range)).toMatchObject({ windowDays: 10 });
+  });
+
+  it('clamps a future end to the end of the current UTC day', () => {
+    const future = new Date(NOW.getTime() + 5 * DAY).toISOString();
+    expect(parseMetricsRange(undefined, future, NOW).windowEnd).toBe(END_OF_TODAY);
+  });
+
+  it('falls back to the default span when from is not before to', () => {
+    const to = '2026-07-10T00:00:00.000Z';
+    const from = '2026-07-12T00:00:00.000Z'; // after to
+    expect(parseMetricsRange(from, to, NOW)).toEqual({
+      windowStart: Date.parse(to) - 30 * DAY,
+      windowEnd: Date.parse(to),
+    });
+  });
+
+  it('caps the span at 366 days', () => {
+    const from = new Date(NOW.getTime() - 500 * DAY).toISOString();
+    expect(parseMetricsRange(from, undefined, NOW)).toEqual({
+      windowStart: Date.parse('2025-07-15T00:00:00.000Z'),
+      windowEnd: END_OF_TODAY,
+    });
+  });
+
+  it('treats malformed values as absent', () => {
+    expect(parseMetricsRange('nonsense', '', NOW)).toEqual({
+      windowStart: Date.parse('2026-06-16T00:00:00.000Z'),
+      windowEnd: END_OF_TODAY,
+    });
+  });
+
+  it('rejects timezone-less datetimes so the window is deployment-independent', () => {
+    // No Z/offset → Date.parse reads server-local; treated as absent (default window).
+    expect(parseMetricsRange('2026-07-01T10:00:00', '2026-07-05T10:00:00', NOW)).toEqual({
+      windowStart: Date.parse('2026-06-16T00:00:00.000Z'),
+      windowEnd: END_OF_TODAY,
+    });
+    // An explicit offset is honored.
+    expect(parseMetricsRange('2026-07-01T00:00:00+00:00', undefined, NOW).windowStart).toBe(
+      Date.parse('2026-07-01T00:00:00Z'),
+    );
   });
 });
 
 describe('computeFactoryMetrics', () => {
   it('given an empty board, then everything is zeroed with a gap-filled throughput series', () => {
-    const metrics = computeFactoryMetrics({ items: [], days: 7, now: NOW });
+    const metrics = computeFactoryMetrics([], lastDays(7));
 
     expect(metrics.windowDays).toBe(7);
+    expect(metrics.earliestItemAt).toBeNull();
     expect(metrics.throughput).toHaveLength(7);
     expect(metrics.throughput.every(point => point.count === 0)).toBe(true);
     // Series is oldest → newest, ending today (UTC).
@@ -86,22 +152,23 @@ describe('computeFactoryMetrics', () => {
       doneItem('00000000-0000-4000-8000-000000000003', 30, 26), // done yesterday, 4h cycle
     ];
 
-    const metrics = computeFactoryMetrics({ items, days: 7, now: NOW });
+    const metrics = computeFactoryMetrics(items, lastDays(7));
 
     const byDate = Object.fromEntries(metrics.throughput.map(p => [p.date, p.count]));
     expect(byDate['2026-07-15']).toBe(1);
     expect(byDate['2026-07-14']).toBe(2);
+    // Earliest creation across all items (item created 60h ago).
+    expect(metrics.earliestItemAt).toBe(new Date(NOW.getTime() - 60 * HOUR).toISOString());
     expect(metrics.cycleTime.samples).toBe(3);
     expect(metrics.cycleTime.medianMs).toBe(34 * HOUR);
     expect(metrics.cycleTime.p90Ms).toBe(46 * HOUR);
   });
 
   it('given a done entry outside the window, then it does not count toward throughput or cycle time', () => {
-    const metrics = computeFactoryMetrics({
-      items: [doneItem('00000000-0000-4000-8000-000000000001', 30 * 24, 10 * 24)],
-      days: 7,
-      now: NOW,
-    });
+    const metrics = computeFactoryMetrics(
+      [doneItem('00000000-0000-4000-8000-000000000001', 30 * 24, 10 * 24)],
+      lastDays(7),
+    );
 
     expect(metrics.throughput.every(point => point.count === 0)).toBe(true);
     expect(metrics.cycleTime.samples).toBe(0);
@@ -118,7 +185,7 @@ describe('computeFactoryMetrics', () => {
       ],
     });
 
-    const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
+    const metrics = computeFactoryMetrics([item], lastDays(7));
 
     expect(metrics.cycleTime.samples).toBe(0);
     expect(metrics.throughput.every(point => point.count === 0)).toBe(true);
@@ -136,7 +203,7 @@ describe('computeFactoryMetrics', () => {
       ],
     });
 
-    const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
+    const metrics = computeFactoryMetrics([item], lastDays(7));
 
     const review = metrics.stageDurations.find(d => d.stage === 'review');
     const execute = metrics.stageDurations.find(d => d.stage === 'execute');
@@ -170,7 +237,7 @@ describe('computeFactoryMetrics', () => {
       doneItem('00000000-0000-4000-8000-000000000003', 40, 2),
     ];
 
-    const metrics = computeFactoryMetrics({ items, days: 30, now: NOW });
+    const metrics = computeFactoryMetrics(items, lastDays(30));
 
     const wip = Object.fromEntries(metrics.wip.map(w => [w.stage, w.count]));
     expect(wip).toEqual({ review: 2, execute: 1, done: 1 });
@@ -188,7 +255,7 @@ describe('computeFactoryMetrics', () => {
       createdAt: new Date(NOW.getTime() - 6 * HOUR),
     });
 
-    const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
+    const metrics = computeFactoryMetrics([item], lastDays(7));
 
     expect(metrics.agingWip).toHaveLength(1);
     expect(metrics.agingWip[0]).toMatchObject({ stage: 'triage', enteredAt: hoursAgo(6) });
@@ -200,18 +267,38 @@ describe('computeFactoryMetrics', () => {
       type: 'issue',
       externalId,
     });
+    const insideWindow = new Date(NOW.getTime() - 20 * DAY);
     const items = [
-      makeItem({ id: '00000000-0000-4000-8000-000000000001', externalSource: githubIssue('1') }),
-      makeItem({ id: '00000000-0000-4000-8000-000000000002', externalSource: githubIssue('2') }),
-      makeItem({ id: '00000000-0000-4000-8000-000000000003' }),
+      makeItem({
+        id: '00000000-0000-4000-8000-000000000001',
+        externalSource: githubIssue('1'),
+        createdAt: insideWindow,
+      }),
+      makeItem({
+        id: '00000000-0000-4000-8000-000000000002',
+        externalSource: githubIssue('2'),
+        createdAt: insideWindow,
+      }),
+      makeItem({
+        id: '00000000-0000-4000-8000-000000000003',
+        createdAt: insideWindow,
+      }),
       makeItem({
         id: '00000000-0000-4000-8000-000000000004',
         externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-1' },
         createdAt: new Date(NOW.getTime() - 40 * DAY),
       }),
+      makeItem({
+        id: '00000000-0000-4000-8000-000000000005',
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-2' },
+        createdAt: new Date(NOW.getTime() - DAY),
+      }),
     ];
 
-    const metrics = computeFactoryMetrics({ items, days: 30, now: NOW });
+    const metrics = computeFactoryMetrics(items, {
+      windowStart: NOW.getTime() - 30 * DAY,
+      windowEnd: NOW.getTime() - 10 * DAY,
+    });
 
     expect(metrics.sourceMix).toEqual([
       { source: 'github:issue', count: 2 },
@@ -229,7 +316,7 @@ describe('computeFactoryMetrics', () => {
       ],
     });
 
-    const metrics = computeFactoryMetrics({ items: [canceled], days: 7, now: NOW });
+    const metrics = computeFactoryMetrics([canceled], lastDays(7));
 
     // Not a completion: throughput and cycle time stay done-only.
     expect(metrics.throughput.every(point => point.count === 0)).toBe(true);
@@ -252,7 +339,7 @@ describe('computeFactoryMetrics', () => {
       ],
     });
 
-    const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
+    const metrics = computeFactoryMetrics([item], lastDays(7));
 
     expect(metrics.stageDurations).toEqual([{ stage: 'triage', medianMs: 3 * HOUR, samples: 1 }]);
   });
@@ -266,7 +353,7 @@ describe('computeFactoryMetrics', () => {
       ],
     });
 
-    const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
+    const metrics = computeFactoryMetrics([item], lastDays(7));
 
     expect(metrics.wipTotal).toBe(1);
     expect(metrics.agingWip).toHaveLength(1);
@@ -283,7 +370,7 @@ describe('computeFactoryMetrics', () => {
       ],
     });
 
-    const metrics = computeFactoryMetrics({ items: [item], days: 30, now: NOW });
+    const metrics = computeFactoryMetrics([item], lastDays(30));
 
     expect(metrics.transitions).toEqual({ human: 1, total: 2 });
   });
@@ -306,7 +393,7 @@ describe('computeFactoryMetrics', () => {
       ],
     });
 
-    const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
+    const metrics = computeFactoryMetrics([item], lastDays(7));
 
     expect(metrics.transitions).toEqual({ human: 1, total: 3 });
     expect(metrics.stageAutomation).toEqual([
@@ -328,7 +415,7 @@ describe('computeFactoryMetrics', () => {
         ],
       });
 
-      const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
+      const metrics = computeFactoryMetrics([item], lastDays(7));
 
       expect(metrics.stageAutomation).toEqual([
         { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 } },
@@ -348,7 +435,7 @@ describe('computeFactoryMetrics', () => {
         ],
       });
 
-      const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
+      const metrics = computeFactoryMetrics([item], lastDays(7));
 
       // Second visit is never automated even with automation actors on both ends.
       expect(metrics.stageAutomation).toEqual([
@@ -378,7 +465,7 @@ describe('computeFactoryMetrics', () => {
         }),
       ];
 
-      const metrics = computeFactoryMetrics({ items, days: 7, now: NOW });
+      const metrics = computeFactoryMetrics(items, lastDays(7));
 
       expect(metrics.stageAutomation).toEqual([
         { stage: 'triage', exits: 2, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
@@ -413,7 +500,7 @@ describe('computeFactoryMetrics', () => {
         ),
       ];
 
-      const metrics = computeFactoryMetrics({ items, days: 7, now: NOW });
+      const metrics = computeFactoryMetrics(items, lastDays(7));
 
       expect(metrics.stageAutomation).toEqual([
         { stage: 'triage', exits: 3, automated: 3, outcomes: { done: 1, canceled: 1, reworked: 0, inFlight: 1 } },
@@ -435,7 +522,7 @@ describe('computeFactoryMetrics', () => {
         ],
       });
 
-      const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
+      const metrics = computeFactoryMetrics([item], lastDays(7));
 
       expect(metrics.stageAutomation).toEqual([]);
     });
@@ -450,7 +537,7 @@ describe('computeFactoryMetrics', () => {
         ],
       });
 
-      const metrics = computeFactoryMetrics({ items: [item], days: 7, now: NOW });
+      const metrics = computeFactoryMetrics([item], lastDays(7));
 
       expect(metrics.stageAutomation).toEqual([]);
     });
