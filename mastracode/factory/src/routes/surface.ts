@@ -42,7 +42,7 @@ export interface IntegrationRegistration {
   ensureReady: () => Promise<void>;
 }
 
-function linearTaskContextIntegration(
+export function linearTaskContextIntegration(
   integration: FactoryIntegration | undefined,
 ): LinearTaskContextIntegration | undefined {
   if (!integration?.taskContext?.getIssue) return undefined;

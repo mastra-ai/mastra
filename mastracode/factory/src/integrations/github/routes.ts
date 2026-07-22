@@ -1041,13 +1041,19 @@ async function prepareProject(options: {
   });
   // Re-read the sandbox binding so we have the freshly persisted sandboxId.
   const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
-  const token = await github.mintInstallationToken(Number(project.installation.externalId));
+  const access = await github.versionControl.getRepositoryAccess({
+    orgId: project.installation.orgId,
+    repositoryId: project.repository.id,
+  });
+  if (!access.authorization) {
+    throw new MaterializeError('Repository access did not include a bearer token.', 'clone-failed');
+  }
   const finalRow = fresh ?? sandboxRow;
   await materializeRepo({
     row: finalRow,
     repoInfo: { repoFullName: project.repository.slug, defaultBranch: project.defaultBranch },
     sandbox,
-    token,
+    token: access.authorization.token,
     storage: github.sourceControlStorage.sandboxes,
     onProgress,
   });
@@ -1307,7 +1313,7 @@ function buildProjectGitRoutes({
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
         if ('response' in owned) return owned.response;
-        const { userId, project } = owned;
+        const { orgId, userId, project } = owned;
 
         let body: { branch?: unknown; sessionId?: unknown };
         try {
@@ -1331,8 +1337,12 @@ function buildProjectGitRoutes({
             storage,
             fn: async () => {
               const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
-              const token = await github.mintInstallationToken(Number(project.installation.externalId));
-              await pushBranch(sandbox, workdir, branch, token, project.repository.slug);
+              const access = await github.versionControl.getRepositoryAccess({
+                orgId,
+                repositoryId: project.repository.id,
+              });
+              if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
+              await pushBranch(sandbox, workdir, branch, access.authorization.token, project.repository.slug);
               await emitAudit?.({
                 context: loose(c),
                 input: {

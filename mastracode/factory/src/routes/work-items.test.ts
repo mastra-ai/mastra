@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,6 +46,7 @@ import type { WorkItemRoutesDeps } from './work-items.js';
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
+  requestContext?: RequestContext,
   transitionService: any = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
   options: Pick<WorkItemRoutesDeps, 'taskContext'> = {},
 ) {
@@ -52,6 +54,7 @@ function buildApp(
   app.onError(handleServerError);
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
+    if (requestContext) c.set('requestContext' as never, requestContext as never);
     await next();
   });
   mountApiRoutes(
@@ -281,7 +284,7 @@ describe('GET /web/factory/projects/:id/threads/:threadId/context', () => {
       getFreshAccessToken: vi.fn().mockResolvedValue('linear-access-token'),
     } as unknown as LinearTaskContextIntegration;
 
-    const res = await buildApp(orgUser, undefined, undefined, {
+    const res = await buildApp(orgUser, undefined, undefined, undefined, {
       taskContext: { linearIntegration, ensureLinearReady: vi.fn().mockResolvedValue(undefined) },
     }).request(contextPath());
 
@@ -318,7 +321,7 @@ describe('GET /web/factory/projects/:id/threads/:threadId/context', () => {
       getFreshAccessToken: vi.fn(),
     } as unknown as LinearTaskContextIntegration;
 
-    const res = await buildApp(orgUser, undefined, undefined, {
+    const res = await buildApp(orgUser, undefined, undefined, undefined, {
       taskContext: { linearIntegration, ensureLinearReady: vi.fn() },
     }).request(contextPath());
 
@@ -383,7 +386,7 @@ describe('GET /web/factory/projects/:id/threads/:threadId/context', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     try {
-      const res = await buildApp(orgUser, undefined, undefined, {
+      const res = await buildApp(orgUser, undefined, undefined, undefined, {
         taskContext: { linearIntegration, ensureLinearReady: vi.fn().mockResolvedValue(undefined) },
       }).request(contextPath());
       const body = await res.json();
@@ -655,7 +658,9 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
       kickoffStatus: 'pending',
       replayed: false,
     }));
-    const app = buildApp(orgUser, { prepare });
+    const requestContext = new RequestContext();
+    requestContext.set('user', orgUser);
+    const app = buildApp(orgUser, { prepare }, requestContext);
 
     const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
       method: 'POST',
@@ -665,7 +670,12 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
 
     expect(res.status).toBe(202);
     expect(prepare).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'org1', userId: 'u1', factoryProjectId: PROJECT_ID }),
+      expect.objectContaining({
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: PROJECT_ID,
+        requestContext,
+      }),
     );
     expect(auditRecorded).toContainEqual(
       expect.objectContaining({

@@ -16,8 +16,8 @@ const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
 
 function baseConfig(): IntakeConfig {
   return {
-    github: { enabled: true, repositoryIds: null },
-    linear: { enabled: true, projectIds: null },
+    github: { enabled: true, sourceIds: null },
+    linear: { enabled: true, sourceIds: null },
   };
 }
 
@@ -146,12 +146,12 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.projectIds).toEqual(['lproj-1']);
+      expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
     });
   });
 
   describe('when a GitHub repository is picked', () => {
-    it('persists an explicit repository selection under repositoryIds', async () => {
+    it('persists an explicit repository selection under sourceIds', async () => {
       seedGithubProject();
       const saved = useIntakeHandlers();
 
@@ -160,8 +160,8 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'mastra' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.github.repositoryIds).toEqual(['ghp-1']);
-      expect(saved[0]).not.toHaveProperty('github.projectIds');
+      expect(saved[0]!.github.sourceIds).toEqual(['ghp-1']);
+      expect(saved[0]).not.toHaveProperty('github.repositoryIds');
     });
   });
 

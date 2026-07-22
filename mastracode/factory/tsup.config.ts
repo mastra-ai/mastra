@@ -9,7 +9,6 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: ['src/**/*.ts', '!src/**/*.test.ts', '!src/**/test-utils.ts', '!src/**/__tests__/**'],
   format: ['esm'],
-  bundle: false,
   clean: true,
   dts: false,
   splitting: false,
