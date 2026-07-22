@@ -2241,7 +2241,7 @@ importers:
         version: 10.7.0(jiti@2.7.0)
       tsup:
         specifier: ^8.5.1
-        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.9(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.7.0)(postcss@8.5.16)(tsx@4.23.1)(typescript@6.0.3)(yaml@2.9.0)
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.12(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.7.0)(postcss@8.5.16)(tsx@4.23.1)(typescript@6.0.3)(yaml@2.9.0)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -7550,8 +7550,8 @@ importers:
   stores/spanner:
     dependencies:
       '@google-cloud/spanner':
-        specifier: ^8.8.1
-        version: 8.8.1
+        specifier: ^8.9.0
+        version: 8.9.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -13787,8 +13787,8 @@ packages:
     resolution: {integrity: sha512-xXAQBVVrFviWz8L8yDKEqv1ziVw/gMSpYHt3IxSYRSY0fTyjis+xOrKJILj8dd8PAUHGnGiAIYuTprflkE9jsQ==}
     engines: {node: '>=18'}
 
-  '@google-cloud/spanner@8.8.1':
-    resolution: {integrity: sha512-kQA9QYgxmjFZ1lRPlUAVg6CG7vcTm9zquKfMqZJvT/v8hQU/ek9GL7BA3r+CUdBvZwdNZd+KrF4mt4egw6DRRQ==}
+  '@google-cloud/spanner@8.9.0':
+    resolution: {integrity: sha512-YUm+m92VB/3JopYclmu9flXrTa8ms7YpmGAYDFeYkrj8T6BfhRBMJrkpCYkPd/u2CJucfl99Jn6HuBaAIlUsOA==}
     engines: {node: '>=18'}
 
   '@google-cloud/speech@6.7.1':
@@ -36386,7 +36386,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/spanner@8.8.1':
+  '@google-cloud/spanner@8.9.0':
     dependencies:
       '@babel/core': 8.0.1
       '@babel/helpers': 7.27.6
