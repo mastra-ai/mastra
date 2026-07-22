@@ -25,12 +25,7 @@ export function DateRangeTimeline({ value, min, max, onCommit }: DateRangeTimeli
   const axisModel = createDateRangeAxisModel(timeline.state);
 
   return (
-    <div
-      ref={rootRef}
-      role="group"
-      aria-label="Date range timeline"
-      className="w-full overflow-x-clip select-none"
-    >
+    <div ref={rootRef} role="group" aria-label="Date range timeline" className="w-full overflow-x-clip select-none">
       <DateRangeBoundaryPickers
         positions={boundaryModel.positions}
         value={boundaryModel.range}
