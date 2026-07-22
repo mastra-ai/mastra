@@ -146,7 +146,7 @@ function useOverviewHandlers({ workItems, activityThreads = [], thresholds }: Ov
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
-        config: { github: { enabled: true, projectIds: [] }, linear: { enabled: false, projectIds: [] } },
+        config: { github: { enabled: true, sourceIds: [] }, linear: { enabled: false, sourceIds: [] } },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>

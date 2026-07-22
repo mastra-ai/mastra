@@ -160,14 +160,14 @@ export function IntakeSection() {
                 <SourceCheckbox
                   key={repository.projectRepositoryId}
                   label={repository.slug}
-                  checked={config.github.repositoryIds?.includes(repository.projectRepositoryId) ?? false}
+                  checked={config.github.sourceIds?.includes(repository.projectRepositoryId) ?? false}
                   disabled={busy}
                   onChange={() =>
                     update({
                       ...config,
                       github: {
                         ...config.github,
-                        repositoryIds: toggleId(config.github.repositoryIds, repository.projectRepositoryId),
+                        sourceIds: toggleId(config.github.sourceIds, repository.projectRepositoryId),
                       },
                     })
                   }
@@ -227,19 +227,19 @@ export function IntakeSection() {
                     <Txt as="span" variant="ui-xs" className="font-medium uppercase tracking-wide text-icon3">
                       {group.label}
                     </Txt>
-                    <SelectedCount ids={config.linear.projectIds} projects={group.projects} />
+                    <SelectedCount ids={config.linear.sourceIds} projects={group.projects} />
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {group.projects.map(project => (
                       <SourceCheckbox
                         key={project.id}
                         label={project.name}
-                        checked={config.linear.projectIds?.includes(project.id) ?? false}
+                        checked={config.linear.sourceIds?.includes(project.id) ?? false}
                         disabled={busy}
                         onChange={() =>
                           update({
                             ...config,
-                            linear: { ...config.linear, projectIds: toggleId(config.linear.projectIds, project.id) },
+                            linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, project.id) },
                           })
                         }
                       />
