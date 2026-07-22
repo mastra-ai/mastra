@@ -11,7 +11,6 @@ export interface ChatSessionContextApi {
   resourceId: string;
   sessionEnabled: boolean;
   resourceEnabled: boolean;
-  projectPath?: string;
   factorySessionState?: FactorySessionState;
   baseUrl: string;
   /**

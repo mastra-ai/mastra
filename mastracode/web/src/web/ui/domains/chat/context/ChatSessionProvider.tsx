@@ -62,7 +62,6 @@ export function ChatSessionConfigProvider({
     resourceId: resourceId ?? '',
     sessionEnabled,
     resourceEnabled: userScoped ? Boolean(resourceId) : ensureQuery.isSuccess,
-    projectPath: undefined,
     factorySessionState:
       factory && repository
         ? {
@@ -93,11 +92,10 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
     threadId,
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),

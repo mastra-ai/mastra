@@ -697,12 +697,11 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
 // ---------------------------------------------------------------------------
 
 export function Transcript() {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
