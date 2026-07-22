@@ -28,13 +28,17 @@ export const queryKeys = {
     ['github', 'repository-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
-  linearIssues: () => ['linear', 'issues'] as const,
+  linearIssuesAll: () => ['linear', 'issues'] as const,
+  linearIssues: (githubProjectId: string | undefined) =>
+    [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   factoryMetrics: (githubProjectId: string | undefined, days: number) =>
     ['factory', 'metrics', githubProjectId ?? null, days] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
     ['factory', 'health-thresholds', githubProjectId ?? null] as const,
+  factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
+    ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string) =>
     ['factory', 'audit', githubProjectId ?? null, group] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,

@@ -1,4 +1,10 @@
-import { FACTORY_GITHUB_EVENTS, FACTORY_RULE_BOARDS, FACTORY_RULE_SOURCES, FACTORY_RULE_STAGES } from './types.js';
+import {
+  FACTORY_GITHUB_EVENTS,
+  FACTORY_LINEAR_EVENTS,
+  FACTORY_RULE_BOARDS,
+  FACTORY_RULE_SOURCES,
+  FACTORY_RULE_STAGES,
+} from './types.js';
 import type {
   FactoryBoardRules,
   FactoryCommitDecision,
@@ -83,7 +89,11 @@ function enumValue<T extends string>(value: unknown, allowed: readonly T[], labe
   return value as T;
 }
 
-function sanitizeJsonValue(value: unknown, depth = 0, seen = new Set<object>()): FactoryRuleJsonValue {
+export function normalizeFactoryRuleJsonValue(
+  value: unknown,
+  depth = 0,
+  seen = new Set<object>(),
+): FactoryRuleJsonValue {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new FactoryRuleValidationError('Rule metadata must contain finite numbers.');
@@ -99,7 +109,7 @@ function sanitizeJsonValue(value: unknown, depth = 0, seen = new Set<object>()):
       if (value.length > MAX_JSON_COLLECTION_SIZE) {
         throw new FactoryRuleValidationError('Rule metadata contains too many entries.');
       }
-      return value.map(entry => sanitizeJsonValue(entry, depth + 1, seen));
+      return value.map(entry => normalizeFactoryRuleJsonValue(entry, depth + 1, seen));
     }
     if (!isPlainObject(value)) throw new FactoryRuleValidationError('Rule metadata must use plain objects.');
     const entries = Object.entries(value);
@@ -111,7 +121,7 @@ function sanitizeJsonValue(value: unknown, depth = 0, seen = new Set<object>()):
       const normalizedKey = boundedString(key, 'Rule metadata key', 128, IDENTIFIER_RE);
       sanitized[normalizedKey] = SENSITIVE_KEY_RE.test(normalizedKey)
         ? '[REDACTED]'
-        : sanitizeJsonValue(entry, depth + 1, seen);
+        : normalizeFactoryRuleJsonValue(entry, depth + 1, seen);
     }
     return sanitized;
   } finally {
@@ -121,7 +131,7 @@ function sanitizeJsonValue(value: unknown, depth = 0, seen = new Set<object>()):
 
 function sanitizeMetadata(value: unknown): Record<string, FactoryRuleJsonValue> | undefined {
   if (value === undefined) return undefined;
-  const sanitized = sanitizeJsonValue(value);
+  const sanitized = normalizeFactoryRuleJsonValue(value);
   if (!isPlainObject(sanitized)) throw new FactoryRuleValidationError('Rule metadata must be an object.');
   if (JSON.stringify(sanitized).length > MAX_METADATA_JSON_LENGTH) {
     throw new FactoryRuleValidationError('Rule metadata is too large.');
@@ -149,7 +159,7 @@ function validateBoardRules(rules: unknown, label: string): asserts rules is Fac
 
 export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
   if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'github'], 'Factory rules');
+  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'github', 'linear'], 'Factory rules');
   boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
   validateBoardRules(rules.work, 'Factory rules.work');
   validateBoardRules(rules.review, 'Factory rules.review');
@@ -172,6 +182,16 @@ export function assertFactoryRules(rules: unknown): asserts rules is FactoryRule
     assertExactKeys(leaf, ['onEvent'], `Factory rules.github.${event}`);
     if (leaf.onEvent !== undefined && typeof leaf.onEvent !== 'function') {
       throw new FactoryRuleValidationError(`Factory rules.github.${event}.onEvent must be a function.`);
+    }
+  }
+
+  if (!isPlainObject(rules.linear)) throw new FactoryRuleValidationError('Factory rules.linear must be an object.');
+  for (const [event, leaf] of Object.entries(rules.linear)) {
+    enumValue(event, FACTORY_LINEAR_EVENTS, 'Factory Linear event');
+    if (!isPlainObject(leaf)) throw new FactoryRuleValidationError(`Factory rules.linear.${event} must be an object.`);
+    assertExactKeys(leaf, ['onEvent'], `Factory rules.linear.${event}`);
+    if (leaf.onEvent !== undefined && typeof leaf.onEvent !== 'function') {
+      throw new FactoryRuleValidationError(`Factory rules.linear.${event}.onEvent must be a function.`);
     }
   }
 }

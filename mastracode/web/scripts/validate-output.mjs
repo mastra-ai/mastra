@@ -68,7 +68,7 @@ if (!spaPath) {
 }
 
 // 4. Web Factory skills
-for (const skillName of ['understand-issue', 'understand-pr']) {
+for (const skillName of ['configure-factory-rules', 'understand-issue', 'understand-pr']) {
   const relativeSkillPath = path.join('factory-skills', skillName, 'SKILL.md');
   const skillPath = path.join(outputDir, relativeSkillPath);
   if (!fs.existsSync(skillPath)) {

@@ -18,6 +18,9 @@ export const FACTORY_GITHUB_EVENTS = [
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
+export const FACTORY_LINEAR_EVENTS = ['issueObserved'] as const;
+export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
+
 export type FactoryRuleJsonValue =
   null | boolean | number | string | FactoryRuleJsonValue[] | { [key: string]: FactoryRuleJsonValue };
 
@@ -38,7 +41,7 @@ export type FactoryRuleActor =
   | { type: 'system'; id: string };
 
 export interface FactoryRuleIngressIdentity {
-  type: 'human' | 'agent' | 'toolResult' | 'github' | 'rule';
+  type: 'human' | 'agent' | 'toolResult' | 'github' | 'linear' | 'rule';
   id: string;
 }
 
@@ -99,6 +102,27 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   };
 }
 
+export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  event: FactoryLinearEventName;
+  issue: {
+    id: string;
+    identifier: string;
+    title: string;
+    url: string;
+    state: string;
+    stateType: string;
+    priorityLabel: string;
+    assignee: string | null;
+    team: string | null;
+    labels: readonly string[];
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
 export type FactoryRuleHandler<TContext> = (
   context: Readonly<TContext>,
 ) => FactoryRuleDecision | void | Promise<FactoryRuleDecision | void>;
@@ -116,6 +140,10 @@ export interface FactoryGithubRuleLeaf {
   onEvent?: FactoryRuleHandler<FactoryGithubRuleContext>;
 }
 
+export interface FactoryLinearRuleLeaf {
+  onEvent?: FactoryRuleHandler<FactoryLinearRuleContext>;
+}
+
 export type FactoryBoardRules = Partial<
   Record<FactoryRuleStage, Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>>>
 >;
@@ -126,6 +154,7 @@ export interface FactoryRules {
   review: FactoryBoardRules;
   tools: Record<string, FactoryToolRuleLeaf>;
   github: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
+  linear: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 
 export interface FactoryRulesOverrides {
@@ -133,6 +162,7 @@ export interface FactoryRulesOverrides {
   review?: FactoryBoardRules;
   tools?: Record<string, FactoryToolRuleLeaf>;
   github?: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
+  linear?: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 
 export type FactoryRuleRejectionCode =
