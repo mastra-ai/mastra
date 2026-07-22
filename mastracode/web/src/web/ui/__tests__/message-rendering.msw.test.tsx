@@ -15,13 +15,15 @@ import Chat from '../domains/chat/Chat';
 import { NewPage } from '../domains/chat/NewPage';
 import { ThreadPage } from '../domains/chat/ThreadPage';
 import type { Factory } from '../domains/workspaces';
+import { ActiveFactoryProvider } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { CreateFactoryPage } from '../pages/CreateFactoryPage';
 
 /**
  * Renders <Chat /> inside a memory router mirroring the app's pathless chat
  * layout (Chat itself uses router hooks for /threads/:threadId navigation).
  * Auth guards are intentionally bypassed — these specs stub /auth/me directly.
  */
-function renderChat() {
+function renderChat(initialEntry = '/threads/thread-test') {
   const router = createMemoryRouter(
     [
       {
@@ -29,14 +31,19 @@ function renderChat() {
         children: [
           { path: '/chat', element: <NewPage /> },
           { path: '/threads/:threadId', element: <ThreadPage /> },
+          { path: '/factories/create', element: <CreateFactoryPage /> },
         ],
       },
     ],
     // The transcript only renders on the thread's own page now — /chat is the
     // draft composer and hides the bound thread's history.
-    { initialEntries: ['/threads/thread-test'] },
+    { initialEntries: [initialEntry] },
   );
-  return renderWithProviders(<RouterProvider router={router} />);
+  return renderWithProviders(
+    <ActiveFactoryProvider>
+      <RouterProvider router={router} />
+    </ActiveFactoryProvider>,
+  );
 }
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -478,7 +485,7 @@ describe('MastraCode message rendering', () => {
     expect(streamRequests).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the running conversation mounted while Create Factory is open in the layout', async () => {
+  it('recovers the running conversation after navigating to Create Factory and back', async () => {
     const user = userEvent.setup();
     seedProject();
     const stream = delayedSse({
@@ -502,38 +509,35 @@ describe('MastraCode message rendering', () => {
     expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
     await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
 
-    const factorySwitcher = screen.getByRole('button', { name: 'Select factory' });
-    await user.click(factorySwitcher);
+    await user.click(screen.getByRole('button', { name: 'Select factory' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
 
+    // Create Factory is now a dedicated page inside the chat layout.
     const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
     expect(factorySurface.closest('main')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
 
     await stream.emit();
+    // Close navigates back to the thread page the user came from.
     await user.click(screen.getByRole('button', { name: 'Close factory creation' }));
 
     expect(await screen.findByText('Streaming while factory creation is open')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
-    await waitFor(() => expect(factorySwitcher).toHaveFocus());
-    expect(streamRequests).toHaveBeenCalledTimes(1);
+    // Leaving the thread route drops the session's threadId, so returning
+    // re-subscribes (same as any thread → /new → thread navigation).
+    expect(streamRequests).toHaveBeenCalledTimes(2);
   });
 
-  it('leads from the first-run welcome state to non-dismissable Factory creation in the layout', async () => {
+  it('shows the first-run factory onboarding after empty backend hydration', async () => {
     useAgentControllerHandlers();
     server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
 
-    renderChat();
+    renderChat('/chat');
 
-    // First run shows the welcome empty state inside the app layout.
-    expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create factory from local folder' })).toBeInTheDocument();
-
-    // Its call to action opens Factory creation as the layout main view; with
-    // zero factories it cannot be dismissed.
-    await userEvent.click(screen.getByRole('button', { name: 'Create factory from local folder' }));
-    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
-    expect(factorySurface.closest('main')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Build software with a Factory that knows your work.' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create my first factory' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 

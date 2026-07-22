@@ -2,7 +2,7 @@
  * BDD coverage for the cross-cutting overlay open-state context
  * (`src/web/ui/lib/overlays`).
  *
- * Overlay visibility (sidebar, settings, shortcuts, projects) is
+ * Overlay visibility (sidebar, settings, shortcuts) is
  * platform-level UI plumbing shared by unrelated components, so it lives in a
  * dedicated provider instead of being prop-drilled through the layout tree.
  */
@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { OverlaysProvider, useOverlays } from '../overlays';
 import type { OverlayName } from '../overlays';
 
-const OVERLAY_NAMES: OverlayName[] = ['sidebar', 'settings', 'shortcuts', 'factories'];
+const OVERLAY_NAMES: OverlayName[] = ['sidebar', 'settings', 'shortcuts'];
 
 function Probe() {
   const overlays = useOverlays();
@@ -89,7 +89,7 @@ describe('OverlaysProvider', () => {
     renderProbe();
 
     await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
-    await userEvent.click(screen.getByRole('button', { name: 'open factories' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open shortcuts' }));
     await userEvent.click(screen.getByRole('button', { name: 'close all' }));
 
     for (const name of OVERLAY_NAMES) {

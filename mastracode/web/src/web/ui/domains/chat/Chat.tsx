@@ -7,7 +7,6 @@ import { OverlaysProvider, useOverlays } from '../../lib/overlays';
 import { SettingsPanel } from '../settings/components/SettingsPanel';
 import { SettingsHeader } from '../settings/components/SettingsHeader';
 import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
-import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
@@ -49,26 +48,11 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 
 function ChatShell() {
   const overlays = useOverlays();
-  const { activeFactory, factories, factoriesPending } = useActiveFactoryContext();
+  const { activeFactory } = useActiveFactoryContext();
   const { isMobile } = useMainSidebar();
-  const factorySetupRequired = factories.length === 0 && !factoriesPending;
-  // First run shows the welcome empty state; the panel opens from its call to
-  // action (or the switcher) rather than being forced open, but stays
-  // non-dismissable until a first factory exists.
-  const factoriesOpen = overlays.isOpen('factories');
   const settingsOpen = overlays.isOpen('settings');
 
-  const closeFactories = () => {
-    overlays.close('factories');
-    const focusTargetId = isMobile ? 'mobile-navigation-trigger' : 'factory-switcher-trigger';
-    requestAnimationFrame(() => document.getElementById(focusTargetId)?.focus());
-  };
-
-  const mainView = settingsOpen ? (
-    <SettingsPanel />
-  ) : factoriesOpen ? (
-    <FactoriesPanel onClose={factorySetupRequired ? undefined : closeFactories} />
-  ) : undefined;
+  const mainView = settingsOpen ? <SettingsPanel /> : undefined;
 
   return (
     <>
