@@ -21,16 +21,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LocalSandbox } from '@mastra/core/workspace';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { PlatformSandbox } from '@mastra/platform-workspace';
-import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
-import { WorkOS } from '@workos-inc/node';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { WorkOSAuditIntegration } from '@mastra/factory/integrations/workos/integration';
 import { MastraFactory } from '@mastra/factory';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 
@@ -74,17 +70,6 @@ if (authDisabled) {
   auth = null;
 }
 
-// WorkOS audit export is an independent capability. Supplying its dedicated
-// API key enables mirroring + the Admin Portal route regardless of whether web
-// auth uses WorkOS, Better Auth, or is disabled.
-const workosAuditApiKey = process.env.WORKOS_AUDIT_API_KEY;
-const workosAudit = workosAuditApiKey
-  ? new WorkOSAuditIntegration({
-    client: new WorkOS(workosAuditApiKey),
-    returnUrl: `${(process.env.MASTRACODE_PUBLIC_URL ?? 'http://localhost:4111').replace(/\/+$/, '')}/factory/audit`,
-  })
-  : undefined;
-
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, APP_DATABASE_URL, …) never leak
 // into commands run against untrusted repo checkouts. PATH is always added by
@@ -114,84 +99,22 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
-const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_PROJECT_ID', 'MASTRA_ENVIRONMENT_ID'] as const;
+const PLATFORM_SANDBOX_ENV_KEYS = [
+  'MASTRA_ENVIRONMENT_ID',
+  'MASTRA_PROJECT_ID',
+  'MASTRA_PLATFORM_SECRET_KEY',
+] as const;
+const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
 
-function hasPlatformSecretKey(): boolean {
-  // MASTRA_PLATFORM_ACCESS_TOKEN is a deprecated alias for
-  // MASTRA_PLATFORM_SECRET_KEY.
-  return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim() || process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim());
-}
-
-function hasPlatformSandboxEnv(): boolean {
-  return hasPlatformSecretKey() && PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
-}
-
-function missingPlatformSandboxEnv(): string[] {
-  const missing: string[] = hasPlatformSecretKey() ? [] : ['MASTRA_PLATFORM_SECRET_KEY'];
-  return [...missing, ...PLATFORM_SANDBOX_ENV_KEYS.filter(key => !process.env[key]?.trim())];
-}
-
-// Sandbox machine, by env precedence (any `WorkspaceSandbox` implementing
-// `clone()` works here too — the factory clones one sandbox per GitHub
-// project from it):
-//   1. MASTRACODE_SANDBOX_PROVIDER=platform|railway|local — explicit selection.
-//      Platform/Railway selected without their required env is a hard
-//      misconfiguration error.
-//   2. PlatformSandbox when MASTRA_PLATFORM_SECRET_KEY (or the deprecated
-//      MASTRA_PLATFORM_ACCESS_TOKEN alias), MASTRA_PROJECT_ID, and
-//      MASTRA_ENVIRONMENT_ID are all set.
-//   3. RAILWAY_API_TOKEN set → RailwaySandbox (isolated cloud VMs,
-//      multi-tenant safe).
-//   4. Neither → LocalSandbox, so repos can always be opened with no extra
-//      wiring. WARNING: the local host-process sandbox has NO tenant
-//      isolation — repo checkouts and agent commands run as the server
-//      process. Single-user local dev only; set a cloud sandbox for shared
-//      deployments.
-// Budget/GC knobs: MASTRACODE_SANDBOX_IDLE_MINUTES (default 30, baked into the
-// Railway template), MASTRACODE_MAX_SANDBOXES (default unlimited),
-// MASTRACODE_SANDBOX_WORKDIR (cloud checkout base, default /workspace),
-// MASTRACODE_LOCAL_SANDBOX_ROOT (local checkout root, default
-// ~/.mastracode/web/sandboxes).
-const sandboxKind =
-  process.env.MASTRACODE_SANDBOX_PROVIDER ??
-  (hasPlatformSandboxEnv() ? 'platform' : process.env.RAILWAY_API_TOKEN ? 'railway' : 'local');
-const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES) ?? 5;
-let sandbox: WorkspaceSandbox;
-if (sandboxKind === 'platform') {
-  const missing = missingPlatformSandboxEnv();
-  if (missing.length > 0) {
-    throw new Error(
-      `MASTRACODE_SANDBOX_PROVIDER=platform requires ${missing.join(', ')} — set the missing variable(s), ` +
-        'or unset the provider to fall back to the local sandbox (single-user dev only).',
-    );
-  }
-  sandbox = new PlatformSandbox();
-} else if (sandboxKind === 'railway') {
-  const railwayToken = process.env.RAILWAY_API_TOKEN;
-  if (!railwayToken) {
-    throw new Error(
-      'MASTRACODE_SANDBOX_PROVIDER=railway requires RAILWAY_API_TOKEN — set the token, or unset the ' +
-      'provider to fall back to the local sandbox (single-user dev only).',
-    );
-  }
-  sandbox = new RailwaySandbox({
-    token: railwayToken,
-    ...(idleMinutes !== undefined ? { idleTimeoutMinutes: idleMinutes } : {}),
-  });
-} else if (sandboxKind === 'local') {
-  sandbox = new LocalSandbox({
-    workingDirectory:
-      process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-    env: localSandboxEnv(),
-  });
-} else {
-  throw new Error(
-    `Unknown MASTRACODE_SANDBOX_PROVIDER "${sandboxKind}" — expected "platform", "railway", or "local" ` +
-      '(or pass any WorkspaceSandbox implementing clone() to MastraFactory).',
-  );
-}
-
-const integrations = workosAudit ? [workosAudit] : [];
+// Use PlatformSandbox only when its complete identity is configured. Otherwise
+// fall back to LocalSandbox for single-user development.
+const sandbox = hasPlatformSandboxEnv
+  ? new PlatformSandbox()
+  : new LocalSandbox({
+      workingDirectory:
+        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+      env: localSandboxEnv(),
+    });
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `APP_DATABASE_URL` set →
@@ -250,9 +173,6 @@ export const factory = new MastraFactory({
   // factory: webhook secret first, then the WorkOS cookie password. Unset →
   // per-process random secret (single-process local dev only).
   stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
-  // Server-owned integrations. MastraFactory adds Platform-backed GitHub and
-  // Linear defaults when Platform credentials are configured.
-  integrations,
 });
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
