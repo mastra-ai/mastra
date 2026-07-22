@@ -5,9 +5,9 @@ import { Outlet, useLocation } from 'react-router';
 import { PageLayoutMainViewProvider } from '../../ui/PageLayout';
 import { OverlaysProvider, useOverlays } from '../../lib/overlays';
 import { SettingsPanel } from '../settings/components/SettingsPanel';
+import { SettingsHeader } from '../settings/components/SettingsHeader';
 import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
-import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
@@ -19,15 +19,13 @@ import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
 export default function Chat() {
   return (
     <MainSidebarProvider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
-        <ChatSessionRouteProvider>
-          <OverlaysProvider>
-            <SettingsNavigationProvider>
-              <ChatShell />
-            </SettingsNavigationProvider>
-          </OverlaysProvider>
-        </ChatSessionRouteProvider>
-      </ActiveFactoryProvider>
+      <ChatSessionRouteProvider>
+        <OverlaysProvider>
+          <SettingsNavigationProvider>
+            <ChatShell />
+          </SettingsNavigationProvider>
+        </OverlaysProvider>
+      </ChatSessionRouteProvider>
     </MainSidebarProvider>
   );
 }
@@ -50,28 +48,27 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 
 function ChatShell() {
   const overlays = useOverlays();
-  const { factories, factoriesPending } = useActiveFactoryContext();
+  const { activeFactory } = useActiveFactoryContext();
   const { isMobile } = useMainSidebar();
-  const factorySetupRequired = factories.length === 0 && !factoriesPending;
-  const factoriesOpen = overlays.isOpen('factories') || factorySetupRequired;
+  const settingsOpen = overlays.isOpen('settings');
 
-  const closeFactories = () => {
-    overlays.close('factories');
-    const focusTargetId = isMobile ? 'mobile-navigation-trigger' : 'factory-switcher-trigger';
-    requestAnimationFrame(() => document.getElementById(focusTargetId)?.focus());
-  };
-
-  const mainView = overlays.isOpen('settings') ? (
-    <SettingsPanel />
-  ) : factoriesOpen ? (
-    <FactoriesPanel onClose={factorySetupRequired ? undefined : closeFactories} />
-  ) : undefined;
+  const mainView = settingsOpen ? <SettingsPanel /> : undefined;
 
   return (
     <>
-      <PageLayoutMainViewProvider view={mainView}>
-        <Outlet />
-      </PageLayoutMainViewProvider>
+      {!activeFactory && mainView !== undefined ? (
+        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">
+          {settingsOpen && isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined}
+          {mainView}
+        </main>
+      ) : (
+        <PageLayoutMainViewProvider
+          view={mainView}
+          mobileHeader={settingsOpen ? <SettingsHeader autoFocus={isMobile} placement="mobile" /> : undefined}
+        >
+          <Outlet />
+        </PageLayoutMainViewProvider>
+      )}
       <ChatOverlays />
     </>
   );

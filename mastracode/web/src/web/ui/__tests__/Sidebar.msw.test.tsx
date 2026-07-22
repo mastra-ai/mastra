@@ -2,7 +2,7 @@
  * BDD coverage for the propless `Sidebar`.
  *
  * The sidebar consumes the domain contexts directly (`useActiveFactoryContext`,
- * focused chat hooks, `useOverlays`, toast feedback, and `useWebAuth`) instead of a
+ * focused chat hooks, `useOverlays`, toast feedback, and `useFactoryAuth`) instead of a
  * drilled prop bag, so the spec drives it end-to-end: real fetch transport,
  * MSW at the network boundary, assertions on the requests the thread actions
  * produce.
@@ -369,11 +369,11 @@ describe('Sidebar', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
 
-      expect(await screen.findByRole('menuitem', { name: 'Mastra' })).toBeInTheDocument();
+      expect(await screen.findByRole('menuitem', { name: /^Mastra\b/ })).toBeInTheDocument();
       expect(screen.getByRole('menuitem', { name: 'Create Factory' })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /remove/i })).not.toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: /^Beta\b/ }));
 
       await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBe(secondLocalProject.id));
       expect(await screen.findByText('Beta')).toBeInTheDocument();

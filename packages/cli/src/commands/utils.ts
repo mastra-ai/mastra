@@ -1,8 +1,12 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { InvalidArgumentError } from 'commander';
 import { execa } from 'execa';
 import fsExtra from 'fs-extra';
 import type { PackageManager } from '../utils/package-manager';
+import { selectMatchingDistTag } from './create/command';
 import { EDITOR, isValidEditor } from './init/mcp-docs-server-install';
 import { areValidComponents, COMPONENTS, isValidLLMProvider, LLMProvider } from './init/utils';
 
@@ -92,25 +96,34 @@ export function shouldSkipDotenvLoading(): boolean {
 
 /**
  * Get the version tag (e.g., 'beta', 'latest') for the currently running mastra CLI.
- * This queries npm dist-tags to find which tag corresponds to the current version.
+ * Create passes its known version to avoid resolving package metadata from an installed layout.
+ * Init omits it and preserves the existing best-effort undefined fallback.
  */
-export async function getVersionTag(): Promise<string | undefined> {
+export async function getVersionTag(version?: string): Promise<string | undefined> {
   try {
-    const pkgPath = fileURLToPath(import.meta.resolve('mastra/package.json'));
-    const json = await fsExtra.readJSON(pkgPath);
-    const currentVersion = json.version;
+    let currentVersion = version;
+    if (!currentVersion) {
+      const pkgPath = fileURLToPath(import.meta.resolve('mastra/package.json'));
+      const json = await fsExtra.readJSON(pkgPath);
+      currentVersion = json.version;
+    }
+    if (!currentVersion) throw new Error('Missing mastra package version');
 
     const { stdout } = await execa('npm', ['dist-tag', 'ls', 'mastra'], {
       cwd: import.meta.dirname,
     });
-    const tagLine = stdout.split('\n').find((distLine: string) => distLine.endsWith(`: ${currentVersion}`));
-    const tag = tagLine ? tagLine.split(':')[0]?.trim() : undefined;
-
-    return tag;
+    const tag = selectMatchingDistTag(currentVersion, stdout);
+    if (tag) return tag;
   } catch {
-    // If we can't determine the tag, return undefined (will use default/latest)
-    return undefined;
+    // The caller-specific fallback is handled below.
   }
+
+  if (version) {
+    console.error('We could not resolve the mastra version tag, falling back to "latest"');
+    return 'latest';
+  }
+
+  return undefined;
 }
 
 /**
@@ -129,16 +142,40 @@ export async function isGitInitialized({ cwd }: { cwd: string }): Promise<boolea
  * Initialize a git repository in the specified directory.
  */
 export async function gitInit({ cwd }: { cwd: string }) {
-  await execa('git', ['init'], { cwd, stdio: 'ignore' });
-  await execa('git', ['add', '-A'], { cwd, stdio: 'ignore' });
-  await execa(
-    'git',
-    [
-      'commit',
-      '-m',
-      '"Initial commit from Mastra"',
-      '--author="dane-ai-mastra[bot] <dane-ai-mastra[bot]@users.noreply.github.com>"',
-    ],
-    { cwd, stdio: 'ignore' },
-  );
+  const isolatedConfigDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-git-config-'));
+  const emptyHooksDirectory = path.join(isolatedConfigDirectory, 'hooks');
+  const emptyGlobalConfig = path.join(isolatedConfigDirectory, 'global.gitconfig');
+  await fs.mkdir(emptyHooksDirectory);
+  await fs.writeFile(emptyGlobalConfig, '');
+  const env = {
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: emptyGlobalConfig,
+    GIT_CONFIG_COUNT: '0',
+  };
+
+  try {
+    await execa('git', ['init'], { cwd, stdio: 'ignore', env });
+    await fs.appendFile(path.join(cwd, '.git', 'info', 'exclude'), '\n.env\n.env.*\n!.env.example\n!.env.*.example\n');
+    await execa('git', ['add', '-A'], { cwd, stdio: 'ignore', env });
+    await execa(
+      'git',
+      [
+        '-c',
+        'user.name=Mastra',
+        '-c',
+        'user.email=noreply@mastra.ai',
+        '-c',
+        'commit.gpgSign=false',
+        '-c',
+        `core.hooksPath=${emptyHooksDirectory}`,
+        'commit',
+        '--no-verify',
+        '-m',
+        'Initial commit from Mastra',
+      ],
+      { cwd, stdio: 'ignore', env },
+    );
+  } finally {
+    await fs.rm(isolatedConfigDirectory, { recursive: true, force: true });
+  }
 }

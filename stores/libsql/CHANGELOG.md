@@ -1,5 +1,24 @@
 # @mastra/libsql
 
+## 1.17.0-alpha.3
+
+### Minor Changes
+
+- Added configurable local journal modes while preserving WAL as the default. ([#19901](https://github.com/mastra-ai/mastra/pull/19901))
+
+  ```ts
+  const storage = new LibSQLStore({
+    id: 'local-storage',
+    url: 'file:./mastra.db',
+    journalMode: 'delete',
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`c7d30cd`](https://github.com/mastra-ai/mastra/commit/c7d30cd86009c407df91105591f03cd6e3d2854d), [`ef03fbc`](https://github.com/mastra-ai/mastra/commit/ef03fbcc556bcbc04c9b3d06fab88771ecaa043c), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`4e68363`](https://github.com/mastra-ai/mastra/commit/4e683634f94ebd062d26a3bb6093a8dfc7263d37), [`9251370`](https://github.com/mastra-ai/mastra/commit/9251370ad413af464aa22d7566338bec5613e8de)]:
+  - @mastra/core@1.52.0-alpha.11
+
 ## 1.17.0-alpha.2
 
 ### Patch Changes

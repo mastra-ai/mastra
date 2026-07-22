@@ -181,7 +181,6 @@ vi.mock('./utils/project.js', () => ({
 
 vi.mock('./utils/storage-factory.js', () => ({
   createStorage: vi.fn(() => ({ storage: {}, backend: 'memory' })),
-  createOwnedVectorStore: vi.fn(() => ({ vector: {}, close: vi.fn() })),
   createVectorStore: vi.fn(() => ({})),
 }));
 

@@ -111,6 +111,26 @@ describe('Code Mode e2e (LocalSandbox)', () => {
     expect(result.error?.message).toBe('boom');
   }, 30_000);
 
+  it('returns results larger than the stdout pipe buffer', async () => {
+    const sandbox = new LocalSandbox();
+    const { tool } = createCodeMode({ tools: { getTopProducts }, sandbox });
+    const payload = 'x'.repeat(1024 * 1024);
+    const result = await run(tool, `return 'x'.repeat(${payload.length});`);
+
+    expect(result.success).toBe(true);
+    expect(result.result).toBe(payload);
+  }, 30_000);
+
+  it('reports errors larger than the stdout pipe buffer', async () => {
+    const sandbox = new LocalSandbox();
+    const { tool } = createCodeMode({ tools: { getTopProducts }, sandbox });
+    const message = 'x'.repeat(1024 * 1024);
+    const result = await run(tool, `throw new Error('x'.repeat(${message.length}));`);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toBe(message);
+  }, 30_000);
+
   it('enforces the allow-list for tools not exposed', async () => {
     // Build a transport directly and dispatch only known ids; call an unlisted one.
     const transport = new StdioCodeModeTransport();
