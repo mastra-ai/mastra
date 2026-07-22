@@ -1,5 +1,15 @@
 # @mastra/code-sdk
 
+## 1.0.0-alpha.15
+
+### Patch Changes
+
+- Fixed provider request history repair so incompatible tool-call IDs are sanitized and retried instead of being blindly resent after a provider rejects the request ([#19969](https://github.com/mastra-ai/mastra/pull/19969))
+
+- Fixed session thread cloning failing with "Source thread not found" when the cached dynamic memory instance was bound to a previous storage instance. The memory cache is now scoped to the storage it was created with. ([#19969](https://github.com/mastra-ai/mastra/pull/19969))
+
+- Fixed cloned session threads reading from a previous storage instance. The dynamic memory cache now invalidates when the storage or vector instance changes, so thread cloning always uses the current database. ([#19966](https://github.com/mastra-ai/mastra/pull/19966))
+
 ## 1.0.0-alpha.14
 
 ### Patch Changes

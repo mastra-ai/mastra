@@ -205,6 +205,8 @@ describe('MastraFactory.prepare', () => {
       'work-items',
       'model-credentials',
       'model-packs',
+      'memory-settings',
+      'custom-providers',
       'queue-health',
       'integrations',
       'projects',
@@ -388,8 +390,9 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('installs the auth gate and tenant credential primer when auth is configured', async () => {
-    // The SPA static middleware is environment-dependent (present when ui/dist
-    // exists), so assert the delta from the two auth-specific middleware.
+    // Both modes mount the custom-providers primer and the SPA static
+    // middleware is environment-dependent (present when ui/dist exists), so
+    // assert the delta from the two auth-specific middleware.
     const openConfig = await prepareFactory({ storage: fakeStorage(), auth: null });
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
@@ -398,6 +401,29 @@ describe('MastraFactory.prepare', () => {
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
     expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
+  });
+
+  it('passes the resolved auth provider to both server.auth and studio.auth', async () => {
+    // Deploys must authenticate BOTH plain API callers (server.auth) and
+    // Studio requests routed via `x-mastra-client-type: studio` (studio.auth).
+    const provider = fakeProvider();
+    const factory = new MastraFactory({ storage: fakeStorage(), auth: provider });
+    const args = (await factory.prepare()) as { studio?: { auth?: unknown } };
+    expect(args.studio?.auth).toBe(provider);
+
+    const config = prepareMock.mock.calls[0]![0];
+    const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
+    expect(serverConfig.auth).toBe(provider);
+  });
+
+  it('omits server.auth and studio.auth when auth is explicitly disabled (auth: null)', async () => {
+    const factory = new MastraFactory({ storage: fakeStorage(), auth: null });
+    const args = (await factory.prepare()) as { studio?: unknown };
+    expect(args.studio).toBeUndefined();
+
+    const config = prepareMock.mock.calls[0]![0];
+    const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
+    expect(serverConfig.auth).toBeUndefined();
   });
 
   it('registers the per-tenant credential resolver when auth is configured', async () => {
