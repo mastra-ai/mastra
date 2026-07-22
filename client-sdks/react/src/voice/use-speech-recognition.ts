@@ -196,6 +196,11 @@ const useMastraSpeechToText = ({
     if (!agent || startInFlightRef.current || recorderRef.current) return;
 
     startInFlightRef.current = true;
+    // Bump the session here (not in stop()) so a normal stop's onstop callback
+    // still matches sessionRef.current. Only a new start (or unmount) should
+    // invalidate a prior in-flight recording's result.
+    // See: https://github.com/mastra-ai/mastra/issues/19980
+    sessionRef.current += 1;
     const session = sessionRef.current;
 
     void recordMicrophoneToFile(handleFinish(session))
@@ -222,10 +227,18 @@ const useMastraSpeechToText = ({
   };
 
   const stop = () => {
-    sessionRef.current += 1;
     startInFlightRef.current = false;
-    recorderRef.current?.stop();
-    recorderRef.current = null;
+    if (recorderRef.current) {
+      // An active recording — its session was fixed at start() time and hasn't
+      // changed, so its own onstop/handleFinish will complete normally.
+      recorderRef.current.stop();
+      recorderRef.current = null;
+    } else {
+      // No recorder yet: a start() is still in-flight. Invalidate the session
+      // so that in-flight start's resolution knows to abort (stop the recorder
+      // instead of assigning/starting it) rather than silently proceeding.
+      sessionRef.current += 1;
+    }
     setState(prev => ({ ...prev, isListening: false }));
   };
 

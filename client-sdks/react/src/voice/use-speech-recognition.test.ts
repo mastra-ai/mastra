@@ -337,4 +337,33 @@ describe('useSpeechRecognition (mastra path)', () => {
     });
     expect(listenMock).not.toHaveBeenCalled();
   });
+
+  it('transcribes a normal stop on an active recorder (regression for #19980)', async () => {
+    // Prior bug: stop() bumped sessionRef before the recorder's async onstop
+    // could fire, so handleFinish's session check always failed and
+    // voice.listen() was silently never called on a normal, successful stop.
+    installSpeechRecognition();
+    const { result } = renderHook(() => useSpeechRecognition({ agentId: 'agent-1' }), { wrapper });
+
+    await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
+
+    await waitFor(() => {
+      act(() => result.current.start());
+      expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => expect(result.current.isListening).toBe(true));
+
+    // Recorder is now active. A normal stop() should NOT invalidate this
+    // recording's session -- the recorder's own onstop must still transcribe.
+    act(() => result.current.stop());
+    expect(recorderStopMock).toHaveBeenCalledTimes(1);
+
+    // Simulate the recorder's async onstop firing after stop() returns.
+    await act(async () => {
+      onFinishCapture?.(new File(['audio'], 'rec.webm', { type: 'audio/webm' }));
+    });
+
+    await waitFor(() => expect(listenMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.transcript).toBe('mastra transcript'));
+  });
 });
