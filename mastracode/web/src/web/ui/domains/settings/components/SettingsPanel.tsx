@@ -42,15 +42,16 @@ export function SettingsPanel() {
   const section = useSettingsSection();
   const closeSettings = useCloseSettings();
   const { theme, setTheme } = useTheme();
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
+  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
+    scope: sessionScope,
     baseUrl,
-    enabled: sessionEnabled,
+    enabled: resourceEnabled,
   };
   // Session-independent: pickers (Factory default model, packs, OM) need the
   // catalog even before any chat session exists.
@@ -59,10 +60,7 @@ export function SettingsPanel() {
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  const sessionResourceId = sessionEnabled ? resourceId : undefined;
-  // Web chat sessions register under (resourceId, scope=projectPath); the
-  // session-scoped config routes need the same pair to find the session.
-  const sessionScope = sessionEnabled ? projectPath : undefined;
+  const sessionResourceId = resourceEnabled ? resourceId : undefined;
 
   useKeyDown({ escape: closeSettings });
 
