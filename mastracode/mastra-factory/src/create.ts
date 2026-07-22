@@ -199,7 +199,6 @@ export async function create(args: CreateArgs): Promise<void> {
     lines.push('Open the Factory UI to finish setup (models, integrations, database).');
   }
   p.note(lines.join('\n'), 'Next steps');
-  p.outro(`Problems or feedback? ${color.underline('https://github.com/mastra-ai/mastra/issues')}`);
 }
 
 async function runPlatformProvisioning({
