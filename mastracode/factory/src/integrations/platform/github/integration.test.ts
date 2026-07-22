@@ -498,6 +498,7 @@ describe('PlatformGithubIntegration', () => {
       getState: () => ({ factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' }),
     });
     expect(Object.keys(integration.sessionTools({ requestContext }))).toEqual([
+      'github_refresh_token',
       'github_subscribe_pr',
       'github_unsubscribe_pr',
     ]);
