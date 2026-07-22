@@ -1,9 +1,4 @@
-import {
-  MASTRA_PLATFORM_API_URL,
-  authHeaders,
-  extractApiErrorDetail,
-  platformFetch,
-} from 'mastra/internal/auth';
+import { MASTRA_PLATFORM_API_URL, authHeaders, extractApiErrorDetail, platformFetch } from 'mastra/internal/auth';
 
 export interface PlatformProject {
   id: string;

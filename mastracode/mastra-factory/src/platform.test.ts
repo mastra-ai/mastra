@@ -46,8 +46,8 @@ afterEach(() => {
 
 describe('attachNeonDatabase', () => {
   it('surfaces the admin-role hint when the platform returns 403', async () => {
-    cliAuth.platformFetch.mockImplementationOnce(async () =>
-      new Response(JSON.stringify({ detail: 'forbidden' }), { status: 403 }),
+    cliAuth.platformFetch.mockImplementationOnce(
+      async () => new Response(JSON.stringify({ detail: 'forbidden' }), { status: 403 }),
     );
 
     await expect(
@@ -63,7 +63,9 @@ describe('waitForDatabaseReady', () => {
   it('resolves as soon as the database reports ready', async () => {
     const provisioning = jsonResponseFactory(200, { database: { id: 'db_1', status: 'provisioning', error: null } });
     const ready = jsonResponseFactory(200, { database: { id: 'db_1', status: 'ready', error: null } });
-    cliAuth.platformFetch.mockImplementationOnce(async () => provisioning()).mockImplementationOnce(async () => ready());
+    cliAuth.platformFetch
+      .mockImplementationOnce(async () => provisioning())
+      .mockImplementationOnce(async () => ready());
 
     vi.useFakeTimers();
     const promise = waitForDatabaseReady({
@@ -113,11 +115,12 @@ describe('waitForDatabaseReady', () => {
   });
 
   it('fails fast when the platform reports status=failed', async () => {
-    cliAuth.platformFetch.mockImplementationOnce(async () =>
-      new Response(
-        JSON.stringify({ database: { id: 'db_1', status: 'failed', error: 'region unavailable' } }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    cliAuth.platformFetch.mockImplementationOnce(
+      async () =>
+        new Response(JSON.stringify({ database: { id: 'db_1', status: 'failed', error: 'region unavailable' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
     );
 
     await expect(

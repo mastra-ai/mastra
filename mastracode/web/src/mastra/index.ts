@@ -293,9 +293,7 @@ const storage = databaseUrl
       url: `file:${getDatabasePath()}`,
       retention: DEFAULT_RETENTION,
     });
-const vector = databaseUrl
-  ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl })
-  : undefined;
+const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
 export const factory = new MastraFactory({
   auth,

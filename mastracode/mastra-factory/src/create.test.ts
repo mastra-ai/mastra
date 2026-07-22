@@ -155,9 +155,9 @@ describe('create --default --no-platform', () => {
   it('fails the run when the template clone fails, without a success outro', async () => {
     exec.execFileAsync.mockRejectedValue(new Error('remote unreachable'));
 
-    await expect(
-      create({ projectName: 'my-factory', useDefaults: true, noPlatform: true, analytics }),
-    ).rejects.toThrow(/Failed to clone template/);
+    await expect(create({ projectName: 'my-factory', useDefaults: true, noPlatform: true, analytics })).rejects.toThrow(
+      /Failed to clone template/,
+    );
 
     expect(exec.runInherit).not.toHaveBeenCalled();
     expect(clack.note).not.toHaveBeenCalled();
@@ -272,9 +272,7 @@ describe('create --default (platform provisioning)', () => {
       analytics,
     });
 
-    expect(platform.attachNeonDatabase).toHaveBeenCalledWith(
-      expect.objectContaining({ regionId: 'aws-us-east-2' }),
-    );
+    expect(platform.attachNeonDatabase).toHaveBeenCalledWith(expect.objectContaining({ regionId: 'aws-us-east-2' }));
   });
 
   it('--org <name> skips the interactive picker and resolves via fetchOrgs', async () => {
@@ -288,9 +286,7 @@ describe('create --default (platform provisioning)', () => {
 
     expect(cliAuth.fetchOrgs).toHaveBeenCalledTimes(1);
     expect(cliAuth.resolveCurrentOrg).not.toHaveBeenCalled();
-    expect(platform.createServerProject).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'org_456' }),
-    );
+    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org_456' }));
   });
 
   it('--org fails with a clear message when no org matches', async () => {
