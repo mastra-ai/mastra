@@ -3,7 +3,7 @@ import type { Mastra } from '../mastra';
 import { createRunScopeKey } from '../mastra/run-scope';
 import type { Tool } from '../tools';
 import { isMastraTool } from '../tools/toolchecks';
-import type { Processor } from './index';
+import type { InputProcessor } from './index';
 
 export type BackgroundWorkDisposition = 'deferred' | 'awaited';
 export type BackgroundWorkInvocationKind = 'tool' | 'agent';
@@ -167,7 +167,7 @@ function wrapTool(tool: Tool<any, any, any, any, any, any, any>, binding: ToolBi
  * Native agent background execution remains responsible for dispatch, persistence,
  * result reconciliation, and continuation.
  */
-export function createBackgroundWorkSignalProcessor(): Processor {
+export function createBackgroundWorkSignalProcessor(): InputProcessor {
   return {
     id: 'background-work-signals',
     processInputStep: async ({ runId, sendSignal, tools, agent }) => {
