@@ -6,9 +6,9 @@
 '@mastra/mssql': minor
 '@mastra/mongodb': minor
 '@mastra/spanner': minor
-'@mastra/client-js': patch
+'@mastra/client-js': minor
+'@mastra/server': minor
 '@mastra/inngest': patch
-'@mastra/server': patch
 '@mastra/memory': patch
 '@mastra/code-sdk': patch
 '@mastra/libsql': patch
@@ -49,7 +49,12 @@ workflow
 
 **New workflow-definitions storage domain.** `WorkflowDefinitionsStorage` (`upsert` / `get` / `list` / `delete` on JSON-safe `WorkflowDefinition`s) plus `Mastra.addStoredWorkflow(definition)` for persisting and live-registering a workflow. In-memory implementation ships in core; SQL adapters land in the store packages (see `@mastra/libsql` below).
 
-**New (de)serialization helpers.** `toStorableGraph(stepFlow)` turns a live workflow into a JSON-safe graph; `rehydrateWorkflow(def, mastra)` reconstructs the live workflow. Referenced agents/tools must be registered on the target `Mastra` at rehydration time — otherwise rehydration hard-crashes rather than silently dropping. The MVP `jsonSchemaToZod` in that module hard-crashes on unsupported JSON Schema keywords (`oneOf` / `anyOf` / `allOf` / `not` / `$ref` / `patternProperties` / `discriminator` and unknown `type`s) for the same reason.
+**New (de)serialization helpers.** `toStorableGraph(stepFlow)` turns a live workflow into a JSON-safe graph; `rehydrateWorkflow(def, mastra, opts?)` reconstructs the live workflow. Referenced agents/tools must be registered on the target `Mastra` at rehydration time — otherwise rehydration hard-crashes rather than silently dropping.
+
+**Two-sided contract for unsupported JSON Schema keywords.** The MVP `jsonSchemaToZod` doesn't support `oneOf` / `anyOf` / `allOf` / `not` / `$ref` / `patternProperties` / `discriminator` (or unknown `type`s):
+
+- **Save path** (`Mastra.addStoredWorkflow`) is strict: the author is right there, so it throws before touching storage or registry, naming the offending schema (`inputSchema`, `outputSchema`, `stateSchema`, `requestContextSchema`, or `step "<id>" outputSchema` reached through `parallel` / `foreach` / `conditional` / `loop`). Simplify the schema or extend the converter before saving.
+- **Load path** (boot-time `#loadStoredWorkflows`) is lenient: `jsonSchemaToZod` accepts an `{ onUnsupportedSchema: 'warn', onUnsupported }` option that degrades the unsupported subtree to `z.any()` and emits a warning through the Mastra logger. One bad pre-existing row (e.g. a definition written by an older version) can't take down startup for every other workflow.
 
 **Agent-step `structuredOutput` and JSON-safe options now round-trip.** The serialized `agent` entry carries an `outputSchema` field (JSON Schema Draft 2020-12) and rehydration reconstructs the equivalent `structuredOutput` wiring. `retries` and `metadata` round-trip on both `agent` and `tool` entries. Closure-valued options (`onFinish`, `onChunk`, `onError`, `onStepFinish`, `onAbort`, function-valued `scorers` / `toolChoice`) hard-crash at `toStorableGraph` time instead of silently dropping. This is what makes patterns like `tool → agent-with-array-outputSchema → foreach(agent)` persistable end-to-end.
 
@@ -60,8 +65,6 @@ workflow
 **New `Mastra.removeWorkflow(keyOrId)` public API** mirroring `removeAgent` / `removeTool`. `Mastra.addStoredWorkflow(def)` now unregisters any existing live workflow with the same id before rehydrating and re-registering, so re-saving a stored workflow surfaces the new graph immediately instead of being silently no-op'd by `addWorkflow`'s first-write-wins guard. Fixes the stale-workflow bug where `deleteWorkflow` + `addStoredWorkflow` served the previous graph until the process restarted.
 
 **`Mastra.addStoredWorkflow` now performs a registry pre-flight before rehydrating.** Every `agentId` in the graph must resolve via `listAgents()` (and must not collide with a tool id), and every `toolId` must resolve via `listTools()` (and must not collide with an agent id). Previously, invalid or mis-classified ids failed deep inside `rehydrateWorkflow` with a less-actionable error (`Tool with name X not found`, or a silent lookup of an agent id in the tool registry). The check produces the same error messages the `mastracode` `save-workflow` tool used to emit locally, so HTTP callers, the SDK tool, and direct `addStoredWorkflow` consumers now share one contract.
-
-**Breaking-ish generic-signature change on `createWorkflow`.** Its generic parameters are now schema types (`TInputSchema`, `TOutputSchema`, `TStateSchema`) rather than raw runtime types. Existing usage that infers types from the passed schemas is unaffected. Any code that explicitly parameterized `createWorkflow<TInput, TOutput>(...)` needs to pass the schemas instead — or drop the explicit generics and let inference handle it.
 
 **New declarative predicate DSL for `.branch()` / `.dowhile()` / `.dountil()`.** Conditional branches and loop conditions can now be authored as a small structural JSON expression instead of (or alongside) a JS closure — the shape that finally lets `conditional` and `loop` step entries round-trip through storage. Nothing about existing closure-based conditions changes: the previous `(ctx) => boolean` overloads still work, still evaluate exactly the way they did, and Studio still renders their `serializedCondition.fn` string unchanged.
 
@@ -110,7 +113,9 @@ The declarative form is what unlocks persistence for `conditional` and `loop` st
 
 **`DELETE /stored/workflows/:storedWorkflowId` now unregisters the live workflow instance** in addition to removing the stored row. Previously the handler only called `store.delete(id)`, leaving the rehydrated `Workflow` on `Mastra` until the process restarted — the same stale-registration bug that was fixed for the `mastracode` `deleteWorkflow` service. The handler now calls `mastra.removeWorkflow(id)` after `store.delete`. Idempotent on missing ids.
 
-**`POST /stored/workflows` body schema is now a typed discriminated union.** The `graph` field was previously typed as `z.array(z.any())` and would only surface malformed entries deep inside `rehydrateWorkflow`. It is now a discriminated union over `type: 'step' | 'agent' | 'tool' | 'mapping' | 'parallel' | 'foreach' | 'sleep' | 'sleepUntil'`, matching the shape the `save-workflow` tool emits. Combined with the new `Mastra.addStoredWorkflow` pre-flight, invalid ids and mis-classified refs are rejected at the HTTP boundary with actionable errors before rehydration runs. `inputSchema` / `outputSchema` / `stateSchema` / `requestContextSchema` remain `z.any()` — they're JSON Schema Draft 2020-12 blobs, validated downstream when the workflow is rehydrated.
+**`POST /stored/workflows` body schema is now a typed discriminated union.** The `graph` field was previously typed as `z.array(z.any())` and would only surface malformed entries deep inside `rehydrateWorkflow`. It is now a discriminated union over `type: 'step' | 'agent' | 'tool' | 'mapping' | 'parallel' | 'foreach' | 'sleep' | 'sleepUntil'`, matching the shape the `save-workflow` tool emits. Combined with the new `Mastra.addStoredWorkflow` pre-flight, invalid ids, mis-classified refs, and JSON Schemas that use converter-unsupported keywords (`oneOf` / `anyOf` / …) are rejected at the HTTP boundary with actionable errors before rehydration runs. `inputSchema` / `outputSchema` / `stateSchema` / `requestContextSchema` remain `z.any()` — they're JSON Schema Draft 2020-12 blobs, validated in `addStoredWorkflow` before the row is persisted.
+
+**`foreach.opts` is now optional on both sides of the wire.** Previously the Zod schema declared `opts` optional but the underlying `SerializedForeachEntry.opts` was required, forcing a `Parameters<Mastra['addStoredWorkflow']>[0]` cast in the handler that defeated compile-time drift detection. `SerializedForeachEntry.opts` is now optional in core, the Zod schema and the runtime type agree, and the handler cast is gone. Runtime unchanged (engine already read `entry.opts?.concurrency ?? 1`).
 
 **`conditional` and `loop` entries now round-trip through `POST /stored/workflows`.** The body schema's discriminated union has been extended with `type: 'conditional'` (`steps: SingleStepEntry[]`, `predicates: Predicate[]`) and `type: 'loop'` (`step: SingleStepEntry`, `loopType: 'dowhile' | 'dountil'`, `predicate: Predicate`), where `Predicate` is the same structural JSON shape now exported from `@mastra/core/workflows`. Legacy closure-based `serializedConditions` payloads are rejected at the HTTP boundary rather than silently reaching the rehydrator.
 
@@ -174,4 +179,4 @@ Anti-patterns and worked examples were updated to match, and a new `foreach → 
 
 ## Backward compatibility
 
-Existing `.then(createStep(agent))`, `.then(createStep(tool))`, `.map()`, `.parallel()`, and `.branch()` usages keep working and now emit the new declarative entries automatically. The only breaking-ish surface is the `createWorkflow` generic-signature change described above.
+Existing `.then(createStep(agent))`, `.then(createStep(tool))`, `.map()`, `.parallel()`, and `.branch()` usages keep working and now emit the new declarative entries automatically. Closure-based `.branch()` / `.dowhile()` / `.dountil()` continue to evaluate exactly as before. Adopt the declarative predicate form only if you want the condition to survive `toStorableGraph` / `rehydrateWorkflow`.

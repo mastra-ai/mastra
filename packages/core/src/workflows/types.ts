@@ -748,7 +748,12 @@ export type SerializedStepFlowEntry =
   | {
       type: 'foreach';
       step: SerializedSingleStepEntry;
-      opts: {
+      /**
+       * Optional. When omitted, the engine defaults to `concurrency: 1`. Present
+       * when the foreach entry carries a static concurrency value or a
+       * serialized concurrency resolver function.
+       */
+      opts?: {
         /** Static concurrency. Omitted when a resolver function is used. */
         concurrency?: number;
         /** Source of the concurrency resolver function, when one is used. */

@@ -186,11 +186,9 @@ export const saveWorkflowTool = createTool({
 
     // `mastra.addStoredWorkflow` performs registry pre-flight — a mis-classified
     // agentId/toolId or unregistered id throws before rehydration with an
-    // actionable message listing every offender.
-    //
-    // The Zod schema output is structurally compatible with StoredWorkflowGraph
-    // but TS can't prove it (optional-vs-required discrepancies on
-    // `foreach.opts`); the cast documents that boundary.
+    // actionable message listing every offender. It also rejects JSON Schemas
+    // that use keywords the storage-side converter can't rehydrate
+    // (oneOf/anyOf/allOf/not/$ref/patternProperties/discriminator).
     await m.addStoredWorkflow(def as Parameters<Mastra['addStoredWorkflow']>[0]);
     return { ok: true as const, id: def.id };
   },

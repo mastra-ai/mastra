@@ -308,11 +308,22 @@ export interface RehydratedWorkflow {
   workflow: any;
 }
 
-export async function rehydrateWorkflow(def: StoredWorkflowGraph, mastra: Mastra): Promise<RehydratedWorkflow> {
-  const inputSchema = jsonSchemaToZod(def.inputSchema);
-  const outputSchema = jsonSchemaToZod(def.outputSchema);
-  const stateSchema = def.stateSchema ? jsonSchemaToZod(def.stateSchema) : undefined;
-  const requestContextSchema = def.requestContextSchema ? jsonSchemaToZod(def.requestContextSchema) : undefined;
+/**
+ * Options controlling how `rehydrateWorkflow` handles unsupported JSON Schema
+ * keywords. Forwarded to `jsonSchemaToZod` for every schema on the definition
+ * (top-level + per-step `agent.outputSchema`). See `JsonSchemaToZodOptions`.
+ */
+export type RehydrateWorkflowOptions = JsonSchemaToZodOptions;
+
+export async function rehydrateWorkflow(
+  def: StoredWorkflowGraph,
+  mastra: Mastra,
+  opts?: RehydrateWorkflowOptions,
+): Promise<RehydratedWorkflow> {
+  const inputSchema = jsonSchemaToZod(def.inputSchema, opts);
+  const outputSchema = jsonSchemaToZod(def.outputSchema, opts);
+  const stateSchema = def.stateSchema ? jsonSchemaToZod(def.stateSchema, opts) : undefined;
+  const requestContextSchema = def.requestContextSchema ? jsonSchemaToZod(def.requestContextSchema, opts) : undefined;
 
   const wf = createWorkflow({
     id: def.id,
@@ -324,17 +335,22 @@ export async function rehydrateWorkflow(def: StoredWorkflowGraph, mastra: Mastra
   });
 
   for (const entry of def.graph) {
-    applyGraphEntry(wf, entry, mastra);
+    applyGraphEntry(wf, entry, mastra, opts);
   }
   const built: any = wf.commit();
   return { workflow: built };
 }
 
-function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra): void {
+function applyGraphEntry(
+  wf: any,
+  entry: SerializedStepFlowEntry,
+  mastra: Mastra,
+  schemaOpts?: JsonSchemaToZodOptions,
+): void {
   switch (entry.type) {
     case 'agent':
       assertAgentExists(mastra, entry.agentId);
-      wf.agent(entry.agentId, rebuildAgentOptions(entry), { id: entry.id });
+      wf.agent(entry.agentId, rebuildAgentOptions(entry, schemaOpts), { id: entry.id });
       return;
     case 'tool':
       assertToolExists(mastra, entry.toolId);
@@ -359,10 +375,10 @@ function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra
       wf.sleepUntil(entry.date instanceof Date ? entry.date : new Date(entry.date as string));
       return;
     case 'parallel':
-      wf.parallel(entry.steps.map(s => resolveSingle(s, mastra)));
+      wf.parallel(entry.steps.map(s => resolveSingle(s, mastra, schemaOpts)));
       return;
     case 'foreach': {
-      const inner = resolveForeachInner(entry.step, mastra);
+      const inner = resolveForeachInner(entry.step, mastra, schemaOpts);
       const opts = entry.opts?.concurrency !== undefined ? { concurrency: entry.opts.concurrency } : undefined;
       wf.foreach(inner, opts);
       return;
@@ -382,7 +398,10 @@ function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra
           `Cannot rehydrate conditional step: missing or mismatched predicates. Only declarative predicate branches round-trip.`,
         );
       }
-      const branches = entry.steps.map((s, i) => [{ predicate: predicates[i] as any }, resolveSingle(s, mastra)]);
+      const branches = entry.steps.map((s, i) => [
+        { predicate: predicates[i] as any },
+        resolveSingle(s, mastra, schemaOpts),
+      ]);
       wf.branch(branches);
       return;
     }
@@ -394,7 +413,7 @@ function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra
           `Cannot rehydrate loop step: missing declarative predicate or loopType. Only declarative predicate loops round-trip.`,
         );
       }
-      const inner = resolveSingle(entry.step as any, mastra);
+      const inner = resolveSingle(entry.step as any, mastra, schemaOpts);
       if (loopType === 'dowhile') {
         wf.dowhile(inner, { predicate: predicate as any });
       } else {
@@ -415,13 +434,16 @@ function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra
  * and merges in `retries` / `metadata`. Returns `undefined` when nothing to
  * restore so `.agent(agentId)` stays a clean call.
  */
-function rebuildAgentOptions(entry: {
-  outputSchema?: Record<string, any>;
-  options?: SerializedStepOptions;
-}): Record<string, any> | undefined {
+function rebuildAgentOptions(
+  entry: {
+    outputSchema?: Record<string, any>;
+    options?: SerializedStepOptions;
+  },
+  schemaOpts?: JsonSchemaToZodOptions,
+): Record<string, any> | undefined {
   const opts: Record<string, any> = {};
   if (entry.outputSchema) {
-    opts.structuredOutput = { schema: jsonSchemaToZod(entry.outputSchema) };
+    opts.structuredOutput = { schema: jsonSchemaToZod(entry.outputSchema, schemaOpts) };
   }
   if (entry.options?.retries !== undefined) opts.retries = entry.options.retries;
   if (entry.options?.metadata !== undefined) opts.metadata = entry.options.metadata;
@@ -435,7 +457,7 @@ function rebuildToolOptions(entry: { options?: SerializedStepOptions }): Record<
   return Object.keys(opts).length > 0 ? opts : undefined;
 }
 
-function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra): any {
+function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra, _schemaOpts?: JsonSchemaToZodOptions): any {
   switch (entry.type) {
     case 'agent': {
       assertAgentExists(mastra, entry.agentId);
@@ -443,6 +465,11 @@ function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra): any {
       // discriminator and re-emits a `type: 'agent'` entry when re-serialized.
       // A raw agent instance falls through to the generic `type: 'step'` branch
       // and the round-trip loses the declarative shape.
+      //
+      // Note: `entry.outputSchema` is intentionally NOT rebuilt here.
+      // `.parallel()`/`.branch()` inner steps produced this way currently
+      // execute the agent with its default output shape; per-step structured
+      // output for parallel/branch inner steps is a separate open item.
       return createStep(mastra.getAgentById(entry.agentId));
     }
     case 'tool': {
@@ -466,12 +493,16 @@ function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra): any {
  * and restores `structuredOutput` / `retries` / `metadata` on the step so
  * per-iteration execution honors them.
  */
-function resolveForeachInner(entry: SerializedSingleStepEntry, mastra: Mastra): any {
+function resolveForeachInner(
+  entry: SerializedSingleStepEntry,
+  mastra: Mastra,
+  schemaOpts?: JsonSchemaToZodOptions,
+): any {
   switch (entry.type) {
     case 'agent': {
       assertAgentExists(mastra, entry.agentId);
       const agent = mastra.getAgentById(entry.agentId);
-      const options = rebuildAgentOptions(entry);
+      const options = rebuildAgentOptions(entry, schemaOpts);
       const base = createStepFromAgent(agent as any, options as any);
       return { ...base, id: entry.id, __agentOptions: options };
     }
@@ -624,8 +655,24 @@ function assertWorkflowExists(mastra: Mastra, workflowId: string): any {
  * `json-schema-to-zod` from npm. Kept inline to avoid pulling a dependency
  * for the MVP demo.
  */
-export function jsonSchemaToZod(schema: JsonSchema): z.ZodTypeAny {
-  return walk(schema);
+/**
+ * Options controlling how `jsonSchemaToZod` handles JSON Schema keywords the
+ * MVP converter doesn't support.
+ *
+ * - `throw` (default): hard-crash with a targeted error. Correct for the save
+ *   path — the author is right there and can simplify the schema.
+ * - `warn`: emit a warning via `onUnsupported` (if provided) and fall back to
+ *   `z.any()` for the unsupported subtree. Correct for the boot-time load
+ *   path — one bad pre-existing row must not take down startup for every
+ *   other workflow.
+ */
+export interface JsonSchemaToZodOptions {
+  onUnsupportedSchema?: 'throw' | 'warn';
+  onUnsupported?: (message: string) => void;
+}
+
+export function jsonSchemaToZod(schema: JsonSchema, opts?: JsonSchemaToZodOptions): z.ZodTypeAny {
+  return walk(schema, opts ?? {});
 }
 
 // JSON Schema keywords that this MVP converter does not support. If a stored
@@ -643,17 +690,21 @@ const UNSUPPORTED_SCHEMA_KEYS = [
   'discriminator',
 ] as const;
 
-function walk(schema: JsonSchema): z.ZodTypeAny {
+function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
   if (!schema || typeof schema !== 'object') return z.any();
 
   for (const key of UNSUPPORTED_SCHEMA_KEYS) {
     if (key in schema) {
-      throw new Error(
+      const message =
         `Stored workflow schema uses unsupported JSON Schema keyword "${key}". ` +
-          `This converter only supports the static subset that Zod round-trips through ` +
-          `standardSchemaToJSONSchema (object, array, string, number, integer, boolean, null, enum). ` +
-          `Simplify the schema or extend jsonSchemaToZod to cover this keyword.`,
-      );
+        `This converter only supports the static subset that Zod round-trips through ` +
+        `standardSchemaToJSONSchema (object, array, string, number, integer, boolean, null, enum). ` +
+        `Simplify the schema or extend jsonSchemaToZod to cover this keyword.`;
+      if (opts.onUnsupportedSchema === 'warn') {
+        opts.onUnsupported?.(message);
+        return z.any();
+      }
+      throw new Error(message);
     }
   }
 
@@ -662,7 +713,7 @@ function walk(schema: JsonSchema): z.ZodTypeAny {
   if (Array.isArray(schema.enum) && schema.enum.length > 0) {
     out = z.enum(schema.enum.map(String) as [string, ...string[]]);
   } else if (Array.isArray(schema.type)) {
-    const options = schema.type.map((t: string) => walk({ ...schema, type: t }));
+    const options = schema.type.map((t: string) => walk({ ...schema, type: t }, opts));
     // z.union requires a tuple of at least two members; guard shorter arrays.
     if (options.length === 1) {
       out = options[0]!;
@@ -675,7 +726,7 @@ function walk(schema: JsonSchema): z.ZodTypeAny {
         const shape: Record<string, z.ZodTypeAny> = {};
         const required = new Set<string>(Array.isArray(schema.required) ? schema.required : []);
         for (const [key, child] of Object.entries(schema.properties ?? {})) {
-          const childSchema = walk(child as JsonSchema);
+          const childSchema = walk(child as JsonSchema, opts);
           shape[key] = required.has(key) ? childSchema : childSchema.optional();
         }
         const obj = z.object(shape);
@@ -683,7 +734,7 @@ function walk(schema: JsonSchema): z.ZodTypeAny {
         break;
       }
       case 'array':
-        out = z.array(walk(schema.items ?? {}));
+        out = z.array(walk(schema.items ?? {}, opts));
         break;
       case 'string':
         out = z.string();
@@ -717,4 +768,50 @@ function walk(schema: JsonSchema): z.ZodTypeAny {
     out = out.describe(schema.description);
   }
   return out;
+}
+
+/**
+ * Result of a `validateStorableJsonSchema` call.
+ * `unsupported` lists every offending keyword usage as `<jsonPointer>: <keyword>`
+ * so callers can log or surface a targeted message per offense.
+ */
+export type StorableJsonSchemaValidation = { ok: true } | { ok: false; unsupported: string[] };
+
+/**
+ * Non-throwing companion to `jsonSchemaToZod`. Walks a JSON Schema and reports
+ * every unsupported-keyword usage without converting. Use this at write time
+ * (e.g. inside `Mastra.addStoredWorkflow`) to surface a warning before the
+ * schema is persisted — the row will still fail to rehydrate on the next boot
+ * (`jsonSchemaToZod` throws), so this is a heads-up, not a guarantee.
+ *
+ * Callers decide whether to warn, reject, or ignore. This function never
+ * throws for any input shape.
+ */
+export function validateStorableJsonSchema(schema: JsonSchema | undefined): StorableJsonSchemaValidation {
+  if (!schema || typeof schema !== 'object') return { ok: true };
+  const unsupported: string[] = [];
+  const visit = (node: unknown, path: string): void => {
+    if (!node || typeof node !== 'object') return;
+    const n = node as Record<string, unknown>;
+    for (const key of UNSUPPORTED_SCHEMA_KEYS) {
+      if (key in n) unsupported.push(`${path || '#'}: ${key}`);
+    }
+    if (n.properties && typeof n.properties === 'object') {
+      for (const [prop, child] of Object.entries(n.properties as Record<string, unknown>)) {
+        visit(child, `${path}/properties/${prop}`);
+      }
+    }
+    if (n.items) {
+      if (Array.isArray(n.items)) {
+        n.items.forEach((child, i) => visit(child, `${path}/items/${i}`));
+      } else {
+        visit(n.items, `${path}/items`);
+      }
+    }
+    if (n.additionalProperties && typeof n.additionalProperties === 'object') {
+      visit(n.additionalProperties, `${path}/additionalProperties`);
+    }
+  };
+  visit(schema, '');
+  return unsupported.length === 0 ? { ok: true } : { ok: false, unsupported };
 }

@@ -72,7 +72,7 @@ import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { StoredWorkflowGraph } from '../workflows/load-from-storage';
-import { rehydrateWorkflow } from '../workflows/load-from-storage';
+import { rehydrateWorkflow, validateStorableJsonSchema } from '../workflows/load-from-storage';
 import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
@@ -4506,6 +4506,12 @@ export class Mastra<
     // mistake here and return a targeted error naming the wrong id and the
     // shape it should have.
     this.#validateStoredWorkflowRefs(def);
+    // Pre-flight: reject JSON Schemas that use keywords `jsonSchemaToZod`
+    // can't convert (oneOf/anyOf/allOf/not/$ref/patternProperties/discriminator).
+    // Throw here — the author is right there and can fix. Boot-time loading
+    // is intentionally more lenient (degrades to z.any() + warns) so one bad
+    // pre-existing row can't take down startup for every other workflow.
+    this.#validateStoredWorkflowSchemas(def);
     const { workflow } = await rehydrateWorkflow(def, this);
     // Stored workflows are the source of truth for this id — replace any
     // existing live registration so re-saves surface immediately instead of
@@ -4528,6 +4534,57 @@ export class Mastra<
         requestContextSchema: def.requestContextSchema,
         graph: def.graph,
       });
+    }
+  }
+
+  /**
+   * Walk a stored workflow definition and throw a targeted error if any JSON
+   * Schema uses a keyword `jsonSchemaToZod` cannot convert
+   * (oneOf/anyOf/allOf/not/$ref/patternProperties/discriminator). Covers the
+   * four top-level schemas plus each `agent.outputSchema` reachable through
+   * `parallel`/`foreach`/`conditional`/`loop`.
+   *
+   * Save-path is strict: the author is right there and can simplify the
+   * schema before it hits storage. Boot-time load is intentionally lenient
+   * (see `#loadStoredWorkflows`) so one bad pre-existing row can't take
+   * down startup for every other workflow.
+   * @internal
+   */
+  #validateStoredWorkflowSchemas(def: StoredWorkflowGraph): void {
+    const offenses: string[] = [];
+    const check = (schema: unknown, label: string): void => {
+      const result = validateStorableJsonSchema(schema as Record<string, unknown> | undefined);
+      if (result.ok) return;
+      offenses.push(`${label}: ${result.unsupported.join(', ')}`);
+    };
+    check(def.inputSchema, 'inputSchema');
+    check(def.outputSchema, 'outputSchema');
+    if (def.stateSchema) check(def.stateSchema, 'stateSchema');
+    if (def.requestContextSchema) check(def.requestContextSchema, 'requestContextSchema');
+    const visit = (entry: unknown): void => {
+      if (!entry || typeof entry !== 'object') return;
+      const e = entry as { type?: string; id?: string; outputSchema?: unknown; step?: unknown; steps?: unknown };
+      switch (e.type) {
+        case 'agent':
+          if (e.outputSchema) check(e.outputSchema, `step "${e.id}" outputSchema`);
+          return;
+        case 'parallel':
+        case 'conditional':
+          if (Array.isArray(e.steps)) e.steps.forEach(visit);
+          return;
+        case 'foreach':
+        case 'loop':
+          visit(e.step);
+          return;
+        default:
+          return;
+      }
+    };
+    def.graph.forEach(visit);
+    if (offenses.length > 0) {
+      throw new Error(
+        `addStoredWorkflow refused: stored workflow "${def.id}" uses JSON Schema keyword(s) jsonSchemaToZod cannot convert. Simplify the schema (or extend the converter) before saving.\n- ${offenses.join('\n- ')}`,
+      );
     }
   }
 
@@ -4717,6 +4774,13 @@ export class Mastra<
               graph: def.graph,
             },
             this,
+            // Boot-time load is lenient: unsupported JSON Schema keywords
+            // degrade to z.any() and emit a warning so the app still boots.
+            // Save path is strict (see #validateStoredWorkflowSchemas).
+            {
+              onUnsupportedSchema: 'warn',
+              onUnsupported: message => this.#logger?.warn?.(`Stored workflow "${def.id}": ${message}`),
+            },
           );
           this.#workflowOrigin.set(def.id, 'stored');
           this.addWorkflow(workflow as AnyWorkflow, def.id);
