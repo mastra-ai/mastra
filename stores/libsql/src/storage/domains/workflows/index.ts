@@ -51,12 +51,6 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       maxRetries,
       initialBackoffMs,
     });
-
-    // Set PRAGMA settings to help with database locks
-    // Note: This is async but we can't await in constructor, so we'll handle it as a fire-and-forget
-    this.setupPragmaSettings().catch(err =>
-      this.logger.warn('LibSQL Workflows: Failed to setup PRAGMA settings.', err),
-    );
   }
 
   supportsConcurrentUpdates(): boolean {
@@ -105,32 +99,6 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       order: ['workflowSnapshot'],
     });
     return runPrune({ db: this.#db, domain: 'workflows', targets, options, logger: this.logger });
-  }
-
-  private async setupPragmaSettings() {
-    try {
-      // Set busy timeout to wait longer before returning busy errors
-      await this.#client.execute('PRAGMA busy_timeout = 10000;');
-      this.logger.debug('LibSQL Workflows: PRAGMA busy_timeout=10000 set.');
-
-      // Enable WAL mode for better concurrency (if supported)
-      try {
-        await this.#client.execute('PRAGMA journal_mode = WAL;');
-        this.logger.debug('LibSQL Workflows: PRAGMA journal_mode=WAL set.');
-      } catch {
-        this.logger.debug('LibSQL Workflows: WAL mode not supported, using default journal mode.');
-      }
-
-      // Set synchronous mode for better durability vs performance trade-off
-      try {
-        await this.#client.execute('PRAGMA synchronous = NORMAL;');
-        this.logger.debug('LibSQL Workflows: PRAGMA synchronous=NORMAL set.');
-      } catch {
-        this.logger.debug('LibSQL Workflows: Failed to set synchronous mode.');
-      }
-    } catch (err) {
-      this.logger.warn('LibSQL Workflows: Failed to set PRAGMA settings.', err);
-    }
   }
 
   async updateWorkflowResults({

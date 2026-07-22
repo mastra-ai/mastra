@@ -239,13 +239,15 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
     createdAt: '2026-07-10T00:00:00Z',
     updatedAt: '2026-07-10T00:00:00Z',
     ...overrides,
+    revision: overrides.revision ?? 1,
   };
 }
 
 interface BoardState {
   items: WorkItem[];
   posts: CreateWorkItemInput[];
-  patches: Array<{ id: string } & UpdateWorkItemInput>;
+  patches: Array<{ id: string; stages?: string[] } & UpdateWorkItemInput>;
+  starts: Array<{ kickoffMessage: string | null; destinationStage: string; workItem: { id: string; role: string } }>;
   deletes: string[];
   triageRequests: Array<{ number: number; body: unknown }>;
   issueRequests: Array<string | null>;
@@ -269,6 +271,7 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
     items: [...(options.workItems ?? [])],
     posts: [],
     patches: [],
+    starts: [],
     deletes: [],
     triageRequests: [],
     issueRequests: [],
@@ -318,6 +321,78 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
       state.items = [...state.items.filter(i => i.sourceKey !== item.sourceKey || item.sourceKey === null), item];
       return HttpResponse.json({ workItem: item }, { status: 201 });
     }),
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/runs/start`, async ({ request }) => {
+      const body = (await request.json()) as {
+        resourceId: string;
+        projectPath: string;
+        branch: string;
+        kickoffMessage: string | null;
+        destinationStage: string;
+        workItem: { id: string; role: string };
+      };
+      state.starts.push({
+        kickoffMessage: body.kickoffMessage,
+        destinationStage: body.destinationStage,
+        workItem: body.workItem,
+      });
+      const existing = state.items.find(item => item.id === body.workItem.id);
+      if (!existing) return HttpResponse.json({ error: 'Work item not found' }, { status: 404 });
+      const session = {
+        projectPath: body.projectPath,
+        branch: body.branch,
+        threadId: 'thread-factory',
+        startedBy: 'user-1',
+      };
+      const updated = {
+        ...existing,
+        revision: existing.revision + 1,
+        stages: [body.destinationStage],
+        sessions: { ...existing.sessions, [body.workItem.role]: session },
+      };
+      state.items = state.items.map(item => (item.id === existing.id ? updated : item));
+      state.patches.push({
+        id: existing.id,
+        stages: [body.destinationStage],
+        sessions: { [body.workItem.role]: session },
+      });
+      return HttpResponse.json(
+        {
+          prepared: {
+            workItemId: existing.id,
+            bindingId: 'binding-1',
+            threadId: 'thread-factory',
+            resourceId: body.resourceId,
+            projectPath: body.projectPath,
+            branch: body.branch,
+            revision: updated.revision,
+            kickoffStatus: 'pending',
+            replayed: false,
+          },
+        },
+        { status: 202 },
+      );
+    }),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items/:id/transition`,
+      async ({ request, params }) => {
+        const id = params.id as string;
+        const body = (await request.json()) as { stage: string; expectedRevision: number };
+        state.patches.push({ id, stages: [body.stage] });
+        const existing = state.items.find(item => item.id === id) ?? makeWorkItem({ id, title: 'unknown' });
+        const updated = { ...existing, stages: [body.stage], revision: existing.revision + 1 };
+        state.items = state.items.map(item => (item.id === id ? updated : item));
+        return HttpResponse.json({
+          result: {
+            status: 'accepted',
+            transitionId: 'transition-1',
+            itemId: id,
+            revision: updated.revision,
+            stage: body.stage,
+            decisions: [],
+          },
+        });
+      },
+    ),
     http.patch(`${TEST_BASE_URL}/web/factory/work-items/:id`, async ({ request, params }) => {
       const id = params.id as string;
       const body = (await request.json()) as UpdateWorkItemInput;
@@ -330,7 +405,6 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
         ...existing,
         ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.parentWorkItemId !== undefined ? { parentWorkItemId: body.parentWorkItemId } : {}),
-        ...(body.stages !== undefined ? { stages: body.stages } : {}),
         sessions: { ...existing.sessions, ...stampedSessions },
         metadata: { ...existing.metadata, ...(body.metadata ?? {}) },
       };
@@ -838,7 +912,7 @@ describe('Factory item actions', () => {
 });
 
 describe('Factory Board — persisted cards', () => {
-  it('given a work item in multiple stages, when the Board renders, then it shows a card in each column with a chip for the other stage', async () => {
+  it('given a work item in multiple stages, when its title opens a session, then it targets the clicked column', async () => {
     useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -850,6 +924,7 @@ describe('Factory Board — persisted cards', () => {
         }),
       ],
     });
+    const captured = useFactoryRunHandlers('item-wi-1');
     renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
@@ -860,6 +935,15 @@ describe('Factory Board — persisted cards', () => {
     // Each card chips the item's other stage.
     expect(within(executeCard).getByText('Review')).toBeInTheDocument();
     expect(within(reviewCard).getByText('Building')).toBeInTheDocument();
+
+    await userEvent.click(within(executeCard).getByRole('button', { name: 'Issue: Parallel effort' }));
+    await waitFor(() =>
+      expect(captured.starts).toContainEqual({
+        kickoffMessage: null,
+        destinationStage: 'execute',
+        workItem: expect.objectContaining({ id: 'wi-1', role: 'chat' }),
+      }),
+    );
   });
 
   it('given related issue and PR items, when switching workflows, then each stays on its own board with a reciprocal relation marker', async () => {
@@ -1084,17 +1168,14 @@ describe('Factory Board — persisted cards', () => {
       ...projectWithIssueWorktree,
       binding: {
         ...projectWithIssueWorktree.binding,
-        repositories: [
-          {
-            ...githubRepository,
-            selectedWorktreePath: reviewWorktreePath,
-            worktrees: [
-              ...githubRepository.worktrees,
-              { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
-              { branch: 'factory/pr-34', worktreePath: reviewWorktreePath, baseBranch: 'main' },
-            ],
-          },
-        ],
+        repositories: projectWithIssueWorktree.binding.repositories.map(repository => ({
+          ...repository,
+          selectedWorktreePath: reviewWorktreePath,
+          worktrees: [
+            ...repository.worktrees,
+            { branch: 'factory/pr-34', worktreePath: reviewWorktreePath, baseBranch: 'main' },
+          ],
+        })),
       },
     };
     useBoardHandlers({ workItems: relatedWorkItems });
@@ -1324,7 +1405,7 @@ describe('Factory Board — persisted cards', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    await waitFor(() => expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['planning'] }]));
+    expect(captured.starts).toMatchObject([{ destinationStage: 'planning', workItem: { id: 'wi-1' } }]);
   });
 
   it('given a persisted issue card needing approval, when Prepare approval is chosen, then the triage session ref is recorded without leaving Triage', async () => {
@@ -1351,20 +1432,13 @@ describe('Factory Board — persisted cards', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-21' });
     await waitFor(() =>
-      expect(captured.messages[0]!.message).toContain(
+      expect(captured.messages[0]?.message).toContain(
         'Prepare approval for GitHub issue #21 (https://github.com/mastra-ai/mastra/issues/21)',
       ),
     );
-    expect(captured.messages[0]!.message).not.toContain('Add OAuth support');
-    await waitFor(() =>
-      expect(state.patches).toMatchObject([
-        {
-          id: 'wi-approval',
-          stages: ['triage'],
-          sessions: { triage: { branch: 'factory/issue-21', threadId: 'thread-factory' } },
-        },
-      ]),
-    );
+    expect(captured.messages[0]?.message).not.toContain('Add OAuth support');
+    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-approval', role: 'triage' } }]);
+    expect(state.patches).toEqual([]);
   });
 
   it('given a card in Triage, when Move to Planning is chosen from the menu, then the card lands in the Planning swimlane', async () => {
@@ -1620,8 +1694,8 @@ describe('Factory Board — persisted cards', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    await waitFor(() => expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12'));
-    await waitFor(() => expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['execute'] }]));
+    await waitFor(() => expect(captured.messages[0]?.message).toContain('Implement a fix for GitHub issue #12'));
+    expect(captured.starts).toMatchObject([{ destinationStage: 'execute', workItem: { id: 'wi-1' } }]);
   });
 
   it('given a card in Intake, when Mark done is chosen from the menu, then the stages PATCH to done and the card moves', async () => {
@@ -1716,7 +1790,7 @@ describe('Factory Board — drag and drop', () => {
     expect(within(column('execute')).queryByTestId('work-item-card')).not.toBeInTheDocument();
   });
 
-  it('given an unmaterialized candidate, when dragged to Building, then a work item is filed with that stage and no run starts', async () => {
+  it('given an unmaterialized candidate, when dragged to Building, then it is filed in Intake and moved through authority without a run', async () => {
     const state = useBoardHandlers({ issues });
     renderAt('/factory/work');
 
@@ -1726,9 +1800,10 @@ describe('Factory Board — drag and drop', () => {
 
     await waitFor(() =>
       expect(state.posts).toMatchObject([
-        { source: 'github-issue', sourceKey: 'github-issue:12', title: 'Fix flaky test', stages: ['execute'] },
+        { source: 'github-issue', sourceKey: 'github-issue:12', title: 'Fix flaky test', stages: ['intake'] },
       ]),
     );
+    expect(state.patches).toEqual(expect.arrayContaining([{ id: 'wi-post-1', stages: ['execute'] }]));
     expect(await within(column('execute')).findByText('Fix flaky test')).toBeInTheDocument();
     // No worktree/run side effects from a drop: the card is filed, nothing else.
     expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument();
@@ -1755,12 +1830,17 @@ interface CapturedRun {
   worktree?: Record<string, unknown>;
   threadTitles: string[];
   messages: Record<string, unknown>[];
+  starts: Array<{
+    workItem: { id: string; role: string };
+    kickoffMessage: string | null;
+    destinationStage: string;
+  }>;
   skillInvocations: Record<string, unknown>[];
 }
 
 /** Registers handlers for the investigate flow: worktree + thread + message. */
 function useFactoryRunHandlers(branchDir: string): CapturedRun {
-  const captured: CapturedRun = { threadTitles: [], messages: [], skillInvocations: [] };
+  const captured: CapturedRun = { threadTitles: [], messages: [], starts: [], skillInvocations: [] };
   server.use(
     http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree`, async ({ request }) => {
       captured.worktree = (await request.json()) as Record<string, unknown>;
@@ -1784,6 +1864,40 @@ function useFactoryRunHandlers(branchDir: string): CapturedRun {
     http.post(`${SESSION}/messages`, async ({ request }) => {
       captured.messages.push((await request.json()) as Record<string, unknown>);
       return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/runs/start`, async ({ request }) => {
+      const body = (await request.json()) as {
+        resourceId: string;
+        projectPath: string;
+        branch: string;
+        threadTitle: string;
+        kickoffMessage: string | null;
+        destinationStage: string;
+        workItem: { id: string; role: string };
+      };
+      captured.threadTitles.push(body.threadTitle);
+      captured.starts.push({
+        workItem: body.workItem,
+        kickoffMessage: body.kickoffMessage,
+        destinationStage: body.destinationStage,
+      });
+      if (body.kickoffMessage !== null) captured.messages.push({ message: body.kickoffMessage });
+      return HttpResponse.json(
+        {
+          prepared: {
+            workItemId: body.workItem.id,
+            bindingId: 'binding-1',
+            threadId: 'thread-factory',
+            resourceId: body.resourceId,
+            projectPath: body.projectPath,
+            branch: body.branch,
+            revision: 3,
+            kickoffStatus: 'pending',
+            replayed: false,
+          },
+        },
+        { status: 202 },
+      );
     }),
     http.post(`${TEST_BASE_URL}/web/agent-controller/code/skills/prepare`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
@@ -1865,88 +1979,86 @@ describe('Factory Board — investigate flow', () => {
       },
     ]);
     expect(JSON.stringify(captured.skillInvocations)).not.toContain('Fix flaky test');
-    // The run files a board record in the planning stage with the plan session ref.
-    await waitFor(() => expect(state.posts).toHaveLength(1));
-    expect(state.posts).toMatchObject([
-      {
-        source: 'github-issue',
-        sourceKey: 'github-issue:12',
-        title: 'Fix flaky test',
-        stages: ['planning'],
-        sessions: {
-          plan: {
-            projectPath: '/sandbox/mastra/worktrees/factory-issue-12',
-            branch: 'factory/issue-12',
-            threadId: 'thread-factory',
-          },
-        },
-      },
-    ]);
+    // One server-owned start request creates the Intake card, binds it, and requests Planning.
+    expect(state.posts).toEqual([]);
+    expect(state.patches).toEqual([]);
+    expect(captured.starts).toMatchObject([{ destinationStage: 'planning', workItem: { role: 'plan' } }]);
   });
 
-  it('given a prepared skill, when Factory starts the run, then the mounted thread projects it before exactly one dispatch settles', async () => {
+  it('given a prepared skill, when Factory starts the run, then the browser navigates only after the server coordinator accepts one kickoff', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
-    let pathWhenDispatched: string | undefined;
-    let releaseDispatch!: () => void;
-    const dispatchResponse = new Promise<void>(resolve => {
-      releaseDispatch = resolve;
+    let releaseStart!: () => void;
+    const startResponse = new Promise<void>(resolve => {
+      releaseStart = resolve;
     });
-    let router!: ReturnType<typeof renderAt>['router'];
+    const startBodies: Array<{
+      resourceId: string;
+      projectPath: string;
+      branch: string;
+      kickoffMessage: string | null;
+      destinationStage: string;
+      workItem: { id?: string };
+    }> = [];
     server.use(
-      http.post(`${SESSION}/messages`, async ({ request }) => {
-        pathWhenDispatched = router.state.location.pathname;
-        captured.messages.push((await request.json()) as Record<string, unknown>);
-        await dispatchResponse;
-        return HttpResponse.json({ ok: true });
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/runs/start`, async ({ request }) => {
+        const body = (await request.json()) as (typeof startBodies)[number];
+        startBodies.push(body);
+        await startResponse;
+        return HttpResponse.json(
+          {
+            prepared: {
+              workItemId: body.workItem.id,
+              bindingId: 'binding-1',
+              threadId: 'thread-factory',
+              resourceId: body.resourceId,
+              projectPath: body.projectPath,
+              branch: body.branch,
+              revision: 3,
+              kickoffStatus: 'pending',
+              replayed: false,
+            },
+          },
+          { status: 202 },
+        );
       }),
     );
-    ({ router } = renderAt('/factory/work'));
-
-    try {
-      const intake = await screen.findByTestId('board-column-intake');
-      await within(intake).findByText('Fix flaky test');
-      await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
-
-      expect(await screen.findByRole('button', { name: /Show understand-issue skill contents/ })).toBeInTheDocument();
-      await waitFor(() => expect(captured.messages).toHaveLength(1));
-      expect(pathWhenDispatched).toBe('/threads/thread-factory');
-      expect(captured.skillInvocations).toHaveLength(1);
-      expect(captured.messages[0]?.message).toContain('<skill name="understand-issue">');
-      expect(state.posts).toHaveLength(0);
-      releaseDispatch();
-      await waitFor(() => expect(state.posts).toHaveLength(1));
-      expect(captured.messages).toHaveLength(1);
-    } finally {
-      releaseDispatch();
-    }
-  });
-
-  it('given a mounted kickoff whose dispatch fails, then the skill stays visible without leaving the transcript pending', async () => {
-    useBoardHandlers({ issues });
-    useFactoryRunHandlers('factory-issue-12');
-    let releaseDispatch!: () => void;
-    const dispatchResponse = new Promise<void>(resolve => {
-      releaseDispatch = resolve;
-    });
-    server.use(
-      http.post(`${SESSION}/messages`, async () => {
-        await dispatchResponse;
-        return HttpResponse.json({ error: 'kickoff failed' }, { status: 500 });
-      }),
-    );
-    renderAt('/factory/work');
+    const { router } = renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
 
-    expect(await screen.findByRole('button', { name: /Show understand-issue skill contents/ })).toBeInTheDocument();
-    expect(screen.getByText('Thinking…')).toBeInTheDocument();
-    releaseDispatch();
-    await waitFor(() => expect(screen.queryByText('Thinking…')).not.toBeInTheDocument());
-    expect(await screen.findByText(/kickoff failed|500/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Show understand-issue skill contents/ })).toBeInTheDocument();
+    await waitFor(() => expect(startBodies).toHaveLength(1));
+    expect(router.state.location.pathname).toBe('/factory/work');
+    expect(captured.skillInvocations).toHaveLength(1);
+    expect(startBodies[0]).toMatchObject({
+      kickoffMessage: expect.stringContaining('<skill name="understand-issue">'),
+      destinationStage: 'planning',
+      workItem: { role: 'plan', input: { stages: ['intake'] } },
+    });
+    expect(state.posts).toHaveLength(0);
+    releaseStart();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(startBodies).toHaveLength(1);
+  });
+
+  it('given a server coordinator failure, when a run is requested, then the browser stays on the board and shows the failure', async () => {
+    useBoardHandlers({ issues });
+    useFactoryRunHandlers('factory-issue-12');
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/runs/start`, () =>
+        HttpResponse.json({ error: 'kickoff failed' }, { status: 500 }),
+      ),
+    );
+    const { router } = renderAt('/factory/work');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await within(intake).findByText('Fix flaky test');
+    await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
+
+    expect(await screen.findByText(/kickoff failed/i)).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factory/work');
   });
 
   it('given a missing workspace skill, when Investigate is clicked, then the error is visible and no fallback prompt or card is dispatched', async () => {
@@ -1974,25 +2086,9 @@ describe('Factory Board — investigate flow', () => {
     expect(state.posts).toHaveLength(0);
   });
 
-  it('given an issue candidate, when Build is chosen from the menu, then navigation happens while the prompt runs and a work item materializes into Building', async () => {
+  it('given an issue candidate, when Build is chosen, then the item moves through authority before the server-bound kickoff', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
-    let releasePrompt!: () => void;
-    let markPromptRequested!: () => void;
-    const promptRequested = new Promise<void>(resolve => {
-      markPromptRequested = resolve;
-    });
-    const promptResponse = new Promise<void>(resolve => {
-      releasePrompt = resolve;
-    });
-    server.use(
-      http.post(`${SESSION}/messages`, async ({ request }) => {
-        captured.messages.push((await request.json()) as Record<string, unknown>);
-        markPromptRequested();
-        await promptResponse;
-        return HttpResponse.json({ ok: true });
-      }),
-    );
     const { router } = renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
@@ -2000,49 +2096,32 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(intake).getByRole('button', { name: 'More actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
-    await promptRequested;
-    expect(router.state.location.pathname).toBe('/threads/thread-factory');
-    releasePrompt();
-    await waitFor(() => expect(state.posts).toHaveLength(1));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.skillInvocations).toHaveLength(0);
     expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12');
-    expect(state.posts).toMatchObject([
-      {
-        source: 'github-issue',
-        sourceKey: 'github-issue:12',
-        stages: ['execute'],
-        sessions: { work: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
-      },
-    ]);
+    expect(state.posts).toEqual([]);
+    expect(captured.starts).toMatchObject([{ destinationStage: 'execute', workItem: { role: 'work' } }]);
   });
 
-  it('given board-card filing that fails, when Investigate is clicked, then the run still succeeds and navigates to the thread', async () => {
+  it('given server start coordination failure, when Investigate is clicked, then no kickoff is accepted', async () => {
     useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
-    // The card filing endpoint blows up, but the run itself already succeeded.
     server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
-        HttpResponse.json({ error: 'boom' }, { status: 500 }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/runs/start`, () =>
+        HttpResponse.json({ error: 'board persistence failed' }, { status: 500 }),
       ),
     );
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      const { router } = renderAt('/factory/work');
+    const { router } = renderAt('/factory/work');
 
-      const intake = await screen.findByTestId('board-column-intake');
-      await within(intake).findByText('Fix flaky test');
-      await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
+    const intake = await screen.findByTestId('board-column-intake');
+    await within(intake).findByText('Fix flaky test');
+    await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
 
-      // Filing is best-effort: the user still lands on the running thread.
-      await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
-      expect(captured.skillInvocations).toHaveLength(1);
-      await waitFor(() =>
-        expect(errorSpy).toHaveBeenCalledWith('Failed to file the board card for this run', expect.anything()),
-      );
-    } finally {
-      errorSpy.mockRestore();
-    }
+    expect(await screen.findByText(/board persistence failed/i)).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factory/work');
+    expect(captured.starts).toEqual([]);
+    expect(captured.messages).toEqual([]);
   });
 
   it('given a PR candidate in Review Intake, when Review is clicked, then the review prompt runs and a work item materializes into Reviewing with a review session', async () => {
@@ -2073,16 +2152,8 @@ describe('Factory Board — investigate flow', () => {
       },
     ]);
     expect(JSON.stringify(captured.skillInvocations)).not.toContain('Add factory pages');
-    await waitFor(() =>
-      expect(state.posts).toMatchObject([
-        {
-          source: 'github-pr',
-          sourceKey: 'github-pr:34',
-          stages: ['review'],
-          sessions: { review: { branch: 'factory/pr-34', threadId: 'thread-factory' } },
-        },
-      ]),
-    );
+    expect(state.posts).toEqual([]);
+    expect(captured.starts).toMatchObject([{ destinationStage: 'review', workItem: { role: 'review' } }]);
   });
 
   it('given a Linear candidate, when Investigate is clicked, then the prompt mentions the linear_get_issue tool', async () => {
@@ -2140,7 +2211,7 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.messages[0]!.message).not.toContain('understand-issue skill');
   });
 
-  it('given a persisted issue card without a plan session, when Investigate is chosen, then the run starts and the card PATCHes into Planning with the session ref', async () => {
+  it('given a persisted issue card without a plan session, when Investigate is chosen, then authority moves it before the server binds the plan role', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -2171,17 +2242,11 @@ describe('Factory Board — investigate flow', () => {
       arguments: expect.stringContaining('GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)'),
     });
     expect(JSON.stringify(captured.skillInvocations)).not.toContain('Fix flaky test');
-    await waitFor(() => expect(state.patches).toHaveLength(1));
-    expect(state.patches).toMatchObject([
-      {
-        id: 'wi-1',
-        stages: ['planning'],
-        sessions: { plan: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
-      },
-    ]);
+    expect(state.patches).toEqual([]);
+    expect(captured.starts).toMatchObject([{ destinationStage: 'planning', workItem: { id: 'wi-1', role: 'plan' } }]);
   });
 
-  it('given a card with a legacy plan ref, when Build is chosen, then filing repoints every role at the run thread', async () => {
+  it('given a card with a legacy plan ref, when Build is chosen, then only the exact work role is bound server-side', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -2213,22 +2278,11 @@ describe('Factory Board — investigate flow', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    // One thread per item: every role ref converges onto the run's thread.
-    await waitFor(() =>
-      expect(state.patches).toMatchObject([
-        {
-          id: 'wi-1',
-          stages: ['execute'],
-          sessions: {
-            plan: { branch: 'factory/issue-12', threadId: 'thread-factory' },
-            work: { branch: 'factory/issue-12', threadId: 'thread-factory' },
-          },
-        },
-      ]),
-    );
+    expect(captured.starts).toMatchObject([{ destinationStage: 'execute', workItem: { id: 'wi-1' } }]);
+    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-1', role: 'work' } }]);
   });
 
-  it('given a repeat run on the same item, when the worktree session already has a thread, then the prompt lands on that thread instead of creating a new one', async () => {
+  it('given a repeat run on the same item, when Review is chosen, then the browser delegates exact-thread reuse to the server coordinator', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -2244,28 +2298,12 @@ describe('Factory Board — investigate flow', () => {
     });
     const captured = useFactoryRunHandlers('factory-pr-34');
     const { router } = renderAt('/factory/review');
-    // The worktree session resumes a real (titled) thread from a previous run.
-    // Registered after renderAt so it takes precedence over the default empty
-    // thread list from useAppHandlers (MSW resolves newest-first).
-    server.use(
-      http.post(`${API}/sessions`, () =>
-        HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
-      ),
-      http.get(`${SESSION}/threads`, () =>
-        HttpResponse.json({
-          threads: [{ id: THREAD_ID, resourceId: RESOURCE_ID, title: 'PR #34: Add factory pages' }],
-        }),
-      ),
-      http.post(`${SESSION}/thread`, () => HttpResponse.json({ ok: true })),
-    );
-
     await screen.findByTestId('board-column-review');
     await userEvent.click(within(column('review')).getByRole('button', { name: 'Actions for Add factory pages' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Review' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${THREAD_ID}`));
-    // No new thread was created — the resumed thread carried the follow-up run.
-    expect(captured.threadTitles).toEqual([]);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.threadTitles).toEqual(['PR #34: Add factory pages']);
     await waitFor(() => expect(captured.messages).toHaveLength(1));
     expect(captured.messages[0]?.message).toContain('<skill name="understand-pr">');
     expect(captured.skillInvocations).toHaveLength(1);
@@ -2275,15 +2313,8 @@ describe('Factory Board — investigate flow', () => {
         'Check out the PR in this worktree first with `gh pr checkout 34`. Expected head branch: feat/factory-pages.',
       ),
     });
-    await waitFor(() =>
-      expect(state.patches).toMatchObject([
-        {
-          id: 'wi-pr',
-          stages: ['review'],
-          sessions: { review: { branch: 'factory/pr-34', threadId: THREAD_ID } },
-        },
-      ]),
-    );
+    expect(state.patches).toEqual([]);
+    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-pr', role: 'review' } }]);
   });
 
   it('given the worktree call fails, when Investigate is clicked, then an error notice renders and no work item is filed', async () => {
@@ -2325,7 +2356,7 @@ describe('Factory Board — open session from the card title', () => {
     },
   };
 
-  it('given a persisted card without a session, when the title is clicked, then an empty session is created and filed under chat with no prompt sent', async () => {
+  it('given a persisted card without a session, when the title is clicked, then the server binds an empty chat session with no prompt', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -2351,14 +2382,9 @@ describe('Factory Board — open session from the card title', () => {
     expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
     // No agent run: nothing was sent to the session.
     expect(captured.messages).toEqual([]);
-    // Opening a session is not a run: the card keeps its stages.
-    expect(state.patches).toMatchObject([
-      {
-        id: 'wi-1',
-        stages: ['intake'],
-        sessions: { chat: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
-      },
-    ]);
+    // Opening a session is not a stage transition; only the exact chat role is sent to the coordinator.
+    expect(state.patches).toEqual([]);
+    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-1', role: 'chat' }, kickoffMessage: null }]);
   });
 
   it('given a card whose run refs went stale, when the title is clicked, then only chat is filed and the stale roles are not revived', async () => {
@@ -2393,12 +2419,9 @@ describe('Factory Board — open session from the card title', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.messages).toEqual([]);
-    // The fresh thread is filed under chat only — repointing the stale `work`
-    // role would make it look live and hide Investigate/Build again.
-    expect(state.patches).toHaveLength(1);
-    expect(state.patches[0].sessions).toEqual({
-      chat: expect.objectContaining({ branch: 'factory/issue-12', threadId: 'thread-factory' }),
-    });
+    // The browser delegates only the fresh chat role; the stale work role is not inferred as authority.
+    expect(state.patches).toEqual([]);
+    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-1', role: 'chat' }, kickoffMessage: null }]);
   });
 
   it('given a candidate, when the title is clicked, then the card materializes with a chat session in its own column and no prompt is sent', async () => {
@@ -2413,16 +2436,9 @@ describe('Factory Board — open session from the card title', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.messages).toEqual([]);
-    expect(state.posts).toMatchObject([
-      {
-        source: 'github-issue',
-        sourceKey: 'github-issue:12',
-        title: 'Fix flaky test',
-        url: 'https://github.com/mastra-ai/mastra/issues/12',
-        stages: ['intake'],
-        metadata: { number: 12 },
-        sessions: { chat: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
-      },
+    expect(state.posts).toEqual([]);
+    expect(captured.starts).toMatchObject([
+      { destinationStage: 'intake', workItem: { role: 'chat' }, kickoffMessage: null },
     ]);
   });
 
@@ -2441,9 +2457,8 @@ describe('Factory Board — open session from the card title', () => {
     expect(captured.worktree).toMatchObject({ branch: 'factory/item-wi-manual' });
     expect(captured.threadTitles).toEqual(['Manual card']);
     expect(captured.messages).toEqual([]);
-    expect(state.patches).toMatchObject([
-      { id: 'wi-manual', stages: ['intake'], sessions: { chat: { branch: 'factory/item-wi-manual' } } },
-    ]);
+    expect(state.patches).toEqual([]);
+    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-manual', role: 'chat' }, kickoffMessage: null }]);
   });
 
   it('given a card whose only session is a chat session, when the Board renders, then the title links to the thread and runs are still offered', async () => {

@@ -518,13 +518,13 @@ export class SessionThread {
   }
 
   /** Create a new thread, bind the session to it, and rebind the agent stream. */
-  async create({ title }: { title?: string } = {}): Promise<AgentControllerThread> {
+  async create({ title, id }: { title?: string; id?: string } = {}): Promise<AgentControllerThread> {
     const session = this.#owner;
     const store = this.#store;
     this.cleanupSubscription();
     const now = new Date();
     const thread: AgentControllerThread = {
-      id: session.machinery.generateId(),
+      id: id ?? session.machinery.generateId(),
       resourceId: session.identity.getResourceId(),
       title: title || '',
       createdAt: now,

@@ -6,8 +6,13 @@ import { getFactoryStorage } from '../runtime-config';
 import { getWorkItemsStorage } from '../storage/domains';
 import { WorkItemRelationError } from '../storage/domains/work-items/base';
 import type {
+  CommitFactoryTransitionInput,
+  CommitFactoryTransitionResult,
   CreateWorkItemInput,
   ExternalWorkItemSource,
+  FactoryPendingStartRecord,
+  PrepareFactoryRunStartInput,
+  PrepareFactoryRunStartResult,
   UpsertWorkItemResult,
   UpdateWorkItemInput,
   WorkItemPriorState,
@@ -170,6 +175,7 @@ export async function upsertWorkItem(params: {
   userId: string;
   factoryProjectId: string;
   input: CreateWorkItemInput;
+  reuseMode?: 'update' | 'preserve' | 'non-stage';
 }): Promise<UpsertWorkItemResult> {
   return (await workItemsDomain()).upsert(params);
 }
@@ -181,6 +187,38 @@ export async function updateWorkItem(params: {
   patch: UpdateWorkItemInput;
 }): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
   return (await workItemsDomain()).update(params);
+}
+
+export async function getWorkItem({
+  orgId,
+  factoryProjectId,
+  id,
+}: {
+  orgId: string;
+  factoryProjectId: string;
+  id: string;
+}): Promise<WorkItemRow | null> {
+  return (await workItemsDomain()).getForProject(orgId, factoryProjectId, id);
+}
+
+export async function commitFactoryTransition(
+  input: CommitFactoryTransitionInput,
+): Promise<CommitFactoryTransitionResult> {
+  return (await workItemsDomain()).commitTransition(input);
+}
+
+export async function prepareFactoryRunStart(
+  input: PrepareFactoryRunStartInput,
+): Promise<PrepareFactoryRunStartResult> {
+  return (await workItemsDomain()).prepareRunStart(input);
+}
+
+export async function markFactoryPendingStart(
+  bindingId: string,
+  status: 'sent' | 'failed',
+  lastError?: string,
+): Promise<FactoryPendingStartRecord | null> {
+  return (await workItemsDomain()).markPendingStart(bindingId, status, lastError);
 }
 
 export async function deleteWorkItem({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {

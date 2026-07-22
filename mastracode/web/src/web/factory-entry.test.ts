@@ -8,12 +8,14 @@ import type { VersionControl } from './capabilities/version-control.js';
 import { PgVector } from '@mastra/pg';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import { MastraFactory } from './factory-entry.js';
+import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './factory/rules/index.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
 import type { FactoryIntegration, IntegrationContext } from './factory-integration.js';
 import {
   __resetRuntimeConfigForTests,
   getFactoryStorage,
   getSeededAuthProvider,
+  getSeededFactoryRules,
   getSeededIntegration,
   getSeededSandbox,
   getSeededStateSigner,
@@ -120,6 +122,28 @@ describe('MastraFactory.prepare', () => {
     expect(getFactoryStorage()).toBe(storage);
     expect(getSeededAuthProvider()).toBe(auth);
     expect(getSeededSandbox()?.machine).toBe(sandbox);
+  });
+
+  it('seeds conservative versioned Factory rules when the slot is omitted', async () => {
+    await prepareFactory({ storage: fakeStorage() });
+    expect(getSeededFactoryRules()).toEqual({
+      version: DEFAULT_FACTORY_RULE_VERSION,
+      work: {},
+      review: {},
+      tools: {},
+      github: {},
+    });
+  });
+
+  it('seeds explicitly configured Factory rules without composing handler leaves', async () => {
+    const onResult = vi.fn(() => undefined);
+    const rules = defaultFactoryRules({
+      version: 'customer-policy-3',
+      overrides: { tools: { submit_plan: { onResult } } },
+    });
+    await prepareFactory({ storage: fakeStorage(), rules });
+    expect(getSeededFactoryRules()).toBe(rules);
+    expect(getSeededFactoryRules()?.tools.submit_plan?.onResult).toBe(onResult);
   });
 
   it('registers and initializes factory domains through the storage lifecycle', async () => {

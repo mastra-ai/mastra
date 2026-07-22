@@ -11,9 +11,13 @@ import type { FactoryIntegration, IntegrationContext } from './factory-integrati
 import { getGithubFeatureDiagnostics } from './github/config.js';
 import { getLinearFeatureDiagnostics } from './linear/config.js';
 import { buildFactoryRoutes } from './factory/routes.js';
+import { FactoryStartCoordinator } from './factory/rules/start-coordinator.js';
+import { FactoryTransitionService } from './factory/rules/transition-service.js';
 import { buildFsRoutes } from './fs-routes.js';
 import { buildIntakeRoutes } from './intake/routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
+import { getFactoryStorage, getSeededFactoryRules } from './runtime-config.js';
+import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
 import type { StateSigner } from './state-signing.js';
@@ -179,7 +183,16 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const absentStubs = ['github', 'linear']
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
     .flatMap(disabledIntegrationStatusRoutes);
-
+  const factoryRoutes = (() => {
+    if (!deps.factoryReady) return [];
+    const workItems = getFactoryStorage().getDomain<WorkItemsStorage>('work-items');
+    const transitionService = new FactoryTransitionService({ rules: getSeededFactoryRules(), storage: workItems });
+    return buildFactoryRoutes({
+      audit: deps.audit,
+      transitionService,
+      startCoordinator: new FactoryStartCoordinator(deps.controller, workItems, transitionService),
+    });
+  })();
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
     ...buildConfigRoutes({ controller: deps.controller, authStorage: deps.authStorage }),
@@ -200,6 +213,6 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
           ),
         })
       : []),
-    ...(deps.factoryReady ? buildFactoryRoutes({ audit: deps.audit }) : []),
+    ...factoryRoutes,
   ];
 }

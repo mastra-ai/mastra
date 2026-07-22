@@ -101,12 +101,14 @@ class Mutex {
   }
 }
 
+type LibSQLExecutor = Pick<Client, 'execute'>;
+
 class LibSQLFactoryStorageOps implements FactoryStorageOps {
-  readonly #client: Client;
+  readonly #client: LibSQLExecutor;
   readonly #schemas: Map<string, CollectionSchema>;
   readonly #writeMutex = new Mutex();
 
-  constructor(client: Client, schemas: Map<string, CollectionSchema>) {
+  constructor(client: LibSQLExecutor, schemas: Map<string, CollectionSchema>) {
     this.#client = client;
     this.#schemas = schemas;
   }
@@ -426,6 +428,21 @@ export class LibSQLFactoryStorage extends FactoryStorage {
 
   protected async initStorage(): Promise<void> {
     await this.#client.execute('SELECT 1');
+  }
+
+  async withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> {
+    if (this.#config.url.includes(':memory:')) return fn(this.ops);
+    const transaction = await this.#client.transaction('write');
+    try {
+      const result = await fn(new LibSQLFactoryStorageOps(transaction, this.#schemas));
+      await transaction.commit();
+      return result;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    } finally {
+      transaction.close();
+    }
   }
 
   async ensureCollections(schemas: CollectionSchema[]): Promise<void> {

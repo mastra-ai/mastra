@@ -402,12 +402,14 @@ async function startMastraCodeApp(
 
   return {
     async stop() {
+      result.session.thread.detachFromCurrent();
       tui.stop();
       const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
       await Promise.allSettled([
         result.mcpManager?.disconnect(),
         result.controller.getMastra()?.stopWorkers(),
         result.controller.stopIntervals(),
+        result.githubSignals?.stopAllPolling(),
         closeSignalsPubSub?.(),
       ]);
     },
