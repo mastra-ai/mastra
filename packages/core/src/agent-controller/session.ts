@@ -3015,6 +3015,11 @@ export class Session<TState = unknown> {
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
         },
+    options?: {
+      tracingContext?: TracingContext;
+      tracingOptions?: TracingOptions;
+      requestContext?: RequestContext;
+    },
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId?: string }> } {
     const settleRunId = async <T>(result: {
       accepted: Promise<SendAgentSignalAccepted<T>>;
@@ -3025,7 +3030,10 @@ export class Session<TState = unknown> {
       const settled = await result.accepted.catch(() => undefined);
       return settled && 'runId' in settled ? settled.runId : undefined;
     };
-    const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
+    const contentOptions = 'content' in input ? input : undefined;
+    const tracingContext = options?.tracingContext ?? contentOptions?.tracingContext;
+    const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
+    const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();

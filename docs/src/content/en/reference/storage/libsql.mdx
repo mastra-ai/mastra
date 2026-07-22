@@ -97,8 +97,36 @@ In-memory storage resets when the process changes. Only suitable for development
     description: 'Authentication token for remote libSQL databases.',
     isOptional: true,
   },
+  {
+    name: 'journalMode',
+    type: "'wal' | 'delete'",
+    description:
+      'Journal mode for local file databases. `wal` uses a write-ahead log. `delete` uses a rollback journal and removes it after each transaction.',
+    isOptional: true,
+    defaultValue: "'wal'",
+  },
 ]}
 />
+
+## Local journal modes
+
+`journalMode` applies only to local file databases. Remote and in-memory databases use their existing connection behavior.
+
+The default `wal` mode supports more concurrent read and write activity. Set `journalMode: 'delete'` when you need rollback journaling without persistent write-ahead log (WAL) sidecar files:
+
+```typescript
+const storage = new LibSQLStore({
+  id: 'libsql-storage',
+  url: 'file:./storage.db',
+  journalMode: 'delete',
+})
+
+await storage.init()
+```
+
+DELETE mode allows one writer at a time, so write-heavy workloads may have lower throughput. Mastra establishes the selected mode before creating tables. Initialization fails if SQLite can't switch a local file to DELETE mode, for example when another process holds an incompatible lock.
+
+Call `close()` when you use the store directly. Closing a local WAL store checkpoints its pending writes and transitions the file to DELETE mode before releasing the client. A store configured for DELETE mode closes the client without running a WAL checkpoint. Repeated `close()` calls are safe.
 
 ## Managed tables
 

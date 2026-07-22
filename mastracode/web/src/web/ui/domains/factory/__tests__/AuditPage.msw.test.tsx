@@ -18,6 +18,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui
 import type { GithubStatus, Factory } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
 import type { AuditEvent } from '../services/audit';
+import type { FactoryDecisionPage, FactoryDecisionSummary } from '../services/decisions';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-gh';
@@ -79,6 +80,22 @@ function makeEvent(overrides: Partial<AuditEvent> = {}): AuditEvent {
   };
 }
 
+function makeDecision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecisionSummary {
+  return {
+    id: 'decision-1',
+    evaluationId: 'evaluation-1',
+    workItemId: 'wi-1',
+    type: 'invokeSkill',
+    status: 'retry',
+    attempts: 2,
+    lastError: 'Session temporarily unavailable.',
+    createdAt: '2026-07-15T18:00:00.000Z',
+    updatedAt: '2026-07-15T18:01:00.000Z',
+    completedAt: null,
+    ...overrides,
+  };
+}
+
 function emptySse(): Response {
   return new Response(
     new ReadableStream<Uint8Array>({
@@ -103,18 +120,22 @@ function sessionState() {
 interface AuditHandlerState {
   /** `(actions, before)` of every audit list request, in order. */
   requests: { actions: string | null; before: string | null }[];
+  decisionRequests: { statuses: string | null; before: string | null }[];
+  decisionRetries: string[];
 }
 
 interface AuditHandlerOptions {
   /** Pages served in order; the last page is repeated for extra requests. */
   pages?: { events: AuditEvent[]; nextCursor?: string }[];
+  decisionPages?: FactoryDecisionPage[];
   /** Portal-link response: a URL when WorkOS is configured, otherwise 404. */
   portalUrl?: string;
 }
 
 function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState {
   const pages = options.pages ?? [{ events: [makeEvent()] }];
-  const state: AuditHandlerState = { requests: [] };
+  const decisionPages = options.decisionPages ?? [{ decisions: [] }];
+  const state: AuditHandlerState = { requests: [], decisionRequests: [], decisionRetries: [] };
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
@@ -125,6 +146,9 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
+      HttpResponse.json({ workItems: [] }),
     ),
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
@@ -143,6 +167,29 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
       const page = pages[Math.min(state.requests.length - 1, pages.length - 1)]!;
       return HttpResponse.json(page);
     }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/decisions`, ({ request }) => {
+      const url = new URL(request.url);
+      const before = url.searchParams.get('before');
+      const statuses = url.searchParams.get('statuses');
+      state.decisionRequests.push({ statuses, before });
+      const page = decisionPages[before ? 1 : 0] ?? decisionPages.at(-1)!;
+      const allowed = statuses?.split(',');
+      return HttpResponse.json({
+        ...page,
+        decisions: page.decisions.filter(decision => !allowed || allowed.includes(decision.status)),
+      });
+    }),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/decisions/:decisionId/retry`,
+      ({ params }) => {
+        const decisionId = String(params.decisionId);
+        state.decisionRetries.push(decisionId);
+        const decision = decisionPages.flatMap(page => page.decisions).find(candidate => candidate.id === decisionId);
+        return decision
+          ? HttpResponse.json({ decision: { ...decision, status: 'retry', completedAt: null } })
+          : HttpResponse.json({ error: 'decision_not_retryable' }, { status: 409 });
+      },
+    ),
     http.get(`${TEST_BASE_URL}/web/audit/portal-link`, () =>
       options.portalUrl
         ? HttpResponse.json({ url: options.portalUrl })
@@ -206,6 +253,72 @@ describe('Factory Audit page', () => {
 
     // WorkOS isn't configured (portal-link 404), so the button is hidden.
     expect(screen.queryByRole('button', { name: 'Open in WorkOS' })).not.toBeInTheDocument();
+  });
+
+  it('given durable rule decisions, when the page renders and filters failures, then status, attempts, and bounded errors remain visible', async () => {
+    const state = useAuditHandlers({
+      decisionPages: [
+        {
+          decisions: [
+            makeDecision(),
+            makeDecision({
+              id: 'decision-failed',
+              status: 'failed',
+              type: 'notify',
+              attempts: 5,
+              lastError: 'Delivery exhausted its retry budget.',
+            }),
+          ],
+        },
+      ],
+    });
+    renderAt('/factory/audit');
+
+    const list = await screen.findByRole('list', { name: 'Rule decisions' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(list).getByText('attempts 2', { exact: false })).toBeInTheDocument();
+    expect(within(list).getByText('Session temporarily unavailable.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Failed' }));
+    await waitFor(() => expect(state.decisionRequests.map(request => request.statuses)).toContain('failed'));
+    await waitFor(() =>
+      expect(within(screen.getByRole('list', { name: 'Rule decisions' })).getAllByRole('listitem')).toHaveLength(1),
+    );
+    expect(
+      within(screen.getByRole('list', { name: 'Rule decisions' })).getByText('Delivery exhausted its retry budget.'),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      within(screen.getByRole('list', { name: 'Rule decisions' })).getByRole('button', { name: 'Retry' }),
+    );
+    await waitFor(() => expect(state.decisionRetries).toEqual(['decision-failed']));
+  });
+
+  it('given more decisions than one page, when Load more effects is chosen, then the cursor page appends', async () => {
+    const state = useAuditHandlers({
+      decisionPages: [
+        { decisions: [makeDecision()], nextCursor: 'decision-cursor' },
+        {
+          decisions: [
+            makeDecision({
+              id: 'decision-succeeded',
+              status: 'succeeded',
+              type: 'sendMessage',
+              attempts: 1,
+              lastError: null,
+              completedAt: '2026-07-15T18:02:00.000Z',
+            }),
+          ],
+        },
+      ],
+    });
+    renderAt('/factory/audit');
+
+    const list = await screen.findByRole('list', { name: 'Rule decisions' });
+    await userEvent.click(screen.getByRole('button', { name: 'Load more effects' }));
+    await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(2));
+    expect(state.decisionRequests.some(request => request.before === 'decision-cursor')).toBe(true);
+    expect(within(list).getByText('sendMessage')).toBeInTheDocument();
   });
 
   it('given the All filter, when the user picks Git, then events are refetched with the git action list', async () => {

@@ -88,6 +88,7 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
     stageHistory: [],
     sessions: {},
     metadata: {},
+    revision: 1,
     createdAt: ago(30 * HOUR_S),
     updatedAt: ago(30 * HOUR_S),
     ...overrides,

@@ -93,6 +93,42 @@ The **Metrics** page at `/factory/metrics` shows queue health for the active Fac
 
 Queue age thresholds are server-side Factory project config in seconds. `GET /web/factory/projects/:factoryProjectId/health/thresholds` reads them from the `queue-health` storage domain. The `queue_health_settings` table keys records by `(org_id, factory_project_id)`. Defaults are `[14400, 86400, 259200]` (4h, 24h, and 72h). `saveConfig` rejects empty or non-ascending `thresholdsSeconds` values.
 
+## Factory rules
+
+`MastraFactory` accepts one authoritative `rules` tree for Work and Review stage entry and exit, completed tool results, and normalized GitHub events. Construct it with `defaultFactoryRules()` so every deployment policy has an explicit version:
+
+```ts
+import { MastraFactory } from './src/web/factory-entry.js';
+import { defaultFactoryRules } from './src/web/factory/rules/index.js';
+
+const rules = defaultFactoryRules({
+  version: '2026-07-18.1',
+  overrides: {
+    review: {
+      intake: {
+        pullRequest: {
+          onEnter: context =>
+            context.actor.type === 'github' && !context.actor.trusted
+              ? { type: 'reject', code: 'forbidden', reason: 'A trusted author is required.' }
+              : undefined,
+        },
+      },
+    },
+    tools: {
+      submit_plan: {
+        onResult: () => undefined,
+      },
+    },
+  },
+});
+
+const factory = new MastraFactory({ rules });
+```
+
+Overrides replace the exact `onEnter`, `onExit`, `onResult`, or `onEvent` leaf; they never compose implicitly with another handler. The version is configuration identity for persisted evaluations and audits, not an event-deduplication key, and Mastra never hashes function source.
+
+Rules are trusted deployment code. They receive normalized, bounded context rather than storage handles, credentials, worktree paths, or raw webhook payloads. Each handler returns one bounded `FactoryRuleDecision` or `void`: a typed rejection, transition, linked-item upsert, skill invocation, bound-session message, or notification. Every returned decision is validated and redacted before persistence; external effects are deferred rather than executed inside rule evaluation.
+
 ## GitHub pull request notifications
 
 GitHub-backed Factory sessions automatically subscribe the current thread after a successful `gh pr create`. The `github_subscribe_pr` tool is primarily for existing pull requests or recovery when automatic subscription did not occur. Use `github_unsubscribe_pr` only to stop notifications early; closing or merging the pull request retires its subscription automatically.
