@@ -89,6 +89,17 @@ function createRateLimitError() {
   });
 }
 
+function createMissingResponseItemError() {
+  return new APICallError({
+    message: "Item with id 'rs_stale' not found.",
+    url: 'https://api.openai.com/v1/responses',
+    requestBodyValues: {},
+    statusCode: 404,
+    responseBody: JSON.stringify({ error: { message: "Item with id 'rs_stale' not found." } }),
+    isRetryable: false,
+  });
+}
+
 function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIErrorArgs {
   const messageList = new MessageList({ threadId: 'test-thread' });
   messageList.add([createUserMessage('hello')], 'input');
@@ -190,6 +201,62 @@ describe('ProviderHistoryCompat', () => {
     const result = await handler.processAPIError(args);
 
     expect(result).toEqual({ retry: true });
+  });
+
+  it('retries missing OpenAI response items without stale item references', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add(
+      [
+        {
+          id: 'assistant-with-stale-items',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning',
+                reasoning: '',
+                details: [],
+                providerMetadata: {
+                  openai: { itemId: 'rs_stale', reasoningEncryptedContent: 'encrypted-reasoning' },
+                },
+              },
+              {
+                type: 'text',
+                text: 'The result',
+                providerMetadata: { openai: { itemId: 'msg_stale' } },
+              },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: 'call_stale',
+                  toolName: 'searchTool',
+                  args: { query: 'test' },
+                  state: 'result',
+                  result: 'ok',
+                },
+                providerMetadata: { openai: { itemId: 'fc_stale' } },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ],
+      'response',
+    );
+    const args = makeArgs({
+      error: createMissingResponseItemError(),
+      messageList,
+      messages: messageList.get.all.db(),
+    });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    const parts = args.messageList.get.all.db()[0]!.content.parts;
+    expect(parts.map(part => part.providerMetadata?.openai?.itemId)).toEqual([undefined, undefined, undefined]);
+    expect(parts[0]?.providerMetadata?.openai?.reasoningEncryptedContent).toBe('encrypted-reasoning');
   });
 
   it('runs custom reactive compat rules for matching API errors', async () => {

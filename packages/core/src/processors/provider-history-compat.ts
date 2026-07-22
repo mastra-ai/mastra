@@ -162,6 +162,42 @@ export const anthropicToolIdFormat: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
+// Built-in rule: OpenAI stale response item references
+// ---------------------------------------------------------------------------
+
+function removeOpenAIItemId(value: { providerMetadata?: unknown }): boolean {
+  const providerMetadata = value.providerMetadata;
+  if (!providerMetadata || typeof providerMetadata !== 'object') return false;
+
+  const openai = (providerMetadata as Record<string, unknown>).openai;
+  if (!openai || typeof openai !== 'object' || !('itemId' in openai)) return false;
+
+  delete (openai as Record<string, unknown>).itemId;
+  return true;
+}
+
+/**
+ * OpenAI response item IDs can become unavailable while their encrypted
+ * reasoning content and complete message history remain valid. When OpenAI
+ * rejects a stale item reference, remove item IDs from the in-memory history
+ * so the retry sends complete items instead of server-side references.
+ */
+export const openaiMissingResponseItem: CompatRule = {
+  name: 'openai-missing-response-item',
+  errorPatterns: [/Item with id '(?:rs|msg|fc)_[^']+' not found/i],
+  fix(messages) {
+    let changed = false;
+    for (const message of messages) {
+      changed = removeOpenAIItemId(message.content) || changed;
+      for (const part of message.content.parts ?? []) {
+        changed = removeOpenAIItemId(part) || changed;
+      }
+    }
+    return changed;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Built-in rule: Cerebras `reasoning_content` strip
 // ---------------------------------------------------------------------------
 
@@ -315,6 +351,7 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
  */
 export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicToolIdFormat,
+  openaiMissingResponseItem,
   cerebrasStripReasoningContent,
   anthropicStripForeignReasoningContent,
 ];
@@ -334,6 +371,9 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   characters outside `[a-zA-Z0-9_-]` (e.g. `.` or `:` from other
  *   providers). Reactive (matches a 400 response body, retries with
  *   sanitized IDs).
+ * - **openai-missing-response-item** — removes stale OpenAI response item
+ *   references after the Responses API reports an item is unavailable, then
+ *   retries with complete history content.
  * - **cerebras-strip-reasoning-content** — strips `reasoning` parts from
  *   assistant messages in the outbound prompt when the resolved model is
  *   Cerebras, to avoid the `@ai-sdk/openai-compatible@>=1.0.32` regression
