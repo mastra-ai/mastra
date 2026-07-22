@@ -1,6 +1,6 @@
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChartLine, GitPullRequest, LayoutDashboard, ListChecks, ScrollText, SquareKanban } from 'lucide-react';
+import { ChartLine, GitPullRequest, ListChecks, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams } from 'react-router';
 
@@ -26,7 +26,6 @@ export function FactorySection({ children }: { children?: ReactNode }) {
         </Txt>
       </div>
       <MainSidebar.NavList>
-        <FactoryLink to={`/factories/${factoryId}/overview`} icon={LayoutDashboard} label="Overview" />
         <FactoryLink to={`/factories/${factoryId}/work`} icon={SquareKanban} label="Work" />
         <FactoryLink to={`/factories/${factoryId}/review`} icon={GitPullRequest} label="Review" />
         <FactoryLink to={`/factories/${factoryId}/metrics`} icon={ChartLine} label="Metrics" />
@@ -44,7 +43,7 @@ function FactoryLink({ to, icon: Icon, label }: { to: string; icon: ComponentTyp
   const isActive = pathname === to || pathname.startsWith(`${to}/`);
 
   return (
-    <MainSidebar.NavLink asChild link={{ name: label, url: to }} isActive={isActive}>
+    <MainSidebar.NavLink asChild size="default" link={{ name: label, url: to }} isActive={isActive}>
       <NavLink to={to} onClick={() => overlays.close('sidebar')}>
         <Icon />
         <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
