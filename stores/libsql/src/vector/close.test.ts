@@ -45,6 +45,36 @@ describe('LibSQLVector.close()', () => {
     expect(client.closed).toBe(true);
   });
 
+  it('skips WAL cleanup when DELETE mode was selected', async () => {
+    const dbPath = path.join(tmpDir, 'vectors-delete.db');
+    const vector = new LibSQLVector({ id: 'close-delete', url: `file:${dbPath}`, journalMode: 'delete' });
+    await vector.createIndex({ indexName: 'close_test', dimension: 4 });
+
+    const client = getClient(vector);
+    const executeSpy = vi.spyOn(client, 'execute');
+    const closeSpy = vi.spyOn(client, 'close');
+
+    await vector.close();
+
+    const executedSql = executedSqlFrom(executeSpy);
+    expect(executedSql).not.toContain('PRAGMA wal_checkpoint(TRUNCATE);');
+    expect(executedSql).not.toContain('PRAGMA journal_mode=DELETE;');
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalesces overlapping close calls', async () => {
+    const dbPath = path.join(tmpDir, 'vectors-overlapping.db');
+    const vector = new LibSQLVector({ id: 'close-overlapping', url: `file:${dbPath}` });
+    await vector.createIndex({ indexName: 'close_test', dimension: 4 });
+
+    const client = getClient(vector);
+    const closeSpy = vi.spyOn(client, 'close');
+
+    await Promise.all([vector.close(), vector.close(), vector.close()]);
+
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('is idempotent — a second close() is a no-op', async () => {
     const dbPath = path.join(tmpDir, 'vectors.db');
     const vector = new LibSQLVector({ id: 'close-idempotent', url: `file:${dbPath}` });

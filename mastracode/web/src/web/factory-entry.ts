@@ -42,6 +42,9 @@ import type {
   IntegrationPostToolContext,
   IntegrationTools,
 } from '@mastra/factory/integrations/base';
+import { builtInFactoryRules } from '@mastra/factory/rules/defaults';
+import type { FactoryRules } from '@mastra/factory/rules/types';
+import { assertFactoryRules } from '@mastra/factory/rules/validation';
 import { getFactoryWorkspace } from './factory/workspace.js';
 import { ProjectRoutes } from '@mastra/factory/routes/projects';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
@@ -139,6 +142,13 @@ export interface MastraFactoryConfig {
    * never mount, its tools never register, and the server boots fine.
    */
   integrations?: FactoryIntegration[];
+  /**
+   * Authoritative Factory board, tool-result, and GitHub-event rules. Construct
+   * with `defaultFactoryRules({ version, overrides })` so deployment policy has
+   * an explicit version and exact handler leaves replace rather than compose.
+   * Omitted → conservative built-in rules for the current deployment.
+   */
+  rules?: FactoryRules;
 }
 
 export interface MastraFactorySandboxConfig {
@@ -300,6 +310,9 @@ export class MastraFactory {
       }
       integrationIds.add(integration.id);
     }
+    const rules = this.#config.rules ?? builtInFactoryRules();
+    assertFactoryRules(rules);
+
     // FactoryStorage owns every app-table domain and initializes them through
     // the same lifecycle as the backend connection.
     const intakeStorage = storage.registerDomain(new IntakeStorage());
@@ -553,6 +566,7 @@ export class MastraFactory {
           integrations: integrationRegistrations,
           intakeReady,
           factoryReady,
+          rules,
         }),
         ...projectRoutes.routes(),
         ...auditDomain.routes(),

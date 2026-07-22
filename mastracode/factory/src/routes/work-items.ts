@@ -11,6 +11,15 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import type {
+  FactoryStartCoordinator,
+  FactoryStartPreparedResult,
+  FactoryStartRequest,
+} from '../rules/start-coordinator';
+import { FactoryStartTransitionError } from '../rules/start-coordinator';
+import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service';
+import type { FactoryRuleBoard, FactoryRuleStage } from '../rules/types';
+import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from '../rules/types';
 import type { AuditEmitter } from '../storage/domains/audit/domain';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base';
@@ -38,6 +47,10 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   workItems: WorkItemsStorage;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
+  /** Governed stage-transition service. Stage moves 503 when absent. */
+  transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
+  /** Coordinator that binds a Factory run before dispatching its kickoff. */
+  startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
 }
 
 function loose(c: unknown): Context {
@@ -177,6 +190,102 @@ function patchedFields(patch: Record<string, unknown>): string[] {
   return Object.keys(patch).filter(key => patch[key] !== undefined);
 }
 
+function boundedText(value: unknown, max: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  return normalized.length > 0 && normalized.length <= max ? normalized : undefined;
+}
+
+function parseTransitionBody(
+  body: unknown,
+): Omit<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' | 'workItemId' | 'actor'> | null {
+  if (!isRecord(body)) return null;
+  const board = FACTORY_RULE_BOARDS.includes(body.board as FactoryRuleBoard)
+    ? (body.board as FactoryRuleBoard)
+    : undefined;
+  const stage = FACTORY_RULE_STAGES.includes(body.stage as FactoryRuleStage)
+    ? (body.stage as FactoryRuleStage)
+    : undefined;
+  const requestId = boundedText(body.requestId, 256);
+  const cause = boundedText(body.cause, 256);
+  if (
+    !board ||
+    !stage ||
+    !requestId ||
+    !UUID_RE.test(requestId) ||
+    !cause ||
+    !Number.isInteger(body.expectedRevision) ||
+    Number(body.expectedRevision) < 1
+  ) {
+    return null;
+  }
+  return {
+    board,
+    stage,
+    expectedRevision: Number(body.expectedRevision),
+    ingress: { type: 'human', identity: requestId },
+    cause,
+  };
+}
+
+function parseStartBody(
+  body: unknown,
+  tenant: { orgId: string; userId: string },
+  factoryProjectId: string,
+): FactoryStartRequest | null {
+  if (!isRecord(body) || !isRecord(body.workItem)) return null;
+  const input = parseCreateWorkItem(body.workItem.input);
+  const resourceId = boundedText(body.resourceId, 256);
+  const projectPath = boundedText(body.projectPath, 2_048);
+  const branch = boundedText(body.branch, 256);
+  const threadTitle = boundedText(body.threadTitle, 512);
+  const kickoffKey = boundedText(body.kickoffKey, 256);
+  const destinationStage = FACTORY_RULE_STAGES.includes(body.destinationStage as FactoryRuleStage)
+    ? (body.destinationStage as FactoryRuleStage)
+    : undefined;
+  const role = boundedText(body.workItem.role, 32);
+  const id = body.workItem.id === undefined ? undefined : boundedText(body.workItem.id, 64);
+  const kickoffMessage = body.kickoffMessage === null ? null : boundedText(body.kickoffMessage, 16_384);
+  if (body.workItem.id !== undefined && (!id || !UUID_RE.test(id))) return null;
+  if (
+    !input ||
+    !resourceId ||
+    !projectPath ||
+    !branch ||
+    !threadTitle ||
+    !kickoffKey ||
+    !UUID_RE.test(kickoffKey) ||
+    !destinationStage ||
+    !role ||
+    kickoffMessage === undefined
+  ) {
+    return null;
+  }
+  const threadTags = isRecord(body.threadTags)
+    ? Object.fromEntries(
+        Object.entries(body.threadTags)
+          .filter(
+            (entry): entry is [string, string] =>
+              boundedText(entry[0], 64) !== undefined && boundedText(entry[1], 256) !== undefined,
+          )
+          .map(([key, value]) => [key, value.trim()]),
+      )
+    : undefined;
+  return {
+    ...tenant,
+    factoryProjectId,
+    resourceId,
+    projectPath,
+    branch,
+    threadTitle,
+    threadTags,
+    kickoffKey,
+    kickoffMessage,
+    destinationStage,
+    workItem: { id, role, input },
+  };
+}
+
 export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
   /** Resolve the `(orgId, userId)` tenant or a ready-to-return error response. */
   async #resolveTenant(c: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
@@ -283,7 +392,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth } = this.deps;
+    const { audit, workItems, queueHealth, transitionService, startCoordinator } = this.deps;
     return [
       // ── List the org's work items for a project ─────────────────────────────
       registerApiRoute('/web/factory/projects/:id/work-items', {
@@ -347,6 +456,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (body === undefined) return c.json({ error: 'Invalid JSON body' }, 400);
           const input = parseCreateWorkItem(body);
           if (!input) return c.json({ error: 'invalid_work_item' }, 400);
+          if ((input.stages ?? ['intake']).length !== 1 || (input.stages ?? ['intake'])[0] !== 'intake') {
+            return c.json(
+              { error: 'governed_transition_required', message: 'New work items must enter through Factory intake.' },
+              409,
+            );
+          }
 
           await workItems.ensureReady();
           try {
@@ -355,6 +470,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               userId: resolved.userId,
               factoryProjectId: resolved.factoryProjectId,
               input,
+              reuseMode: 'non-stage',
             });
             const item = result.item;
             if (result.created) {
@@ -370,11 +486,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             } else {
               // Source-key reuse: the POST updated an existing card, so audit it
               // as an update (plus stage/run events) instead of a false creation.
+              const { stages: _stages, sessions: _sessions, ...boundedPatch } = input;
               await this.#auditWorkItemPatch({
                 context: loose(c),
                 item,
                 previous: result.previous,
-                patch: input as unknown as Record<string, unknown>,
+                patch: boundedPatch as unknown as Record<string, unknown>,
               });
             }
             return c.json({ workItem: item });
@@ -387,7 +504,108 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
-      // ── Patch stages / sessions / metadata / title ───────────────────────────
+      // ── Authoritative stage transition ──────────────────────────────────────
+      registerApiRoute('/web/factory/projects/:id/work-items/:workItemId/transition', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const workItemId = loose(c).req.param('workItemId');
+          if (!workItemId || !UUID_RE.test(workItemId)) return c.json({ error: 'Work item not found' }, 404);
+          const parsed = parseTransitionBody(await readJson(loose(c)));
+          if (!parsed) return c.json({ error: 'invalid_transition_request' }, 400);
+          if (!transitionService) {
+            return c.json({ error: 'factory_transition_unavailable' }, 503);
+          }
+          await workItems.ensureReady();
+          const result = await transitionService.transition({
+            ...parsed,
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+            workItemId,
+            actor: { type: 'human', id: resolved.userId },
+            ingress: {
+              ...parsed.ingress,
+              identity: `human:${resolved.userId}:${parsed.ingress.identity}`,
+            },
+          });
+          await audit.emit({
+            context: loose(c),
+            input: {
+              action:
+                result.status === 'accepted'
+                  ? 'factory.work_item.stage_moved'
+                  : 'factory.work_item.transition_rejected',
+              factoryProjectId: resolved.factoryProjectId,
+              targets: [{ type: 'work_item', id: workItemId }],
+              metadata: {
+                transitionId: result.transitionId,
+                ingressType: parsed.ingress.type,
+                ruleSetVersion: transitionService.ruleSetVersion,
+                ...(result.status === 'accepted'
+                  ? { to: result.stage, revision: result.revision }
+                  : { code: result.code, reason: result.reason }),
+              },
+            },
+          });
+          if (result.status === 'accepted') return c.json({ result });
+          return c.json({ result }, result.code === 'stale' ? 409 : 422);
+        },
+      }),
+
+      // ── Bind a Factory run before dispatching its kickoff ────────────────────
+      registerApiRoute('/web/factory/projects/:id/runs/start', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          if (!startCoordinator) {
+            return c.json({ error: 'factory_start_unavailable' }, 503);
+          }
+          const input = parseStartBody(await readJson(loose(c)), resolved, resolved.factoryProjectId);
+          if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
+          if (
+            !input.workItem.id &&
+            ((input.workItem.input.stages ?? ['intake']).length !== 1 ||
+              (input.workItem.input.stages ?? ['intake'])[0] !== 'intake')
+          ) {
+            return c.json(
+              { error: 'governed_transition_required', message: 'Create the work item in Intake before starting it.' },
+              409,
+            );
+          }
+          await workItems.ensureReady();
+          let prepared: FactoryStartPreparedResult;
+          try {
+            prepared = await startCoordinator.prepare(input);
+          } catch (error) {
+            if (error instanceof FactoryStartTransitionError) {
+              return c.json({ result: error.result }, error.result.code === 'stale' ? 409 : 422);
+            }
+            throw error;
+          }
+          await audit.emit({
+            context: loose(c),
+            input: {
+              action: 'factory.run.started',
+              factoryProjectId: resolved.factoryProjectId,
+              targets: [{ type: 'work_item', id: prepared.workItemId }],
+              metadata: {
+                role: input.workItem.role,
+                branch: prepared.branch,
+                threadId: prepared.threadId,
+                projectPath: prepared.projectPath,
+                bindingId: prepared.bindingId,
+              },
+            },
+          });
+          return c.json({ prepared }, 202);
+        },
+      }),
+
+      // ── Patch non-stage metadata / sessions / title ──────────────────────────
       registerApiRoute('/web/factory/work-items/:id', {
         method: 'PATCH',
         requiresAuth: false,
@@ -402,6 +620,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (body === undefined) return c.json({ error: 'Invalid JSON body' }, 400);
           const patch = parseUpdateWorkItem(body);
           if (!patch) return c.json({ error: 'invalid_work_item_patch' }, 400);
+          if (patch.stages !== undefined) {
+            return c.json(
+              { error: 'governed_transition_required', message: 'Use the Factory transition endpoint to move stages.' },
+              409,
+            );
+          }
 
           await workItems.ensureReady();
           try {

@@ -7,6 +7,9 @@ import type { FactoryStorage } from '@mastra/core/storage';
 
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config';
+import { FactoryStartCoordinator } from '../rules/start-coordinator';
+import { FactoryTransitionService } from '../rules/transition-service';
+import type { FactoryRules } from '../rules/types';
 import type { SandboxFleet } from '../sandbox/fleet';
 import type { StateSigner } from '../state-signing';
 import type { AuditEmitter } from '../storage/domains/audit/domain';
@@ -61,6 +64,8 @@ export interface FactoryApiRoutesDeps {
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
   factoryReady: boolean;
+  /** Resolved Factory rule set, threaded from the host (no service locator). */
+  rules: FactoryRules;
 }
 
 function guardIntegrationRoutes({
@@ -219,6 +224,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
     .flatMap(id => disabledIntegrationStatusRoutes(deps, id));
 
+  const transitionService = deps.factoryReady
+    ? new FactoryTransitionService({ rules: deps.rules, storage: deps.domains.workItems })
+    : undefined;
+
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
     ...new ConfigRoutes({
@@ -261,6 +270,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           queueHealth: deps.domains.queueHealth,
+          transitionService,
+          startCoordinator: transitionService
+            ? new FactoryStartCoordinator(deps.controller, deps.domains.workItems, transitionService)
+            : undefined,
         }).routes()
       : []),
   ];

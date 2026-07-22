@@ -8,6 +8,7 @@ import type { VersionControl } from '@mastra/factory/capabilities/version-contro
 import { PgVector } from '@mastra/pg';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import { MastraFactory } from './factory-entry.js';
+import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from '@mastra/factory/rules/defaults';
 import { getFactoryWorkspace } from './factory/workspace.js';
 import type { FactoryIntegration, IntegrationContext } from '@mastra/factory/integrations/base';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
@@ -67,6 +68,21 @@ const registerTenantCredentialResolverMock = vi.fn();
 vi.mock('@mastra/factory/routes/tenant-credentials', async importOriginal => {
   const actual = await importOriginal<typeof import('@mastra/factory/routes/tenant-credentials')>();
   return { ...actual, registerTenantCredentialResolver: () => registerTenantCredentialResolverMock() };
+});
+
+// Wrap the route-surface assembly with a spy so tests can assert the DI deps
+// the factory threads into it (e.g. the resolved Factory rules) — there is no
+// service locator to read them back from anymore.
+const assembleFactoryApiRoutesSpy = vi.fn();
+vi.mock('@mastra/factory/routes/surface', async importOriginal => {
+  const actual = await importOriginal<typeof import('@mastra/factory/routes/surface')>();
+  return {
+    ...actual,
+    assembleFactoryApiRoutes: (deps: Parameters<typeof actual.assembleFactoryApiRoutes>[0]) => {
+      assembleFactoryApiRoutesSpy(deps);
+      return actual.assembleFactoryApiRoutes(deps);
+    },
+  };
 });
 
 /** An SSO-shaped fake provider: gets the hosted-login `/auth/*` routes. */
@@ -144,6 +160,33 @@ describe('MastraFactory.prepare', () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: sandbox } });
     expect(ctx.fleet.enabled).toBe(true);
     expect(ctx.fleet.provider).toBe('local');
+  });
+
+  it('threads conservative versioned Factory rules when the slot is omitted', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage() });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: {}, authStorage: {} });
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
+    expect(assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules).toEqual({
+      version: DEFAULT_FACTORY_RULE_VERSION,
+      work: {},
+      review: {},
+      tools: {},
+      github: {},
+    });
+  });
+
+  it('threads explicitly configured Factory rules without composing handler leaves', async () => {
+    const onResult = vi.fn(() => undefined);
+    const rules = defaultFactoryRules({
+      version: 'customer-policy-3',
+      overrides: { tools: { submit_plan: { onResult } } },
+    });
+    const prepared = await prepareFactory({ storage: fakeStorage(), rules });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: {}, authStorage: {} });
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
+    const threaded = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
+    expect(threaded).toBe(rules);
+    expect(threaded.tools.submit_plan?.onResult).toBe(onResult);
   });
 
   it('registers and initializes factory domains through the storage lifecycle', async () => {
