@@ -102,9 +102,13 @@ export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> 
   }
 }
 
+function currentPageRedirectTo(): string {
+  return encodeURIComponent(window.location.pathname);
+}
+
 /** Begin the GitHub App install/connect flow (full-page redirect). */
 export function connectGithub(baseUrl: string): void {
-  window.location.assign(`${baseUrl}/auth/github/connect`);
+  window.location.assign(`${baseUrl}/auth/github/connect?redirectTo=${currentPageRedirectTo()}`);
 }
 
 /**
@@ -114,7 +118,7 @@ export function connectGithub(baseUrl: string): void {
  * instantly and invisibly, which would make the manage button a silent no-op.
  */
 export function manageGithubConnection(baseUrl: string): void {
-  window.location.assign(`${baseUrl}/auth/github/connect?manage=1`);
+  window.location.assign(`${baseUrl}/auth/github/connect?manage=1&redirectTo=${currentPageRedirectTo()}`);
 }
 
 /**
@@ -126,8 +130,7 @@ export function manageGithubConnection(baseUrl: string): void {
  * load refetches `/web/github/status`.
  */
 export function connectUserGithub(baseUrl: string): void {
-  const redirectTo = encodeURIComponent(window.location.pathname);
-  window.location.assign(`${baseUrl}/auth/github/connect-user?redirectTo=${redirectTo}`);
+  window.location.assign(`${baseUrl}/auth/github/connect-user?redirectTo=${currentPageRedirectTo()}`);
 }
 
 /** List repos across the user's installations, optionally filtered by query. */
