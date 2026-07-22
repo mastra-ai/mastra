@@ -211,6 +211,20 @@ function transformPackageJson() {
   manifest.dependencies['@mastra/memory'] = 'alpha'; // peer of @mastra/playground-ui
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
 
+  // Downgrade `typescript` from tsgo (v7) to classic (v5). The Mastra Factory
+  // sources happily typecheck under tsgo, but `mastra build` transitively
+  // loads the classic TypeScript API via `typescript-paths` — tsgo's ESM
+  // package doesn't expose `ts.sys`, so `require('typescript')` returns an
+  // almost-empty module and analyzeBundle crashes with
+  //   TypeError: Cannot read properties of undefined (reading 'readFile')
+  // In the monorepo pnpm hoists classic TypeScript from another workspace
+  // package, hiding the problem. In the standalone template there is no
+  // hoist, so we pin the classic compiler here. Remove once
+  // `typescript-paths` (or whatever @mastra/deployer uses) supports tsgo.
+  if (manifest.devDependencies?.typescript) {
+    manifest.devDependencies.typescript = '^5.9.2';
+  }
+
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 

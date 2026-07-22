@@ -103,6 +103,12 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     const npmrc = fs.readFileSync(path.join(outDir, '.npmrc'), 'utf8');
     expect(npmrc).toMatch(/^legacy-peer-deps\s*=\s*true\s*$/m);
 
+    // `typescript` is downgraded from tsgo (v7) to the classic compiler (v5)
+    // because `mastra build` transitively loads TypeScript via
+    // `typescript-paths`, which needs the classic `ts.sys` API tsgo does not
+    // expose. Remove once the deployer supports tsgo.
+    expect(pkg.devDependencies.typescript).toMatch(/^\^5\./);
+
     // Tests and their dependencies are stripped.
     expect(allDeps.vitest).toBeUndefined();
     expect(fs.existsSync(path.join(outDir, 'e2e'))).toBe(false);
