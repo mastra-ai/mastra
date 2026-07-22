@@ -8,7 +8,7 @@
  */
 import type { AgentControllerSessionState } from '@mastra/client-js';
 import { QueryClient } from '@tanstack/react-query';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -167,6 +167,17 @@ describe('MastraCode web routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create factory from local folder' })).toBeInTheDocument();
+  });
+
+  it('given no factory, when local factory creation is opened, then the creation panel replaces the welcome screen', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
+
+    await user.click(await screen.findByRole('button', { name: 'Create factory from local folder' }));
+
+    const creationPanel = await screen.findByRole('region', { name: 'Create Factory' });
+    expect(within(creationPanel).getByRole('button', { name: 'Bind a local folder instead' })).toBeInTheDocument();
+    expect(screen.queryByText('Welcome to MastraCode')).not.toBeInTheDocument();
   });
 
   it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {
