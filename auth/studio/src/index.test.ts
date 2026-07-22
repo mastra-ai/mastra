@@ -87,15 +87,26 @@ describe('MastraAuthStudio', () => {
       delete process.env.MASTRA_SHARED_API_URL;
     });
 
-    it('should fall back to localhost default when no config or env var', () => {
+    it('should fall back to the platform default when no config or env var', () => {
       delete process.env.MASTRA_SHARED_API_URL;
       const a = new MastraAuthStudio();
       const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
-      expect(url).toContain('http://localhost:3010/v1/auth/login');
+      expect(url).toContain('https://platform.mastra.ai/v1/auth/login');
     });
 
     it('should set isMastraCloudAuth to true', () => {
       expect(auth.isMastraCloudAuth).toBe(true);
+    });
+
+    it('should not auto-detect a .mastra.ai cookie domain from the built-in default URL', () => {
+      // The platform.mastra.ai fallback must not flip on production cookies —
+      // a localhost studio using the default would mint Domain=.mastra.ai
+      // cookies the browser rejects.
+      delete process.env.MASTRA_SHARED_API_URL;
+      const a = new MastraAuthStudio();
+      const headers = a.getSessionHeaders({ id: 'sess', userId: 'u1' } as any);
+      expect(headers['Set-Cookie']).not.toContain('Domain=');
+      expect(headers['Set-Cookie']).not.toContain('Secure');
     });
   });
 
