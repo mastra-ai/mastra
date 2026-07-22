@@ -19,13 +19,15 @@ const script = path.join(pkgRoot, 'scripts', 'sync-template.mjs');
 let workDir: string;
 let outDir: string;
 let fakeBinDir: string;
+let failingBinDir: string;
 let sentinel: string;
 
-function runSync(args: string[]): { status: number; stderr: string } {
+function runSync(args: string[], overrides: { binDir?: string } = {}): { status: number; stderr: string } {
+  const binDir = overrides.binDir ?? fakeBinDir;
   try {
     execFileSync(process.execPath, [script, ...args], {
       stdio: 'pipe',
-      env: { ...process.env, PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}` },
+      env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}` },
     });
     return { status: 0, stderr: '' };
   } catch (err) {
@@ -42,6 +44,12 @@ beforeAll(() => {
   fakeBinDir = path.join(workDir, 'bin');
   fs.mkdirSync(fakeBinDir);
   fs.writeFileSync(path.join(fakeBinDir, 'npm'), '#!/bin/sh\necho "9.9.9"\n', { mode: 0o755 });
+
+  // Failing fake npm: every `npm view` exits non-zero, simulating a package
+  // that is not yet published. Used to exercise --skip-verify / --local-workspace.
+  failingBinDir = path.join(workDir, 'bin-failing');
+  fs.mkdirSync(failingBinDir);
+  fs.writeFileSync(path.join(failingBinDir, 'npm'), '#!/bin/sh\necho "npm ERR! 404" >&2\nexit 1\n', { mode: 0o755 });
 
   // Sentinel env file in the source tree — must never reach the template.
   sentinel = path.join(webRoot, '.env.test-sentinel');
@@ -121,5 +129,54 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(pkg.scripts.dev).toContain('vite');
     expect(pkg.scripts.prebuild).toBeUndefined();
     expect(JSON.stringify(pkg.scripts)).not.toContain('monorepo-deps');
+  });
+
+  it('default mode fails when a linked dep is not on npm', () => {
+    const failOut = path.join(workDir, 'out-fail');
+    const result = runSync(['--out', failOut], { binDir: failingBinDir });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('not published on npm');
+    expect(result.stderr).toContain('--skip-verify');
+  });
+
+  it('--skip-verify writes caret ranges anyway when deps are not on npm', () => {
+    const skipOut = path.join(workDir, 'out-skip');
+    const result = runSync(['--out', skipOut, '--skip-verify'], { binDir: failingBinDir });
+    expect(result.status).toBe(0);
+    const pkg = JSON.parse(fs.readFileSync(path.join(skipOut, 'package.json'), 'utf8'));
+    const mastraCore = pkg.dependencies['@mastra/core'];
+    expect(mastraCore).toMatch(/^\^/);
+    // The peer alias falls back to the caret range too.
+    expect(pkg.dependencies['@mastra/memory']).toMatch(/^\^/);
+  });
+
+  it('--local-workspace rewrites unpublished deps to file: paths', () => {
+    const localOut = path.join(workDir, 'out-local');
+    const result = runSync(['--out', localOut, '--local-workspace'], { binDir: failingBinDir });
+    expect(result.status).toBe(0);
+    const pkg = JSON.parse(fs.readFileSync(path.join(localOut, 'package.json'), 'utf8'));
+    // Every mastra dep that came from `link:` should now be a `file:` spec
+    // pointing at a real directory inside the monorepo.
+    const monorepoRoot = path.resolve(pkgRoot, '../..');
+    for (const [name, spec] of Object.entries(pkg.dependencies) as Array<[string, string]>) {
+      if (name !== 'mastra' && !name.startsWith('@mastra/')) continue;
+      expect(spec, `${name} should be a file: spec under --local-workspace`).toMatch(/^file:/);
+      const resolved = path.resolve(localOut, spec.slice('file:'.length));
+      expect(fs.existsSync(path.join(resolved, 'package.json')), `${resolved} must exist`).toBe(true);
+      // The resolved path must live inside the monorepo — never escape it.
+      const rel = path.relative(monorepoRoot, resolved);
+      expect(rel.startsWith('..')).toBe(false);
+    }
+    // Peer alias must not reuse @mastra/core's file: path (which points at
+    // packages/core, not packages/memory).
+    expect(pkg.dependencies['@mastra/memory']).not.toBe(pkg.dependencies['@mastra/core']);
+    expect(pkg.dependencies['@mastra/memory']).toMatch(/^file:/);
+  });
+
+  it('rejects --skip-verify combined with --tag', () => {
+    const bogusOut = path.join(workDir, 'out-bogus');
+    const result = runSync(['--out', bogusOut, '--skip-verify', '--tag', 'latest']);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('cannot be combined with --tag');
   });
 });

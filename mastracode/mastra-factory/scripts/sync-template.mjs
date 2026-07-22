@@ -22,6 +22,27 @@
  *
  * Usage:
  *   node scripts/sync-template.mjs [--out <dir>] [--tag latest]
+ *                                  [--skip-verify] [--local-workspace]
+ *
+ * Flags:
+ *   --out <dir>          Where to write the generated template
+ *                        (default: `template-out/` next to this package).
+ *   --tag <name>         Pin caret ranges to that dist-tag on npm instead of
+ *                        the local monorepo versions.
+ *   --skip-verify        Skip the `npm view` publish check. Caret ranges are
+ *                        still written from the local monorepo versions, so
+ *                        `npm install` inside the template will fail if any
+ *                        dep is not yet on npm. Intended for local iteration
+ *                        on the sync script itself, not for publishing.
+ *   --local-workspace    Implies `--skip-verify`. For any dep whose local
+ *                        monorepo version is not yet on npm, write a `file:`
+ *                        spec pointing at the monorepo package instead of a
+ *                        caret range. The resulting template installs and
+ *                        runs against the local package set — useful for
+ *                        smoke-testing an unreleased template end-to-end.
+ *                        NEVER use this for a template that will be pushed
+ *                        to the softwarefactory-template repo: `file:` paths
+ *                        only resolve inside this monorepo.
  *
  * Output defaults to `template-out/` next to this package (gitignored).
  * Publish flow: automated — the sync-softwarefactory-template workflow runs
@@ -48,6 +69,14 @@ function argValue(flag) {
 const defaultOutDir = path.join(pkgRoot, 'template-out');
 const outDir = path.resolve(argValue('--out') ?? defaultOutDir);
 const pinTag = argValue('--tag'); // undefined = local monorepo versions
+// `--local-workspace` implies `--skip-verify`: with `file:` fallbacks the
+// npm publish check is meaningless for the unpublished deps we'd be swapping.
+const useLocalWorkspace = args.includes('--local-workspace');
+const skipVerify = useLocalWorkspace || args.includes('--skip-verify');
+if ((useLocalWorkspace || args.includes('--skip-verify')) && pinTag) {
+  console.error('sync-template: --skip-verify / --local-workspace cannot be combined with --tag');
+  process.exit(1);
+}
 
 /** True when `candidate` is `parent` or nested inside it. */
 function containsPath(parent, candidate) {
@@ -154,27 +183,46 @@ function monorepoVersion(name, relPath) {
 /**
  * Resolve the version to pin: the local monorepo version (default, verified
  * published) or the requested dist-tag.
+ *
+ * Returns `{ version, published }`. `published` is only meaningful when the
+ * caller passed `--skip-verify` or `--local-workspace` — in the default mode
+ * it is always `true` because we throw on unpublished versions.
  */
 function resolvePinnedVersion(name, relPath) {
   if (pinTag) {
     try {
-      return execFileSync('npm', ['view', name, `dist-tags.${pinTag}`], { stdio: 'pipe' })
+      const version = execFileSync('npm', ['view', name, `dist-tags.${pinTag}`], { stdio: 'pipe' })
         .toString()
         .trim();
+      return { version, published: true };
     } catch {
       throw new Error(`sync-template: could not resolve ${name}@${pinTag} on npm.`);
     }
   }
   const version = monorepoVersion(name, relPath);
+  if (skipVerify) {
+    // With --local-workspace we care whether the dep is on npm so we can
+    // fall back to `file:`. With bare --skip-verify we still probe (cheap)
+    // to let the caller see which deps would break, but never throw.
+    let published = false;
+    try {
+      execFileSync('npm', ['view', `${name}@${version}`, 'version'], { stdio: 'pipe' });
+      published = true;
+    } catch {
+      published = false;
+    }
+    return { version, published };
+  }
   try {
     execFileSync('npm', ['view', `${name}@${version}`, 'version'], { stdio: 'pipe' });
   } catch {
     throw new Error(
       `sync-template: ${name}@${version} (local monorepo version) is not published on npm — ` +
-        `publish it (or wait for the release train), or sync with --tag latest.`,
+        `publish it (or wait for the release train), or sync with --tag latest. ` +
+        `For local iteration, use --skip-verify or --local-workspace.`,
     );
   }
-  return version;
+  return { version, published: true };
 }
 
 function transformPackageJson() {
@@ -205,20 +253,36 @@ function transformPackageJson() {
   console.log(
     pinTag
       ? `sync-template: pinning npm ${pinTag} dist-tags...`
-      : 'sync-template: pinning local monorepo versions (verified on npm)...',
+      : skipVerify
+        ? useLocalWorkspace
+          ? 'sync-template: pinning local monorepo versions (unpublished deps get file: fallbacks)...'
+          : 'sync-template: pinning local monorepo versions (publish verification skipped)...'
+        : 'sync-template: pinning local monorepo versions (verified on npm)...',
   );
   for (const section of ['dependencies', 'devDependencies']) {
     const deps = manifest[section];
     if (!deps) continue;
     for (const [name, spec] of Object.entries(deps)) {
       if (!spec.startsWith('link:')) continue;
-      const version = resolvePinnedVersion(name, linkSpecToRelPath(spec));
+      const relPath = linkSpecToRelPath(spec);
+      const { version, published } = resolvePinnedVersion(name, relPath);
+      if (useLocalWorkspace && !published) {
+        // `file:` spec relative to the template's own package.json so npm
+        // links the local build. Only reachable via --local-workspace, which
+        // the docstring documents as monorepo-only (never published).
+        const fileSpec = `file:${path.relative(outDir, path.join(monorepoRoot, relPath))}`;
+        deps[name] = fileSpec;
+        pins.push([name, version]);
+        console.log(`  ! ${name}@${version} not on npm, using ${fileSpec}`);
+        continue;
+      }
       // Caret ranges, matching the monorepo's other templates (templates/*):
       // the scaffold floats to compatible releases instead of freezing the
       // exact set that existed at sync time.
       deps[name] = `^${version}`;
       pins.push([name, version]);
-      console.log(`  ✓ ${name}@^${version}`);
+      const suffix = skipVerify && !published ? ' (WARNING: not on npm)' : '';
+      console.log(`  ${skipVerify && !published ? '!' : '✓'} ${name}@^${version}${suffix}`);
     }
   }
 
@@ -227,9 +291,12 @@ function transformPackageJson() {
   }
 
   // npm cannot install monorepo-only protocols; nothing may slip through.
+  // `file:` is only permitted under --local-workspace (documented as
+  // monorepo-only, never pushed to the template repo).
+  const forbidden = useLocalWorkspace ? /^(link:|workspace:|catalog:)/ : /^(link:|workspace:|file:|catalog:)/;
   for (const section of ['dependencies', 'devDependencies']) {
     for (const [name, spec] of Object.entries(manifest[section] ?? {})) {
-      if (/^(link:|workspace:|file:|catalog:)/.test(spec)) {
+      if (forbidden.test(spec)) {
         throw new Error(`sync-template: unresolved monorepo spec in template: ${name}@${spec}`);
       }
     }
@@ -239,7 +306,22 @@ function transformPackageJson() {
   // skips automatic peer installation. Most peers are already direct deps;
   // these transitive runtime peers are not, so declare them explicitly.
   // (In the monorepo dev setup pnpm's auto-install-peers provides them.)
-  manifest.dependencies['@mastra/memory'] = manifest.dependencies['@mastra/core']; // peer of @mastra/playground-ui
+  //
+  // @mastra/memory tracks @mastra/core's version. Normally that's a caret
+  // range we can copy verbatim, but under --local-workspace core may resolve
+  // to a `file:` path pointing at packages/core — so give memory its own
+  // resolution against packages/memory instead of aliasing core's spec.
+  if (useLocalWorkspace && manifest.dependencies['@mastra/core']?.startsWith('file:')) {
+    const memoryRelPath = 'packages/memory';
+    const { version, published } = resolvePinnedVersion('@mastra/memory', memoryRelPath);
+    if (published) {
+      manifest.dependencies['@mastra/memory'] = `^${version}`;
+    } else {
+      manifest.dependencies['@mastra/memory'] = `file:${path.relative(outDir, path.join(monorepoRoot, memoryRelPath))}`;
+    }
+  } else {
+    manifest.dependencies['@mastra/memory'] = manifest.dependencies['@mastra/core']; // peer of @mastra/playground-ui
+  }
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
 
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
