@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 42.0.0-alpha.13
+
+### Minor Changes
+
+- Added a borderless surface appearance, compact content density, and a dedicated card link component with native link semantics, plus hover, focus, and active states for interactive cards. ([#19747](https://github.com/mastra-ai/mastra/pull/19747))
+
 ## 42.0.0-alpha.12
 
 ### Patch Changes
