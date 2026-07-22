@@ -256,6 +256,8 @@ export class PosthogExporter extends TrackingExporter<
     }
 
     const properties: Record<string, any> = {
+      // Custom metadata goes first so it cannot overwrite the natively mapped fields below
+      ...this.extractCustomMetadata(feedback.metadata),
       $ai_trace_id: feedback.traceId,
       // PostHog's trace UI only displays feedback events that carry $ai_feedback_text
       $ai_feedback_text: feedback.comment ?? String(feedback.value),
@@ -269,8 +271,6 @@ export class PosthogExporter extends TrackingExporter<
     if (feedback.spanId) properties.span_id = feedback.spanId;
     if (feedback.sourceId) properties.source_id = feedback.sourceId;
     if (feedback.metadata?.sessionId) properties.$ai_session_id = feedback.metadata.sessionId;
-
-    Object.assign(properties, this.extractCustomMetadata(feedback.metadata));
 
     try {
       this.#client.capture(

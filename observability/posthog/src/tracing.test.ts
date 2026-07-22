@@ -1251,12 +1251,36 @@ describe('PosthogExporter', () => {
       );
     });
 
+    it('should not let custom metadata overwrite natively mapped properties', async () => {
+      await exporter.onFeedbackEvent(
+        createFeedbackEvent({
+          traceId: 'trace-1',
+          metadata: { $ai_trace_id: 'spoofed-trace', feedback_type: 'spoofed-type', environment: 'prod' },
+        }),
+      );
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            $ai_trace_id: 'trace-1',
+            feedback_type: 'thumbs',
+            environment: 'prod',
+          }),
+        }),
+      );
+    });
+
     it('should log instead of throwing when capture fails', async () => {
+      const errorSpy = vi.spyOn(exporter['logger'], 'error');
       mockCapture.mockImplementationOnce(() => {
         throw new Error('capture failed');
       });
 
       await expect(exporter.onFeedbackEvent(createFeedbackEvent())).resolves.toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledWith(
+        'PostHog exporter: failed to submit feedback',
+        expect.objectContaining({ error: expect.any(Error), feedbackId: 'feedback-1' }),
+      );
     });
   });
 });
