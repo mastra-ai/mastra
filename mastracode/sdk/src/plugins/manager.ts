@@ -40,12 +40,19 @@ export class PluginManager {
   private githubPollInFlight: Promise<boolean> | undefined;
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
+  private readonly githubUpdateListeners = new Set<(pluginNames: string[]) => void | Promise<void>>();
 
   constructor(private readonly options: PluginManagerOptions) {}
 
   onReload(listener: (plugins: LoadedPlugin[]) => void | Promise<void>): () => void {
     this.reloadListeners.add(listener);
     return () => this.reloadListeners.delete(listener);
+  }
+
+  /** Notified with the display names of GitHub plugins that were updated by the background poll. */
+  onGithubPluginsUpdated(listener: (pluginNames: string[]) => void | Promise<void>): () => void {
+    this.githubUpdateListeners.add(listener);
+    return () => this.githubUpdateListeners.delete(listener);
   }
 
   async reload(): Promise<LoadedPlugin[]> {
@@ -225,7 +232,7 @@ export class PluginManager {
   }
 
   private async pollGithubSourcesForUpdatesOnce(): Promise<boolean> {
-    let changed = false;
+    const changedCheckouts = new Set<string>();
     const seen = new Set<string>();
     for (const plugin of this.loadedPlugins) {
       if (plugin.source !== 'github' || plugin.status === 'inactive' || plugin.status === 'blocked') continue;
@@ -236,13 +243,28 @@ export class PluginManager {
       const before = await this.readGitHead(checkoutPath);
       const checkoutChanged = await this.refreshGithubCheckout(plugin, checkoutPath, before);
       const after = await this.readGitHead(checkoutPath);
-      if (checkoutChanged || before !== after) changed = true;
+      if (checkoutChanged || before !== after) changedCheckouts.add(checkoutPath);
     }
 
-    if (changed) {
-      await this.reload();
-    }
-    return changed;
+    if (changedCheckouts.size === 0) return false;
+
+    // Multiple plugins can share one checkout — report every plugin whose source changed.
+    const updatedPluginNames = this.loadedPlugins
+      .filter(
+        plugin =>
+          plugin.source === 'github' &&
+          plugin.status !== 'inactive' &&
+          plugin.status !== 'blocked' &&
+          changedCheckouts.has(this.resolvePluginSourcePath(plugin)),
+      )
+      .map(plugin => plugin.name ?? plugin.id);
+    await this.reload();
+    await this.notifyGithubUpdateListeners(updatedPluginNames);
+    return true;
+  }
+
+  private async notifyGithubUpdateListeners(pluginNames: string[]): Promise<void> {
+    await Promise.all([...this.githubUpdateListeners].map(listener => Promise.resolve(listener(pluginNames))));
   }
 
   private async refreshGithubCheckout(

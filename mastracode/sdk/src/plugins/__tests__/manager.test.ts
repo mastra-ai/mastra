@@ -194,12 +194,16 @@ describe('PluginManager', () => {
 
     const manager = new PluginManager({ projectRoot, homeDir });
     const pluginTools = manager.getPluginTools();
+    const updateListener = vi.fn();
+    manager.onGithubPluginsUpdated(updateListener);
     await manager.reload();
     expect(pluginTools.github_tool?.description).toBe('first');
 
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     expect(pluginTools.github_tool?.description).toBe('second');
+    expect(updateListener).toHaveBeenCalledTimes(1);
+    expect(updateListener).toHaveBeenCalledWith(['acme.github']);
     expect(execaMock).toHaveBeenCalledWith(
       'git',
       ['fetch', 'origin'],
@@ -317,11 +321,14 @@ describe('PluginManager', () => {
     });
 
     const manager = new PluginManager({ projectRoot, homeDir });
+    const updateListener = vi.fn();
+    manager.onGithubPluginsUpdated(updateListener);
     await manager.reload();
 
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(false);
 
     expect(execaMock.mock.calls.some(call => call[0] === 'corepack' && call[1][0]?.startsWith('pnpm@'))).toBe(false);
+    expect(updateListener).not.toHaveBeenCalled();
   });
 
   it('backs up divergent GitHub plugin checkouts before forcing them to origin', async () => {
