@@ -155,6 +155,10 @@ export type FactoryBoardRules = Partial<
   Record<FactoryRuleStage, Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>>>
 >;
 
+export interface FactorySupervisorRules {
+  observeIdleWithoutTransition?: boolean;
+}
+
 export interface FactoryRules {
   version: string;
   work: FactoryBoardRules;
@@ -162,6 +166,7 @@ export interface FactoryRules {
   tools: Record<string, FactoryToolRuleLeaf>;
   github: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
   linear: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
+  supervisor?: FactorySupervisorRules;
 }
 
 export interface FactoryRulesOverrides {
@@ -170,6 +175,7 @@ export interface FactoryRulesOverrides {
   tools?: Record<string, FactoryToolRuleLeaf>;
   github?: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
   linear?: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
+  supervisor?: FactorySupervisorRules;
 }
 
 export type FactoryRuleRejectionCode =

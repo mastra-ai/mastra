@@ -13,6 +13,7 @@ import { FactoryTransitionApprovalService } from '../rules/approval-service.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryGithubEventService } from '../rules/github-service.js';
 import { FactoryLinearIssueService } from '../rules/linear-service.js';
+import type { FactoryRunLifecycleObserver } from '../rules/run-lifecycle-observer.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
@@ -78,6 +79,7 @@ export interface FactoryApiRoutesDeps {
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
+  runLifecycleObserver?: Pick<FactoryRunLifecycleObserver, 'observe' | 'subscribeIdle'>;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -348,6 +350,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         transitionService,
         githubIntegration?.sourceControlStorage,
         deps.domains.memorySettings,
+        deps.runLifecycleObserver,
       )
     : undefined;
   if (transitionService && startCoordinator) {

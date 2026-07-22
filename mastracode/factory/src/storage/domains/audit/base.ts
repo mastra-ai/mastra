@@ -26,6 +26,7 @@
  *   - factory.git.push
  *   - factory.git.pr_opened
  *   - factory.intake.config_updated
+ *   - factory.run.idle_without_transition
  *
  * v1.1 adds agent-level actions (also register these in WorkOS):
  *   - factory.agent.commit

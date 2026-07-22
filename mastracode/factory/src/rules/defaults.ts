@@ -310,6 +310,10 @@ export function mergeFactoryRuleOverrides(
     tools: mergeToolRules(base.tools, overrides.tools),
     github: mergeGithubRules(base.github, overrides.github),
     linear: mergeLinearRules(base.linear, overrides.linear),
+    supervisor: {
+      observeIdleWithoutTransition:
+        overrides.supervisor?.observeIdleWithoutTransition ?? base.supervisor?.observeIdleWithoutTransition ?? true,
+    },
   };
 }
 

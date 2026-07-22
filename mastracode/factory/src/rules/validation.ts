@@ -159,7 +159,7 @@ function validateBoardRules(rules: unknown, label: string): asserts rules is Fac
 
 export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
   if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'github', 'linear'], 'Factory rules');
+  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'github', 'linear', 'supervisor'], 'Factory rules');
   boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
   validateBoardRules(rules.work, 'Factory rules.work');
   validateBoardRules(rules.review, 'Factory rules.review');
@@ -192,6 +192,19 @@ export function assertFactoryRules(rules: unknown): asserts rules is FactoryRule
     assertExactKeys(leaf, ['onEvent'], `Factory rules.linear.${event}`);
     if (leaf.onEvent !== undefined && typeof leaf.onEvent !== 'function') {
       throw new FactoryRuleValidationError(`Factory rules.linear.${event}.onEvent must be a function.`);
+    }
+  }
+
+  if (rules.supervisor !== undefined) {
+    if (!isPlainObject(rules.supervisor)) {
+      throw new FactoryRuleValidationError('Factory rules.supervisor must be an object.');
+    }
+    assertExactKeys(rules.supervisor, ['observeIdleWithoutTransition'], 'Factory rules.supervisor');
+    if (
+      rules.supervisor.observeIdleWithoutTransition !== undefined &&
+      typeof rules.supervisor.observeIdleWithoutTransition !== 'boolean'
+    ) {
+      throw new FactoryRuleValidationError('Factory rules.supervisor.observeIdleWithoutTransition must be a boolean.');
     }
   }
 }

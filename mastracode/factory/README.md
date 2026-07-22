@@ -39,6 +39,23 @@ Authenticated clients can list and resolve approvals through the tenant-scoped r
 
 Resolver and tenant identity always come from server authentication, not request-body fields.
 
+## Idle worker observation
+
+Factory observes live work-item sessions for runs that finish normally without changing the item's stage or revision and without leaving a transition approval pending. The observer reconciles final persisted tool results before comparing state, records a bounded `factory.run.idle_without_transition` audit event, and provides the lifecycle callback used by the Factory supervisor.
+
+Observation is enabled by default. A Factory can opt out through its rules configuration:
+
+```ts
+const rules = defaultFactoryRules({
+  version: 'factory-rules-v1',
+  overrides: {
+    supervisor: { observeIdleWithoutTransition: false },
+  },
+});
+```
+
+This is an advisory live lifecycle signal, not durable Factory state. Each qualifying `agent_end` triggers it directly; there is no persisted completion cursor or polling deduplication, so a process crash at the completion boundary may lose the notification. Aborted, errored, suspended, transitioned, approval-pending, unbound, and opted-out runs do not emit it.
+
 ## Development (monorepo)
 
 This package lives in the `mastra-ai/mastra` monorepo at `mastracode/factory`.
