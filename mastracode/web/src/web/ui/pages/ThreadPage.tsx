@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { useMatch, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
 import { ChatLayout } from '../ui/ChatLayout';
@@ -24,13 +24,13 @@ const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 export function ThreadPage() {
   const { activeFactory, factoriesPending } = useActiveFactoryContext();
   const { threadId } = useParams();
-  const location = useLocation();
+  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
   const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
   const activeUserSessionMatch =
     userSessionMatch && activeFactory?.id === userSessionMatch.factory.id ? userSessionMatch : undefined;
-  const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
+  const isUserThreadRoute = Boolean(userThreadMatch);
   const workspaceFactory = isUserThreadRoute ? activeUserSessionMatch?.factory : activeFactory;
   const workspacePath = workspaceFactory
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)

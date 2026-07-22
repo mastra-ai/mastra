@@ -172,6 +172,20 @@ function useAgentControllerHandlers(workItems: WorkItem[] = relatedWorkItems) {
   });
 
   server.use(
+    // Mount-driven sandbox materialization: opening `/factories/:factoryId/**`
+    // runs the `/ensure` SSE route before the session is allowed to bind.
+    http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/ensure`, () => {
+      const done = {
+        resourceId: 'resource-gh',
+        factoryProjectId: GITHUB_PROJECT_ID,
+        projectRepositoryId: PROJECT_REPOSITORY_ID,
+        sandboxId: 'sbx-test',
+        sandboxWorkdir: '/sandbox/mastra',
+      };
+      return new HttpResponse(`event: done\ndata: ${JSON.stringify(done)}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }),
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: 'resource-gh', threadId: 'thread-test' }),
     ),
@@ -197,7 +211,6 @@ function useAgentControllerHandlers(workItems: WorkItem[] = relatedWorkItems) {
 
 function seedActiveFactory(project: Factory) {
   saveFactories([project]);
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function LocationProbe() {
@@ -205,10 +218,10 @@ function LocationProbe() {
   return <span data-testid="location">{location.pathname}</span>;
 }
 
-function renderSection(initialPath = '/') {
+function renderSection(initialPath = `/factories/${githubProject.id}/new`, factoryId = githubProject.id) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[initialPath]}>
-      <ActiveFactoryProvider>
+      <ActiveFactoryProvider factoryId={factoryId}>
         <ChatSessionConfigProvider>
           <WorkspacesSection />
           <LocationProbe />
@@ -377,7 +390,7 @@ describe('WorkspacesSection', () => {
     seedActiveFactory(localProject);
     useAgentControllerHandlers();
 
-    renderSection();
+    renderSection(`/factories/${localProject.id}/new`, localProject.id);
 
     await waitFor(() => expect(screen.queryByText('Work Sessions')).not.toBeInTheDocument());
   });
@@ -481,7 +494,7 @@ describe('WorkspacesSection', () => {
       expect(screen.queryByRole('status', { name: 'Agent finished in Feature work' })).not.toBeInTheDocument(),
     );
     // Let the open-thread flow settle so its requests can't leak into later tests.
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-feat'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-feat`));
   });
 
   it('given workspaces that are idle from the start, then no done indicator or chime fires', async () => {
@@ -519,7 +532,7 @@ describe('WorkspacesSection', () => {
 
     await waitFor(() => expect(storedRepository().selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
     // Let the open-thread flow settle so its requests can't leak into later tests.
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-generic`));
   });
 
   it('opens the most recent thread of the new worktree when switching workspaces', async () => {
@@ -535,11 +548,11 @@ describe('WorkspacesSection', () => {
         }),
       ),
     );
-    renderSection('/threads/thread-test');
+    renderSection(`/factories/${githubProject.id}/threads/thread-test`);
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-latest`));
   });
 
   it('opens the most recent thread of the new worktree when switching from /new', async () => {
@@ -554,11 +567,11 @@ describe('WorkspacesSection', () => {
         }),
       ),
     );
-    renderSection('/new');
+    renderSection(`/factories/${githubProject.id}/new`);
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-latest`));
   });
 
   it('creates and opens a thread when the new worktree has none', async () => {
@@ -571,11 +584,11 @@ describe('WorkspacesSection', () => {
         return HttpResponse.json({ id: 'thread-fresh', title: 'New thread', resourceId: 'resource-gh' });
       }),
     );
-    renderSection('/threads/thread-test');
+    renderSection(`/factories/${githubProject.id}/threads/thread-test`);
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-fresh'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-fresh`));
     expect(created).toBe(1);
   });
 
@@ -597,7 +610,7 @@ describe('WorkspacesSection', () => {
         }),
       ),
     );
-    renderSection('/factory/board');
+    renderSection(`/factories/${githubProject.id}/work`);
 
     const activeSession = await screen.findByRole('button', { name: 'Latest' });
     expect(activeSession).toHaveAttribute('aria-current', 'true');
@@ -605,7 +618,7 @@ describe('WorkspacesSection', () => {
 
     // A session row IS its conversation — clicking it opens the thread even
     // from worktree-independent pages like the board.
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-latest`));
   });
 
   it('opens the titled conversation thread, not a newer empty untitled one', async () => {
@@ -637,11 +650,11 @@ describe('WorkspacesSection', () => {
         }),
       ),
     );
-    renderSection('/factory/board');
+    renderSection(`/factories/${githubProject.id}/work`);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Real work' }));
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-convo'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-convo`));
   });
 
   it('opens the already-selected workspace’s thread when its row is clicked from another page', async () => {
@@ -662,7 +675,7 @@ describe('WorkspacesSection', () => {
         }),
       ),
     );
-    renderSection('/factory/board');
+    renderSection(`/factories/${githubProject.id}/work`);
 
     // feat-api is the selected workspace; its row must still lead to its
     // conversation when the user is elsewhere (board, /new, …).
@@ -670,7 +683,7 @@ describe('WorkspacesSection', () => {
     expect(row).toHaveAttribute('aria-current', 'true');
     await userEvent.click(row);
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-generic`));
     // No re-select happened — the workspace selection is unchanged.
     expect(storedRepository().selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
   });

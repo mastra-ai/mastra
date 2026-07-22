@@ -13,7 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
@@ -78,7 +78,8 @@ function readFileAsBase64(file: File): Promise<string> {
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { kind, resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const location = useLocation();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
@@ -212,12 +213,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const send = async (text: string, files: PendingImage[]) => {
     if (!text.trim() && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
-    if (location.pathname === '/new') {
+    if (onDraftComposer) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
       await sendMutation.mutateAsync({ text, files: outgoing });
       seedThreadMessageCache(threadId, text, files);
-      void navigate(`/threads/${threadId}`, { replace: true });
+      void navigate(`/factories/${factoryId}/threads/${threadId}`, { replace: true });
       return;
     }
     localUser(text, false, outgoing);

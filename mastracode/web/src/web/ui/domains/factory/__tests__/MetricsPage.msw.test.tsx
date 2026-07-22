@@ -161,11 +161,10 @@ function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsSta
   return state;
 }
 
-function renderAt(initialEntry: string, project: Factory = githubProject) {
+function renderAt(project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${project.id}/metrics`] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -188,7 +187,7 @@ describe('Factory Metrics page', () => {
         wipTotal: 4,
       }),
     );
-    renderAt('/factory/metrics');
+    renderAt();
 
     expect(await screen.findByRole('heading', { name: 'Metrics' })).toBeInTheDocument();
 
@@ -230,7 +229,7 @@ describe('Factory Metrics page', () => {
 
   it('given the default window, when the user switches to 7d, then metrics are refetched with days=7', async () => {
     const state = useMetricsHandlers();
-    renderAt('/factory/metrics');
+    renderAt();
 
     expect(await screen.findByText('Completed (30d)')).toBeInTheDocument();
     expect(state.requestedDays).toEqual(['30']);
@@ -254,7 +253,7 @@ describe('Factory Metrics page', () => {
         transitions: { human: 0, total: 0 },
       }),
     );
-    renderAt('/factory/metrics');
+    renderAt();
 
     expect(await screen.findByText('Nothing in flight — the board is clear.')).toBeInTheDocument();
     expect(screen.getByText('No items created in this window.')).toBeInTheDocument();
@@ -265,7 +264,7 @@ describe('Factory Metrics page', () => {
 
   it('given a local project, when visiting Metrics, then the server-factory notice renders instead of the dashboard', async () => {
     useMetricsHandlers();
-    renderAt('/factory/metrics', localProject);
+    renderAt(localProject);
 
     expect(
       await screen.findByText(/Board, metrics, and audit are available for server-backed Factories/),

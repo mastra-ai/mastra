@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router';
 import { useAddFactoryMutation, useCreateFactoryMutation } from '../../../../../shared/hooks/useFactories';
 import { useKeyDown } from '../../../lib/hooks';
 import { CloseIcon } from '../../../ui/icons';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
+import { factoryHomePath } from '../services/factoryPaths';
 import { DirectoryBrowser } from './DirectoryPicker';
 
 function mutationError(error: unknown): string | null {
@@ -22,7 +22,6 @@ function mutationError(error: unknown): string | null {
  * folder remains a secondary path for terminal-shared, org-less workflows.
  */
 export function FactoriesPanel({ onClose }: { onClose: () => void }) {
-  const { selectFactory } = useActiveFactoryContext();
   const navigate = useNavigate();
   const createFactory = useCreateFactoryMutation();
   const addLocalFactory = useAddFactoryMutation();
@@ -39,8 +38,7 @@ export function FactoriesPanel({ onClose }: { onClose: () => void }) {
     if (!trimmed) return;
     try {
       const factory = await createFactory.mutateAsync({ name: trimmed });
-      await selectFactory(factory);
-      void navigate('/factory/board');
+      void navigate(factoryHomePath(factory));
     } catch {
       // Mutation state owns the rendered error.
     }
@@ -49,8 +47,7 @@ export function FactoriesPanel({ onClose }: { onClose: () => void }) {
   const handlePickFolder = async (path: string, folderName: string) => {
     try {
       const factory = await addLocalFactory.mutateAsync({ name: folderName || path, path });
-      await selectFactory(factory);
-      void navigate('/new');
+      void navigate(factoryHomePath(factory));
     } catch {
       // Mutation state owns the rendered error.
     }

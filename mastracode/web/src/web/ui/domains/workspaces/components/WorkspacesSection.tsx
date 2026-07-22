@@ -170,14 +170,16 @@ export function WorkspacesSection() {
           ),
           queryFn: () => chatSession.listMessages(latest.id, INITIAL_THREAD_MESSAGE_LIMIT),
         });
-        void navigate(`/threads/${latest.id}`, { replace: true });
+        void navigate(`/factories/${activeFactory.id}/threads/${latest.id}`, { replace: true });
         return;
       }
       // Empty worktree: leave the stale thread route before creating, so the
       // route-thread sync can't race the create call and error on the old
       // thread. The scoped session is pinned to this worktree, so the new
       // thread is tagged with its projectPath.
-      if (location.pathname.startsWith('/threads/')) void navigate('/new', { replace: true });
+      if (location.pathname.startsWith(`/factories/${activeFactory.id}/threads/`)) {
+        void navigate(`/factories/${activeFactory.id}/new`, { replace: true });
+      }
       const created = await chatSession.createThread();
       // A fresh thread has no messages; seed the cache to skip the skeleton.
       queryClient.setQueryData(
@@ -190,9 +192,9 @@ export function WorkspacesSection() {
         [],
       );
       void queryClient.invalidateQueries({ queryKey: threadsKey });
-      void navigate(`/threads/${created.id}`, { replace: true });
+      void navigate(`/factories/${activeFactory.id}/threads/${created.id}`, { replace: true });
     } catch {
-      void navigate('/new', { replace: true });
+      void navigate(`/factories/${activeFactory.id}/new`, { replace: true });
     }
   };
 
@@ -205,10 +207,10 @@ export function WorkspacesSection() {
         // Threads under the deleted worktree are gone; if we were inside one,
         // land on the fallback workspace's latest thread. Factory pages are
         // worktree-independent, so deleting from there stays put.
-        if (wasSelected && !location.pathname.startsWith('/factory')) {
+        if (wasSelected && location.pathname.startsWith(`/factories/${activeFactory.id}/threads/`)) {
           const fallback = selectedRepository(updated)?.selectedWorktreePath;
           if (fallback) void openWorktreeThread(fallback);
-          else void navigate('/new', { replace: true });
+          else void navigate(`/factories/${activeFactory.id}/new`, { replace: true });
         }
       },
       onError: () => setConfirmDelete(null),

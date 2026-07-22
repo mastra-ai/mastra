@@ -20,8 +20,6 @@ export interface ChatSessionContextApi {
    * /user/threads/*, or a local project chat); modes stay available.
    */
   kind: 'factory' | 'user';
-  /** Route prefix this session's threads are addressed under. */
-  threadBasePath: '/threads' | '/user/threads';
 }
 
 export const ChatSessionContext = createContext<ChatSessionContextApi | null>(null);

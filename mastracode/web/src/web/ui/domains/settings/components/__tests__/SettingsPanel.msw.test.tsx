@@ -180,7 +180,6 @@ function useAgentControllerHandlers(): CapturedRequests {
 
 function seedFactory() {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function ThemeProbe() {
@@ -208,7 +207,7 @@ function SettingsSectionControls() {
 function Harness({ children }: { children: ReactNode }) {
   return (
     <MainSidebarProvider storageKey="settings-panel-test" mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
+      <ActiveFactoryProvider factoryId={project.id}>
         <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
           <OverlaysProvider>
             <SettingsNavigationProvider>
@@ -293,7 +292,7 @@ describe('SettingsPanel', () => {
 
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
-      await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBeNull());
+      // The route's factory disappears from the stored list, so it stops resolving.
       await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
       await screen.findByText('Select a factory to manage its source control.');
       expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]);

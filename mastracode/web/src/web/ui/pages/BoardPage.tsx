@@ -7,7 +7,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight, CircleDot, EllipsisVertical, ExternalLink, GitCompareArrows, Link2, Plus } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../shared/api/config';
 import { relativeTime } from '../../../shared/lib/date/relativeTime';
@@ -582,7 +582,7 @@ function BoardContent({
   });
   const openThread = async (session: WorkItemSessionRef) => {
     await selectWorkspace.mutateAsync(session.sessionId);
-    navigate(`/threads/${session.threadId}`);
+    navigate(`/factories/${factory.id}/threads/${session.threadId}`);
   };
 
   const refreshItemAndWorktrees = async (itemId: string) => {
@@ -1077,6 +1077,7 @@ function WorkItemCard({
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
+  const { factoryId = '' } = useParams<{ factoryId: string }>();
   const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source] ?? {
     icon: CircleDot,
     className: 'text-icon3',
@@ -1112,7 +1113,7 @@ function WorkItemCard({
         <Icon size={14} className={cn('mt-0.5 shrink-0', iconClassName)} aria-hidden />
         {threadSession !== null ? (
           <a
-            href={`/threads/${threadSession.threadId}`}
+            href={`/factories/${factoryId}/threads/${threadSession.threadId}`}
             onClick={event => {
               event.preventDefault();
               onOpenThread(threadSession);
@@ -1191,7 +1192,11 @@ function WorkItemCard({
         return (
           <a
             key={related.id}
-            href={relatedSession ? `/threads/${relatedSession.threadId}` : relationshipPath(related)}
+            href={
+              relatedSession
+                ? `/factories/${factoryId}/threads/${relatedSession.threadId}`
+                : relationshipPath(related, factoryId)
+            }
             onClick={event => {
               if (!relatedSession) return;
               event.preventDefault();

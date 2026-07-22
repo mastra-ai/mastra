@@ -2,12 +2,12 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
-import { loadActiveFactoryId, loadFactories, saveFactories } from '../../services/factories';
+import { loadFactories, saveFactories } from '../../services/factories';
 import type { GithubStatus } from '../../services/github';
 import { EmptyFactoryState } from '../EmptyFactoryState';
 
@@ -35,11 +35,16 @@ const repo = {
   sandboxWorkdir: '/workspace/hello',
 };
 
+function LocationProbe() {
+  return <output data-testid="pathname">{useLocation().pathname}</output>;
+}
+
 function renderOnboarding() {
   return renderWithProviders(
     <MemoryRouter>
-      <ActiveFactoryProvider>
+      <ActiveFactoryProvider factoryId="missing-factory">
         <EmptyFactoryState />
+        <LocationProbe />
       </ActiveFactoryProvider>
     </MemoryRouter>,
   );
@@ -204,13 +209,18 @@ describe('EmptyFactoryState onboarding', () => {
 
     await waitFor(() => expect(calls).toEqual(['create', 'connect', 'link']));
     expect(await screen.findByRole('heading', { name: 'Connect the work behind the code.' })).toBeInTheDocument();
-    expect(loadActiveFactoryId()).toBeNull();
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/');
     expect(sessionStorage.getItem(FACTORY_KEY)).not.toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Skip for now' }));
 
-    await waitFor(() => expect(loadActiveFactoryId()).not.toBeNull());
-    expect(loadFactories()[0]).toMatchObject({ resourceId: 'resource-1' });
+    await waitFor(() => {
+      const factory = loadFactories()[0];
+      expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${factory?.id}/work`);
+    });
+    expect(loadFactories()[0]).toMatchObject({
+      binding: { kind: 'factory', factoryProjectId: 'fp-1' },
+    });
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
     expect(sessionStorage.getItem(FACTORY_KEY)).toBeNull();
   });
@@ -276,7 +286,9 @@ describe('EmptyFactoryState onboarding', () => {
     expect(await screen.findByText('Connected to Acme.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Finish setup' }));
 
-    await waitFor(() => expect(loadActiveFactoryId()).toBe('factory-1'));
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/factory-1/work'),
+    );
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
     expect(sessionStorage.getItem(FACTORY_KEY)).toBeNull();
   });

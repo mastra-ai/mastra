@@ -1,6 +1,6 @@
 import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { ReactNode } from 'react';
-import { Outlet, useLocation } from 'react-router';
+import { Outlet, useMatch } from 'react-router';
 
 import { PageLayoutMainViewProvider } from '../../ui/PageLayout';
 import { OverlaysProvider, useOverlays } from '../../lib/overlays';
@@ -31,13 +31,12 @@ export default function Chat() {
 }
 
 function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
-  const { pathname } = useLocation();
-  const userScoped = pathname.startsWith('/user/threads/');
-  const threadId = userScoped
-    ? decodeURIComponent(pathname.slice('/user/threads/'.length))
-    : pathname.startsWith('/threads/')
-      ? decodeURIComponent(pathname.slice('/threads/'.length))
-      : undefined;
+  // `useParams` in a layout can't see descendant params, so match the thread
+  // routes explicitly (params come back already decoded).
+  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
+  const factoryThreadMatch = useMatch('/factories/:factoryId/threads/:threadId');
+  const userScoped = userThreadMatch !== null;
+  const threadId = userThreadMatch?.params.threadId ?? factoryThreadMatch?.params.threadId;
 
   return (
     <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>
