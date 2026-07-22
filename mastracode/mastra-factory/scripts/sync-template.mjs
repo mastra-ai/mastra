@@ -162,7 +162,9 @@ function transformPackageJson() {
   // Direct mapping of the web project's own scripts (web:dev / web:build /
   // web:start), minus monorepo-only bits (prebuild, monorepo-deps.mjs).
   manifest.scripts = {
-    dev: 'concurrently --kill-others-on-fail --names server,ui "MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra dev --dir src/mastra" "vite --config src/web/vite.config.ts"',
+    dev: 'concurrently --kill-others-on-fail --names server,ui "MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra factory dev --dir src/mastra" "vite --config src/web/vite.config.ts"',
+    'dev:prod':
+      'npm run build:ui && PORT=5173 MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra factory dev --dir src/mastra',
     'db:up': 'docker compose up -d --wait',
     'db:down': 'docker compose down',
     build: 'mastra build --dir src/mastra',

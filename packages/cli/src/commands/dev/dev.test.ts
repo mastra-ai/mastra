@@ -2,6 +2,8 @@ import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const devBundlerConstructorSpy = vi.hoisted(() => vi.fn());
+
 vi.mock('node:fs', () => ({
   writeFileSync: vi.fn(),
   existsSync: vi.fn().mockImplementation((path: string) => path.endsWith('index.ts')),
@@ -84,6 +86,10 @@ vi.mock('./DevBundler', () => {
     prepare = vi.fn().mockResolvedValue(undefined);
     getAllToolPaths = vi.fn().mockReturnValue([]);
     watch = vi.fn().mockResolvedValue(mockWatcher);
+
+    constructor(...args: any[]) {
+      devBundlerConstructorSpy(...args);
+    }
   }
 
   return {
@@ -513,6 +519,47 @@ describe('dev command - factory mode environment', () => {
     const callOptions = execaMock.mock.calls[0][2] as { env: Record<string, string> };
     expect(callOptions.env.MASTRA_FACTORY_DEV).toBe('true');
     expect(callOptions.env.MASTRA_TELEMETRY_COMMAND).toBe('factory dev');
+  });
+
+  it('should pass factory: true to DevBundler when factory is set', async () => {
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+      factory: true,
+    });
+
+    expect(devBundlerConstructorSpy).toHaveBeenCalled();
+    const lastCall = devBundlerConstructorSpy.mock.calls[devBundlerConstructorSpy.mock.calls.length - 1];
+    expect(lastCall[1]).toBe(true);
+  });
+
+  it('should not pass factory to DevBundler when factory is not set', async () => {
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    expect(devBundlerConstructorSpy).toHaveBeenCalled();
+    const lastCall = devBundlerConstructorSpy.mock.calls[devBundlerConstructorSpy.mock.calls.length - 1];
+    expect(lastCall[1]).not.toBe(true);
   });
 
   it('should not set MASTRA_FACTORY_DEV in spawned env when factory is not set', async () => {

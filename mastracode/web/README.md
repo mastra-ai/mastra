@@ -20,8 +20,16 @@ pnpm install
 pnpm web:dev
 ```
 
-- API server (`mastra dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
+- API server (`mastra factory dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
 - Vite SPA on **:5173**, proxying `/api`, `/web`, and `/auth/` to the API server.
+
+To test the production-like, same-origin setup on port 5173 with one long-running process, build the SPA once and serve it from the Factory API server:
+
+```bash
+pnpm web:dev:prod
+```
+
+This mode does not provide UI HMR. Run `pnpm web:dev` for normal UI development.
 
 Local development works without PostgreSQL: the full web surface uses the SDK's local LibSQL database. To exercise the PostgreSQL backend and distributed-lock path, run `pnpm web:dev:github` (Docker Compose on port 54329).
 
