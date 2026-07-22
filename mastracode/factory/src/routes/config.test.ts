@@ -2,10 +2,10 @@ import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createFactoryStorageForTests } from '../storage/test-utils';
-import type { FactoryStorageTestSeed } from '../storage/test-utils';
-import { ConfigRoutes, listProviders } from './config';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { ConfigRoutes, listProviders } from './config.js';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {
   const loggedIn = new Set(opts.loggedIn ?? []);

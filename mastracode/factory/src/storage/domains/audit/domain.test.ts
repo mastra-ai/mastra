@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils';
-import { createFactoryStorageForTests } from '../../test-utils';
-import type { AuditDomainOptions } from './domain';
-import { AuditDomain } from './domain';
+import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
+import { createFactoryStorageForTests } from '../../test-utils.js';
+import type { AuditDomainOptions } from './domain.js';
+import { AuditDomain } from './domain.js';
 
 function auditDomain(
   seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>,

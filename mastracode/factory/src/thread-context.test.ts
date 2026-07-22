@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { TaskContextProviderRequestError } from './capabilities/task-context';
-import type { TaskContext } from './capabilities/task-context';
-import type { FactoryIntegration } from './integrations/base';
-import type { SourceControlStorageHandle } from './storage/domains/source-control/base';
-import type { WorkItemRow } from './storage/domains/work-items/base';
-import { loadFactoryThreadTaskContext } from './thread-context';
-import type { LinearTaskContextIntegration } from './thread-context';
+import { TaskContextProviderRequestError } from './capabilities/task-context.js';
+import type { TaskContext } from './capabilities/task-context.js';
+import type { FactoryIntegration } from './integrations/base.js';
+import type { SourceControlStorageHandle } from './storage/domains/source-control/base.js';
+import type { WorkItemRow } from './storage/domains/work-items/base.js';
+import { loadFactoryThreadTaskContext } from './thread-context.js';
+import type { LinearTaskContextIntegration } from './thread-context.js';
 
 const now = new Date('2026-07-22T00:00:00.000Z');
 

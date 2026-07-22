@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
-import { builtInFactoryRules } from '../rules/defaults';
-import { FactoryTransitionService } from '../rules/transition-service';
-import type { AuditEmitter } from '../storage/domains/audit/domain';
+import { builtInFactoryRules } from '../rules/defaults.js';
+import { FactoryTransitionService } from '../rules/transition-service.js';
+import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
@@ -33,12 +33,12 @@ const audit: AuditEmitter = {
     }
   },
 };
-import { createFactoryStorageForTests } from '../storage/test-utils';
-import type { FactoryStorageTestSeed } from '../storage/test-utils';
-import type { LinearTaskContextIntegration } from '../thread-context';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils';
-import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items';
-import type { WorkItemRoutesDeps } from './work-items';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import type { LinearTaskContextIntegration } from '../thread-context.js';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
+import type { WorkItemRoutesDeps } from './work-items.js';
 
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(

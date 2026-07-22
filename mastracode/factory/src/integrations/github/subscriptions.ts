@@ -1,4 +1,4 @@
-import type { IntegrationStorageHandle, IntegrationSubscription } from '../../storage/domains/integrations/base';
+import type { IntegrationStorageHandle, IntegrationSubscription } from '../../storage/domains/integrations/base.js';
 
 export type GithubSignalSubscriptionSource = 'auto-gh-pr-create' | 'factory-pr-create' | 'explicit-tool';
 export type GithubSignalSubscriptionStatus = 'open' | 'closed' | 'merged';

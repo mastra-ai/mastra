@@ -18,17 +18,21 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
-import type { CredentialRecord, LoginSessionKind, ModelCredentialsStorage } from '../storage/domains/credentials/base';
-import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base';
+import type {
+  CredentialRecord,
+  LoginSessionKind,
+  ModelCredentialsStorage,
+} from '../storage/domains/credentials/base.js';
+import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
   resolveCredentialContext,
   tenantOrgId,
   WEB_OAUTH_FLOW_KINDS,
-} from './provider-credentials';
-import { Route } from './route';
-import type { RouteAuth, RouteDependencies } from './route';
+} from './provider-credentials.js';
+import { Route } from './route.js';
+import type { RouteAuth, RouteDependencies } from './route.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {

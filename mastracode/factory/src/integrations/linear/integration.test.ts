@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { TASK_CONTEXT_LIMITS } from '../../capabilities/task-context';
-import { LinearGraphqlOperationError, LinearIntegration, LinearProviderRequestError } from './integration';
-import type { LinearIssue, LinearIssueDetail } from './integration';
+import { TASK_CONTEXT_LIMITS } from '../../capabilities/task-context.js';
+import { LinearGraphqlOperationError, LinearIntegration, LinearProviderRequestError } from './integration.js';
+import type { LinearIssue, LinearIssueDetail } from './integration.js';
 
 function integration(): LinearIntegration {
   return new LinearIntegration({ clientId: 'linear-client', clientSecret: 'linear-secret' });

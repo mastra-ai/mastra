@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createStateSigner } from './state-signing';
+import { createStateSigner } from './state-signing.js';
 
 // ── State-secret deploy scenario (ported from github/state-secret-scenario) ──
 // The OAuth/install `state` is HMAC-signed. Each `createStateSigner(secret)`

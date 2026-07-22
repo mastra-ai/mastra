@@ -105,6 +105,8 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
         expect(spec, `${name} must use a caret range`).toMatch(/^\^/);
       }
     }
+    expect(pkg.dependencies['@mastra/memory']).toMatch(/^\^/);
+
     // Tests and their dependencies are stripped.
     expect(allDeps.vitest).toBeUndefined();
     expect(fs.existsSync(path.join(outDir, 'e2e'))).toBe(false);

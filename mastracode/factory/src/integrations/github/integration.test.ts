@@ -1,10 +1,10 @@
 import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TASK_CONTEXT_LIMITS } from '../../capabilities/task-context';
+import { TASK_CONTEXT_LIMITS } from '../../capabilities/task-context.js';
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { SandboxFleet } from '../../sandbox/fleet.js';
-import { createStateSigner } from '../../state-signing';
+import { createStateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubIntegration, GithubProviderRequestError, normalizePrivateKey } from './integration.js';
 

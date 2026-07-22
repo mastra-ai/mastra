@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbUpdates: Array<Record<string, unknown>> = [];
 
-import { SandboxFleet } from '../../sandbox/fleet';
-import type { MaterializationSandbox, SandboxCommandResult, SandboxFactory } from '../../sandbox/fleet';
-import type { ProjectRepositorySandbox, SourceControlStorageHandle } from '../../storage/domains/source-control/base';
+import { SandboxFleet } from '../../sandbox/fleet.js';
+import type { MaterializationSandbox, SandboxCommandResult, SandboxFactory } from '../../sandbox/fleet.js';
+import type {
+  ProjectRepositorySandbox,
+  SourceControlStorageHandle,
+} from '../../storage/domains/source-control/base.js';
 import {
   computeWorktreePath,
   configureGitIdentity,
@@ -22,8 +25,8 @@ import {
   shellQuote,
   withInstallToken,
   WorktreeError,
-} from './sandbox';
-import type { RepoMaterializeInfo } from './sandbox';
+} from './sandbox.js';
+import type { RepoMaterializeInfo } from './sandbox.js';
 
 /** Minimal cloneable template sandbox standing in for Railway/Local instances. */
 function templateSandbox(opts: { provider?: string; idleTimeoutMinutes?: number } = {}): WorkspaceSandbox {

@@ -1,2 +1,2 @@
-export { MastraFactory } from './factory';
-export type { MastraArgs, MastraFactoryConfig } from './factory';
+export { MastraFactory } from './factory.js';
+export type { MastraArgs, MastraFactoryConfig } from './factory.js';

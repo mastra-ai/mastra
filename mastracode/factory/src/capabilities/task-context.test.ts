@@ -4,7 +4,7 @@ import {
   boundedTaskContextDetail,
   isTaskContextProviderRequestError,
   TaskContextProviderRequestError,
-} from './task-context';
+} from './task-context.js';
 
 const detail = {
   identifier: 'ENG-42',

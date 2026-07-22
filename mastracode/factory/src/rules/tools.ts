@@ -2,12 +2,12 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { IntegrationTools } from '../integrations/base';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base';
-import { getFactorySessionAddress } from './binding-context';
-import type { FactoryTransitionService } from './transition-service';
-import { FACTORY_RULE_STAGES } from './types';
-import type { FactoryRuleBoard } from './types';
+import type { IntegrationTools } from '../integrations/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { getFactorySessionAddress } from './binding-context.js';
+import type { FactoryTransitionService } from './transition-service.js';
+import { FACTORY_RULE_STAGES } from './types.js';
+import type { FactoryRuleBoard } from './types.js';
 
 const transitionInputSchema = z
   .object({

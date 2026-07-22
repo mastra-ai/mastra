@@ -28,7 +28,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
-import type { IntegrationConnection } from '../../capabilities/connection';
+import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
   GetIntakeIssueInput,
@@ -36,9 +36,9 @@ import type {
   IntakeIssue,
   IntakeIssueDetail,
   ListIntakeIssuesInput,
-} from '../../capabilities/intake';
-import { boundedTaskContextDetail, TaskContextProviderRequestError } from '../../capabilities/task-context';
-import type { TaskContext } from '../../capabilities/task-context';
+} from '../../capabilities/intake.js';
+import { boundedTaskContextDetail, TaskContextProviderRequestError } from '../../capabilities/task-context.js';
+import type { TaskContext } from '../../capabilities/task-context.js';
 import type {
   PullRequest,
   PullRequestComment,
@@ -46,8 +46,8 @@ import type {
   Review,
   ReviewComment,
   VersionControl,
-} from '../../capabilities/version-control';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base';
+} from '../../capabilities/version-control.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { runGithubIssueTriage } from './issue-triage.js';
 import { buildGithubRoutes } from './routes.js';
 import {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { factoryRuleBranch } from '../../routes/surface';
-import { buildIssueTriagePrompt } from './issue-triage';
+import { factoryRuleBranch } from '../../routes/surface.js';
+import { buildIssueTriagePrompt } from './issue-triage.js';
 
 describe('buildIssueTriagePrompt', () => {
   it('passes only the canonical issue URL as issue data', () => {

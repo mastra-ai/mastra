@@ -22,7 +22,7 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
-import type { IntegrationConnection } from '../../capabilities/connection';
+import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
   GetIntakeIssueInput,
@@ -30,12 +30,12 @@ import type {
   IntakeIssue,
   IntakeIssueDetail,
   ListIntakeIssuesInput,
-} from '../../capabilities/intake';
-import { boundedTaskContextDetail, TaskContextProviderRequestError } from '../../capabilities/task-context';
-import type { TaskContext } from '../../capabilities/task-context';
+} from '../../capabilities/intake.js';
+import { boundedTaskContextDetail, TaskContextProviderRequestError } from '../../capabilities/task-context.js';
+import type { TaskContext } from '../../capabilities/task-context.js';
 import type { RouteAuth } from '../../routes/route.js';
-import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base';
-import type { FactoryProjectsStorage } from '../../storage/domains/projects/base';
+import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import { buildLinearRoutes } from './routes.js';

@@ -1,12 +1,12 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth } from '../../routes/test-utils';
-import { createFactoryStorageForTests } from '../../storage/test-utils';
-import type { FactoryStorageTestSeed } from '../../storage/test-utils';
-import { buildLinearAgentTools } from './agent-tools';
-import { LinearIntegration } from './integration';
-import type { UpsertLinearConnectionInput } from './storage';
+import { fakeRouteAuth } from '../../routes/test-utils.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
+import { buildLinearAgentTools } from './agent-tools.js';
+import { LinearIntegration } from './integration.js';
+import type { UpsertLinearConnectionInput } from './storage.js';
 
 // A real integration instance backed by seeded `:memory:` storage. Only the
 // network edges (GraphQL reads/writes, token refresh) are spied out, so the

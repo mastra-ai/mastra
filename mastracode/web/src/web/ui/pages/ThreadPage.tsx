@@ -1,27 +1,27 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 
-import { Sidebar } from '../../Sidebar';
-import { ChatLayout } from '../../ui/ChatLayout';
+import { useRouteThreadSync } from '../../../shared/hooks/useRouteThreadSync';
+import { Sidebar } from '../Sidebar';
+import { ChatHeader } from '../domains/chat/components/ChatHeader';
+import { ChatMessageList } from '../domains/chat/components/ChatMessageList';
+import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
+import { TaskPanel } from '../domains/chat/components/TaskPanel';
+import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
+import { useChatSessionContext } from '../domains/chat/context/useChatSessionContext';
+import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
 import {
   FactorySessionContextPanel,
   type FactorySessionContextTab,
-} from '../factory/components/FactorySessionContextPanel';
-import { FactorySessionHeader } from '../factory/components/RelatedFactorySessions';
-import { renderedPaths } from '../workspace-viewer/config';
-import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
-import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
-import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
-import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
-import { ChatHeader } from './components/ChatHeader';
-import { ChatMessageList } from './components/ChatMessageList';
-import { ComposerPanel } from './components/ComposerPanel';
-import { TaskPanel } from './components/TaskPanel';
-import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
-import { useChatSessionContext } from './context/useChatSessionContext';
-import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
-import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
+} from '../domains/factory/components/FactorySessionContextPanel';
+import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
+import { renderedPaths } from '../domains/workspace-viewer/config';
+import { WorkspaceViewerPanel } from '../domains/workspace-viewer/components/WorkspaceViewerPanel';
+import { EmptyFactoryState } from '../domains/workspaces/components/EmptyFactoryState';
+import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { activeWorkspacePath, findUserSessionByThreadId } from '../domains/workspaces/services/factories';
+import { ChatLayout } from '../ui/ChatLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
