@@ -995,4 +995,66 @@ describe('MastraClient', () => {
       expect(JSON.parse(init.body)).toMatchObject({ toolMocks });
     });
   });
+
+  describe('Dataset Item Timeouts', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+    });
+
+    it('addDatasetItem posts timeout in the request body', async () => {
+      await client.addDatasetItem({ datasetId: 'ds-1', input: { q: 'x' }, timeout: 1_000 });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({ input: { q: 'x' }, timeout: 1_000 });
+    });
+
+    it('updateDatasetItem posts timeout in the request body', async () => {
+      await client.updateDatasetItem({ datasetId: 'ds-1', itemId: 'item-1', timeout: 2_000 });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items/item-1');
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toMatchObject({ timeout: 2_000 });
+    });
+
+    it('batchInsertDatasetItems posts timeout in each item', async () => {
+      await client.batchInsertDatasetItems({
+        datasetId: 'ds-1',
+        items: [{ input: { q: 'x' }, timeout: 3_000 }],
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items/batch');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({ items: [{ input: { q: 'x' }, timeout: 3_000 }] });
+    });
+
+    it('triggerDatasetExperiment posts itemTimeout in the request body', async () => {
+      await client.triggerDatasetExperiment({
+        datasetId: 'ds-1',
+        targetType: 'agent',
+        targetId: 'agent-1',
+        itemTimeout: 5_000,
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({
+        targetType: 'agent',
+        targetId: 'agent-1',
+        itemTimeout: 5_000,
+      });
+    });
+  });
 });

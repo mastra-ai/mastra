@@ -2624,6 +2624,7 @@ type Shared_Type_116 = {
   toolMocks?: Shared_Type_114[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+  timeout?: number | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -17033,6 +17034,8 @@ export type PostDatasetsDatasetIdItems_Body = {
   toolMocks?: Shared_Type_114[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+  /** Execution timeout override in milliseconds */
+  timeout?: number | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17086,6 +17089,8 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     toolMocks?: Shared_Type_114[] | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+    /** Execution timeout override in milliseconds */
+    timeout?: number | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -17207,6 +17212,8 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   toolMocks?: Shared_Type_114[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+  /** Execution timeout override in milliseconds */
+  timeout?: number | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17328,6 +17335,7 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     toolMocks?: Shared_Type_114[] | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+    timeout?: number | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -17498,6 +17506,8 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   agentVersion?: string | undefined;
   /** Maximum concurrent executions */
   maxConcurrency?: number | undefined;
+  /** Fallback execution timeout per item in milliseconds */
+  itemTimeout?: number | undefined;
   /** Global request context passed to the target */
   requestContext?:
     | {

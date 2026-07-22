@@ -409,6 +409,7 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        timeout,
       } = params as {
         externalId?: string | null;
         input: unknown;
@@ -419,6 +420,7 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory?: unknown;
         toolMocks?: DatasetItemToolMock[];
         unmockedToolPolicy?: 'allow' | 'deny';
+        timeout?: number;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       return await ds.addItem({
@@ -431,6 +433,7 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        timeout,
       });
     } catch (error) {
       if (isSchemaValidationError(error)) {
@@ -498,7 +501,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata, expectedTrajectory, toolMocks, unmockedToolPolicy } =
+      const { input, groundTruth, requestContext, metadata, expectedTrajectory, toolMocks, unmockedToolPolicy, timeout } =
         params as {
           input?: unknown;
           groundTruth?: unknown;
@@ -507,6 +510,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
           expectedTrajectory?: unknown;
           toolMocks?: DatasetItemToolMock[];
           unmockedToolPolicy?: 'allow' | 'deny';
+          timeout?: number;
         };
       const ds = await mastra.datasets.get({ id: datasetId });
       // Check if item exists and belongs to dataset
@@ -523,6 +527,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        timeout,
       });
     } catch (error) {
       if (isSchemaValidationError(error)) {
@@ -687,6 +692,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         version,
         agentVersion,
         maxConcurrency,
+        itemTimeout,
         requestContext: rawRequestContext,
         versions,
       } = params as {
@@ -696,6 +702,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         version?: number;
         agentVersion?: string;
         maxConcurrency?: number;
+        itemTimeout?: number;
         requestContext?: Record<string, unknown> | RequestContext;
         versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
       };
@@ -710,6 +717,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         version,
         agentVersion,
         maxConcurrency,
+        itemTimeout,
         requestContext,
         versions,
       });
@@ -992,6 +1000,7 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
           expectedTrajectory?: unknown;
           toolMocks?: DatasetItemToolMock[];
           unmockedToolPolicy?: 'allow' | 'deny';
+          timeout?: number;
           metadata?: Record<string, unknown>;
           source?: DatasetItemSource;
         }>;
