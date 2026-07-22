@@ -41,8 +41,6 @@ vi.mock('@mastra/core/coding-agent', () => ({
 const agentConstructorMock = vi.fn();
 
 const controllerConstructorMock = vi.fn();
-const controllerInitMock = vi.fn(async () => undefined);
-const controllerStopIntervalsMock = vi.fn(async () => undefined);
 const loadSettingsMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
 const getAvailableOmPacksMock = vi.fn(() => []);
@@ -122,12 +120,7 @@ vi.mock('@mastra/core/agent-controller', () => ({
     constructor(config: unknown) {
       controllerConstructorMock(config);
     }
-    init() {
-      return controllerInitMock();
-    }
-    stopIntervals() {
-      return controllerStopIntervalsMock();
-    }
+    async init() {}
     getMastra() {
       return undefined;
     }
@@ -323,11 +316,11 @@ vi.mock('../utils/project.js', () => ({
 }));
 
 const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({ storage: {} }));
-const createOwnedVectorStoreMock = vi.fn((): { vector: unknown; close?: () => Promise<void> } => ({ vector: {} }));
+const createVectorStoreMock = vi.fn(() => ({}));
 
 vi.mock('../utils/storage-factory.js', () => ({
   createStorage: createStorageMock,
-  createOwnedVectorStore: createOwnedVectorStoreMock,
+  createVectorStore: createVectorStoreMock,
 }));
 
 vi.mock('../utils/thread-lock.js', () => ({
@@ -348,8 +341,8 @@ describe('createMastraCode', () => {
     mastraCodeGatewayMock.resolveLanguageModel.mockClear();
     createStorageMock.mockReset();
     createStorageMock.mockReturnValue({ storage: {}, backend: 'memory' });
-    createOwnedVectorStoreMock.mockReset();
-    createOwnedVectorStoreMock.mockReturnValue({ vector: {} });
+    createVectorStoreMock.mockReset();
+    createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
     getDynamicMemoryMock.mockReturnValue(() => undefined);
     controllerSubscribeMock.mockReset();
@@ -382,10 +375,6 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
     controllerConstructorMock.mockReset();
-    controllerInitMock.mockReset();
-    controllerInitMock.mockResolvedValue(undefined);
-    controllerStopIntervalsMock.mockReset();
-    controllerStopIntervalsMock.mockResolvedValue(undefined);
     streamErrorRetryProcessorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
@@ -397,22 +386,6 @@ describe('createMastraCode', () => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
   });
-
-  it('closes owned storage when local controller startup fails', async () => {
-    const startupError = new Error('storage init failed');
-    const closeStorage = vi.fn(async () => undefined);
-    const closeVector = vi.fn(async () => undefined);
-    createStorageMock.mockReturnValue({ storage: { close: closeStorage }, backend: 'memory' });
-    createOwnedVectorStoreMock.mockReturnValue({ vector: {}, close: closeVector });
-    controllerInitMock.mockRejectedValueOnce(startupError);
-    const { createMastraCode } = await import('../index.js');
-
-    await expect(createMastraCode()).rejects.toBe(startupError);
-
-    expect(controllerStopIntervalsMock).toHaveBeenCalledOnce();
-    expect(closeStorage).toHaveBeenCalledOnce();
-    expect(closeVector).toHaveBeenCalledOnce();
-  }, 10_000);
 
   it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {
     const { createMastraCode } = await import('../index.js');
@@ -484,7 +457,7 @@ describe('createMastraCode', () => {
     await createMastraCode({ vector: vector as any });
 
     expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector);
-    expect(createOwnedVectorStoreMock).not.toHaveBeenCalled();
+    expect(createVectorStoreMock).not.toHaveBeenCalled();
   });
 
   it('requires an explicit backend for unknown injected storage implementations', async () => {
