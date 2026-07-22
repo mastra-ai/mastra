@@ -5857,7 +5857,8 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "resourceId",
       "sessionScope",
-      "tags"
+      "tags",
+      "threadId"
     ],
     "hasQuery": false,
     "hasBody": true,
