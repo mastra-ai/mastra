@@ -178,11 +178,7 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
   }, {});
 }
 
-export function getWorkflowInfo(
-  workflow: Workflow,
-  partial: boolean = false,
-  origin?: 'code' | 'stored',
-): WorkflowInfo {
+export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): WorkflowInfo {
   if (partial) {
     // Return minimal info in partial mode
     return {
@@ -198,7 +194,7 @@ export function getWorkflowInfo(
       outputSchema: undefined,
       stateSchema: undefined,
       requestContextSchema: undefined,
-      origin,
+      origin: workflow.origin,
     } as WorkflowInfo;
   }
 
@@ -206,7 +202,7 @@ export function getWorkflowInfo(
     name: workflow.name,
     description: workflow.description,
     metadata: workflow.metadata,
-    origin,
+    origin: workflow.origin,
     steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
       acc[key] = {
         id: step.id,

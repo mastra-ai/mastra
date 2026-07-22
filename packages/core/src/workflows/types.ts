@@ -530,7 +530,8 @@ export type WorkflowInfo = {
    * hydrated or added via `addStoredWorkflow()` (HTTP or SDK).
    *
    * Optional so external consumers of `WorkflowInfo` don't break; the server
-   * populates it via `mastra.getWorkflowOrigin(key)` at response-build time.
+   * reads it from `workflow.origin`, which `rehydrateWorkflow` sets to
+   * `'stored'` at construction time (defaults to `'code'`).
    */
   origin?: 'code' | 'stored';
 };
