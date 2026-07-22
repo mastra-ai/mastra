@@ -207,7 +207,7 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
   }
 
   const boot = await createMastraCode({ settingsPath: args.settings });
-  const { controller, session, mcpManager, effectiveDefaults, storageMaintenance } = boot;
+  const { controller, session, githubSignals, mcpManager, effectiveDefaults, storageMaintenance } = boot;
 
   if (mcpManager?.hasServers()) {
     try {
@@ -275,6 +275,7 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
         () => mcpManager?.disconnect(),
         () => controller.getMastra()?.stopWorkers(),
         () => controller?.stopIntervals(),
+        () => githubSignals?.stopAllPolling(),
         () => (boot.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close?.(),
       ],
       closeStorage: () => storageMaintenance.closeStorage?.(),

@@ -24,6 +24,7 @@ let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
+let githubSignals: Awaited<ReturnType<typeof createMastraCode>>['githubSignals'];
 let storageMaintenance: Awaited<ReturnType<typeof createMastraCode>>['storageMaintenance'];
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 let tui: MastraTUI | undefined;
@@ -73,6 +74,7 @@ async function tuiMain(pipedInput?: string | null) {
   hookManager = result.hookManager;
   authStorage = result.authStorage;
   signalsPubSub = result.signalsPubSub;
+  githubSignals = result.githubSignals;
   storageMaintenance = result.storageMaintenance;
 
   if (result.storageWarning) {
@@ -157,6 +159,7 @@ export const asyncCleanup = createTuiCleanup({
     () => mcpManager?.disconnect(),
     () => controller?.getMastra()?.stopWorkers(),
     () => controller?.stopIntervals(),
+    () => githubSignals?.stopAllPolling(),
     () => (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close?.(),
   ],
   closeStorage: () => storageMaintenance?.closeStorage?.(),

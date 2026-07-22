@@ -51,7 +51,7 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
       disableHooks: false,
     });
 
-    const { controller, mcpManager, signalsPubSub, storageMaintenance } = result;
+    const { controller, githubSignals, mcpManager, signalsPubSub, storageMaintenance } = result;
 
     // Default modes (same as createMastraCode defaults)
     const modes: AgentControllerMode[] = [
@@ -66,6 +66,7 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
         () => mcpManager?.disconnect(),
         () => controller?.getMastra()?.stopWorkers(),
         () => controller?.stopIntervals(),
+        () => githubSignals?.stopAllPolling(),
         () => (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close?.(),
       ],
       closeStorage: () => storageMaintenance.closeStorage?.(),

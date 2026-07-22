@@ -407,6 +407,7 @@ async function startMastraCodeApp(
         result.mcpManager?.disconnect(),
         result.controller.getMastra()?.stopWorkers(),
         result.controller.stopIntervals(),
+        result.githubSignals?.stopAllPolling(),
         closeSignalsPubSub?.(),
       ]);
       await result.storageMaintenance.closeStorage?.();
