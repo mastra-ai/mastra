@@ -240,6 +240,78 @@ describe('P1 Regression', () => {
       expect(result.succeededCount).toBe(1);
       expect(result.results[0]!.retryCount).toBe(2);
     });
+
+    it('does not retry after the item deadline aborts target execution', async () => {
+      await setupDataset(1);
+      const agent = {
+        id: 'timeout-agent',
+        name: 'Timeout Agent',
+        getModel: vi.fn().mockResolvedValue({ specificationVersion: 'v2' }),
+        generate: vi.fn().mockImplementation(() => new Promise(() => {})),
+      } as unknown as Agent;
+      setupMastra(agent);
+
+      const result = await runExperiment(mastra, {
+        data: [{ input: 'hang', timeout: 20 }],
+        targetType: 'agent',
+        targetId: 'timeout-agent',
+        maxRetries: 3,
+      });
+
+      expect(agent.generate).toHaveBeenCalledTimes(1);
+      expect(result.results[0]!.retryCount).toBe(0);
+      expect(result.results[0]!.error?.message).toMatch(/timeout/i);
+    });
+
+    it('uses the original item deadline while waiting to retry', async () => {
+      await setupDataset(1);
+      const agent = {
+        id: 'backoff-timeout-agent',
+        name: 'Backoff Timeout Agent',
+        getModel: vi.fn().mockResolvedValue({ specificationVersion: 'v2' }),
+        generate: vi.fn().mockImplementation(async () => {
+          await new Promise(resolve => setTimeout(resolve, 30));
+          throw new Error('Transient failure');
+        }),
+      } as unknown as Agent;
+      setupMastra(agent);
+
+      const startedAt = Date.now();
+      const result = await runExperiment(mastra, {
+        data: [{ input: 'fail', timeout: 200 }],
+        targetType: 'agent',
+        targetId: 'backoff-timeout-agent',
+        maxRetries: 3,
+      });
+
+      expect(Date.now() - startedAt).toBeLessThan(600);
+      expect(agent.generate).toHaveBeenCalledTimes(1);
+      expect(result.results[0]!.retryCount).toBe(0);
+      expect(result.results[0]!.error?.message).toMatch(/timeout/i);
+    });
+
+    it('cancels promptly when the run signal aborts during retry backoff', async () => {
+      await setupDataset(1);
+      const agent = createMockAgent({ shouldFail: true });
+      setupMastra(agent);
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException('Run cancelled', 'AbortError')), 100);
+
+      const startedAt = Date.now();
+      const result = await runExperiment(mastra, {
+        data: [{ input: 'fail' }],
+        targetType: 'agent',
+        targetId: 'test-agent',
+        signal: controller.signal,
+        maxRetries: 3,
+      });
+
+      expect(Date.now() - startedAt).toBeLessThan(600);
+      expect(agent.generate).toHaveBeenCalledTimes(1);
+      expect(result.status).toBe('failed');
+      expect(result.results).toHaveLength(0);
+      expect(result.skippedCount).toBe(1);
+    });
   });
 
   // T-3: Deterministic ordering

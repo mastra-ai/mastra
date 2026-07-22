@@ -183,7 +183,7 @@ export async function executeTarget(
 /**
  * Race a promise against an AbortSignal. Rejects with the signal's reason when aborted.
  */
-function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+export function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) {
     return Promise.reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
   }
