@@ -89,14 +89,10 @@ function utcDayStart(time: number): number {
 }
 
 /**
- * Resolve untrusted `from`/`to` query params into a bounded half-open UTC
- * window. Date-only bounds include both selected calendar days: `from` starts
- * at midnight and `to` resolves to the following midnight. Datetimes remain
- * exact instants. An open or future end resolves to the exclusive end of the
- * current UTC day (not `now`) so an event happening at this instant still falls
- * inside the half-open window instead of landing on its excluded upper edge.
- * The default and maximum spans are calendar-day based so the gap-filled
- * throughput series has a stable size.
+ * Resolve untrusted `from`/`to` into a bounded half-open UTC window. A date-only
+ * `to` covers the whole day; an open/future end resolves to the end of the
+ * current UTC day (not `now`) so an event at this instant stays inside the
+ * window instead of on its excluded edge.
  */
 export function parseMetricsRange(
   fromParam: unknown,
