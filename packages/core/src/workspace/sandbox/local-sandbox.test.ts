@@ -460,6 +460,24 @@ describe('LocalSandbox', () => {
       await envSandbox._destroy();
     });
 
+    it('should use environment variables updated after sandbox creation', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+      const envSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        env: { PATH: process.env.PATH!, REFRESHED_VAR: 'initial' },
+      });
+
+      await envSandbox._start();
+      envSandbox.setEnvironmentVariable('REFRESHED_VAR', 'fresh');
+
+      const result = await envSandbox.executeCommand('printenv', ['REFRESHED_VAR']);
+
+      expect(result.success).toBe(true);
+      expect(result.stdout.trim()).toBe('fresh');
+
+      await envSandbox._destroy();
+    });
+
     it('should override configured env with execution env', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
       const envSandbox = new LocalSandbox({

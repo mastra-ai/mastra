@@ -411,6 +411,11 @@ export class LocalSandbox extends MastraSandbox {
     return `local-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  /** Update an environment variable used by future sandbox commands. */
+  setEnvironmentVariable(name: string, value: string): void {
+    this.env[name] = value;
+  }
+
   /**
    * Build the environment object for execution.
    * Always includes PATH by default (needed for finding executables).
