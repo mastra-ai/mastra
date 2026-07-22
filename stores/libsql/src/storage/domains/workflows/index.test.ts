@@ -1,22 +1,34 @@
 import { createClient } from '@libsql/client';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LibSQLDB } from '../../db';
 import { WorkflowsLibSQL } from './index';
 
 describe('WorkflowsLibSQL — snapshot serialization', () => {
   let workflows: WorkflowsLibSQL;
+  let client: ReturnType<typeof createClient>;
 
   beforeEach(async () => {
-    const client = createClient({ url: ':memory:' });
+    client = createClient({ url: ':memory:' });
     const db = new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 });
     await db.createTable({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
     });
     workflows = new WorkflowsLibSQL({ client });
+  });
+
+  it('does not mutate connection-wide PRAGMA policy', () => {
+    const executeSpy = vi.spyOn(client, 'execute');
+
+    new WorkflowsLibSQL({ client });
+
+    const sql = (executeSpy.mock.calls as unknown as Array<[string | { sql: string }]>).map(([statement]) =>
+      typeof statement === 'string' ? statement : statement.sql,
+    );
+    expect(sql.some(statement => /^PRAGMA\b/i.test(statement.trim()))).toBe(false);
   });
 
   // Regression test: the default workflow executor builds the success snapshot
