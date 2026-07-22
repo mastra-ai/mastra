@@ -612,6 +612,23 @@ describe('SankeySignals drill-in', () => {
       expect(screen.getByRole('button', { name: 'Clear filter' })).not.toBeNull();
     });
 
+    it('returns to the overview after clearing the failed drill-in', async () => {
+      useFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, () =>
+          HttpResponse.json({ error: 'failed' }, { status: 500 }),
+        ),
+      );
+      renderSignals();
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      await screen.findByText('Unable to load signal flow.');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+
+      expect(await screen.findByText('3 traces analyzed')).not.toBeNull();
+      expect(screen.queryByText('Unable to load signal flow.')).toBeNull();
+    });
+
     it('stops snapshot playback after the paths request fails', async () => {
       useFlowHandlers();
       server.use(
