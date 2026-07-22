@@ -237,7 +237,7 @@ function issueRunActions(ref: string, extra?: { context?: string }): RunAction[]
       stage: 'planning',
       invocation: {
         type: 'skill',
-        skillName: 'understand-issue',
+        skillName: 'factory-triage',
         arguments: `${ref}${context}`,
       },
     },
@@ -311,7 +311,7 @@ function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
         stage: 'review',
         invocation: {
           type: 'skill',
-          skillName: 'understand-pr',
+          skillName: 'factory-review',
           arguments: `${ref}\n\n${checkout}`,
         },
       },
@@ -408,7 +408,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
           stage: 'review',
           invocation: {
             type: 'skill',
-            skillName: 'understand-pr',
+            skillName: 'factory-review',
             arguments: `${ref}\n\n${checkout}${headBranch}`,
           },
         },

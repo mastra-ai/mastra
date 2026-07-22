@@ -243,14 +243,7 @@ describe('getFactoryWorkspace', () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const assetNames = (await fs.readdir(assetRoot)).sort();
 
-    expect(assetNames).toEqual([
-      'configure-factory-rules',
-      'factory-plan',
-      'factory-review',
-      'factory-triage',
-      'understand-issue',
-      'understand-pr',
-    ]);
+    expect(assetNames).toEqual(['configure-factory-rules', 'factory-plan', 'factory-review', 'factory-triage']);
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
@@ -281,28 +274,26 @@ describe('getFactoryWorkspace', () => {
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-factory-skills-'));
     tempDirs.push(projectPath);
-    const shadowDir = path.join(projectPath, '.mastracode', 'skills', 'understand-issue');
+    const shadowDir = path.join(projectPath, '.mastracode', 'skills', 'factory-triage');
     await fs.mkdir(shadowDir, { recursive: true });
     await fs.writeFile(
       path.join(shadowDir, 'SKILL.md'),
-      '---\nname: understand-issue\ndescription: Project shadow\n---\n\n# Shadowed Project Skill',
+      '---\nname: factory-triage\ndescription: Project shadow\n---\n\n# Shadowed Project Skill',
     );
 
     const workspace = await getFactoryWorkspace({ requestContext: createRequestContext(projectPath) });
     const configureRules = await workspace.skills?.get('configure-factory-rules');
-    const understandIssue = await workspace.skills?.get('understand-issue');
-    const understandPr = await workspace.skills?.get('understand-pr');
+    const factoryTriage = await workspace.skills?.get('factory-triage');
+    const factoryReview = await workspace.skills?.get('factory-review');
     const filesystem = workspace.filesystem as LocalFilesystem;
 
     expect(workspace.id).toContain('-web-factory');
     expect(configureRules?.instructions).toContain('# Configure Factory Rules');
-    expect(understandIssue?.instructions).toContain('# Understand Issue');
-    expect(understandIssue?.instructions).not.toContain('# Shadowed Project Skill');
-    expect(understandIssue?.metadata).toMatchObject({ goal: true });
-    expect(understandPr?.instructions).toContain('# Understand PR');
-    expect(understandPr?.metadata).toMatchObject({ goal: true });
+    expect(factoryTriage?.instructions).toContain('# Factory Triage');
+    expect(factoryTriage?.instructions).not.toContain('# Shadowed Project Skill');
+    expect(factoryReview?.instructions).toContain('# Factory Review');
     expect(filesystem.allowedPaths).not.toContain('/__mastracode_factory_skills__');
-    await expect(filesystem.writeFile(path.join(understandIssue!.path, 'SKILL.md'), 'mutated')).rejects.toMatchObject({
+    await expect(filesystem.writeFile(path.join(factoryTriage!.path, 'SKILL.md'), 'mutated')).rejects.toMatchObject({
       name: 'PermissionError',
       code: 'EACCES',
     });
