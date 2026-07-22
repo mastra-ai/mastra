@@ -253,7 +253,7 @@ export async function buildProviderAccess({
       const credential = userRec?.credential ?? orgRec?.credential;
       if (credential?.type === 'oauth') return 'oauth';
       if (credential?.type === 'api_key' && credential.key.trim().length > 0) return 'apikey';
-      return hasModelKey(provider) ? 'apikey' : false;
+      return false;
     }
 
     const oauthCredential = authStorage?.get(authProviderId);
@@ -266,15 +266,15 @@ export async function buildProviderAccess({
   const access: ProviderAccess = {
     anthropic: accessLevel('anthropic'),
     openai: accessLevel('openai'),
-    cerebras: hasModelKey('cerebras') ? 'apikey' : false,
-    google: hasModelKey('google') ? 'apikey' : false,
-    deepseek: hasModelKey('deepseek') ? 'apikey' : false,
+    cerebras: accessLevel('cerebras'),
+    google: accessLevel('google'),
+    deepseek: accessLevel('deepseek'),
     'github-copilot': accessLevel('github-copilot'),
   };
   const seen = new Set(Object.keys(access));
   for (const m of models) {
-    if (!seen.has(m.provider) && hasModelKey(m.provider)) {
-      access[m.provider] = 'apikey';
+    if (!seen.has(m.provider)) {
+      access[m.provider] = accessLevel(m.provider);
       seen.add(m.provider);
     }
   }

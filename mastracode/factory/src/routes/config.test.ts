@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
-import { ConfigRoutes, listProviders } from './config.js';
+import { buildProviderAccess, ConfigRoutes, listProviders } from './config.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {
@@ -151,6 +151,55 @@ describe('listProviders', () => {
       // Tenant records take over entirely; auth.json state must not leak.
       expect(list[0]?.source).toBe('none');
     });
+  });
+});
+
+describe('buildProviderAccess', () => {
+  it('does not expose catalog or environment credentials in tenant mode', async () => {
+    const access = await buildProviderAccess({
+      controller: makeAgentController([
+        { provider: 'anthropic', hasApiKey: true },
+        { provider: 'cerebras', hasApiKey: true },
+        { provider: 'google', hasApiKey: true },
+        { provider: 'deepseek', hasApiKey: true },
+        { provider: 'xai', hasApiKey: true },
+      ]),
+      tenantCredentials: [],
+    });
+
+    expect(access).toMatchObject({
+      anthropic: false,
+      cerebras: false,
+      google: false,
+      deepseek: false,
+      xai: false,
+    });
+  });
+
+  it('uses scoped tenant credentials for built-in and dynamic providers', async () => {
+    const access = await buildProviderAccess({
+      controller: makeAgentController([
+        { provider: 'cerebras', hasApiKey: false },
+        { provider: 'xai', hasApiKey: false },
+      ]),
+      tenantCredentials: [
+        {
+          provider: 'cerebras',
+          scope: 'org',
+          credential: { type: 'api_key', key: 'cerebras-key' },
+          updatedAt: new Date(),
+        },
+        {
+          provider: 'xai',
+          scope: 'user',
+          credential: { type: 'api_key', key: 'xai-key' },
+          updatedAt: new Date(),
+        },
+      ],
+    });
+
+    expect(access.cerebras).toBe('apikey');
+    expect(access.xai).toBe('apikey');
   });
 });
 
@@ -317,7 +366,7 @@ describe('GET /web/config/models', () => {
     });
   });
 
-  it('includes models reachable through tenant credentials or the controller catalog', async () => {
+  it('includes only models reachable through tenant credentials', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
       type: 'oauth',
@@ -345,10 +394,7 @@ describe('GET /web/config/models', () => {
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      models: [
-        { id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true },
-        { id: 'openai/gpt-5.6', provider: 'openai', modelName: 'gpt-5.6', hasApiKey: true },
-      ],
+      models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
     });
   });
 });
@@ -399,7 +445,7 @@ describe('model pack routes with a tenant', () => {
     expect(res.status).toBe(401);
   });
 
-  it('includes builtin packs reachable through tenant credentials or the controller catalog', async () => {
+  it('includes only builtin packs reachable through tenant credentials', async () => {
     const controllerWithoutEnv = makeAgentController([
       { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
       { provider: 'openai', hasApiKey: true, apiKeyEnvVar: 'OPENAI_API_KEY' },
@@ -432,10 +478,7 @@ describe('model pack routes with a tenant', () => {
       name: 'Anthropic',
       custom: false,
     });
-    expect(packs.find((p: { id: string }) => p.id === 'openai')).toMatchObject({
-      name: 'OpenAI',
-      custom: false,
-    });
+    expect(packs.find((p: { id: string }) => p.id === 'openai')).toBeUndefined();
   });
 
   it('persists custom packs in the org-scoped storage domain', async () => {
