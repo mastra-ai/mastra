@@ -11,7 +11,6 @@ import { connectLinear, isLinearReauthError } from '../../factory/services/linea
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
-import { isServerFactory } from '../../workspaces/services/factories';
 
 /**
  * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
@@ -101,9 +100,7 @@ export function IntakeSection() {
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
   const config = configQuery.data;
-  const linkedRepositories = (factoriesQuery.data ?? [])
-    .filter(isServerFactory)
-    .flatMap(factory => factory.binding.repositories);
+  const linkedRepositories = (factoriesQuery.data ?? []).flatMap(factory => factory.repositories);
 
   const heading = (
     <Txt variant="ui-lg" className="text-icon6 font-medium">
@@ -160,14 +157,14 @@ export function IntakeSection() {
                 <SourceCheckbox
                   key={repository.projectRepositoryId}
                   label={repository.slug}
-                  checked={config.github.sourceIds?.includes(repository.projectRepositoryId) ?? false}
+                  checked={config.github.sourceIds?.includes(repository.slug) ?? false}
                   disabled={busy}
                   onChange={() =>
                     update({
                       ...config,
                       github: {
                         ...config.github,
-                        sourceIds: toggleId(config.github.sourceIds, repository.projectRepositoryId),
+                        sourceIds: toggleId(config.github.sourceIds, repository.slug),
                       },
                     })
                   }

@@ -4,7 +4,6 @@ import { Navigate, useLocation, useParams } from 'react-router';
 import { Sidebar } from '../Sidebar';
 import { PageLayout } from '../ui/PageLayout';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
-import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
 import { isSettingsSection } from '../domains/settings/settingsSections';
@@ -26,10 +25,10 @@ export function SettingsPage() {
 }
 
 function SettingsPageContent() {
-  const { activeFactory } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
   const { isMobile } = useMainSidebar();
 
-  if (!activeFactory) {
+  if (!factoryId) {
     return (
       <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">
         {isMobile && <SettingsHeader autoFocus placement="mobile" />}

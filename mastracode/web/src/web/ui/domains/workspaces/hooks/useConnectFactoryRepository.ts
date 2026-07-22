@@ -3,9 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../../shared/hooks/useFactories';
 import { useFactoryOnboarding } from './useFactoryOnboarding';
-import { saveFactories } from '../services/factories';
-import type { Factory } from '../services/factories';
-import type { GithubRepo } from '../services/github';
+import type { FactoryProject, GithubRepo } from '../services/github';
 
 export function useConnectFactoryRepository() {
   const queryClient = useQueryClient();
@@ -18,22 +16,14 @@ export function useConnectFactoryRepository() {
       const pendingFactory = onboarding.state?.pendingFactory;
       const factory = pendingFactory ?? (await createFactory.mutateAsync({ name: repo.name }));
       if (!pendingFactory) await onboarding.recordPendingFactory(factory);
-      if (factory.binding.kind !== 'factory') return;
-
       const linkedRepository = await linkRepository.mutateAsync({
-        factoryProjectId: factory.binding.factoryProjectId,
+        factoryProjectId: factory.id,
         repo,
       });
-      const linkedFactory = {
+      const linkedFactory: FactoryProject = {
         ...factory,
-        binding: {
-          ...factory.binding,
-          selectedRepositoryId: linkedRepository.projectRepositoryId,
-          repositories: [{ ...linkedRepository, worktrees: [] }],
-        },
+        repositories: [linkedRepository],
       };
-      const factories = queryClient.getQueryData<Factory[]>(queryKeys.factories()) ?? [];
-      saveFactories([...factories.filter(item => item.id !== linkedFactory.id), linkedFactory]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       await onboarding.advanceToProjectManagement(linkedFactory);
     },

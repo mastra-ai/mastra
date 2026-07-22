@@ -36,7 +36,13 @@ export interface MaterializationSandbox {
   readonly id: string;
   start(): Promise<void>;
   getInfo(): Promise<{ metadata?: Record<string, unknown> }>;
-  executeCommand(command: string, args?: string[], options?: { timeout?: number }): Promise<SandboxCommandResult>;
+  executeCommand(
+    command: string,
+    args?: string[],
+    options?: { timeout?: number; env?: Record<string, string | undefined> },
+  ): Promise<SandboxCommandResult>;
+  /** Update an environment variable for future commands in this sandbox. */
+  setEnvironmentVariable?(name: string, value: string): void;
   /** Tear down the underlying VM. Optional: providers without it are no-ops. */
   stop?(): Promise<void>;
 }
@@ -126,20 +132,31 @@ export interface SandboxBindingStore {
  * status tracking and concurrency safety on `MastraSandbox` subclasses),
  * falling back to the plain methods for interface-only implementations.
  */
-function toMaterializationSandbox(sandbox: WorkspaceSandbox): MaterializationSandbox {
+function toMaterializationSandbox(
+  sandbox: WorkspaceSandbox,
+  initialEnvironment: Record<string, string> = {},
+): MaterializationSandbox {
   if (typeof sandbox.executeCommand !== 'function') {
     throw new Error(
       `Sandbox provider '${sandbox.provider}' does not implement executeCommand() — cannot materialize repos.`,
     );
   }
   const lifecycle = sandbox as { _start?(): Promise<void>; _stop?(): Promise<void> };
+  const environment = { ...initialEnvironment };
   return {
     id: sandbox.id,
     start: async () => {
       await (lifecycle._start ?? sandbox.start)?.call(sandbox);
     },
     getInfo: async () => (await sandbox.getInfo?.()) ?? {},
-    executeCommand: (command, args, options) => sandbox.executeCommand!(command, args, options),
+    executeCommand: (command, args, options) =>
+      sandbox.executeCommand!(command, args, {
+        ...options,
+        env: { ...environment, ...options?.env },
+      }),
+    setEnvironmentVariable: (name, value) => {
+      environment[name] = value;
+    },
     stop: async () => {
       await (lifecycle._stop ?? sandbox.stop)?.call(sandbox);
     },
@@ -329,7 +346,7 @@ export class SandboxFleet {
       ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
       ...(opts.checkpointName ? { checkpointName: opts.checkpointName } : {}),
     });
-    return toMaterializationSandbox(clone);
+    return toMaterializationSandbox(clone, opts.env);
   }
 
   /**

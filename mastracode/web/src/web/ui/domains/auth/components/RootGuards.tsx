@@ -8,15 +8,14 @@ export const RootGuards = () => {
 };
 
 const AuthGuard = () => {
-  const auth = useFactoryAuth();
+  const { isPending, isError, data } = useFactoryAuth();
   const location = useLocation();
 
-  if (auth.isPending) return <AuthPendingSkeleton />;
-  if (auth.isError) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
+  if (isPending) return <AuthPendingSkeleton />;
+  if (isError) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
 
-  // Local factory situation
-  const state = auth.data;
-  if (!state?.authEnabled) return <OnboardingGuard />;
+  const state = data;
+  if (!state?.authEnabled) return <AuthNotConfiguredScreen />;
 
   if (!state.authenticated) {
     // Router location (not window.location) so memory routers and in-app
@@ -37,6 +36,22 @@ const OnboardingGuard = () => {
 
   return <Outlet />;
 };
+
+function AuthNotConfiguredScreen() {
+  return (
+    <div className="grid h-dvh w-full place-items-center bg-surface1 px-6 text-center">
+      <div className="max-w-md space-y-3">
+        <h1 className="text-xl font-semibold text-icon6">
+          This MastraCode server has no authentication provider configured
+        </h1>
+        <p className="text-sm leading-6 text-icon3">
+          MastraCode web requires authenticated remote Factories. Configure a supported auth provider on the server,
+          then reload this page.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
   return (

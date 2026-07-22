@@ -27,7 +27,7 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
   // `useParams` in a layout can't see descendant params, so match the thread
   // routes explicitly (params come back already decoded).
   const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
-  const factoryThreadMatch = useMatch('/factories/:factoryId/threads/:threadId');
+  const factoryThreadMatch = useMatch('/factories/:factoryId/workspaces/:sessionId/threads/:threadId');
   const userScoped = userThreadMatch !== null;
   const threadId = userThreadMatch?.params.threadId ?? factoryThreadMatch?.params.threadId;
 
