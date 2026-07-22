@@ -4,6 +4,24 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import {
+  Plan,
+  PlanActionGroup,
+  PlanBody,
+  PlanContent,
+  PlanControls,
+  PlanCopyButton,
+  PlanExpandButton,
+  PlanFile,
+  PlanHeader,
+  PlanHeaderActions,
+  PlanIntro,
+  PlanLabel,
+  PlanMain,
+  PlanPath,
+  PlanStatus,
+  PlanTitle,
+} from '@mastra/playground-ui/components/ai/plan';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -36,6 +54,7 @@ import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
 } from '../../../../../shared/hooks/useAgentControllerRunMutations';
+import { usePlanFile } from '../../../../../shared/hooks/use-fs';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
@@ -461,6 +480,94 @@ function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
   };
 }
 
+/**
+ * Plan approval card for `submit_plan`. The tool suspends with only the plan
+ * file `path` (in its args), so we load the plan markdown from the server by
+ * that path and render its body — rather than just echoing the filename. Any
+ * inline summary a host attached to the suspend payload is used as a fallback.
+ */
+function PlanApprovalCard({
+  prompt,
+  payload,
+  isSubmitting,
+  onRespond,
+}: {
+  prompt: SuspensionPrompt;
+  payload: SuspendPayloadShape;
+  isSubmitting: boolean;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+}) {
+  const { projectPath } = useChatSessionContext();
+  const planPath = stringProperty(prompt.args, 'path') ?? payload.requestedPath;
+  const { data, isLoading, isError } = usePlanFile(projectPath, planPath, { enabled: Boolean(planPath) });
+
+  // Prefer the freshly-read file; fall back to any inline summary a host put on the payload.
+  const body = data?.plan ?? payload.plan?.summary ?? '';
+  const fileName = planPath ? (planPath.split(/[\\/]/).filter(Boolean).pop() ?? planPath) : undefined;
+  const title = data?.title || payload.plan?.title || payload.title || fileName || 'Proposed plan';
+  const unavailable = Boolean(planPath) && !isLoading && !body && isError;
+
+  return (
+    <Plan role="group" aria-label="Plan approval">
+      <PlanHeader>
+        <PlanLabel />
+        <PlanHeaderActions>
+          {unavailable && <PlanStatus variant="warning">Unavailable</PlanStatus>}
+          {body && <PlanCopyButton content={body} />}
+        </PlanHeaderActions>
+      </PlanHeader>
+      <PlanBody>
+        <PlanIntro>
+          <PlanTitle>{title}</PlanTitle>
+          {planPath && <PlanPath>{planPath}</PlanPath>}
+        </PlanIntro>
+        <PlanMain>
+          {isLoading ? (
+            <Txt as="p" variant="ui-sm" className="text-neutral3">
+              Loading plan…
+            </Txt>
+          ) : body ? (
+            <PlanContent>{body}</PlanContent>
+          ) : planPath ? (
+            <PlanFile>{planPath}</PlanFile>
+          ) : (
+            <Txt as="p" variant="ui-sm" className="text-neutral3">
+              No plan file was provided.
+            </Txt>
+          )}
+          <PlanControls>
+            <PlanActionGroup>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                aria-label="Approve the plan and switch to build"
+                autoFocus
+                disabled={isSubmitting}
+                onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
+              >
+                Approve &amp; build
+              </Button>
+            </PlanActionGroup>
+            {body ? <PlanExpandButton /> : <span />}
+            <PlanActionGroup className="justify-end">
+              <Button
+                type="button"
+                size="sm"
+                aria-label="Reject the plan"
+                disabled={isSubmitting}
+                onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
+              >
+                Reject
+              </Button>
+            </PlanActionGroup>
+          </PlanControls>
+        </PlanMain>
+      </PlanBody>
+    </Plan>
+  );
+}
+
 function SuspensionCard({
   prompt,
   isSubmitting,
@@ -473,36 +580,7 @@ function SuspensionCard({
   const payload = suspensionPayloadShape(prompt.suspendPayload);
 
   if (prompt.toolName === 'submit_plan') {
-    return (
-      <div className={promptCardSuspension} role="group" aria-label="Plan approval">
-        <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
-        {payload.plan?.summary && (
-          <div className="whitespace-pre-wrap break-words font-mono text-ui-smd leading-relaxed text-icon5">
-            {payload.plan.summary}
-          </div>
-        )}
-        <div className={promptActions}>
-          <Button
-            variant="primary"
-            size="sm"
-            aria-label="Approve the plan and switch to build"
-            autoFocus
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
-          >
-            Approve &amp; build
-          </Button>
-          <Button
-            size="sm"
-            aria-label="Reject the plan"
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
-          >
-            Reject
-          </Button>
-        </div>
-      </div>
-    );
+    return <PlanApprovalCard prompt={prompt} payload={payload} isSubmitting={isSubmitting} onRespond={onRespond} />;
   }
 
   if (prompt.toolName === 'request_access') {

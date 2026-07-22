@@ -2,7 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { ArtifactListing, DirectoryListing, WorkspaceFile, WorkspaceRenderedListing } from '../api/types';
+import type {
+  ArtifactListing,
+  DirectoryListing,
+  WorkspaceFile,
+  WorkspacePlan,
+  WorkspaceRenderedListing,
+} from '../api/types';
 
 /**
  * Server-driven directory listing for the project picker (mirrors
@@ -56,6 +62,28 @@ export function useWorkspaceFile(
     queryFn: () =>
       client.get<WorkspaceFile>(
         `/web/workspace/file?workspacePath=${encodeURIComponent(workspacePath ?? '')}&path=${encodeURIComponent(filePath ?? '')}`,
+      ),
+  });
+}
+
+/**
+ * Load the plan markdown a `submit_plan` call points at (mirrors `GET /web/plan`).
+ * `planPath` is the path from the tool's args; the server reads it confined to
+ * the workspace's `.mastracode/plans/` directory so the approval card can render
+ * the plan body rather than just its filename.
+ */
+export function usePlanFile(
+  workspacePath: string | undefined,
+  planPath: string | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const { client } = useApiConfig();
+  return useQuery<WorkspacePlan>({
+    queryKey: queryKeys.workspacePlan(workspacePath, planPath),
+    enabled: Boolean(workspacePath && planPath && (options.enabled ?? true)),
+    queryFn: () =>
+      client.get<WorkspacePlan>(
+        `/web/plan?workspacePath=${encodeURIComponent(workspacePath ?? '')}&path=${encodeURIComponent(planPath ?? '')}`,
       ),
   });
 }

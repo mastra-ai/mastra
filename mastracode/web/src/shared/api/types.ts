@@ -16,6 +16,7 @@ import type {
   DirectoryEntry,
   DirectoryListing,
   WorkspaceFile,
+  WorkspacePlan,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 } from '../../web/fs-routes.js';
@@ -27,6 +28,7 @@ export type {
   DirectoryEntry,
   DirectoryListing,
   WorkspaceFile,
+  WorkspacePlan,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 };

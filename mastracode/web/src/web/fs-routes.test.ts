@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { listArtifacts, listWorkspaceRenderedPath, readWorkspaceFile } from './fs-routes.js';
+import { listArtifacts, listWorkspaceRenderedPath, readWorkspaceFile, readWorkspacePlan } from './fs-routes.js';
 
 describe('listArtifacts', () => {
   it('returns an empty list when .artifacts does not exist', async () => {
@@ -185,6 +185,66 @@ describe('readWorkspaceFile', () => {
 
     await expect(readWorkspaceFile(root, join(root, 'workspace'), '.artifacts/secret.md')).rejects.toThrow(
       'Path is outside the workspace',
+    );
+  });
+});
+
+describe('readWorkspacePlan', () => {
+  async function writePlan(relPath: string, content: string): Promise<string> {
+    const root = await mkdtemp(join(tmpdir(), 'mc-plan-root-'));
+    const workspace = join(root, 'workspace');
+    const file = join(workspace, relPath);
+    await mkdir(join(file, '..'), { recursive: true });
+    await writeFile(file, content);
+    return root;
+  }
+
+  it('parses the leading heading as the title and returns the body', async () => {
+    const root = await writePlan('.mastracode/plans/add-readme.md', '# Add a README\n\n1. Write it.\n');
+    const workspace = join(root, 'workspace');
+
+    const result = await readWorkspacePlan(root, workspace, '.mastracode/plans/add-readme.md');
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        path: '.mastracode/plans/add-readme.md',
+        title: 'Add a README',
+        plan: '1. Write it.',
+      }),
+    );
+  });
+
+  it('rejects a missing path', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-plan-root-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace, { recursive: true });
+
+    await expect(readWorkspacePlan(root, workspace, '')).rejects.toThrow('Missing required query param: path');
+  });
+
+  it('rejects paths outside the plans directory', async () => {
+    const root = await writePlan('notes.md', '# Notes\n');
+    const workspace = join(root, 'workspace');
+
+    await expect(readWorkspacePlan(root, workspace, 'notes.md')).rejects.toThrow('Path is not a plan file');
+  });
+
+  it('rejects non-markdown plan paths', async () => {
+    const root = await writePlan('.mastracode/plans/data.json', '{}');
+    const workspace = join(root, 'workspace');
+
+    await expect(readWorkspacePlan(root, workspace, '.mastracode/plans/data.json')).rejects.toThrow(
+      'Path is not a plan file',
+    );
+  });
+
+  it('reports a missing plan file', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-plan-root-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(join(workspace, '.mastracode', 'plans'), { recursive: true });
+
+    await expect(readWorkspacePlan(root, workspace, '.mastracode/plans/missing.md')).rejects.toThrow(
+      'Plan file not found',
     );
   });
 });

@@ -658,7 +658,7 @@ describe('MastraCode message rendering', () => {
   });
 
   describe('when a plan approval is suspended', () => {
-    it('renders the plan title with approve and reject controls', async () => {
+    it('renders the plan title, body, and approve/reject controls', async () => {
       seedProject();
       useAgentControllerHandlers({
         events: [
@@ -675,9 +675,45 @@ describe('MastraCode message rendering', () => {
       renderChat();
 
       const card = await screen.findByRole('group', { name: 'Plan approval' });
-      expect(within(card).getByText('Plan: Ship the migration')).toBeInTheDocument();
+      expect(within(card).getByRole('heading', { name: 'Ship the migration' })).toBeInTheDocument();
+      expect(within(card).getByText('Do the thing')).toBeInTheDocument();
       expect(within(card).getByRole('button', { name: 'Approve the plan and switch to build' })).toBeInTheDocument();
       expect(within(card).getByRole('button', { name: 'Reject the plan' })).toBeInTheDocument();
+    });
+
+    it('loads the plan markdown from the server by the path in the tool args', async () => {
+      seedProject();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/plan`, ({ request }) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get('workspacePath')).toBe(PROJECT_PATH);
+          expect(url.searchParams.get('path')).toBe('.mastracode/plans/add-readme.md');
+          return HttpResponse.json({
+            workspacePath: PROJECT_PATH,
+            path: '.mastracode/plans/add-readme.md',
+            title: 'Add a README',
+            plan: '## Steps\n\n1. Write the README.',
+          });
+        }),
+      );
+      useAgentControllerHandlers({
+        events: [
+          {
+            type: 'tool_suspended',
+            toolCallId: 'plan-2',
+            toolName: 'submit_plan',
+            args: { path: '.mastracode/plans/add-readme.md' },
+            suspendPayload: {},
+          },
+        ],
+      });
+
+      renderChat();
+
+      const card = await screen.findByRole('group', { name: 'Plan approval' });
+      expect(await within(card).findByRole('heading', { name: 'Add a README' })).toBeInTheDocument();
+      expect(await within(card).findByText('Write the README.')).toBeInTheDocument();
+      expect(within(card).getByText('add-readme.md')).toBeInTheDocument();
     });
   });
 
