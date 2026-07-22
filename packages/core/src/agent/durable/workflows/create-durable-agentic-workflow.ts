@@ -626,24 +626,6 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           const finalText = lastStep?.text;
 
-          // Finish-time side effects — output processors, memory persistence, thread
-          // title — shared with the other durable engines (@mastra/inngest). Includes
-          // the cross-process runtime-dependency rebuild, so it works when this
-          // terminal step runs in a different process than the one that called
-          // `stream()`. See finalize-run.ts.
-          await runDurableFinishSideEffects({
-            runId: state.runId,
-            initData,
-            messageListState: state.messageListState,
-            mastra: mastra as Mastra | undefined,
-            requestContext,
-            tracingContext,
-            // Parent finish-time spans under the run's AGENT_RUN (the helper
-            // prefers the registry's resume override when one exists).
-            agentSpanData: initData.agentSpanData as ExportedSpan<SpanType.AGENT_RUN> | undefined,
-            logger,
-          });
-
           const finalOutput = {
             messageListState: state.messageListState,
             messageId: state.messageId,
@@ -660,12 +642,34 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             state: state.state,
           };
 
-          if (pubsub) {
-            await emitFinishEvent(pubsub, state.runId, {
-              output: finalOutput.output,
-              stepResult: finalOutput.stepResult,
-            });
-          }
+          // Finish-time side effects — output processors, memory persistence, thread
+          // title — shared with the other durable engines (@mastra/inngest). Includes
+          // the cross-process runtime-dependency rebuild, so it works when this
+          // terminal step runs in a different process than the one that called
+          // `stream()`. The finish event is emitted via the helper's `emitFinish`
+          // hook: after persistence (so a client refetching the thread on `finish`
+          // sees the messages) but before title generation (an LLM roundtrip that
+          // shouldn't hold the client stream open). See finalize-run.ts.
+          await runDurableFinishSideEffects({
+            runId: state.runId,
+            initData,
+            messageListState: state.messageListState,
+            mastra: mastra as Mastra | undefined,
+            requestContext,
+            tracingContext,
+            // Parent finish-time spans under the run's AGENT_RUN (the helper
+            // prefers the registry's resume override when one exists).
+            agentSpanData: initData.agentSpanData as ExportedSpan<SpanType.AGENT_RUN> | undefined,
+            emitFinish: pubsub
+              ? async () => {
+                  await emitFinishEvent(pubsub, state.runId, {
+                    output: finalOutput.output,
+                    stepResult: finalOutput.stepResult,
+                  });
+                }
+              : undefined,
+            logger,
+          });
 
           // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
           // originals were ended as `suspended`, so end the *resume* spans (registry override).

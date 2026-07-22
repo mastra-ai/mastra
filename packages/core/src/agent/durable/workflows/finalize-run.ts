@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext } from '../../../observability';
 import type { ExportedSpan, SpanType, TracingContext } from '../../../observability';
@@ -30,7 +31,22 @@ export interface DurableFinishSideEffectsOptions {
    * shape as the non-durable agent (processor spans under agent run).
    */
   agentSpanData?: ExportedSpan<SpanType.AGENT_RUN>;
-  logger?: { warn?: (...args: any[]) => void; debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
+  /**
+   * Called after output processors + memory persistence, BEFORE title generation.
+   * Terminal steps pass their finish-event emission here so the client's stream
+   * closes as soon as the persisted messages are visible (`finish` ⇒ messages
+   * persisted still holds) without waiting on the title's LLM roundtrip —
+   * mirroring the non-durable agent, where `genTitle` runs after the stream
+   * finishes. When omitted, the caller emits after this helper returns and the
+   * title simply runs before the finish event (previous behavior).
+   */
+  emitFinish?: () => void | Promise<void>;
+  logger?: {
+    warn?: (...args: any[]) => void;
+    debug?: (...args: any[]) => void;
+    error?: (...args: any[]) => void;
+    trackException?: (error: MastraError) => void;
+  };
 }
 
 /**
@@ -52,7 +68,9 @@ export interface DurableFinishSideEffectsOptions {
  *
  * Every block is individually fail-soft: an error is logged and the remaining blocks still
  * run — matching the non-durable agent, where a failed title generation does not lose the
- * persisted messages.
+ * persisted messages. Failures that can lose data (dependency rebuild, memory persistence)
+ * are escalated as tracked `MastraError`s — same contract as the non-durable
+ * `AGENT_MEMORY_PERSIST_RESPONSE_MESSAGES_FAILED` path — instead of debug-level noise.
  */
 export async function runDurableFinishSideEffects({
   runId,
@@ -62,6 +80,7 @@ export async function runDurableFinishSideEffects({
   requestContext,
   tracingContext,
   agentSpanData,
+  emitFinish,
   logger,
 }: DurableFinishSideEffectsOptions): Promise<void> {
   // Rebuild runtime dependencies when the process-local registry entry is missing or
@@ -82,7 +101,19 @@ export async function runDurableFinishSideEffects({
           logger,
         });
       } catch (error) {
-        logger?.warn?.(`[DurableAgent] Error rebuilding runtime dependencies at finish: ${error}`);
+        // A failed rebuild means every guarded block below silently no-ops — the
+        // exact data loss this helper exists to prevent — so escalate, don't warn.
+        const mastraError = new MastraError(
+          {
+            id: 'DURABLE_AGENT_FINISH_REBUILD_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.SYSTEM,
+            details: { agentId: initData.agentId, runId, threadId: initData.state?.threadId ?? '' },
+          },
+          error,
+        );
+        logger?.error?.(`[DurableAgent] Error rebuilding runtime dependencies at finish: ${mastraError}`);
+        logger?.trackException?.(mastraError);
       }
     }
   }
@@ -158,13 +189,48 @@ export async function runDurableFinishSideEffects({
         });
       }
 
+      // Deliberately redundant with the MessageHistory output processor above: both
+      // save the SAME new-turn messages (id-keyed upserts, so double writes are
+      // harmless). The flush must stay — MessageHistory silently no-ops when the
+      // rebuilt worker requestContext lacks memory context, and processor-less
+      // configs have no other save path. The serialized state round-trips the
+      // unsaved-message tracking, so this drains only the new turn, never the
+      // full transcript.
       await registryEntry.saveQueueManager.flushMessages(
         memoryMessageList,
         durableState.threadId,
         durableState.memoryConfig,
       );
     } catch (error) {
-      logger?.warn?.(`[DurableAgent] Error persisting messages: ${error}`);
+      // Same contract as the non-durable agent's persist failure: a tracked
+      // MastraError, not a warn — losing the conversation is the bug this
+      // helper fixes, so its own failure must be loud.
+      const mastraError = new MastraError(
+        {
+          id: 'AGENT_MEMORY_PERSIST_RESPONSE_MESSAGES_FAILED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          details: {
+            agentName: initData.agentName ?? initData.agentId,
+            runId,
+            threadId: durableState.threadId ?? '',
+          },
+        },
+        error,
+      );
+      logger?.error?.(`[DurableAgent] Error persisting messages: ${mastraError}`);
+      logger?.trackException?.(mastraError);
+    }
+  }
+
+  // Emit the finish event now: messages are persisted (`finish` ⇒ persisted holds
+  // for clients that refetch the thread on finish), and the title block below costs
+  // an LLM roundtrip on the first turn that shouldn't hold the client stream open.
+  if (emitFinish) {
+    try {
+      await emitFinish();
+    } catch (error) {
+      logger?.warn?.(`[DurableAgent] Error emitting finish event: ${error}`);
     }
   }
 
