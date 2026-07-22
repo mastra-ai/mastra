@@ -233,7 +233,7 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
       <div
         ref={containerRef}
         aria-hidden="true"
-        className="factory-halftone-field pointer-events-none absolute inset-0 overflow-hidden opacity-90 [mask-image:radial-gradient(135%_135%_at_50%_42%,rgba(0,0,0,0.35)_0%,rgba(0,0,0,0.7)_28%,black_55%)]"
+        className="factory-halftone-field pointer-events-none absolute inset-0 overflow-hidden opacity-70 [mask-image:radial-gradient(135%_135%_at_50%_42%,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.25)_30%,rgba(0,0,0,0.55)_48%,black_64%)]"
       >
         <canvas ref={canvasRef} className="absolute inset-0 size-full" aria-hidden="true" />
       </div>

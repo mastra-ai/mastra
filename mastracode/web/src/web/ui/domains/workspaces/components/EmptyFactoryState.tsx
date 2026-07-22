@@ -3,7 +3,11 @@ import { useEffect, useState } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useCreateFactoryMutation, useFactoriesQuery, useLinkRepositoryMutation } from '../../../../../shared/hooks/useFactories';
+import {
+  useCreateFactoryMutation,
+  useFactoriesQuery,
+  useLinkRepositoryMutation,
+} from '../../../../../shared/hooks/useFactories';
 import { connectLinear } from '../../factory/services/linear';
 import type { FactoryProject, FactoryProjectPayload } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
