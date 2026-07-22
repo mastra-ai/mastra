@@ -300,8 +300,8 @@ describe('rehydrate static subset — parallel / foreach / sleep / sleepUntil', 
       {
         type: 'parallel',
         steps: [
-          { type: 'tool', id: 'echo-tool', toolId: 'echo-tool' },
-          { type: 'tool', id: 'upper-tool', toolId: 'upper-tool' },
+          { type: 'tool', id: 'echo-left', toolId: 'echo-tool' },
+          { type: 'tool', id: 'echo-right', toolId: 'echo-tool' },
         ],
       },
       {
@@ -342,8 +342,8 @@ describe('rehydrate static subset — parallel / foreach / sleep / sleepUntil', 
     expect(parallel).toMatchObject({
       type: 'parallel',
       steps: [
-        { type: 'tool', toolId: 'echo-tool' },
-        { type: 'tool', toolId: 'upper-tool' },
+        { type: 'tool', id: 'echo-left', toolId: 'echo-tool' },
+        { type: 'tool', id: 'echo-right', toolId: 'echo-tool' },
       ],
     });
 

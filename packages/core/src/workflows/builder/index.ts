@@ -41,14 +41,16 @@ export interface WorkflowBuilderWorkflowEntry {
 export type WorkflowBuilderSingleStepEntry =
   WorkflowBuilderAgentEntry | WorkflowBuilderToolEntry | WorkflowBuilderMappingEntry | WorkflowBuilderWorkflowEntry;
 
+export type WorkflowBuilderExecutableInnerEntry = Exclude<WorkflowBuilderSingleStepEntry, WorkflowBuilderMappingEntry>;
+
 export interface WorkflowBuilderParallelEntry {
   type: 'parallel';
-  steps: WorkflowBuilderSingleStepEntry[];
+  steps: WorkflowBuilderExecutableInnerEntry[];
 }
 
 export interface WorkflowBuilderForeachEntry {
   type: 'foreach';
-  step: Exclude<WorkflowBuilderSingleStepEntry, WorkflowBuilderMappingEntry>;
+  step: WorkflowBuilderExecutableInnerEntry;
   opts?: { concurrency: number };
 }
 
@@ -66,13 +68,13 @@ export interface WorkflowBuilderSleepUntilEntry {
 
 export interface WorkflowBuilderConditionalEntry {
   type: 'conditional';
-  steps: WorkflowBuilderSingleStepEntry[];
+  steps: WorkflowBuilderExecutableInnerEntry[];
   predicates: Predicate[];
 }
 
 export interface WorkflowBuilderLoopEntry {
   type: 'loop';
-  step: WorkflowBuilderSingleStepEntry;
+  step: WorkflowBuilderExecutableInnerEntry;
   loopType: 'dowhile' | 'dountil';
   predicate: Predicate;
 }
@@ -117,7 +119,7 @@ A persisted workflow is a JSON-safe static graph. The supported entry types are 
 
 Every adjacent step must compose exactly: the previous output shape must satisfy the next input schema. Agent inputs are always { prompt: string }. Insert a mapping step whenever shapes differ; never rely on implicit coercion. A mapping's output keys are the top-level keys of its JSON-encoded mapConfig. Persisted mappings only select, rename, template, or provide constant values; they cannot evaluate arithmetic or arbitrary expressions. Template placeholders must use inputData, initData, state, requestContext, or stepResults namespaces (for example \${stepResults.add-numbers.result}), never input, steps, or JavaScript expressions. Use a discovered tool or agent when computation is required.
 
-Parallel and conditional children must be single-step agent, tool, mapping, or nested workflow entries; do not nest containers inside them. Foreach bodies may be agent, tool, or nested workflow entries. Loop bodies may be any single-step entry. Conditional predicates align by index with their branch steps. Loop and conditional predicates must use the declarative predicate DSL.
+Mapping entries must be top-level linear steps. Parallel and conditional children, foreach bodies, and loop bodies may be agent, tool, or nested workflow entries; do not place mappings or nested containers inside them. Parallel and conditional children all receive the same preceding output. Foreach requires an array input and passes each array item directly to its body. Loop bodies must accept both the preceding output and their own output on later iterations. Use a nested workflow when a branch or foreach item needs its own input-shaping mapping. Conditional predicates align by index with their branch steps. Loop and conditional predicates must use the declarative predicate DSL.
 
 Use dependency IDs returned by discovery. Never invent agent, tool, or workflow IDs. Keep workflow IDs, step IDs, schemas, mapping configs, options, predicates, and metadata JSON-safe.`;
 

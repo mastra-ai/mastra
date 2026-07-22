@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { ClientToolsInput } from '@mastra/react';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { serializeWorkflowDraftInstructions } from './workflow-conversation';
@@ -28,6 +28,7 @@ export function WorkflowChatProvider({
   debounceTime = 300,
   children,
 }: WorkflowChatProviderProps) {
+  const [hydrationMessages] = useState(initialMessages);
   const generationRef = useRef(0);
   const createClientTools = useCallback(() => {
     const generation = ++generationRef.current;
@@ -39,7 +40,7 @@ export function WorkflowChatProvider({
       agentId="workflow-builder"
       streamPath="/editor/workflow-builder/stream"
       threadId={threadId}
-      initialMessages={initialMessages}
+      initialMessages={hydrationMessages}
       initialUserMessage={initialUserMessage}
       createClientTools={createClientTools}
       extraInstructions={serializeWorkflowDraftInstructions(authoringState, validationContext)}

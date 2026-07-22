@@ -183,6 +183,137 @@ describe('workflow draft', () => {
     });
   });
 
+  describe('when a workflow input cannot satisfy its first dependency', () => {
+    it('rejects the definition before finalization', () => {
+      const draft = createValidDraft();
+      draft.inputSchema = {
+        type: 'object',
+        properties: { subject: { type: 'string' } },
+        required: ['subject'],
+      };
+      draft.graph = [{ type: 'tool', id: 'create-ticket', toolId: 'create-support-ticket' }];
+
+      const result = validateWorkflowDraft(draft, {
+        tools: {
+          'create-support-ticket': {
+            inputSchema: {
+              type: 'object',
+              properties: { summary: { type: 'string' } },
+              required: ['summary'],
+            },
+          },
+        },
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          {
+            code: 'incompatible-schema',
+            path: 'graph.0',
+            message: 'Step 0 input is incompatible with the workflow input. Insert or update a mapping step.',
+          },
+        ],
+      });
+    });
+  });
+
+  describe('when parallel branches cannot accept their shared input', () => {
+    it('reports each incompatible branch before finalization', () => {
+      const draft = createValidDraft();
+      draft.inputSchema = {
+        type: 'object',
+        properties: { emailA: { type: 'string' }, emailB: { type: 'string' } },
+        required: ['emailA', 'emailB'],
+      };
+      draft.graph = [
+        {
+          type: 'parallel',
+          steps: [
+            { type: 'tool', id: 'lookup-a', toolId: 'lookup-customer' },
+            { type: 'tool', id: 'lookup-b', toolId: 'lookup-customer' },
+          ],
+        },
+      ];
+
+      const result = validateWorkflowDraft(draft, {
+        tools: {
+          'lookup-customer': {
+            inputSchema: {
+              type: 'object',
+              properties: { email: { type: 'string' } },
+              required: ['email'],
+            },
+          },
+        },
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({ code: 'incompatible-schema', path: 'graph.0.steps.0' }),
+          expect.objectContaining({ code: 'incompatible-schema', path: 'graph.0.steps.1' }),
+        ],
+      });
+    });
+  });
+
+  describe('when a persisted container contains a mapping child', () => {
+    it.each(['parallel', 'conditional', 'loop'] as const)('rejects the mapping inside %s', type => {
+      const draft = createValidDraft();
+      const mapping = { type: 'mapping' as const, id: 'shape', mapConfig: '{"value":{"value":"ok"}}' };
+      draft.graph =
+        type === 'parallel'
+          ? [{ type, steps: [mapping] }]
+          : type === 'conditional'
+            ? [{ type, steps: [mapping], predicates: [{ op: 'exists', path: 'inputData.value' }] }]
+            : [
+                {
+                  type,
+                  step: mapping,
+                  loopType: 'dowhile',
+                  predicate: { op: 'exists', path: 'inputData.value' },
+                },
+              ];
+
+      const result = validateWorkflowDraft(draft);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'invalid-map-config', message: expect.stringContaining('top-level') }),
+        ]),
+      );
+    });
+  });
+
+  describe('when a foreach body cannot accept an array item', () => {
+    it('rejects the item schema mismatch before finalization', () => {
+      const draft = createValidDraft();
+      draft.inputSchema = { type: 'array', items: { type: 'string' } };
+      draft.graph = [{ type: 'foreach', step: { type: 'tool', id: 'lookup', toolId: 'lookup-customer' } }];
+
+      const result = validateWorkflowDraft(draft, {
+        tools: {
+          'lookup-customer': {
+            inputSchema: {
+              type: 'object',
+              properties: { email: { type: 'string' } },
+              required: ['email'],
+            },
+          },
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: 'incompatible-schema', path: 'graph.0.step' })]),
+      );
+    });
+  });
+
   describe('when catalog schemas are unavailable or inconclusive', () => {
     it('does not reject an otherwise valid draft', () => {
       expect(validateWorkflowDraft(createValidDraft())).toEqual({ ok: true });

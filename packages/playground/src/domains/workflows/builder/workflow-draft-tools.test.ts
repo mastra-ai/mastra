@@ -100,6 +100,33 @@ describe('workflow draft client tools', () => {
     });
   });
 
+  describe('when strict finalization rejects an incompatible workflow', () => {
+    it('returns structured issue codes and paths for bounded repair', async () => {
+      const store = createStore();
+      await executeTool(store.tools['checkpoint-workflow-draft'], {
+        ...completeDefinition,
+        graph: [
+          {
+            type: 'foreach',
+            step: { type: 'agent', id: 'summarize-item', agentId: 'summary-agent' },
+          },
+        ],
+      });
+
+      const result = await executeTool(store.tools['finalize-workflow-draft'], { expectedRevision: 1 });
+
+      expect(result).toMatchObject({
+        success: false,
+        issues: [
+          {
+            code: 'incompatible-schema',
+            path: 'graph.0',
+          },
+        ],
+      });
+    });
+  });
+
   describe('when the assistant targets a stale revision', () => {
     it('returns the deterministic revision conflict without changing the draft', async () => {
       const store = createStore();
@@ -141,7 +168,7 @@ describe('workflow draft client tools', () => {
       },
       {
         type: 'loop',
-        step: { type: 'mapping', id: 'loop-map', output: { value: 'ok' } },
+        step: { type: 'agent', id: 'loop-agent', agent: 'summary-agent' },
         loopType: 'dowhile',
         predicate: { op: 'truthy', value: { path: 'inputData.continue' } },
       },

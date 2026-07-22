@@ -18,6 +18,15 @@ const jsonSchema = z.record(z.string(), z.unknown());
 const resultSchema = z.object({
   success: z.boolean(),
   error: z.string().optional(),
+  issues: z
+    .array(
+      z.object({
+        code: z.string(),
+        path: z.string(),
+        message: z.string(),
+      }),
+    )
+    .optional(),
   lifecycle: z.enum(['untouched', 'constructing', 'ready']).optional(),
   revision: z.number().int().nonnegative().optional(),
   finalizedRevision: z.number().int().nonnegative().optional(),
@@ -67,15 +76,8 @@ const nestedWorkflowStepSchema = z.object({
   workflowId: z.string().min(1),
   options: stepOptionsSchema,
 });
-const singleStepSchema = z.union([agentStepSchema, toolStepSchema, mappingStepSchema, nestedWorkflowStepSchema]);
-const singleStepInputSchema = z.union([
-  agentStepInputSchema,
-  toolStepSchema,
-  mappingStepInputSchema,
-  nestedWorkflowStepSchema,
-]);
-const foreachInnerStepSchema = z.union([agentStepSchema, toolStepSchema, nestedWorkflowStepSchema]);
-const foreachInnerStepInputSchema = z.union([agentStepInputSchema, toolStepSchema, nestedWorkflowStepSchema]);
+const executableInnerStepSchema = z.union([agentStepSchema, toolStepSchema, nestedWorkflowStepSchema]);
+const executableInnerStepInputSchema = z.union([agentStepInputSchema, toolStepSchema, nestedWorkflowStepSchema]);
 const literalScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const pathOrLiteralSchema = z.union([
   z.object({ path: z.string().min(1) }),
@@ -95,16 +97,19 @@ const predicateSchema: z.ZodType<WorkflowPredicate> = z.lazy(() =>
     z.object({ op: z.literal('not'), arg: predicateSchema }),
   ]),
 );
-const parallelStepSchema = z.object({ type: z.literal('parallel'), steps: z.array(singleStepSchema).min(1) });
-const parallelStepInputSchema = z.object({ type: z.literal('parallel'), steps: z.array(singleStepInputSchema).min(1) });
+const parallelStepSchema = z.object({ type: z.literal('parallel'), steps: z.array(executableInnerStepSchema).min(1) });
+const parallelStepInputSchema = z.object({
+  type: z.literal('parallel'),
+  steps: z.array(executableInnerStepInputSchema).min(1),
+});
 const foreachStepSchema = z.object({
   type: z.literal('foreach'),
-  step: foreachInnerStepSchema,
+  step: executableInnerStepSchema,
   opts: z.object({ concurrency: z.number().int().positive() }).optional(),
 });
 const foreachStepInputSchema = z.object({
   type: z.literal('foreach'),
-  step: foreachInnerStepInputSchema,
+  step: executableInnerStepInputSchema,
   opts: z.object({ concurrency: z.number().int().positive() }).optional(),
 });
 const sleepStepSchema = z.object({
@@ -119,23 +124,23 @@ const sleepUntilStepSchema = z.object({
 });
 const conditionalStepSchema = z.object({
   type: z.literal('conditional'),
-  steps: z.array(singleStepSchema).min(1),
+  steps: z.array(executableInnerStepSchema).min(1),
   predicates: z.array(predicateSchema).min(1),
 });
 const conditionalStepInputSchema = z.object({
   type: z.literal('conditional'),
-  steps: z.array(singleStepInputSchema).min(1),
+  steps: z.array(executableInnerStepInputSchema).min(1),
   predicates: z.array(predicateSchema).min(1),
 });
 const loopStepSchema = z.object({
   type: z.literal('loop'),
-  step: singleStepSchema,
+  step: executableInnerStepSchema,
   loopType: z.enum(['dowhile', 'dountil']),
   predicate: predicateSchema,
 });
 const loopStepInputSchema = z.object({
   type: z.literal('loop'),
-  step: singleStepInputSchema,
+  step: executableInnerStepInputSchema,
   loopType: z.enum(['dowhile', 'dountil']),
   predicate: predicateSchema,
 });
@@ -240,7 +245,9 @@ export interface WorkflowDraftToolStore {
 const supersededResult = { success: false as const, error: 'Submission was superseded.' };
 
 function toToolResult(result: WorkflowDraftAuthoringResult) {
-  if (!result.ok) return { success: false as const, error: result.error };
+  if (!result.ok) {
+    return { success: false as const, error: result.error, ...(result.issues ? { issues: result.issues } : {}) };
+  }
   return {
     success: true as const,
     lifecycle: result.state.lifecycle,

@@ -83,7 +83,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
     [agentsQuery.data, toolsQuery.data, workflowCatalogUnavailable, workflowsQuery.data],
   );
   const workflowDraft = useWorkflowDraft(workflowQuery.data, initialWorkflowId, validationContext);
-  const [threadId] = useState(() => getWorkflowConversationThreadId(initialWorkflowId));
+  const threadId = getWorkflowConversationThreadId(initialWorkflowId);
   const conversationQuery = useAgentMessages({ agentId: 'workflow-builder', threadId, memory: true });
   const initialMessages = conversationQuery.data?.messages ?? EMPTY_MESSAGES;
   const deleteWorkflow = useDeleteStoredWorkflow();
@@ -148,6 +148,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
 
   return (
     <WorkflowChatProvider
+      key={threadId}
       threadId={threadId}
       authoringState={workflowDraft.authoringState}
       validationContext={validationContext}

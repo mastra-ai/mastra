@@ -200,7 +200,7 @@ function mappingOutputSchema(
 function getStepInputSchema(step: WorkflowDraftStep, context?: WorkflowDraftValidationContext): JsonSchema | undefined {
   switch (step.type) {
     case 'agent':
-      return context?.agents?.[step.agentId]?.inputSchema ?? agentInputSchema;
+      return context?.agents ? (context.agents[step.agentId]?.inputSchema ?? agentInputSchema) : undefined;
     case 'tool':
       return context?.tools?.[step.toolId]?.inputSchema;
     case 'workflow':
@@ -302,7 +302,16 @@ function validateStep(
       if (step.steps.length === 0) {
         issues.push({ code: 'invalid-parallel', path: `${path}.steps`, message: 'Parallel steps cannot be empty.' });
       }
-      step.steps.forEach((child, index) => validateStep(child, `${path}.steps.${index}`, seenIds, issues, context));
+      step.steps.forEach((child, index) => {
+        if (child.type === 'mapping') {
+          issues.push({
+            code: 'invalid-map-config',
+            path: `${path}.steps.${index}`,
+            message: 'Persisted mapping steps must be top-level workflow entries.',
+          });
+        }
+        validateStep(child, `${path}.steps.${index}`, seenIds, issues, context);
+      });
       return;
     case 'foreach':
       if (step.opts?.concurrency !== undefined && step.opts.concurrency < 1) {
@@ -322,11 +331,27 @@ function validateStep(
           message: 'Conditional steps and predicates must be non-empty and aligned.',
         });
       }
-      step.steps.forEach((child, index) => validateStep(child, `${path}.steps.${index}`, seenIds, issues, context));
+      step.steps.forEach((child, index) => {
+        if (child.type === 'mapping') {
+          issues.push({
+            code: 'invalid-map-config',
+            path: `${path}.steps.${index}`,
+            message: 'Persisted mapping steps must be top-level workflow entries.',
+          });
+        }
+        validateStep(child, `${path}.steps.${index}`, seenIds, issues, context);
+      });
       return;
     case 'loop':
       if (step.loopType !== 'dowhile' && step.loopType !== 'dountil') {
         issues.push({ code: 'invalid-loop', path: `${path}.loopType`, message: 'Loop type is invalid.' });
+      }
+      if (step.step.type === 'mapping') {
+        issues.push({
+          code: 'invalid-map-config',
+          path: `${path}.step`,
+          message: 'Persisted mapping steps must be top-level workflow entries.',
+        });
       }
       validateStep(step.step, `${path}.step`, seenIds, issues, context);
       return;
@@ -351,6 +376,87 @@ function validateStep(
   }
 }
 
+function incompatibleSchemaIssue(issues: WorkflowDraftValidationIssue[], path: string, message: string): void {
+  issues.push({ code: 'incompatible-schema', path, message });
+}
+
+function childOutputProperties(
+  steps: Extract<WorkflowDraftStep, { type: 'parallel' | 'conditional' }>['steps'],
+  context?: WorkflowDraftValidationContext,
+): Record<string, JsonSchema> | undefined {
+  const properties: Record<string, JsonSchema> = {};
+  for (const child of steps) {
+    const output = getStepOutputSchema(child, context);
+    if (!output) return undefined;
+    properties[child.id] = output;
+  }
+  return properties;
+}
+
+function validateStepSchemaFlow(
+  step: WorkflowDraftStep,
+  inputSchema: JsonSchema | undefined,
+  path: string,
+  issues: WorkflowDraftValidationIssue[],
+  context?: WorkflowDraftValidationContext,
+): JsonSchema | undefined {
+  switch (step.type) {
+    case 'mapping':
+      return getStepOutputSchema(step, context);
+    case 'sleep':
+    case 'sleepUntil':
+      return inputSchema;
+    case 'parallel': {
+      step.steps.forEach((child, index) => {
+        validateStepSchemaFlow(child, inputSchema, `${path}.steps.${index}`, issues, context);
+      });
+      const properties = childOutputProperties(step.steps, context);
+      return properties ? { type: 'object', properties, required: Object.keys(properties) } : undefined;
+    }
+    case 'conditional': {
+      step.steps.forEach((child, index) => {
+        validateStepSchemaFlow(child, inputSchema, `${path}.steps.${index}`, issues, context);
+      });
+      const properties = childOutputProperties(step.steps, context);
+      return properties ? { type: 'object', properties } : undefined;
+    }
+    case 'foreach': {
+      const itemSchema =
+        isRecord(inputSchema) && inputSchema.type === 'array' && isRecord(inputSchema.items)
+          ? inputSchema.items
+          : undefined;
+      if (isRecord(inputSchema) && typeof inputSchema.type === 'string' && inputSchema.type !== 'array') {
+        incompatibleSchemaIssue(issues, path, 'Foreach input must be an array. Insert or update a mapping step.');
+      }
+      const itemOutput = validateStepSchemaFlow(step.step, itemSchema, `${path}.step`, issues, context);
+      return itemOutput ? { type: 'array', items: itemOutput } : undefined;
+    }
+    case 'loop': {
+      const output = validateStepSchemaFlow(step.step, inputSchema, `${path}.step`, issues, context);
+      const destination = getStepInputSchema(step.step, context);
+      if (schemaCompatibility(output, destination) === 'incompatible') {
+        incompatibleSchemaIssue(
+          issues,
+          `${path}.step`,
+          'Loop step output is incompatible with its input for a subsequent iteration.',
+        );
+      }
+      return output;
+    }
+    default: {
+      const destination = getStepInputSchema(step, context);
+      if (schemaCompatibility(inputSchema, destination) === 'incompatible') {
+        const label =
+          path.startsWith('graph.') && !path.includes('.steps.') && !path.endsWith('.step')
+            ? `Step ${path.slice('graph.'.length)} input is incompatible with ${path === 'graph.0' ? 'the workflow input' : 'the previous step output'}. Insert or update a mapping step.`
+            : 'Step input is incompatible with the containing flow input. Insert a top-level mapping step or use a nested workflow to shape the input.';
+        incompatibleSchemaIssue(issues, path, label);
+      }
+      return getStepOutputSchema(step, context);
+    }
+  }
+}
+
 export function validateWorkflowDraft(
   draft: WorkflowDraft,
   context?: WorkflowDraftValidationContext,
@@ -371,16 +477,17 @@ export function validateWorkflowDraft(
 
   const seenIds = new Set<string>();
   draft.graph.forEach((step, index) => validateStep(step, `graph.${index}`, seenIds, issues, context));
-  for (let index = 1; index < draft.graph.length; index += 1) {
-    const source = getStepOutputSchema(draft.graph[index - 1]!, context);
-    const destination = getStepInputSchema(draft.graph[index]!, context);
-    if (schemaCompatibility(source, destination) === 'incompatible') {
-      issues.push({
-        code: 'incompatible-schema',
-        path: `graph.${index}`,
-        message: `Step ${index} input is incompatible with the previous step output. Insert or update a mapping step.`,
-      });
-    }
+
+  let currentSchema: JsonSchema | undefined = draft.inputSchema;
+  draft.graph.forEach((step, index) => {
+    currentSchema = validateStepSchemaFlow(step, currentSchema, `graph.${index}`, issues, context);
+  });
+  if (schemaCompatibility(currentSchema, draft.outputSchema) === 'incompatible') {
+    incompatibleSchemaIssue(
+      issues,
+      'outputSchema',
+      'Workflow output schema is incompatible with the final step output. Add a top-level mapping step or update the output schema.',
+    );
   }
 
   return issues.length === 0 ? { ok: true } : { ok: false, issues };
@@ -444,7 +551,9 @@ export function applyWorkflowDraftMutation(
   if (nextValidation.ok) return { ok: true, draft: nextDraft };
 
   const previousIssueKeys = new Set(previousValidation.ok ? [] : previousValidation.issues.map(issueKey));
-  const introducedIssues = nextValidation.issues.filter(issue => !previousIssueKeys.has(issueKey(issue)));
+  const introducedIssues = nextValidation.issues.filter(
+    issue => issue.code !== 'incompatible-schema' && !previousIssueKeys.has(issueKey(issue)),
+  );
   if (introducedIssues.length > 0) return { ok: false, draft, issues: introducedIssues };
   return { ok: true, draft: nextDraft };
 }

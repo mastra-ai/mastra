@@ -30,7 +30,7 @@ import type {
   StepFlowEntry,
 } from './types';
 import { getSingleStepEntryId } from './utils';
-import { createStep, createStepFromAgent, createStepFromTool, mapVariable } from './workflow';
+import { createStepFromAgent, createStepFromTool, mapVariable } from './workflow';
 
 // ============================================================================
 // JSON shape persisted to WorkflowDefinitionsStorage
@@ -458,26 +458,21 @@ function rebuildToolOptions(entry: { options?: SerializedStepOptions }): Record<
   return Object.keys(opts).length > 0 ? opts : undefined;
 }
 
-function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra, _schemaOpts?: JsonSchemaToZodOptions): any {
+function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra, schemaOpts?: JsonSchemaToZodOptions): any {
   switch (entry.type) {
     case 'agent': {
       assertAgentExists(mastra, entry.agentId);
-      // Wrap in createStep so `.parallel()` / `.foreach()` sees the __agentRef
-      // discriminator and re-emits a `type: 'agent'` entry when re-serialized.
-      // A raw agent instance falls through to the generic `type: 'step'` branch
-      // and the round-trip loses the declarative shape.
-      //
-      // Note: `entry.outputSchema` is intentionally NOT rebuilt here.
-      // `.parallel()`/`.branch()` inner steps produced this way currently
-      // execute the agent with its default output shape; per-step structured
-      // output for parallel/branch inner steps is a separate open item.
-      return createStep(mastra.getAgentById(entry.agentId));
+      const agent = mastra.getAgentById(entry.agentId);
+      const options = rebuildAgentOptions(entry, schemaOpts);
+      const base = createStepFromAgent(agent as any, options as any);
+      return { ...base, id: entry.id, __agentOptions: options };
     }
     case 'tool': {
       assertToolExists(mastra, entry.toolId);
-      // Same reason as above — the tool must be wrapped so `.parallel()` /
-      // `.foreach()` can recognize the __toolRef discriminator.
-      return createStep(mastra.getTool(entry.toolId) as any);
+      const tool = mastra.getTool(entry.toolId);
+      const options = rebuildToolOptions(entry);
+      const base = createStepFromTool(tool as any, options as any);
+      return { ...base, id: entry.id, __toolOptions: options };
     }
     case 'step':
       return resolveStepDescriptor(entry.step, mastra);
