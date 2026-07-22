@@ -253,7 +253,8 @@ describe('create (platform provisioning)', () => {
     expect(note).toContain('Acme');
     expect(note).toContain('Postgres database');
     expect(note).toContain('code agent sessions run inside Mastra platform sandboxes');
-    expect(note).toContain('https://projects.mastra.ai/orgs/org_123/projects/proj_abc');
+    expect(note).toContain('Manage your project at');
+    expect(note).toContain('https://projects.mastra.ai');
   });
 
   it('surfaces a Neon 403 as a "need admin role" hint without failing the run', async () => {

@@ -190,7 +190,7 @@ export async function create(args: CreateArgs): Promise<void> {
       `  - Postgres database (credentials written to ${color.cyan('.env')})`,
       '',
       'When deployed, code agent sessions run inside Mastra platform sandboxes.',
-      `Manage project settings at ${color.underline(`https://projects.mastra.ai/orgs/${platformResult.orgId}/projects/${platformResult.project.id}`)}`,
+      `Manage your project at ${color.underline('https://projects.mastra.ai')}`,
     );
   } else if (args.noPlatform) {
     lines.push(
