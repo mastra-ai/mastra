@@ -215,7 +215,7 @@ function ThreadRow({
               </Button>
             }
           />
-          <DropdownMenu.Content align="end" className="min-w-28">
+          <DropdownMenu.Content align="end">
             <DropdownMenu.Item onClick={onStartRename}>
               <Pencil />
               Rename
