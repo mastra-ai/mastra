@@ -651,7 +651,11 @@ export class MastraFactory {
         //   2. primer — hydrates the caller's model-credential snapshot so the
         //               request's first model call resolves tenant credentials.
         //   3. spa    — serves the built UI for everything the server doesn't own.
+        // `auth` also lands on `server.auth` so the core auth middleware (and
+        // Studio's dual-auth routing — see `studio.auth` on the returned args)
+        // authenticates core `/api/*` routes with the same provider.
         return {
+          auth,
           middleware: [
             createFactoryAuthGate(auth),
             createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
@@ -695,6 +699,10 @@ export class MastraFactory {
 
     return {
       ...prepared.mastraArgs,
+      // Same provider on `studio.auth` as on `server.auth` (buildServerConfig):
+      // deployed factories must authenticate BOTH plain API callers and Studio
+      // requests (`x-mastra-client-type: studio` routes to `studio.auth`).
+      ...(auth ? { studio: { auth } } : {}),
       ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
     };
   }

@@ -389,6 +389,29 @@ describe('MastraFactory.prepare', () => {
     expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
   });
 
+  it('passes the resolved auth provider to both server.auth and studio.auth', async () => {
+    // Deploys must authenticate BOTH plain API callers (server.auth) and
+    // Studio requests routed via `x-mastra-client-type: studio` (studio.auth).
+    const provider = fakeProvider();
+    const factory = new MastraFactory({ storage: fakeStorage(), auth: provider });
+    const args = (await factory.prepare()) as { studio?: { auth?: unknown } };
+    expect(args.studio?.auth).toBe(provider);
+
+    const config = prepareMock.mock.calls[0]![0];
+    const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
+    expect(serverConfig.auth).toBe(provider);
+  });
+
+  it('omits server.auth and studio.auth when auth is explicitly disabled (auth: null)', async () => {
+    const factory = new MastraFactory({ storage: fakeStorage(), auth: null });
+    const args = (await factory.prepare()) as { studio?: unknown };
+    expect(args.studio).toBeUndefined();
+
+    const config = prepareMock.mock.calls[0]![0];
+    const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
+    expect(serverConfig.auth).toBeUndefined();
+  });
+
   it('registers the per-tenant credential resolver when auth is configured', async () => {
     registerTenantCredentialResolverMock.mockClear();
     await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
