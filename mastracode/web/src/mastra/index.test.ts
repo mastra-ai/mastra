@@ -56,25 +56,33 @@ describe('platform entry (src/mastra/index.ts)', () => {
       vi.resetModules();
     });
 
-    it('boots when the GitHub group is partially configured so diagnostics can report the missing setup', { timeout: 60_000 }, async () => {
-      vi.resetModules();
-      // The test env may carry a full GitHub config — blank everything but the
-      // app id to force the partial state.
-      vi.stubEnv('GITHUB_APP_ID', '12345');
-      vi.stubEnv('GITHUB_APP_PRIVATE_KEY', '');
-      vi.stubEnv('GITHUB_APP_CLIENT_ID', '');
-      vi.stubEnv('GITHUB_APP_CLIENT_SECRET', '');
-      vi.stubEnv('GITHUB_APP_SLUG', '');
-      const mod = await import('./index.js');
-      expect(mod.mastra).toBeDefined();
-    });
+    it(
+      'boots when the GitHub group is partially configured so diagnostics can report the missing setup',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        // The test env may carry a full GitHub config — blank everything but the
+        // app id to force the partial state.
+        vi.stubEnv('GITHUB_APP_ID', '12345');
+        vi.stubEnv('GITHUB_APP_PRIVATE_KEY', '');
+        vi.stubEnv('GITHUB_APP_CLIENT_ID', '');
+        vi.stubEnv('GITHUB_APP_CLIENT_SECRET', '');
+        vi.stubEnv('GITHUB_APP_SLUG', '');
+        const mod = await import('./index.js');
+        expect(mod.mastra).toBeDefined();
+      },
+    );
 
-    it('boots when the Linear group is partially configured so diagnostics can report the missing setup', { timeout: 60_000 }, async () => {
-      vi.resetModules();
-      vi.stubEnv('LINEAR_CLIENT_ID', 'lin_client');
-      vi.stubEnv('LINEAR_CLIENT_SECRET', '');
-      const mod = await import('./index.js');
-      expect(mod.mastra).toBeDefined();
-    });
+    it(
+      'boots when the Linear group is partially configured so diagnostics can report the missing setup',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('LINEAR_CLIENT_ID', 'lin_client');
+        vi.stubEnv('LINEAR_CLIENT_SECRET', '');
+        const mod = await import('./index.js');
+        expect(mod.mastra).toBeDefined();
+      },
+    );
   });
 });

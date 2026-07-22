@@ -46,13 +46,18 @@ export function ChatSessionConfigProvider({
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
   const repository = storedSession
-    ? factory?.repositories.find((repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId)
+    ? factory?.repositories.find(
+        (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
+      )
     : factory?.repositories[0];
   const ensureQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
   const resolvingSession = Boolean(userScoped ? threadId : sessionId) && sessionQuery.isPending;
-  const resourceId = userScoped && authQuery.data ? userSessionResourceId(authQuery.data) : ensureQuery.data?.resourceId;
+  const resourceId =
+    userScoped && authQuery.data ? userSessionResourceId(authQuery.data) : ensureQuery.data?.resourceId;
   const projectPath = userScoped ? undefined : storedSession?.sessionId;
-  const sessionEnabled = userScoped ? Boolean(storedSession) && !resolvingSession : ensureQuery.isSuccess && Boolean(projectPath);
+  const sessionEnabled = userScoped
+    ? Boolean(storedSession) && !resolvingSession
+    : ensureQuery.isSuccess && Boolean(projectPath);
   const value = {
     resourceId: resourceId ?? '',
     sessionEnabled,
@@ -64,7 +69,8 @@ export function ChatSessionConfigProvider({
             factoryProjectId: factory.id,
             projectRepositoryId: repository.projectRepositoryId,
             sandboxId: storedSession?.sandboxId ?? ensureQuery.data?.sandboxId,
-            sandboxWorkdir: storedSession?.sandboxWorkdir ?? ensureQuery.data?.sandboxWorkdir ?? repository.sandboxWorkdir,
+            sandboxWorkdir:
+              storedSession?.sandboxWorkdir ?? ensureQuery.data?.sandboxWorkdir ?? repository.sandboxWorkdir,
           }
         : undefined,
     baseUrl,

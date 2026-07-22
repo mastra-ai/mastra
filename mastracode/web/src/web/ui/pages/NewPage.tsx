@@ -87,7 +87,9 @@ function BrandLockup() {
 function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | undefined }) {
   const { sessionId } = useParams<{ sessionId: string }>();
   const sessionQuery = useUserSessionQuery(sessionId);
-  const repository = activeFactory?.repositories.find(repo => repo.projectRepositoryId === sessionQuery.data?.projectRepositoryId);
+  const repository = activeFactory?.repositories.find(
+    repo => repo.projectRepositoryId === sessionQuery.data?.projectRepositoryId,
+  );
   const projectPath = sessionQuery.data?.sessionId;
   const gitBranch = repository?.gitBranch;
   return (
