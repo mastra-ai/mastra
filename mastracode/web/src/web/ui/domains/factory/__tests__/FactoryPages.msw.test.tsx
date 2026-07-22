@@ -285,6 +285,52 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
   };
 }
 
+function externalSourceFor(item: Pick<WorkItem, 'source' | 'sourceKey' | 'url'>) {
+  if (item.source === 'manual' || !item.sourceKey) return null;
+  const [integrationId, type] =
+    item.source === 'github-issue'
+      ? ['github', 'issue']
+      : item.source === 'github-pr'
+        ? ['github', 'pull-request']
+        : ['linear', 'issue'];
+  return {
+    integrationId,
+    type,
+    externalId: item.sourceKey,
+    ...(item.url ? { url: item.url } : {}),
+  };
+}
+
+function toWireWorkItem(item: WorkItem) {
+  const { githubProjectId, source: _source, sourceKey: _sourceKey, url: _url, ...rest } = item;
+  return { ...rest, factoryProjectId: githubProjectId, externalSource: externalSourceFor(item) };
+}
+
+function fromWireCreateWorkItem(body: {
+  externalSource?: { integrationId: string; type: string; externalId: string; url?: string };
+  parentWorkItemId?: string | null;
+  title: string;
+  stages: string[];
+  sessions?: CreateWorkItemInput['sessions'];
+  metadata?: Record<string, unknown>;
+}): CreateWorkItemInput {
+  const external = body.externalSource;
+  const source =
+    external?.integrationId === 'github' && external.type === 'issue'
+      ? 'github-issue'
+      : external?.integrationId === 'github' && external.type === 'pull-request'
+        ? 'github-pr'
+        : external?.integrationId === 'linear' && external.type === 'issue'
+          ? 'linear-issue'
+          : 'manual';
+  return {
+    ...body,
+    source,
+    sourceKey: external?.externalId ?? null,
+    url: external?.url ?? null,
+  };
+}
+
 interface BoardState {
   items: WorkItem[];
   posts: CreateWorkItemInput[];
@@ -340,11 +386,14 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
     http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
       HttpResponse.json({ issues: options.linearIssues ?? [], nextCursor: null }),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/decisions`, () =>
+      HttpResponse.json({ decisions: [] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: state.items }),
+      HttpResponse.json({ workItems: state.items.map(toWireWorkItem) }),
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, async ({ request }) => {
-      const body = (await request.json()) as CreateWorkItemInput;
+      const body = fromWireCreateWorkItem((await request.json()) as Parameters<typeof fromWireCreateWorkItem>[0]);
       state.posts.push(body);
       const sessions = Object.fromEntries(
         Object.entries(body.sessions ?? {}).map(([role, ref]) => [role, { ...ref, startedBy: 'user-1' }]),
@@ -361,7 +410,7 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
         metadata: body.metadata ?? {},
       });
       state.items = [...state.items.filter(i => i.sourceKey !== item.sourceKey || item.sourceKey === null), item];
-      return HttpResponse.json({ workItem: item }, { status: 201 });
+      return HttpResponse.json({ workItem: toWireWorkItem(item) }, { status: 201 });
     }),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/runs/start`, async ({ request }) => {
       const body = (await request.json()) as {
@@ -453,7 +502,7 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
         metadata: { ...existing.metadata, ...(body.metadata ?? {}) },
       };
       state.items = state.items.map(i => (i.id === id ? updated : i));
-      return HttpResponse.json({ workItem: updated });
+      return HttpResponse.json({ workItem: toWireWorkItem(updated) });
     }),
     http.delete(`${TEST_BASE_URL}/web/factory/work-items/:id`, ({ params }) => {
       const id = params.id as string;
