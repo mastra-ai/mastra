@@ -62,7 +62,7 @@ function json(data: unknown, status = 200): Response {
 
 beforeEach(() => {
   vi.stubEnv('MASTRA_SHARED_API_URL', config.baseUrl);
-  vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', config.accessToken);
+  vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', config.accessToken);
 });
 
 afterEach(() => {
@@ -588,8 +588,9 @@ describe('PlatformGithubIntegration', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', '');
     expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'platform.mastra.ai' });
 
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
-    expect(() => new PlatformGithubIntegration()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
+    expect(() => new PlatformGithubIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 
   it('can disable polling and resolves collaborator permissions through the platform API', async () => {
