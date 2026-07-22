@@ -322,24 +322,35 @@ To fix this you have three different options:
        */
       list: async (): Promise<Record<string, Resource[]>> => {
         const allResources: Record<string, Resource[]> = {};
-        for (const serverName of Object.keys(this.serverConfigs)) {
-          try {
-            const internalClient = await this.getConnectedClientForServer(serverName);
-            allResources[serverName] = await internalClient.resources.list();
-          } catch (error) {
-            const mastraError = new MastraError(
-              {
-                id: 'MCP_CLIENT_LIST_RESOURCES_FAILED',
-                domain: ErrorDomain.MCP,
-                category: ErrorCategory.THIRD_PARTY,
-                details: {
-                  serverName,
+        // Query every server concurrently (see listToolsWithErrors) so a slow
+        // server does not delay the others; fold back in configuration order.
+        const serverNames = Object.keys(this.serverConfigs);
+        const settled = await Promise.all(
+          serverNames.map(async serverName => {
+            try {
+              const internalClient = await this.getConnectedClientForServer(serverName);
+              return { serverName, resources: await internalClient.resources.list() };
+            } catch (error) {
+              const mastraError = new MastraError(
+                {
+                  id: 'MCP_CLIENT_LIST_RESOURCES_FAILED',
+                  domain: ErrorDomain.MCP,
+                  category: ErrorCategory.THIRD_PARTY,
+                  details: {
+                    serverName,
+                  },
                 },
-              },
-              error,
-            );
-            this.logger.trackException(mastraError);
-            this.logger.error('Failed to list resources from server:', { error: mastraError.toString() });
+                error,
+              );
+              this.logger.trackException(mastraError);
+              this.logger.error('Failed to list resources from server:', { error: mastraError.toString() });
+              return { serverName, resources: undefined };
+            }
+          }),
+        );
+        for (const { serverName, resources } of settled) {
+          if (resources) {
+            allResources[serverName] = resources;
           }
         }
         return allResources;
@@ -360,24 +371,35 @@ To fix this you have three different options:
        */
       templates: async (): Promise<Record<string, ResourceTemplate[]>> => {
         const allTemplates: Record<string, ResourceTemplate[]> = {};
-        for (const serverName of Object.keys(this.serverConfigs)) {
-          try {
-            const internalClient = await this.getConnectedClientForServer(serverName);
-            allTemplates[serverName] = await internalClient.resources.templates();
-          } catch (error) {
-            const mastraError = new MastraError(
-              {
-                id: 'MCP_CLIENT_LIST_RESOURCE_TEMPLATES_FAILED',
-                domain: ErrorDomain.MCP,
-                category: ErrorCategory.THIRD_PARTY,
-                details: {
-                  serverName,
+        // Query every server concurrently (see listToolsWithErrors) so a slow
+        // server does not delay the others; fold back in configuration order.
+        const serverNames = Object.keys(this.serverConfigs);
+        const settled = await Promise.all(
+          serverNames.map(async serverName => {
+            try {
+              const internalClient = await this.getConnectedClientForServer(serverName);
+              return { serverName, templates: await internalClient.resources.templates() };
+            } catch (error) {
+              const mastraError = new MastraError(
+                {
+                  id: 'MCP_CLIENT_LIST_RESOURCE_TEMPLATES_FAILED',
+                  domain: ErrorDomain.MCP,
+                  category: ErrorCategory.THIRD_PARTY,
+                  details: {
+                    serverName,
+                  },
                 },
-              },
-              error,
-            );
-            this.logger.trackException(mastraError);
-            this.logger.error('Failed to list resource templates from server:', { error: mastraError.toString() });
+                error,
+              );
+              this.logger.trackException(mastraError);
+              this.logger.error('Failed to list resource templates from server:', { error: mastraError.toString() });
+              return { serverName, templates: undefined };
+            }
+          }),
+        );
+        for (const { serverName, templates } of settled) {
+          if (templates) {
+            allTemplates[serverName] = templates;
           }
         }
         return allTemplates;
@@ -591,24 +613,35 @@ To fix this you have three different options:
        */
       list: async (): Promise<Record<string, Prompt[]>> => {
         const allPrompts: Record<string, Prompt[]> = {};
-        for (const serverName of Object.keys(this.serverConfigs)) {
-          try {
-            const internalClient = await this.getConnectedClientForServer(serverName);
-            allPrompts[serverName] = await internalClient.prompts.list();
-          } catch (error) {
-            const mastraError = new MastraError(
-              {
-                id: 'MCP_CLIENT_LIST_PROMPTS_FAILED',
-                domain: ErrorDomain.MCP,
-                category: ErrorCategory.THIRD_PARTY,
-                details: {
-                  serverName,
+        // Query every server concurrently (see listToolsWithErrors) so a slow
+        // server does not delay the others; fold back in configuration order.
+        const serverNames = Object.keys(this.serverConfigs);
+        const settled = await Promise.all(
+          serverNames.map(async serverName => {
+            try {
+              const internalClient = await this.getConnectedClientForServer(serverName);
+              return { serverName, prompts: await internalClient.prompts.list() };
+            } catch (error) {
+              const mastraError = new MastraError(
+                {
+                  id: 'MCP_CLIENT_LIST_PROMPTS_FAILED',
+                  domain: ErrorDomain.MCP,
+                  category: ErrorCategory.THIRD_PARTY,
+                  details: {
+                    serverName,
+                  },
                 },
-              },
-              error,
-            );
-            this.logger.trackException(mastraError);
-            this.logger.error('Failed to list prompts from server:', { error: mastraError.toString() });
+                error,
+              );
+              this.logger.trackException(mastraError);
+              this.logger.error('Failed to list prompts from server:', { error: mastraError.toString() });
+              return { serverName, prompts: undefined };
+            }
+          }),
+        );
+        for (const { serverName, prompts } of settled) {
+          if (prompts) {
+            allPrompts[serverName] = prompts;
           }
         }
         return allPrompts;
