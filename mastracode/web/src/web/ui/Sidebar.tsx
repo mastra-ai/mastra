@@ -1,14 +1,15 @@
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../shared/api/config';
 import { clearMastraCodeStorage, redirectToLogout, useFactoryAuth } from './domains/auth';
 import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
-import { useSetSettingsSection } from './domains/settings/context/SettingsNavigationProvider';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
+import { DEFAULT_SETTINGS_PATH } from './domains/settings/settingsSections';
 import {
   isServerFactory,
   FactorySwitcher,
@@ -16,12 +17,16 @@ import {
   UserSessionsSection,
   WorkspacesSection,
 } from './domains/workspaces';
-import { useOverlays } from './lib/overlays';
+
+function useSettingsOpen() {
+  const { pathname } = useLocation();
+  return pathname.startsWith('/settings');
+}
 
 /**
  * Composition shell: each section owns its data through the domain contexts
- * (`useActiveFactoryContext`, focused chat hooks, `useOverlays`), so nothing is
- * wired through props here.
+ * (`useActiveFactoryContext`, focused chat hooks) or the router location, so
+ * nothing is wired through props here.
  *
  * Everything runs in a worktree branched from the repo's HEAD. Server-backed
  * factories show the Factory menu (Board + org-level factory Sessions) and the
@@ -31,12 +36,11 @@ import { useOverlays } from './lib/overlays';
  */
 export function Sidebar() {
   const { activeFactory } = useActiveFactoryContext();
-  const overlays = useOverlays();
   const isServerBacked = activeFactory ? isServerFactory(activeFactory) : false;
-  const settingsOpen = overlays.isOpen('settings');
+  const settingsOpen = useSettingsOpen();
 
   return (
-    <MainSidebar className="bg-transparent h-full">
+    <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         {settingsOpen ? (
           <SettingsNavigation />
@@ -68,18 +72,17 @@ export function Sidebar() {
 }
 
 function SidebarFooter() {
-  const overlays = useOverlays();
-  const settingsOpen = overlays.isOpen('settings');
-  const setSettingsSection = useSetSettingsSection();
+  const settingsOpen = useSettingsOpen();
   const closeSettings = useCloseSettings();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const toggleSettings = () => {
     if (settingsOpen) {
       closeSettings();
       return;
     }
-    setSettingsSection('general');
-    overlays.open('settings');
+    void navigate(DEFAULT_SETTINGS_PATH, { state: { from: location } });
   };
 
   return (

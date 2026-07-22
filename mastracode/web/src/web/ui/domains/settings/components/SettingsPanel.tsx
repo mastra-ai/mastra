@@ -4,12 +4,9 @@ import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { useKeyDown } from '../../../lib/hooks';
-
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { useSettingsSection } from '../context/SettingsNavigationProvider';
-import { useCloseSettings } from '../hooks/useCloseSettings';
+import { useSettingsSection } from '../hooks/useSettingsSection';
 import { useAgentControllerSettings } from '../../../../../shared/hooks/useAgentControllerSettings';
 import { useAvailableModelsQuery } from '../../../../../shared/hooks/useAvailableModels';
 import {
@@ -35,12 +32,11 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 }
 
 /**
- * In-layout settings surface controlled by the application sidebar, with an
- * independently scrolling content pane.
+ * Settings content pane: renders the section addressed by the settings-page
+ * URL, with an independently scrolling content column.
  */
 export function SettingsPanel() {
   const section = useSettingsSection();
-  const closeSettings = useCloseSettings();
   const { theme, setTheme } = useTheme();
   const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { isMobile } = useMainSidebar();
@@ -61,8 +57,6 @@ export function SettingsPanel() {
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
   const sessionResourceId = resourceEnabled ? resourceId : undefined;
-
-  useKeyDown({ escape: closeSettings });
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
     if (!settings || updateSettingsMutation.isPending) return;

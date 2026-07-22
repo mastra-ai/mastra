@@ -6,10 +6,7 @@ export interface PlatformApiClientConfig {
 
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
   const sharedApiUrl = process.env.MASTRA_SHARED_API_URL?.trim() || 'https://platform.mastra.ai/v1';
-  const accessToken =
-    process.env.MASTRA_PLATFORM_SECRET_KEY?.trim() ||
-    // Deprecated alias — prefer MASTRA_PLATFORM_SECRET_KEY.
-    process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim();
+  const accessToken = process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
   if (!accessToken) {
     throw new Error('Platform integration: missing required environment variable MASTRA_PLATFORM_SECRET_KEY.');
   }

@@ -605,15 +605,20 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`)).status).toBe(404);
   });
 
-  it('clamps the days param to a supported window', async () => {
+  it('resolves the from/to range window, defaulting when absent or malformed', async () => {
     const bodyFor = async (query: string) =>
       (await (await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics${query}`)).json()).metrics;
 
+    // No params → default 30-day window.
     expect((await bodyFor('')).windowDays).toBe(30);
-    expect((await bodyFor('?days=7')).windowDays).toBe(7);
-    expect((await bodyFor('?days=90')).windowDays).toBe(90);
-    expect((await bodyFor('?days=17')).windowDays).toBe(30);
-    expect((await bodyFor('?days=evil')).windowDays).toBe(30);
+
+    // Explicit 7-day window.
+    const to = new Date();
+    const from = new Date(to.getTime() - 7 * 86_400_000);
+    expect((await bodyFor(`?from=${from.toISOString()}&to=${to.toISOString()}`)).windowDays).toBe(7);
+
+    // Malformed params fall back to the default.
+    expect((await bodyFor('?from=evil&to=evil')).windowDays).toBe(30);
   });
 
   it('aggregates the project board: throughput, WIP, transitions, and source mix', async () => {
@@ -633,7 +638,12 @@ describe('GET /web/factory/projects/:id/metrics', () => {
       createBody({ externalSource: null, title: 'Manual card' }),
     );
 
-    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?days=7`);
+    const to = new Date();
+    const from = new Date(to.getTime() - 7 * 86_400_000);
+    const res = await json(
+      'GET',
+      `/web/factory/projects/${PROJECT_ID}/metrics?from=${from.toISOString()}&to=${to.toISOString()}`,
+    );
     expect(res.status).toBe(200);
     const { metrics } = await res.json();
 
