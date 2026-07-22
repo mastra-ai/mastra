@@ -375,10 +375,15 @@ describe('SettingsPanel', () => {
     it('keeps session settings and pack activation available when an active server factory has no worktree selected', async () => {
       const user = userEvent.setup();
       let activateBody: unknown;
+      const rendered = renderSettingsPanel(serverProjectWithoutWorktree);
       server.use(
         http.get(`${TEST_BASE_URL}/web/factory/projects/factory-project-settings-panel`, () =>
           HttpResponse.json({
-            project: { id: 'factory-project-settings-panel', name: 'Server Settings Panel Project', defaultModelId: null },
+            project: {
+              id: 'factory-project-settings-panel',
+              name: 'Server Settings Panel Project',
+              defaultModelId: null,
+            },
           }),
         ),
         http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
@@ -401,7 +406,7 @@ describe('SettingsPanel', () => {
           return HttpResponse.json({ ok: true, activePackId: 'openai' });
         }),
       );
-      await renderSettingsPanel(serverProjectWithoutWorktree);
+      await rendered;
 
       await user.click(screen.getByRole('button', { name: 'Show model settings' }));
       const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
