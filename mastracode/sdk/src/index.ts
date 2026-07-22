@@ -25,6 +25,7 @@ import {
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
+import type { InputProcessor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
@@ -186,6 +187,11 @@ export interface MastraCodeConfig {
       }) => Record<string, ToolLike | undefined> | Promise<Record<string, ToolLike | undefined>>);
   /** Observe completed tool calls without replacing or modifying the built-in tool implementation. */
   postToolObserver?: PostToolObserver;
+  /**
+   * Stateless input processor instances prepended before Mastra Code's mandatory processors.
+   * Embedders may extend processing but cannot replace built-in safety and compatibility policy.
+   */
+  inputProcessors?: InputProcessor[];
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /**
@@ -652,6 +658,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       tools: getGoalJudgeTools,
     },
     inputProcessors: [
+      ...(config?.inputProcessors ?? []),
       new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {

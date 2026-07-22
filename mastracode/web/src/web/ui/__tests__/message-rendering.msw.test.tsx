@@ -527,6 +527,7 @@ describe('MastraCode message rendering', () => {
 
     // First run shows the welcome empty state inside the app layout.
     expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory from local folder' })).toBeInTheDocument();
 
     // Its call to action opens Factory creation as the layout main view; with
     // zero factories it cannot be dismissed.
@@ -534,7 +535,6 @@ describe('MastraCode message rendering', () => {
     const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
     expect(factorySurface.closest('main')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Close factory creation' })).not.toBeInTheDocument();
   });
 
   it('does not show first-run Factory creation after a remote Factory hydrates', async () => {

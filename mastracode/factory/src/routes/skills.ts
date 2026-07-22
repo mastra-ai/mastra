@@ -2,10 +2,9 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import { formatSkillActivation } from '@mastra/core/workspace';
-import type { Workspace } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
+import { resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -31,11 +30,6 @@ interface SessionAuthorizationResult {
   message?: string;
 }
 
-interface SkillSession {
-  getWorkspace(): Workspace;
-  sendMessage(input: { content: string }): Promise<unknown>;
-}
-
 export interface SkillRoutesDeps extends RouteDependencies {
   controllerId: string;
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
@@ -49,10 +43,6 @@ export interface SkillRoutesDeps extends RouteDependencies {
 
 function loose(context: unknown): Context {
   return context as Context;
-}
-
-function escapeSkillBoundary(value: string): string {
-  return value.replaceAll('</skill>', '&lt;/skill&gt;');
 }
 
 function parseBody(value: unknown): SkillInvocationBody | undefined {
@@ -175,27 +165,20 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
         return c.json({ error: authorization.code, message: authorization.message }, authorization.status ?? 403);
       }
 
-      const session = (await controller.getSessionByResource(body.resourceId, body.scope)) as SkillSession | undefined;
-      if (!session) {
-        return c.json({ error: 'session_not_found', message: 'Agent controller session not found.' }, 404);
+      try {
+        const resolved = await resolveSkillInvocation(controller, body);
+        if (dispatch) {
+          void resolved.session.sendMessage({ content: resolved.message }).catch((error: unknown) => {
+            console.error('Workspace skill dispatch failed after acceptance', error);
+          });
+        }
+        return c.json({ ok: true, skill: resolved.skillName, message: resolved.message });
+      } catch (error) {
+        if (error instanceof SkillInvocationError) {
+          return c.json({ error: error.code, message: error.message }, 404);
+        }
+        throw error;
       }
-
-      const skills = session.getWorkspace().skills;
-      await skills?.maybeRefresh();
-      const skill = await skills?.get(body.name);
-      if (!skill || skill['user-invocable'] === false) {
-        return c.json({ error: 'skill_not_found', message: `Skill not found: ${body.name}.` }, 404);
-      }
-
-      const args = body.arguments?.trim();
-      const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
-      const message = `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
-      if (dispatch) {
-        void session.sendMessage({ content: message }).catch(error => {
-          console.error('Workspace skill dispatch failed after acceptance', error);
-        });
-      }
-      return c.json({ ok: true, skill: skill.name, message });
     };
 
     return [

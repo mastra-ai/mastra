@@ -6,6 +6,7 @@ import type { TestAuthUser } from '../../routes/test-utils';
 import type { StateSigner } from '../../state-signing';
 import { createFactoryStorageForTests } from '../../storage/test-utils';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils';
+import type { IntegrationHooks } from '../base';
 import { LinearIntegration } from './integration';
 import { buildLinearRoutes } from './routes';
 
@@ -65,7 +66,10 @@ const stateSigner: StateSigner = {
 };
 
 // ── Test harness ─────────────────────────────────────────────────────────
-function buildApp(user: TestAuthUser | null, options: { signer?: StateSigner | null; authEnabled?: boolean } = {}) {
+function buildApp(
+  user: TestAuthUser | null,
+  options: { signer?: StateSigner | null; authEnabled?: boolean; hooks?: IntegrationHooks } = {},
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -79,6 +83,7 @@ function buildApp(user: TestAuthUser | null, options: { signer?: StateSigner | n
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       stateSigner: options.signer === undefined ? stateSigner : (options.signer ?? undefined),
       intake: seed.intake,
+      hooks: options.hooks,
     }),
   );
   return app;
@@ -242,6 +247,35 @@ describe('issues route', () => {
     expect(json.issues[0]).toMatchObject({ identifier: 'ENG-42', title: 'Fix intake sync' });
     expect(json.nextCursor).toBe('cursor-2');
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
+  });
+
+  it('ingests fetched issues for the active Factory project', async () => {
+    await connect();
+    const ingestLinearIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
+    const factoryProjectId = '11111111-1111-4111-8111-111111111111';
+    const res = await buildApp(org1(), { hooks: { ingestLinearIssues } }).request(
+      `/web/linear/issues?factoryProjectId=${factoryProjectId}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(ingestLinearIssues).toHaveBeenCalledWith({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId,
+      issues: expect.arrayContaining([expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42' })]),
+    });
+  });
+
+  it('rejects malformed Factory project identifiers before fetching issues', async () => {
+    await connect();
+    const ingestLinearIssues = vi.fn();
+    const res = await buildApp(org1(), { hooks: { ingestLinearIssues } }).request(
+      '/web/linear/issues?factoryProjectId=not-a-uuid',
+    );
+
+    expect(res.status).toBe(400);
+    expect(listActiveLinearIssues).not.toHaveBeenCalled();
+    expect(ingestLinearIssues).not.toHaveBeenCalled();
   });
 
   it('forwards the pagination cursor', async () => {

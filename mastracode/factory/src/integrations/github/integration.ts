@@ -999,6 +999,8 @@ export class GithubIntegration implements FactoryIntegration {
         : undefined,
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
+      ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
+      revokeFactoryBindingsForProjectPath: ctx.hooks?.revokeFactoryBindingsForProjectPath,
     });
   }
 

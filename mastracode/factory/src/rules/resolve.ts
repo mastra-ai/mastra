@@ -1,6 +1,8 @@
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleLeaf,
+  FactoryLinearEventName,
+  FactoryLinearRuleLeaf,
   FactoryRuleBoard,
   FactoryRuleHandler,
   FactoryRuleSource,
@@ -23,12 +25,13 @@ export function resolveFactoryStageRules(
     source: FactoryRuleSource;
     fromStage: FactoryRuleStage;
     toStage: FactoryRuleStage;
+    initialEntry?: boolean;
   },
 ): ResolvedFactoryStageRule[] {
-  if (input.fromStage === input.toStage) return [];
+  if (input.fromStage === input.toStage && !input.initialEntry) return [];
   const boardRules = rules[input.board];
   const resolved: ResolvedFactoryStageRule[] = [];
-  const onExit = boardRules[input.fromStage]?.[input.source]?.onExit;
+  const onExit = input.initialEntry ? undefined : boardRules[input.fromStage]?.[input.source]?.onExit;
   if (onExit) resolved.push({ phase: 'exit', handler: onExit });
   const onEnter = boardRules[input.toStage]?.[input.source]?.onEnter;
   if (onEnter) resolved.push({ phase: 'enter', handler: onEnter });
@@ -44,6 +47,13 @@ export function resolveFactoryGithubRule(
   event: FactoryGithubEventName,
 ): FactoryGithubRuleLeaf['onEvent'] {
   return rules.github[event]?.onEvent;
+}
+
+export function resolveFactoryLinearRule(
+  rules: FactoryRules,
+  event: FactoryLinearEventName,
+): FactoryLinearRuleLeaf['onEvent'] {
+  return rules.linear[event]?.onEvent;
 }
 
 export type ResolvedFactoryToolRule = FactoryRuleHandler<FactoryToolResultRuleContext>;

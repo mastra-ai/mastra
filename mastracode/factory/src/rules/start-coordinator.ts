@@ -5,8 +5,6 @@ import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/w
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryRuleStage, FactoryTransitionResult } from './types.js';
 
-const MAX_KICKOFF_ERROR_LENGTH = 512;
-
 export interface FactoryStartRequest {
   orgId: string;
   userId: string;
@@ -44,7 +42,7 @@ export interface FactoryStartPreparedResult {
   projectPath: string;
   branch: string;
   revision: number;
-  kickoffStatus: 'pending' | 'sent' | 'failed';
+  kickoffStatus: 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
   replayed: boolean;
 }
 
@@ -154,16 +152,6 @@ export class FactoryStartCoordinator {
     if (request.kickoffMessage === null) {
       await storage.markPendingStart(prepared.binding.id, 'sent');
       prepared.pendingStart.status = 'sent';
-    } else if (!prepared.replayed || prepared.pendingStart.status === 'failed') {
-      void session.sendMessage({ content: request.kickoffMessage }).then(
-        () => storage.markPendingStart(prepared.binding.id, 'sent'),
-        (error: unknown) =>
-          storage.markPendingStart(
-            prepared.binding.id,
-            'failed',
-            (error instanceof Error ? error.message : String(error)).slice(0, MAX_KICKOFF_ERROR_LENGTH),
-          ),
-      );
     }
 
     return {

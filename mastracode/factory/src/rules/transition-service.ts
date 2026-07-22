@@ -34,6 +34,8 @@ export interface FactoryTransitionRequest {
   ingress: { type: 'human' | 'agent' | 'toolResult' | 'github' | 'rule'; identity: string; transitionId?: string };
   cause: string;
   causalChain?: readonly FactoryRuleCausalEntry[];
+  /** Internal materialization path: evaluate only the destination onEnter leaf even when already at that stage. */
+  initialEntry?: boolean;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -188,6 +190,7 @@ export class FactoryTransitionService {
             source,
             fromStage,
             toStage: request.stage,
+            initialEntry: request.initialEntry,
           })) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,
@@ -243,6 +246,7 @@ export class FactoryTransitionService {
       actorId: actorId(request.actor),
       ingress: { identity: request.ingress.identity, triggerType: request.ingress.type, transitionId },
       ruleSetVersion: this.#rules.version,
+      causalChain: [...(request.causalChain ?? [])],
       evaluation,
     });
     if (committed.status === 'missing') {

@@ -42,6 +42,7 @@ import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
+  transitionService: any = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -56,7 +57,7 @@ function buildApp(
       projects: seed.projects,
       workItems: seed.workItems,
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+      transitionService,
       startCoordinator,
     }).routes(),
   );
@@ -168,6 +169,57 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     expect(workItem.stageHistory[0]).toMatchObject({ stage: 'intake', by: 'u1' });
     expect(workItem.stageHistory[0].enteredAt).toBeTruthy();
     expect(workItem.stageHistory[0].exitedAt).toBeUndefined();
+  });
+
+  it('evaluates Intake onEnter when a work item is created manually', async () => {
+    const transition = vi.fn(async (request: any) => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: request.workItemId,
+      board: request.board,
+      stage: request.stage,
+      revision: 2,
+    }));
+
+    const res = await buildApp(orgUser, undefined, { transition } as never).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody()),
+      },
+    );
+
+    expect(res.status).toBe(200);
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        board: 'work',
+        stage: 'intake',
+        actor: { type: 'human', id: 'u1' },
+        initialEntry: true,
+      }),
+    );
+  });
+
+  it('removes a newly created work item when its initial Intake entry is rejected', async () => {
+    const transition = vi.fn(async () => ({
+      status: 'rejected' as const,
+      code: 'forbidden',
+      reason: 'Intake is closed.',
+    }));
+
+    const res = await buildApp(orgUser, undefined, { transition } as never).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody({ externalSource: null })),
+      },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ status: 'rejected', code: 'forbidden', reason: 'Intake is closed.' });
+    expect(await listItems()).toEqual([]);
   });
 
   it('rejects an external-source upsert that tries to bypass governed stage transition', async () => {
@@ -787,6 +839,86 @@ describe('audit events', () => {
     expect(await listItems()).toHaveLength(0);
 
     warn.mockRestore();
+  });
+});
+
+// ── Durable decision status ──────────────────────────────────────────────
+describe('decision status', () => {
+  async function queueDecision(identity: string, now: string, orgId = 'org1') {
+    await seed.workItems.commitRuleEvaluation({
+      orgId,
+      factoryProjectId: PROJECT_ID,
+      workItemId: null,
+      ingress: { identity, triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: null,
+      actor: { type: 'human', id: 'u1' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'notify', idempotencyKey: identity, title: 'Rule update', body: 'Bounded body' }],
+      causalChain: [],
+      now: new Date(now),
+    });
+  }
+
+  it('returns a bounded tenant-scoped newest-first page with an opaque cursor', async () => {
+    await queueDecision('effect-1', '2030-01-01T00:00:00.000Z');
+    await queueDecision('effect-2', '2030-01-01T00:01:00.000Z');
+    await queueDecision('other-org', '2030-01-01T00:02:00.000Z', 'org2');
+
+    const first = await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions?statuses=pending&limit=1`);
+    expect(first.status).toBe(200);
+    const firstPage = await first.json();
+    expect(firstPage.decisions).toEqual([
+      expect.objectContaining({ type: 'notify', status: 'pending', attempts: 0, lastError: null }),
+    ]);
+    expect(firstPage.decisions[0]).not.toHaveProperty('orgId');
+    expect(firstPage.decisions[0]).not.toHaveProperty('decision');
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+
+    const second = await json(
+      'GET',
+      `/web/factory/projects/${PROJECT_ID}/decisions?statuses=pending&limit=1&before=${encodeURIComponent(firstPage.nextCursor)}`,
+    );
+    expect(second.status).toBe(200);
+    const secondPage = await second.json();
+    expect(secondPage.decisions).toHaveLength(1);
+    expect(secondPage.decisions[0].createdAt).toBe('2030-01-01T00:00:00.000Z');
+    expect(secondPage.nextCursor).toBeUndefined();
+  });
+
+  it('requeues only a tenant-scoped failed effect while preserving its identity', async () => {
+    await queueDecision('effect-retry', '2030-01-01T00:00:00.000Z');
+    const now = new Date('2030-01-01T00:01:00.000Z');
+    const [leased] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date('2030-01-01T00:02:00.000Z'),
+      limit: 1,
+    });
+    await seed.workItems.failDeferredDecision({
+      id: leased!.id,
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'terminal failure',
+      terminal: true,
+    });
+
+    const response = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${leased!.id}/retry`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      decision: expect.objectContaining({ id: leased!.id, evaluationId: leased!.evaluationId, status: 'retry' }),
+    });
+    const denied = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${leased!.id}/retry`);
+    expect(denied.status).toBe(409);
+  });
+
+  it('rejects malformed cursors instead of silently restarting pagination', async () => {
+    const response = await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions?before=not-a-cursor`);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_cursor' });
   });
 });
 

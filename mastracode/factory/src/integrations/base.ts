@@ -34,10 +34,38 @@ import type { IntakeStorage } from '../storage/domains/intake/base';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import type { ParsedGithubWebhook } from './github/webhook.js';
+
+export interface LinearIssueIngress {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+  state: string;
+  stateType: string;
+  priorityLabel: string;
+  assignee: string | null;
+  team: string | null;
+  labels: string[];
+  createdAt: string;
+  updatedAt: string;
+}
 
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
+  ingestGithubEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  ingestLinearIssues?: (input: {
+    orgId: string;
+    userId: string;
+    factoryProjectId: string;
+    issues: LinearIssueIngress[];
+  }) => Promise<unknown>;
+  revokeFactoryBindingsForProjectPath?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    projectPath: string;
+  }) => Promise<void>;
 }
 
 /**

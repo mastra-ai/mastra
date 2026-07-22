@@ -515,6 +515,23 @@ export interface WorktreeResult {
   resourceId: string;
 }
 
+export interface PersistedWorktree {
+  worktreePath: string;
+  branch: string;
+  baseBranch: string;
+}
+
+/** List the signed-in user's server-persisted worktrees for a project repository. */
+export async function listWorktrees(baseUrl: string, projectRepositoryId: string): Promise<PersistedWorktree[]> {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/worktrees`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`Failed to list worktrees (${res.status})`);
+  const body = (await res.json()) as { worktrees: PersistedWorktree[] };
+  return body.worktrees;
+}
+
 /**
  * Create (or reuse) a git worktree + feature branch for a unit of work inside
  * the project's cloud sandbox. `baseBranch` defaults to the project's default

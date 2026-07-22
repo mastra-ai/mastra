@@ -199,6 +199,16 @@ export function invalidateTenantCredentialSnapshots(tenant: { orgId: string; use
  * async seam in model resolution. Cheap when fresh (TTL check), best-effort
  * when not — a failed hydrate falls back to env vars, never blocks a request.
  */
+export async function primeTenantCredentials({
+  tenant,
+  credentials,
+}: {
+  tenant: SdkCredentialTenant;
+  credentials: ModelCredentialsStorage;
+}): Promise<void> {
+  await storeFor(tenant, credentials).ensureFresh();
+}
+
 export function createTenantCredentialPrimer({
   auth,
   credentials,

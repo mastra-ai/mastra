@@ -50,7 +50,7 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 
 function ChatShell() {
   const overlays = useOverlays();
-  const { factories, factoriesPending } = useActiveFactoryContext();
+  const { activeFactory, factories, factoriesPending } = useActiveFactoryContext();
   const { isMobile } = useMainSidebar();
   const factorySetupRequired = factories.length === 0 && !factoriesPending;
   // First run shows the welcome empty state; the panel opens from its call to
@@ -72,9 +72,13 @@ function ChatShell() {
 
   return (
     <>
-      <PageLayoutMainViewProvider view={mainView}>
-        <Outlet />
-      </PageLayoutMainViewProvider>
+      {!activeFactory && mainView !== undefined ? (
+        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">{mainView}</main>
+      ) : (
+        <PageLayoutMainViewProvider view={mainView}>
+          <Outlet />
+        </PageLayoutMainViewProvider>
+      )}
       <ChatOverlays />
     </>
   );
