@@ -86,18 +86,22 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     const envExample = fs.readFileSync(path.join(outDir, '.env.example'), 'utf8');
     expect(envExample).not.toMatch(/^[A-Z][A-Z0-9_]*=\s*$/m);
 
-    // package.json: monorepo coupling removed; every Mastra dep pins `latest`.
+    // package.json: monorepo coupling removed; every Mastra dep pins `alpha`.
     const pkg = JSON.parse(fs.readFileSync(path.join(outDir, 'package.json'), 'utf8'));
     const allDeps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies };
     for (const [name, spec] of Object.entries(allDeps)) {
       expect(spec, `${name} must not use a link:/workspace: spec`).not.toMatch(/^(link|workspace|catalog|file):/);
       if (name === 'mastra' || name.startsWith('@mastra/')) {
-        expect(spec, `${name} must be pinned to "latest"`).toBe('latest');
+        expect(spec, `${name} must be pinned to "alpha"`).toBe('alpha');
       }
     }
-    expect(pkg.dependencies['@mastra/memory']).toBe('latest');
-    // Legacy artifact from the caret-pinning era must not appear anymore.
-    expect(fs.existsSync(path.join(outDir, '.npmrc'))).toBe(false);
+    expect(pkg.dependencies['@mastra/memory']).toBe('alpha');
+    // While the Mastra deps float on `alpha`, `.npmrc` needs
+    // `legacy-peer-deps=true` so npm accepts the internally-consistent
+    // prerelease peer graph. Remove once the packages ship stable versions
+    // and the template pins `"latest"` again.
+    const npmrc = fs.readFileSync(path.join(outDir, '.npmrc'), 'utf8');
+    expect(npmrc).toMatch(/^legacy-peer-deps\s*=\s*true\s*$/m);
 
     // Tests and their dependencies are stripped.
     expect(allDeps.vitest).toBeUndefined();
