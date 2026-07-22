@@ -1,11 +1,15 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { Navigate, Outlet, useLocation } from 'react-router';
-import { useActiveFactoryContext } from '../../workspaces';
+import { ActiveFactoryProvider, useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
 import { useEffect, useEffectEvent, useState } from 'react';
 
 export const RootGuards = () => {
-  return <AuthGuard />;
+  return (
+    <ActiveFactoryProvider>
+      <AuthGuard />
+    </ActiveFactoryProvider>
+  );
 };
 
 const AuthGuard = () => {

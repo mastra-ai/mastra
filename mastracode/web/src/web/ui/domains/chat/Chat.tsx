@@ -1,10 +1,11 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router';
 
 import { PageLayoutMainViewProvider } from '../../ui/PageLayout';
 import { OverlaysProvider, useOverlays } from '../../lib/overlays';
 import { SettingsPanel } from '../settings/components/SettingsPanel';
+import { SettingsHeader } from '../settings/components/SettingsHeader';
 import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
@@ -48,15 +49,23 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 function ChatShell() {
   const overlays = useOverlays();
   const { activeFactory } = useActiveFactoryContext();
+  const { isMobile } = useMainSidebar();
+  const settingsOpen = overlays.isOpen('settings');
 
-  const mainView = overlays.isOpen('settings') ? <SettingsPanel /> : undefined;
+  const mainView = settingsOpen ? <SettingsPanel /> : undefined;
 
   return (
     <>
       {!activeFactory && mainView !== undefined ? (
-        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">{mainView}</main>
+        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">
+          {settingsOpen && isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined}
+          {mainView}
+        </main>
       ) : (
-        <PageLayoutMainViewProvider view={mainView}>
+        <PageLayoutMainViewProvider
+          view={mainView}
+          mobileHeader={settingsOpen ? <SettingsHeader autoFocus={isMobile} placement="mobile" /> : undefined}
+        >
           <Outlet />
         </PageLayoutMainViewProvider>
       )}

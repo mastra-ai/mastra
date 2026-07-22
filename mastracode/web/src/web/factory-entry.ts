@@ -32,26 +32,16 @@ import { AuditDomain } from './audit/domain.js';
 import { buildAuthRoutes, createWebAuthGate, isWebAuthEnabled } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './factory-integration.js';
 import { builtInFactoryRules } from './factory/rules/defaults.js';
-import { FactoryDecisionDispatcher } from './factory/rules/dispatcher.js';
-import { FactoryPhaseStateProcessor } from './factory/rules/processor.js';
-import { createFactoryTransitionTools } from './factory/rules/tools.js';
-import { FactoryTransitionService } from './factory/rules/transition-service.js';
 import type { FactoryRules } from './factory/rules/types.js';
 import { assertFactoryRules } from './factory/rules/validation.js';
-import { getFactoryWorkspace } from './factory/workspace.js';
-import type { GithubIntegration } from './github/integration.js';
-import { recordFactoryPullRequestProvenance } from './github/provenance.js';
+import { createWorkspaceFactory } from './factory/workspace.js';
 import { ProjectDomain } from './projects/domain.js';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { getFactoryStorage, seedRuntimeConfig } from './runtime-config.js';
+import { seedRuntimeConfig } from './runtime-config.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
-import {
-  createTenantCredentialPrimer,
-  primeTenantCredentials,
-  registerTenantCredentialResolver,
-} from './tenant-credentials.js';
+import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './tenant-credentials.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -253,8 +243,6 @@ function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
-  #dispatcher: FactoryDecisionDispatcher | undefined;
-  #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -430,42 +418,6 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
-    const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      GithubIntegration | undefined;
-    const workItemsStorage = storage.isDomainReady('work-items')
-      ? storage.getDomain<WorkItemsStorage>('work-items')
-      : undefined;
-    const transitionService = workItemsStorage
-      ? new FactoryTransitionService({ rules, storage: workItemsStorage })
-      : undefined;
-    const factoryProcessor = workItemsStorage
-      ? new FactoryPhaseStateProcessor({
-          rules,
-          storage: workItemsStorage,
-          ...(transitionService ? { transitionService } : {}),
-          ...(githubIntegration
-            ? {
-                recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[3]) =>
-                  recordFactoryPullRequestProvenance(
-                    githubIntegration,
-                    sourceControlStorage.forIntegration('github'),
-                    integrationStorage.forIntegration('github'),
-                    input,
-                  ),
-              }
-            : {}),
-          ...(storage
-            ? {
-                messageReader: {
-                  listMessages: async input => {
-                    const memory = await storage.getMastraStorage().getStore('memory');
-                    return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
-                  },
-                },
-              }
-            : {}),
-        })
-      : undefined;
 
     // Boot assertion: an active integration that signs OAuth `state` needs a
     // replica-stable signer — a per-process random secret silently breaks the
@@ -492,34 +444,27 @@ export class MastraFactory {
     // one shared database for all users, separated by `resourceId` scoping.
     const prepared = await prepareAgentControllerMount({
       controllerId: CONTROLLER_ID,
-      workspace: getFactoryWorkspace,
+      workspace: createWorkspaceFactory(this.#config.sandbox),
       disableGithubSignals: true,
       storage: storage.getMastraStorage(),
-      ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
       ...(vector ? { vector } : {}),
-      ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
+      ...(toolIntegrations.length > 0
         ? {
             extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
               const tools: IntegrationTools = {};
               const toolOwners = new Map<string, string>();
-              const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
+              const mergeTools = (integration: FactoryIntegration, contributed: IntegrationTools) => {
                 for (const [name, tool] of Object.entries(contributed)) {
                   const owner = toolOwners.get(name);
                   if (owner) {
                     throw new Error(
-                      `MastraFactory: integration tool '${name}' from '${ownerId}' conflicts with '${owner}'.`,
+                      `MastraFactory: integration tool '${name}' from '${integration.id}' conflicts with '${owner}'.`,
                     );
                   }
-                  toolOwners.set(name, ownerId);
+                  toolOwners.set(name, integration.id);
                   tools[name] = tool;
                 }
               };
-              if (workItemsStorage && transitionService) {
-                mergeTools(
-                  'factory',
-                  await createFactoryTransitionTools({ requestContext, storage: workItemsStorage, transitionService }),
-                );
-              }
               for (const { integration, ready, ensureReady } of toolIntegrations) {
                 if (!ready && ensureReady) {
                   try {
@@ -529,10 +474,10 @@ export class MastraFactory {
                   }
                 }
                 if (integration.agentTools) {
-                  mergeTools(integration.id, await integration.agentTools({ requestContext }));
+                  mergeTools(integration, await integration.agentTools({ requestContext }));
                 }
                 if (integration.sessionTools) {
-                  mergeTools(integration.id, integration.sessionTools({ requestContext }));
+                  mergeTools(integration, integration.sessionTools({ requestContext }));
                 }
               }
               return tools;
@@ -578,17 +523,6 @@ export class MastraFactory {
           integrations: integrationRegistrations,
           intakeReady,
           factoryReady,
-          factoryTransitionService: transitionService,
-          onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
-            this.#dispatcher ??= new FactoryDecisionDispatcher({
-              controller,
-              transitionService: runtimeTransitionService,
-              storage: getFactoryStorage().getDomain<WorkItemsStorage>('work-items'),
-              reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
-              prepareBinding,
-              primeCredentials: primeTenantCredentials,
-            });
-          },
         }),
         ...projectDomain.routes(),
         ...auditDomain.routes(),
@@ -625,8 +559,6 @@ export class MastraFactory {
     });
 
     this.#prepared = prepared;
-
-    this.#factoryProcessor = factoryProcessor;
 
     // Integration lifecycle workers (e.g. polling an upstream without
     // webhooks): collected from READY integrations only, folded into the
@@ -667,12 +599,5 @@ export class MastraFactory {
       throw new Error('MastraFactory.finalize() called before prepare()');
     }
     await this.#prepared.finalize();
-    await this.#factoryProcessor?.reconcileAllBoundThreads();
-    this.#dispatcher?.start();
-  }
-
-  /** Stop Factory-owned background dispatch before the host process shuts down. */
-  async shutdown(): Promise<void> {
-    await this.#dispatcher?.stop();
   }
 }

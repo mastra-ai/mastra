@@ -31,7 +31,7 @@ Configure the platform credentials. The access token, project ID, and environmen
 <Tabs>
   <TabItem value="env-file" label=".env file">
     ```bash
-    MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
+    MASTRA_PLATFORM_SECRET_KEY=your-platform-secret-key
     MASTRA_PROJECT_ID=your-project-id
     MASTRA_ENVIRONMENT_ID=your-environment-id
     ```
@@ -138,7 +138,8 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   {
     name: 'accessToken',
     type: 'string',
-    description: 'Platform access token. Falls back to the MASTRA_PLATFORM_ACCESS_TOKEN environment variable.',
+    description:
+      'Platform secret key. Falls back to the MASTRA_PLATFORM_SECRET_KEY environment variable (MASTRA_PLATFORM_ACCESS_TOKEN is a deprecated fallback).',
     isOptional: true,
   },
   {

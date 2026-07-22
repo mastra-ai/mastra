@@ -17,7 +17,7 @@ import type { FactoryBindingPreparationInput } from './factory/rules/dispatcher.
 import { FactoryStartCoordinator } from './factory/rules/start-coordinator.js';
 import { FactoryTransitionService } from './factory/rules/transition-service.js';
 import { buildFsRoutes } from './fs-routes.js';
-import { ensureFactoryRuleWorktree } from './github/factory-worktree.js';
+import { ensureFactoryRuleSession } from './github/factory-session.js';
 import type { GithubIntegration } from './github/integration.js';
 import { buildIntakeRoutes } from './intake/routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
@@ -134,7 +134,7 @@ async function prepareFactoryRuleBinding(
   const branch = factoryRuleBranch(input.item);
   const repositorySlug =
     typeof input.item.metadata?.repository === 'string' ? input.item.metadata.repository : undefined;
-  const preparedWorktree = await ensureFactoryRuleWorktree({
+  const preparedSession = await ensureFactoryRuleSession({
     github,
     orgId: input.record.orgId,
     factoryProjectId: input.record.factoryProjectId,
@@ -146,14 +146,11 @@ async function prepareFactoryRuleBinding(
 
   await coordinator.prepare({
     orgId: input.record.orgId,
-    userId: preparedWorktree.userId,
+    userId: preparedSession.userId,
     factoryProjectId: input.record.factoryProjectId,
-    resourceId: input.record.factoryProjectId,
-    projectPath: preparedWorktree.projectPath,
-    branch,
+    sessionId: preparedSession.sessionId,
     threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
     kickoffKey: input.record.id,
-    kickoffMessage: null,
     destinationStage: destinationStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
     workItem: {
       id: input.item.id,
@@ -279,34 +276,6 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
       context.hooks = {
         ...context.hooks,
         ...(githubEventService ? { ingestGithubEvent: event => githubEventService.ingest(event) } : {}),
-        ...(workItems
-          ? {
-              revokeFactoryBindingsForProjectPath: async (input: {
-                orgId: string;
-                factoryProjectId: string;
-                projectPath: string;
-              }) => {
-                const bindings = await workItems.listActiveRunBindings();
-                await Promise.all(
-                  bindings
-                    .filter(
-                      binding =>
-                        binding.orgId === input.orgId &&
-                        binding.factoryProjectId === input.factoryProjectId &&
-                        binding.projectPath === input.projectPath,
-                    )
-                    .map(binding =>
-                      workItems.revokeRunBinding({
-                        orgId: binding.orgId,
-                        factoryProjectId: binding.factoryProjectId,
-                        bindingId: binding.id,
-                        revokedAt: new Date(),
-                      }),
-                    ),
-                );
-              },
-            }
-          : {}),
       };
     }
     if (integration.id === 'linear' && linearIssueService) {
@@ -323,7 +292,12 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     const transitionService =
       deps.factoryTransitionService ??
       new FactoryTransitionService({ rules: getSeededFactoryRules(), storage: workItems });
-    const startCoordinator = new FactoryStartCoordinator(deps.controller, workItems, transitionService);
+    const startCoordinator = new FactoryStartCoordinator(
+      deps.controller,
+      workItems,
+      transitionService,
+      githubIntegration?.sourceControlStorage,
+    );
     deps.onFactoryRuntime?.({
       transitionService,
       ...(githubIntegration

@@ -60,7 +60,7 @@ export function PullRequestLinks({
     item =>
       item.source === 'github-pr' &&
       Object.values(item.sessions).some(
-        session => session.threadId === threadId && (!projectPath || session.projectPath === projectPath),
+        session => session.threadId === threadId && (!projectPath || session.sessionId === projectPath),
       ),
   );
   const reviewNumber = reviewItem?.metadata.githubPullRequestNumber ?? reviewItem?.metadata.number;

@@ -1,6 +1,6 @@
 ---
 'mastra': minor
-'create-mastra': major
+'create-mastra': minor
 ---
 
 Improved project creation with a new default template, provider-native OpenAI, Anthropic, Google Gemini, and xAI setup, an empty scaffold mode, automatic skills, automatic git initialization, and interactive Mastra platform setup.
