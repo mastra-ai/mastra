@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   CreateProjectSourceControlConnectionInput,
+  CreateSourceControlSessionInput,
   ExternalRepositoryProjectTarget,
   LinkProjectRepositoryInput,
   ProjectRepository,
@@ -9,6 +10,7 @@ import type {
   ProjectSourceControlConnection,
   SourceControlInstallation,
   SourceControlRepository,
+  SourceControlSession,
   SourceControlStorageHandle,
   SourceControlWorktree,
   UpdateProjectRepositoryInput,
@@ -26,6 +28,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   projectRepositoriesRows: ProjectRepository[] = [];
   sandboxesRows: ProjectRepositorySandbox[] = [];
   worktreesRows: SourceControlWorktree[] = [];
+  sessionsRows: SourceControlSession[] = [];
 
   constructor(integrationId = 'github') {
     this.integrationId = integrationId;
@@ -377,6 +380,52 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
           row => !(row.projectRepositoryId === projectRepositoryId && row.userId === userId && row.branch === branch),
         ),
       );
+    },
+  };
+
+  readonly sessions = {
+    list: async ({ projectRepositoryId, userId }: { projectRepositoryId: string; userId: string }) =>
+      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId && row.userId === userId),
+    getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
+      this.sessionsRows.find(row => row.sessionId === sessionId) ?? null,
+    getForBranch: async ({
+      projectRepositoryId,
+      userId,
+      branch,
+    }: {
+      projectRepositoryId: string;
+      userId: string;
+      branch: string;
+    }): Promise<SourceControlSession | null> =>
+      this.sessionsRows.find(
+        row => row.projectRepositoryId === projectRepositoryId && row.userId === userId && row.branch === branch,
+      ) ?? null,
+    create: async (input: CreateSourceControlSessionInput): Promise<SourceControlSession> => {
+      const existing = await this.sessions.getForBranch(input);
+      if (existing) return existing;
+      const now = new Date();
+      const session: SourceControlSession = {
+        id: randomUUID(),
+        ...input,
+        sandboxId: null,
+        sandboxWorkdir: null,
+        materializedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.sessionsRows.push(session);
+      return session;
+    },
+    setSandbox: async ({ id, sandboxId, sandboxWorkdir }: { id: string; sandboxId: string | null; sandboxWorkdir: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.id === id);
+      if (row) Object.assign(row, { sandboxId, sandboxWorkdir, updatedAt: new Date() });
+    },
+    markMaterialized: async ({ id }: { id: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.id === id);
+      if (row) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+    },
+    delete: async (id: string) => {
+      this.sessionsRows.splice(0, this.sessionsRows.length, ...this.sessionsRows.filter(row => row.id !== id));
     },
   };
 }

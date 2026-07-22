@@ -15,7 +15,7 @@ import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
   return Object.values(item.sessions)
-    .filter(session => livePaths.has(session.projectPath))
+    .filter(session => livePaths.has(session.sessionId))
     .at(-1);
 }
 
@@ -51,7 +51,7 @@ export function FactorySessionHeader() {
   const activeProjectPath = deriveProjectPath(activeFactory);
   const currentItem = allItems.find(item =>
     Object.values(item.sessions).some(
-      session => session.threadId === threadId && (!activeProjectPath || session.projectPath === activeProjectPath),
+      session => session.threadId === threadId && (!activeProjectPath || session.sessionId === activeProjectPath),
     ),
   );
   if (!currentItem) return null;
@@ -64,7 +64,7 @@ export function FactorySessionHeader() {
   const sectionPath = isReview ? '/factory/review' : '/factory/work';
 
   const openSession = async (session: WorkItemSessionRef) => {
-    await selectWorkspace.mutateAsync(session.projectPath);
+    await selectWorkspace.mutateAsync(session.sessionId);
     void navigate(`/threads/${session.threadId}`);
   };
 
