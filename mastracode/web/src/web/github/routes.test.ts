@@ -21,6 +21,7 @@ interface Tables {
   projectRepositories: Array<Record<string, any>>;
   sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
+  sessions: Array<Record<string, any>>;
   subscriptions: Array<Record<string, any>>;
 }
 const tables: Tables = {
@@ -30,6 +31,7 @@ const tables: Tables = {
   projectRepositories: [],
   sandboxes: [],
   worktrees: [],
+  sessions: [],
   subscriptions: [],
 };
 
@@ -223,7 +225,7 @@ const listRepoOpenIssues = vi.fn(
         number: 12,
         title: 'Fix flaky test',
         url: 'https://github.com/octo/hello/issues/12',
-        author: 'ada' as string | null,
+        author: 'ada',
         labels: ['bug'],
         comments: 3,
         createdAt: '2026-07-01T00:00:00Z',
@@ -390,7 +392,7 @@ const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch:
 const runWorktreeSetup = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
-const createPullRequest = vi.fn(async (_input?: unknown) => ({ url: 'https://github.com/octo/hello/pull/1' }));
+const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
 vi.mock('../sandbox/fleet', () => {
   class SandboxBudgetError extends Error {
@@ -572,10 +574,6 @@ function buildApp(
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
-    ingestFactoryEvent?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['ingestFactoryEvent'];
-    revokeFactoryBindingsForProjectPath?: NonNullable<
-      Parameters<typeof buildGithubRoutes>[0]
-    >['revokeFactoryBindingsForProjectPath'];
     stateSigner?: typeof stateSigner | null;
   } = {},
 ) {
@@ -630,6 +628,7 @@ beforeEach(() => {
   tables.projectRepositories = [];
   tables.sandboxes = [];
   tables.worktrees = [];
+  tables.sessions = [];
   tables.subscriptions = [];
   sourceControlStorage.installationsRows = tables.installations as any;
   sourceControlStorage.repositoriesRows = tables.repositories as any;
@@ -637,6 +636,7 @@ beforeEach(() => {
   sourceControlStorage.projectRepositoriesRows = tables.projectRepositories as any;
   sourceControlStorage.sandboxesRows = tables.sandboxes as any;
   sourceControlStorage.worktreesRows = tables.worktrees as any;
+  sourceControlStorage.sessionsRows = tables.sessions as any;
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
@@ -716,28 +716,6 @@ describe('webhook route', () => {
     });
     await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
     expect(addIssueLabels).not.toHaveBeenCalled();
-    expect(runIssueTriage).not.toHaveBeenCalled();
-  });
-
-  it('routes a supported event through Factory authority instead of legacy issue triage', async () => {
-    seedMaterializedProject();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    const ingestFactoryEvent = vi.fn(async () => undefined);
-    const runIssueTriage = vi.fn(async () => ({ threadId: 'legacy-triage' }));
-    const request = signedGithubWebhookRequest('issues', {
-      action: 'opened',
-      repository: { id: 99, full_name: 'octo/hello' },
-      issue: { number: 12, title: 'Fix flaky test', html_url: 'https://github.com/octo/hello/issues/12' },
-      sender: { login: 'ada' },
-      installation: { id: 7 },
-    });
-
-    const res = await buildApp(null, { ingestFactoryEvent, runIssueTriage }).request(request);
-
-    expect(res.status).toBe(202);
-    expect(ingestFactoryEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'issues', deliveryId: 'delivery-1' }),
-    );
     expect(runIssueTriage).not.toHaveBeenCalled();
   });
 
@@ -1257,6 +1235,25 @@ function seedMaterializedProject(opts: { orgId?: string; userId?: string; setupC
   );
 }
 
+function seedMaterializedSession() {
+  seedMaterializedProject();
+  const now = new Date();
+  tables.sessions.push({
+    id: 'stored-session-1',
+    sessionId: 'session-1',
+    projectRepositoryId: 'p1',
+    orgId: 'org1',
+    userId: 'u1',
+    branch: 'feat/x',
+    baseBranch: 'main',
+    sandboxId: 'sb-1',
+    sandboxWorkdir: '/workspace/worktrees/feat-x',
+    materializedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown) {
   return app.request(path, {
     method: 'POST',
@@ -1296,58 +1293,6 @@ describe('issues route', () => {
     expect(json.issues[0]).toMatchObject({ number: 12, title: 'Fix flaky test', labels: ['bug'] });
     expect(json.nextPage).toBeNull();
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: undefined });
-  });
-
-  it('reconciles polled issues through Factory ingress without a webhook', async () => {
-    seedMaterializedProject();
-    const ingestFactoryEvent = vi.fn(async () => undefined);
-
-    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/issues');
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryEvent).toHaveBeenCalledWith({
-      event: 'issues',
-      deliveryId: 'poll:99:issue:12:2026-07-01T00:00:00Z',
-      payload: {
-        action: 'opened',
-        installation: { id: 7 },
-        repository: { id: 99, full_name: 'octo/hello' },
-        sender: { login: 'ada' },
-        issue: {
-          number: 12,
-          title: 'Fix flaky test',
-          html_url: 'https://github.com/octo/hello/issues/12',
-          labels: [{ name: 'bug' }],
-        },
-      },
-    });
-  });
-
-  it('governs polled issues whose GitHub author was deleted as untrusted', async () => {
-    seedMaterializedProject();
-    listRepoOpenIssues.mockResolvedValueOnce({
-      issues: [
-        {
-          number: 12,
-          title: 'Fix flaky test',
-          url: 'https://github.com/octo/hello/issues/12',
-          author: null,
-          labels: ['bug'],
-          comments: 3,
-          createdAt: '2026-07-01T00:00:00Z',
-          updatedAt: '2026-07-02T00:00:00Z',
-        },
-      ],
-      nextPage: null,
-    });
-    const ingestFactoryEvent = vi.fn(async () => undefined);
-
-    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/issues');
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: expect.objectContaining({ sender: { login: '__unknown__' } }) }),
-    );
   });
 
   it('forwards the requested page and echoes the next page', async () => {
@@ -1508,34 +1453,6 @@ describe('prs route', () => {
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
   });
 
-  it('reconciles polled pull requests through Factory ingress without a webhook', async () => {
-    seedMaterializedProject();
-    const ingestFactoryEvent = vi.fn(async () => undefined);
-
-    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryEvent).toHaveBeenCalledWith({
-      event: 'pull_request',
-      deliveryId: 'poll:99:pull-request:34:2026-07-03T00:00:00Z',
-      payload: {
-        action: 'opened',
-        installation: { id: 7 },
-        repository: { id: 99, full_name: 'octo/hello' },
-        sender: { login: 'grace' },
-        pull_request: {
-          number: 34,
-          title: 'Add factory pages',
-          html_url: 'https://github.com/octo/hello/pull/34',
-          state: 'open',
-          merged: false,
-          head: { ref: 'feat/factory' },
-          base: { ref: 'main' },
-        },
-      },
-    });
-  });
-
   it('forwards the requested page and echoes the next page', async () => {
     seedMaterializedProject();
     listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [], nextPage: 4 });
@@ -1630,249 +1547,69 @@ describe('project settings routes', () => {
   });
 });
 
-describe('worktree route', () => {
-  it('401s without an authenticated user', async () => {
+describe('Factory session routes', () => {
+  it('creates metadata without provisioning a sandbox or worktree', async () => {
     seedMaterializedProject();
-    const app = buildApp(null);
-    const create = await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    const list = await app.request('/web/github/projects/p1/worktrees');
-    expect(create.status).toBe(401);
-    expect(list.status).toBe(401);
-  });
-
-  it("lists only the signed-in user's persisted worktrees", async () => {
-    seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/mine' });
-    await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/worktree', { branch: 'feat/theirs' });
-    reattachSandbox.mockClear();
-    ensureWorktree.mockClear();
-
-    const res = await app.request('/web/github/projects/p1/worktrees');
-
-    expect(res.status).toBe(200);
-    expect(reattachSandbox).not.toHaveBeenCalled();
-    expect(ensureWorktree).not.toHaveBeenCalled();
-    expect(await res.json()).toEqual({
-      worktrees: [
-        {
-          branch: 'feat/mine',
-          baseBranch: 'main',
-          worktreePath: '/workspace/hello/../worktrees/feat/mine',
-        },
-      ],
-    });
-  });
-
-  it('503s when the sandbox is not configured', async () => {
-    sandboxEnabled = false;
-    seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
-      branch: 'feat/x',
-    });
-    expect(res.status).toBe(503);
-  });
-
-  it('404s for a project owned by another org', async () => {
-    seedMaterializedProject({ orgId: 'other-org' });
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
-      branch: 'feat/x',
-    });
-    expect(res.status).toBe(404);
-    expect(ensureWorktree).not.toHaveBeenCalled();
-  });
-
-  it('400s on an invalid branch name', async () => {
-    seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
-      branch: 'bad branch!',
-    });
-    expect(res.status).toBe(400);
-    expect(ensureWorktree).not.toHaveBeenCalled();
-  });
-
-  it('creates a worktree, persists a row, and returns the path', async () => {
-    seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.branch).toBe('feat/x');
-    expect(json.baseBranch).toBe('main');
-    expect(json.resourceId).toBe('factory-p1');
-    expect(json.projectRepositoryId).toBe('p1');
-    expect(reattachSandbox).toHaveBeenCalledWith('sb-1');
-    expect(ensureWorktree).toHaveBeenCalledOnce();
-    // A freshly minted install token + repo name are passed through so the
-    // worktree forks from the latest fetched origin/<base>, not local state.
-    expect(ensureWorktree).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', {
-      branch: 'feat/x',
-      baseBranch: 'main',
-      token: 'install-token',
-      repoFullName: 'octo/hello',
-    });
-    expect(tables.worktrees).toHaveLength(1);
-    expect(tables.worktrees[0]).toMatchObject({ projectRepositoryId: 'p1', branch: 'feat/x', userId: 'u1' });
-  });
-
-  it('upserts the worktree row on conflict instead of duplicating', async () => {
-    seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    expect(tables.worktrees).toHaveLength(1);
-  });
-
-  it('runs the configured setup command in the fresh worktree', async () => {
-    seedMaterializedProject({ setupCommand: 'pnpm i && pnpm build' });
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
-      branch: 'feat/x',
-    });
-    expect(res.status).toBe(200);
-    expect(runWorktreeSetup).toHaveBeenCalledOnce();
-    expect(runWorktreeSetup).toHaveBeenCalledWith(
-      expect.anything(),
-      '/workspace/hello/../worktrees/feat/x',
-      'pnpm i && pnpm build',
-    );
-  });
-
-  it('skips the setup command when no command is configured', async () => {
-    seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
-      branch: 'feat/x',
-    });
-    expect(res.status).toBe(200);
-    expect(runWorktreeSetup).not.toHaveBeenCalled();
-  });
-
-  it('skips the setup command when reusing an existing worktree', async () => {
-    seedMaterializedProject({ setupCommand: 'pnpm i' });
-    ensureWorktree.mockResolvedValueOnce({
-      worktreePath: '/workspace/hello/../worktrees/feat/x',
-      branch: 'feat/x',
-      baseBranch: 'main',
-      reused: true,
-    } as any);
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
-      branch: 'feat/x',
-    });
-    expect(res.status).toBe(200);
-    expect(runWorktreeSetup).not.toHaveBeenCalled();
-  });
-
-  it('surfaces a setup failure and does not persist the worktree row', async () => {
-    seedMaterializedProject({ setupCommand: 'pnpm i' });
-    runWorktreeSetup.mockRejectedValueOnce(new MockedWorktreeError('Setup command failed (exit 1)', 'setup-failed'));
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
-      branch: 'feat/x',
-    });
-    expect(res.status).toBe(502);
-    expect(await res.json()).toMatchObject({ error: 'setup-failed' });
-    expect(tables.worktrees).toHaveLength(0);
-  });
-});
-
-describe('worktree delete route', () => {
-  it('401s without an authenticated user', async () => {
-    seedMaterializedProject();
-    const res = await postJson(buildApp(null), '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
-    expect(res.status).toBe(401);
-  });
-
-  it('400s on an invalid branch name', async () => {
-    seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
-      branch: 'bad branch!',
-    });
-    expect(res.status).toBe(400);
-    expect(removeWorktree).not.toHaveBeenCalled();
-  });
-
-  it('404s for a worktree that was never created', async () => {
-    seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
-      branch: 'feat/unknown',
-    });
-    expect(res.status).toBe(404);
-    expect(removeWorktree).not.toHaveBeenCalled();
-  });
-
-  it("404s for another user's worktree", async () => {
-    seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    const res = await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/worktree/delete', {
-      branch: 'feat/x',
-    });
-    expect(res.status).toBe(404);
-    expect(removeWorktree).not.toHaveBeenCalled();
-    expect(tables.worktrees).toHaveLength(1);
-  });
-
-  it('400s when the worktree row points at the repo root checkout', async () => {
-    seedMaterializedProject();
-    tables.worktrees.push(
-      worktreeRow({
-        id: 'wt-root',
-        orgId: 'org1',
-        userId: 'u1',
-        projectRepositoryId: 'p1',
-        branch: 'main',
-        baseBranch: 'main',
-        worktreePath: '/workspace/hello',
-      }),
-    );
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
-      branch: 'main',
-    });
-    expect(res.status).toBe(400);
-    expect(removeWorktree).not.toHaveBeenCalled();
-  });
-
-  it('revokes scoped Factory bindings before removing the checkout', async () => {
-    seedMaterializedProject();
-    const revokeFactoryBindingsForProjectPath = vi.fn().mockResolvedValue(undefined);
-    const app = buildApp({ workosId: 'u1' }, { revokeFactoryBindingsForProjectPath });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    expect(tables.worktrees).toHaveLength(1);
-
-    const res = await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json).toMatchObject({
-      removed: true,
-      branch: 'feat/x',
-      worktreePath: '/workspace/hello/../worktrees/feat/x',
-    });
-    expect(revokeFactoryBindingsForProjectPath).toHaveBeenCalledWith({
+    const { session } = await res.json();
+    expect(session).toMatchObject({
+      projectRepositoryId: 'p1',
       orgId: 'org1',
-      factoryProjectId: 'factory-p1',
-      projectPath: '/workspace/hello/../worktrees/feat/x',
-    });
-    expect(revokeFactoryBindingsForProjectPath.mock.invocationCallOrder[0]).toBeLessThan(
-      removeWorktree.mock.invocationCallOrder[0]!,
-    );
-    expect(removeWorktree).toHaveBeenCalledOnce();
-    expect(removeWorktree).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', {
+      userId: 'u1',
       branch: 'feat/x',
-      worktreePath: '/workspace/hello/../worktrees/feat/x',
+      baseBranch: 'main',
+      sandboxId: null,
+      sandboxWorkdir: null,
     });
-    expect(tables.worktrees).toHaveLength(0);
+    expect(session.sessionId).toEqual(expect.any(String));
+    expect(tables.sessions).toHaveLength(1);
+    expect(ensureWorktree).not.toHaveBeenCalled();
+    expect(ensureProjectSandbox).not.toHaveBeenCalled();
   });
 
-  it('keeps the row when the sandbox removal fails', async () => {
+  it('reuses the session for the same repository, user, and branch', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    removeWorktree.mockRejectedValueOnce(
-      Object.assign(new Error('git worktree remove failed'), { name: 'WorktreeError', code: 'worktree-failed' }),
-    );
+    const first = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const second = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    expect((await second.json()).session.sessionId).toBe((await first.json()).session.sessionId);
+    expect(tables.sessions).toHaveLength(1);
+  });
 
-    const res = await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(tables.worktrees).toHaveLength(1);
+  it('loads and deletes a session by its public session id', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const loaded = await app.request(`/web/user-sessions/${sessionId}`);
+    expect(loaded.status).toBe(200);
+    expect((await loaded.json()).session.sessionId).toBe(sessionId);
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+    expect(deleted.status).toBe(200);
+    expect(tables.sessions).toHaveLength(0);
+  });
+
+  it('does not expose another user or organization session', async () => {
+    seedMaterializedProject();
+    const created = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
+      branch: 'feat/x',
+    });
+    const sessionId = (await created.json()).session.sessionId;
+    expect((await buildApp({ workosId: 'u2' }).request(`/web/user-sessions/${sessionId}`)).status).toBe(404);
+  });
+
+  it('rejects invalid branch names', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
+      branch: 'bad branch!',
+    });
+    expect(res.status).toBe(400);
+    expect(tables.sessions).toHaveLength(0);
   });
 });
 
@@ -1886,45 +1623,24 @@ describe('commit route', () => {
     expect(commitAll).not.toHaveBeenCalled();
   });
 
-  it('400s on an unknown worktreePath', async () => {
+  it('400s on an unknown sessionId', async () => {
     seedMaterializedProject();
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
       message: 'wip',
-      worktreePath: '/etc/passwd',
+      sessionId: 'missing-session',
     });
     expect(res.status).toBe(400);
     expect(commitAll).not.toHaveBeenCalled();
   });
 
-  it('commits on the base checkout when no worktreePath is given', async () => {
-    seedMaterializedProject();
+  it('commits in a materialized session workspace', async () => {
+    seedMaterializedSession();
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
       message: 'wip',
+      sessionId: 'session-1',
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ committed: true });
-    expect(commitAll).toHaveBeenCalledOnce();
-    // The base repo workdir is used when worktreePath is omitted.
-    expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe('/workspace/hello');
-  });
-
-  it('commits in a persisted worktree path', async () => {
-    seedMaterializedProject();
-    tables.worktrees.push(
-      worktreeRow({
-        id: 'w1',
-        userId: 'u1',
-        projectRepositoryId: 'p1',
-        branch: 'feat/x',
-        baseBranch: 'main',
-        worktreePath: '/workspace/worktrees/feat-x',
-      }),
-    );
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
-      message: 'wip',
-      worktreePath: '/workspace/worktrees/feat-x',
-    });
-    expect(res.status).toBe(200);
     expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe('/workspace/worktrees/feat-x');
   });
 });
@@ -1940,9 +1656,10 @@ describe('push route', () => {
   });
 
   it('mints a token and pushes the branch', async () => {
-    seedMaterializedProject();
+    seedMaterializedSession();
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
       branch: 'feat/x',
+      sessionId: 'session-1',
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ pushed: true, branch: 'feat/x' });
@@ -1977,11 +1694,12 @@ describe('pr route', () => {
   });
 
   it('opens a PR and returns its URL', async () => {
-    seedMaterializedProject();
+    seedMaterializedSession();
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
+      sessionId: 'session-1',
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
@@ -1997,11 +1715,12 @@ describe('pr route', () => {
   });
 
   it('returns 502 when the version-control provider rejects PR creation', async () => {
-    seedMaterializedProject();
+    seedMaterializedSession();
     createPullRequest.mockRejectedValueOnce(new Error('GitHub unavailable'));
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
       title: 'My PR',
+      sessionId: 'session-1',
     });
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: 'github_pr_create_failed', message: 'GitHub unavailable' });
@@ -2010,48 +1729,6 @@ describe('pr route', () => {
 
 // ── Audit events ─────────────────────────────────────────────────────────
 describe('audit events', () => {
-  it('records worktree.created with actor, project, and branch metadata', async () => {
-    seedMaterializedProject();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    expect(auditRecorded).toHaveLength(1);
-    expect(auditRecorded[0]).toMatchObject({
-      orgId: 'org1',
-      actorId: 'u1',
-      action: 'factory.worktree.created',
-      projectRepositoryId: 'p1',
-      targets: [{ type: 'worktree', id: '/workspace/hello/../worktrees/feat/x', name: 'feat/x' }],
-      metadata: { branch: 'feat/x', baseBranch: 'main' },
-    });
-  });
-
-  it('does not record worktree.created when the worktree is reused', async () => {
-    seedMaterializedProject();
-    ensureWorktree.mockResolvedValueOnce({
-      worktreePath: '/workspace/hello/../worktrees/feat/x',
-      branch: 'feat/x',
-      baseBranch: 'main',
-      reused: true,
-    } as any);
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    expect(auditRecorded).toHaveLength(0);
-  });
-
-  it('records worktree.deleted when a worktree is removed', async () => {
-    seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    auditRecorded = [];
-
-    await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
-    expect(auditRecorded).toHaveLength(1);
-    expect(auditRecorded[0]).toMatchObject({
-      action: 'factory.worktree.deleted',
-      projectRepositoryId: 'p1',
-      targets: [{ type: 'worktree', id: '/workspace/hello/../worktrees/feat/x', name: 'feat/x' }],
-      metadata: { branch: 'feat/x' },
-    });
-  });
-
   it('records triage.started with the issue number and title', async () => {
     seedMaterializedProject();
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
@@ -2071,20 +1748,23 @@ describe('audit events', () => {
   });
 
   it('records git.commit only when a commit was actually created', async () => {
-    seedMaterializedProject();
+    seedMaterializedSession();
     const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/commit', { message: 'wip' });
+    await postJson(app, '/web/github/projects/p1/commit', { message: 'wip', sessionId: 'session-1' });
     expect(auditRecorded.map(e => e.action)).toEqual(['factory.git.commit']);
 
     auditRecorded = [];
     commitAll.mockResolvedValueOnce({ committed: false } as any);
-    await postJson(app, '/web/github/projects/p1/commit', { message: 'nothing to do' });
+    await postJson(app, '/web/github/projects/p1/commit', { message: 'nothing to do', sessionId: 'session-1' });
     expect(auditRecorded).toHaveLength(0);
   });
 
   it('records git.push with the branch target', async () => {
-    seedMaterializedProject();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', { branch: 'feat/x' });
+    seedMaterializedSession();
+    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
+      branch: 'feat/x',
+      sessionId: 'session-1',
+    });
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
       action: 'factory.git.push',
@@ -2095,10 +1775,11 @@ describe('audit events', () => {
   });
 
   it('records git.pr_opened with the PR url and title', async () => {
-    seedMaterializedProject();
+    seedMaterializedSession();
     await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
       title: 'My PR',
+      sessionId: 'session-1',
     });
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
@@ -2116,10 +1797,13 @@ describe('audit events', () => {
   });
 
   it('still succeeds the mutation when the audit insert throws', async () => {
-    seedMaterializedProject();
+    seedMaterializedSession();
     auditFailure = new Error('audit db down');
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', { branch: 'feat/x' });
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
+      branch: 'feat/x',
+      sessionId: 'session-1',
+    });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ pushed: true, branch: 'feat/x' });
     expect(warnSpy).toHaveBeenCalledWith('[Audit] Failed to emit audit event', expect.anything());

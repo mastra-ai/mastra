@@ -578,7 +578,7 @@ function BoardContent({
     resourceId: factory.resourceId,
   });
   const openThread = async (session: WorkItemSessionRef) => {
-    await selectWorkspace.mutateAsync(session.projectPath);
+    await selectWorkspace.mutateAsync(session.sessionId);
     navigate(`/threads/${session.threadId}`);
   };
 
@@ -597,7 +597,7 @@ function BoardContent({
     const refreshed = await refreshItemAndWorktrees(item.id);
     if (!refreshed) return;
     const liveSessions = Object.fromEntries(
-      Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.projectPath)),
+      Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.sessionId)),
     );
     const existingSession = itemThreadSession(liveSessions);
     if (existingSession) {
@@ -623,7 +623,7 @@ function BoardContent({
     const refreshed = await refreshItemAndWorktrees(item.id);
     if (!refreshed) return;
     const existingSession = refreshed.item.sessions[role];
-    if (existingSession && refreshed.paths.has(existingSession.projectPath)) {
+    if (existingSession && refreshed.paths.has(existingSession.sessionId)) {
       await openThread(existingSession);
       return;
     }
@@ -1058,7 +1058,7 @@ function WorkItemCard({
   // Session refs whose worktree was deleted are stale: their threads went with
   // the worktree, so they don't render links and don't block re-running.
   const liveSessions = Object.fromEntries(
-    Object.entries(item.sessions).filter(([, session]) => liveWorktreePaths.has(session.projectPath)),
+    Object.entries(item.sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)),
   );
   // Offer only runs whose session slot hasn't been used yet on this card.
   const runActions = runSpec === null ? [] : runSpec.actions.filter(action => !(action.role in liveSessions));
@@ -1156,7 +1156,7 @@ function WorkItemCard({
       {relatedItems.map(related => {
         const relationText = relationshipLabel(related);
         const relatedLiveSessions = Object.fromEntries(
-          Object.entries(related.sessions).filter(([, session]) => liveWorktreePaths.has(session.projectPath)),
+          Object.entries(related.sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)),
         );
         const relatedSession = itemThreadSession(relatedLiveSessions);
         return (

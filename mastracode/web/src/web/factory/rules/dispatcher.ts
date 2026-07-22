@@ -243,7 +243,6 @@ export class FactoryDecisionDispatcher {
         requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const resolved = await resolveSkillInvocation(this.#controller, {
           resourceId: binding.resourceId,
-          scope: binding.projectPath,
           name: decision.skillName,
           arguments: decision.arguments,
         });
@@ -395,7 +394,7 @@ export class FactoryDecisionDispatcher {
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
     if (binding) {
-      const session = await this.#controller.getSessionByResource(binding.resourceId, binding.projectPath);
+      const session = await this.#controller.getSessionByResource(binding.resourceId);
       if (session) return binding;
     }
     if (!this.#prepareBinding) {
@@ -407,7 +406,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<DispatcherSession> {
-    const session = (await this.#controller.getSessionByResource(binding.resourceId, binding.projectPath)) as
+    const session = (await this.#controller.getSessionByResource(binding.resourceId)) as
       DispatcherSession | undefined;
     if (!session) throw new Error('Bound Factory session not found.');
     await this.#switchThread(session, binding);
