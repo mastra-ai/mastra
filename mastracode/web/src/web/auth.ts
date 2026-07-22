@@ -620,6 +620,9 @@ export function createWebAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'POST' && path === '/web/github/webhook') {
       return next();
     }
+    if (c.req.method === 'POST' && path === '/api/agent-controllers/code/channels/slack/webhook') {
+      return next();
+    }
     // The SPA sign-in page and the static bundle it needs must be reachable
     // while signed out; no user is stashed, so `/api/*` stays protected.
     if (path === '/signin' || path.startsWith('/assets/')) {

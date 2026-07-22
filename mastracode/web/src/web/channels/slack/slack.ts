@@ -1,6 +1,6 @@
-import type { ChannelHandler } from '@mastra/core/channels';
+import { AgentControllerChannels, type ChannelHandler, type ChannelHandlers } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
-import { SlackProvider } from '@mastra/slack';
+import { createSlackAdapter, SlackProvider } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
 /** Dependencies the Slack channel handlers close over, injected from the web entry. */
@@ -11,7 +11,7 @@ interface SlackChannelDeps {
    * literal — the instance doesn't exist yet at construction, only later when
    * a handler actually fires.
    */
-  getMastra: () => Mastra;
+  getMastra: () => Mastra | undefined;
 }
 
 /**
@@ -21,6 +21,9 @@ interface SlackChannelDeps {
  */
 function createNewSessionChatHandler({ getMastra }: SlackChannelDeps): ChannelHandler {
   return async (thread, message, defaultHandler) => {
+    // TODO: Check if the slack user id maps to a Mastra user, if not send a message to that user saying to auth with a link
+    // TODO: if they do have a connected slack account, hydrate the req context with that Mastra user
+
     // A mention on a not-yet-subscribed thread is a NEW session. The
     // default handler auto-subscribes, so once subscribed this is a
     // follow-up mention — don't re-announce.
@@ -36,15 +39,15 @@ function createNewSessionChatHandler({ getMastra }: SlackChannelDeps): ChannelHa
     // to — otherwise the link would be `undefined/threads/...`. Without one the
     // session is still created; we skip the (broken) card and the lookup it
     // needs entirely.
-    const publicUrl = process.env.MASTRACODE_PUBLIC_URL;
-    if (!publicUrl) return;
+
+    if (!process.env.MASTRACODE_PUBLIC_URL) return;
 
     // The handler's `thread` is the Slack chat thread — its `.id` is the
     // platform thread id (e.g. `slack:C0BG...`), NOT the internal Mastra
     // thread UUID the web UI routes on. Look up the internal thread that
     // the framework created for this channel conversation via the stored
     // channel metadata, then build the link from its real id + resourceId.
-    const store = await getMastra().getStorage()?.getStore('memory');
+    const store = await getMastra()?.getStorage()?.getStore('memory');
     const { threads } = (await store?.listThreads({
       filter: {
         metadata: {
@@ -69,7 +72,7 @@ function createNewSessionChatHandler({ getMastra }: SlackChannelDeps): ChannelHa
           CardText('A new session has been created.'),
           Actions([
             LinkButton({
-              url: `${publicUrl}/threads/${internalThread.id}?resourceId=${encodeURIComponent(
+              url: `${process.env.MASTRACODE_PUBLIC_URL}/threads/${internalThread.id}?resourceId=${encodeURIComponent(
                 internalThread.resourceId,
               )}`,
               label: 'View Session',
@@ -80,24 +83,43 @@ function createNewSessionChatHandler({ getMastra }: SlackChannelDeps): ChannelHa
     );
   };
 }
+const createHandlers = (getMastra: () => Mastra | undefined): ChannelHandlers => {
+  const newSessionChatHandler = createNewSessionChatHandler({ getMastra });
+
+  return {
+    onSubscribedMessage: async (thread, message, defaultHandler) => {
+      // `aside` as its own leading word lets humans talk in a subscribed
+      // thread without the bot replying. Word boundary so messages that
+      // merely start with "aside..." (e.g. "asides can wait") still route.
+      if (/^aside\b/i.test(message.text)) return;
+      return defaultHandler(thread, message);
+    },
+    onMention: newSessionChatHandler,
+    onDirectMessage: newSessionChatHandler,
+  };
+};
 
 /** Construct the Slack channel provider wired to the server-owned Mastra instance. */
 export function createSlackChannelProvider({ getMastra }: SlackChannelDeps): SlackProvider {
-  const newSessionChatHandler = createNewSessionChatHandler({ getMastra });
-
   return new SlackProvider({
     refreshToken: process.env.SLACK_APP_REFRESH_TOKEN,
-    baseUrl: process.env.MASTRACODE_PUBLIC_URL,
-    handlers: {
-      onSubscribedMessage: async (thread, message, defaultHandler) => {
-        // `aside` as its own leading word lets humans talk in a subscribed
-        // thread without the bot replying. Word boundary so messages that
-        // merely start with "aside..." (e.g. "asides can wait") still route.
-        if (/^aside\b/i.test(message.text)) return;
-        return defaultHandler(thread, message);
+    baseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
+    handlers: createHandlers(getMastra),
+  });
+}
+
+export function createAgentControllerSlackChannels({ getMastra }: SlackChannelDeps): AgentControllerChannels {
+  return new AgentControllerChannels({
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter({
+          clientId: process.env.SLACK_APP_CLIENT_ID,
+          clientSecret: process.env.SLACK_APP_CLIENT_SECRET,
+          signingSecret: process.env.SLACK_APP_SIGNING_SECRET,
+          botToken: process.env.SLACK_APP_BOT_TOKEN,
+        }),
       },
-      onMention: newSessionChatHandler,
-      onDirectMessage: newSessionChatHandler,
     },
+    handlers: createHandlers(getMastra),
   });
 }

@@ -35,7 +35,7 @@ import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '../web/factory-integration.js';
 import { GithubIntegration } from '../web/github/integration.js';
 import { LinearIntegration } from '../web/linear/integration.js';
-import { createSlackChannelProvider } from '../web/channels/slack/slack.js';
+import { createAgentControllerSlackChannels, createSlackChannelProvider } from '../web/channels/slack/slack.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -285,6 +285,13 @@ export const factory = new MastraFactory({
   integrations,
 });
 
+const preparedArgs = await factory.prepare();
+
+const mcAgentController = preparedArgs.agentControllers?.['code'];
+if (mcAgentController) {
+  mcAgentController.setChannels(createAgentControllerSlackChannels({ getMastra: () => mcAgentController.getMastra() }));
+}
+
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
@@ -292,14 +299,14 @@ export const factory = new MastraFactory({
 // layered on top of the factory args here so channel rendering rides the same
 // deployed instance while the factory keeps owning the rest of the config.
 export const mastra: Mastra = new Mastra({
-  ...(await factory.prepare()),
-  channels: {
-    // `getMastra` is a lazy accessor: the provider is built inside this
-    // `new Mastra(...)` literal, so `mastra` isn't assigned yet. The thunk is
-    // only dereferenced when a handler fires (well after module init), so it
-    // safely resolves the exported instance by then.
-    slack: createSlackChannelProvider({ getMastra: () => mastra }),
-  },
+  ...preparedArgs,
+  // channels: {
+  //   // `getMastra` is a lazy accessor: the provider is built inside this
+  //   // `new Mastra(...)` literal, so `mastra` isn't assigned yet. The thunk is
+  //   // only dereferenced when a handler fires (well after module init), so it
+  //   // safely resolves the exported instance by then.
+  //   slack: createSlackChannelProvider({ getMastra: () => mastra }),
+  // },
   logger: new ConsoleLogger({ level: (process.env.LOG_LEVEL as LogLevelType) ?? 'debug' }),
 });
 

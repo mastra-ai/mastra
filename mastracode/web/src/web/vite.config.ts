@@ -14,6 +14,12 @@ const here = dirname(fileURLToPath(import.meta.url));
  */
 const apiTarget = process.env.MASTRACODE_API_TARGET ?? 'http://localhost:4111';
 const uiPort = Number(process.env.MASTRACODE_UI_PORT ?? 5173);
+// Bind the dev server to IPv4 loopback explicitly. Vite's default `localhost`
+// bind resolves to `::1` (IPv6) only on modern macOS/Node, which leaves the UI
+// unreachable over `127.0.0.1` — a cloudflared tunnel pointed at
+// `http://127.0.0.1:5173` gets connection-refused. Overridable so the dev
+// runner can expose the server on all interfaces when needed.
+const uiHost = process.env.MASTRACODE_UI_HOST ?? '127.0.0.1';
 
 /**
  * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html.
@@ -64,6 +70,9 @@ export default defineConfig(({ mode }) => {
   // `.env` never reaches this Vite process's `process.env` — load it here.
   const env = { ...loadEnv(mode, resolve(here, '../..'), ''), ...process.env };
   const publicUrl = env.MASTRACODE_PUBLIC_URL;
+  const channelsPublicUrl = env.MASTRACODE_CHANNELS_PUBLIC_URL;
+  const allowedHosts = publicUrl ? [new URL(publicUrl).host] : [];
+  if (channelsPublicUrl) allowedHosts.push(new URL(channelsPublicUrl).host);
 
   return {
     root: resolve(here, 'ui'),
@@ -79,6 +88,7 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
     },
     server: {
+      host: uiHost,
       port: uiPort,
       // OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the
       // configured UI origin ahead of time. Silently hopping to a free port
@@ -116,7 +126,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
       },
-      ...(publicUrl ? { allowedHosts: [new URL(publicUrl).host] } : {}),
+      allowedHosts,
     },
   };
 });
