@@ -46,7 +46,9 @@ describe('factory creation refresh', () => {
     await user.click(screen.getByRole('button', { name: 'Create Factory' }));
 
     // Active factory shows in the trigger…
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Select factory' })).toHaveTextContent('Fresh Factory'));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Select factory' })).toHaveTextContent('Fresh Factory'),
+    );
 
     // …and the dropdown lists it.
     await user.click(screen.getByRole('button', { name: 'Select factory' }));
