@@ -20,15 +20,13 @@ import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
 export default function Chat() {
   return (
     <MainSidebarProvider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
-        <ChatSessionRouteProvider>
-          <OverlaysProvider>
-            <SettingsNavigationProvider>
-              <ChatShell />
-            </SettingsNavigationProvider>
-          </OverlaysProvider>
-        </ChatSessionRouteProvider>
-      </ActiveFactoryProvider>
+      <ChatSessionRouteProvider>
+        <OverlaysProvider>
+          <SettingsNavigationProvider>
+            <ChatShell />
+          </SettingsNavigationProvider>
+        </OverlaysProvider>
+      </ChatSessionRouteProvider>
     </MainSidebarProvider>
   );
 }
@@ -51,7 +49,7 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
 
 function ChatShell() {
   const overlays = useOverlays();
-  const { factories, factoriesPending } = useActiveFactoryContext();
+  const { activeFactory, factories, factoriesPending } = useActiveFactoryContext();
   const { isMobile } = useMainSidebar();
   const factorySetupRequired = factories.length === 0 && !factoriesPending;
   const factoriesOpen = overlays.isOpen('factories');
@@ -71,12 +69,19 @@ function ChatShell() {
 
   return (
     <>
-      <PageLayoutMainViewProvider
-        view={mainView}
-        mobileHeader={settingsOpen ? <SettingsHeader autoFocus={isMobile} placement="mobile" /> : undefined}
-      >
-        <Outlet />
-      </PageLayoutMainViewProvider>
+      {!activeFactory && mainView !== undefined ? (
+        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">
+          {settingsOpen && isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined}
+          {mainView}
+        </main>
+      ) : (
+        <PageLayoutMainViewProvider
+          view={mainView}
+          mobileHeader={settingsOpen ? <SettingsHeader autoFocus={isMobile} placement="mobile" /> : undefined}
+        >
+          <Outlet />
+        </PageLayoutMainViewProvider>
+      )}
       <ChatOverlays />
     </>
   );

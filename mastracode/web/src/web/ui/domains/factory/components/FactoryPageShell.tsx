@@ -1,19 +1,18 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useOverlays } from '../../../lib/overlays';
 import { Sidebar } from '../../../Sidebar';
 import { PageLayout } from '../../../ui/PageLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { EmptyFactoryState } from '../../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
-import type { Factory, ServerFactory } from '../../workspaces/services/factories';
+import type { ServerFactory } from '../../workspaces/services/factories';
 import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces/services/factories';
 
 interface FactoryPageShellProps {
@@ -32,10 +31,16 @@ interface FactoryPageShellProps {
  * the header scopes repository-based intake.
  */
 export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
-  const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending } = useActiveFactoryContext();
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
 
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
   return (
     <PageLayout
       sidebar={<Sidebar />}
@@ -44,36 +49,16 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
       description={activeFactory ? description : undefined}
       actions={serverFactory ? <RepositoryPicker factory={serverFactory} /> : undefined}
     >
-      <FactoryPageBody
-        activeFactory={activeFactory ?? undefined}
-        onOpenFactories={() => overlays.open('factories')}
-        renderServerFactory={children}
-      />
+      {serverFactory ? (
+        children(serverFactory)
+      ) : (
+        <Notice variant="info">
+          Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder —
+          create a Factory from the switcher to use the Board.
+        </Notice>
+      )}
     </PageLayout>
   );
-}
-
-function FactoryPageBody({
-  activeFactory,
-  onOpenFactories,
-  renderServerFactory,
-}: {
-  activeFactory: Factory | undefined;
-  onOpenFactories: () => void;
-  renderServerFactory: (factory: ServerFactory) => ReactNode;
-}) {
-  if (!activeFactory) return <EmptyFactoryState onOpenFactories={onOpenFactories} />;
-
-  if (!isServerFactory(activeFactory)) {
-    return (
-      <Notice variant="info">
-        Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder —
-        create a Factory from the switcher to use the Board.
-      </Notice>
-    );
-  }
-
-  return renderServerFactory(activeFactory);
 }
 
 /**

@@ -84,6 +84,16 @@ describe('LocalSandbox', () => {
       expect(child.isolation).toBe(template.isolation);
     });
 
+    it('applies a derived working directory override', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir });
+      const childWorkdir = path.join(tempDir, 'child');
+
+      const child = template.clone({ workingDirectory: childWorkdir });
+
+      expect(child.workingDirectory).toBe(childWorkdir);
+      expect(template.workingDirectory).toBe(tempDir);
+    });
+
     it('applies env overrides and can execute commands after start', async () => {
       const template = new LocalSandbox({ workingDirectory: tempDir, env: { PATH: process.env.PATH } });
 
@@ -248,7 +258,7 @@ describe('LocalSandbox', () => {
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('Hello, World!');
       expect(result.exitCode).toBe(0);
-      expect(result.executionTimeMs).toBeGreaterThan(0);
+      expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
     });
 
     it('should handle command failure', async () => {

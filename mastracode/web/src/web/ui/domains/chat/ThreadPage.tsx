@@ -1,15 +1,12 @@
 import { useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 
-import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui/ChatLayout';
 import { renderedPaths } from '../workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
-import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
-import type { Factory } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
 import { FactorySessionHeader } from '../factory/components/RelatedFactorySessions';
 import { ChatMessageList } from './components/ChatMessageList';
@@ -19,13 +16,13 @@ import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionP
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
 import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
-  const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending } = useActiveFactoryContext();
   const { threadId } = useParams();
   const location = useLocation();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
@@ -39,6 +36,13 @@ export function ThreadPage() {
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
 
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
   return (
     <ChatLayout
       sidebar={<Sidebar />}
@@ -59,31 +63,11 @@ export function ThreadPage() {
         ) : undefined
       }
       main={
-        <ThreadPageBody
-          activeFactory={activeFactory ?? undefined}
-          threadId={threadId}
-          onOpenFactories={() => overlays.open('factories')}
-        />
+        <ChatSessionBoundary threadId={threadId}>
+          <ThreadPageMain />
+        </ChatSessionBoundary>
       }
     />
-  );
-}
-
-function ThreadPageBody({
-  activeFactory,
-  threadId,
-  onOpenFactories,
-}: {
-  activeFactory: Factory | undefined;
-  threadId: string | undefined;
-  onOpenFactories: () => void;
-}) {
-  if (!activeFactory) return <EmptyFactoryState onOpenFactories={onOpenFactories} />;
-
-  return (
-    <ChatSessionBoundary threadId={threadId}>
-      <ThreadPageMain />
-    </ChatSessionBoundary>
   );
 }
 

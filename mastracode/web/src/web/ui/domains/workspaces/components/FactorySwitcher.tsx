@@ -4,7 +4,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, ChevronsUpDown, Factory as FactoryIcon, Folder, Plus } from 'lucide-react';
-
+import { useNavigate } from 'react-router';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useOverlays } from '../../../lib/overlays';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
@@ -14,12 +14,14 @@ import { isServerFactory } from '../services/factories';
 export function FactorySwitcher() {
   const { factories, activeFactory, selectFactory } = useActiveFactoryContext();
   const overlays = useOverlays();
+  const navigate = useNavigate();
   const { setOpenMobile } = useMainSidebar();
 
   const openFactories = () => {
     overlays.open('factories');
     setOpenMobile(false);
   };
+
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
@@ -36,9 +38,17 @@ export function FactorySwitcher() {
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => {
+          const nextSpot = isServerFactory(factory) ? '/factory/board' : '/new';
           const projectPath = deriveProjectPath(factory);
+
           return (
-            <DropdownMenu.Item key={factory.id} onSelect={() => void selectFactory(factory)}>
+            <DropdownMenu.Item
+              key={factory.id}
+              onSelect={async () => {
+                await selectFactory(factory);
+                void navigate(nextSpot);
+              }}
+            >
               {isServerFactory(factory) ? <FactoryIcon /> : <Folder />}
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">{factory.name}</span>
@@ -52,6 +62,7 @@ export function FactorySwitcher() {
             </DropdownMenu.Item>
           );
         })}
+
         {factories.length > 0 && <DropdownMenu.Separator />}
         <DropdownMenu.Item onSelect={openFactories}>
           <Plus />

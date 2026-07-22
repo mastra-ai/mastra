@@ -30,11 +30,13 @@ import { WorkOS } from '@workos-inc/node';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { WorkOSAuditIntegration } from '../web/audit/workos-integration.js';
-import { createWebAuthProvider } from './auth.js';
 import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '../web/factory-integration.js';
 import { GithubIntegration } from '../web/github/integration.js';
 import { LinearIntegration } from '../web/linear/integration.js';
+import type { IMastraAuthProvider } from '@mastra/core/server';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -69,14 +71,25 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-const auth = createWebAuthProvider({
-  disabled: process.env.MASTRACODE_AUTH_DISABLED === '1',
-  studioConfigured: Boolean(process.env.MASTRA_SHARED_API_URL),
-  workosConfigured: Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID),
-  workosRedirectUri: process.env.WORKOS_REDIRECT_URI,
-  betterAuthSecret: process.env.BETTER_AUTH_SECRET,
-  betterAuthSignUpEnabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED !== '1',
-});
+// Web auth: MastraFactory installs `MastraAuthStudio` by default (identity
+// proxied to the shared Mastra platform API — reads `MASTRA_SHARED_API_URL`,
+// `MASTRA_ORGANIZATION_ID`, and `MASTRA_COOKIE_DOMAIN` from env). Set
+// `MASTRACODE_AUTH_DISABLED=1` to boot with no auth provider (open server,
+// bare local dev).
+const workosConfigured = Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
+const betterAuthSecret = process.env.BETTER_AUTH_SECRET;
+const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
+let auth: IMastraAuthProvider | null | undefined;
+if (workosConfigured) {
+  auth = new MastraAuthWorkos({ redirectUri: process.env.WORKOS_REDIRECT_URI, fetchMemberships: true });
+} else if (betterAuthSecret) {
+  auth = new MastraAuthBetterAuth({
+    secret: betterAuthSecret,
+    signUpEnabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED !== '1',
+  });
+} else if (authDisabled) {
+  auth = null;
+}
 
 // WorkOS audit export is an independent capability. Supplying its dedicated
 // API key enables mirroring + the Admin Portal route regardless of whether web
