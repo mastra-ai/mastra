@@ -19,6 +19,8 @@ test.describe('Persisted Workflow Builder', () => {
       await page.goto('/workflow-builder');
       await page.getByRole('link', { name: 'New workflow' }).click();
       await page.waitForURL('/workflow-builder/create');
+      await expect(page.getByText('Not started')).toBeVisible();
+      await expect(page.getByText('Workflow graph must contain at least one step.')).not.toBeVisible();
 
       await page.getByTestId('workflow-builder-conversation-input').fill('Create a support intake workflow.');
       await page.getByTestId('workflow-builder-conversation-submit').click();
@@ -26,8 +28,9 @@ test.describe('Persisted Workflow Builder', () => {
       await expect(page.getByText(`Done — I created ${workflowId} with one agent step.`)).toBeVisible({
         timeout: 30_000,
       });
-      await expect(page.getByText('Valid definition')).toBeVisible();
+      await expect(page.getByText('Ready to save')).toBeVisible();
       await expect(page.getByTestId('workflow-definition-graph')).toContainText('answer-request');
+      await expect(page.getByTestId('agent-builder-chat-generic-tool')).toContainText('Completed');
 
       await page.getByRole('button', { name: 'Save', exact: true }).click();
       await page.waitForURL(`/workflow-builder/${workflowId}`);

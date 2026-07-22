@@ -42,19 +42,19 @@ const stopTurn = (text: string) => [
 export const workflowBuilderLifecycleFixture = [
   toolCallTurn([
     [
-      'workflow-identity',
-      'set-workflow-identity',
-      { id: 'support-intake-workflow', description: 'Processes a support request with the weather agent.' },
-    ],
-    [
-      'workflow-schemas',
-      'set-workflow-schemas',
+      'workflow-checkpoint',
+      'checkpoint-workflow-draft',
       {
-        inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
-        outputSchema: { type: 'string' },
+        definition: {
+          id: 'support-intake-workflow',
+          description: 'Processes a support request with the weather agent.',
+          inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
+          outputSchema: { type: 'string' },
+          graph: [{ type: 'agent', id: 'answer-request', agentId: 'weatherAgent' }],
+        },
       },
     ],
-    ['workflow-step', 'add-workflow-step', { step: { type: 'agent', id: 'answer-request', agentId: 'weatherAgent' } }],
   ]),
+  toolCallTurn([['workflow-finalize', 'finalize-workflow-draft', { expectedRevision: 1 }]]),
   stopTurn('Done — I created support-intake-workflow with one agent step.'),
 ];
