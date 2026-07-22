@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -82,12 +83,15 @@ function SourcePickerSection({
   items,
   selectedIds,
   disabled,
+  pending,
   onToggleItem,
 }: {
   label: string;
   items: SourcePickerItem[];
   selectedIds: string[] | null;
   disabled: boolean;
+  /** True while the selection save is in flight — shows the section spinner. */
+  pending: boolean;
   onToggleItem: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -123,6 +127,13 @@ function SourcePickerSection({
               {selectedCount} selected
             </Txt>
           )}
+          {pending && (
+            // Wrapped in a span so the trigger's `[&>svg]` chevron-rotation
+            // rules don't apply to the spinner svg.
+            <span className="ml-auto flex shrink-0">
+              <Spinner size="sm" aria-label={`Saving ${label} selection`} />
+            </span>
+          )}
         </CollapsibleTrigger>
         <CollapsibleContent className="flex flex-col gap-2 px-3 pb-3">
           <ListSearch label={`Search ${label}`} placeholder="Search…" size="sm" value={query} onSearch={setQuery} />
@@ -135,6 +146,7 @@ function SourcePickerSection({
                   <DataList.SelectCell
                     checked={selectedIds?.includes(item.id) ?? false}
                     onToggle={() => toggle(item.id)}
+                    disabled={disabled}
                     aria-label={item.label}
                   />
                   <DataList.RowButton
@@ -235,6 +247,7 @@ export function IntakeSection() {
                 items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
                 selectedIds={config.github.sourceIds}
                 disabled={busy}
+                pending={busy}
                 onToggleItem={slug =>
                   update({
                     ...config,
@@ -301,6 +314,7 @@ export function IntakeSection() {
                       items={group.projects.map(project => ({ id: project.id, label: project.name }))}
                       selectedIds={config.linear.sourceIds}
                       disabled={busy}
+                      pending={busy}
                       onToggleItem={projectId =>
                         update({
                           ...config,

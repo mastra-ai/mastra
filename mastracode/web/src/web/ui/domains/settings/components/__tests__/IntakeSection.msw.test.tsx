@@ -238,6 +238,39 @@ describe('IntakeSection', () => {
       expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
     });
 
+    it('disables the checkboxes and shows a spinner while the selection saves', async () => {
+      useIntakeHandlers();
+      let releaseSave!: () => void;
+      const savePending = new Promise<void>(resolve => {
+        releaseSave = resolve;
+      });
+      server.use(
+        http.put(CONFIG_URL, async ({ request }) => {
+          await savePending;
+          return HttpResponse.json({ config: (await request.json()) as IntakeConfig });
+        }),
+      );
+
+      renderIntakeSection();
+
+      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
+      await userEvent.click(within(eng).getByRole('button', { name: 'ENG · Engineering' }));
+      await userEvent.click(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' }));
+
+      expect(await within(eng).findByRole('status', { name: 'Saving ENG · Engineering selection' })).toBeInTheDocument();
+      // Base UI's checkbox root is a span, so disabled state is exposed via aria-disabled.
+      expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).toHaveAttribute('aria-disabled', 'true');
+
+      releaseSave();
+
+      await waitFor(() =>
+        expect(
+          within(eng).queryByRole('status', { name: 'Saving ENG · Engineering selection' }),
+        ).not.toBeInTheDocument(),
+      );
+      expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).not.toHaveAttribute('aria-disabled');
+    });
+
     it('persists the selection when the row itself is clicked instead of the checkbox', async () => {
       const saved = useIntakeHandlers();
 
