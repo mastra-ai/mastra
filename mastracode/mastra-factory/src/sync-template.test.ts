@@ -109,9 +109,21 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
 
     // Scripts map the web project's own flow, minus monorepo-only bits.
     expect(pkg.scripts.dev).toContain('concurrently');
-    expect(pkg.scripts.dev).toContain('mastra dev');
+    expect(pkg.scripts.dev).toContain('mastra factory dev');
     expect(pkg.scripts.dev).toContain('vite');
+    expect(pkg.scripts['dev:prod']).toBe(
+      'npm run build:ui && PORT=5173 MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra factory dev --dir src/mastra',
+    );
+    expect(pkg.scripts['dev:prod']).not.toContain('concurrently');
     expect(pkg.scripts.prebuild).toBeUndefined();
     expect(JSON.stringify(pkg.scripts)).not.toContain('monorepo-deps');
+    // Production builds use the prebuilt Factory UI bundled with the Mastra CLI.
+    expect(pkg.scripts.build).toBe('mastra build --dir src/mastra');
+    expect(pkg.scripts['build:ui']).toBe('vite --config src/web/vite.config.ts build');
+    expect(pkg.scripts['build:server']).toBeUndefined();
+    // The generated .gitignore ignores the Vite output directory.
+    const gitignore = fs.readFileSync(path.join(outDir, '.gitignore'), 'utf8');
+    expect(gitignore).toContain('src/mastra/public/factory/');
+    expect(gitignore).not.toContain('src/mastra/public/ui/');
   });
 });

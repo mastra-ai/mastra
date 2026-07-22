@@ -152,7 +152,7 @@ function assertLinkedPackage(name, relPath) {
 function transformPackageJson() {
   const manifest = JSON.parse(fs.readFileSync(path.join(webRoot, 'package.json'), 'utf8'));
 
-  manifest.name = 'mastra-software-factory';
+  manifest.name = 'mastra-factory';
   manifest.version = '0.1.0';
   manifest.description =
     'Mastra Factory: an agent-powered software delivery environment. Intake GitHub/Linear issues, work them with coding agents, and ship pull requests — all from your own deployable web app.';
@@ -162,12 +162,13 @@ function transformPackageJson() {
   // Direct mapping of the web project's own scripts (web:dev / web:build /
   // web:start), minus monorepo-only bits (prebuild, monorepo-deps.mjs).
   manifest.scripts = {
-    dev: 'concurrently --kill-others-on-fail --names server,ui "MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra dev --dir src/mastra" "vite --config src/web/vite.config.ts"',
+    dev: 'concurrently --kill-others-on-fail --names server,ui "MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra factory dev --dir src/mastra" "vite --config src/web/vite.config.ts"',
+    'dev:prod':
+      'npm run build:ui && PORT=5173 MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra factory dev --dir src/mastra',
     'db:up': 'docker compose up -d --wait',
     'db:down': 'docker compose down',
-    build: 'npm run build:ui && npm run build:server',
+    build: 'mastra build --dir src/mastra',
     'build:ui': 'vite --config src/web/vite.config.ts build',
-    'build:server': 'mastra build --dir src/mastra',
     start: 'varlock run -- mastra start',
     deploy: 'npm run build && node scripts/validate-output.mjs && mastra deploy --skip-build',
     check: 'tsc --noEmit && tsc --noEmit -p src/web/ui/tsconfig.json',
@@ -296,7 +297,7 @@ function writeGitignore() {
 !.env.example
 !.env.schema
 .mastra/
-src/mastra/public/ui/
+src/mastra/public/factory/
 *.log
 .DS_Store
 `,

@@ -97,7 +97,7 @@ beforeEach(() => {
   fs.mkdirSync(templateDir);
   fs.writeFileSync(
     path.join(templateDir, 'package.json'),
-    `${JSON.stringify({ name: 'mastra-software-factory', version: '0.1.0', private: true }, null, 2)}\n`,
+    `${JSON.stringify({ name: 'mastra-factory', version: '0.1.0', private: true }, null, 2)}\n`,
   );
   fs.writeFileSync(path.join(templateDir, '.env.example'), ENV_EXAMPLE);
   process.chdir(workDir);
