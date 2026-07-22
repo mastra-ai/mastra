@@ -38,6 +38,9 @@ export function GitHubAppCallbackHandler() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
 
+    // The route tree mounts before the app-level Toaster sibling in main.tsx.
+    // Defer one microtask so the toaster's own passive effects subscribe before
+    // this callback emits a notification on initial page load.
     queueMicrotask(() => {
       if (requested) {
         toast.success(
