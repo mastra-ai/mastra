@@ -1,14 +1,14 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { GitBranch } from 'lucide-react';
-import { useLocation } from 'react-router';
+import { Navigate, useLocation } from 'react-router';
 
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui/ChatLayout';
 import { FolderIcon } from '../../ui/icons';
 import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
-import { isLocalFactory, selectedRepository } from '../workspaces/services/factories';
+import { isLocalFactory, isServerFactory, selectedRepository } from '../workspaces/services/factories';
 import type { Factory } from '../workspaces/services/factories';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
@@ -25,6 +25,10 @@ export function NewPage() {
 
   if (!activeFactory) {
     return <EmptyFactoryState />;
+  }
+
+  if (isServerFactory(activeFactory)) {
+    return <Navigate to="/factory/work" replace />;
   }
   return (
     <ChatLayout
@@ -95,8 +99,8 @@ function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
     ? activeFactory.binding.gitBranch
     : selectedRepository(activeFactory)?.gitBranch;
   return (
-    <div className="flex max-w-full flex-col items-center gap-1 text-ui-sm text-icon3">
-      <div className="flex max-w-full items-center justify-center gap-1.5">
+    <div className="flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
+      <div className="flex min-w-0 items-center gap-1.5">
         <FolderIcon size={13} className="shrink-0 text-icon2" />
         <span className="shrink-0 font-medium">{activeFactory.name}</span>
         {projectPath && (
@@ -109,12 +113,17 @@ function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
         )}
       </div>
       {gitBranch && (
-        <div className="flex max-w-full items-center justify-center gap-1.5">
-          <GitBranch size={13} aria-hidden className="shrink-0 text-icon2" />
-          <span className="min-w-0 truncate" title={gitBranch}>
-            {gitBranch}
+        <>
+          <span aria-hidden className="shrink-0 text-icon2">
+            ·
           </span>
-        </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <GitBranch size={13} aria-hidden className="shrink-0 text-icon2" />
+            <span className="min-w-0 truncate" title={gitBranch}>
+              {gitBranch}
+            </span>
+          </div>
+        </>
       )}
     </div>
   );

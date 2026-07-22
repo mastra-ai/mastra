@@ -161,11 +161,20 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
+    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, () =>
+      HttpResponse.json({ sessions: [] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/audit`, ({ request }) => {
       const url = new URL(request.url);
-      state.requests.push({ actions: url.searchParams.get('actions'), before: url.searchParams.get('before') });
-      const page = pages[Math.min(state.requests.length - 1, pages.length - 1)]!;
-      return HttpResponse.json(page);
+      const before = url.searchParams.get('before');
+      const actions = url.searchParams.get('actions');
+      state.requests.push({ actions, before });
+      const page = pages[before ? 1 : 0] ?? pages.at(-1)!;
+      const allowed = actions?.split(',');
+      return HttpResponse.json({
+        ...page,
+        events: page.events.filter(event => !allowed || allowed.includes(event.action)),
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/decisions`, ({ request }) => {
       const url = new URL(request.url);
@@ -321,7 +330,7 @@ describe('Factory Audit page', () => {
     expect(within(list).getByText('sendMessage')).toBeInTheDocument();
   });
 
-  it('given the All filter, when the user picks Git, then events are refetched with the git action list', async () => {
+  it('given the All filter, when the user picks Git, then only matching events are shown and the filter can reset', async () => {
     const state = useAuditHandlers();
     renderAt('/factory/audit');
 
@@ -333,6 +342,12 @@ describe('Factory Audit page', () => {
     await waitFor(() =>
       expect(state.requests.map(r => r.actions)).toContain('factory.git.commit,factory.git.push,factory.git.pr_opened'),
     );
+    expect(await screen.findByText('No matching audit events')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Git' })).toHaveAttribute('aria-pressed', 'true');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show all events' }));
+    expect(await screen.findByRole('list', { name: 'Audit events' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('given the All filter, when the user picks Agent, then events are refetched with the agent action list', async () => {
@@ -409,11 +424,12 @@ describe('Factory Audit page', () => {
     expect(open).toHaveBeenCalledWith('https://portal.workos.com/audit-logs/one-time', '_blank', 'noopener,noreferrer');
   });
 
-  it('given no events yet, when the page renders, then a friendly empty state appears', async () => {
+  it('given no events or effects yet, when the page renders, then both friendly empty states appear', async () => {
     useAuditHandlers({ pages: [{ events: [] }] });
     renderAt('/factory/audit');
 
-    expect(await screen.findByText(/No audit events yet/)).toBeInTheDocument();
+    expect(await screen.findByText('No rule effects yet')).toBeInTheDocument();
+    expect(await screen.findByText('No audit events yet')).toBeInTheDocument();
   });
 
   it('given a local project, when visiting Audit, then the GitHub-only notice renders instead of the trail', async () => {
