@@ -535,6 +535,19 @@ export class MastraFactory {
       }
     }
 
+    // The SDK needs to know which backend the injected Mastra store uses
+    // (its own `instanceof` detection breaks when the dependency graph holds
+    // duplicate package copies). Resolve it by walking the FactoryStorage
+    // prototype chain by class name — the factory can't import the concrete
+    // classes since '@mastra/pg' / '@mastra/libsql' are the user's choice.
+    const mastraStorageBackend = (() => {
+      for (let proto = Object.getPrototypeOf(storage); proto; proto = Object.getPrototypeOf(proto)) {
+        if (proto.constructor?.name === 'PgFactoryStorage') return 'pg' as const;
+        if (proto.constructor?.name === 'LibSQLFactoryStorage') return 'libsql' as const;
+      }
+      return undefined;
+    })();
+
     // Integrations contributing tools to agent sessions: org-scoped
     // `agentTools` (resolved per request) + session-scoped `sessionTools`.
     const toolIntegrations = integrationRegistrations.filter(
@@ -557,6 +570,7 @@ export class MastraFactory {
       // org/user), so the host machine's TUI settings.json must not seed them.
       disableSettingsOmSeed: true,
       storage: storage.getMastraStorage(),
+      ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
       ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
       ...(vector ? { vector } : {}),
       ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
