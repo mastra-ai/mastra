@@ -121,7 +121,12 @@ describe('FactoryStartCoordinator', () => {
   it('commits the item session, exact binding, and durable pending start', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller, sendMessage } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, makeSourceControl() as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
 
     const prepared = await coordinator.prepare(startRequest());
 
@@ -164,7 +169,12 @@ describe('FactoryStartCoordinator', () => {
       }),
     });
     const { controller, sendMessage } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, transitionService, makeSourceControl() as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      transitionService,
+      makeSourceControl() as never,
+    );
 
     const prepared = await coordinator.prepare({ ...startRequest(), destinationStage: 'execute' });
 
@@ -178,7 +188,12 @@ describe('FactoryStartCoordinator', () => {
   it('binds the controller session to the exact Factory session thread', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, makeSourceControl() as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
 
     const prepared = await coordinator.prepare(startRequest({ kickoffMessage: null }));
 
@@ -194,7 +209,12 @@ describe('FactoryStartCoordinator', () => {
   it('reuses the exact Factory session thread across roles', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, makeSourceControl() as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
 
     const triage = await coordinator.prepare(
       startRequest({ role: 'triage', kickoffKey: 'triage-1', kickoffMessage: null }),
@@ -225,7 +245,12 @@ describe('FactoryStartCoordinator', () => {
       }),
     });
     const { controller, sendMessage } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, transitionService, makeSourceControl() as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      transitionService,
+      makeSourceControl() as never,
+    );
 
     await expect(coordinator.prepare({ ...startRequest(), destinationStage: 'execute' })).rejects.toMatchObject({
       result: { status: 'rejected', code: 'forbidden' },
@@ -240,7 +265,12 @@ describe('FactoryStartCoordinator', () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     vi.spyOn(storage, 'prepareRunStart').mockRejectedValueOnce(new Error('commit failed'));
     const { controller, sendMessage } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, makeSourceControl() as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
 
     await expect(coordinator.prepare(startRequest())).rejects.toThrow('commit failed');
     expect(sendMessage).not.toHaveBeenCalled();
@@ -249,7 +279,12 @@ describe('FactoryStartCoordinator', () => {
   it('replays the same durable pending kickoff and binding without dispatching it inline', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller, sendMessage } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, makeSourceControl() as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
     const input = startRequest();
 
     const first = await coordinator.prepare(input);
@@ -264,7 +299,12 @@ describe('FactoryStartCoordinator', () => {
   it('revokes only the prior binding for the same item role', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, makeSourceControl() as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
     const first = await coordinator.prepare(startRequest({ kickoffMessage: null }));
 
     await coordinator.prepare(
@@ -278,7 +318,12 @@ describe('FactoryStartCoordinator', () => {
   it('scopes kickoff idempotency to tenant and project', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller } = makeController();
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, makeSourceControl() as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
     const first = await coordinator.prepare(startRequest({ kickoffMessage: null }));
     const second = await coordinator.prepare({
       ...startRequest({ sessionId: 'session-2', kickoffMessage: null }),

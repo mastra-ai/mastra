@@ -1982,9 +1982,7 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
     await waitFor(() => expect(captured.messages).toHaveLength(1));
-    expect(captured.messages[0]?.message).toContain(
-      'GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)',
-    );
+    expect(captured.messages[0]?.message).toContain('GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)');
     expect(captured.messages[0]?.message).toContain(`- Session: ${captured.sessionId}`);
     expect(captured.skillInvocations).toEqual([]);
     // One server-owned start request creates the Intake card, binds it, and requests Planning.
@@ -2073,10 +2071,7 @@ describe('Factory Board — investigate flow', () => {
     const captured = useFactoryRunHandlers('factory-issue-12');
     server.use(
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/runs/start`, () =>
-        HttpResponse.json(
-          { error: 'skill_not_found', message: 'Skill not found: understand-issue.' },
-          { status: 404 },
-        ),
+        HttpResponse.json({ error: 'skill_not_found', message: 'Skill not found: understand-issue.' }, { status: 404 }),
       ),
     );
     const { router } = renderAt('/factory/work');
@@ -2228,9 +2223,7 @@ describe('Factory Board — investigate flow', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${captured.sessionId}`));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     await waitFor(() => expect(captured.messages).toHaveLength(1));
-    expect(captured.messages[0]?.message).toContain(
-      'GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)',
-    );
+    expect(captured.messages[0]?.message).toContain('GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)');
     expect(captured.messages[0]?.message).not.toContain('Fix flaky test');
     expect(captured.skillInvocations).toEqual([]);
     expect(state.patches).toEqual([]);

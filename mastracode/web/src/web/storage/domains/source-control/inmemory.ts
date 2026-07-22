@@ -416,7 +416,15 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       this.sessionsRows.push(session);
       return session;
     },
-    setSandbox: async ({ id, sandboxId, sandboxWorkdir }: { id: string; sandboxId: string | null; sandboxWorkdir: string }) => {
+    setSandbox: async ({
+      id,
+      sandboxId,
+      sandboxWorkdir,
+    }: {
+      id: string;
+      sandboxId: string | null;
+      sandboxWorkdir: string;
+    }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
       if (row) Object.assign(row, { sandboxId, sandboxWorkdir, updatedAt: new Date() });
     },

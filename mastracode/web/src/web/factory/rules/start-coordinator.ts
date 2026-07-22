@@ -17,9 +17,7 @@ export interface FactoryStartRequest {
   threadTitle: string;
   threadTags?: Record<string, string>;
   kickoffKey: string;
-  invocation?:
-    | { type: 'prompt'; prompt: string }
-    | { type: 'skill'; skillName: string; arguments: string };
+  invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
   destinationStage: FactoryRuleStage;
   workItem: {
     id?: string;
