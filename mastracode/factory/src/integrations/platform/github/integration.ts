@@ -129,6 +129,11 @@ type GithubReviewComment = GithubComment & {
 
 const PAGE_SIZE = 30;
 const API_PREFIX = '/v1/server';
+const REPOSITORY_TOKEN_PERMISSIONS = {
+  contents: 'write',
+  issues: 'write',
+  pull_requests: 'write',
+} as const;
 
 function loose(c: unknown): Context {
   return c as Context;
@@ -304,7 +309,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const token = await this.#client.request<{ token: string }>(
         'POST',
         `${API_PREFIX}/github-app/installations/${installationId}/token`,
-        { repositories: [repositoryName], permissions: { contents: 'write' } },
+        { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
       );
       return {
         cloneUrl: `https://github.com/${repository.slug}.git`,
@@ -637,7 +642,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ token: string }>(
       'POST',
       `${API_PREFIX}/github-app/installations/${installationId}/token`,
-      { repositories: repositories.map(repository => repository.name), permissions: { contents: 'write' } },
+      { repositories: repositories.map(repository => repository.name), permissions: REPOSITORY_TOKEN_PERMISSIONS },
     );
     return result.token;
   }
