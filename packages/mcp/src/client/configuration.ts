@@ -27,6 +27,14 @@ import { MCPClientServerProxy } from './server-proxy';
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
 
+// Outcome of a single server's discovery within discoverAcrossServers(). An
+// explicit discriminated union (rather than `{ value?: T; error?: string }`) so
+// that narrowing on `error` also narrows `value` — Promise.all would otherwise
+// widen the two branches into independent optional props and break the fold.
+type ServerDiscoveryResult<T> =
+  | { serverName: string; value: T; error: undefined }
+  | { serverName: string; value: undefined; error: string };
+
 // Matches the entire 127.0.0.0/8 range in dotted-quad form. `URL` normalizes
 // IPv4 hosts to four octets (so `127.1` becomes `127.0.0.1`), so anchoring the
 // pattern is enough — and it rejects lookalikes like `127.evil.com` that a
@@ -322,24 +330,13 @@ To fix this you have three different options:
        */
       list: async (): Promise<Record<string, Resource[]>> => {
         const allResources: Record<string, Resource[]> = {};
-        for (const serverName of Object.keys(this.serverConfigs)) {
-          try {
-            const internalClient = await this.getConnectedClientForServer(serverName);
-            allResources[serverName] = await internalClient.resources.list();
-          } catch (error) {
-            const mastraError = new MastraError(
-              {
-                id: 'MCP_CLIENT_LIST_RESOURCES_FAILED',
-                domain: ErrorDomain.MCP,
-                category: ErrorCategory.THIRD_PARTY,
-                details: {
-                  serverName,
-                },
-              },
-              error,
-            );
-            this.logger.trackException(mastraError);
-            this.logger.error('Failed to list resources from server:', { error: mastraError.toString() });
+        const settled = await this.discoverAcrossServers(
+          async serverName => (await this.getConnectedClientForServer(serverName)).resources.list(),
+          { errorId: 'MCP_CLIENT_LIST_RESOURCES_FAILED', logMessage: 'Failed to list resources from server:' },
+        );
+        for (const { serverName, value, error } of settled) {
+          if (error === undefined) {
+            allResources[serverName] = value;
           }
         }
         return allResources;
@@ -360,24 +357,16 @@ To fix this you have three different options:
        */
       templates: async (): Promise<Record<string, ResourceTemplate[]>> => {
         const allTemplates: Record<string, ResourceTemplate[]> = {};
-        for (const serverName of Object.keys(this.serverConfigs)) {
-          try {
-            const internalClient = await this.getConnectedClientForServer(serverName);
-            allTemplates[serverName] = await internalClient.resources.templates();
-          } catch (error) {
-            const mastraError = new MastraError(
-              {
-                id: 'MCP_CLIENT_LIST_RESOURCE_TEMPLATES_FAILED',
-                domain: ErrorDomain.MCP,
-                category: ErrorCategory.THIRD_PARTY,
-                details: {
-                  serverName,
-                },
-              },
-              error,
-            );
-            this.logger.trackException(mastraError);
-            this.logger.error('Failed to list resource templates from server:', { error: mastraError.toString() });
+        const settled = await this.discoverAcrossServers(
+          async serverName => (await this.getConnectedClientForServer(serverName)).resources.templates(),
+          {
+            errorId: 'MCP_CLIENT_LIST_RESOURCE_TEMPLATES_FAILED',
+            logMessage: 'Failed to list resource templates from server:',
+          },
+        );
+        for (const { serverName, value, error } of settled) {
+          if (error === undefined) {
+            allTemplates[serverName] = value;
           }
         }
         return allTemplates;
@@ -591,24 +580,13 @@ To fix this you have three different options:
        */
       list: async (): Promise<Record<string, Prompt[]>> => {
         const allPrompts: Record<string, Prompt[]> = {};
-        for (const serverName of Object.keys(this.serverConfigs)) {
-          try {
-            const internalClient = await this.getConnectedClientForServer(serverName);
-            allPrompts[serverName] = await internalClient.prompts.list();
-          } catch (error) {
-            const mastraError = new MastraError(
-              {
-                id: 'MCP_CLIENT_LIST_PROMPTS_FAILED',
-                domain: ErrorDomain.MCP,
-                category: ErrorCategory.THIRD_PARTY,
-                details: {
-                  serverName,
-                },
-              },
-              error,
-            );
-            this.logger.trackException(mastraError);
-            this.logger.error('Failed to list prompts from server:', { error: mastraError.toString() });
+        const settled = await this.discoverAcrossServers(
+          async serverName => (await this.getConnectedClientForServer(serverName)).prompts.list(),
+          { errorId: 'MCP_CLIENT_LIST_PROMPTS_FAILED', logMessage: 'Failed to list prompts from server:' },
+        );
+        for (const { serverName, value, error } of settled) {
+          if (error === undefined) {
+            allPrompts[serverName] = value;
           }
         }
         return allPrompts;
@@ -1091,27 +1069,18 @@ To fix this you have three different options:
     const connectedTools: Record<string, Tool<any, any, any, any>> = {};
     const errors: Record<string, string> = {};
 
-    for (const serverName of Object.keys(this.serverConfigs)) {
-      try {
-        const tools = await this.getToolsForServer(serverName);
-        for (const [toolName, toolConfig] of Object.entries(tools)) {
-          connectedTools[`${serverName}_${toolName}`] = toolConfig;
-        }
-      } catch (error) {
-        const mastraError = new MastraError(
-          {
-            id: 'MCP_CLIENT_GET_TOOLS_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            details: {
-              serverName,
-            },
-          },
-          error,
-        );
-        this.logger.trackException(mastraError);
-        this.logger.error('Failed to list tools from server:', { error: mastraError.toString() });
-        errors[serverName] = error instanceof Error ? error.message : String(error);
+    const settled = await this.discoverAcrossServers(serverName => this.getToolsForServer(serverName), {
+      errorId: 'MCP_CLIENT_GET_TOOLS_FAILED',
+      logMessage: 'Failed to list tools from server:',
+    });
+
+    for (const { serverName, value, error } of settled) {
+      if (error !== undefined) {
+        errors[serverName] = error;
+        continue;
+      }
+      for (const [toolName, toolConfig] of Object.entries(value)) {
+        connectedTools[`${serverName}_${toolName}`] = toolConfig;
       }
     }
 
@@ -1171,31 +1140,59 @@ To fix this you have three different options:
     const connectedToolsets: Record<string, Record<string, Tool<any, any, any, any>>> = {};
     const errors: Record<string, string> = {};
 
-    for (const serverName of Object.keys(this.serverConfigs)) {
-      try {
-        const tools = await this.getToolsForServer(serverName);
-        if (tools) {
-          connectedToolsets[serverName] = tools;
-        }
-      } catch (error) {
-        const mastraError = new MastraError(
-          {
-            id: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            details: {
-              serverName,
-            },
-          },
-          error,
-        );
-        this.logger.trackException(mastraError);
-        this.logger.error('Failed to list toolsets from server:', { error: mastraError.toString() });
-        errors[serverName] = error instanceof Error ? error.message : String(error);
+    const settled = await this.discoverAcrossServers(serverName => this.getToolsForServer(serverName), {
+      errorId: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
+      logMessage: 'Failed to list toolsets from server:',
+    });
+
+    for (const { serverName, value, error } of settled) {
+      if (error !== undefined) {
+        errors[serverName] = error;
+        continue;
       }
+      connectedToolsets[serverName] = value;
     }
 
     return { toolsets: connectedToolsets, errors };
+  }
+
+  /**
+   * Runs a per-server discovery `operation` against every configured server
+   * concurrently, isolating and logging per-server failures. Results are
+   * returned in configuration order (`Object.keys(serverConfigs)`) so callers
+   * fold them back deterministically.
+   *
+   * Mirrors the parallel teardown in `disconnect()`: each server is bounded by
+   * its own request timeout, so total time is the slowest single server rather
+   * than the sum, and one slow or unresponsive server never stalls the others.
+   * Backs `listTools`/`listToolsets`, `resources.list`/`templates`, and
+   * `prompts.list`.
+   */
+  private async discoverAcrossServers<T>(
+    operation: (serverName: string) => Promise<T>,
+    onError: { errorId: Uppercase<string>; logMessage: string },
+  ): Promise<Array<ServerDiscoveryResult<T>>> {
+    const serverNames = Object.keys(this.serverConfigs);
+    return Promise.all(
+      serverNames.map(async (serverName): Promise<ServerDiscoveryResult<T>> => {
+        try {
+          return { serverName, value: await operation(serverName), error: undefined };
+        } catch (error) {
+          const mastraError = new MastraError(
+            {
+              id: onError.errorId,
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { serverName },
+            },
+            error,
+          );
+          this.logger.trackException(mastraError);
+          this.logger.error(onError.logMessage, { error: mastraError.toString() });
+          return { serverName, value: undefined, error: error instanceof Error ? error.message : String(error) };
+        }
+      }),
+    );
   }
 
   /**
