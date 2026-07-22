@@ -725,6 +725,7 @@ const sidebars = {
         { type: 'doc', id: 'tools/submit-plan-tool', label: 'submitPlanTool' },
         { type: 'doc', id: 'tools/task-tools', label: 'Task tools' },
         { type: 'doc', id: 'tools/tavily', label: 'Tavily Tools' },
+        { type: 'doc', id: 'tools/you-search', label: 'You.com Tools' },
       ],
     },
     {

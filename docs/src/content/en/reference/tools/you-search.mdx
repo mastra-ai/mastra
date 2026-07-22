@@ -1,0 +1,164 @@
+---
+title: "Reference: You.com tools | Tools and MCP"
+description: "API reference for @mastra/you-search, which provides a You.com web search tool for Mastra agents with a zero-configuration keyless free tier."
+packages:
+  - "@mastra/you-search"
+---
+
+# You.com tools
+
+The `@mastra/you-search` package wraps the [You.com Search API](https://you.com/docs/api-reference/search/v1-search) as a Mastra-compatible tool. It exposes a factory function that returns a tool created with [`createTool()`](./create-tool) and full Zod input/output schemas.
+
+The tool works with **zero configuration**: without an API key, searches use You.com's keyless free tier (rate limited per IP). Set the `YDC_API_KEY` environment variable or pass `{ apiKey }` explicitly to use the keyed API with higher limits.
+
+## Installation
+
+Install the package alongside Zod:
+
+```sh npm2yarn
+npm install @mastra/you-search zod
+```
+
+## Usage example
+
+The following example creates the search tool with the default configuration — no API key required:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createYouSearchTool } from '@mastra/you-search'
+
+const searchTool = createYouSearchTool()
+```
+
+To pass an API key explicitly:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createYouSearchTool } from '@mastra/you-search'
+
+const searchTool = createYouSearchTool({ apiKey: process.env.YDC_API_KEY })
+```
+
+## Configuration
+
+All factory functions accept a `YouClientOptions` object:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description:
+      'You.com API key. Falls back to the `YDC_API_KEY` environment variable. When neither is set, requests use the keyless free tier (rate limited per IP).',
+    isOptional: true,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description: 'Override the API base URL.',
+    isOptional: true,
+    defaultValue: "'https://ydc-index.io' (keyed) or 'https://api.you.com' (keyless)",
+  },
+  {
+    name: 'fetch',
+    type: 'typeof fetch',
+    description: 'Custom `fetch` implementation. Useful for tests, retries, or instrumentation.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Methods
+
+### Factory functions
+
+#### `createYouTools(config?)`
+
+Returns an object containing all You.com tools that share the supplied configuration.
+
+```typescript
+import { createYouTools } from '@mastra/you-search'
+
+const tools = createYouTools()
+// { youSearch: Tool }
+```
+
+#### `createYouSearchTool(config?)`
+
+Returns the `you-search` tool. It searches the web via the You.com Search API and returns LLM-ready web and news results.
+
+Input schema:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The search query.',
+    isOptional: false,
+  },
+  {
+    name: 'count',
+    type: 'number',
+    description: 'Maximum number of results per section (web, news), 1-100.',
+    isOptional: true,
+    defaultValue: '10',
+  },
+  {
+    name: 'freshness',
+    type: 'string',
+    description:
+      'Only return results from within the given window: `day`, `week`, `month`, `year`, or a date range in the format `YYYY-MM-DDtoYYYY-MM-DD`.',
+    isOptional: true,
+  },
+  {
+    name: 'country',
+    type: 'string',
+    description: 'Two-letter country code determining the geographical focus of web results (e.g. `US`, `DE`, `JP`).',
+    isOptional: true,
+  },
+  {
+    name: 'language',
+    type: 'string',
+    description: 'Language of the returned web results in BCP 47 format (e.g. `EN`, `FR`, `PT-BR`).',
+    isOptional: true,
+    defaultValue: "'EN'",
+  },
+  {
+    name: 'safesearch',
+    type: "'off' | 'moderate' | 'strict'",
+    description: 'Content moderation level for the results.',
+    isOptional: true,
+  },
+  {
+    name: 'includeDomains',
+    type: 'string[]',
+    description: 'Restrict results to these domains only (strict allowlist). Cannot be combined with `excludeDomains`.',
+    isOptional: true,
+  },
+  {
+    name: 'excludeDomains',
+    type: 'string[]',
+    description: 'Exclude results from these domains. Cannot be combined with `includeDomains`.',
+    isOptional: true,
+  },
+]}
+/>
+
+Output shape:
+
+```typescript
+{
+  query: string
+  results: Array<{
+    title: string
+    url: string
+    description: string
+    snippets?: string[]      // web results only
+    publishedDate?: string   // ISO timestamp when available
+    source: 'web' | 'news'
+  }>
+}
+```
+
+## Rate limits
+
+Without an API key, requests use the keyless free tier, which is rate limited per IP (currently 100 searches/day) and does not support livecrawl. Over-limit requests cause the tool to throw an error with upgrade guidance. Get a free API key with higher limits at [you.com/platform](https://you.com/platform).
