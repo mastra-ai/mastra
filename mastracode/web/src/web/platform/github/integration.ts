@@ -149,7 +149,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           suspendedAt: string | null;
           usable: boolean;
         }>;
-      }>('GET', `${API_PREFIX}/github-app/installations`, undefined, { organizationId: orgId });
+      }>('GET', `${API_PREFIX}/github-app/installations`);
       const usable = installations.installations.filter(
         installation => installation.usable && !installation.suspendedAt,
       );
@@ -172,9 +172,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
               defaultBranch: string;
               htmlUrl: string;
             }>;
-          }>('GET', `${API_PREFIX}/github-app/installations/${installation.installationId}/repositories`, undefined, {
-            organizationId: orgId,
-          });
+          }>('GET', `${API_PREFIX}/github-app/installations/${installation.installationId}/repositories`);
           await this.versionControl.registerRepositories({
             orgId,
             installationId: storedInstallation.id,
@@ -299,7 +297,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'POST',
         `${API_PREFIX}/github-app/installations/${installationId}/token`,
         { repositories: [repositoryName], permissions: { contents: 'write' } },
-        { organizationId: orgId },
       );
       return {
         cloneUrl: `https://github.com/${repository.slug}.git`,
@@ -449,8 +446,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         const { url } = await this.#client.request<{ url: string }>(
           'GET',
           `${API_PREFIX}/github-app/install-url?${query}`,
-          undefined,
-          { organizationId: tenant.orgId },
         );
         return c.redirect(url);
       },
@@ -461,8 +456,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
       'GET',
       `${API_PREFIX}/github-app/installations`,
-      undefined,
-      { organizationId: orgId },
     );
     const usableInstallations = result.installations.filter(
       installation => installation.usable && !installation.suspendedAt,
@@ -552,7 +545,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async listInstallationRepos(installationId: number, organizationId?: string): Promise<RepoSummary[]> {
+  async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {
     const result = await this.#client.request<{
       repositories: Array<{
         id: number;
@@ -562,9 +555,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         private: boolean;
         defaultBranch: string;
       }>;
-    }>('GET', `${API_PREFIX}/github-app/installations/${installationId}/repositories`, undefined, {
-      organizationId,
-    });
+    }>('GET', `${API_PREFIX}/github-app/installations/${installationId}/repositories`);
     return result.repositories.map(repository => ({ ...repository, installationId }));
   }
 

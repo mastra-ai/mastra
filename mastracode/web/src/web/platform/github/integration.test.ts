@@ -129,17 +129,12 @@ describe('PlatformGithubIntegration', () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,
       'https://platform.example.com/v1/server/github-app/installations',
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          authorization: 'Bearer platform-token',
-          'x-organization-id': 'org-1',
-        }),
-      }),
+      expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer platform-token' }) }),
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
       'https://platform.example.com/v1/server/github-app/installations/7/repositories',
-      expect.objectContaining({ headers: expect.objectContaining({ 'x-organization-id': 'org-1' }) }),
+      expect.anything(),
     );
     const [storedInstallation] = await storage.installations.list({ orgId: 'org-1' });
     expect(storedInstallation).toMatchObject({ externalId: '7', accountName: 'acme' });
@@ -458,9 +453,6 @@ describe('PlatformGithubIntegration', () => {
       repositories: ['app'],
       permissions: { contents: 'write' },
     });
-    expect((fetchImpl.mock.calls[0]?.[1] as RequestInit).headers).toEqual(
-      expect.objectContaining({ 'x-organization-id': 'org-1' }),
-    );
   });
 
   it('exposes platform-backed routes and session tools without local callback or webhook routes', async () => {
@@ -577,14 +569,9 @@ describe('PlatformGithubIntegration', () => {
       'https://github.com/apps/mastra/installations/new?state=platform-state',
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
-      1,
-      'https://platform.example.com/v1/server/github-app/installations',
-      expect.objectContaining({ headers: expect.objectContaining({ 'x-organization-id': 'org-1' }) }),
-    );
-    expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
       'https://platform.example.com/v1/server/github-app/install-url?action=install&redirectTo=%2F&originator=https%3A%2F%2Ffactory.example',
-      expect.objectContaining({ headers: expect.objectContaining({ 'x-organization-id': 'org-1' }) }),
+      expect.anything(),
     );
   });
 

@@ -626,7 +626,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         for (const inst of installs) {
           let list;
           try {
-            list = await github.listInstallationRepos(Number(inst.externalId), resolved.tenant.orgId);
+            list = await github.listInstallationRepos(Number(inst.externalId));
           } catch (err) {
             // GitHub 404s when the installation no longer exists for this app
             // (app uninstalled/reinstalled, or the row was recorded under

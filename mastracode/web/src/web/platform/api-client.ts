@@ -4,11 +4,6 @@ export interface PlatformApiClientConfig {
   fetchImpl?: typeof fetch;
 }
 
-interface PlatformApiRequestOptions {
-  signal?: AbortSignal;
-  organizationId?: string;
-}
-
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
   const sharedApiUrl = process.env.MASTRA_SHARED_API_URL?.trim() || 'https://platform.mastra.ai/v1';
   const accessToken =
@@ -52,7 +47,7 @@ export class PlatformApiClient {
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 
-  async request<T>(method: string, path: string, body?: unknown, options?: PlatformApiRequestOptions): Promise<T> {
+  async request<T>(method: string, path: string, body?: unknown, options?: { signal?: AbortSignal }): Promise<T> {
     const response = await this.#send(method, path, body, options);
     if (!response.ok) {
       const message = redact(await extractError(response), this.#accessToken);
@@ -70,7 +65,7 @@ export class PlatformApiClient {
     return (await response.json()) as T;
   }
 
-  async requestRedirect(method: string, path: string, options?: PlatformApiRequestOptions): Promise<string> {
+  async requestRedirect(method: string, path: string, options?: { signal?: AbortSignal }): Promise<string> {
     const response = await this.#send(method, path, undefined, options, 'manual');
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
@@ -96,14 +91,13 @@ export class PlatformApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: PlatformApiRequestOptions,
+    options?: { signal?: AbortSignal },
     redirect?: RequestInit['redirect'],
   ): Promise<Response> {
     const headers: Record<string, string> = {
       accept: 'application/json',
       authorization: `Bearer ${this.#accessToken}`,
     };
-    if (options?.organizationId) headers['x-organization-id'] = options.organizationId;
     const timeoutSignal = AbortSignal.timeout(15_000);
     const init: RequestInit = {
       method,

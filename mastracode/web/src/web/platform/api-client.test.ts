@@ -66,23 +66,6 @@ describe('PlatformApiClient', () => {
     expect(fetchImpl.mock.calls[0]?.[1]).not.toHaveProperty('credentials');
   });
 
-  it('scopes requests to the caller organization when provided', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }),
-      );
-
-    await client(fetchImpl).request('GET', '/v1/test', undefined, { organizationId: 'org-current' });
-
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'https://platform.example.com/v1/test',
-      expect.objectContaining({
-        headers: expect.objectContaining({ 'x-organization-id': 'org-current' }),
-      }),
-    );
-  });
-
   it('returns manual redirect locations without following them', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

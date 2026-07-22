@@ -958,8 +958,6 @@ describe('repos route', () => {
     const json = await res.json();
     expect(json.repos).toHaveLength(1);
     expect(json.repos[0].fullName).toBe('octo/hello');
-    expect(listInstallationRepos).toHaveBeenCalledWith(7, 'org1');
-    expect(listInstallationRepos).toHaveBeenCalledWith(8, 'org1');
     // The stale row is gone; the live one remains.
     expect(tables.installations.map(i => i.externalId)).toEqual(['7']);
     expect(String(errorSpy.mock.calls[0]![0])).toContain('stale GitHub installation 8');
