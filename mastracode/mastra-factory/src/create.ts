@@ -4,7 +4,7 @@ import * as p from '@clack/prompts';
 // `mastra/internal/auth` is the CLI's internal barrel — drives the browser-auth
 // flow and reuses persisted credentials + org resolution rather than duplicating
 // them here.
-import { fetchOrgs, getToken, MASTRA_PLATFORM_API_URL, resolveCurrentOrg } from 'mastra/internal/auth';
+import { fetchOrgs, getToken, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
 import { x } from 'tinyexec';
 
@@ -239,7 +239,6 @@ async function runPlatformProvisioning({
       ? await resolveOrgFromFlag(token, org)
       : await resolveCurrentOrg(token, { forcePrompt: true });
     p.log.info(`Using organization ${color.cyan(orgName)}.`);
-    envAccumulator.MASTRA_SHARED_API_URL = MASTRA_PLATFORM_API_URL;
     envAccumulator.MASTRA_ORGANIZATION_ID = orgId;
 
     // 3. Project — session-auth POST /v1/server/projects.
