@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
+import { FactoryTransitionApprovalService } from './approval-service.js';
+import { defaultFactoryRules, requireSupervisorApproval } from './defaults.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -288,6 +289,100 @@ describe('FactoryDecisionDispatcher', () => {
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect(consumeStream).toHaveBeenCalledOnce();
   });
+
+  it.each(['approved', 'rejected', 'stale'] as const)(
+    'delivers durable %s approval notifications exactly once after resolution',
+    async terminalStatus => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: `approval-${terminalStatus}` },
+            title: 'Approval item',
+            stages: ['intake'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/approval', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: `kickoff-${terminalStatus}`,
+        kickoffMessage: null,
+      });
+      const rules = defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: {
+          work: {
+            execute: {
+              issue: {
+                onEnter: context => requireSupervisorApproval(context, { reason: 'Supervisor approval required.' }),
+              },
+            },
+          },
+        },
+      });
+      const transitionService = new FactoryTransitionService({ storage, rules });
+      const pending = await transitionService.transition({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: prepared.item.id,
+        board: 'work',
+        stage: 'execute',
+        expectedRevision: prepared.item.revision,
+        actor: { type: 'agent', bindingId: prepared.binding.id, role: 'work' },
+        ingress: { type: 'agent', identity: `tool:${terminalStatus}` },
+        cause: 'test',
+      });
+      if (pending.status !== 'pending_approval') throw new Error('Expected pending approval.');
+      if (terminalStatus === 'stale') {
+        await storage.update({
+          orgId: 'org-1',
+          id: prepared.item.id,
+          userId: 'user-2',
+          patch: { title: 'Changed before resolution' },
+        });
+      }
+      const resolution = await new FactoryTransitionApprovalService({ storage }).resolve({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        approvalId: pending.approvalId,
+        decision: terminalStatus === 'rejected' ? 'reject' : 'approve',
+        resolvedBy: 'supervisor-1',
+        resolverType: 'agent',
+      });
+      expect(resolution.status).toBe(terminalStatus);
+
+      const { controller, delivered } = createSession();
+      const firstDispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'before-restart',
+      });
+      await firstDispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      const secondDispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'after-restart',
+      });
+      await secondDispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      await secondDispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+
+      expect(delivered).toEqual(
+        terminalStatus === 'approved'
+          ? [`${pending.approvalId}:stage-changed`, `${pending.approvalId}:resolution:approved`]
+          : [`${pending.approvalId}:resolution:${terminalStatus}`],
+      );
+      expect(
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).every(record => record.status === 'succeeded'),
+      ).toBe(true);
+    },
+  );
 
   it('renews the lease while an external delivery remains in flight', async () => {
     vi.useFakeTimers();

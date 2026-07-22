@@ -9,6 +9,7 @@ import type { FactoryIntegration, IntegrationContext } from '../integrations/bas
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import { ensureFactoryRuleSession } from '../integrations/github/factory-session.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
+import { FactoryTransitionApprovalService } from '../rules/approval-service.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryGithubEventService } from '../rules/github-service.js';
 import { FactoryLinearIssueService } from '../rules/linear-service.js';
@@ -337,6 +338,9 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     ? (deps.factoryTransitionService ??
       new FactoryTransitionService({ rules: deps.rules, storage: deps.domains.workItems }))
     : undefined;
+  const approvalService = deps.factoryReady
+    ? new FactoryTransitionApprovalService({ storage: deps.domains.workItems })
+    : undefined;
   const startCoordinator = transitionService
     ? new FactoryStartCoordinator(
         deps.controller,
@@ -410,6 +414,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           queueHealth: deps.domains.queueHealth,
+          approvalService: approvalService!,
           transitionService,
           startCoordinator,
         }).routes()

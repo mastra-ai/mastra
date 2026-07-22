@@ -235,6 +235,77 @@ describe('WorkItemsStorage', () => {
     expect((await storage.get({ orgId: 'org1', id: child.item.id }))?.parentWorkItemId).toBeNull();
   });
 
+  it('persists pending transition approvals without mutating the work item', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({ orgId: 'org1', userId: 'agent', factoryProjectId: 'p1', input });
+    const transition = {
+      orgId: 'org1',
+      factoryProjectId: 'p1',
+      workItemId: created.item.id,
+      expectedRevision: created.item.revision,
+      destinationStage: 'execute',
+      actorId: 'agent:binding-1',
+      ingress: { identity: 'tool:call-1', triggerType: 'tool', transitionId: 'transition-1' },
+      ruleSetVersion: 'rules-v1',
+      causalChain: [],
+      evaluation: {
+        outcome: 'pending_approval' as const,
+        approval: {
+          idempotencyKey: 'tool:call-1:approval',
+          board: 'work',
+          actor: { type: 'agent', bindingId: 'binding-1', role: 'work' },
+          ingress: { type: 'tool', identity: 'tool:call-1' },
+          cause: 'agent_tool',
+          reason: 'Supervisor approval is required.',
+          summary: 'Move Fix login to execute',
+          decisions: [{ type: 'notify', idempotencyKey: 'notify-1', title: 'Ready' }],
+        },
+      },
+    };
+
+    const committed = await storage.commitTransition(transition);
+    const replayed = await storage.commitTransition(transition);
+    const coalesced = await storage.commitTransition({
+      ...transition,
+      ingress: { identity: 'tool:call-2', triggerType: 'tool', transitionId: 'transition-2' },
+      evaluation: {
+        ...transition.evaluation,
+        approval: {
+          ...transition.evaluation.approval,
+          idempotencyKey: 'tool:call-2:approval',
+          reason: 'A second rule evaluation reached the same pending transition.',
+        },
+      },
+    });
+    if (committed.status !== 'committed' || replayed.status !== 'replayed' || coalesced.status !== 'committed') {
+      throw new Error('Expected approval commit replay and coalescing.');
+    }
+
+    expect(committed.result).toMatchObject({
+      status: 'pending_approval',
+      approvalId: expect.any(String),
+      revision: created.item.revision,
+      stage: 'execute',
+    });
+    expect(replayed).toMatchObject({ status: 'replayed', result: committed.result });
+    expect(coalesced.result).toMatchObject({
+      status: 'pending_approval',
+      approvalId: (committed.result as { approvalId: string }).approvalId,
+      reason: 'Supervisor approval is required.',
+    });
+    expect((await storage.get({ orgId: 'org1', id: created.item.id }))?.stages).toEqual(['intake']);
+    expect(await storage.listApprovals('org1', 'p1', ['pending'])).toEqual([
+      expect.objectContaining({
+        id: (committed.result as { approvalId: string }).approvalId,
+        expectedRevision: created.item.revision,
+        requestedStage: 'execute',
+        requestingActor: { type: 'agent', bindingId: 'binding-1', role: 'work' },
+        status: 'pending',
+      }),
+    ]);
+    expect(await storage.listApprovals('other-org', 'p1')).toEqual([]);
+  });
+
   it('serializes relationship writes and deletion on the project lock', async () => {
     const backend = new LibSQLFactoryStorage({ id: 'work-items-lock-test', url: ':memory:' });
     const locks: string[] = [];

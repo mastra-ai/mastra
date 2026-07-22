@@ -219,6 +219,16 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         reason: boundedString(value.reason, 'Factory rejection reason', MAX_REASON_LENGTH),
       };
     }
+    case 'requestApproval': {
+      assertExactKeys(value, ['type', 'idempotencyKey', 'reason', 'summary'], 'Factory approval decision');
+      const summary = optionalBoundedString(value.summary, 'Factory approval summary', MAX_TITLE_LENGTH);
+      return {
+        type,
+        ...commonCommitFields(value),
+        reason: boundedString(value.reason, 'Factory approval reason', MAX_REASON_LENGTH),
+        ...(summary ? { summary } : {}),
+      };
+    }
     case 'transition': {
       assertExactKeys(value, ['type', 'idempotencyKey', 'board', 'stage'], 'Factory transition decision');
       return {
@@ -328,6 +338,9 @@ export function validateFactoryRuleDecisions(values: readonly unknown[], causalD
     const decision = validateFactoryRuleDecision(value, causalDepth);
     if (decision.type === 'reject') {
       throw new FactoryRuleValidationError('A rejection cannot be persisted with commit decisions.');
+    }
+    if (decision.type === 'requestApproval') {
+      throw new FactoryRuleValidationError('An approval request cannot be persisted as a deferred effect.');
     }
     decisions.push(decision);
   }

@@ -55,6 +55,34 @@ describe('Factory rule validation', () => {
     ).toThrow(/rejection cannot be persisted/i);
   });
 
+  it('validates approval requests separately from deferred effects', () => {
+    expect(
+      validateFactoryRuleDecision({
+        type: 'requestApproval',
+        idempotencyKey: 'approval-1',
+        reason: 'Supervisor approval required.',
+        summary: 'Move item to execute',
+      }),
+    ).toEqual({
+      type: 'requestApproval',
+      idempotencyKey: 'approval-1',
+      reason: 'Supervisor approval required.',
+      summary: 'Move item to execute',
+    });
+    expect(() =>
+      validateFactoryRuleDecisions([
+        { type: 'requestApproval', idempotencyKey: 'approval-1', reason: 'Supervisor approval required.' },
+      ]),
+    ).toThrow(/approval request cannot be persisted/i);
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'requestApproval',
+        idempotencyKey: 'approval-1',
+        reason: 'x'.repeat(513),
+      }),
+    ).toThrow(/approval reason is invalid/i);
+  });
+
   it('enforces bounds, serializability, and causal depth', () => {
     expect(() =>
       validateFactoryRuleDecision({

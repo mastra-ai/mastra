@@ -8,10 +8,12 @@
  * Factory transition path keeps one exclusive current stage per item.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+
+import { AUDIT_EVENTS_SCHEMA } from '../audit/base.js';
 
 export type WorkItemStage = string;
 
@@ -127,12 +129,68 @@ export interface FactoryRuleEvaluationRecord {
   workItemId: string | null;
   ruleSetVersion: string;
   expectedRevision: number | null;
-  outcome: 'accepted' | 'rejected';
+  outcome: 'accepted' | 'rejected' | 'pending_approval';
   code: string | null;
   reason: string | null;
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   createdAt: Date;
 }
+
+export type FactoryApprovalStatus = 'pending' | 'approved' | 'rejected' | 'stale';
+
+export interface FactoryApprovalRecord {
+  id: string;
+  orgId: string;
+  factoryProjectId: string;
+  evaluationId: string;
+  workItemId: string;
+  transitionId: string;
+  idempotencyKey: string;
+  requestedBoard: string;
+  requestedStage: string;
+  expectedRevision: number;
+  requestingActor: Record<string, unknown>;
+  ingress: Record<string, unknown>;
+  cause: string | null;
+  causalChain: Array<{ ingressId: string; decisionType: string }>;
+  reason: string;
+  summary: string | null;
+  decisions: Record<string, unknown>[];
+  status: FactoryApprovalStatus;
+  resolvedBy: string | null;
+  resolutionReason: string | null;
+  resolvedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FactoryApprovalPageInput {
+  orgId: string;
+  factoryProjectId: string;
+  statuses?: FactoryApprovalStatus[];
+  before?: { createdAt: Date; id: string };
+  limit: number;
+}
+
+export interface FactoryApprovalPage {
+  approvals: FactoryApprovalRecord[];
+  hasMore: boolean;
+}
+
+export interface ResolveFactoryApprovalInput {
+  orgId: string;
+  factoryProjectId: string;
+  approvalId: string;
+  decision: 'approve' | 'reject';
+  resolvedBy: string;
+  resolverType: 'human' | 'agent';
+  resolutionReason?: string;
+  now: Date;
+}
+
+export type ResolveFactoryApprovalResult =
+  | { status: 'missing' }
+  | { status: 'resolved' | 'replayed'; approval: FactoryApprovalRecord; item: WorkItemRow | null };
 
 export type FactoryDispatchStatus = 'pending' | 'leased' | 'retry' | 'succeeded' | 'failed';
 
@@ -256,7 +314,20 @@ export interface CommitFactoryTransitionInput {
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
-    | { outcome: 'rejected'; code: string; reason: string };
+    | { outcome: 'rejected'; code: string; reason: string }
+    | {
+        outcome: 'pending_approval';
+        approval: {
+          idempotencyKey: string;
+          board: string;
+          actor: Record<string, unknown>;
+          ingress: Record<string, unknown>;
+          cause: string | null;
+          reason: string;
+          summary?: string;
+          decisions: Record<string, unknown>[];
+        };
+      };
 }
 
 export type CommitFactoryTransitionResult =
@@ -579,6 +650,40 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
     },
   },
   {
+    name: 'factory_approvals',
+    columns: {
+      id: { type: 'uuid-pk' },
+      org_id: { type: 'text' },
+      factory_project_id: { type: 'text' },
+      evaluation_id: { type: 'text' },
+      work_item_id: { type: 'text' },
+      transition_id: { type: 'text' },
+      idempotency_key: { type: 'text' },
+      requested_board: { type: 'text' },
+      requested_stage: { type: 'text' },
+      expected_revision: { type: 'integer' },
+      requesting_actor: { type: 'json' },
+      ingress: { type: 'json' },
+      cause: { type: 'text', nullable: true },
+      causal_chain: { type: 'json' },
+      reason: { type: 'text' },
+      summary: { type: 'text', nullable: true },
+      decisions: { type: 'json' },
+      status: { type: 'text' },
+      resolved_by: { type: 'text', nullable: true },
+      resolution_reason: { type: 'text', nullable: true },
+      resolved_at: { type: 'timestamp', nullable: true },
+      created_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
+    },
+    uniqueIndexes: [
+      {
+        name: 'factory_approvals_tenant_key_unique',
+        columns: ['org_id', 'factory_project_id', 'idempotency_key'],
+      },
+    ],
+  },
+  {
     name: 'factory_deferred_decisions',
     columns: {
       id: { type: 'uuid-pk' },
@@ -689,6 +794,34 @@ function toBinding(row: GovernanceDbRow): FactoryRunBindingRecord {
     revokedAt: (row.revoked_at as Date | null) ?? null,
   };
 }
+function toApproval(row: GovernanceDbRow): FactoryApprovalRecord {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    factoryProjectId: String(row.factory_project_id),
+    evaluationId: String(row.evaluation_id),
+    workItemId: String(row.work_item_id),
+    transitionId: String(row.transition_id),
+    idempotencyKey: String(row.idempotency_key),
+    requestedBoard: String(row.requested_board),
+    requestedStage: String(row.requested_stage),
+    expectedRevision: Number(row.expected_revision),
+    requestingActor: row.requesting_actor as Record<string, unknown>,
+    ingress: row.ingress as Record<string, unknown>,
+    cause: (row.cause as string | null) ?? null,
+    causalChain: (row.causal_chain as FactoryApprovalRecord['causalChain']) ?? [],
+    reason: String(row.reason),
+    summary: (row.summary as string | null) ?? null,
+    decisions: (row.decisions as Record<string, unknown>[]) ?? [],
+    status: row.status as FactoryApprovalStatus,
+    resolvedBy: (row.resolved_by as string | null) ?? null,
+    resolutionReason: (row.resolution_reason as string | null) ?? null,
+    resolvedAt: (row.resolved_at as Date | null) ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at as Date,
+  };
+}
+
 function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord {
   return {
     id: row.id,
@@ -713,6 +846,84 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     updatedAt: row.updated_at as Date,
   };
 }
+async function insertApprovalAudit(
+  ops: FactoryStorageOps,
+  approval: {
+    id: string;
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    stage: string;
+    expectedRevision: number;
+  },
+  input: {
+    action: string;
+    actorId: string;
+    actorType: 'human' | 'agent';
+    status: FactoryApprovalStatus;
+    occurredAt: Date;
+  },
+): Promise<void> {
+  await ops.insertOne('audit_events', {
+    org_id: approval.orgId,
+    actor_id: input.actorId,
+    actor_type: input.actorType,
+    action: input.action,
+    targets: [
+      { type: 'approval', id: approval.id },
+      { type: 'work_item', id: approval.workItemId },
+    ],
+    metadata: {
+      approvalId: approval.id,
+      stage: approval.stage,
+      expectedRevision: approval.expectedRevision,
+      status: input.status,
+    },
+    factory_project_id: approval.factoryProjectId,
+    project_repository_id: null,
+    context: {},
+    occurred_at: input.occurredAt,
+  });
+}
+
+async function insertDeferredDecision(
+  ops: FactoryStorageOps,
+  input: {
+    orgId: string;
+    factoryProjectId: string;
+    evaluationId: string;
+    workItemId: string;
+    idempotencyKey: string;
+    ordinal: number;
+    causalChain: Array<{ ingressId: string; decisionType: string }>;
+    actor: Record<string, unknown> | null;
+    decision: Record<string, unknown>;
+    now: Date;
+  },
+): Promise<void> {
+  await ops.insertOne('factory_deferred_decisions', {
+    org_id: input.orgId,
+    factory_project_id: input.factoryProjectId,
+    evaluation_id: input.evaluationId,
+    work_item_id: input.workItemId,
+    idempotency_key: input.idempotencyKey,
+    effect_ordinal: input.ordinal,
+    effect_hash: factoryDecisionHash(input.decision),
+    causal_chain: input.causalChain,
+    actor: input.actor,
+    decision: input.decision,
+    status: 'pending',
+    attempts: 0,
+    available_at: input.now,
+    lease_owner: null,
+    lease_expires_at: null,
+    last_error: null,
+    completed_at: null,
+    created_at: new Date(input.now.getTime() + input.ordinal),
+    updated_at: input.now,
+  });
+}
+
 function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
   return {
     id: row.id,
@@ -739,7 +950,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async init(): Promise<void> {
-    await this.ensureCollections([WORK_ITEMS_SCHEMA, ...FACTORY_GOVERNANCE_SCHEMAS]);
+    await this.ensureCollections([WORK_ITEMS_SCHEMA, AUDIT_EVENTS_SCHEMA, ...FACTORY_GOVERNANCE_SCHEMAS]);
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -911,6 +1122,230 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toRow(row) : null;
   }
 
+  async getApproval({
+    orgId,
+    factoryProjectId,
+    approvalId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    approvalId: string;
+  }): Promise<FactoryApprovalRecord | null> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_approvals', {
+      id: approvalId,
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+    });
+    return row ? toApproval(row) : null;
+  }
+
+  async listApprovalPage(input: FactoryApprovalPageInput): Promise<FactoryApprovalPage> {
+    const rows = await this.#db.findMany<GovernanceDbRow>(
+      'factory_approvals',
+      {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        ...(input.statuses?.length ? { status: { in: input.statuses } } : {}),
+      },
+      {
+        orderBy: [
+          ['created_at', 'desc'],
+          ['id', 'desc'],
+        ],
+        limit: input.limit + 1,
+        ...(input.before ? { cursor: { values: [input.before.createdAt, input.before.id] } } : {}),
+      },
+    );
+    return { approvals: rows.slice(0, input.limit).map(toApproval), hasMore: rows.length > input.limit };
+  }
+
+  async listApprovals(
+    orgId: string,
+    factoryProjectId: string,
+    statuses?: FactoryApprovalStatus[],
+  ): Promise<FactoryApprovalRecord[]> {
+    return (
+      await this.listApprovalPage({
+        orgId,
+        factoryProjectId,
+        ...(statuses ? { statuses } : {}),
+        limit: 100,
+      })
+    ).approvals;
+  }
+
+  async resolveApproval(input: ResolveFactoryApprovalInput): Promise<ResolveFactoryApprovalResult> {
+    const resolve = () =>
+      this.storage.withTransaction<ResolveFactoryApprovalResult>(async ops => {
+        const row = await ops.findOne<GovernanceDbRow>('factory_approvals', {
+          id: input.approvalId,
+          org_id: input.orgId,
+          factory_project_id: input.factoryProjectId,
+        });
+        if (!row) return { status: 'missing' };
+
+        const currentApproval = toApproval(row);
+        const currentItemRow = await ops.findOne<WorkItemDbRow>('work_items', {
+          id: currentApproval.workItemId,
+          org_id: input.orgId,
+          factory_project_id: input.factoryProjectId,
+        });
+        if (currentApproval.status !== 'pending') {
+          return {
+            status: 'replayed',
+            approval: currentApproval,
+            item: currentItemRow ? toRow(currentItemRow) : null,
+          };
+        }
+
+        let item = currentItemRow ? toRow(currentItemRow) : null;
+        let terminalStatus: Exclude<FactoryApprovalStatus, 'pending'>;
+        if (input.decision === 'reject') {
+          terminalStatus = 'rejected';
+        } else if (!item || item.revision !== currentApproval.expectedRevision) {
+          terminalStatus = 'stale';
+        } else {
+          terminalStatus = 'approved';
+          if (!(item.stages.length === 1 && item.stages[0] === currentApproval.requestedStage)) {
+            let revisionMatched = false;
+            const updated = await ops.updateAtomic<WorkItemDbRow>(
+              'work_items',
+              { id: item.id, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+              current => {
+                const latest = toRow(current);
+                if (latest.revision !== currentApproval.expectedRevision) return null;
+                revisionMatched = true;
+                return patchColumns({
+                  stages: [currentApproval.requestedStage],
+                  stageHistory: applyStageTransition(
+                    latest.stageHistory,
+                    latest.stages,
+                    [currentApproval.requestedStage],
+                    input.resolvedBy,
+                    input.now,
+                  ),
+                  revision: latest.revision + 1,
+                  updatedAt: input.now,
+                });
+              },
+            );
+            if (!revisionMatched || !updated) {
+              terminalStatus = 'stale';
+              item = currentItemRow ? toRow(currentItemRow) : null;
+            } else {
+              item = toRow(updated);
+            }
+          }
+        }
+
+        let resolved = false;
+        const approvalRow = await ops.updateAtomic<GovernanceDbRow>(
+          'factory_approvals',
+          { id: input.approvalId, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+          current => {
+            if (current.status !== 'pending') return null;
+            resolved = true;
+            return {
+              status: terminalStatus,
+              resolved_by: input.resolvedBy,
+              resolution_reason: input.resolutionReason ?? null,
+              resolved_at: input.now,
+              updated_at: input.now,
+            };
+          },
+        );
+        if (!resolved || !approvalRow) {
+          const replay = await ops.findOne<GovernanceDbRow>('factory_approvals', {
+            id: input.approvalId,
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+          });
+          if (!replay) return { status: 'missing' };
+          return { status: 'replayed', approval: toApproval(replay), item };
+        }
+
+        const approval = toApproval(approvalRow);
+        const role = typeof approval.requestingActor.role === 'string' ? approval.requestingActor.role : 'work';
+        let ordinal = 0;
+        if (terminalStatus === 'approved') {
+          for (const decision of approval.decisions) {
+            await insertDeferredDecision(ops, {
+              orgId: input.orgId,
+              factoryProjectId: input.factoryProjectId,
+              evaluationId: approval.evaluationId,
+              workItemId: approval.workItemId,
+              idempotencyKey: String(decision.idempotencyKey),
+              ordinal: ordinal++,
+              causalChain: approval.causalChain,
+              actor: approval.requestingActor,
+              decision,
+              now: input.now,
+            });
+          }
+          await insertDeferredDecision(ops, {
+            orgId: input.orgId,
+            factoryProjectId: input.factoryProjectId,
+            evaluationId: approval.evaluationId,
+            workItemId: approval.workItemId,
+            idempotencyKey: `${approval.id}:stage-changed`,
+            ordinal: ordinal++,
+            causalChain: approval.causalChain,
+            actor: approval.requestingActor,
+            decision: {
+              type: 'sendMessage',
+              idempotencyKey: `${approval.id}:stage-changed`,
+              role,
+              message: `Work item moved to ${approval.requestedStage} after supervisor approval.`,
+            },
+            now: input.now,
+          });
+        }
+        const resolutionMessage =
+          terminalStatus === 'approved'
+            ? `Supervisor approved transition to ${approval.requestedStage}.`
+            : terminalStatus === 'rejected'
+              ? `Supervisor rejected transition to ${approval.requestedStage}.`
+              : `Transition approval became stale because the work item changed.`;
+        await insertDeferredDecision(ops, {
+          orgId: input.orgId,
+          factoryProjectId: input.factoryProjectId,
+          evaluationId: approval.evaluationId,
+          workItemId: approval.workItemId,
+          idempotencyKey: `${approval.id}:resolution:${terminalStatus}`,
+          ordinal,
+          causalChain: approval.causalChain,
+          actor: approval.requestingActor,
+          decision: {
+            type: 'sendMessage',
+            idempotencyKey: `${approval.id}:resolution:${terminalStatus}`,
+            role,
+            message: resolutionMessage,
+          },
+          now: input.now,
+        });
+        await insertApprovalAudit(
+          ops,
+          {
+            id: approval.id,
+            orgId: approval.orgId,
+            factoryProjectId: approval.factoryProjectId,
+            workItemId: approval.workItemId,
+            stage: approval.requestedStage,
+            expectedRevision: approval.expectedRevision,
+          },
+          {
+            action: `factory.approval.${terminalStatus}`,
+            actorId: input.resolvedBy,
+            actorType: input.resolverType,
+            status: terminalStatus,
+            occurredAt: input.now,
+          },
+        );
+        return { status: 'resolved', approval, item };
+      });
+    return this.#withProjectRelationLock(input.orgId, input.factoryProjectId, resolve);
+  }
+
   async getTransitionResultByIngress(
     orgId: string,
     factoryProjectId: string,
@@ -940,6 +1375,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           };
 
         const now = new Date();
+        const existingApproval =
+          input.evaluation.outcome === 'pending_approval'
+            ? await ops.findOne<GovernanceDbRow>('factory_approvals', {
+                org_id: input.orgId,
+                factory_project_id: input.factoryProjectId,
+                work_item_id: input.workItemId,
+                expected_revision: input.expectedRevision,
+                requested_board: input.evaluation.approval.board,
+                requested_stage: input.destinationStage,
+                status: 'pending',
+              })
+            : null;
         let item: WorkItemRow | null = null;
         let code: string | null = null;
         let reason: string | null = null;
@@ -964,6 +1411,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               reason = input.evaluation.reason;
               return null;
             }
+            if (input.evaluation.outcome === 'pending_approval') return null;
             if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) return null;
             return patchColumns({
               stages: [input.destinationStage],
@@ -984,8 +1432,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           code = input.evaluation.outcome === 'rejected' ? input.evaluation.code : 'invalid_transition';
           reason = input.evaluation.outcome === 'rejected' ? input.evaluation.reason : 'Work item not found.';
         }
-        const outcome: 'accepted' | 'rejected' =
-          item && code === null && input.evaluation.outcome === 'accepted' ? 'accepted' : 'rejected';
+        const outcome: 'accepted' | 'rejected' | 'pending_approval' =
+          item && code === null ? input.evaluation.outcome : 'rejected';
+        const approvalId = outcome === 'pending_approval' ? (existingApproval?.id ?? randomUUID()) : null;
         result =
           outcome === 'accepted'
             ? {
@@ -996,7 +1445,25 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 stage: input.destinationStage,
                 decisions: input.evaluation.outcome === 'accepted' ? input.evaluation.decisions : [],
               }
-            : { status: 'rejected', transitionId: input.ingress.transitionId, itemId: input.workItemId, code, reason };
+            : outcome === 'pending_approval'
+              ? {
+                  status: 'pending_approval',
+                  transitionId: input.ingress.transitionId,
+                  approvalId: approvalId!,
+                  itemId: item!.id,
+                  revision: item!.revision,
+                  stage: input.destinationStage,
+                  reason:
+                    existingApproval?.reason ??
+                    (input.evaluation.outcome === 'pending_approval' ? input.evaluation.approval.reason : ''),
+                }
+              : {
+                  status: 'rejected',
+                  transitionId: input.ingress.transitionId,
+                  itemId: input.workItemId,
+                  code,
+                  reason,
+                };
         const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -1018,40 +1485,75 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             causal_chain: input.causalChain,
             created_at: now,
           });
+          if (outcome === 'pending_approval' && input.evaluation.outcome === 'pending_approval' && !existingApproval) {
+            const approval = input.evaluation.approval;
+            await ops.insertOne<GovernanceDbRow>('factory_approvals', {
+              id: approvalId!,
+              org_id: input.orgId,
+              factory_project_id: input.factoryProjectId,
+              evaluation_id: evaluation.id,
+              work_item_id: item.id,
+              transition_id: input.ingress.transitionId,
+              idempotency_key: approval.idempotencyKey,
+              requested_board: approval.board,
+              requested_stage: input.destinationStage,
+              expected_revision: input.expectedRevision,
+              requesting_actor: approval.actor,
+              ingress: approval.ingress,
+              cause: approval.cause,
+              causal_chain: [...input.causalChain, { ingressId: approvalId!, decisionType: 'requestApproval' }],
+              reason: approval.reason,
+              summary: approval.summary ?? null,
+              decisions: approval.decisions,
+              status: 'pending',
+              resolved_by: null,
+              resolution_reason: null,
+              resolved_at: null,
+              created_at: now,
+              updated_at: now,
+            });
+            await insertApprovalAudit(
+              ops,
+              {
+                id: approvalId!,
+                orgId: input.orgId,
+                factoryProjectId: input.factoryProjectId,
+                workItemId: item.id,
+                stage: input.destinationStage,
+                expectedRevision: input.expectedRevision,
+              },
+              {
+                action: 'factory.approval.requested',
+                actorId:
+                  approval.actor.type === 'agent' && typeof approval.actor.bindingId === 'string'
+                    ? `agent:${approval.actor.bindingId}`
+                    : 'factory-rule',
+                actorType: 'agent',
+                status: 'pending',
+                occurredAt: now,
+              },
+            );
+          }
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
             for (const [index, decision] of input.evaluation.decisions.entries()) {
-              await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
-                org_id: input.orgId,
-                factory_project_id: input.factoryProjectId,
-                evaluation_id: evaluation.id,
-                work_item_id: item.id,
-                idempotency_key: String(decision.idempotencyKey),
-                effect_ordinal: index,
-                effect_hash: factoryDecisionHash(decision),
-                causal_chain: input.causalChain,
+              await insertDeferredDecision(ops, {
+                orgId: input.orgId,
+                factoryProjectId: input.factoryProjectId,
+                evaluationId: evaluation.id,
+                workItemId: item.id,
+                idempotencyKey: String(decision.idempotencyKey),
+                ordinal: index,
+                causalChain: input.causalChain,
                 actor: null,
                 decision,
-                status: 'pending',
-                attempts: 0,
-                available_at: now,
-                lease_owner: null,
-                lease_expires_at: null,
-                last_error: null,
-                completed_at: null,
-                created_at: new Date(now.getTime() + index),
-                updated_at: now,
+                now,
               });
             }
           }
         }
         return { status: 'committed', item, result };
       });
-    return this.storage.withDistributedLock
-      ? this.storage.withDistributedLock(
-          `factory-ingress:${input.orgId}:${input.factoryProjectId}:${input.ingress.identity}`,
-          commit,
-        )
-      : commit();
+    return this.#withProjectRelationLock(input.orgId, input.factoryProjectId, commit);
   }
 
   async commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult> {

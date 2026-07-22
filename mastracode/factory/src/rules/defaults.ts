@@ -19,6 +19,19 @@ import { assertFactoryRules, FactoryRuleValidationError } from './validation.js'
 
 export const DEFAULT_FACTORY_RULE_VERSION = 'factory-default-v1';
 
+export function requireSupervisorApproval(
+  context: Pick<FactoryStageRuleContext, 'actor' | 'ingress'>,
+  options: { reason: string; summary?: string; idempotencyKey?: string },
+) {
+  if (context.actor.type !== 'agent') return;
+  return {
+    type: 'requestApproval',
+    idempotencyKey: options.idempotencyKey ?? `${context.ingress.id}:supervisor-approval`,
+    reason: options.reason,
+    ...(options.summary ? { summary: options.summary } : {}),
+  } as const;
+}
+
 function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): boolean {
   return context.actor.type === 'github' && context.actor.trusted;
 }
