@@ -8,7 +8,7 @@ import type {
 } from '@mastra/playground-ui/components/SankeyChart';
 import { Slider } from '@mastra/playground-ui/components/Slider';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pause, Play } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -204,9 +204,6 @@ export function SankeySignals({
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
   const [signalNames, setSignalNames] = useState(() => initialSignalNames);
-  const [pendingSignalNames, setPendingSignalNames] = useState<TraceSignalName[]>();
-  const [isChangingPerspective, setIsChangingPerspective] = useState(false);
-  const [perspectiveError, setPerspectiveError] = useState<string>();
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames);
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
@@ -258,6 +255,34 @@ export function SankeySignals({
     return () => window.clearTimeout(timer);
   }, [hasFlowError, isFlowPending, isPlaying, isPlaybackBlockedByDrillIn, nextSnapshotOrdinal, snapshots.length]);
 
+  const perspectiveMutation = useMutation({
+    mutationFn: async (nextSignalNames: TraceSignalName[]) => {
+      const nextSnapshots = await queryClient.fetchQuery({
+        queryKey: ['entity-learning', entityType, entityId, 'theme-snapshots', nextSignalNames],
+        queryFn: () => fetchThemeSnapshots(entityId, entityType, nextSignalNames),
+      });
+      await Promise.all(
+        nextSnapshots.snapshots.map(nextSnapshot =>
+          queryClient.fetchQuery({
+            queryKey: ['entity-learning', entityType, entityId, 'theme-flow', nextSignalNames, nextSnapshot.snapshotId],
+            queryFn: () => fetchThemeFlow(entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
+          }),
+        ),
+      );
+      const nextSnapshot =
+        nextSnapshots.snapshots.find(candidate => candidate.ordinal === snapshot?.ordinal) ??
+        nextSnapshots.snapshots.at(-1);
+      if (drillIn && nextSnapshot && nextSnapshot.traceCount <= DRILL_IN_TRACE_LIMIT) {
+        await queryClient.fetchQuery({
+          queryKey: ['entity-learning', entityType, entityId, 'theme-paths', nextSignalNames, nextSnapshot.snapshotId],
+          queryFn: () => fetchThemePaths(entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
+        });
+      }
+      return nextSignalNames;
+    },
+    onSuccess: setSignalNames,
+  });
+
   if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
 
   if (snapshotsQuery.isError || hasFlowError || pathsQuery.isError) {
@@ -299,7 +324,7 @@ export function SankeySignals({
   }
 
   const stages = flow.stages;
-  const distributionSignalNames = pendingSignalNames ?? signalNames;
+  const distributionSignalNames = perspectiveMutation.isPending ? perspectiveMutation.variables : signalNames;
   const distributionPositions = new Map(distributionSignalNames.map((signalName, index) => [signalName, index]));
   const distributionStages = [...stages].sort(
     (left, right) =>
@@ -324,44 +349,12 @@ export function SankeySignals({
     ? undefined
     : 'Drill-in is unavailable for snapshots with more than 2,000 traces.';
   const isDrilledEmpty = drillIn !== undefined && pathsQuery.data !== undefined && flow.snapshot.traceCount === 0;
-  const handleSignalOrderChange = async (nextSignalNames: TraceSignalName[]) => {
-    if (isChangingPerspective) return;
+  const handleSignalOrderChange = (nextSignalNames: TraceSignalName[]) => {
+    if (perspectiveMutation.isPending) return;
     setIsPlaying(false);
     setDetailSelection(undefined);
     setNoiseSignalName(undefined);
-    setPerspectiveError(undefined);
-    setPendingSignalNames(nextSignalNames);
-    setIsChangingPerspective(true);
-
-    try {
-      const nextSnapshots = await queryClient.fetchQuery({
-        queryKey: ['entity-learning', entityType, entityId, 'theme-snapshots', nextSignalNames],
-        queryFn: () => fetchThemeSnapshots(entityId, entityType, nextSignalNames),
-      });
-      await Promise.all(
-        nextSnapshots.snapshots.map(nextSnapshot =>
-          queryClient.fetchQuery({
-            queryKey: ['entity-learning', entityType, entityId, 'theme-flow', nextSignalNames, nextSnapshot.snapshotId],
-            queryFn: () => fetchThemeFlow(entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
-          }),
-        ),
-      );
-      const nextSnapshot =
-        nextSnapshots.snapshots.find(candidate => candidate.ordinal === snapshot.ordinal) ??
-        nextSnapshots.snapshots.at(-1);
-      if (drillIn && nextSnapshot && nextSnapshot.traceCount <= DRILL_IN_TRACE_LIMIT) {
-        await queryClient.fetchQuery({
-          queryKey: ['entity-learning', entityType, entityId, 'theme-paths', nextSignalNames, nextSnapshot.snapshotId],
-          queryFn: () => fetchThemePaths(entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
-        });
-      }
-      setSignalNames(nextSignalNames);
-    } catch {
-      setPerspectiveError('Unable to load that signal perspective. Try reordering the columns again.');
-    } finally {
-      setPendingSignalNames(undefined);
-      setIsChangingPerspective(false);
-    }
+    perspectiveMutation.mutate(nextSignalNames);
   };
 
   return (
@@ -446,18 +439,18 @@ export function SankeySignals({
       />
       {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
         <>
-          {isChangingPerspective ? (
+          {perspectiveMutation.isPending ? (
             <p className="font-mono text-xs text-neutral3" role="status">
               Reloading snapshots for new signal perspective…
             </p>
           ) : null}
-          {perspectiveError ? (
+          {perspectiveMutation.isError ? (
             <p className="text-xs text-red-500" role="alert">
-              {perspectiveError}
+              Unable to load that signal perspective. Try reordering the columns again.
             </p>
           ) : null}
           <SignalDistributions
-            disabled={isChangingPerspective}
+            disabled={perspectiveMutation.isPending}
             stages={distributionStages}
             onOrderChange={handleSignalOrderChange}
             onViewThemeDetails={selection => {
