@@ -107,9 +107,19 @@ async function awaitNotification(
   requireDelivery = false,
 ): Promise<void> {
   await result.persisted;
-  if (requireDelivery && !result.accepted)
-    throw new Error('Factory notification was persisted without agent delivery.');
-  await result.accepted;
+  if (!result.accepted) {
+    if (requireDelivery) throw new Error('Factory notification was persisted without agent delivery.');
+    return;
+  }
+  const accepted = await result.accepted;
+  if (!requireDelivery) return;
+  if (accepted.action === 'wake') {
+    await accepted.output.consumeStream();
+    return;
+  }
+  if (accepted.action !== 'deliver') {
+    throw new Error(`Factory notification did not reach the agent (${String(accepted.action)}).`);
+  }
 }
 
 export class FactoryDecisionDispatcher {
@@ -250,6 +260,26 @@ export class FactoryDecisionDispatcher {
         await this.#switchThread(session, binding);
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === record.id)) return;
+        if (decision.precedingMessage) {
+          await awaitNotification(
+            await session.sendNotificationSignal(
+              {
+                source: 'factory',
+                kind: 'stage-transition',
+                summary: decision.precedingMessage,
+                priority: 'medium',
+                payload: { message: decision.precedingMessage },
+                sourceId: `${record.id}:stage-transition`,
+                dedupeKey: `${record.idempotencyKey}:stage-transition`,
+              },
+              {
+                ifActive: { behavior: 'deliver' },
+                ifIdle: { behavior: 'persist' },
+                requestContext,
+              },
+            ),
+          );
+        }
         const result = session.sendSignal(
           {
             id: record.id,
@@ -263,7 +293,15 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'sendMessage': {
-        const binding = await this.#requireBinding(record, decision.role);
+        const binding = decision.prepareBinding
+          ? await this.#requireOrPrepareBinding(record, decision.role)
+          : await this.#requireBinding(record, decision.role);
+        const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
+        const startedBy = item?.sessions[binding.role]?.startedBy;
+        if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const session = await this.#requireSession(binding);
         await awaitNotification(
           await session.sendNotificationSignal(
@@ -271,12 +309,16 @@ export class FactoryDecisionDispatcher {
               source: 'factory',
               kind: 'rule-message',
               summary: decision.message,
-              priority: 'high',
+              priority: decision.priority ?? 'high',
               payload: { message: decision.message },
               sourceId: record.id,
               dedupeKey: record.idempotencyKey,
             },
-            { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
+            {
+              ifActive: { behavior: 'deliver' },
+              ifIdle: { behavior: decision.idleBehavior ?? 'wake' },
+              requestContext,
+            },
           ),
           true,
         );

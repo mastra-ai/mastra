@@ -1,5 +1,7 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
+import type { SendAgentSignalResult } from '@mastra/core/agent';
 import type { AgentController } from '@mastra/core/agent-controller';
+import type { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 import type { Workspace } from '@mastra/core/workspace';
 
@@ -23,8 +25,12 @@ export interface SkillSession {
       dedupeKey?: string;
       sourceId?: string;
     },
-    options?: { ifActive?: { behavior?: 'deliver' }; ifIdle?: { behavior?: 'wake' } },
-  ): Promise<{ persisted?: Promise<unknown>; accepted?: Promise<unknown> }>;
+    options?: {
+      ifActive?: { behavior?: 'deliver' | 'persist' };
+      ifIdle?: { behavior?: 'persist' | 'wake' };
+      requestContext?: RequestContext;
+    },
+  ): Promise<Pick<SendAgentSignalResult, 'persisted' | 'accepted'>>;
 }
 
 export class SkillInvocationError extends Error {

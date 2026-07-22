@@ -31,10 +31,12 @@ function makeController(sendMessage = vi.fn(async () => {})) {
   };
   return {
     controller: {
-      createSession: vi.fn(async ({ threadId: exactThreadId }: { threadId: string }) => {
-        threadId = exactThreadId;
-        return session;
-      }),
+      createSession: vi.fn(
+        async ({ threadId: exactThreadId }: { threadId: string; requestContext?: { get(key: string): unknown } }) => {
+          threadId = exactThreadId;
+          return session;
+        },
+      ),
     },
     session,
     sendMessage,
@@ -138,6 +140,8 @@ describe('FactoryStartCoordinator', () => {
       replayed: false,
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
+    const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
+    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect(sendMessage).not.toHaveBeenCalled();
     const item = await storage.get({ orgId: 'org-1', id: prepared.workItemId });
     expect(item?.sessions.work).toMatchObject({

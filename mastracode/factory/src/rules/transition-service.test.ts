@@ -60,6 +60,60 @@ function request(
 }
 
 describe('FactoryTransitionService', () => {
+  it('queues an urgent wake-up when a board drag has no skill follow-up', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'planning' }),
+      cause: 'board_drag',
+    });
+
+    expect(result).toMatchObject({
+      status: 'accepted',
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'plan',
+          message: 'This work was moved from the triage stage to the planning stage.',
+          priority: 'urgent',
+          idleBehavior: 'wake',
+          prepareBinding: true,
+        },
+      ],
+    });
+  });
+
+  it('attaches a persisted notice to a skill triggered by a board drag', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'triage' }),
+      cause: 'board_drag',
+    });
+
+    expect(result).toMatchObject({
+      status: 'accepted',
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'triage',
+          skillName: 'understand-issue',
+          precedingMessage: 'This work was moved from the intake stage to the triage stage.',
+        },
+      ],
+    });
+  });
+
   it('runs onExit before onEnter and atomically persists accepted decisions', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
