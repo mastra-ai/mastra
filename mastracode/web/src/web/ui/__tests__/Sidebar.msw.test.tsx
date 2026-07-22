@@ -507,8 +507,10 @@ describe('Sidebar', () => {
       renderSidebar();
 
       expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
+      expect(localStorage.getItem('mastracode-active-factory')).toBe(project.id);
       await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
+      expect(localStorage.length).toBe(0);
       expect(redirectToLogout).toHaveBeenCalledWith(TEST_BASE_URL);
     });
   });

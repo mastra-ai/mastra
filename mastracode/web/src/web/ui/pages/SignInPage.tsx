@@ -144,6 +144,9 @@ export function SignInPage() {
   const [redirecting, setRedirecting] = useState(false);
   const returnTo = safeReturnTo(searchParams.get('returnTo')?.toString());
   const credentialForm = auth.data?.provider === 'better-auth';
+  const studioAuth = auth.data?.provider === 'mastra-studio';
+  const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
+  const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
   // Mirror of the root auth guard: signed-in (or auth-disabled) visitors have
   // nothing to do here, so send them to their destination (or the root landing
@@ -190,8 +193,12 @@ export function SignInPage() {
                   redirectToLogin(baseUrl, returnTo);
                 }}
               >
-                <GithubIcon aria-hidden="true" />
-                {redirecting ? 'Opening GitHub…' : 'Continue with GitHub'}
+                {studioAuth ? (
+                  <LogoWithoutText className="w-4" aria-hidden="true" />
+                ) : (
+                  <GithubIcon aria-hidden="true" />
+                )}
+                {redirecting ? hostedLoginPendingLabel : hostedLoginLabel}
               </Button>
             )}
           </section>

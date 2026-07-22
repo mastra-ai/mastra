@@ -138,7 +138,15 @@ function SidebarAuth() {
         icon: <CircleUserRound />,
       }}
     >
-      <button type="button" onClick={() => redirectToLogout(baseUrl)} aria-label="Sign out" title={identity}>
+      <button
+        type="button"
+        onClick={() => {
+          localStorage.clear();
+          redirectToLogout(baseUrl);
+        }}
+        aria-label="Sign out"
+        title={identity}
+      >
         <CircleUserRound />
         <MainSidebar.NavLabel>{identity}</MainSidebar.NavLabel>
       </button>

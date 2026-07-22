@@ -411,7 +411,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   /** List repos accessible to an installation (paginated). */
-  async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {
+  async listInstallationRepos(installationId: number, _organizationId?: string): Promise<RepoSummary[]> {
     const octokit = this.getInstallationOctokit(installationId);
     const repos = await octokit.paginate(octokit.apps.listReposAccessibleToInstallation, {
       per_page: 100,
