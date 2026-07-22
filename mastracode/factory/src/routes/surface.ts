@@ -21,6 +21,7 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -61,6 +62,7 @@ export interface FactoryApiRoutesDeps {
   domains: {
     intake: IntakeStorage;
     modelCredentials: ModelCredentialsStorage;
+    memorySettings: MemorySettingsStorage;
     modelPacks: ModelPacksStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
@@ -359,6 +361,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       modelPacks: deps.domains.modelPacks,
+      memorySettings: deps.domains.memorySettings,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
     ...new OAuthRoutes({

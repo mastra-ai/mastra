@@ -11,6 +11,7 @@ import { AuditStorage } from './domains/audit/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { IntakeStorage } from './domains/intake/base.js';
 import { IntegrationStorage } from './domains/integrations/base.js';
+import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelPacksStorage } from './domains/model-packs/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
@@ -27,6 +28,7 @@ export interface FactoryStorageTestSeed {
   projects: FactoryProjectsStorage;
   sourceControl: SourceControlStorage;
   modelPacks: ModelPacksStorage;
+  memorySettings: MemorySettingsStorage;
   queueHealth: QueueHealthStorage;
 }
 
@@ -45,6 +47,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const projects = storage.registerDomain(new FactoryProjectsStorage());
   const sourceControl = storage.registerDomain(new SourceControlStorage());
   const modelPacks = storage.registerDomain(new ModelPacksStorage());
+  const memorySettings = storage.registerDomain(new MemorySettingsStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   await storage.init();
   onTestFinished(() => storage.close());
@@ -58,6 +61,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     projects,
     sourceControl,
     modelPacks,
+    memorySettings,
     queueHealth,
   };
 }

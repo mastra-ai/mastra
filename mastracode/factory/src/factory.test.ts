@@ -205,6 +205,7 @@ describe('MastraFactory.prepare', () => {
       'work-items',
       'model-credentials',
       'model-packs',
+      'memory-settings',
       'queue-health',
       'integrations',
       'projects',

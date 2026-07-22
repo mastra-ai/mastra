@@ -65,6 +65,7 @@ import { AuditDomain } from './storage/domains/audit/domain.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
+import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
@@ -325,6 +326,7 @@ export class MastraFactory {
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage());
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
+    const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
@@ -337,6 +339,7 @@ export class MastraFactory {
       intake: intakeStorage,
       modelCredentials: modelCredentialsStorage,
       modelPacks: modelPacksStorage,
+      memorySettings: memorySettingsStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
@@ -524,6 +527,9 @@ export class MastraFactory {
         fleet,
       }),
       disableGithubSignals: true,
+      // Memory settings live in the factory's `memory-settings` app table (per
+      // org/user), so the host machine's TUI settings.json must not seed them.
+      disableSettingsOmSeed: true,
       storage: storage.getMastraStorage(),
       ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
       ...(vector ? { vector } : {}),

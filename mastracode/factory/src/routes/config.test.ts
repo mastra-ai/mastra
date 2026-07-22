@@ -1,4 +1,5 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -525,5 +526,182 @@ describe('model pack routes with a tenant', () => {
   it('validates the pack payload', async () => {
     expect((await postPack(buildApp(userA), { models: packBody.models })).status).toBe(400);
     expect((await postPack(buildApp(userA), { name: 'x', models: { build: 'a/b' } })).status).toBe(400);
+  });
+});
+
+describe('OM routes with a tenant', () => {
+  let seed: FactoryStorageTestSeed;
+
+  /** A minimal OM session whose role models live in a mutable map. */
+  function makeOmSession() {
+    const roleModels: Record<'observer' | 'reflector', string> = {
+      observer: 'google/gemini-3-flash',
+      reflector: 'anthropic/claude-haiku-4-5',
+    };
+    const state: Record<string, unknown> = {};
+    const role = (name: 'observer' | 'reflector') => ({
+      modelId: () => roleModels[name],
+      threshold: () => undefined,
+      switchModel: async ({ modelId }: { modelId: string }) => {
+        roleModels[name] = modelId;
+      },
+    });
+    return {
+      mode: { get: () => 'build' },
+      model: { switch: async () => {} },
+      subagents: { model: { set: async () => {} } },
+      thread: { getId: () => null, setSetting: async () => {}, list: async () => [] },
+      state: {
+        get: () => state,
+        set: (updates: Record<string, unknown>) => {
+          Object.assign(state, updates);
+        },
+      },
+      om: { observer: role('observer'), reflector: role('reflector') },
+    };
+  }
+
+  function buildApp(
+    session: ReturnType<typeof makeOmSession>,
+    opts: { withStorage?: boolean; authEnabled?: boolean } = {},
+  ) {
+    const controller = {
+      ...makeAgentController([{ provider: 'anthropic', hasApiKey: true }]),
+      getSessionByResource: async () => session,
+    };
+    const app = new Hono();
+    if (opts.authEnabled !== false) {
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+        await next();
+      });
+    }
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth({ enabled: opts.authEnabled !== false }),
+        controller,
+        ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings }),
+      }).routes(),
+    );
+    return app;
+  }
+
+  const putJson = (app: Hono, path: string, body: unknown) =>
+    app.request(path, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(async () => {
+    seed = await createFactoryStorageForTests();
+  });
+
+  it('persists a role model switch to the memory-settings domain, snapshotting the other role', async () => {
+    const session = makeOmSession();
+    const res = await putJson(buildApp(session), '/web/config/om/observer/model', {
+      resourceId: 'r1',
+      modelId: 'anthropic/claude-fable-5',
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).config.observerModelId).toBe('anthropic/claude-fable-5');
+
+    const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
+    expect(stored).toMatchObject({
+      observerModelId: 'anthropic/claude-fable-5',
+      // The reflector's current model is pinned so a restart doesn't drift it.
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('does not overwrite an explicitly stored other-role model on later switches', async () => {
+    const session = makeOmSession();
+    const app = buildApp(session);
+    await putJson(app, '/web/config/om/reflector/model', { resourceId: 'r1', modelId: 'openai/gpt-5.6' });
+    await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', modelId: 'anthropic/claude-fable-5' });
+
+    const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
+    expect(stored).toMatchObject({
+      observerModelId: 'anthropic/claude-fable-5',
+      reflectorModelId: 'openai/gpt-5.6',
+    });
+  });
+
+  it('persists thresholds to the memory-settings domain', async () => {
+    const res = await putJson(buildApp(makeOmSession()), '/web/config/om/thresholds', {
+      resourceId: 'r1',
+      observationThreshold: 25000,
+      reflectionThreshold: 45000,
+    });
+    expect(res.status).toBe(200);
+
+    const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
+    expect(stored).toMatchObject({ observationThreshold: 25000, reflectionThreshold: 45000 });
+  });
+
+  it('persists observe-attachments to the memory-settings domain', async () => {
+    const res = await putJson(buildApp(makeOmSession()), '/web/config/om/observe-attachments', {
+      resourceId: 'r1',
+      value: false,
+    });
+    expect(res.status).toBe(200);
+
+    const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
+    expect(stored?.observeAttachments).toBe(false);
+  });
+
+  it('returns 503 when tenant mode has no memory-settings storage', async () => {
+    const res = await putJson(buildApp(makeOmSession(), { withStorage: false }), '/web/config/om/thresholds', {
+      resourceId: 'r1',
+      observationThreshold: 25000,
+    });
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe('memory_settings_unavailable');
+  });
+
+  it('GET hydrates the session from the stored memory-settings row', async () => {
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observerModelId: 'openai/gpt-5.6', observationThreshold: 12000, observeAttachments: false },
+    });
+
+    const session = makeOmSession();
+    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    expect(res.status).toBe(200);
+    const { config } = await res.json();
+    // The stored row wins over the session's boot-time values.
+    expect(config.observerModelId).toBe('openai/gpt-5.6');
+    expect(config.observeAttachments).toBe(false);
+    expect(session.state.get().observationThreshold).toBe(12000);
+    // Knobs never explicitly stored reset to the built-in default — whatever
+    // the session booted with is not authoritative.
+    expect(config.reflectorModelId).toBe(DEFAULT_OM_MODEL_ID);
+  });
+
+  it('GET resets stale session values to defaults when no row is stored', async () => {
+    // Simulates a session whose state still carries a pre-DB settings.json
+    // seed (e.g. a custom-provider model from the host machine's TUI config).
+    const session = makeOmSession();
+    await session.om.observer.switchModel({ modelId: 'alibaba-token-plan/deepseek-v4-flash' });
+    session.state.set({ observationThreshold: 99000 });
+
+    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    expect(res.status).toBe(200);
+    const { config } = await res.json();
+    expect(config.observerModelId).toBe(DEFAULT_OM_MODEL_ID);
+    expect(config.reflectorModelId).toBe(DEFAULT_OM_MODEL_ID);
+    expect(config.observationThreshold).toBe(30000);
+  });
+
+  it('uses a sentinel local row when auth is disabled — never settings.json', async () => {
+    const session = makeOmSession();
+    const app = buildApp(session, { authEnabled: false });
+    const res = await putJson(app, '/web/config/om/thresholds', { resourceId: 'r1', observationThreshold: 7000 });
+    expect(res.status).toBe(200);
+
+    const stored = await seed.memorySettings.get({ orgId: 'local', userId: 'local' });
+    expect(stored?.observationThreshold).toBe(7000);
   });
 });
