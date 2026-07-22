@@ -37,8 +37,8 @@ const OnboardingGuard = () => {
   const { factoriesPending, factories } = useActiveFactoryContext();
   const { isActivatingInitialFactory } = useSetInitialFactoryWhenNoActive();
 
-  if (isActivatingInitialFactory) return <AuthPendingSkeleton />;
-  if (factoriesPending) return <AuthPendingSkeleton />;
+  if (isActivatingInitialFactory) return <AuthPendingSkeleton label="Loading factories" />;
+  if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
   if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
 
   return <Outlet />;

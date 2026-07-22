@@ -1,5 +1,12 @@
 # @mastra/code-sdk
 
+## 1.0.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`c9e3521`](https://github.com/mastra-ai/mastra/commit/c9e3521628422db84e00a5ff1dea7426c8cce537)]:
+  - @mastra/pg@1.17.0-alpha.3
+
 ## 1.0.0-alpha.12
 
 ### Minor Changes
