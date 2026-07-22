@@ -14,6 +14,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { FACTORY_RULE_STAGES } from '@mastra/factory/rules/types';
 import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
 import type { GithubStatus, Factory } from '../../workspaces';
@@ -160,8 +161,8 @@ const notConnectedStatus: GithubStatus = {
 
 /** Both sources selected so GitHub/Linear specs see data by default. */
 const defaultIntakeConfig: IntakeConfig = {
-  github: { enabled: true, repositoryIds: [PROJECT_REPOSITORY_ID] },
-  linear: { enabled: true, projectIds: ['lin-proj-1'] },
+  github: { enabled: true, sourceIds: [PROJECT_REPOSITORY_ID] },
+  linear: { enabled: true, sourceIds: ['lin-proj-1'] },
 };
 
 /** Linear stays out of the way unless a spec opts in. */
@@ -403,6 +404,11 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
       async ({ request, params }) => {
         const id = params.id as string;
         const body = (await request.json()) as { stage: string; expectedRevision: number };
+        // Mirror the real route's vocabulary check (FACTORY_RULE_STAGES) so UI
+        // tests can't pass with stages the governed endpoint would reject.
+        if (!FACTORY_RULE_STAGES.includes(body.stage as (typeof FACTORY_RULE_STAGES)[number])) {
+          return HttpResponse.json({ error: 'invalid_transition_request' }, { status: 400 });
+        }
         state.patches.push({ id, stages: [body.stage] });
         const existing = state.items.find(item => item.id === id) ?? makeWorkItem({ id, title: 'unknown' });
         const updated = { ...existing, stages: [body.stage], revision: existing.revision + 1 };
@@ -534,7 +540,9 @@ describe('Factory workflow routing', () => {
       const { router } = renderAt(route);
 
       await waitFor(() => expect(router.state.location.pathname).toBe('/factory/work'));
-      expect(await screen.findByRole('heading', { name: 'Work' })).toBeInTheDocument();
+      // The page title renders in both the mobile header and desktop content column
+      // (responsive `hidden md:*` pair); either accessible copy confirms the page.
+      expect((await screen.findAllByRole('heading', { name: 'Work' }))[0]).toBeInTheDocument();
     },
   );
 
@@ -542,7 +550,7 @@ describe('Factory workflow routing', () => {
     useBoardHandlers({ pullRequests });
     const { router } = renderAt('/factory/review');
 
-    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Review' }))[0]).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/factory/review');
   });
 
@@ -572,7 +580,7 @@ describe('Factory Work and Review intake candidates', () => {
     const state = useBoardHandlers({ issues, pullRequests });
     renderAt('/factory/work');
 
-    expect(await screen.findByRole('heading', { name: 'Work' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Work' }))[0]).toBeInTheDocument();
     await waitFor(() => expect(state.issueRequests).toEqual(expect.arrayContaining([null, 'auto-triaged'])));
     const intake = await screen.findByTestId('board-column-intake');
     expect(await within(intake).findByText('Fix flaky test')).toBeInTheDocument();
@@ -595,7 +603,7 @@ describe('Factory Work and Review intake candidates', () => {
     const state = useBoardHandlers({ issues, pullRequests });
     renderAt('/factory/review');
 
-    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Review' }))[0]).toBeInTheDocument();
     const intake = await screen.findByTestId('board-column-intake');
     expect(await within(intake).findByText('Add factory pages')).toBeInTheDocument();
     expect(within(intake).queryByText('Fix flaky test')).not.toBeInTheDocument();
@@ -651,8 +659,8 @@ describe('Factory Work and Review intake candidates', () => {
     useBoardHandlers();
     renderAt('/factory/board', githubProject, connectedStatus, {
       intakeConfig: {
-        github: { enabled: false, repositoryIds: [] },
-        linear: { enabled: false, projectIds: [] },
+        github: { enabled: false, sourceIds: [] },
+        linear: { enabled: false, sourceIds: [] },
       },
     });
 
@@ -1044,7 +1052,7 @@ describe('Factory Board — persisted cards', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Factory' });
     await userEvent.click(within(nav).getByRole('link', { name: 'Review' }));
-    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Review' }))[0]).toBeInTheDocument();
     const reviewCard = within(column('review')).getByTestId('work-item-card');
     expect(within(reviewCard).getByText('PR Review:')).toBeInTheDocument();
     expect(within(reviewCard).queryByText('Issue:')).not.toBeInTheDocument();
@@ -1799,6 +1807,28 @@ describe('Factory Board — drag and drop', () => {
     await waitFor(() => expect(state.patches).toEqual([{ id: 'wi-1', stages: ['done'] }]));
     expect(within(column('done')).getByText('Parallel effort')).toBeInTheDocument();
     expect(within(column('execute')).queryByTestId('work-item-card')).not.toBeInTheDocument();
+  });
+
+  it('given a card in Review, when dragged to Canceled, then the stages PATCH to canceled and the card moves', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Dead-end spike',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['review'],
+        }),
+      ],
+    });
+    renderAt('/factory/work');
+
+    await screen.findByTestId('board-column-intake');
+    dragTo(within(column('review')).getByTestId('work-item-card'), column('canceled'));
+
+    await waitFor(() => expect(state.patches).toEqual([{ id: 'wi-1', stages: ['canceled'] }]));
+    expect(within(column('canceled')).getByText('Dead-end spike')).toBeInTheDocument();
+    expect(within(column('review')).queryByTestId('work-item-card')).not.toBeInTheDocument();
   });
 
   it('given an unmaterialized candidate, when dragged to Building, then it is filed in Intake and moved through authority without a run', async () => {

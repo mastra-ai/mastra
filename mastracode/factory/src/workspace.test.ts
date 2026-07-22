@@ -24,6 +24,10 @@ const mocks = vi.hoisted(() => ({
   materializeRepo: vi.fn(async (_input: unknown) => {}),
   checkoutSessionBranch: vi.fn(async () => {}),
   runWorktreeSetup: vi.fn(async () => {}),
+  getRepositoryAccess: vi.fn(async ({ repositoryId }: { repositoryId: string }) => ({
+    cloneUrl: 'https://github.com/octocat/hello.git',
+    authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
+  })),
   mintInstallationToken: vi.fn(async () => 'gh-token'),
 }));
 
@@ -47,6 +51,7 @@ afterEach(async () => {
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
   mocks.runWorktreeSetup.mockClear();
+  mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
 });
 
@@ -65,14 +70,18 @@ function createRequestContext(projectPath: string) {
   return requestContext;
 }
 
-function createGithubRequestContext(_projectId: string, sessionId: string) {
+function createGithubRequestContext(
+  _projectId: string,
+  sessionId: string,
+  user: Record<string, unknown> = { organizationId: 'org-1', workosId: 'user-1' },
+) {
   const requestContext = createRequestContext('/unused');
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: sessionId,
     session: { id: sessionId },
   });
-  requestContext.set('user', { organizationId: 'org-1', workosId: 'user-1' });
+  requestContext.set('user', user);
   return requestContext;
 }
 
@@ -140,7 +149,9 @@ function fakeGithubIntegration() {
   });
   return {
     id: 'github',
-    versionControl: {},
+    versionControl: {
+      getRepositoryAccess: mocks.getRepositoryAccess,
+    },
     mintInstallationToken: (...args: unknown[]) => mocks.mintInstallationToken(...(args as [])),
     getInstallationOctokit: vi.fn(),
     sourceControlStorage: {
@@ -269,18 +280,30 @@ describe('GitHub session workspace preparation', () => {
     const workdirB = path.join(root, 'github-sessions', 'octocat', 'hello', 'session-b');
     expect(workspaceA.id).toContain('project-1-session-a');
     expect(workspaceB.id).toContain('project-1-session-b');
-    expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(1, expect.any(Object), { GH_TOKEN: 'gh-token' }, undefined, {
-      workingDirectory: workdirA,
-    });
-    expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(2, expect.any(Object), { GH_TOKEN: 'gh-token' }, undefined, {
-      workingDirectory: workdirB,
-    });
+    expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Object),
+      { GH_TOKEN: 'repo-token-repository-1' },
+      undefined,
+      {
+        workingDirectory: workdirA,
+      },
+    );
+    expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(
+      2,
+      expect.any(Object),
+      { GH_TOKEN: 'repo-token-repository-1' },
+      undefined,
+      {
+        workingDirectory: workdirB,
+      },
+    );
     expect(mocks.materializeRepo).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         row: expect.objectContaining({ id: 'session-a', sandboxWorkdir: workdirA }),
         repoInfo: expect.objectContaining({ repoFullName: 'octocat/hello' }),
-        token: 'gh-token',
+        token: 'repo-token-repository-1',
       }),
     );
     expect(mocks.checkoutSessionBranch).toHaveBeenNthCalledWith(
@@ -292,6 +315,18 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it('uses repository-scoped access when materializing a Factory session', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
+    expect(mocks.mintInstallationToken).not.toHaveBeenCalled();
+    expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
   });
 
   it('reuses an already registered workspace for the exact GitHub session', async () => {
@@ -311,6 +346,16 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
 
+  it('accepts provider users whose stable identity is exposed as id', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    requestContext.set('user', { organizationId: 'org-1', id: 'user-1' });
+
+    await expect(workspace({ requestContext })).resolves.toBeDefined();
+  });
+
   it('enforces exact session scope ownership', async () => {
     const { workspace } = await createLocalFactory();
     addProject();
@@ -319,6 +364,23 @@ describe('GitHub session workspace preparation', () => {
     await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
       /Factory session session-a is not available/,
     );
+  });
+
+  it('accepts session owners identified by provider-neutral id instead of workosId', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const existing = { id: 'existing', setToolsConfig: vi.fn() };
+
+    const result = await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a', {
+        organizationId: 'org-1',
+        id: 'user-1',
+      }),
+      mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+    });
+
+    expect(result).toBe(existing);
   });
 
   it('keeps ordinary local-folder projects on the dynamic workspace resolver', async () => {

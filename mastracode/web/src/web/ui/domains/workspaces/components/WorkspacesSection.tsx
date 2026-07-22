@@ -65,7 +65,7 @@ export function WorkspacesSection() {
     scope: projectPath || undefined,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory)),
+    enabled: sessionEnabled && Boolean(projectPath) && Boolean(activeFactory && isServerFactory(activeFactory)),
   };
   const runningByPath = useWorkspaceActivity(activityOptions);
   // Both hooks read the same cached thread listing — one poll, no extra request.

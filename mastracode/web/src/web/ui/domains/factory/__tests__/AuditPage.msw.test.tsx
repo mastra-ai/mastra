@@ -141,7 +141,7 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
-        config: { github: { enabled: true, repositoryIds: [] }, linear: { enabled: false, projectIds: [] } },
+        config: { github: { enabled: true, sourceIds: [] }, linear: { enabled: false, sourceIds: [] } },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
@@ -243,7 +243,7 @@ describe('Factory Audit page', () => {
     });
     renderAt('/factory/audit');
 
-    expect(await screen.findByRole('heading', { name: 'Audit' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Audit' }))[0]).toBeInTheDocument();
     const list = await screen.findByRole('list', { name: 'Audit events' });
     const rows = within(list).getAllByRole('listitem');
     expect(rows).toHaveLength(2);

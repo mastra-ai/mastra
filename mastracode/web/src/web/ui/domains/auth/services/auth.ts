@@ -61,6 +61,13 @@ export function logoutUrl(baseUrl: string): string {
   return `${baseUrl}/auth/logout`;
 }
 
+export function clearMastraCodeStorage(): void {
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith('mastracode')) localStorage.removeItem(key);
+  }
+}
+
 export function redirectToLogout(baseUrl: string): void {
   window.location.assign(logoutUrl(baseUrl));
 }
