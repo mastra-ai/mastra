@@ -181,7 +181,7 @@ export interface MastraFactorySandboxConfig {
 const CONTROLLER_ID = 'code';
 
 function hasPlatformSecretKey(): boolean {
-  return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim() || process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim());
+  return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
 }
 
 /**
