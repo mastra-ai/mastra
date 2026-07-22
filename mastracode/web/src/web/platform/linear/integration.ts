@@ -73,6 +73,7 @@ const API_PREFIX = '/v1/server/linear';
 const PAGE_SIZE = 30;
 const MAX_REFERENCE_PAGES = 20;
 const MAX_COMMENT_PAGES = 20;
+const PLATFORM_MANAGED_CONNECTION_TOKEN = 'platform-managed';
 
 function loose(c: unknown): Context {
   return c as Context;
@@ -86,7 +87,6 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
-  readonly #accessToken: string;
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
 
@@ -168,7 +168,6 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
-    this.#accessToken = config.accessToken;
   }
 
   get storage(): LinearStorageHandle {
@@ -181,7 +180,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           orgId,
           userId: null,
           data: {
-            accessToken: this.#accessToken,
+            accessToken: PLATFORM_MANAGED_CONNECTION_TOKEN,
             refreshToken: null,
             expiresAtMs: null,
             scope: 'read,comments:create',
@@ -228,7 +227,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       id: `platform-linear:${orgId}`,
       orgId,
       userId: null,
-      accessToken: this.#accessToken,
+      accessToken: PLATFORM_MANAGED_CONNECTION_TOKEN,
       scope: 'read,comments:create',
       refreshToken: null,
       expiresAt: null,
@@ -239,8 +238,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     };
   }
 
-  async getFreshAccessToken(connection: LinearConnectionRow): Promise<string> {
-    return connection.accessToken;
+  async getFreshAccessToken(_connection: LinearConnectionRow): Promise<string> {
+    return PLATFORM_MANAGED_CONNECTION_TOKEN;
   }
 
   canPostComments(connection: LinearConnectionRow): boolean {

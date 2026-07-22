@@ -83,6 +83,19 @@ function createIntegration(fetchImpl?: typeof fetch): PlatformLinearIntegration 
 }
 
 describe('PlatformLinearIntegration', () => {
+  it('does not expose the Platform secret through synthetic Linear connections', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [workspace] }));
+    const integration = createIntegration(fetchImpl);
+
+    const storedConnection = await integration.storage.connections.get('org-1');
+    const loadedConnection = await integration.loadConnection('org-1');
+    if (!loadedConnection) throw new Error('Expected a connected Platform Linear workspace.');
+
+    expect(storedConnection?.data.accessToken).not.toBe(config.accessToken);
+    expect(loadedConnection.accessToken).not.toBe(config.accessToken);
+    await expect(integration.getFreshAccessToken(loadedConnection)).resolves.not.toBe(config.accessToken);
+  });
+
   it('lists connected workspace projects as Intake sources', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

@@ -3,7 +3,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';
 
 import { useApiConfig } from '../../shared/api/config';
-import { redirectToLogout, useFactoryAuth } from './domains/auth';
+import { clearMastraCodeStorage, redirectToLogout, useFactoryAuth } from './domains/auth';
 import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
@@ -141,7 +141,7 @@ function SidebarAuth() {
       <button
         type="button"
         onClick={() => {
-          localStorage.clear();
+          clearMastraCodeStorage();
           redirectToLogout(baseUrl);
         }}
         aria-label="Sign out"
