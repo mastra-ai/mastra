@@ -77,11 +77,11 @@ tokens:
   # "It's less about X and more about Y" patterns
   - "[Ii]t'?s less about [^;,—:]+ and more about [^.!?]+"
   - "[Ii]t'?s less about [^;,—:]+, more about [^.!?]+"
-  - "[Tt]his is less about [^;,—:]+ and more about [^.!?]+"
+  - '[Tt]his is less about [^;,—:]+ and more about [^.!?]+'
 
   # "X isn't the point; Y is" patterns
   - "[^.!?]+ isn'?t the point[;,—:] [^.!?]+ is"
-  - "[^.!?]+ is not the point[;,—:] [^.!?]+ is"
+  - '[^.!?]+ is not the point[;,—:] [^.!?]+ is'
 
   # "The real X isn't Y; it's Z" patterns
   - "[Tt]he real [^;,—:]+ isn'?t [^;,—:]+[;,—:] it'?s [^.!?]+"
@@ -100,8 +100,8 @@ tokens:
   - "[Tt]he challenge isn'?t [^;,—:]+[;,—:] it'?s [^.!?]+"
 
   # "Yes, X, but Y" dismissive acknowledgment
-  - "[Yy]es, [^,]+, but the real [^.!?]+"
-  - "[Ss]ure, [^,]+, but what really [^.!?]+"
+  - '[Yy]es, [^,]+, but the real [^.!?]+'
+  - '[Ss]ure, [^,]+, but what really [^.!?]+'
 
   # "It's not whether X; it's how/why/when Y"
   - "[Ii]t'?s not whether [^;,—:]+[;,—:] it'?s (?:how|why|when|what) [^.!?]+"
@@ -117,13 +117,13 @@ tokens:
   # above never match. Subsumes the older single-word-subject
   # "X is a Y, not a Z" token.
   - "\\b[Aa]n? [^,.;:!?\\n]{2,}, [Nn]ot [Aa]n? [^.!?;:,\\n]+"
-  - "[A-Z][a-z]+ are [^,]+, not [^.]+"
+  - '[A-Z][a-z]+ are [^,]+, not [^.]+'
 
   # "Not only X but also Y" patterns
-  - "[Nn]ot only [^,;—:]+,? but (?:also )?[^.!?]+"
+  - '[Nn]ot only [^,;—:]+,? but (?:also )?[^.!?]+'
 
   # "Not because X, but because Y" causal variant
-  - "[Nn]ot because [^,;—:]+,? but because [^.!?]+"
+  - '[Nn]ot because [^,;—:]+,? but because [^.!?]+'
 
   # === Plural subject negation-correction ===
 

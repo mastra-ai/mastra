@@ -8,11 +8,7 @@
  */
 
 export type LinearStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 
 export interface LinearStatus {
   enabled: boolean;
@@ -120,9 +116,14 @@ export function isLinearReauthError(err: unknown): boolean {
 }
 
 /** List one cursor page of the workspace's active issues. */
-export async function listLinearIssues(baseUrl: string, after?: string): Promise<LinearIssuePage> {
-  const path = after ? `/web/linear/issues?after=${encodeURIComponent(after)}` : '/web/linear/issues';
-  return getLinearResource<LinearIssuePage>(baseUrl, path);
+export async function listLinearIssues(
+  baseUrl: string,
+  factoryProjectId: string,
+  after?: string,
+): Promise<LinearIssuePage> {
+  const params = new URLSearchParams({ factoryProjectId });
+  if (after) params.set('after', after);
+  return getLinearResource<LinearIssuePage>(baseUrl, `/web/linear/issues?${params.toString()}`);
 }
 
 /** List the connected workspace's projects (Settings intake-source picker). */

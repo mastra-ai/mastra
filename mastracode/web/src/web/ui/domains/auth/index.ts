@@ -1,11 +1,13 @@
-export { SignInPage } from './components/SignInPage';
-export { useWebAuth } from './hooks/useWebAuth';
+export { useFactoryAuth } from '../../../../shared/hooks/useFactoryAuth';
 export {
+  clearMastraCodeStorage,
   fetchAuthState,
   loginUrl,
   logoutUrl,
   redirectToLogin,
   redirectToLogout,
+  signInWithPassword,
+  signUpWithPassword,
   userSessionResourceId,
 } from './services/auth';
-export type { WebAuthState } from './services/auth';
+export type { FactoryAuthState } from './services/auth';

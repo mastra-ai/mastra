@@ -1,6 +1,6 @@
 {
   "name": "@mastra/arthur",
-  "version": "0.4.4",
+  "version": "0.4.5-alpha.1",
   "description": "Arthur AI observability provider for Mastra - exports traces using OpenInference semantic conventions",
   "type": "module",
   "main": "dist/index.js",
@@ -46,7 +46,7 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

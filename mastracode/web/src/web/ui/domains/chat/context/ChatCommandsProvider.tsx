@@ -1,12 +1,14 @@
-import { createContext, useContext, useState } from 'react';
-import type { ReactNode } from 'react';
+import { createContext, useContext, useRef, useState } from 'react';
+import type { ReactNode, RefObject } from 'react';
 
 import type { SlashCommand } from '../services/commands';
 import { useRunPaletteCommand } from './useRunPaletteCommand';
 
 export interface ChatCommandsApi {
-  composerCommandName: string | undefined;
-  clearComposerCommand: () => void;
+  composerDraft: string;
+  composerInputRef: RefObject<HTMLTextAreaElement | null>;
+  setComposerDraft: (draft: string) => void;
+  prefillComposer: (draft: string) => void;
   run: (command: SlashCommand) => void;
   runComposerCommand: (text: string) => Promise<boolean>;
 }
@@ -14,11 +16,22 @@ export interface ChatCommandsApi {
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
 export function ChatCommandsProvider({ children }: { children: ReactNode }) {
-  const [composerCommandName, setComposerCommandName] = useState<string | undefined>();
-  const { run, runComposerCommand } = useRunPaletteCommand(setComposerCommandName);
+  const [composerDraft, setComposerDraft] = useState('');
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const prefillComposer = (draft: string) => {
+    setComposerDraft(draft);
+    requestAnimationFrame(() => composerInputRef.current?.focus());
+  };
+  const { run, runComposerCommand } = useRunPaletteCommand(prefillComposer);
 
-  const clearComposerCommand = () => setComposerCommandName(undefined);
-  const value: ChatCommandsApi = { composerCommandName, clearComposerCommand, run, runComposerCommand };
+  const value: ChatCommandsApi = {
+    composerDraft,
+    composerInputRef,
+    setComposerDraft,
+    prefillComposer,
+    run,
+    runComposerCommand,
+  };
 
   return <ChatCommandsContext.Provider value={value}>{children}</ChatCommandsContext.Provider>;
 }

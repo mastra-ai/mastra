@@ -12,6 +12,12 @@ export type SankeyProps = {
   onColumnOrderChange?: (columnOrder: Array<string>) => void;
   visibleColumnIds?: Array<string>;
   onVisibleColumnIdsChange?: (columnIds: Array<string>) => void;
+  getRecordWeight?: (record: SankeyChartRecord) => number;
+  getRecordLayoutWeight?: (record: SankeyChartRecord) => number;
+  getRecordNodeId?: (record: SankeyChartRecord, column: SankeyChartColumn) => string;
+  getRecordNodeLabel?: (record: SankeyChartRecord, column: SankeyChartColumn) => string;
+  getRecordNodeValue?: (record: SankeyChartRecord, column: SankeyChartColumn) => number;
+  getColumnHue?: (column: SankeyChartColumn) => number;
 };
 
 export type SankeyControlColumn = SankeyChartColumn & {
@@ -28,6 +34,7 @@ type SankeyRenderContext = {
   graph: SankeyChartGraph;
   enabledColumns: Array<SankeyChartColumn>;
   hueMap: Record<string, number>;
+  usesFixedGeometry: boolean;
 };
 
 const SankeyControlsContext = createContext<SankeyControls | undefined>(undefined);
@@ -41,6 +48,12 @@ export function Sankey({
   onColumnOrderChange,
   visibleColumnIds,
   onVisibleColumnIdsChange,
+  getRecordWeight,
+  getRecordLayoutWeight,
+  getRecordNodeId,
+  getRecordNodeLabel,
+  getRecordNodeValue,
+  getColumnHue,
 }: SankeyProps) {
   const columnIds = columns.map(column => column.id);
   const [internalOrder, setInternalOrder] = useState(columnIds);
@@ -48,8 +61,22 @@ export function Sankey({
   const orderedColumns = orderColumns(columns, columnOrder ?? internalOrder);
   const visibleIds = new Set(visibleColumnIds ?? internalVisibleIds);
   const enabledColumns = orderedColumns.filter(column => visibleIds.has(column.id));
-  const graph = buildSankeyChartGraph(data, enabledColumns);
-  const hueMap = buildSankeyHueMap(graph.nodes.map(node => String(node.value)));
+  const graph = buildSankeyChartGraph(
+    data,
+    enabledColumns,
+    getRecordWeight,
+    getRecordNodeId,
+    getRecordNodeLabel,
+    getRecordNodeValue,
+    getRecordLayoutWeight,
+  );
+  const defaultHueMap = buildSankeyHueMap(graph.nodes.map(node => String(node.value)));
+  const hueMap = Object.fromEntries(
+    graph.nodes.map(node => [
+      String(node.value),
+      getColumnHue?.(node.column) ?? defaultHueMap[String(node.value)] ?? 0,
+    ]),
+  );
 
   const setVisibleColumns = (nextIds: Array<string>) => {
     if (visibleColumnIds === undefined) setInternalVisibleIds(nextIds);
@@ -81,7 +108,11 @@ export function Sankey({
 
   return (
     <SankeyControlsContext.Provider value={{ columns: controlColumns, toggleColumn, reorderColumns }}>
-      <SankeyRenderContext.Provider value={{ graph, enabledColumns, hueMap }}>{children}</SankeyRenderContext.Provider>
+      <SankeyRenderContext.Provider
+        value={{ graph, enabledColumns, hueMap, usesFixedGeometry: getRecordLayoutWeight !== undefined }}
+      >
+        {children}
+      </SankeyRenderContext.Provider>
     </SankeyControlsContext.Provider>
   );
 }

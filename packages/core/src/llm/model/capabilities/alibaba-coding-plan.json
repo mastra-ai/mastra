@@ -13,5 +13,6 @@
     "qwen3.6-plus",
     "qwen3.7-max",
     "qwen3.7-plus"
-  ]
+  ],
+  "structuredOutput": ["qwen3-coder-next", "qwen3.6-flash"]
 }

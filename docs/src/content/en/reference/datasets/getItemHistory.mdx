@@ -16,9 +16,7 @@ Retrieves the full SCD-2 (Slowly Changing Dimension Type 2) history of a specifi
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 

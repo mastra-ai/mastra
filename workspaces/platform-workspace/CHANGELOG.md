@@ -1,5 +1,43 @@
 # @mastra/platform
 
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- Renamed the environment variable read by PlatformSandbox and PlatformFilesystem for platform authentication from MASTRA_PLATFORM_ACCESS_TOKEN to MASTRA_PLATFORM_SECRET_KEY. The old variable still works as a deprecated fallback. ([#19932](https://github.com/mastra-ai/mastra/pull/19932))
+
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- Added `clone()` support to `PlatformSandbox`. `clone()` constructs an unstarted sibling sandbox that inherits the template's configuration (access token, project, environment, network isolation, timeout, instructions, env, idle timeout) with per-instance overrides for `id`, `sandboxId`, `env`, and `idleTimeoutMinutes`, so one configured sandbox can act as a template for a fleet of sandbox clones (for example, one per project). ([#19647](https://github.com/mastra-ai/mastra/pull/19647))
+
+  ```ts
+  const template = new PlatformSandbox({
+    accessToken,
+    projectId,
+    environmentId,
+  });
+
+  const projectSandbox = template.clone({
+    id: 'mc-project-42',
+    env: { GITHUB_TOKEN: token },
+    idleTimeoutMinutes: 30,
+  });
+  await projectSandbox.start();
+  ```
+
+  This brings `PlatformSandbox` up to parity with the other sandbox providers (`@mastra/railway`, `@mastra/e2b`, `@mastra/daytona`, `@mastra/modal`, `@mastra/docker`, `@mastra/blaxel`, `@mastra/apple-container`, `@mastra/vercel`) so it can be used with `MastraFactory` fleets and the MC Web factory.
+
+### Patch Changes
+
+- `PlatformSandbox` now includes its caller-facing `id` on the `POST /v1/projects/:projectId/sandbox` wire body when provisioning a new sandbox. The Mastra Platform treats this as an advisory recovery key so callers can opt into checkpoint-based sandbox recovery — if the platform recognizes the id from a previous session, the new sandbox boots from the most recent checkpoint instead of the base template. Unknown ids fall through to a fresh sandbox, so existing callers see no change in behavior. ([#19648](https://github.com/mastra-ai/mastra/pull/19648))
+
+  No API changes — the value sent is the same `id` you already pass to `new PlatformSandbox({ id })` (or the auto-generated one).
+
+- Updated dependencies [[`a40adeb`](https://github.com/mastra-ai/mastra/commit/a40adeb222b961a56a58af56a106106525721b74), [`821648b`](https://github.com/mastra-ai/mastra/commit/821648bf2871ef840100c7bacbecf676010bd12a), [`11f6cd9`](https://github.com/mastra-ai/mastra/commit/11f6cd96fe42582403416608beb212cc1a2cc79e)]:
+  - @mastra/core@1.52.0-alpha.6
+
 ## 0.1.0
 
 ### Minor Changes

@@ -16,7 +16,6 @@ import type { EventHandlerContext } from './types.js';
 
 export function handleAgentStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.goalManager.startActiveTimer();
 
   // Refresh git branch async to avoid blocking the event loop
   getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
@@ -37,9 +36,6 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
 
 export function handleAgentEnd(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  // Stop the goal active-timer on normal completion too (not just abort/error),
-  // otherwise the elapsed-time display keeps counting while idle between turns.
-  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -100,14 +96,17 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
     ctx.addUserMessage({
       id: `user-${Date.now()}`,
       role: 'user',
-      content: [
-        { type: 'text', text: nextMessage.content },
-        ...(nextMessage.images?.map(img => ({
-          type: 'image' as const,
-          data: img.data,
-          mimeType: img.mimeType,
-        })) ?? []),
-      ],
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: nextMessage.content },
+          ...(nextMessage.images?.map(img => ({
+            type: 'file' as const,
+            data: img.data,
+            mimeType: img.mimeType,
+          })) ?? []),
+        ],
+      },
       createdAt: new Date(),
     });
     // Track the text so the subscription echo is suppressed in addUserMessage.
@@ -139,7 +138,6 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
 
 export function handleAgentAborted(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -151,9 +149,13 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   } else if (state.streamingComponent && state.streamingMessage) {
-    // Update unexpected aborted streams to show they were interrupted.
-    state.streamingMessage.stopReason = 'aborted';
-    state.streamingMessage.errorMessage = 'Interrupted';
+    // Update streaming message to show it was interrupted. Terminal status
+    // lives in content.metadata under the DB-native contract.
+    state.streamingMessage.content.metadata = {
+      ...state.streamingMessage.content.metadata,
+      stopReason: 'aborted',
+      errorMessage: 'Interrupted',
+    };
     state.streamingComponent.updateContent(state.streamingMessage);
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
@@ -180,7 +182,6 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
 
 export function handleAgentError(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }

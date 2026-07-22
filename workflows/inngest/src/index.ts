@@ -477,8 +477,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, InngestEngineType> {
   const toolOpts = agentOrToolOptions as
-    | { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata }
-    | undefined;
+    { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata } | undefined;
   if (!params.inputSchema || !params.outputSchema) {
     throw new Error('Tool must have input and output schemas defined');
   }
@@ -867,8 +866,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               const spanKey = `__outputStreamSpan_${processor.id}`;
               const mutableState = (state ?? {}) as Record<string, unknown>;
               let processorSpan = mutableState[spanKey] as
-                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
-                | undefined;
+                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
@@ -1102,7 +1100,7 @@ function createStepFromProcessor<TProcessorId extends string>(
   };
 }
 
-export function init(inngest: Inngest) {
+export function init<TRequestContext = unknown>(inngest: Inngest) {
   return {
     createTool,
     createWorkflow<
@@ -1119,11 +1117,17 @@ export function init(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
-    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
-      return new InngestWorkflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>(
-        params,
-        inngest,
-      );
+    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+      return new InngestWorkflow<
+        InngestEngineType,
+        TSteps,
+        TWorkflowId,
+        TState,
+        TInput,
+        TOutput,
+        TInput,
+        TRequestContext
+      >(params, inngest);
     },
     createStep,
     cloneStep<TStepId extends string>(

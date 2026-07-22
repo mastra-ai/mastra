@@ -34,7 +34,7 @@
     "redis": "5.12.1"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.110",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.114",
     "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
@@ -45,7 +45,7 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "tsx": "catalog:",
     "typescript": "catalog:",

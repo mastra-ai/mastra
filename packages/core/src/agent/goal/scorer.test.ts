@@ -169,6 +169,39 @@ describe('createGoalScorer tool support', () => {
   });
 });
 
+describe('createGoalScorer JSON prompt injection', () => {
+  async function runWithInjectedJson(decision: 'done' | 'continue' | 'waiting', reason: string) {
+    const streamCalls: any[] = [];
+    const model = createMockModel({
+      mockText: { decision, reason },
+      version: 'v2',
+      spyStream: props => streamCalls.push(props),
+    });
+    const scorer = createGoalScorer({ judgeModel: model as any });
+
+    const result = await scorer.run({
+      input: { originalTask: 'do the thing', currentText: 'I did the thing' },
+      output: 'I did the thing',
+    } as any);
+
+    expect(JSON.stringify(streamCalls[0]?.prompt)).toContain('Return your response as JSON matching this schema');
+    expect(streamCalls.every(call => call.responseFormat === undefined)).toBe(true);
+    return result;
+  }
+
+  it('parses JSON prompt injection text through the structured output pipeline', async () => {
+    const result = await runWithInjectedJson('done', 'all requirements met');
+    expect(result.score).toBe(1);
+    expect(result.reason).toBe('all requirements met');
+  });
+
+  it('preserves the waiting score when JSON prompt injection text returns waiting', async () => {
+    const result = await runWithInjectedJson('waiting', 'waiting for approval');
+    expect(result.score).toBe(GOAL_SCORE_WAITING);
+    expect(result.reason).toBe('waiting for approval');
+  });
+});
+
 describe('createGoalScorer tri-state decision → score mapping', () => {
   it('maps "done" to score 1 (goal complete)', async () => {
     const result = await runWithDecision('done', 'all requirements met');

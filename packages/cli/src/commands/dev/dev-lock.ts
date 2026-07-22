@@ -50,7 +50,7 @@ function parseLockContents(contents: string): LockData | null {
 function printDuplicateError(lock: LockData): never {
   console.error('');
   console.error(
-    pc.red('  ✗ ') + pc.bold(pc.red('Another instance of `mastra dev` is already running in this directory')),
+    pc.red('  ✗ ') + pc.bold(pc.red('Another development server instance is already running in this directory')),
   );
   console.error('');
   console.error(`  ${pc.red('│')} PID ${pc.bold(String(lock.pid))} is still active.`);
@@ -62,7 +62,7 @@ function printDuplicateError(lock: LockData): never {
   console.error(`  ${pc.red('│')} (e.g. database locks, port collisions).`);
   console.error('');
   console.error(`  ${pc.dim('To fix this:')}`);
-  console.error(`  ${pc.dim('•')} Stop the other \`mastra dev\` process (PID ${lock.pid}), or`);
+  console.error(`  ${pc.dim('•')} Stop the other development server process (PID ${lock.pid}), or`);
   console.error(`  ${pc.dim('•')} If that process is stuck, run: ${pc.cyan(`kill ${lock.pid}`)}`);
   console.error('');
   process.exit(1);
@@ -87,7 +87,7 @@ async function checkAndRemoveStaleLock(lockPath: string): Promise<void> {
 }
 
 /**
- * Attempt to acquire the dev lock. If another `mastra dev` instance is
+ * Attempt to acquire the dev lock. If another development server instance is
  * already running against the same `.mastra` directory, print a
  * user-friendly error and exit instead of letting resources fail with
  * confusing lock errors.

@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
-import type { GithubStatus, Project } from '../../workspaces';
+import type { GithubStatus, Factory } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
 import type { FactoryMetrics } from '../services/metrics';
 
@@ -23,27 +23,38 @@ const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-gh';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
-const GITHUB_PROJECT_ID = 'github-project-1';
+const FACTORY_PROJECT_ID = 'fp-1';
 
-const githubProject: Project = {
+const githubProject: Factory = {
   id: 'project-gh',
   name: 'Mastra',
-  source: 'github',
-  githubProjectId: GITHUB_PROJECT_ID,
-  sandboxWorkdir: '/sandbox/mastra',
   resourceId: RESOURCE_ID,
-  gitBranch: 'main',
-  worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
-  selectedWorktreePath: '/sandbox/mastra',
   createdAt: 1,
+  binding: {
+    kind: 'factory',
+    factoryProjectId: FACTORY_PROJECT_ID,
+    repositories: [
+      {
+        projectRepositoryId: 'pr-1',
+        slug: 'mastra-ai/mastra',
+        gitBranch: 'main',
+        sandboxWorkdir: '/sandbox/mastra',
+        selectedWorktreePath: '/sandbox/mastra',
+        worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
+      },
+    ],
+  },
 };
 
-const localProject: Project = {
+const localProject: Factory = {
   id: 'project-local',
   name: 'Local',
-  path: '/projects/local',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/local',
+  },
 };
 
 const connectedStatus: GithubStatus = {
@@ -58,6 +69,7 @@ const HOUR = 3_600_000;
 function makeMetrics(overrides: Partial<FactoryMetrics> = {}): FactoryMetrics {
   return {
     windowDays: 30,
+    earliestItemAt: '2026-05-01T00:00:00.000Z',
     throughput: [
       { date: '2026-07-14', count: 2 },
       { date: '2026-07-15', count: 1 },
@@ -87,6 +99,10 @@ function makeMetrics(overrides: Partial<FactoryMetrics> = {}): FactoryMetrics {
       { source: 'manual', count: 1 },
     ],
     transitions: { human: 2, total: 6 },
+    stageAutomation: [
+      { stage: 'triage', exits: 4, automated: 2, outcomes: { done: 1, canceled: 0, reworked: 1, inFlight: 0 } },
+      { stage: 'planning', exits: 3, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+    ],
     ...overrides,
   };
 }
@@ -113,18 +129,23 @@ function sessionState() {
 }
 
 interface MetricsState {
-  /** `days` query params of every metrics request, in order. */
-  requestedDays: string[];
+  /** `from`/`to` query params of every metrics request, in order. */
+  requestedRanges: { from: string; to: string }[];
+}
+
+/** Whole-day span of a requested range. */
+function spanDays(range: { from: string; to: string }): number {
+  return Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
 }
 
 function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsState {
-  const state: MetricsState = { requestedDays: [] };
+  const state: MetricsState = { requestedRanges: [] };
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
-        config: { github: { enabled: true, projectIds: [] }, linear: { enabled: false, projectIds: [] } },
+        config: { github: { enabled: true, sourceIds: [] }, linear: { enabled: false, sourceIds: [] } },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
@@ -141,20 +162,23 @@ function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsSta
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${GITHUB_PROJECT_ID}/metrics`, ({ request }) => {
-      const days = new URL(request.url).searchParams.get('days') ?? '';
-      state.requestedDays.push(days);
-      return HttpResponse.json({ metrics: { ...metrics, windowDays: Number(days) || metrics.windowDays } });
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/metrics`, ({ request }) => {
+      const url = new URL(request.url);
+      const range = { from: url.searchParams.get('from') ?? '', to: url.searchParams.get('to') ?? '' };
+      state.requestedRanges.push(range);
+      const days = spanDays(range);
+      return HttpResponse.json({
+        metrics: { ...metrics, windowDays: Number.isFinite(days) ? days : metrics.windowDays },
+      });
     }),
   );
   return state;
 }
 
-function renderAt(initialEntry: string, project: Project = githubProject) {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function renderAt(project: Factory = githubProject) {
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${project.id}/metrics`] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -177,12 +201,12 @@ describe('Factory Metrics page', () => {
         wipTotal: 4,
       }),
     );
-    renderAt('/factory/metrics');
+    renderAt();
 
-    expect(await screen.findByRole('heading', { name: 'Metrics' })).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Date range timeline' })).toBeInTheDocument();
 
     // Stat cards: throughput total, cycle time (with p90 hint), WIP, live agents.
-    const completed = (await screen.findByText('Completed (30d)')).parentElement!;
+    const completed = (await screen.findByText('Completed')).parentElement!;
     expect(within(completed).getByText('3')).toBeInTheDocument();
     const cycle = screen.getByText('Median cycle time').parentElement!;
     expect(within(cycle).getByText('3h')).toBeInTheDocument();
@@ -217,17 +241,39 @@ describe('Factory Metrics page', () => {
     expect(within(sources).getByText('Manual')).toBeInTheDocument();
   });
 
-  it('given the default window, when the user switches to 7d, then metrics are refetched with days=7', async () => {
+  it('given mixed automation, when the page renders, then the automated-moves stat and per-stage rows appear', async () => {
+    useMetricsHandlers();
+    renderAt();
+
+    // Global stat: total - human automated moves, with the window total as hint.
+    const automatedMoves = (await screen.findByText('Automated moves (30d)')).parentElement!;
+    expect(within(automatedMoves).getByText('4')).toBeInTheDocument();
+    expect(within(automatedMoves).getByText('of 6 stage moves')).toBeInTheDocument();
+
+    // Per-stage rows: automated % over exits, plus the outcome split of
+    // automated passes (zero buckets omitted).
+    const section = screen.getByRole('heading', { name: 'Automation by stage' }).parentElement!;
+    expect(within(section).getByText(/50% automated \(2\/4\) · 1 done, 1 reworked/)).toBeInTheDocument();
+    expect(within(section).getByText(/0% automated \(0\/3\)/)).toBeInTheDocument();
+    // Board stages with no exits in the window render an em dash.
+    const building = within(section).getByText('Building').closest('li')!;
+    expect(within(building as HTMLElement).getByText('—')).toBeInTheDocument();
+    // Terminal stages never get automation rows.
+    expect(within(section).queryByText('Done')).not.toBeInTheDocument();
+    expect(within(section).queryByText('Canceled')).not.toBeInTheDocument();
+  });
+
+  it('given the default window, when the page renders, then the timeline drives a 30-day fetch', async () => {
     const state = useMetricsHandlers();
-    renderAt('/factory/metrics');
+    renderAt();
 
-    expect(await screen.findByText('Completed (30d)')).toBeInTheDocument();
-    expect(state.requestedDays).toEqual(['30']);
-
-    await userEvent.click(screen.getByRole('button', { name: '7d' }));
-
-    await waitFor(() => expect(state.requestedDays).toContain('7'));
-    expect(await screen.findByText('Completed (7d)')).toBeInTheDocument();
+    expect(await screen.findByText('Completed')).toBeInTheDocument();
+    // The draggable date-range timeline is the window control.
+    expect(screen.getByRole('group', { name: 'Date range timeline' })).toBeInTheDocument();
+    // Initial fetch covers the default last-30-days window (inclusive end-of-day).
+    expect(state.requestedRanges).toHaveLength(1);
+    expect(spanDays(state.requestedRanges[0])).toBeGreaterThanOrEqual(30);
+    expect(spanDays(state.requestedRanges[0])).toBeLessThanOrEqual(31);
   });
 
   it('given an empty board, when the page renders, then friendly empty states appear', async () => {
@@ -241,22 +287,30 @@ describe('Factory Metrics page', () => {
         agingWip: [],
         sourceMix: [],
         transitions: { human: 0, total: 0 },
+        stageAutomation: [],
       }),
     );
-    renderAt('/factory/metrics');
+    renderAt();
 
     expect(await screen.findByText('Nothing in flight — the board is clear.')).toBeInTheDocument();
     expect(screen.getByText('No items created in this window.')).toBeInTheDocument();
     // Null cycle time renders as an em dash instead of a bogus number.
     const cycle = screen.getByText('Median cycle time').parentElement!;
     expect(within(cycle).getByText('—')).toBeInTheDocument();
+    // Zero stage moves: the automated-moves stat renders an em dash too.
+    const automatedMoves = screen.getByText('Automated moves (30d)').parentElement!;
+    expect(within(automatedMoves).getByText('—')).toBeInTheDocument();
+    // No completed passes anywhere: the automation section shows its empty state.
+    expect(screen.getByText('No completed stage passes in this window yet.')).toBeInTheDocument();
   });
 
-  it('given a local project, when visiting Metrics, then the GitHub-only notice renders instead of the dashboard', async () => {
+  it('given a local project, when visiting Metrics, then the server-factory notice renders instead of the dashboard', async () => {
     useMetricsHandlers();
-    renderAt('/factory/metrics', localProject);
+    renderAt(localProject);
 
-    expect(await screen.findByText(/only available for GitHub projects/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Board, metrics, rules, and audit are available for server-backed Factories/),
+    ).toBeInTheDocument();
     expect(screen.queryByText('Median cycle time')).not.toBeInTheDocument();
   });
 });

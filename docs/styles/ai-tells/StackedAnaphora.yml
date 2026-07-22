@@ -11,10 +11,10 @@ tokens:
   - "No \\w[^.]+\\. No \\w[^.]+"
 
   # "No X, no Y, no Z." pattern (3+ comma-separated)
-  - "No [^,]+, no [^,]+, no [^.!?]+"
+  - 'No [^,]+, no [^,]+, no [^.!?]+'
 
   # "No X, no Y." pattern (2 comma-separated)
-  - "No [^,]+, no [^.!?]+"
+  - 'No [^,]+, no [^.!?]+'
 
   # "Not X. Not Y. Not Z." pattern
   - "Not [^.]+\\. Not [^.]+\\. Not [^.]+"
@@ -44,43 +44,43 @@ tokens:
   - "One [^.]+\\. One [^.]+\\. One [^.]+"
 
   # "One X, one Y, one Z." pattern (3+ comma-separated)
-  - "One [^,]+, one [^,]+, one [^.!?]+"
+  - 'One [^,]+, one [^,]+, one [^.!?]+'
 
   # "One X, one Y." pattern (2 comma-separated)
-  - "One [^,]+, one [^.!?]+"
+  - 'One [^,]+, one [^.!?]+'
 
   # "Every X. Every Y. Every Z." pattern (3+ consecutive)
   - "Every [^.]+\\. Every [^.]+\\. Every [^.]+"
 
   # "Every X, every Y, every Z." pattern (3+ comma-separated)
-  - "Every [^,]+, every [^,]+, every [^.!?]+"
+  - 'Every [^,]+, every [^,]+, every [^.!?]+'
 
   # "Every X, every Y." pattern (2 comma-separated)
-  - "Every [^,]+, every [^.!?]+"
+  - 'Every [^,]+, every [^.!?]+'
 
   # "Each X. Each Y. Each Z." pattern (3+ consecutive)
   - "Each [^.]+\\. Each [^.]+\\. Each [^.]+"
 
   # "Each X, each Y, each Z." pattern (3+ comma-separated)
-  - "Each [^,]+, each [^,]+, each [^.!?]+"
+  - 'Each [^,]+, each [^,]+, each [^.!?]+'
 
   # "Each X, each Y." pattern (2 comma-separated)
-  - "Each [^,]+, each [^.!?]+"
+  - 'Each [^,]+, each [^.!?]+'
 
   # "Zero X. Zero Y. Zero Z." pattern (3+ consecutive)
   - "Zero [^.]+\\. Zero [^.]+\\. Zero [^.]+"
 
   # "Zero X, zero Y, zero Z." pattern (3+ comma-separated)
-  - "Zero [^,]+, zero [^,]+, zero [^.!?]+"
+  - 'Zero [^,]+, zero [^,]+, zero [^.!?]+'
 
   # "Zero X, zero Y." pattern (2 comma-separated)
-  - "Zero [^,]+, zero [^.!?]+"
+  - 'Zero [^,]+, zero [^.!?]+'
 
   # "A single X. A single Y." pattern (2+ consecutive)
   - "A single [^.]+\\. A single [^.]+"
 
   # "A single X, a single Y." pattern (2+ comma-separated)
-  - "A single [^,]+, a single [^.!?]+"
+  - 'A single [^,]+, a single [^.!?]+'
 
   # "Many X. Many Y." pattern (2+ consecutive)
   - "Many [^.]+\\. Many [^.]+\\."
@@ -92,7 +92,7 @@ tokens:
   - "All [^.]+\\. All [^.]+\\. All [^.]+"
 
   # Three prepositional phrase chains: "with X, through Y, and for Z" style
-  - "(?:with|through|by|for|via|within) [^,]+, (?:with|through|by|for|via|within) [^,]+, (?:and )?(?:with|through|by|for|via|within) [^.!?]+"
+  - '(?:with|through|by|for|via|within) [^,]+, (?:with|through|by|for|via|within) [^,]+, (?:and )?(?:with|through|by|for|via|within) [^.!?]+'
 
   # === Adverb anaphora ===
 
@@ -100,55 +100,55 @@ tokens:
   - "Always [^.]+\\. Always [^.]+\\."
 
   # "always X, always Y." pattern (2+ comma-separated)
-  - "[Aa]lways [^,]+, always [^.!?]+"
+  - '[Aa]lways [^,]+, always [^.!?]+'
 
   # "Never X. Never Y." pattern (2+ consecutive)
   - "Never [^.]+\\. Never [^.]+\\."
 
   # "never X, never Y." pattern (2+ comma-separated)
-  - "[Nn]ever [^,]+, never [^.!?]+"
+  - '[Nn]ever [^,]+, never [^.!?]+'
 
   # "Fully X. Fully Y." pattern (2+ consecutive)
   - "Fully [^.]+\\. Fully [^.]+\\."
 
   # "fully X, fully Y." pattern (2+ comma-separated)
-  - "[Ff]ully [^,]+, fully [^.!?]+"
+  - '[Ff]ully [^,]+, fully [^.!?]+'
 
   # "Completely X. Completely Y." pattern (2+ consecutive)
   - "Completely [^.]+\\. Completely [^.]+\\."
 
   # "completely X, completely Y." pattern (2+ comma-separated)
-  - "[Cc]ompletely [^,]+, completely [^.!?]+"
+  - '[Cc]ompletely [^,]+, completely [^.!?]+'
 
   # "Entirely X. Entirely Y." pattern (2+ consecutive)
   - "Entirely [^.]+\\. Entirely [^.]+\\."
 
   # "entirely X, entirely Y." pattern (2+ comma-separated)
-  - "[Ee]ntirely [^,]+, entirely [^.!?]+"
+  - '[Ee]ntirely [^,]+, entirely [^.!?]+'
 
   # "Truly X. Truly Y." pattern (2+ consecutive)
   - "Truly [^.]+\\. Truly [^.]+\\."
 
   # "truly X, truly Y." pattern (2+ comma-separated)
-  - "[Tt]ruly [^,]+, truly [^.!?]+"
+  - '[Tt]ruly [^,]+, truly [^.!?]+'
 
   # "Purely X. Purely Y." pattern (2+ consecutive)
   - "Purely [^.]+\\. Purely [^.]+\\."
 
   # "purely X, purely Y." pattern (2+ comma-separated)
-  - "[Pp]urely [^,]+, purely [^.!?]+"
+  - '[Pp]urely [^,]+, purely [^.!?]+'
 
   # "Only X. Only Y." pattern (2+ consecutive)
   - "Only [^.]+\\. Only [^.]+\\."
 
   # "only X, only Y." pattern (2+ comma-separated)
-  - "[Oo]nly [^,]+, only [^.!?]+"
+  - '[Oo]nly [^,]+, only [^.!?]+'
 
   # "Just X. Just Y." pattern (2+ consecutive)
   - "Just [^.]+\\. Just [^.]+\\."
 
   # "just X, just Y." pattern (2+ comma-separated)
-  - "[Jj]ust [^,]+, just [^.!?]+"
+  - '[Jj]ust [^,]+, just [^.!?]+'
 
   # === Indefinite-article exemplification stack ===
   # AI loves stacking hypothetical scenarios as parallel sentences:

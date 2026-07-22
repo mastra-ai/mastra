@@ -1203,3 +1203,45 @@ describe('DockerSandbox Shared Conformance', () => {
 
   createSandboxLifecycleTests(getContext);
 });
+
+describe('DockerSandbox.clone', () => {
+  it('constructs an unstarted sibling without any I/O', () => {
+    const template = new DockerSandbox({ image: 'node:22', workingDir: '/workspace' });
+
+    const child = template.clone({ id: 'mc-project-1' });
+
+    expect(child).toBeInstanceOf(DockerSandbox);
+    expect(child).not.toBe(template);
+    expect(child.id).toBe('mc-project-1');
+    expect(child.status).toBe('pending');
+  });
+
+  it('inherits template config and applies env override', () => {
+    const template = new DockerSandbox({ image: 'node:22', workingDir: '/workspace', env: { BASE: '1' } });
+
+    const child = template.clone({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      image: 'node:22',
+      workingDir: '/workspace',
+      env: { GITHUB_TOKEN: 'ghs_abc' },
+    });
+  });
+
+  it('ignores idleTimeoutMinutes (Docker has no provider-side idle teardown)', () => {
+    const template = new DockerSandbox({ image: 'node:22', timeout: 120_000 });
+
+    const child = template.clone({ idleTimeoutMinutes: 15 });
+
+    expect(child['_constructorOptions']).toMatchObject({ timeout: 120_000 });
+  });
+
+  it('inherits template defaults when no overrides are passed', () => {
+    const template = new DockerSandbox({ image: 'node:22', env: { BASE: '1' } });
+
+    const child = template.clone();
+
+    expect(child.id).not.toBe(template.id);
+    expect(child['_constructorOptions']).toMatchObject({ image: 'node:22', env: { BASE: '1' } });
+  });
+});

@@ -1,86 +1,143 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { createContext, useContext } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { SkeletonRows } from '../../../ui';
-// Deep imports (not the domain barrels): the barrels re-export components
-// that consume this chat context, so importing them here would create cycles.
-import { useWebAuth } from '../../auth/hooks/useWebAuth';
-import { userSessionResourceId } from '../../auth/services/auth';
-import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
-import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
-import { findUserSessionByThreadId } from '../../workspaces/services/projects';
-import { useAgentControllerThreadMessages } from '../hooks/useAgentControllerThreadMessages';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import { isServerFactory, selectedRepository } from '../../workspaces/services/factories';
+import { getUserSession } from '../../workspaces/services/github';
+import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
+import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
-import { ChatPermissionsProvider } from './ChatPermissionsProvider';
 import { ChatSessionContext } from './ChatSessionContext';
-import type { ChatSessionContextApi } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatSessionContext } from './useChatSessionContext';
 
-export function ChatSessionProvider({
+interface ChatThreadMessagesApi {
+  threadId?: string;
+  isPending: boolean;
+  error: unknown;
+}
+
+const ChatThreadMessagesContext = createContext<ChatThreadMessagesApi | null>(null);
+
+/** Stable project/API configuration for chat shell consumers such as the sidebar. */
+export function ChatSessionConfigProvider({
   children,
   threadId,
   userScoped = false,
 }: {
   children: ReactNode;
   threadId?: string;
-  /** True for /user/threads/* routes: bind to the user's personal session. */
   userScoped?: boolean;
 }) {
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const auth = useWebAuth();
+  const { activeFactory, resourceId, sessionEnabled: activeResourceEnabled } = useActiveFactoryContext();
   const { baseUrl } = useApiConfig();
-  let sessionContextValue: ChatSessionContextApi;
-  if (userScoped) {
-    // Personal session: resourceId is the logged-in user, scope is the
-    // user-session worktree that owns the route's thread.
-    const userSession = threadId ? findUserSessionByThreadId(threadId) : undefined;
-    sessionContextValue = {
-      resourceId: userSessionResourceId(auth.data),
-      sessionEnabled: !auth.isPending && Boolean(userSession),
-      projectPath: userSession?.worktree.worktreePath,
-      baseUrl,
-      kind: 'user',
-      threadBasePath: '/user/threads',
-    };
-  } else {
-    const projectPath = deriveProjectPath(activeProject);
-    const isGithubProject = activeProject?.source === 'github';
-    sessionContextValue = {
-      resourceId,
-      // GitHub projects have no repo-root session anymore — without a factory
-      // worktree there is nothing to bind a session to.
-      sessionEnabled: sessionEnabled && (!isGithubProject || Boolean(projectPath)),
-      projectPath,
-      projectState: isGithubProject ? { githubProjectId: activeProject.githubProjectId } : undefined,
-      baseUrl,
-      kind: isGithubProject ? 'factory' : 'user',
-      threadBasePath: '/threads',
-    };
-  }
+  const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
+  const repository = serverFactory ? selectedRepository(serverFactory) : undefined;
+  const sessionQuery = useQuery({
+    queryKey: ['factory-session', threadId],
+    queryFn: () => getUserSession(baseUrl, threadId!),
+    enabled: Boolean(threadId) && (userScoped || Boolean(serverFactory)),
+    retry: false,
+  });
+  const storedSession = sessionQuery.data;
+  const resolvingStoredSession = Boolean(threadId && serverFactory) && sessionQuery.isPending;
+  const projectPath = storedSession || resolvingStoredSession ? undefined : deriveProjectPath(activeFactory);
+  const projectSessionEnabled =
+    !resolvingStoredSession &&
+    (storedSession ? activeResourceEnabled : activeResourceEnabled && (!repository || Boolean(projectPath)));
+  const userSessionEnabled = Boolean(storedSession) && !sessionQuery.isPending;
+  const value = {
+    resourceId: storedSession?.sessionId ?? resourceId,
+    sessionEnabled: userScoped ? userSessionEnabled : projectSessionEnabled,
+    resourceEnabled: userScoped ? userSessionEnabled : activeResourceEnabled,
+    projectPath,
+    factorySessionState:
+      serverFactory && repository
+        ? {
+            factoryProjectId: serverFactory.binding.factoryProjectId,
+            projectRepositoryId: repository.projectRepositoryId,
+            sandboxId: storedSession?.sandboxId ?? repository.sandboxId,
+            sandboxWorkdir: storedSession?.sandboxWorkdir ?? repository.sandboxWorkdir,
+          }
+        : undefined,
+    baseUrl,
+    kind: userScoped ? ('user' as const) : serverFactory ? ('factory' as const) : ('user' as const),
+  };
 
-  return (
-    <ChatSessionContext.Provider value={sessionContextValue}>
-      <ChatSessionBoundary threadId={threadId}>{children}</ChatSessionBoundary>
-    </ChatSessionContext.Provider>
-  );
+  return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;
 }
 
-function ChatSessionBoundary({ children, threadId }: { children: ReactNode; threadId?: string }) {
+/**
+ * Route-thread state and transport. This boundary deliberately remains below
+ * the persistent shell so only chat content responds to history loading.
+ */
+export function ChatSessionBoundary({
+  children,
+  threadId,
+  deferUntilMessagesReady = false,
+}: {
+  children: ReactNode;
+  threadId?: string;
+  deferUntilMessagesReady?: boolean;
+}) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     threadId,
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),
   });
+  const messages = {
+    threadId,
+    isPending: Boolean(threadId) && messagesQuery.isPending,
+    error: messagesQuery.error,
+  };
 
-  if (threadId && messagesQuery.isPending) {
+  if (deferUntilMessagesReady && threadId && (messages.isPending || messages.error)) {
+    return <ChatMessageFeedback {...messages} />;
+  }
+
+  return (
+    <ChatTranscriptProvider
+      key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.isPending ? 'loading' : 'ready'}`}
+      threadId={threadId}
+      initialMessages={messagesQuery.data}
+      hasMoreHistory={messagesQuery.hasMore}
+      isLoadingMoreHistory={messagesQuery.isLoadingMore}
+      loadMoreHistory={messagesQuery.loadMore}
+    >
+      <ChatModesProvider>
+        <ChatModelsProvider>
+          <ChatCommandsProvider>
+            <ChatThreadMessagesContext.Provider value={messages}>{children}</ChatThreadMessagesContext.Provider>
+          </ChatCommandsProvider>
+        </ChatModelsProvider>
+      </ChatModesProvider>
+    </ChatTranscriptProvider>
+  );
+}
+
+/** Limits delayed thread-history feedback to the transcript content region. */
+export function ChatMessageBoundary({ children }: { children: ReactNode }) {
+  const value = useContext(ChatThreadMessagesContext);
+  if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
+
+  if (value.isPending || value.error) return <ChatMessageFeedback {...value} />;
+
+  return children;
+}
+
+function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesApi) {
+  if (threadId && isPending) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
         <SkeletonRows label="Loading messages" rows={6} />
@@ -88,9 +145,8 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
     );
   }
 
-  if (threadId && messagesQuery.isError) {
-    const errorMessage = messagesQuery.error instanceof Error ? messagesQuery.error.message : undefined;
-
+  if (threadId && error) {
+    const errorMessage = error instanceof Error ? error.message : undefined;
     return (
       <div className="flex min-h-0 flex-1 flex-col place-items-center gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
         <Notice variant="destructive">
@@ -100,13 +156,24 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
     );
   }
 
+  return null;
+}
+
+/** Backward-compatible full chat boundary for focused component tests. */
+export function ChatSessionProvider({
+  children,
+  threadId,
+  userScoped = false,
+}: {
+  children: ReactNode;
+  threadId?: string;
+  userScoped?: boolean;
+}) {
   return (
-    <ChatTranscriptProvider key={threadId ?? 'draft'} threadId={threadId} initialMessages={messagesQuery.data}>
-      <ChatModesProvider>
-        <ChatModelsProvider>
-          <ChatPermissionsProvider>{children}</ChatPermissionsProvider>
-        </ChatModelsProvider>
-      </ChatModesProvider>
-    </ChatTranscriptProvider>
+    <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>
+      <ChatSessionBoundary threadId={threadId} deferUntilMessagesReady>
+        {children}
+      </ChatSessionBoundary>
+    </ChatSessionConfigProvider>
   );
 }

@@ -747,3 +747,45 @@ describe('runAppleContainerCli', () => {
     );
   });
 });
+
+describe('AppleContainerSandbox.clone', () => {
+  it('constructs an unstarted sibling without any I/O', () => {
+    const template = new AppleContainerSandbox({ image: 'ubuntu:24.04', workingDir: '/workspace' });
+
+    const child = template.clone({ id: 'mc-project-1' });
+
+    expect(child).toBeInstanceOf(AppleContainerSandbox);
+    expect(child).not.toBe(template);
+    expect(child.id).toBe('mc-project-1');
+    expect(child.status).toBe('pending');
+  });
+
+  it('inherits template config and applies env override', () => {
+    const template = new AppleContainerSandbox({ image: 'ubuntu:24.04', env: { BASE: '1' } });
+
+    const child = template.clone({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      image: 'ubuntu:24.04',
+      env: { GITHUB_TOKEN: 'ghs_abc' },
+    });
+  });
+
+  it('ignores idleTimeoutMinutes (no provider-side idle teardown) and drops the template name', () => {
+    const template = new AppleContainerSandbox({ image: 'ubuntu:24.04', name: 'template-box', timeout: 120_000 });
+
+    const child = template.clone({ id: 'mc-project-1', idleTimeoutMinutes: 15 });
+
+    expect(child['_constructorOptions']).toMatchObject({ timeout: 120_000 });
+    expect(child['_constructorOptions'].name).toBeUndefined();
+  });
+
+  it('inherits template defaults when no overrides are passed', () => {
+    const template = new AppleContainerSandbox({ image: 'ubuntu:24.04', env: { BASE: '1' } });
+
+    const child = template.clone();
+
+    expect(child.id).not.toBe(template.id);
+    expect(child['_constructorOptions']).toMatchObject({ image: 'ubuntu:24.04', env: { BASE: '1' } });
+  });
+});

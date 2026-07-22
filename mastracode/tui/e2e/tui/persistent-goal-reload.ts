@@ -7,8 +7,8 @@ function quoteSql(value: string): string {
 
 export const persistentGoalReloadScenario: McE2eScenario = {
   name: 'persistent-goal-reload',
-  description: 'Load persisted goal metadata from a seeded thread through the real TUI thread picker.',
-  testName: 'restores persisted goal status from loaded thread metadata',
+  description: 'Load a durable goal objective from a seeded thread through the real TUI thread picker.',
+  testName: 'restores persisted goal status and active duration from thread state',
   prepare({ dbPath, projectDir }) {
     const now = new Date('2026-06-07T12:00:00.000Z');
     const resourceId = 'mc-e2e-goal-reload-resource';
@@ -17,14 +17,14 @@ export const persistentGoalReloadScenario: McE2eScenario = {
       id: 'goal-mc-e2e-reload',
       objective: 'Restore persisted goal metadata from loaded history.',
       status: 'active',
-      turnsUsed: 2,
-      maxTurns: 5,
+      runsUsed: 2,
+      maxRuns: 5,
       judgeModelId: 'openai/gpt-5.4-mini',
-      startedAt: '2026-06-07T11:58:00.000Z',
-      activeStartedAt: '2026-06-07T11:59:00.000Z',
-      activeDurationMs: 12345,
+      startedAt: new Date('2026-06-07T11:58:00.000Z').getTime(),
+      updatedAt: now.getTime(),
+      activeDurationMs: 60_000,
     };
-    const metadata = JSON.stringify({ projectPath: projectDir, goal });
+    const metadata = JSON.stringify({ projectPath: projectDir });
     const userContent = JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'Seeded goal reload user turn.' }] });
     const assistantContent = JSON.stringify({
       format: 2,
@@ -33,6 +33,8 @@ export const persistentGoalReloadScenario: McE2eScenario = {
     const sql = `
 insert into mastra_threads (id, resourceId, title, metadata, createdAt, updatedAt)
 values (${quoteSql(threadId)}, ${quoteSql(resourceId)}, 'E2E persisted goal fixture', ${quoteSql(metadata)}, ${quoteSql(now.toISOString())}, ${quoteSql(now.toISOString())});
+insert into mastra_thread_state (threadId, type, value, createdAt, updatedAt)
+values (${quoteSql(threadId)}, 'goal', ${quoteSql(JSON.stringify(goal))}, ${quoteSql(now.toISOString())}, ${quoteSql(now.toISOString())});
 insert into mastra_messages (id, thread_id, content, role, type, createdAt, resourceId)
 values
   ('msg-mc-e2e-goal-reload-user', ${quoteSql(threadId)}, ${quoteSql(userContent)}, 'user', 'v2', ${quoteSql(now.toISOString())}, ${quoteSql(resourceId)}),
@@ -52,7 +54,7 @@ values
 
     await runtime.waitForScreenText(/Switched to: E2E persisted goal fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/Seeded goal reload assistant turn/i, terminal, 8_000);
-    await runtime.waitForScreenText(/▐[^▌]+▌.*\bgoal(?:\s+<1m)?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/▐[^▌]+▌.*\bgoal\s+1m/i, terminal, 8_000);
 
     terminal.submit('/goal status');
     await runtime.waitForScreenText(

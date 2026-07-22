@@ -9,7 +9,7 @@ import type {
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
+import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
@@ -2421,6 +2421,7 @@ export class Agent extends BaseResource {
 
   async approveNetworkToolCall(params: {
     runId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2470,6 +2471,7 @@ export class Agent extends BaseResource {
 
   async declineNetworkToolCall(params: {
     runId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2559,8 +2561,8 @@ export class Agent extends BaseResource {
   >;
   async stream<OUTPUT>(
     messagesOrParams: MessageListInput,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+    options?: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
     },
   ): Promise<
     Response & {
@@ -2680,8 +2682,8 @@ export class Agent extends BaseResource {
   >;
   async streamUntilIdle<OUTPUT>(
     messagesOrParams: MessageListInput,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+    options?: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
       maxIdleMs?: number;
     },
   ): Promise<
@@ -2781,6 +2783,7 @@ export class Agent extends BaseResource {
   async approveToolCall(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2856,6 +2859,7 @@ export class Agent extends BaseResource {
   async declineToolCall(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -3167,6 +3171,7 @@ export class Agent extends BaseResource {
   async approveToolCallGenerate(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<any> {
     const { requestContext, ...rest } = params;
@@ -3183,6 +3188,7 @@ export class Agent extends BaseResource {
   async declineToolCallGenerate(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<any> {
     const { requestContext, ...rest } = params;

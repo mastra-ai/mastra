@@ -152,5 +152,25 @@
     "qwen3-30b-a3b",
     "qwen3-coder-480b-a35b-instruct",
     "qwen3-max-2025-09-23"
+  ],
+  "structuredOutput": [
+    "glm-5-turbo",
+    "glm-5.1",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-4o",
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-pro",
+    "gpt-5.1",
+    "gpt-5.1-chat-latest",
+    "gpt-5.2",
+    "gpt-5.2-chat-latest",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-mini-2026-03-17",
+    "gpt-5.4-nano",
+    "gpt-5.4-nano-2026-03-17"
   ]
 }

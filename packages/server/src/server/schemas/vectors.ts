@@ -18,7 +18,7 @@ const indexBodyBaseSchema = z.object({
 
 export const upsertVectorsBodySchema = indexBodyBaseSchema.extend({
   vectors: z.array(z.array(z.number())),
-  metadata: z.array(z.record(z.string(), z.any())).optional(),
+  metadata: z.array(z.record(z.string(), z.unknown())).optional(),
   ids: z.array(z.string()).optional(),
 });
 
@@ -30,7 +30,7 @@ export const createIndexBodySchema = indexBodyBaseSchema.extend({
 export const queryVectorsBodySchema = indexBodyBaseSchema.extend({
   queryVector: z.array(z.number()),
   topK: z.number().optional(),
-  filter: z.record(z.string(), z.any()).optional(),
+  filter: z.record(z.string(), z.unknown()).optional(),
   includeVector: z.boolean().optional(),
 });
 

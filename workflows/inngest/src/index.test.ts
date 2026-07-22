@@ -18,7 +18,7 @@ import {
   simulateReadableStream,
 } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
-import type { StreamEvent } from '@mastra/core/workflows';
+import type { StreamEvent, Workflow } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
@@ -216,6 +216,51 @@ async function resetInngest(expectedFnIds: string[] = []) {
 
   await waitForFunctionRegistration(expectedFnIds);
 }
+
+describe('Inngest type regressions', () => {
+  it('should correctly thread TRequestContext type without TS2416 errors', () => {
+    // This is a compile-time test to ensure TS2416 doesn't regress when InngestWorkflow
+    // overrides createRun from the base Workflow class.
+    const inngest = new Inngest({ id: 'test' });
+    type CustomContext = { userId: string };
+    const { createWorkflow, createStep } = init<CustomContext>(inngest);
+
+    const step1 = createStep<any, any, any, any, any, any, CustomContext>({
+      id: 'step1',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ user: z.string() }),
+      execute: async ({ requestContext }) => {
+        // requestContext should be typed as RequestContext<CustomContext>
+        return { user: requestContext.get('userId') as string };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'typed-context-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ user: z.string() }),
+      requestContextSchema: z.object({ userId: z.string() }),
+      steps: [step1],
+    });
+
+    workflow.then(step1).commit();
+
+    const baseWorkflow: Workflow<any, any, any, any, any, any, any, CustomContext> = workflow;
+
+    const typecheckRunContext = async () => {
+      const run = await baseWorkflow.createRun();
+      const requestContext = new RequestContext<CustomContext>();
+      requestContext.set('userId', 'test-user');
+
+      void run.start({ inputData: {}, requestContext });
+      void run.startAsync({ inputData: {}, requestContext });
+      void run.resume({ requestContext });
+    };
+
+    expect(baseWorkflow).toBe(workflow);
+    void typecheckRunContext;
+  });
+});
 
 describe('MastraInngestWorkflow', () => {
   let globServer: any;

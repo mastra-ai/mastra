@@ -33,24 +33,24 @@ describe('getTavilyClient', () => {
 
   it('should use the API key from config', () => {
     getTavilyClient({ apiKey: 'test-key-123' });
-    expect(tavily).toHaveBeenCalledWith({ apiKey: 'test-key-123', clientSource: 'mastra' });
+    expect(tavily).toHaveBeenCalledWith({ apiKey: 'test-key-123', clientName: 'mastra' });
   });
 
   it('should fall back to TAVILY_API_KEY env var', () => {
     process.env.TAVILY_API_KEY = 'env-key-456';
     getTavilyClient();
-    expect(tavily).toHaveBeenCalledWith({ apiKey: 'env-key-456', clientSource: 'mastra' });
+    expect(tavily).toHaveBeenCalledWith({ apiKey: 'env-key-456', clientName: 'mastra' });
   });
 
   it('should prefer config.apiKey over env var', () => {
     process.env.TAVILY_API_KEY = 'env-key-456';
     getTavilyClient({ apiKey: 'config-key-789' });
-    expect(tavily).toHaveBeenCalledWith({ apiKey: 'config-key-789', clientSource: 'mastra' });
+    expect(tavily).toHaveBeenCalledWith({ apiKey: 'config-key-789', clientName: 'mastra' });
   });
 
-  it('should allow overriding clientSource', () => {
-    getTavilyClient({ apiKey: 'test-key', clientSource: 'custom-app' });
-    expect(tavily).toHaveBeenCalledWith({ apiKey: 'test-key', clientSource: 'custom-app' });
+  it('should allow overriding clientName', () => {
+    getTavilyClient({ apiKey: 'test-key', clientName: 'custom-app' });
+    expect(tavily).toHaveBeenCalledWith({ apiKey: 'test-key', clientName: 'custom-app' });
   });
 
   it('should return a client object', () => {

@@ -1,16 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useToast } from '../../../ui';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../factory/hooks/useIntakeConfig';
-import { useLinearProjectsQuery, useLinearStatusQuery } from '../../factory/hooks/useLinearData';
+import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../../shared/hooks/useIntakeConfig';
+import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../../shared/hooks/useLinearData';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
-import { useProjectsQuery } from '../../workspaces/hooks/useProjects';
+import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
+import { isServerFactory } from '../../workspaces/services/factories';
 
 /**
  * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
@@ -84,16 +85,15 @@ function SourceCheckbox({
 
 /**
  * Settings › General › Intake sources: choose which sources feed the Factory
- * Intake page. Both sources sync only the explicitly selected projects —
- * nothing is synced until something is picked. Linear projects are grouped by
- * team. Every change persists immediately.
+ * Intake page. GitHub syncs selected connected repositories; Linear syncs
+ * selected Linear projects (grouped by team). Nothing is synced until
+ * something is picked. Every change persists immediately.
  */
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
-  const { toast } = useToast();
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
-  const projectsQuery = useProjectsQuery();
+  const factoriesQuery = useFactoriesQuery();
   const linearStatusQuery = useLinearStatusQuery();
 
   const linearStatus = linearStatusQuery.data;
@@ -101,7 +101,9 @@ export function IntakeSection() {
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
   const config = configQuery.data;
-  const githubProjects = (projectsQuery.data ?? []).filter(p => p.source === 'github' && p.githubProjectId);
+  const linkedRepositories = (factoriesQuery.data ?? [])
+    .filter(isServerFactory)
+    .flatMap(factory => factory.binding.repositories);
 
   const heading = (
     <Txt variant="ui-lg" className="text-icon6 font-medium">
@@ -111,7 +113,7 @@ export function IntakeSection() {
 
   if (configQuery.isPending) {
     return (
-      <div className="mt-6 pt-4 border-t border-border1/40">
+      <div className="mt-6 pt-4">
         {heading}
         <SkeletonRows label="Loading intake sources" rows={4} />
       </div>
@@ -119,7 +121,7 @@ export function IntakeSection() {
   }
   if (configQuery.isError || !config) {
     return (
-      <div className="mt-6 pt-4 border-t border-border1/40">
+      <div className="mt-6 pt-4">
         {heading}
         <Txt as="p" variant="ui-sm" className="text-icon3 py-4">
           Intake configuration is unavailable. Connect GitHub or Linear first.
@@ -130,42 +132,42 @@ export function IntakeSection() {
 
   const update = (next: IntakeConfig) => {
     saveMutation.mutate(next, {
-      onSuccess: () => toast('Intake sources updated', 'success'),
-      onError: err => toast(err instanceof Error ? err.message : 'Failed to save intake sources', 'error'),
+      onSuccess: () => toast.success('Intake sources updated'),
+      onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save intake sources'),
     });
   };
   const busy = saveMutation.isPending;
 
   return (
-    <div className="mt-6 pt-4 border-t border-border1/40 flex flex-col gap-6">
+    <div className="mt-6 pt-4 flex flex-col gap-6">
       {heading}
       <section className="flex flex-col gap-2" aria-label="GitHub intake">
         <SourceHeader
-          title="GitHub"
-          hint="Sync open issues from the selected projects. Nothing syncs until you pick one."
+          title="GitHub repositories"
+          hint="Sync open issues from the selected connected repositories. Nothing syncs until you pick one."
           enabled={config.github.enabled}
           disabled={busy}
           onToggle={enabled => update({ ...config, github: { ...config.github, enabled } })}
         />
         {config.github.enabled && (
           <div className="flex flex-wrap gap-1.5 pl-1">
-            {githubProjects.length === 0 ? (
+            {linkedRepositories.length === 0 ? (
               <Txt as="span" variant="ui-xs" className="text-icon3">
-                No GitHub projects yet — open a repo from GitHub to add one.
+                No linked repositories yet — link a repository to a factory to add one.
               </Txt>
             ) : (
-              githubProjects.map(project => (
+              linkedRepositories.map(repository => (
                 <SourceCheckbox
-                  key={project.githubProjectId}
-                  label={project.name}
-                  checked={config.github.projectIds?.includes(project.githubProjectId!) ?? false}
+                  key={repository.projectRepositoryId}
+                  label={repository.slug}
+                  checked={config.github.sourceIds?.includes(repository.projectRepositoryId) ?? false}
                   disabled={busy}
                   onChange={() =>
                     update({
                       ...config,
                       github: {
                         ...config.github,
-                        projectIds: toggleId(config.github.projectIds, project.githubProjectId!),
+                        sourceIds: toggleId(config.github.sourceIds, repository.projectRepositoryId),
                       },
                     })
                   }
@@ -178,8 +180,8 @@ export function IntakeSection() {
 
       <section className="flex flex-col gap-2" aria-label="Linear intake">
         <SourceHeader
-          title="Linear"
-          hint="Sync active issues from the projects picked per team. Nothing syncs until you pick one."
+          title="Linear projects"
+          hint="Sync active issues from the Linear projects picked per team. Nothing syncs until you pick one."
           enabled={config.linear.enabled}
           disabled={busy || !linearConnected}
           onToggle={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
@@ -225,19 +227,19 @@ export function IntakeSection() {
                     <Txt as="span" variant="ui-xs" className="font-medium uppercase tracking-wide text-icon3">
                       {group.label}
                     </Txt>
-                    <SelectedCount ids={config.linear.projectIds} projects={group.projects} />
+                    <SelectedCount ids={config.linear.sourceIds} projects={group.projects} />
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {group.projects.map(project => (
                       <SourceCheckbox
                         key={project.id}
                         label={project.name}
-                        checked={config.linear.projectIds?.includes(project.id) ?? false}
+                        checked={config.linear.sourceIds?.includes(project.id) ?? false}
                         disabled={busy}
                         onChange={() =>
                           update({
                             ...config,
-                            linear: { ...config.linear, projectIds: toggleId(config.linear.projectIds, project.id) },
+                            linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, project.id) },
                           })
                         }
                       />
@@ -271,8 +273,8 @@ interface LinearTeamGroup {
 }
 
 /**
- * Group projects under each team they belong to (shared projects appear in
- * every team), sorted by team key. Team-less projects land in a trailing
+ * Group Linear projects under each team they belong to (shared projects appear
+ * in every team), sorted by team key. Team-less projects land in a trailing
  * "No team" group.
  */
 function groupLinearProjectsByTeam(projects: LinearProject[]): LinearTeamGroup[] {

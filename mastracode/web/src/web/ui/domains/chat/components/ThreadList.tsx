@@ -1,65 +1,60 @@
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { MoreHorizontal, Plus } from 'lucide-react';
+import { Copy, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { relativeTime } from '../../../../../shared/lib/date';
 import { useOverlays } from '../../../lib/overlays';
-import { useToast } from '../../../ui';
-import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
+import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
 import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useCloneAgentControllerThreadMutation,
   useDeleteAgentControllerThreadMutation,
   useRenameAgentControllerThreadMutation,
-} from '../hooks/useAgentControllerThreadMutations';
-import { useAgentControllerThreads } from '../hooks/useAgentControllerThreads';
+} from '../../../../../shared/hooks/useAgentControllerThreadMutations';
+import { useAgentControllerThreads } from '../../../../../shared/hooks/useAgentControllerThreads';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
-const MAX_THREADS = 5;
-
 export function ThreadList() {
-  const { activeProject } = useActiveProjectContext();
+  const { activeFactory } = useActiveFactoryContext();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
 
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
-  if (!activeProject) return null;
+  if (!activeFactory) return null;
 
   // Worktrees hold a single conversation: show its title for context, but no
   // "Threads" header/count, no rename/clone/delete actions, and no way to
   // create more threads. Every GitHub chat target is a worktree (the repo
   // root is not a workspace), so any GitHub project path is read-only here.
-  const readOnly = activeProject.source === 'github' && Boolean(projectPath);
+  const readOnly = isServerFactory(activeFactory) && Boolean(projectPath);
 
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;
-  const sortedThreads = [...threads]
-    .sort((a, b) => {
-      const ta = a.updatedAt ?? a.createdAt ?? '';
-      const tb = b.updatedAt ?? b.createdAt ?? '';
-      return tb.localeCompare(ta);
-    })
-    .slice(0, MAX_THREADS);
+  const sortedThreads = [...threads].sort((a, b) => {
+    const ta = a.updatedAt ?? a.createdAt ?? '';
+    const tb = b.updatedAt ?? b.createdAt ?? '';
+    return tb.localeCompare(ta);
+  });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      {!readOnly && <ThreadListHeader threadCount={threads.length} />}
+      {!readOnly && <ThreadListHeader factoryId={activeFactory.id} threadCount={threads.length} />}
       <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {sortedThreads.length === 0 && (
           <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
@@ -73,16 +68,12 @@ export function ThreadList() {
             <ThreadRow
               key={thread.id}
               thread={thread}
+              factoryId={activeFactory.id}
               active={thread.id === activeThreadId}
               readOnly={readOnly}
               onStartRename={() => setRenamingId(thread.id)}
             />
           ),
-        )}
-        {threads.length > MAX_THREADS && (
-          <Txt as="div" variant="ui-xs" className="px-2 py-1.5 text-icon3">
-            +{threads.length - MAX_THREADS} more
-          </Txt>
         )}
       </div>
     </div>
@@ -94,13 +85,13 @@ function useThreadHookArgs() {
   return {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
 }
 
-function ThreadListHeader({ threadCount }: { threadCount: number }) {
+function ThreadListHeader({ factoryId, threadCount }: { factoryId: string; threadCount: number }) {
   const overlays = useOverlays();
   const navigate = useNavigate();
 
@@ -120,7 +111,7 @@ function ThreadListHeader({ threadCount }: { threadCount: number }) {
         aria-label="New thread"
         onClick={() => {
           overlays.close('sidebar');
-          void navigate('/new');
+          void navigate(`/factories/${factoryId}/new`);
         }}
       >
         <Plus size={15} />
@@ -132,14 +123,13 @@ function ThreadListHeader({ threadCount }: { threadCount: number }) {
 function RenameThreadRow({ thread, onDone }: { thread: AgentControllerThreadInfo; onDone: () => void }) {
   const hookArgs = useThreadHookArgs();
   const renameThreadMutation = useRenameAgentControllerThreadMutation(hookArgs);
-  const { toast } = useToast();
   const [draft, setDraft] = useState(() => thread.title ?? '');
 
   const commit = () => {
     const title = draft.trim();
     if (title) {
       void renameThreadMutation.mutateAsync({ threadId: thread.id, title });
-      toast('Thread renamed', 'success');
+      toast.success('Thread renamed');
     }
     onDone();
   };
@@ -164,19 +154,19 @@ function RenameThreadRow({ thread, onDone }: { thread: AgentControllerThreadInfo
 
 function ThreadRow({
   thread,
+  factoryId,
   active,
   readOnly,
   onStartRename,
 }: {
   thread: AgentControllerThreadInfo;
+  factoryId: string;
   active: boolean;
   readOnly: boolean;
   onStartRename: () => void;
 }) {
   const hookArgs = useThreadHookArgs();
-  const { reset } = useChatTranscript();
   const overlays = useOverlays();
-  const { toast } = useToast();
   const navigate = useNavigate();
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
 
@@ -184,33 +174,32 @@ function ThreadRow({
   const cloneThreadMutation = useCloneAgentControllerThreadMutation(hookArgs);
 
   const openThread = () => {
-    void navigate(`/threads/${thread.id}`);
+    void navigate(`/factories/${factoryId}/threads/${thread.id}`);
     overlays.close('sidebar');
   };
 
   const cloneThread = async () => {
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
-    reset(clonedThread.id);
-    toast('Thread cloned', 'success');
-    void navigate(`/threads/${clonedThread.id}`);
+    toast.success('Thread cloned');
+    void navigate(`/factories/${factoryId}/threads/${clonedThread.id}`);
   };
 
   const deleteThread = async () => {
     await deleteThreadMutation.mutateAsync(thread.id);
     toast('Thread deleted');
     if (thread.id === routeThreadId) {
-      reset();
-      void navigate('/new');
+      void navigate(`/factories/${factoryId}/new`);
     }
   };
 
   return (
-    <div role="listitem" className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
-      <button
-        type="button"
-        className="flex w-full flex-col gap-0.5 rounded-md px-2 py-2 text-left"
-        onClick={openThread}
-      >
+    <div
+      role="listitem"
+      className={`group relative rounded-md ${
+        active ? 'bg-[var(--sidebar-nav-active)]' : 'hover:bg-[var(--sidebar-nav-hover)]'
+      }`}
+    >
+      <button type="button" className="flex w-full flex-col rounded-md px-2 py-1.5 text-left" onClick={openThread}>
         <span className="truncate text-ui-sm text-icon6">{thread.title || 'Untitled thread'}</span>
         <span className="text-ui-xs text-icon3">{relativeTime(thread.updatedAt ?? thread.createdAt ?? '')}</span>
       </button>
@@ -229,10 +218,17 @@ function ThreadRow({
               </Button>
             }
           />
-          <DropdownMenu.Content align="end" className="min-w-28">
-            <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
-            <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
+          <DropdownMenu.Content align="end">
+            <DropdownMenu.Item onClick={onStartRename}>
+              <Pencil />
+              Rename
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onClick={() => void cloneThread()}>
+              <Copy />
+              Clone
+            </DropdownMenu.Item>
             <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
+              <Trash2 />
               Delete
             </DropdownMenu.Item>
           </DropdownMenu.Content>

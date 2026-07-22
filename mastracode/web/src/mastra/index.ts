@@ -1,94 +1,54 @@
 /**
  * Platform-deployable Mastra entry for MastraCode.
  *
+ * This module is the ONE place deployment env is read. It maps today's env
+ * vars onto explicit `MastraFactory` config — instances for behaviors (pubsub,
+ * storage, vector), plain values for config (publicUrl, origins) — so anyone
+ * reading the entry sees exactly which env var feeds which slot.
+ * Everything else (feature readiness, route/middleware assembly, controller
+ * construction) lives in `MastraFactory` (`@mastra/factory`).
+ *
  * `mastra build` requires the entry to export a `Mastra` instance named
- * `mastra` (validated by the `checkConfigExport` Babel plugin). Everything
- * outside that instance is discarded — the deployer generates its own Hono
- * server via `createHonoServer(mastra, ...)`. So this entry folds the ENTIRE
- * web surface onto the instance the deployer builds from:
- *
- *   - `server.apiRoutes`   — the custom `/web/*` routes (fs / config / github),
- *                            already migrated off `/api`, `requiresAuth: false`.
- *   - `server.middleware`  — the WorkOS auth gate (bare handler, runs first) and
- *                            the same-origin SPA static middleware.
- *   - `server.cors`        — the SPA is hosted separately (static host / CDN),
- *                            so cross-origin credentialed requests are allowed
- *                            for the configured origin(s).
- *
- * This entry is the single web surface. The Mastra CLI consumes it everywhere:
- * `mastra dev` (local), `mastra build`, and `mastra deploy` all bundle this
- * module and let the deployer generate the server — there is no separate
- * hand-wired dev bootstrap.
- *
- * NOTE: the deployer's own static serving is Studio-only. The SPA (vite build
- * output) is served same-origin at `/` by the SPA middleware below when a
- * build is found (`web:build` produces one); `server.cors` remains only for
- * the optional separately-hosted-SPA setup. In dev, Vite serves the SPA and
- * proxies API paths here instead.
+ * `mastra` constructed by a literal `new Mastra(...)` in THIS file (validated
+ * by the deployer's `checkConfigExport` Babel plugin) — which is why the
+ * factory returns constructor args from `prepare()` instead of the instance.
+ * The Mastra CLI consumes this entry everywhere: `mastra dev`, `mastra build`,
+ * and `mastra deploy` all bundle this module and let the deployer generate
+ * the server.
  */
 
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
-import type { RequestContext } from '@mastra/core/request-context';
-import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { LocalSandbox } from '@mastra/core/workspace';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { PgVector, PgFactoryStorage } from '@mastra/pg';
+import { PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
-import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
-import { buildLinearAgentTools } from '../web/linear/agent-tools.js';
-import { handleServerError } from '../web/server-error.js';
-import {
-  createGithubSubscriptionTools,
-  parseCreatedPullRequest,
-  subscribeCurrentSessionToPullRequest,
-} from '../web/github/session-subscriptions.js';
-import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
-import {
-  assembleWebApiRoutes,
-  resolveFactoryReady,
-  resolveGithubReady,
-  resolveIntakeReady,
-  resolveLinearReady,
-} from '../web/web-surface.js';
-import type { WebApiRoutesDeps } from '../web/web-surface.js';
-
-type BuildApiRoutesDeps = Pick<WebApiRoutesDeps, 'controller' | 'authStorage'>;
-
-const CONTROLLER_ID = 'code';
+import { getDatabasePath } from '@mastra/code-sdk/utils/project';
+import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
+import { MastraFactory } from '@mastra/factory';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
- * Browser-facing origin used to build GitHub OAuth/install callback URLs and to
- * derive the WorkOS redirect URI. On the platform the SPA is hosted separately,
- * so this MUST be set to the public API origin via `MASTRACODE_PUBLIC_URL`.
+ * Parse a positive-integer env knob; anything else means "use the default".
+ * Fractional values are rejected rather than floored — flooring `0.5` to `0`
+ * would silently disable a capacity knob or turn an idle window into
+ * immediate expiry.
  */
-const publicOrigin = (process.env.MASTRACODE_PUBLIC_URL ?? 'http://localhost:4111').replace(/\/+$/, '');
-
-/**
- * Allowed cross-origin SPA origins (comma-separated). The SPA is served from a
- * separate static host, so credentialed requests must be explicitly allowed.
- */
-const allowedOrigins = (process.env.MASTRACODE_ALLOWED_ORIGINS ?? '')
-  .split(',')
-  .map(o => o.trim().replace(/\/+$/, ''))
-  .filter(Boolean);
-
-// GitHub App + cloud-sandbox readiness, resolved BEFORE constructing Mastra so
-// the github routes are simply omitted from `apiRoutes` when unavailable. Fails
-// soft (see resolveGithubReady).
-const githubReady = await resolveGithubReady();
-
-// Linear intake readiness, same fail-soft pattern as GitHub.
-const linearReady = await resolveLinearReady();
-
-// Intake source configuration (Settings › Intake) — needs at least one source.
-const intakeReady = await resolveIntakeReady(githubReady || linearReady);
-
-// Factory work-item board — hangs off GitHub projects, same fail-soft pattern.
-const factoryReady = await resolveFactoryReady(githubReady);
+function positiveInt(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined;
+  return parsed;
+}
 
 // Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
 // signals) ride Redis Streams so multiple web server processes can share one
-// event bus. RedisStreamsPubSub also implements LeaseProvider, so passing
-// `crossProcessPubSub` lets the controller drop its file-based thread locks in
-// favor of pubsub-coordinated leases. Without `REDIS_URL` (bare local dev) the
-// in-process default applies.
+// event bus. RedisStreamsPubSub also implements LeaseProvider, so the factory
+// marks it cross-process and the controller drops its file-based thread locks
+// in favor of pubsub-coordinated leases. Without `REDIS_URL` (bare local dev)
+// the in-process default applies.
 const redisUrl = process.env.REDIS_URL;
 const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl }) : undefined;
 if (redisUrl) {
@@ -103,110 +63,137 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-const webAuthEnabled = isWebAuthEnabled();
+const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
+let auth: IMastraAuthProvider | null | undefined;
 
-const redirectUri = process.env.WORKOS_REDIRECT_URI ?? `${publicOrigin}/auth/callback`;
+if (authDisabled) {
+  auth = null;
+}
 
-// One WorkOS provider for the process, shared by the gate middleware and the
-// public `/auth/*` routes so session encryption/validation stays consistent.
-const authProvider = webAuthEnabled ? createWebAuthProvider(redirectUri) : undefined;
+// Host env exposed to local sandboxes: an allow-list only, so app secrets
+// (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
+// commands run against untrusted repo checkouts. PATH is always added by the
+// core LocalSandbox itself; the rest keeps git and TLS working normally.
+const LOCAL_SANDBOX_ENV_KEYS = [
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'TMPDIR',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'TZ',
+  'GIT_EXEC_PATH',
+  'GIT_TEMPLATE_DIR',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+] as const;
 
-// Build the real production controller (agents, modes, tools, memory, OM, MCP,
-// providers) — identical to the terminal app — and register it on a Mastra whose
-// `server` config owns the whole web surface. The deployer generates its Hono
-// server from THIS instance, so the gate, custom routes, and CORS all ride along.
+function localSandboxEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of LOCAL_SANDBOX_ENV_KEYS) {
+    const value = process.env[key];
+    if (value) env[key] = value;
+  }
+  return env;
+}
+
+const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
+const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
+
+// Use PlatformSandbox only when its complete identity is configured. Otherwise
+// fall back to LocalSandbox for single-user development.
+const sandbox = hasPlatformSandboxEnv
+  ? new PlatformSandbox()
+  : new LocalSandbox({
+      workingDirectory:
+        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+      env: localSandboxEnv(),
+    });
+
+// One FactoryStorage backend powers agent storage, the factory app tables,
+// the distributed project lock, and better-auth. `DATABASE_URL` set →
+// Postgres (the paired PgVector rides the same database for recall search).
+// Unset (bare local dev) → libSQL on the same local file the SDK's default
+// storage resolution uses, running the FULL app surface (auth, intake,
+// audit, work-items, integrations) — no features silently off.
 //
-// Agent state (threads, messages, memory, OM, recall vectors) lives in the
-// single app Postgres (`APP_DATABASE_URL`) alongside the github/app tables —
-// one shared DB for all users, separated by `resourceId` scoping. Without
-// `APP_DATABASE_URL` (bare local dev) the default storage resolution applies
-// (local libSQL file).
-const prepared = await prepareAgentControllerMount({
-  controllerId: CONTROLLER_ID,
-  disableGithubSignals: true,
-  ...(process.env.APP_DATABASE_URL
-    ? { storage: { backend: 'pg', connectionString: process.env.APP_DATABASE_URL } }
-    : {}),
-  ...(githubReady || linearReady
-    ? {
-        extraTools: async ({ requestContext }: { requestContext: RequestContext }) => ({
-          ...(linearReady ? await buildLinearAgentTools({ requestContext }) : {}),
-          ...(githubReady ? createGithubSubscriptionTools(requestContext) : {}),
-        }),
-      }
-    : {}),
-  ...(githubReady
-    ? {
-        postToolObserver: async (context: {
-          toolName: string;
-          input: unknown;
-          output?: unknown;
-          error?: unknown;
-          context: unknown;
-        }) => {
-          const pullRequestUrl = parseCreatedPullRequest(context);
-          const requestContext = (context.context as { requestContext?: RequestContext } | undefined)?.requestContext;
-          if (pullRequestUrl && requestContext) {
-            await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create');
-          }
-        },
-      }
-    : {}),
-  ...(pubsub ? { pubsub, crossProcessPubSub: true } : {}),
-  buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
-    // Public WorkOS `/auth/*` routes (login/callback/logout/me). Folded in as
-    // `apiRoutes` (not plain Hono routes) because the entry can't touch the Hono
-    // app the deployer generates. `requiresAuth: false`; the gate skips `/auth/*`.
-    ...(authProvider ? buildAuthRoutes(authProvider, redirectUri) : []),
-    // Custom `/web/*` routes (fs / config / github).
-    ...assembleWebApiRoutes({
-      controller,
-      authStorage,
-      publicOrigin,
-      githubReady,
-      linearReady,
-      intakeReady,
-      factoryReady,
-    }),
-  ],
-  buildServerConfig: () => {
-    const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
-    // Log route errors with method/path/stack and answer with structured JSON
-    // instead of an opaque `Internal Server Error`. Applied by the deployer to
-    // both the top-level app and the custom-route sub-app.
-    const onError = { onError: handleServerError };
-    // Same-origin SPA: when a vite build is present (see resolveUiDistDir),
-    // serve it at `/` from this server. Mounted last so the auth gate (when
-    // enabled) covers it; it always passes `/api`, `/web`, `/auth` through.
-    const uiDist = resolveUiDistDir();
-    const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
-    if (!webAuthEnabled || !authProvider) {
-      // Auth disabled: no gate. SPA + CORS only.
-      return { ...(spa.length ? { middleware: spa } : {}), ...cors, ...onError };
-    }
+// `APP_DATABASE_URL` is the deprecated legacy name — still honored as a
+// fallback so existing checkouts keep working, but new setups should use
+// `DATABASE_URL` (matches the platform's managed env-var sync for attached
+// databases, so `mastra deploy` populates it automatically).
+const databaseUrl = process.env.DATABASE_URL?.trim() || process.env.APP_DATABASE_URL?.trim() || undefined;
+if (process.env.APP_DATABASE_URL?.trim() && !process.env.DATABASE_URL?.trim()) {
+  console.warn(
+    '[mastracode-web] APP_DATABASE_URL is deprecated — rename it to DATABASE_URL. ' +
+      'The old name is honored as a fallback for now, but new deploys should use DATABASE_URL.',
+  );
+}
+const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+if (!databaseUrl && !localDevelopmentMode) {
+  throw new Error('DATABASE_URL is required outside local development and tests.');
+}
+const storage = databaseUrl
+  ? new PgFactoryStorage({
+      id: 'mastra-code-storage',
+      connectionString: databaseUrl,
+      retention: DEFAULT_RETENTION,
+    })
+  : new LibSQLFactoryStorage({
+      id: 'mastra-code-storage',
+      url: `file:${getDatabasePath()}`,
+      retention: DEFAULT_RETENTION,
+    });
+const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
-    // Ordered middleware. The deployer applies these AFTER its context
-    // middleware sets `c.set('mastra', mastra)` and BEFORE routes, so:
-    //   1. gate  — validates the WorkOS session, stashes the user, and 401s /
-    //              redirects unauthenticated requests. Skips public `/auth/*`.
-    //   2. spa   — serves the built UI for everything the server doesn't own.
-    return {
-      middleware: [createWebAuthGate(authProvider), ...spa],
-      ...cors,
-      ...onError,
-    };
+export const factory = new MastraFactory({
+  auth,
+  sandbox: {
+    machine: sandbox,
+    // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
+    // this in-sandbox path and uses its host workingDirectory instead.
+    workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
+    // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
+    maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
   },
+  // Agent state (threads, messages, memory, OM, recall vectors) lives in the
+  // single app Postgres alongside the github/app tables — one shared DB (and
+  // pg pool) for all users, separated by `resourceId` scoping. Unset (bare
+  // local dev) → default storage resolution applies (local libSQL file).
+  storage,
+  vector,
+  pubsub,
+  // Browser-facing origin. On the platform the SPA is hosted separately, so
+  // this MUST be set to the public API origin.
+  publicUrl: process.env.MASTRACODE_PUBLIC_URL,
+  // Allowed cross-origin SPA origins (comma-separated). The SPA is served from
+  // a separate static host, so credentialed requests must be explicitly allowed.
+  allowedOrigins: (process.env.MASTRACODE_ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean),
+  // Deployment-stable secret for OAuth `state` signing (GitHub/Linear connect
+  // flows). Same resolution the state signer used before it moved into the
+  // factory: webhook secret first, then the WorkOS cookie password. Unset →
+  // per-process random secret (single-process local dev only).
+  stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
 });
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
-// in the entry file. The deployer's `checkConfigExport` Babel plugin only marks
-// the config valid when it finds `export const mastra = new Mastra(...)` (or an
-// `export { x as mastra }` where `x = new Mastra(...)`) in the entry source AST.
-// `prepared.mastraArgs` already carries the controller (via `agentControllers`),
-// storage, and the assembled `server` config (middleware + apiRoutes + cors).
-export const mastra = new Mastra(prepared.mastraArgs);
+// in the entry file (see module docs). `prepare()` returns the constructor args
+// carrying the controller (via `agentControllers`), storage, and the assembled
+// `server` config (middleware + apiRoutes + cors).
+const prepared = await factory.prepare();
+export const mastra = new Mastra({
+  ...prepared,
+  bundler: {
+    externals: ['@anush008/tokenizers', '@duckdb/node-bindings', '@node-rs/xxhash', 'supports-color'],
+    transpilePackages: ['@mastra/factory'],
+  },
+});
 
 // Post-construct boot: initialize the controller (which now inherits this
 // instance's storage) and start its workers. Runs at module load via top-level
 // await, so the deployer imports a fully-booted instance.
-await prepared.finalize();
+await factory.finalize();

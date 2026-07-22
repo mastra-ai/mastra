@@ -1,5 +1,5 @@
 import type { AgentControllerAvailableModel } from '@mastra/client-js';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -16,6 +16,16 @@ const models: AgentControllerAvailableModel[] = [
   { id: 'openai/observer-x', provider: 'openai' } as AgentControllerAvailableModel,
   { id: 'openai/reflector-x', provider: 'openai' } as AgentControllerAvailableModel,
 ];
+
+/** Open a searchable combobox and pick an option (Base UI selects on pointer events). */
+async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement, name: RegExp) {
+  await user.click(trigger);
+  const option = await screen.findByRole('option', { name });
+  fireEvent.pointerDown(option, { pointerType: 'mouse' });
+  fireEvent.click(option, { detail: 1 });
+  // Wait for the popup to close so the next interaction targets a settled DOM.
+  await waitFor(() => expect(screen.queryByRole('option', { name })).not.toBeInTheDocument());
+}
 
 const baseConfig: OMConfigInfo = {
   observerModelId: 'openai/observer-x',
@@ -38,7 +48,7 @@ describe('OMSection', () => {
 
       renderWithProviders(<OMSection models={models} />);
 
-      expect(await screen.findByText(/Open a project to view/)).toBeInTheDocument();
+      expect(await screen.findByText(/Open a factory to view/)).toBeInTheDocument();
       expect(hit).toBe(false);
     });
   });
@@ -125,8 +135,8 @@ describe('OMSection', () => {
       renderWithProviders(<OMSection resourceId={RESOURCE_ID} models={models} />);
 
       await screen.findByDisplayValue('1000');
-      const observerSelect = screen.getAllByRole('combobox')[0]!;
-      await user.selectOptions(observerSelect, 'openai/reflector-x');
+      const observerTrigger = screen.getAllByRole('combobox')[0]!;
+      await pickOption(user, observerTrigger, /openai\/reflector-x/);
 
       await waitFor(() => expect(putBody).toEqual({ resourceId: RESOURCE_ID, modelId: 'openai/reflector-x' }));
     });

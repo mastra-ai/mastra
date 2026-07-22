@@ -7,7 +7,7 @@ import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
-} from '../hooks/useAgentControllerGoalMutations';
+} from '../../../../../shared/hooks/useAgentControllerGoalMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border1 bg-accent2/5 px-4 py-2 text-xs';
@@ -23,7 +23,7 @@ export function GoalPanel() {
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };

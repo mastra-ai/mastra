@@ -1,5 +1,79 @@
 # @mastra/libsql
 
+## 1.17.0-alpha.3
+
+### Minor Changes
+
+- Added configurable local journal modes while preserving WAL as the default. ([#19901](https://github.com/mastra-ai/mastra/pull/19901))
+
+  ```ts
+  const storage = new LibSQLStore({
+    id: 'local-storage',
+    url: 'file:./mastra.db',
+    journalMode: 'delete',
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`c7d30cd`](https://github.com/mastra-ai/mastra/commit/c7d30cd86009c407df91105591f03cd6e3d2854d), [`ef03fbc`](https://github.com/mastra-ai/mastra/commit/ef03fbcc556bcbc04c9b3d06fab88771ecaa043c), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`4e68363`](https://github.com/mastra-ai/mastra/commit/4e683634f94ebd062d26a3bb6093a8dfc7263d37), [`9251370`](https://github.com/mastra-ai/mastra/commit/9251370ad413af464aa22d7566338bec5613e8de)]:
+  - @mastra/core@1.52.0-alpha.11
+
+## 1.17.0-alpha.2
+
+### Patch Changes
+
+- Replaced GitHub-specific Mastra Code session state with Factory project and linked-repository identities. This lets SDK consumers represent sessions independently of a source-control provider and select a repository explicitly when sandbox execution is required. ([#19849](https://github.com/mastra-ai/mastra/pull/19849))
+
+  Updated Mastra Code onboarding to be Factory-first: create a Factory by name, then link repositories from your connected source-control installations in a separate step. A Factory is valid with zero linked repositories, and the Board, Metrics, and Audit pages stay available for any server-backed Factory. Factory pages keep project-scoped data separate from repository-scoped intake and provide a repository selector when a Factory has multiple linked repositories. Creating a Factory from a local folder remains available as a secondary option.
+
+  **Before**
+
+  ```ts
+  const state = { githubProjectId: 'project-1', sandboxId, sandboxWorkdir };
+  ```
+
+  **After**
+
+  ```ts
+  const state = {
+    factoryProjectId: 'factory-project-1',
+    projectRepositoryId: 'project-repository-1',
+    sandboxId,
+    sandboxWorkdir,
+  };
+  ```
+
+- Updated dependencies [[`41a5392`](https://github.com/mastra-ai/mastra/commit/41a5392d9f6c5e18d6b227f0fc0ddf49c50774e9), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`da009e1`](https://github.com/mastra-ai/mastra/commit/da009e1aacd89ed94b8d1b2af09c9d4fe7c4db49), [`35c2181`](https://github.com/mastra-ai/mastra/commit/35c2181e6a50e47c90ba36260db7c9723d54696f), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`c328769`](https://github.com/mastra-ai/mastra/commit/c3287698ff8ef98dba86d415faa566fa3e5f4d56), [`232fcbc`](https://github.com/mastra-ai/mastra/commit/232fcbc14fce625dd672ba043329c0b732c62be2), [`3491666`](https://github.com/mastra-ai/mastra/commit/34916663c4fdd43b48c21f4ab2d5fb6dcccc94f9)]:
+  - @mastra/core@1.52.0-alpha.10
+
+## 1.17.0-alpha.1
+
+### Minor Changes
+
+- Added LibSQLFactoryStorage for persisting Mastra agent state and lifecycle-managed application domains through one LibSQL connection. ([#19681](https://github.com/mastra-ai/mastra/pull/19681))
+
+  ```ts
+  import { LibSQLFactoryStorage } from '@mastra/libsql';
+
+  const storage = new LibSQLFactoryStorage({ url: 'file:mastra.db' });
+  await storage.init();
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`3b77e77`](https://github.com/mastra-ai/mastra/commit/3b77e7704936522e4769d29de1b5ea6901f302bd), [`6b1bf3b`](https://github.com/mastra-ai/mastra/commit/6b1bf3b9494bd51aa8f654c68c9355d6046fa2a1), [`72e437c`](https://github.com/mastra-ai/mastra/commit/72e437c515942c80b9def5b026e0bdee61b469d9)]:
+  - @mastra/core@1.52.0-alpha.8
+
+## 1.16.1-alpha.0
+
+### Patch Changes
+
+- Fixed an uncaught `RangeError: Maximum call stack size exceeded` when writing deeply-nested values (such as a long chained `Error.cause`) to LibSQL storage. `safeStringify` now caps its recursion depth and substitutes a `"[Max depth exceeded]"` sentinel instead of overflowing the stack. ([#19610](https://github.com/mastra-ai/mastra/pull/19610))
+
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/core@1.52.0-alpha.5
+
 ## 1.16.0
 
 ### Minor Changes
@@ -917,9 +991,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({
@@ -947,9 +1019,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({

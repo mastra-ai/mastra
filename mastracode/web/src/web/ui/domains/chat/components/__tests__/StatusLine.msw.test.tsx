@@ -13,47 +13,58 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { StatusLine } from '../StatusLine';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
+const CONFIGURED_MODELS = `${TEST_BASE_URL}/web/config/models`;
 const THREAD_ID = 'thread-test';
 
 afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject(source: 'local' | 'github' = 'local') {
-  const project: Project =
+function seedFactory(source: 'local' | 'github' = 'local') {
+  const project: Factory =
     source === 'github'
       ? {
           id: 'project-test',
           name: 'octo/hello',
-          source: 'github',
-          githubProjectId: 'github-project-test',
-          sandboxWorkdir: '/tmp/mastracode-test',
           resourceId: RESOURCE_ID,
-          gitBranch: 'main',
-          worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
-          selectedWorktreePath: '/tmp/mastracode-test-worktree',
           createdAt: 1,
+          binding: {
+            kind: 'factory',
+            factoryProjectId: 'fp-test',
+            repositories: [
+              {
+                projectRepositoryId: 'pr-test',
+                slug: 'octo/hello',
+                gitBranch: 'main',
+                sandboxWorkdir: '/tmp/mastracode-test',
+                selectedWorktreePath: '/tmp/mastracode-test-worktree',
+                worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
+              },
+            ],
+          },
         }
       : {
           id: 'project-test',
           name: 'MastraCode Test',
-          path: '/tmp/mastracode-test',
           resourceId: RESOURCE_ID,
-          gitBranch: 'main',
           createdAt: 1,
+          binding: {
+            kind: 'local',
+            path: '/tmp/mastracode-test',
+            gitBranch: 'main',
+          },
         };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
 }
 
 function sessionState(modeId = 'build'): AgentControllerSessionState {
@@ -93,6 +104,20 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], delayed
   const onMode = vi.fn();
   let activeModeId = 'build';
   server.use(
+    // Mount-driven sandbox materialization for the github-backed factory
+    // variant: `/ensure` must succeed before the session is allowed to bind.
+    http.post(`${TEST_BASE_URL}/web/github/projects/pr-test/ensure`, () => {
+      const done = {
+        resourceId: RESOURCE_ID,
+        factoryProjectId: 'fp-test',
+        projectRepositoryId: 'pr-test',
+        sandboxId: 'sbx-test',
+        sandboxWorkdir: '/tmp/mastracode-test',
+      };
+      return new HttpResponse(`event: done\ndata: ${JSON.stringify(done)}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }),
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
     ),
@@ -106,6 +131,11 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], delayed
       }),
     ),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
+    http.get(CONFIGURED_MODELS, () =>
+      HttpResponse.json({
+        models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }],
+      }),
+    ),
     http.get(SESSION, () => HttpResponse.json(sessionState(activeModeId))),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState(activeModeId))),
     http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
@@ -139,16 +169,16 @@ function omProgress(overrides: Partial<AgentControllerOMProgress> = {}): AgentCo
 
 function renderStatusLine() {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+    <MemoryRouter initialEntries={[`/factories/project-test/threads/${THREAD_ID}`]}>
       <Routes>
         <Route
-          path="/threads/:threadId"
+          path="/factories/:factoryId/threads/:threadId"
           element={
-            <ActiveProjectProvider>
+            <ActiveFactoryProvider factoryId="project-test">
               <ChatSessionProvider>
                 <StatusLine />
               </ChatSessionProvider>
-            </ActiveProjectProvider>
+            </ActiveFactoryProvider>
           }
         />
       </Routes>
@@ -158,85 +188,103 @@ function renderStatusLine() {
 
 describe('StatusLine', () => {
   describe('when the session exposes multiple modes', () => {
-    it('marks the active mode as pressed inside the mode group', async () => {
-      seedProject();
+    it('shows the active mode in a compact ghost select', async () => {
+      seedFactory();
       useAgentControllerHandlers();
       renderStatusLine();
 
-      const group = await screen.findByRole('group', { name: 'Session mode' });
-      expect(group).toBeInTheDocument();
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'true'),
-      );
-      expect(screen.getByRole('button', { name: 'Plan' })).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.getByRole('button', { name: 'Explore' })).toHaveAttribute('aria-pressed', 'false');
-      for (const button of screen.getAllByRole('button', { name: /Build|Plan|Explore/ })) {
-        expect(button).toHaveAttribute('data-variant', 'outline');
-      }
-    });
-
-    it('colors only the active mode background', async () => {
-      seedProject();
-      useAgentControllerHandlers();
-      renderStatusLine();
-
-      const buildButton = await screen.findByRole('button', { name: 'Build' });
-      await waitFor(() => expect(buildButton).toHaveStyle({ backgroundColor: '#16c858', color: '#111827' }));
-      expect(screen.getByRole('button', { name: 'Plan' })).not.toHaveAttribute('style');
-      expect(screen.getByRole('button', { name: 'Explore' })).not.toHaveAttribute('style');
+      const selector = await screen.findByRole('combobox', { name: 'Session mode' });
+      await waitFor(() => expect(selector).toHaveTextContent('Build'));
     });
 
     it('colors Explore orange when its fast mode is active', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       const user = userEvent.setup();
       renderStatusLine();
 
-      const exploreButton = await screen.findByRole('button', { name: 'Explore' });
-      await user.click(exploreButton);
+      const selector = await screen.findByRole('combobox', { name: 'Session mode' });
+      await user.click(selector);
+      await user.click(await screen.findByRole('option', { name: 'Explore' }));
 
-      await waitFor(() => expect(exploreButton).toHaveAttribute('aria-pressed', 'true'));
-      expect(exploreButton).toHaveStyle({ backgroundColor: '#fdac53', color: '#111827' });
+      await waitFor(() => expect(selector).toHaveTextContent('Explore'));
     });
 
-    it('switches modes through the controller mode endpoint before updating the pressed state', async () => {
-      seedProject();
+    it('switches modes through the controller mode endpoint before updating the selected value', async () => {
+      seedFactory();
       const { onMode } = useAgentControllerHandlers();
       const user = userEvent.setup();
       renderStatusLine();
 
-      const planButton = await screen.findByRole('button', { name: 'Plan' });
-      await user.click(planButton);
+      const selector = await screen.findByRole('combobox', { name: 'Session mode' });
+      await user.click(selector);
+      await user.click(await screen.findByRole('option', { name: 'Plan' }));
 
       await waitFor(() => expect(onMode).toHaveBeenCalledWith({ modeId: 'plan' }));
-      await waitFor(() => expect(planButton).toHaveAttribute('aria-pressed', 'true'));
-      expect(planButton).toHaveStyle({ backgroundColor: '#7f45e0', color: '#ffffff' });
-      expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'false');
+      await waitFor(() => expect(selector).toHaveTextContent('Plan'));
     });
   });
 
   describe('when the session reports its model', () => {
-    it('shows the active model id once the session syncs', async () => {
-      seedProject();
+    it('shows a readable active model name once the session syncs', async () => {
+      seedFactory();
       useAgentControllerHandlers();
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument());
-      expect(screen.queryByText('no model')).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText('GPT-4o Mini')).toBeInTheDocument());
+      expect(screen.queryByText('No model')).not.toBeInTheDocument();
+    });
+
+    it('formats Claude family and version slugs as a readable alias', async () => {
+      seedFactory();
+      useAgentControllerHandlers();
+      const claudeState = { ...sessionState(), modelId: 'anthropic/claude-opus-4-8' };
+      server.use(
+        http.get(SESSION, () => HttpResponse.json(claudeState)),
+        http.put(`${SESSION}/state`, () => HttpResponse.json(claudeState)),
+        http.get(CONFIGURED_MODELS, () =>
+          HttpResponse.json({
+            models: [
+              {
+                id: 'anthropic/claude-opus-4-8',
+                provider: 'anthropic',
+                modelName: 'claude-opus-4-8',
+                hasApiKey: true,
+              },
+            ],
+          }),
+        ),
+      );
+      renderStatusLine();
+
+      expect(await screen.findByText('Claude Opus 4.8')).toBeInTheDocument();
     });
 
     it('shows the no-model fallback before the session syncs', () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderStatusLine();
 
-      expect(screen.getByText('no model')).toBeInTheDocument();
+      expect(screen.getByText('No model')).toBeInTheDocument();
+    });
+  });
+
+  describe('when the active model is not configured', () => {
+    it('marks the readable active model name as unavailable', async () => {
+      seedFactory();
+      useAgentControllerHandlers();
+      server.use(http.get(CONFIGURED_MODELS, () => HttpResponse.json({ models: [] })));
+      renderStatusLine();
+
+      const model = await screen.findByLabelText('GPT-4o Mini is not configured');
+      expect(model).toHaveTextContent('GPT-4o Mini');
+      expect(model).toHaveTextContent('not configured');
     });
   });
 
   describe('when the active GitHub thread is subscribed to a pull request', () => {
     it('shows a linked pull request at the right side of the status line', async () => {
-      seedProject('github');
+      seedFactory('github');
       useAgentControllerHandlers();
       server.use(
         http.get(`${TEST_BASE_URL}/web/github/subscriptions`, ({ request }) => {
@@ -265,7 +313,7 @@ describe('StatusLine', () => {
     });
 
     it('refreshes subscribed pull requests when an agent run completes', async () => {
-      seedProject('github');
+      seedFactory('github');
       useAgentControllerHandlers([{ type: 'agent_start' }], [{ type: 'agent_end' }]);
       let requests = 0;
       server.use(
@@ -294,7 +342,7 @@ describe('StatusLine', () => {
     });
 
     it('refreshes the pull request status when a notification arrives', async () => {
-      seedProject('github');
+      seedFactory('github');
       useAgentControllerHandlers(
         [],
         [
@@ -303,16 +351,23 @@ describe('StatusLine', () => {
             message: {
               id: 'notification-message',
               role: 'assistant',
-              content: [
-                {
-                  type: 'notification',
-                  notificationId: 'notification-merged',
-                  message: 'octo/hello#42 was merged',
-                  source: 'github',
-                  kind: 'pull-request-merged',
-                  priority: 'urgent',
+              createdAt: new Date(),
+              content: {
+                format: 2,
+                parts: [],
+                metadata: {
+                  harnessContent: [
+                    {
+                      type: 'notification',
+                      notificationId: 'notification-merged',
+                      message: 'octo/hello#42 was merged',
+                      source: 'github',
+                      kind: 'pull-request-merged',
+                      priority: 'urgent',
+                    },
+                  ],
                 },
-              ],
+              },
             },
           },
         ],
@@ -345,8 +400,9 @@ describe('StatusLine', () => {
   });
 
   describe('when display state carries observational memory budgets', () => {
-    it('shows the message budget with its projected removal', async () => {
-      seedProject();
+    it('shows the message budget with an explained icon and its projected removal', async () => {
+      const user = userEvent.setup();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'display_state_changed',
@@ -362,13 +418,15 @@ describe('StatusLine', () => {
       ]);
       renderStatusLine();
 
-      const msgBudget = await screen.findByTitle('Message window until next observation');
-      expect(msgBudget).toHaveTextContent('msg 1.5/10k');
-      expect(msgBudget).toHaveTextContent('↓2k');
+      const messageWindowIcon = await screen.findByLabelText('Message window until next observation');
+      await user.hover(messageWindowIcon);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('Message window until next observation');
+      expect(screen.getByText(/1\.5\/10k/)).toHaveTextContent('↓2k');
+      expect(screen.queryByText('msg')).not.toBeInTheDocument();
     });
 
     it('shows the memory budget with its projected savings', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'display_state_changed',
@@ -390,7 +448,7 @@ describe('StatusLine', () => {
     });
 
     it('hides the memory budget until observations accumulate', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'display_state_changed',
@@ -406,14 +464,22 @@ describe('StatusLine', () => {
       ]);
       renderStatusLine();
 
-      await screen.findByTitle('Message window until next observation');
+      await screen.findByLabelText('Message window until next observation');
       expect(screen.queryByTitle('Observations accumulated until next reflection')).not.toBeInTheDocument();
     });
   });
 
   describe('when the agent is actively working', () => {
+    it('reports Working in the composer status line', async () => {
+      seedFactory();
+      useAgentControllerHandlers([{ type: 'agent_start' }]);
+      renderStatusLine();
+
+      expect(await screen.findByRole('status')).toHaveTextContent('Working…');
+    });
+
     it('shows the observational memory phase while observing', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([{ type: 'om_observation_start' }]);
       renderStatusLine();
 
@@ -421,13 +487,18 @@ describe('StatusLine', () => {
     });
 
     it('shows tokens-per-second throughput after a streamed step reports usage', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers(
         [
           { type: 'agent_start' },
           {
             type: 'message_update',
-            message: { id: 'assistant-1', role: 'assistant', content: [{ type: 'text', text: 'Working…' }] },
+            message: {
+              id: 'assistant-1',
+              role: 'assistant',
+              createdAt: new Date(),
+              content: { format: 2, parts: [{ type: 'text', text: 'Working…' }] },
+            },
           },
         ],
         [{ type: 'usage_update', usage: { completionTokens: 120 } }],
@@ -440,7 +511,7 @@ describe('StatusLine', () => {
 
   describe('when follow-ups are queued', () => {
     it('shows the queued follow-up count', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([{ type: 'follow_up_queued', count: 2 }]);
       renderStatusLine();
 
@@ -450,7 +521,7 @@ describe('StatusLine', () => {
 
   describe('when a goal is being pursued', () => {
     it('shows the pursuing label for an active goal', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'goal_evaluation',
@@ -463,7 +534,7 @@ describe('StatusLine', () => {
     });
 
     it('shows the paused label for a paused goal', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'goal_evaluation',
@@ -476,7 +547,7 @@ describe('StatusLine', () => {
     });
 
     it('hides the goal indicator once the goal is done', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers([
         {
           type: 'goal_evaluation',
@@ -485,20 +556,55 @@ describe('StatusLine', () => {
       ]);
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('GPT-4o Mini')).toBeInTheDocument());
       expect(screen.queryByText('pursuing goal')).not.toBeInTheDocument();
       expect(screen.queryByText('goal paused')).not.toBeInTheDocument();
     });
   });
 
+  describe('when the active thread belongs to a Factory pull request', () => {
+    it('shows the pull request link from canonical rule metadata', async () => {
+      seedFactory('github');
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-test/work-items`, () =>
+          HttpResponse.json({
+            workItems: [
+              {
+                id: 'work-item-pr-34',
+                source: 'github-pr',
+                sessions: {
+                  review: {
+                    projectPath: '/tmp/mastracode-test-worktree',
+                    branch: 'factory/pr-34',
+                    threadId: THREAD_ID,
+                    startedBy: 'user-1',
+                  },
+                },
+                metadata: { githubPullRequestNumber: 34 },
+              },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
+      );
+      renderStatusLine();
+
+      expect(await screen.findByRole('link', { name: 'Open open octo/hello pull request 34' })).toHaveAttribute(
+        'href',
+        'https://github.com/octo/hello/pull/34',
+      );
+    });
+  });
+
   describe('when the session is idle with no activity data', () => {
     it('omits budgets, activity, queue, and goal indicators', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument());
-      expect(screen.queryByTitle('Message window until next observation')).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText('GPT-4o Mini')).toBeInTheDocument());
+      expect(screen.queryByLabelText('Message window until next observation')).not.toBeInTheDocument();
       expect(screen.queryByTitle('Observations accumulated until next reflection')).not.toBeInTheDocument();
       expect(screen.queryByText(/tok\/s/)).not.toBeInTheDocument();
       expect(screen.queryByText(/queued/)).not.toBeInTheDocument();

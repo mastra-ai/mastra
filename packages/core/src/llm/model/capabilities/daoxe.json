@@ -9,5 +9,6 @@
     "grok-4.3",
     "grok-4.5"
   ],
-  "temperature": ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "gemini-3.1-pro-preview", "grok-4.3", "grok-4.5"]
+  "temperature": ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "gemini-3.1-pro-preview", "grok-4.3", "grok-4.5"],
+  "structuredOutput": ["gemini-3.1-pro-preview", "gpt-5.4", "gpt-5.5", "grok-4.3", "grok-4.5", "kimi-k2.5"]
 }

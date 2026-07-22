@@ -1,26 +1,24 @@
+import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChartLine, SquareKanban } from 'lucide-react';
+import { ChartLine, GitPullRequest, LayoutDashboard, ListChecks, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
-import { NavLink } from 'react-router';
+import { NavLink, useLocation } from 'react-router';
 
 import { useOverlays } from '../../../lib/overlays';
-import { useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import { isServerFactory } from '../../workspaces/services/factories';
 
 /**
  * The Factory menu: Board navigation plus whatever the caller nests under it
- * (the factory Sessions list). Factory work is GitHub-backed, so the section
- * only renders for GitHub projects; the Board link additionally requires the
- * GitHub integration to be enabled and connected, while the nested sessions
- * work off the project's own worktrees.
+ * (the factory Sessions list). Renders for any server-backed Factory — a
+ * Factory with no linked repositories (or a disconnected GitHub integration)
+ * still has a Board; those states surface connect CTAs inside the pages
+ * instead of hiding the navigation.
  */
 export function FactorySection({ children }: { children?: ReactNode }) {
-  const { activeProject } = useActiveProjectContext();
-  const isGithubProject = activeProject?.source === 'github';
-  const { data: status } = useGithubStatusQuery(isGithubProject);
+  const { activeFactory } = useActiveFactoryContext();
 
-  if (!isGithubProject) return null;
-
-  const showBoard = Boolean(status?.enabled && status.connected);
+  if (!activeFactory || !isServerFactory(activeFactory)) return null;
 
   return (
     <nav className="flex flex-col gap-2" aria-label="Factory">
@@ -29,30 +27,30 @@ export function FactorySection({ children }: { children?: ReactNode }) {
           Factory
         </Txt>
       </div>
-      {showBoard && (
-        <div className="flex flex-col gap-1">
-          <FactoryLink to="/factory/board" icon={SquareKanban} label="Board" />
-          <FactoryLink to="/factory/metrics" icon={ChartLine} label="Metrics" />
-        </div>
-      )}
-      {children && <div className="flex flex-col gap-2 pl-2">{children}</div>}
+      <MainSidebar.NavList>
+        <FactoryLink to={`/factories/${activeFactory.id}/overview`} icon={LayoutDashboard} label="Overview" />
+        <FactoryLink to={`/factories/${activeFactory.id}/work`} icon={SquareKanban} label="Work" />
+        <FactoryLink to={`/factories/${activeFactory.id}/review`} icon={GitPullRequest} label="Review" />
+        <FactoryLink to={`/factories/${activeFactory.id}/metrics`} icon={ChartLine} label="Metrics" />
+        <FactoryLink to={`/factories/${activeFactory.id}/rules`} icon={ListChecks} label="Rules" />
+        <FactoryLink to={`/factories/${activeFactory.id}/audit`} icon={ScrollText} label="Audit log" />
+      </MainSidebar.NavList>
+      {children}
     </nav>
   );
 }
 
 function FactoryLink({ to, icon: Icon, label }: { to: string; icon: ComponentType<{ size?: number }>; label: string }) {
   const overlays = useOverlays();
+  const { pathname } = useLocation();
+  const isActive = pathname === to || pathname.startsWith(`${to}/`);
 
   return (
-    <NavLink
-      to={to}
-      onClick={() => overlays.close('sidebar')}
-      className={({ isActive }) =>
-        `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs no-underline transition ${isActive ? 'bg-surface4 text-icon6' : 'text-icon3 hover:bg-surface3 hover:text-icon5'}`
-      }
-    >
-      <Icon size={13} />
-      <span className="truncate">{label}</span>
-    </NavLink>
+    <MainSidebar.NavLink asChild link={{ name: label, url: to }} isActive={isActive}>
+      <NavLink to={to} onClick={() => overlays.close('sidebar')}>
+        <Icon />
+        <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
+      </NavLink>
+    </MainSidebar.NavLink>
   );
 }

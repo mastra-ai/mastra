@@ -169,9 +169,7 @@ export const agent = new Agent({
   name: 'context-limited-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    /* ... */
-  }),
+  memory: new Memory({/* ... */}),
   inputProcessors: [
     new TokenLimiterProcessor({ limit: 4000 }), // Limits historical messages to ~4000 tokens
   ],

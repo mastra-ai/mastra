@@ -70,7 +70,7 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
 // `drawer-popup` hooks into drawer.css for swipe/stack transforms; `::after` dims under nested drawers.
 const drawerPopupVariants = cva(
   cn(
-    'drawer-popup group/popup relative z-50 box-border flex flex-col overflow-y-auto overscroll-contain outline-none [touch-action:auto] will-change-transform',
+    'drawer-popup group/popup relative z-50 box-border flex [touch-action:auto] flex-col overflow-y-auto overscroll-contain will-change-transform outline-none',
     'border-border1 bg-surface3 text-neutral5 shadow-dialog',
     'data-[swiping]:select-none',
     "after:pointer-events-none after:absolute after:inset-0 after:bg-transparent after:transition-[background-color] after:duration-[450ms] after:content-['']",
@@ -374,7 +374,7 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
       aria-hidden
       data-slot="drawer-side-handle"
       className={cn(
-        'absolute top-1/2 z-10 flex h-20 w-5 -translate-y-1/2 touch-none select-none items-center justify-center cursor-ew-resize lg:hidden',
+        'absolute top-1/2 z-10 flex h-20 w-5 -translate-y-1/2 cursor-ew-resize touch-none items-center justify-center select-none lg:hidden',
         side === 'right' ? '-left-2' : '-right-2',
       )}
     >

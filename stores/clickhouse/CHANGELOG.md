@@ -293,9 +293,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({
@@ -321,9 +319,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({

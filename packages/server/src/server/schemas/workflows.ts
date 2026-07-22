@@ -1,5 +1,6 @@
+import type { TimeTravelContext, WorkflowRunState } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
-import { createCombinedPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
+import { createCombinedPaginationSchema, tracingOptionsSchema, messageResponseSchema, typedPermissive } from './common';
 
 export const workflowRunStatusSchema = z.enum([
   'running',
@@ -79,7 +80,7 @@ export const listWorkflowsResponseSchema = z.record(z.string(), workflowInfoSche
 const workflowRunSchema = z.object({
   workflowName: z.string(),
   runId: z.string(),
-  snapshot: z.union([z.record(z.string(), z.any()), z.string()]),
+  snapshot: typedPermissive<WorkflowRunState | string>(z.union([z.record(z.string(), z.unknown()), z.string()])),
   createdAt: z.date(),
   updatedAt: z.date(),
   resourceId: z.string().optional(),
@@ -170,8 +171,12 @@ export const timeTravelBodySchema = z.object({
   resumeData: z.unknown().optional(),
   initialState: z.unknown().optional(),
   step: z.union([z.string(), z.array(z.string())]),
-  context: z.record(z.string(), z.any()).optional(),
-  nestedStepsContext: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+  context: typedPermissive<TimeTravelContext<unknown, unknown, unknown, unknown>>(
+    z.record(z.string(), z.unknown()),
+  ).optional(),
+  nestedStepsContext: typedPermissive<Record<string, TimeTravelContext<unknown, unknown, unknown, unknown>>>(
+    z.record(z.string(), z.record(z.string(), z.unknown())),
+  ).optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
   perStep: z.boolean().optional(),
@@ -232,7 +237,7 @@ export const workflowExecutionResultSchema = z.object({
   error: z.unknown().optional(),
   payload: z.unknown().optional(),
   initialState: z.unknown().optional(),
-  steps: z.record(z.string(), z.any()).optional(),
+  steps: z.record(z.string(), z.unknown()).optional(),
   activeStepsPath: z.record(z.string(), z.array(z.number())).optional(),
   serializedStepGraph: z.array(serializedStepFlowEntrySchema).optional(),
 });
@@ -261,11 +266,11 @@ export const workflowRunResultSchema = z.object({
 
   // Execution state
   status: workflowRunStatusSchema,
-  initialState: z.record(z.string(), z.any()).optional(),
+  initialState: z.record(z.string(), z.unknown()).optional(),
   result: z.unknown().optional(),
   error: z.unknown().optional(),
   payload: z.unknown().optional(),
-  steps: z.record(z.string(), z.any()).optional(),
+  steps: z.record(z.string(), z.unknown()).optional(),
 
   // Optional detailed fields
   activeStepsPath: z.record(z.string(), z.array(z.number())).optional(),

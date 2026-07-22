@@ -1,0 +1,79 @@
+{
+  "name": "@mastra/factory",
+  "version": "0.1.0-alpha.3",
+  "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "factory-skills",
+    "CHANGELOG.md"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./*": {
+      "import": {
+        "types": "./dist/*.d.ts",
+        "default": "./dist/*.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "mastra",
+    "software-factory",
+    "agents",
+    "ai"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "mastracode/factory"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "dependencies": {
+    "@mastra/auth-studio": "workspace:*",
+    "@mastra/auth-workos": "workspace:*",
+    "@mastra/code-sdk": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@octokit/auth-app": "^8.0.0",
+    "@octokit/rest": "^22.0.1",
+    "hono": "^4.12.8",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "@mastra/pg": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@types/node": "22.20.1",
+    "eslint": "^10.7.0",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.57.0",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

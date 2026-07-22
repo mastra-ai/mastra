@@ -1,3 +1,4 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -5,7 +6,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { ToastProvider } from '../../../../ui';
 import type { IntakeConfig } from '../../../factory/services/intake';
 import type { LinearProject, LinearStatus } from '../../../factory/services/linear';
 import { IntakeSection } from '../IntakeSection';
@@ -16,8 +16,8 @@ const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
 
 function baseConfig(): IntakeConfig {
   return {
-    github: { enabled: true, projectIds: null },
-    linear: { enabled: true, projectIds: null },
+    github: { enabled: true, sourceIds: null },
+    linear: { enabled: true, sourceIds: null },
   };
 }
 
@@ -39,15 +39,18 @@ const linearProjects: LinearProject[] = [
 
 function seedGithubProject() {
   localStorage.setItem(
-    'mastracode-projects',
+    'mastracode-factories',
     JSON.stringify([
       {
         id: 'project-gh',
         name: 'mastra',
-        source: 'github',
-        githubProjectId: 'ghp-1',
         resourceId: 'resource-gh',
         createdAt: 1,
+        binding: {
+          kind: 'factory',
+          factoryProjectId: 'fp-1',
+          repositories: [{ projectRepositoryId: 'ghp-1', slug: 'mastra', worktrees: [] }],
+        },
       },
     ]),
   );
@@ -73,9 +76,10 @@ function useIntakeHandlers({
 
 function renderIntakeSection() {
   return renderWithProviders(
-    <ToastProvider>
+    <>
       <IntakeSection />
-    </ToastProvider>,
+      <Toaster position="bottom-right" />
+    </>,
   );
 }
 
@@ -85,15 +89,15 @@ afterEach(() => {
 
 describe('IntakeSection', () => {
   describe('given a config with both sources enabled', () => {
-    it('renders the GitHub project and Linear project pickers', async () => {
+    it('renders the GitHub repository and Linear project pickers', async () => {
       seedGithubProject();
       useIntakeHandlers();
 
       renderIntakeSection();
 
       expect(await screen.findByText('Intake sources')).toBeInTheDocument();
-      expect(await screen.findByRole('switch', { name: 'Sync GitHub' })).toBeChecked();
-      expect(await screen.findByRole('switch', { name: 'Sync Linear' })).toBeChecked();
+      expect(await screen.findByRole('switch', { name: 'Sync GitHub repositories' })).toBeChecked();
+      expect(await screen.findByRole('switch', { name: 'Sync Linear projects' })).toBeChecked();
       expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
       expect(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
       expect(screen.getByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
@@ -124,7 +128,7 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      await userEvent.click(await screen.findByRole('switch', { name: 'Sync GitHub' }));
+      await userEvent.click(await screen.findByRole('switch', { name: 'Sync GitHub repositories' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
       expect(saved[0]!.github.enabled).toBe(false);
@@ -142,7 +146,22 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.projectIds).toEqual(['lproj-1']);
+      expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
+    });
+  });
+
+  describe('when a GitHub repository is picked', () => {
+    it('persists an explicit repository selection under sourceIds', async () => {
+      seedGithubProject();
+      const saved = useIntakeHandlers();
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'mastra' }));
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.github.sourceIds).toEqual(['ghp-1']);
+      expect(saved[0]).not.toHaveProperty('github.repositoryIds');
     });
   });
 
@@ -185,7 +204,7 @@ describe('IntakeSection', () => {
       expect(await screen.findByText('Connect a Linear workspace to sync its issues.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Connect Linear' })).toBeInTheDocument();
       expect(screen.queryByRole('checkbox', { name: 'Q3 Roadmap' })).not.toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Sync Linear' })).toBeDisabled();
+      expect(screen.getByRole('switch', { name: 'Sync Linear projects' })).toBeDisabled();
     });
   });
 

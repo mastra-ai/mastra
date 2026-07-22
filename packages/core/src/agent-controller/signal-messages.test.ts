@@ -30,9 +30,10 @@ function createTextStreamModel(responseText: string) {
 }
 
 async function waitFor(predicate: () => boolean) {
-  for (let i = 0; i < 20; i++) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
     if (predicate()) return;
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 10));
   }
   throw new Error('Timed out waiting for controller events');
 }
@@ -125,270 +126,149 @@ describe('AgentController signal messages', () => {
     ]);
   });
 
-  it('renders persisted user-message signal attributes', async () => {
+  // DB-native contract: history reads return the persisted MastraDBMessage verbatim
+  // (role 'signal', nested content.parts, signal identity on content.metadata.signal).
+  // Consumers read signals from this shape instead of a flattened UI union.
+  it('returns persisted user-message signals as DB-native signal messages', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
     const thread = await session.thread.create();
 
-    await storage.stores.memory!.saveMessages({
-      messages: [
-        createSignal({
-          id: 'signal-user-1',
-          type: 'user-message',
-          contents: 'Continue with this',
-          attributes: { delivery: 'while-active' },
-          createdAt: new Date('2026-05-04T00:00:00.000Z'),
-        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
-      ],
-    });
+    const persisted = createSignal({
+      id: 'signal-user-1',
+      type: 'user-message',
+      contents: 'Continue with this',
+      attributes: { delivery: 'while-active' },
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId });
 
-    await expect(session.thread.listActiveMessages()).resolves.toEqual([
-      {
-        id: 'signal-user-1',
-        role: 'user',
-        content: [{ type: 'text', text: 'Continue with this' }],
-        attributes: { delivery: 'while-active' },
-        createdAt: new Date('2026-05-04T00:00:00.000Z'),
-      },
-    ]);
+    await storage.stores.memory!.saveMessages({ messages: [persisted] });
+
+    await expect(session.thread.listActiveMessages()).resolves.toEqual([persisted]);
   });
 
-  it('renders persisted system-reminder signals from signal attributes', async () => {
+  it('returns persisted system-reminder signals as DB-native signal messages', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
     const thread = await session.thread.create();
 
-    await storage.stores.memory!.saveMessages({
-      messages: [
-        createSignal({
-          id: 'signal-1',
-          type: 'system-reminder',
-          contents: 'Remember the repo instructions',
-          attributes: { type: 'dynamic-agents-md', path: '/tmp/AGENTS.md' },
-          createdAt: new Date('2026-05-04T00:00:00.000Z'),
-        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
-      ],
-    });
+    const persisted = createSignal({
+      id: 'signal-1',
+      type: 'system-reminder',
+      contents: 'Remember the repo instructions',
+      attributes: { type: 'dynamic-agents-md', path: '/tmp/AGENTS.md' },
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId });
 
-    await expect(session.thread.listActiveMessages()).resolves.toEqual([
-      {
-        id: 'signal-1',
-        role: 'user',
-        content: [
-          {
-            type: 'system_reminder',
-            message: 'Remember the repo instructions',
-            reminderType: 'dynamic-agents-md',
-            path: '/tmp/AGENTS.md',
-            precedesMessageId: undefined,
-            gapText: undefined,
-            gapMs: undefined,
-            timestamp: undefined,
-          },
-        ],
-        createdAt: new Date('2026-05-04T00:00:00.000Z'),
-      },
-    ]);
+    await storage.stores.memory!.saveMessages({ messages: [persisted] });
+
+    await expect(session.thread.listActiveMessages()).resolves.toEqual([persisted]);
   });
 
-  it('normalizes system-reminder contents from text-part arrays', async () => {
+  it('preserves system-reminder text-part arrays in DB-native signal messages', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
     const thread = await session.thread.create();
 
-    await storage.stores.memory!.saveMessages({
-      messages: [
-        createSignal({
-          id: 'signal-array',
-          type: 'system-reminder',
-          contents: [
-            { type: 'text', text: 'First line' },
-            { type: 'text', text: 'Second line' },
-          ],
-          attributes: { type: 'dynamic-agents-md', path: '/tmp/AGENTS.md' },
-          createdAt: new Date('2026-05-04T00:00:00.000Z'),
-        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+    const persisted = createSignal({
+      id: 'signal-array',
+      type: 'system-reminder',
+      contents: [
+        { type: 'text', text: 'First line' },
+        { type: 'text', text: 'Second line' },
       ],
-    });
+      attributes: { type: 'dynamic-agents-md', path: '/tmp/AGENTS.md' },
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId });
 
-    await expect(session.thread.listActiveMessages()).resolves.toEqual([
-      {
-        id: 'signal-array',
-        role: 'user',
-        content: [
-          {
-            type: 'system_reminder',
-            message: 'First line\nSecond line',
-            reminderType: 'dynamic-agents-md',
-            path: '/tmp/AGENTS.md',
-            precedesMessageId: undefined,
-            gapText: undefined,
-            gapMs: undefined,
-            timestamp: undefined,
-          },
-        ],
-        createdAt: new Date('2026-05-04T00:00:00.000Z'),
-      },
-    ]);
+    await storage.stores.memory!.saveMessages({ messages: [persisted] });
+
+    await expect(session.thread.listActiveMessages()).resolves.toEqual([persisted]);
   });
 
-  it('renders persisted generic reactive signals', async () => {
+  it('returns persisted generic reactive signals as DB-native signal messages', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
     const thread = await session.thread.create();
 
-    await storage.stores.memory!.saveMessages({
-      messages: [
-        createSignal({
-          id: 'reactive-signal-1',
-          type: 'reactive',
-          tagName: 'build-status',
-          contents: 'Build is still running',
-          attributes: { source: 'ci' },
-          metadata: { buildId: 'build-1' },
-          createdAt: new Date('2026-05-04T00:00:00.000Z'),
-        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
-      ],
-    });
+    const persisted = createSignal({
+      id: 'reactive-signal-1',
+      type: 'reactive',
+      tagName: 'build-status',
+      contents: 'Build is still running',
+      attributes: { source: 'ci' },
+      metadata: { buildId: 'build-1' },
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId });
 
-    await expect(session.thread.listActiveMessages()).resolves.toEqual([
-      {
-        id: 'reactive-signal-1',
-        role: 'user',
-        content: [
-          {
-            type: 'reactive_signal',
-            id: 'reactive-signal-1',
-            tagName: 'build-status',
-            message: 'Build is still running',
-            attributes: { source: 'ci' },
-            metadata: { buildId: 'build-1' },
-          },
-        ],
-        createdAt: new Date('2026-05-04T00:00:00.000Z'),
-      },
-    ]);
+    await storage.stores.memory!.saveMessages({ messages: [persisted] });
+
+    await expect(session.thread.listActiveMessages()).resolves.toEqual([persisted]);
   });
 
-  it('renders persisted notification summary signals', async () => {
+  it('returns persisted notification summary signals as DB-native signal messages', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
     const thread = await session.thread.create();
 
-    await storage.stores.memory!.saveMessages({
-      messages: [
-        createSignal({
-          id: 'summary-1',
-          type: 'notification',
-          tagName: 'notification-summary',
-          contents: 'mastracode: 1',
-          attributes: { pending: 1 },
-          metadata: {
-            notificationSummary: {
-              threadId: thread.id,
-              resourceId: thread.resourceId,
-              pending: 1,
-              bySource: { mastracode: 1 },
-              byPriority: { low: 1 },
-              notificationIds: ['notification-1'],
-            },
-            notificationIds: ['notification-1'],
-          },
-          createdAt: new Date('2026-05-04T00:00:00.000Z'),
-        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
-      ],
-    });
-
-    await expect(session.thread.listActiveMessages()).resolves.toEqual([
-      {
-        id: 'summary-1',
-        role: 'user',
-        content: [
-          {
-            type: 'notification_summary',
-            id: 'summary-1',
-            message: 'mastracode: 1',
-            pending: 1,
-            bySource: { mastracode: 1 },
-            byPriority: { low: 1 },
-            notificationIds: ['notification-1'],
-          },
-        ],
-        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    const persisted = createSignal({
+      id: 'summary-1',
+      type: 'notification',
+      tagName: 'notification-summary',
+      contents: 'mastracode: 1',
+      attributes: { pending: 1 },
+      metadata: {
+        notificationSummary: {
+          threadId: thread.id,
+          resourceId: thread.resourceId,
+          pending: 1,
+          bySource: { mastracode: 1 },
+          byPriority: { low: 1 },
+          notificationIds: ['notification-1'],
+        },
+        notificationIds: ['notification-1'],
       },
-    ]);
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId });
+
+    await storage.stores.memory!.saveMessages({ messages: [persisted] });
+
+    await expect(session.thread.listActiveMessages()).resolves.toEqual([persisted]);
   });
 
-  it('renders persisted full notification signals', async () => {
+  it('returns persisted full notification signals as DB-native signal messages', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
     const thread = await session.thread.create();
 
-    await storage.stores.memory!.saveMessages({
-      messages: [
-        createSignal({
-          id: 'notification-signal-1',
-          type: 'notification',
-          tagName: 'notification',
-          contents: 'CI failed on main',
-          attributes: {
-            id: 'notification-1',
-            source: 'github',
-            kind: 'ci-status',
-            priority: 'high',
-            status: 'delivered',
-          },
-          metadata: {
-            notification: {
-              signal: 'notification',
-              recordId: 'notification-1',
-              source: 'github',
-              kind: 'ci-status',
-              priority: 'high',
-              status: 'delivered',
-            },
-          },
-          createdAt: new Date('2026-05-04T00:00:00.000Z'),
-        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
-      ],
-    });
-
-    await expect(session.thread.listActiveMessages()).resolves.toEqual([
-      {
-        id: 'notification-signal-1',
-        role: 'user',
-        content: [
-          {
-            type: 'notification',
-            id: 'notification-signal-1',
-            notificationId: 'notification-1',
-            message: 'CI failed on main',
-            source: 'github',
-            kind: 'ci-status',
-            priority: 'high',
-            status: 'delivered',
-            attributes: {
-              id: 'notification-1',
-              source: 'github',
-              kind: 'ci-status',
-              priority: 'high',
-              status: 'delivered',
-            },
-            metadata: {
-              notification: {
-                signal: 'notification',
-                recordId: 'notification-1',
-                source: 'github',
-                kind: 'ci-status',
-                priority: 'high',
-                status: 'delivered',
-              },
-            },
-          },
-        ],
-        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    const persisted = createSignal({
+      id: 'notification-signal-1',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'CI failed on main',
+      attributes: {
+        id: 'notification-1',
+        source: 'github',
+        kind: 'ci-status',
+        priority: 'high',
+        status: 'delivered',
       },
-    ]);
+      metadata: {
+        notification: {
+          signal: 'notification',
+          recordId: 'notification-1',
+          source: 'github',
+          kind: 'ci-status',
+          priority: 'high',
+          status: 'delivered',
+        },
+      },
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId });
+
+    await storage.stores.memory!.saveMessages({ messages: [persisted] });
+
+    await expect(session.thread.listActiveMessages()).resolves.toEqual([persisted]);
   });
 
   it('processes sendMessage streams once through the active thread subscription', async () => {
@@ -413,8 +293,24 @@ describe('AgentController signal messages', () => {
     );
     expect(assistantStarts).toHaveLength(1);
     expect(assistantEnds).toHaveLength(1);
-    expect(assistantEnds[0]?.message.content).toEqual([{ type: 'text', text: 'Hello' }]);
+    expect(assistantEnds[0]?.message.content.parts).toEqual([{ type: 'text', text: 'Hello' }]);
     expect(session.getCurrentRunId()).toBeNull();
+  });
+
+  it('uses explicit request context when a prebuilt signal starts an idle run', async () => {
+    const storage = new InMemoryStore();
+    const { controller, session } = await createController(storage);
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    const buildToolsets = vi.spyOn(controller as any, 'buildToolsets');
+
+    const signal = session.sendSignal(
+      { id: 'factory-skill-1', type: 'user', tagName: 'user', contents: 'investigate' },
+      { requestContext },
+    );
+    await signal.accepted;
+
+    expect(buildToolsets).toHaveBeenCalledWith(session, requestContext);
   });
 
   it('sends active text signals without building idle stream options', async () => {
@@ -822,7 +718,9 @@ describe('AgentController signal messages', () => {
         event =>
           event.type === 'message_end' &&
           event.message.id === signal.id &&
-          event.message.content.some(part => part.type === 'text' && part.text === 'hows it going'),
+          event.message.content.parts.some(
+            part => part.type === 'data-user-message' && part.data?.contents === 'hows it going',
+          ),
       ),
     );
 
@@ -886,7 +784,9 @@ describe('AgentController signal messages', () => {
         event =>
           event.type === 'message_end' &&
           event.message.role === 'assistant' &&
-          event.message.content.some(part => part.type === 'text' && part.text === 'approved through subscription'),
+          event.message.content.parts.some(
+            part => part.type === 'text' && part.text === 'approved through subscription',
+          ),
       ),
     );
 
@@ -915,8 +815,16 @@ describe('AgentController signal messages', () => {
         event.type === 'message_end' && event.message.role === 'assistant',
     );
 
-    expect(signalEnd?.message.content).toEqual([{ type: 'text', text: 'hello from signal' }]);
-    expect(assistantEnd?.message.content).toEqual([{ type: 'text', text: 'Hello' }]);
+    // DB-native: the echoed user-message signal ends as a role:'signal' message
+    // carrying the raw data-user-message part (id/createdAt are dynamic).
+    expect(signalEnd?.message.role).toBe('signal');
+    expect(signalEnd?.message.content.parts).toEqual([
+      expect.objectContaining({
+        type: 'data-user-message',
+        data: expect.objectContaining({ type: 'user', contents: 'hello from signal' }),
+      }),
+    ]);
+    expect(assistantEnd?.message.content.parts).toEqual([{ type: 'text', text: 'Hello' }]);
   });
 
   it('does not carry a stale abort reason into a later idle signal run', async () => {
@@ -1031,16 +939,36 @@ describe('AgentController signal messages', () => {
       new RequestContext(),
     );
 
+    // DB-native: the echoed file user-message signal preserves its raw
+    // data-user-message part (including the original contents array) verbatim.
     const signalEnd = events.find(event => event.type === 'message_end' && event.message.id === 'signal-file-1');
     expect(signalEnd).toMatchObject({
       type: 'message_end',
       message: {
         id: 'signal-file-1',
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Review this' },
-          { type: 'file', data: 'data:text/plain;base64,aGVsbG8=', mediaType: 'text/plain', filename: 'note.txt' },
-        ],
+        role: 'signal',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-user-message',
+              data: {
+                id: 'signal-file-1',
+                type: 'user-message',
+                contents: [
+                  { type: 'text', text: 'Review this' },
+                  {
+                    type: 'file',
+                    data: 'data:text/plain;base64,aGVsbG8=',
+                    mediaType: 'text/plain',
+                    filename: 'note.txt',
+                  },
+                ],
+                createdAt: '2026-05-04T00:00:00.000Z',
+              },
+            },
+          ],
+        },
       },
     });
   });
@@ -1070,25 +998,38 @@ describe('AgentController signal messages', () => {
     const signalEvents = events.filter(
       event => (event.type === 'message_start' || event.type === 'message_end') && event.message.id === 'signal-user-1',
     );
+    // DB-native: the echoed user-message signal is emitted as a 'signal'-role
+    // MastraDBMessage carrying the raw data-user-message part (no flattening).
+    const expectedMessage = {
+      id: 'signal-user-1',
+      role: 'signal',
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'data-user-message',
+            data: {
+              id: 'signal-user-1',
+              type: 'user-message',
+              contents: 'continue with this',
+              createdAt: '2026-05-04T00:00:00.000Z',
+            },
+          },
+        ],
+        metadata: {
+          signal: {
+            id: 'signal-user-1',
+            type: 'user-message',
+            contents: 'continue with this',
+            createdAt: '2026-05-04T00:00:00.000Z',
+          },
+        },
+      },
+    };
     expect(signalEvents).toEqual([
-      {
-        type: 'message_start',
-        message: {
-          id: 'signal-user-1',
-          role: 'user',
-          content: [{ type: 'text', text: 'continue with this' }],
-          createdAt: new Date('2026-05-04T00:00:00.000Z'),
-        },
-      },
-      {
-        type: 'message_end',
-        message: {
-          id: 'signal-user-1',
-          role: 'user',
-          content: [{ type: 'text', text: 'continue with this' }],
-          createdAt: new Date('2026-05-04T00:00:00.000Z'),
-        },
-      },
+      { type: 'message_start', message: expectedMessage },
+      { type: 'message_end', message: expectedMessage },
     ]);
   });
 
@@ -1151,8 +1092,8 @@ describe('AgentController signal messages', () => {
     );
 
     expect(messageEndEvents).toHaveLength(1);
-    expect(messageEndEvents[0].message.content).toEqual([{ type: 'text', text: 'Fact 1' }]);
-    expect(messageUpdateEvents.at(-1)?.message.content).toEqual([{ type: 'text', text: 'Fact 2' }]);
+    expect(messageEndEvents[0].message.content.parts).toEqual([{ type: 'text', text: 'Fact 1' }]);
+    expect(messageUpdateEvents.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'Fact 2' }]);
     expect(messageUpdateEvents.at(-1)?.message.id).not.toBe(messageEndEvents[0].message.id);
   });
 
@@ -1182,20 +1123,26 @@ describe('AgentController signal messages', () => {
       new RequestContext(),
     );
 
+    // DB-native: a reactive data-signal chunk emits a 'signal'-role MastraDBMessage
+    // carrying the raw data-signal part, not a flattened assistant content item.
+    const signalData = {
+      id: 'reactive-signal-1',
+      type: 'reactive',
+      tagName: 'build-status',
+      contents: 'Build is still running',
+      createdAt: '2026-05-04T00:00:00.000Z',
+      attributes: { source: 'ci' },
+      metadata: { buildId: 'build-1' },
+    };
     expect(events).toContainEqual({
-      type: 'message_update',
+      type: 'message_start',
       message: expect.objectContaining({
-        role: 'assistant',
-        content: [
-          {
-            type: 'reactive_signal',
-            id: 'reactive-signal-1',
-            tagName: 'build-status',
-            message: 'Build is still running',
-            attributes: { source: 'ci' },
-            metadata: { buildId: 'build-1' },
-          },
-        ],
+        role: 'signal',
+        content: expect.objectContaining({
+          format: 2,
+          parts: [{ type: 'data-signal', data: signalData }],
+          metadata: { signal: signalData },
+        }),
       }),
     });
   });
@@ -1209,47 +1156,35 @@ describe('AgentController signal messages', () => {
     });
     const state = session.runEngine.createStreamState();
 
-    await session.runEngine.processStreamChunk(
-      state,
-      {
-        type: 'data-signal',
-        data: {
-          id: 'summary-1',
-          type: 'notification',
-          tagName: 'notification-summary',
-          contents: 'mastracode: 1',
-          createdAt: '2026-05-04T00:00:00.000Z',
-          metadata: {
-            notificationSummary: {
-              threadId: 'thread-1',
-              resourceId: 'resource-1',
-              pending: 1,
-              bySource: { mastracode: 1 },
-              byPriority: { low: 1 },
-              notificationIds: ['notification-1'],
-            },
-            notificationIds: ['notification-1'],
-          },
+    const signalData = {
+      id: 'summary-1',
+      type: 'notification',
+      tagName: 'notification-summary',
+      contents: 'mastracode: 1',
+      createdAt: '2026-05-04T00:00:00.000Z',
+      metadata: {
+        notificationSummary: {
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          pending: 1,
+          bySource: { mastracode: 1 },
+          byPriority: { low: 1 },
+          notificationIds: ['notification-1'],
         },
+        notificationIds: ['notification-1'],
       },
-      new RequestContext(),
-    );
+    };
+    await session.runEngine.processStreamChunk(state, { type: 'data-signal', data: signalData }, new RequestContext());
 
     expect(events).toContainEqual({
-      type: 'message_update',
+      type: 'message_start',
       message: expect.objectContaining({
-        role: 'assistant',
-        content: [
-          {
-            type: 'notification_summary',
-            id: 'summary-1',
-            message: 'mastracode: 1',
-            pending: 1,
-            bySource: { mastracode: 1 },
-            byPriority: { low: 1 },
-            notificationIds: ['notification-1'],
-          },
-        ],
+        role: 'signal',
+        content: expect.objectContaining({
+          format: 2,
+          parts: [{ type: 'data-signal', data: signalData }],
+          metadata: { signal: signalData },
+        }),
       }),
     });
   });
@@ -1263,71 +1198,41 @@ describe('AgentController signal messages', () => {
     });
     const state = session.runEngine.createStreamState();
 
-    await session.runEngine.processStreamChunk(
-      state,
-      {
-        type: 'data-signal',
-        data: {
-          id: 'notification-signal-1',
-          type: 'notification',
-          tagName: 'notification',
-          contents: 'CI failed on main',
-          createdAt: '2026-05-04T00:00:00.000Z',
-          attributes: {
-            id: 'notification-1',
-            source: 'github',
-            kind: 'ci-status',
-            priority: 'high',
-            status: 'delivered',
-          },
-          metadata: {
-            notification: {
-              signal: 'notification',
-              recordId: 'notification-1',
-              source: 'github',
-              kind: 'ci-status',
-              priority: 'high',
-              status: 'delivered',
-            },
-          },
+    const signalData = {
+      id: 'notification-signal-1',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'CI failed on main',
+      createdAt: '2026-05-04T00:00:00.000Z',
+      attributes: {
+        id: 'notification-1',
+        source: 'github',
+        kind: 'ci-status',
+        priority: 'high',
+        status: 'delivered',
+      },
+      metadata: {
+        notification: {
+          signal: 'notification',
+          recordId: 'notification-1',
+          source: 'github',
+          kind: 'ci-status',
+          priority: 'high',
+          status: 'delivered',
         },
       },
-      new RequestContext(),
-    );
+    };
+    await session.runEngine.processStreamChunk(state, { type: 'data-signal', data: signalData }, new RequestContext());
 
     expect(events).toContainEqual({
-      type: 'message_update',
+      type: 'message_start',
       message: expect.objectContaining({
-        role: 'assistant',
-        content: [
-          {
-            type: 'notification',
-            id: 'notification-signal-1',
-            notificationId: 'notification-1',
-            message: 'CI failed on main',
-            source: 'github',
-            kind: 'ci-status',
-            priority: 'high',
-            status: 'delivered',
-            attributes: {
-              id: 'notification-1',
-              source: 'github',
-              kind: 'ci-status',
-              priority: 'high',
-              status: 'delivered',
-            },
-            metadata: {
-              notification: {
-                signal: 'notification',
-                recordId: 'notification-1',
-                source: 'github',
-                kind: 'ci-status',
-                priority: 'high',
-                status: 'delivered',
-              },
-            },
-          },
-        ],
+        role: 'signal',
+        content: expect.objectContaining({
+          format: 2,
+          parts: [{ type: 'data-signal', data: signalData }],
+          metadata: { signal: signalData },
+        }),
       }),
     });
   });
@@ -1341,44 +1246,32 @@ describe('AgentController signal messages', () => {
     });
     const state = session.runEngine.createStreamState();
 
-    await session.runEngine.processStreamChunk(
-      state,
-      {
-        type: 'data-signal',
-        data: {
-          id: 'state-signal-1',
-          type: 'state',
-          tagName: 'state',
-          contents: 'changed: active tab URL changed to https://example.com',
-          createdAt: '2026-05-04T00:00:00.000Z',
-          metadata: {
-            state: {
-              id: 'browser',
-              mode: 'delta',
-              cacheKey: 'browser:https://example.com',
-              version: 2,
-            },
-          },
+    const signalData = {
+      id: 'state-signal-1',
+      type: 'state',
+      tagName: 'state',
+      contents: 'changed: active tab URL changed to https://example.com',
+      createdAt: '2026-05-04T00:00:00.000Z',
+      metadata: {
+        state: {
+          id: 'browser',
+          mode: 'delta',
+          cacheKey: 'browser:https://example.com',
+          version: 2,
         },
       },
-      new RequestContext(),
-    );
+    };
+    await session.runEngine.processStreamChunk(state, { type: 'data-signal', data: signalData }, new RequestContext());
 
     expect(events).toContainEqual({
-      type: 'message_update',
+      type: 'message_start',
       message: expect.objectContaining({
-        role: 'assistant',
-        content: [
-          {
-            type: 'state_signal',
-            id: 'state-signal-1',
-            stateId: 'browser',
-            mode: 'delta',
-            cacheKey: 'browser:https://example.com',
-            version: 2,
-            message: 'changed: active tab URL changed to https://example.com',
-          },
-        ],
+        role: 'signal',
+        content: expect.objectContaining({
+          format: 2,
+          parts: [{ type: 'data-signal', data: signalData }],
+          metadata: { signal: signalData },
+        }),
       }),
     });
   });

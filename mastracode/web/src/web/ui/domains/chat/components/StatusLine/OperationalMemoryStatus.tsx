@@ -1,6 +1,9 @@
-import { useChatTranscript } from '../../context/useChatTranscript';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { MessageSquareText } from 'lucide-react';
 
-const statusBudget = 'inline-flex items-baseline whitespace-nowrap text-icon3 tabular-nums';
+import { useChatRuntime } from '../../context/useChatRuntime';
+
+const statusBudget = 'inline-flex items-center whitespace-nowrap text-icon3 tabular-nums';
 const slLabel = 'mr-1 text-icon2';
 const slBuffer = 'italic text-icon2';
 
@@ -26,8 +29,7 @@ function pctClass(percent: number): string {
  * and the observations accumulated until the next reflection.
  */
 export function OperationalMemoryStatus() {
-  const { transcript } = useChatTranscript();
-  const om = transcript.omProgress;
+  const { omProgress: om } = useChatRuntime();
   const showMsg = om && om.threshold > 0;
   const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;
 
@@ -36,11 +38,22 @@ export function OperationalMemoryStatus() {
   return (
     <>
       {showMsg && (
-        <span
-          className={`${statusBudget} ${pctClass(om.thresholdPercent)}`}
-          title="Message window until next observation"
-        >
-          <span className={slLabel}>msg</span> {fmtTokensValue(om.pendingTokens)}/{fmtTokensThreshold(om.threshold)}
+        <span className={`${statusBudget} ${pctClass(om.thresholdPercent)}`}>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  aria-label="Message window until next observation"
+                  className="mr-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-accent1"
+                  tabIndex={0}
+                >
+                  <MessageSquareText aria-hidden size={13} className="text-icon2" />
+                </span>
+              }
+            />
+            <TooltipContent>Message window until next observation</TooltipContent>
+          </Tooltip>
+          {fmtTokensValue(om.pendingTokens)}/{fmtTokensThreshold(om.threshold)}
           {om.projectedMessageRemoval > 0 && (
             <span className={slBuffer}> ↓{fmtTokensThreshold(om.projectedMessageRemoval)}</span>
           )}

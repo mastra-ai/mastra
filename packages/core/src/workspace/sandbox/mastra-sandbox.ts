@@ -31,7 +31,7 @@ import type { ProviderStatus } from '../lifecycle';
 import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
-import type { WorkspaceSandbox } from './sandbox';
+import type { SandboxFileInput, SandboxNetworking, WorkspaceSandbox } from './sandbox';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 import { shellQuote } from './utils';
 
@@ -135,6 +135,18 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    * which would shadow prototype methods defined by subclasses.
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
+
+  /** Optional networking capability - implement to expose public port URLs */
+  readonly networking?: SandboxNetworking;
+
+  /**
+   * Optional bulk file upload into the sandbox's own filesystem.
+   *
+   * Method syntax (not property syntax) is intentional — it prevents
+   * `useDefineForClassFields` from emitting `this.writeFiles = undefined`
+   * which would shadow prototype methods defined by subclasses.
+   */
+  writeFiles?(files: SandboxFileInput[]): Promise<void>;
 
   /** Process manager */
   readonly processes?: SandboxProcessManager;

@@ -83,6 +83,7 @@ export {
   parseModelString,
   getProviderConfig,
   modelSupportsAttachments,
+  modelSupportsStructuredOutput,
   modelSupportsTemperature,
 } from './model/provider-registry.js';
 export type {
@@ -96,12 +97,7 @@ export { resolveModelConfig } from './model/resolve-model';
 export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;
 
 export type SystemMessage =
-  | string
-  | string[]
-  | CoreSystemMessage
-  | SystemModelMessage
-  | CoreSystemMessage[]
-  | SystemModelMessage[];
+  string | string[] | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[];
 
 type GenerateTextOptions = Parameters<typeof generateText>[0];
 type StreamTextOptions = Parameters<typeof streamText>[0];
@@ -109,14 +105,7 @@ type GenerateObjectOptions = Parameters<typeof generateObject>[0];
 type StreamObjectOptions = Parameters<typeof streamObject>[0];
 
 type MastraCustomLLMOptionsKeys =
-  | 'messages'
-  | 'tools'
-  | 'model'
-  | 'onStepFinish'
-  | 'experimental_output'
-  | 'messages'
-  | 'onFinish'
-  | 'output';
+  'messages' | 'tools' | 'model' | 'onStepFinish' | 'experimental_output' | 'messages' | 'onFinish' | 'output';
 
 export type DefaultLLMTextOptions = Omit<GenerateTextOptions, MastraCustomLLMOptionsKeys>;
 export type DefaultLLMTextObjectOptions = Omit<GenerateObjectOptions, MastraCustomLLMOptionsKeys>;

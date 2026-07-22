@@ -24,7 +24,7 @@ Use tools when an agent needs additional context or information from remote reso
 
 Import [`createTool`](/reference/tools/create-tool) from `@mastra/core/tools` and define a tool with an `id`, `description`, `inputSchema`, `outputSchema`, and `execute` function.
 
-This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
+This example creates a tool that fetches weather data from an API. The `execute` function receives input validated against `inputSchema` as its first argument and an optional execution context as its second. You can destructure the input fields directly in the function signature.
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
 import { createTool } from '@mastra/core/tools'
@@ -37,15 +37,21 @@ export const weatherTool = createTool({
     location: z.string(),
   }),
   outputSchema: z.object({
-    weather: z.string(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
-  execute: async inputData => {
-    const { location } = inputData
+  execute: async ({ location }, { abortSignal }) => {
+    const response = await fetch(`https://wttr.in/${location}?format=j1`, {
+      signal: abortSignal,
+    })
+    const data = await response.json()
 
-    const response = await fetch(`https://wttr.in/${location}?format=3`)
-    const weather = await response.text()
-
-    return { weather }
+    return {
+      location,
+      temperatureCelsius: Number(data.current_condition[0].temp_C),
+      conditions: data.current_condition[0].weatherDesc[0].value,
+    }
   },
 })
 ```
@@ -86,10 +92,12 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
         location: z.string(),
       }),
       outputSchema: z.object({
-        weather: z.string(),
+        location: z.string(),
+        temperatureCelsius: z.number(),
+        conditions: z.string(),
       }),
-      execute: async inputData => {
-        // Fetch weather data
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
     })
     ```
@@ -111,11 +119,13 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
       ),
       outputSchema: toStandardJsonSchema(
         v.object({
-          weather: v.string(),
+          location: v.string(),
+          temperatureCelsius: v.number(),
+          conditions: v.string(),
         }),
       ),
-      execute: async inputData => {
-        // Fetch weather data
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
     })
     ```
@@ -133,10 +143,12 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
         location: 'string',
       }),
       outputSchema: type({
-        weather: 'string',
+        location: 'string',
+        temperatureCelsius: 'number',
+        conditions: 'string',
       }),
-      execute: async inputData => {
-        // Fetch weather data
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
     })
     ```
@@ -209,40 +221,44 @@ export const researchAgent = new Agent({
 
 ## Share tools across agents
 
-Direct imports are the simplest choice when one tool is used by one or a small number of agents. Each agent imports the tool and adds it to its `tools` record, as shown in the quickstart above.
+Direct imports are the best choice when one tool is used by multiple agents. Each agent imports the tool and adds it to its `tools` record. Dependencies remain explicit and each agent can be used independently.
 
-For tools shared across agents or retrieved elsewhere from the Mastra instance, register them once with `new Mastra({ tools })`. A function-based Agent `tools` callback can then resolve entries from that registry.
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
 
-```typescript title="src/mastra/index.ts"
-import { Agent } from '@mastra/core/agent'
-import { Mastra } from '@mastra/core/mastra'
-import { weatherTool } from './tools/weather-tool'
-
-export const sharedWeatherAgent = new Agent({
-  id: 'shared-weather-agent',
-  name: 'Shared Weather Agent',
-  instructions: `
-    You are a helpful weather assistant.
-    Use the weatherTool to fetch current weather data.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: ({ mastra }) => {
-    if (!mastra) {
-      throw new Error('Mastra instance is required to resolve shared tools')
-    }
-
-    return { weatherTool: mastra.getTool('weather') }
-  },
-})
-
-export const mastra = new Mastra({
-  tools: { weather: weatherTool },
-  agents: { sharedWeatherAgent },
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  // Rest of the tool definition...
 })
 ```
 
-Register the tool and Agent on the same Mastra instance. The Agent can then retrieve the shared tool by its registration key in the `tools` callback and return it under the name the model should use. Keep the `mastra` guard because it's optional in the callback type.
+```typescript title="src/mastra/agents/weather-agents.ts"
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
 
-For API details, see [`Mastra.getTool()`](/reference/core/getTool), [`Mastra.getToolById()`](/reference/core/getToolById), [`Mastra.listTools()`](/reference/core/listTools), and the [`Agent` reference](/reference/agents/agent).
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions: 'Answer questions about current weather.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { weatherTool },
+})
+```
+
+```typescript title="src/mastra/agents/travel-agents.ts"
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
+
+export const travelAgent = new Agent({
+  id: 'travel-agent',
+  name: 'Travel Agent',
+  instructions: 'Help users plan trips.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { weatherTool },
+})
+```
+
+If you need to access tools from the Mastra instance, see [`Mastra.getTool()`](/reference/core/getTool), [`Mastra.getToolById()`](/reference/core/getToolById), [`Mastra.listTools()`](/reference/core/listTools), and the [`Agent` reference](/reference/agents/agent).
 
 ## Shape output for the model
 
@@ -256,8 +272,8 @@ export const weatherTool = createTool({
 
     return {
       location,
-      temperature: data.current_condition[0].temp_F,
-      condition: data.current_condition[0].weatherDesc[0].value,
+      temperatureCelsius: Number(data.current_condition[0].temp_C),
+      conditions: data.current_condition[0].weatherDesc[0].value,
       weatherIconUrl: data.current_condition[0].weatherIconUrl[0].value,
       source: data,
     }
@@ -268,7 +284,7 @@ export const weatherTool = createTool({
       value: [
         {
           type: 'text',
-          text: `${output.location}: ${output.temperature}F and ${output.condition}`,
+          text: `${output.location}: ${output.temperatureCelsius}°C and ${output.conditions}`,
         },
         { type: 'image-url', url: output.weatherIconUrl },
       ],
@@ -374,23 +390,24 @@ export const weatherTool = createTool({
   id: 'weather-tool',
   description: 'Get weather information',
   inputSchema: z.object({
-    city: z.string(),
+    location: z.string(),
   }),
   outputSchema: z.object({
-    temperature: z.number(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
     conditions: z.string(),
   }),
   // Called when the complete input is available
   onInputAvailable: ({ input, toolCallId }) => {
-    console.log(`Weather requested for: ${input.city}`)
+    console.log(`Weather requested for: ${input.location}`)
   },
-  execute: async input => {
-    const weather = await fetchWeather(input.city)
+  execute: async ({ location }) => {
+    const weather = await fetchWeather(location)
     return weather
   },
   // Called after successful execution
   onOutput: ({ output, toolName }) => {
-    console.log(`${toolName} result: ${output.temperature}°F, ${output.conditions}`)
+    console.log(`${toolName} result: ${output.temperatureCelsius}°C, ${output.conditions}`)
   },
 })
 ```

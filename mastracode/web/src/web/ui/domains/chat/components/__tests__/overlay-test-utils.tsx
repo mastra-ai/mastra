@@ -2,12 +2,11 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
-import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatCommandsProvider } from '../../context/ChatCommandsProvider';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
+import { ActiveFactoryProvider, useActiveFactoryContext } from '../../../workspaces';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
   class ResizeObserverPolyfill {
@@ -24,6 +23,24 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoVi
 }
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
+
+const OVERLAY_FACTORY_ID = 'p-overlay';
+
+/** Seed a local factory so the route-scoped provider resolves `factoryId`. */
+function seedOverlayFactory() {
+  localStorage.setItem(
+    'mastracode-factories',
+    JSON.stringify([
+      {
+        id: OVERLAY_FACTORY_ID,
+        name: 'Overlay',
+        resourceId: 'test-resource',
+        createdAt: 1,
+        binding: { kind: 'local', path: '/tmp' },
+      },
+    ]),
+  );
+}
 
 /** Install real network-boundary responses used by context-backed overlay tests. */
 export function useOverlayControllerHandlers() {
@@ -57,26 +74,43 @@ export function useOverlayControllerHandlers() {
     http.get(`${API}/sessions/:resourceId/threads/thread-test/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(
       `${API}/sessions/:resourceId/stream`,
-      () => new Response(null, { headers: { 'content-type': 'text/event-stream' } }),
+      () =>
+        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
+      HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
   );
 }
 
+/**
+ * Defer children until the route factory resolves so the transcript remount
+ * key (which includes `resourceId`) is stable before tests interact.
+ */
+function WhenFactoryResolved({ children }: { children: ReactNode }) {
+  const { activeFactory } = useActiveFactoryContext();
+  if (!activeFactory) return null;
+  return children;
+}
+
 export function OverlayTestProviders({ children }: { children: ReactNode }) {
+  seedOverlayFactory();
   return (
-    <MemoryRouter initialEntries={['/threads/thread-test']}>
+    <MemoryRouter initialEntries={[`/factories/${OVERLAY_FACTORY_ID}/threads/thread-test`]}>
       <Routes>
         <Route
-          path="/threads/:threadId"
+          path="/factories/:factoryId/threads/:threadId"
           element={
-            <ActiveProjectProvider>
-              <ChatSessionProvider>
-                <OverlaysProvider>
-                  <ChatCommandsProvider>{children}</ChatCommandsProvider>
-                </OverlaysProvider>
-              </ChatSessionProvider>
-            </ActiveProjectProvider>
+            <ActiveFactoryProvider factoryId={OVERLAY_FACTORY_ID}>
+              <WhenFactoryResolved>
+                <ChatSessionProvider>
+                  <OverlaysProvider>{children}</OverlaysProvider>
+                </ChatSessionProvider>
+              </WhenFactoryResolved>
+            </ActiveFactoryProvider>
           }
         />
       </Routes>

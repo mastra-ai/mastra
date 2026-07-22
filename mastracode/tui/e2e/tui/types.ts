@@ -48,6 +48,10 @@ export type ScenarioName =
   | 'github-signals-notification-reload'
   | 'github-signals-polling-inbox'
   | 'github-signals-unsubscribe-reload'
+  | 'goal-api-error-stops-loop'
+  | 'goal-duration-tool-approval'
+  | 'goal-judge-om-model-isolation'
+  | 'goal-judge-single-render'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
   | 'openai-strict-schema'
@@ -84,6 +88,8 @@ export type ScenarioName =
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
   | 'mcp-reload-config'
+  | 'mcp-oauth-authenticate'
+  | 'mcp-oauth-cancel'
   | 'mcp-selector-reconnect'
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
@@ -102,6 +108,7 @@ export type ScenarioName =
   | 'om-status-indicator'
   | 'om-threshold-persistence'
   | 'quiet-settings'
+  | 'quiet-streaming-preview-height'
   | 'quiet-tool-history-parity'
   | 'report-issue-command'
   | 'request-access-modal'
@@ -213,7 +220,7 @@ export type McE2eScenario = {
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
   aimockFixture?: string;
-  env?: (context: McE2ePrepareContext) => Record<string, string>;
+  env?: (context: McE2ePrepareContext) => Record<string, string | null>;
   entrypoint?: (context: McE2ePrepareContext) => string;
   inProcessApp?: (context: McE2eInProcessAppContext) => Promise<McE2eInProcessApp> | McE2eInProcessApp;
   terminalBackend?: 'subprocess';

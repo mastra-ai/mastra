@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildFixedSankeyGeometry,
   buildSankeyChartGraph,
   getSankeyChartCurveSelection,
+  getSankeyChartNodeWeights,
   getSankeyChartValue,
   reorderSankeyChartColumns,
 } from './sankey-chart-utils';
@@ -35,6 +37,73 @@ describe('SankeyChart utilities', () => {
     });
   });
 
+  describe('when records provide explicit weights', () => {
+    it('sums weights for matching links without duplicating records', () => {
+      const data = [
+        { source: 'API', model: 'GPT', count: 2 },
+        { source: 'API', model: 'GPT', count: 3 },
+      ];
+
+      const graph = buildSankeyChartGraph(data, columns.slice(0, 2), record => Number(record.count));
+
+      expect(graph.links[0]).toMatchObject({ value: 5, records: data });
+    });
+  });
+
+  describe('when records provide invalid weights', () => {
+    it('excludes them from the graph', () => {
+      const validRecord = { source: 'API', model: 'GPT', count: 2 };
+      const data = [
+        validRecord,
+        { source: 'CLI', model: 'Claude', count: Number.NaN },
+        { source: 'UI', model: 'Gemini', count: Number.POSITIVE_INFINITY },
+        { source: 'SDK', model: 'Llama', count: -1 },
+      ];
+
+      const graph = buildSankeyChartGraph(data, columns.slice(0, 2), record => Number(record.count));
+
+      expect(graph).toMatchObject({
+        nodes: [{ value: 'API' }, { value: 'GPT' }],
+        links: [{ value: 2, records: [validRecord] }],
+      });
+    });
+  });
+
+  describe('when graph nodes have weighted incoming and outgoing links', () => {
+    it('derives source, target, and intermediate node weights using Sankey conservation', () => {
+      const graph = buildSankeyChartGraph(
+        [
+          { source: 'API', model: 'GPT', status: 'Success', count: 2 },
+          { source: 'API', model: 'GPT', status: 'Error', count: 3 },
+          { source: 'UI', model: 'GPT', status: 'Success', count: 4 },
+        ],
+        columns,
+        record => Number(record.count),
+      );
+
+      expect(Object.fromEntries(getSankeyChartNodeWeights(graph))).toEqual({
+        '["source","string","API"]': 5,
+        '["model","string","GPT"]': 9,
+        '["status","string","Success"]': 6,
+        '["status","string","Error"]': 3,
+        '["source","string","UI"]': 4,
+      });
+    });
+
+    it('uses the greater total when an intermediate node has mismatched incoming and outgoing weights', () => {
+      const graph = buildSankeyChartGraph(
+        [
+          { source: 'API', model: 'GPT', status: 'Success', count: 2 },
+          { source: 'UI', model: 'GPT', status: '', count: 5 },
+        ],
+        columns,
+        record => Number(record.count),
+      );
+
+      expect(getSankeyChartNodeWeights(graph).get('["model","string","GPT"]')).toBe(7);
+    });
+  });
+
   describe('when equal labels appear in different dimensions', () => {
     it('creates distinct nodes keyed by their columns', () => {
       const graph = buildSankeyChartGraph([{ source: 'Shared', model: 'Shared' }], columns.slice(0, 2));
@@ -42,6 +111,165 @@ describe('SankeyChart utilities', () => {
       expect(graph.nodes).toHaveLength(2);
       expect(graph.nodes[0]?.id).not.toBe(graph.nodes[1]?.id);
       expect(graph.links[0]).toMatchObject({ source: 0, target: 1, value: 1 });
+    });
+  });
+
+  describe('when records have equal display labels with distinct identities', () => {
+    it('creates distinct nodes with their own weights', () => {
+      const data = [
+        { source: 'source-1', sourceLabel: 'Shared', model: 'model-1', modelLabel: 'Model', count: 2 },
+        { source: 'source-2', sourceLabel: 'Shared', model: 'model-1', modelLabel: 'Model', count: 3 },
+      ];
+      const getNodeId = (record: Record<string, unknown>, column: { id: string }) => String(record[column.id]);
+      const getNodeLabel = (record: Record<string, unknown>, column: { id: string }) =>
+        String(record[`${column.id}Label`]);
+
+      const graph = buildSankeyChartGraph(
+        data,
+        columns.slice(0, 2),
+        record => Number(record.count),
+        getNodeId,
+        getNodeLabel,
+      );
+      const sourceNodes = graph.nodes.filter(node => node.column.id === 'source');
+      const weights = getSankeyChartNodeWeights(graph);
+
+      expect(sourceNodes.map(node => ({ label: node.label, value: node.value, weight: weights.get(node.id) }))).toEqual(
+        [
+          { label: 'Shared', value: 'source-1', weight: 2 },
+          { label: 'Shared', value: 'source-2', weight: 3 },
+        ],
+      );
+    });
+  });
+
+  describe('when display values differ from layout weights', () => {
+    it('preserves current link and node values independently of stable layout weights', () => {
+      const graph = buildSankeyChartGraph(
+        [{ source: 'source-1', sourceCount: 0, model: 'model-1', modelCount: 3, count: 2, layoutWeight: 5 }],
+        columns.slice(0, 2),
+        record => Number(record.count),
+        undefined,
+        undefined,
+        (record, column) => Number(record[`${column.id}Count`]),
+        record => Number(record.layoutWeight),
+      );
+
+      expect(graph.links[0]).toMatchObject({ value: 5, displayValue: 2 });
+      expect(graph.nodes.map(node => node.displayValue)).toEqual([0, 3]);
+    });
+  });
+
+  describe('when fixed theme slots render current values', () => {
+    it('keeps node centers fixed and packs ribbons contiguously inside resized bars', () => {
+      const graph = buildSankeyChartGraph(
+        [
+          { source: 'A', sourceCount: 8, model: 'X', modelCount: 8, count: 6, layoutCount: 10 },
+          { source: 'A', sourceCount: 8, model: 'Y', modelCount: 2, count: 2, layoutCount: 10 },
+          { source: 'B', sourceCount: 2, model: 'X', modelCount: 8, count: 2, layoutCount: 10 },
+        ],
+        columns.slice(0, 2),
+        record => Number(record.count),
+        undefined,
+        undefined,
+        (record, column) => Number(record[`${column.id}Count`]),
+        record => Number(record.layoutCount),
+      );
+
+      const geometry = buildFixedSankeyGeometry(graph, {
+        top: 0,
+        bottom: 200,
+        left: 100,
+        right: 500,
+        nodePadding: 20,
+      });
+      const sourceA = geometry.nodes.get(graph.nodes.find(node => node.name === 'A')?.id ?? '');
+      const sourceB = geometry.nodes.get(graph.nodes.find(node => node.name === 'B')?.id ?? '');
+      const targetX = geometry.nodes.get(graph.nodes.find(node => node.name === 'X')?.id ?? '');
+      const aToX = geometry.links.get(
+        graph.links.find(link => link.sourceNode.name === 'A' && link.targetNode.name === 'X')?.id ?? '',
+      );
+      const aToY = geometry.links.get(
+        graph.links.find(link => link.sourceNode.name === 'A' && link.targetNode.name === 'Y')?.id ?? '',
+      );
+      const bToX = geometry.links.get(
+        graph.links.find(link => link.sourceNode.name === 'B' && link.targetNode.name === 'X')?.id ?? '',
+      );
+
+      expect(sourceA?.x).toBe(100);
+      expect(sourceB?.x).toBe(100);
+      expect(targetX?.x).toBe(500);
+      expect(sourceA?.centerY).toBe(45);
+      expect(sourceB?.centerY).toBe(155);
+      expect(sourceA?.height).toBe(43.2);
+      expect(sourceA?.height).toBeGreaterThan(sourceB?.height ?? 0);
+      expect((aToX?.sourceY ?? 0) + (aToX?.sourceWidth ?? 0) / 2).toBeCloseTo(
+        (aToY?.sourceY ?? 0) - (aToY?.sourceWidth ?? 0) / 2,
+      );
+      expect((aToX?.targetY ?? 0) + (aToX?.targetWidth ?? 0) / 2).toBeCloseTo(
+        (bToX?.targetY ?? 0) - (bToX?.targetWidth ?? 0) / 2,
+      );
+    });
+
+    it('scales percentages against one chart-wide maximum height', () => {
+      const graph = buildSankeyChartGraph(
+        [
+          { source: 'A', sourceCount: 70, model: 'X', modelCount: 100, count: 70, layoutCount: 100 },
+          { source: 'B', sourceCount: 30, model: 'X', modelCount: 100, count: 30, layoutCount: 100 },
+          { source: 'B', sourceCount: 30, model: 'Y', modelCount: 0, count: 0, layoutCount: 1 },
+          { source: 'B', sourceCount: 30, model: 'Z', modelCount: 0, count: 0, layoutCount: 1 },
+          { source: 'B', sourceCount: 30, model: 'W', modelCount: 0, count: 0, layoutCount: 1 },
+        ],
+        columns.slice(0, 2),
+        record => Number(record.count),
+        undefined,
+        undefined,
+        (record, column) => Number(record[`${column.id}Count`]),
+        record => Number(record.layoutCount),
+      );
+      const geometry = buildFixedSankeyGeometry(graph, {
+        top: 0,
+        bottom: 200,
+        left: 100,
+        right: 500,
+        nodePadding: 20,
+      });
+      const sourceA = geometry.nodes.get(graph.nodes.find(node => node.name === 'A')?.id ?? '');
+      const targetX = geometry.nodes.get(graph.nodes.find(node => node.name === 'X')?.id ?? '');
+
+      expect(targetX?.height).toBeGreaterThan(sourceA?.height ?? 0);
+      expect((sourceA?.height ?? 0) / (targetX?.height ?? 1)).toBeCloseTo(0.7);
+    });
+  });
+
+  describe('when only one optional node accessor is provided', () => {
+    it('keeps record values as labels when only identity is customized', () => {
+      const graph = buildSankeyChartGraph(
+        [{ source: 'Readable source', sourceId: 'source-1', model: 'Readable model', modelId: 'model-1' }],
+        columns.slice(0, 2),
+        undefined,
+        (record, column) => String(record[`${column.id}Id`]),
+      );
+
+      expect(graph.nodes.map(node => ({ label: node.label, value: node.value }))).toEqual([
+        { label: 'Readable source', value: 'source-1' },
+        { label: 'Readable model', value: 'model-1' },
+      ]);
+    });
+
+    it('keeps record values as identities when only labels are customized', () => {
+      const graph = buildSankeyChartGraph(
+        [{ source: 'source-1', sourceLabel: 'Readable source', model: 'model-1', modelLabel: 'Readable model' }],
+        columns.slice(0, 2),
+        undefined,
+        undefined,
+        (record, column) => String(record[`${column.id}Label`]),
+      );
+
+      expect(graph.nodes.map(node => ({ label: node.label, value: node.value }))).toEqual([
+        { label: 'Readable source', value: 'source-1' },
+        { label: 'Readable model', value: 'model-1' },
+      ]);
     });
   });
 

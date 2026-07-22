@@ -1,5 +1,5 @@
 import { transformSync } from '@babel/core';
-import type { Plugin } from 'rollup';
+import type { Plugin, SourceMapInput } from 'rollup';
 import { mastraInstanceWrapper as mastraInstanceWrapperBabel } from '../babel/mastra-instance-wrapper';
 
 export function mastraInstanceWrapper(mastraEntryFile: string): Plugin {
@@ -23,7 +23,7 @@ export function mastraInstanceWrapper(mastraEntryFile: string): Plugin {
 
       return {
         code: result.code,
-        map: result?.map,
+        map: result?.map as SourceMapInput | undefined,
       };
     },
   };

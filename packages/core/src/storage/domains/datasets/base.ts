@@ -23,6 +23,7 @@ import type {
 import { StorageDomain } from '../base';
 import { planDatasetItemBatch as createDatasetItemBatchPlan, validateDatasetItemExternalId } from './identity';
 import type { DatasetItemBatchPlan } from './identity';
+import { validateDatasetItemPayloadSerialization } from './serialization';
 
 const DATASET_IMMUTABLE_FIELDS = ['organizationId', 'projectId', 'candidateKey', 'candidateId'] as const;
 
@@ -174,6 +175,9 @@ export abstract class DatasetsStorage extends StorageDomain {
       throw new Error(`Dataset not found: ${args.datasetId}`);
     }
 
+    const { id: _id, datasetId: _datasetId, filters: _filters, ...payload } = args;
+    validateDatasetItemPayloadSerialization(payload, 'item');
+
     // Validate new values against schemas if enabled
     const validator = getSchemaValidator();
     const cacheKey = `dataset:${args.datasetId}`;
@@ -236,8 +240,9 @@ export abstract class DatasetsStorage extends StorageDomain {
     const validator = getSchemaValidator();
     const cacheKey = `dataset:${input.datasetId}`;
 
-    for (const itemData of input.items) {
+    for (const [index, itemData] of input.items.entries()) {
       validateDatasetItemExternalId(itemData.externalId);
+      validateDatasetItemPayloadSerialization(itemData, `items[${index}]`);
       if (dataset.inputSchema) {
         validator.validate(itemData.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
       }

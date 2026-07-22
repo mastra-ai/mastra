@@ -1,44 +1,153 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
+import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
+import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
+import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { Panel, usePanelRef } from 'react-resizable-panels';
+import { PanelRightIcon } from 'lucide-react';
+
+import { PageLayout } from './PageLayout';
 
 type ChatLayoutProps = {
   sidebar: ReactNode;
   /** Optional bar above the chat content (e.g. mobile sidebar toggle). */
   header?: ReactNode;
-  content: ReactNode;
+  content?: ReactNode;
+  /** A complete main area when content and footer need to share one provider boundary. */
+  main?: ReactNode;
   /** Optional pinned region below the chat content (e.g. composer). */
   footer?: ReactNode;
-  /** Mobile-only: whether the sidebar overlay is open (controls the backdrop). */
-  sidebarOpen?: boolean;
-  onSidebarClose?: () => void;
+  /** Optional workspace panel rendered inline on desktop and in a drawer on mobile. */
+  rightPanel?: ReactNode;
+  rightPanelExpanded?: boolean;
+  rightPanelAvailable?: boolean;
+  onRightPanelOpen?: () => void;
+  onRightPanelClose?: () => void;
 };
 
-/**
- * Pure slot-based layout primitive for the chat page. Owns the responsive
- * frame: sidebar column, mobile backdrop, header bar, scrollable content
- * region, and pinned footer. No domain hooks — callers fill the slots.
- */
-export function ChatLayout({ sidebar, header, content, footer, sidebarOpen = false, onSidebarClose }: ChatLayoutProps) {
-  const backdropVisibilityClass = sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0';
+const COMPACT_RIGHT_PANEL_WIDTH = 320;
+const EXPANDED_RIGHT_PANEL_WIDTH = 720;
+const MIN_RIGHT_PANEL_WIDTH = 260;
+const MIN_CHAT_WIDTH = 420;
+
+/** Slot-based chat content arrangement inside the shared application page frame. */
+export function ChatLayout({
+  sidebar,
+  header,
+  content,
+  main,
+  footer,
+  rightPanel,
+  rightPanelExpanded = false,
+  rightPanelAvailable = false,
+  onRightPanelOpen,
+  onRightPanelClose,
+}: ChatLayoutProps) {
+  const isMobile = useIsMobile();
 
   return (
-    <div className="relative z-1 flex h-screen gap-3 overflow-y-scroll bg-surface1 pb-3 pl-3 pt-3 md:gap-4 md:pb-4 md:pl-4 md:pt-4">
-      <aside className="overflow-y-scroll md:relative md:z-40 md:block md:h-full md:w-64 md:shrink-0 md:rounded-lg md:border md:border-border1 md:bg-surface2 md:shadow-sm">
-        {sidebar}
-      </aside>
-
-      <div
-        className={`fixed inset-0 z-30 bg-black/50 transition-opacity duration-200 md:hidden ${backdropVisibilityClass}`}
-        onClick={onSidebarClose}
-        aria-hidden="true"
-      />
-
-      <div className="relative z-1 flex h-full min-w-0 flex-1 flex-col overflow-y-scroll">
-        {header}
-        <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
-          {content}
-          {footer}
-        </div>
+    <PageLayout sidebar={sidebar} header={header}>
+      <div className="relative flex h-full min-w-0 flex-1 overflow-visible">
+        <DesktopRightPanelFrame
+          initialWidth={rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH}
+          rightPanel={isMobile ? undefined : rightPanel}
+          onRightPanelClose={onRightPanelClose}
+        >
+          <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+            {main ?? (
+              <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+                {content}
+                {footer}
+              </div>
+            )}
+          </div>
+        </DesktopRightPanelFrame>
+        {isMobile && rightPanel ? (
+          <PanelDrawer direction="right" label="Open workspace files">
+            {rightPanel}
+          </PanelDrawer>
+        ) : null}
+        {!rightPanel && rightPanelAvailable ? (
+          <Button
+            size="icon-md"
+            variant="ghost"
+            tooltip="Open workspace files"
+            className="absolute right-2 top-2 z-10 hidden rounded-md lg:inline-flex"
+            onClick={onRightPanelOpen}
+            aria-label="Open workspace files"
+            aria-expanded="false"
+          >
+            <PanelRightIcon className="rotate-180" />
+          </Button>
+        ) : null}
       </div>
-    </div>
+    </PageLayout>
+  );
+}
+
+function DesktopRightPanelFrame({
+  initialWidth,
+  rightPanel,
+  children,
+  onRightPanelClose,
+}: {
+  initialWidth: number;
+  rightPanel?: ReactNode;
+  children: ReactNode;
+  onRightPanelClose?: () => void;
+}) {
+  const rightPanelRef = usePanelRef();
+  const hasRightPanel = rightPanel !== undefined;
+  const previousInitialWidthRef = useRef(initialWidth);
+  const previousHasRightPanelRef = useRef(hasRightPanel);
+
+  useEffect(() => {
+    const previousInitialWidth = previousInitialWidthRef.current;
+    const previouslyHadRightPanel = previousHasRightPanelRef.current;
+    previousInitialWidthRef.current = initialWidth;
+    previousHasRightPanelRef.current = hasRightPanel;
+    if (hasRightPanel && previouslyHadRightPanel && previousInitialWidth !== initialWidth) {
+      rightPanelRef.current?.resize(initialWidth);
+    }
+  }, [hasRightPanel, initialWidth, rightPanelRef]);
+
+  return (
+    <PanelGroup className="h-full min-h-0 w-full min-w-0">
+      <Panel id="chat-main-slot" minSize={MIN_CHAT_WIDTH} className="min-w-0">
+        {children}
+      </Panel>
+      {hasRightPanel ? (
+        <>
+          <PanelSeparator />
+          <Panel
+            id="chat-right-slot"
+            panelRef={rightPanelRef}
+            minSize={MIN_RIGHT_PANEL_WIDTH}
+            defaultSize={initialWidth}
+            groupResizeBehavior="preserve-pixel-size"
+            className="min-w-0"
+          >
+            <div className="relative h-full min-w-0">
+              {rightPanel}
+              {onRightPanelClose ? (
+                <Button
+                  size="icon-md"
+                  variant="ghost"
+                  tooltip="Close workspace files"
+                  className="absolute right-2 top-2 z-10 rounded-md"
+                  onClick={onRightPanelClose}
+                  aria-label="Close workspace files"
+                  aria-expanded="true"
+                >
+                  <PanelRightIcon />
+                </Button>
+              ) : null}
+            </div>
+          </Panel>
+        </>
+      ) : null}
+    </PanelGroup>
   );
 }

@@ -380,9 +380,7 @@
   });
 
   export const mastra = new Mastra({
-    agents: {
-      /* your agents here */
-    },
+    agents: {/* your agents here */},
     observability: new Observability({
       configs: {
         default: {
@@ -466,9 +464,7 @@
   });
 
   export const mastra = new Mastra({
-    agents: {
-      /* your agents here */
-    },
+    agents: {/* your agents here */},
     observability: new Observability({
       configs: {
         default: {
@@ -515,9 +511,7 @@
   });
 
   export const mastra = new Mastra({
-    agents: {
-      /* your agents here */
-    },
+    agents: {/* your agents here */},
     observability: new Observability({
       configs: {
         default: {

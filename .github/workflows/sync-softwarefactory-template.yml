@@ -1,0 +1,92 @@
+name: Sync Software Factory Template
+
+# Mirrors the templates/* process (sync-templates.yml): a one-way overwrite
+# push to the external template repo whenever its monorepo source changes.
+# The only difference is a generation step — the Software Factory template is
+# derived from mastracode/web by sync-template.mjs rather than checked in.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'mastracode/web/**'
+      - 'mastracode/mastra-factory/scripts/sync-template.mjs'
+      - 'mastracode/mastra-factory/template/**'
+  workflow_dispatch: # Allow manual triggers
+
+jobs:
+  sync-template:
+    name: Sync softwarefactory-template
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          owner: mastra-ai
+          permission-contents: write
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Generate template
+        # Default mode anchors the caret ranges on the local monorepo versions
+        # (the coherent set these sources were built against) and verifies each
+        # exists on npm — failing loudly here beats pushing a template whose
+        # sources need unpublished APIs. Re-run after the alpha publish if so.
+        run: node mastracode/mastra-factory/scripts/sync-template.mjs --out "$RUNNER_TEMP/template-out"
+
+      # Sources can legitimately be ahead of npm between release trains
+      # (version exists on npm but the sources need unpublished APIs), so the
+      # push is gated on the template actually working against PUBLISHED
+      # packages: install, typecheck, build. When this fails, the template
+      # repo simply stays at its last good sync — re-run this workflow
+      # (workflow_dispatch) after the next release train catches up.
+      # PR-time validation against the LOCAL package set lives in the
+      # e2e-softwarefactory job of e2e-tests.yml.
+      - name: Validate template against published packages
+        working-directory: ${{ runner.temp }}/template-out
+        env:
+          MASTRA_TELEMETRY_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          npm run check
+          npm run build
+
+      - name: Push to template repository
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          USERNAME: '${{ steps.app-auth.outputs.app-slug }}[bot]'
+          EMAIL: '${{ steps.app-auth.outputs.user-id }}+${{ steps.app-auth.outputs.app-slug }}[bot]@users.noreply.github.com'
+        run: |
+          set -euo pipefail
+          git config --global user.name "$USERNAME"
+          git config --global user.email "$EMAIL"
+          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/mastra-ai/softwarefactory-template.git" "$RUNNER_TEMP/template-repo"
+          cd "$RUNNER_TEMP/template-repo"
+          # One-way overwrite: remove everything except .git, then copy the
+          # generated tree in. Downstream commits are intentionally clobbered.
+          find . -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
+          cp -R "$RUNNER_TEMP/template-out/." .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to sync"
+          else
+            git commit -m "Update template from monorepo (main)"
+            git push origin main
+          fi

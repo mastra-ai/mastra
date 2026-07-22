@@ -16,7 +16,7 @@ import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { ProjectInfo } from '@mastra/code-sdk/utils/project';
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
 import type { StorageMaintenance } from '@mastra/code-sdk/utils/storage-maintenance';
-import type { AgentController, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
+import type { AgentController, MastraDBMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
@@ -180,7 +180,7 @@ export interface TUIState {
   isInitialized: boolean;
   gradientAnimator?: GradientAnimator;
   streamingComponent?: AssistantMessageComponent;
-  streamingMessage?: AgentControllerMessage;
+  streamingMessage?: MastraDBMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
   /** Task tools are hidden on success but promoted to normal tool boxes on errors */
   pendingTaskToolIds: Set<string>;

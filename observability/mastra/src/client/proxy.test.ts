@@ -207,8 +207,7 @@ describe('ingest happy path', () => {
       carrier(),
     );
     const metric = bus.events.find(e => (e as { type: string }).type === 'metric') as
-      | { metric: { labels: Record<string, string> } }
-      | undefined;
+      { metric: { labels: Record<string, string> } } | undefined;
     expect(metric?.metric.labels.status).toBe('error');
   });
 

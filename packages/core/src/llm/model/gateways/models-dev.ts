@@ -20,6 +20,7 @@ import type {
   GatewayLanguageModel,
   ModelProviderOverride,
   ProviderConfig,
+  StructuredOutputCapabilities,
   TemperatureCapabilities,
 } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
@@ -31,6 +32,7 @@ interface ModelsDevModelInfo {
   modalities?: { input?: string[]; output?: string[] };
   attachment?: boolean;
   temperature?: boolean;
+  structured_output?: boolean;
   // Per-model endpoint/shape/SDK override (models.dev model `provider` block).
   provider?: { api?: string; shape?: 'responses' | 'completions'; npm?: string };
   [key: string]: unknown;
@@ -120,6 +122,7 @@ export class ModelsDevGateway extends MastraModelGateway {
   private providerConfigs: Record<string, ProviderConfig> = {};
   private attachmentCapabilities: AttachmentCapabilities = {};
   private temperatureCapabilities: TemperatureCapabilities = {};
+  private structuredOutputCapabilities: StructuredOutputCapabilities = {};
 
   constructor(providerConfigs?: Record<string, ProviderConfig>) {
     super();
@@ -137,6 +140,7 @@ export class ModelsDevGateway extends MastraModelGateway {
     // Reset capability maps so removed providers/models are not retained across syncs
     this.attachmentCapabilities = {};
     this.temperatureCapabilities = {};
+    this.structuredOutputCapabilities = {};
 
     const providerConfigs: Record<string, ProviderConfig> = {};
 
@@ -178,6 +182,11 @@ export class ModelsDevGateway extends MastraModelGateway {
         // Collect model IDs that support temperature sampling
         const temperatureModels = activeModels
           .filter(([, modelInfo]) => modelInfo?.temperature === true)
+          .map(([modelId]) => modelId)
+          .sort();
+
+        const structuredOutputModels = activeModels
+          .filter(([, modelInfo]) => modelInfo?.structured_output === true)
           .map(([modelId]) => modelId)
           .sort();
 
@@ -238,6 +247,9 @@ export class ModelsDevGateway extends MastraModelGateway {
         if (temperatureModels.length > 0) {
           this.temperatureCapabilities[normalizedId] = temperatureModels;
         }
+        if (structuredOutputModels.length > 0) {
+          this.structuredOutputCapabilities[normalizedId] = structuredOutputModels;
+        }
       }
     }
 
@@ -257,6 +269,10 @@ export class ModelsDevGateway extends MastraModelGateway {
 
   getTemperatureCapabilities(): TemperatureCapabilities {
     return this.temperatureCapabilities;
+  }
+
+  getStructuredOutputCapabilities(): StructuredOutputCapabilities {
+    return this.structuredOutputCapabilities;
   }
 
   buildUrl(routerId: string, envVars?: typeof process.env): string | undefined {
