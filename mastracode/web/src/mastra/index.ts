@@ -32,9 +32,6 @@ import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { WorkOSAuditIntegration } from '@mastra/factory/integrations/workos/integration';
 import { MastraFactory } from '@mastra/factory';
-import type { FactoryIntegration } from '@mastra/factory/integrations/base';
-import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
-import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
@@ -194,65 +191,7 @@ if (sandboxKind === 'platform') {
   );
 }
 
-// Integrations, all-or-nothing per integration: setting ANY of an
-// integration's env vars means you intend to enable it, so a partial set is a
-// hard misconfiguration error listing exactly what's missing. No vars set →
-// the integration is omitted entirely: its routes never mount, its tools never
-// register, and its status endpoint reports "not configured".
-function envGroup<K extends string>(
-  vars: Record<K, string | undefined>,
-  integration: string,
-): Record<K, string> | undefined {
-  const entries = Object.entries(vars) as Array<[K, string | undefined]>;
-  const present = entries.filter(([, value]) => value);
-  if (present.length === 0) return undefined;
-  const missing = entries.filter(([, value]) => !value).map(([name]) => name);
-  if (missing.length > 0) {
-    throw new Error(
-      `${integration} integration is partially configured — missing ${missing.join(', ')}. ` +
-      'Set the remaining variable(s) to enable it, or unset the group to disable it.',
-    );
-  }
-  return Object.fromEntries(entries) as Record<K, string>;
-}
-
-// GitHub App: signed-in users install the app, pick repos, and turn them into
-// projects. The webhook secret is optional (webhook deliveries are rejected
-// without it) so it is validated separately from the required group.
-const githubEnv = envGroup(
-  {
-    GITHUB_APP_ID: process.env.GITHUB_APP_ID,
-    GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY,
-    GITHUB_APP_CLIENT_ID: process.env.GITHUB_APP_CLIENT_ID,
-    GITHUB_APP_CLIENT_SECRET: process.env.GITHUB_APP_CLIENT_SECRET,
-    GITHUB_APP_SLUG: process.env.GITHUB_APP_SLUG,
-  },
-  'GitHub',
-);
-const github = githubEnv
-  ? new GithubIntegration({
-      appId: githubEnv.GITHUB_APP_ID,
-      privateKey: githubEnv.GITHUB_APP_PRIVATE_KEY,
-      clientId: githubEnv.GITHUB_APP_CLIENT_ID,
-      clientSecret: githubEnv.GITHUB_APP_CLIENT_SECRET,
-      slug: githubEnv.GITHUB_APP_SLUG,
-      webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET,
-    })
-  : undefined;
-
-// Linear OAuth app: per-org workspace connections + issue intake.
-const linearEnv = envGroup(
-  {
-    LINEAR_CLIENT_ID: process.env.LINEAR_CLIENT_ID,
-    LINEAR_CLIENT_SECRET: process.env.LINEAR_CLIENT_SECRET,
-  },
-  'Linear',
-);
-const linear = linearEnv
-  ? new LinearIntegration({ clientId: linearEnv.LINEAR_CLIENT_ID, clientSecret: linearEnv.LINEAR_CLIENT_SECRET })
-  : undefined;
-
-const integrations: FactoryIntegration[] = [github, linear, workosAudit].filter(i => i !== undefined);
+const integrations = workosAudit ? [workosAudit] : [];
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `APP_DATABASE_URL` set →
@@ -311,9 +250,8 @@ export const factory = new MastraFactory({
   // factory: webhook secret first, then the WorkOS cookie password. Unset →
   // per-process random secret (single-process local dev only).
   stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
-  // Explicit direct-provider integrations. MastraFactory fills missing GitHub
-  // and Linear slots with Platform-backed defaults when Platform credentials
-  // are configured.
+  // Server-owned integrations. MastraFactory adds Platform-backed GitHub and
+  // Linear defaults when Platform credentials are configured.
   integrations,
 });
 
