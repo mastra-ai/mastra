@@ -5,7 +5,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { MoreHorizontal, Plus } from 'lucide-react';
+import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
@@ -190,12 +190,13 @@ function ThreadRow({
   };
 
   return (
-    <div role="listitem" className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
-      <button
-        type="button"
-        className="flex w-full flex-col gap-0.5 rounded-md px-2 py-2 text-left"
-        onClick={openThread}
-      >
+    <div
+      role="listitem"
+      className={`group relative rounded-md ${
+        active ? 'bg-[var(--sidebar-nav-active)]' : 'hover:bg-[var(--sidebar-nav-hover)]'
+      }`}
+    >
+      <button type="button" className="flex w-full flex-col rounded-md px-2 py-1.5 text-left" onClick={openThread}>
         <span className="truncate text-ui-sm text-icon6">{thread.title || 'Untitled thread'}</span>
         <span className="text-ui-xs text-icon3">{relativeTime(thread.updatedAt ?? thread.createdAt ?? '')}</span>
       </button>
@@ -218,6 +219,7 @@ function ThreadRow({
             <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
             <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
             <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
+              <Trash2 />
               Delete
             </DropdownMenu.Item>
           </DropdownMenu.Content>

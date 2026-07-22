@@ -265,15 +265,19 @@ describe('MastraCode sidebar auth actions', () => {
 });
 
 describe('MastraCode empty thread state', () => {
-  it('given a project with no messages, when the app renders, then the Mastra Code wordmark hero appears', async () => {
+  it('given a project with no messages, when a starter is chosen, then it prefills and focuses the composer', async () => {
+    const user = userEvent.setup();
     renderSeededApp();
 
+    expect(await screen.findByRole('heading', { name: 'What can I help you build?' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Mastra Code')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Explore this codebase' }));
+
+    const composer = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
     await waitFor(() => {
-      expect(screen.getByText('Ready for new conversation')).toBeInTheDocument();
-      const wordmark = screen.getByLabelText('Mastra Code');
-      expect(wordmark).toBeInTheDocument();
-      // The hero sits inside the transcript scroller, which centers empty content vertically.
-      expect(wordmark.closest('.place-items-center')).not.toBeNull();
+      expect(composer).toHaveValue('Help me understand how this codebase is structured.');
+      expect(composer).toHaveFocus();
     });
   });
 });
@@ -449,7 +453,9 @@ describe('MastraCode message rendering', () => {
 
     renderChat();
 
-    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'What can I help you build?' })).toBeInTheDocument(),
+    );
     await new Promise(resolve => setTimeout(resolve, 100));
     await stream.emit();
 
