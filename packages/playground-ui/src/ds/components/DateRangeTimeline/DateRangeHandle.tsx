@@ -1,10 +1,8 @@
-import type { KeyboardEventHandler, PointerEventHandler } from 'react';
 import { format } from 'date-fns';
+import type { KeyboardEventHandler, PointerEventHandler } from 'react';
+import { parseDate } from './lib/date-range-timeline';
+import type { DateBoundary } from './lib/date-range-timeline';
 import { cn } from '@/lib/utils';
-import {
-  parseDate,
-  type DateBoundary,
-} from './lib/date-range-timeline';
 
 interface DateRangeHandleProps {
   boundary: DateBoundary;
@@ -50,7 +48,7 @@ export function DateRangeHandle({
     >
       <span
         className={cn(
-          'absolute top-1/2 left-1/2 h-7 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-xs bg-surface3 ring-1 transition-[width,box-shadow] duration-150 group-hover:w-2 group-focus-visible:w-2 group-focus-visible:ring-2 group-focus-visible:ring-accent3 motion-reduce:transition-none',
+          'absolute top-1/2 left-1/2 h-7 w-1.5 -translate-1/2 rounded-xs bg-surface3 ring-1 transition-[width,box-shadow] duration-150 group-hover:w-2 group-focus-visible:w-2 group-focus-visible:ring-2 group-focus-visible:ring-accent3 motion-reduce:transition-none',
           active ? 'w-2 ring-2 ring-neutral3/40' : 'ring-border2',
         )}
         aria-hidden="true"

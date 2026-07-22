@@ -1,17 +1,15 @@
-import { useRef, type PointerEvent, type RefObject } from 'react';
-import { cn } from '@/lib/utils';
+import { useRef } from 'react';
+import type { PointerEvent, RefObject } from 'react';
 import { DateRangeHandle } from './DateRangeHandle';
 import { DateRangeSelection } from './DateRangeSelection';
 import { DateRangeTrackGrid } from './DateRangeTrackGrid';
 import { useDateRangeKeyboardControls } from './hooks/useDateRangeKeyboardControls';
 import { useDateRangePointerGestures } from './hooks/useDateRangePointerGestures';
 import { useDateRangeWheelZoom } from './hooks/useDateRangeWheelZoom';
-import type {
-  TimelineIndexRange,
-  TimelineState,
-} from './lib/date-range-timeline';
+import type { TimelineIndexRange, TimelineState } from './lib/date-range-timeline';
 import { createDateRangeGridMarkers } from './lib/date-range-timeline-grid';
 import { createDateRangeTrackModel } from './lib/date-range-timeline-view-model';
+import { cn } from '@/lib/utils';
 
 interface DateRangeTrackProps {
   wheelTargetRef: RefObject<HTMLDivElement | null>;
@@ -40,12 +38,11 @@ export function DateRangeTrack({
     onSelectionCommit,
     onSelectionCancel,
   });
-  const { handleSelectionKeyDown, handleFromKeyDown, handleToKeyDown } =
-    useDateRangeKeyboardControls({
-      selection: timeline.selection,
-      maximumIndex,
-      onCommit: onSelectionCommit,
-    });
+  const { handleSelectionKeyDown, handleFromKeyDown, handleToKeyDown } = useDateRangeKeyboardControls({
+    selection: timeline.selection,
+    maximumIndex,
+    onCommit: onSelectionCommit,
+  });
 
   useDateRangeWheelZoom({
     rootRef: wheelTargetRef,

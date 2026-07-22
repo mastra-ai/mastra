@@ -1,17 +1,13 @@
-import { useState, type PointerEvent, type RefObject } from 'react';
-import { usePointerDrag } from './use-pointer-drag';
-import type {
-  DateBoundary,
-  TimelineIndexRange,
-  TimelineState,
-} from '../lib/date-range-timeline';
+import { useState } from 'react';
+import type { PointerEvent, RefObject } from 'react';
+import type { DateBoundary, TimelineIndexRange, TimelineState } from '../lib/date-range-timeline';
 import {
   getTimelineIndexAtClientX,
   getTimelineInteraction,
   resolveTimelineGestureSelection,
-  type TimelineInteraction,
-  type TimelinePointerGesture,
 } from '../lib/date-range-timeline-interactions';
+import type { TimelineInteraction, TimelinePointerGesture } from '../lib/date-range-timeline-interactions';
+import { usePointerDrag } from './use-pointer-drag';
 
 export type { TimelineInteraction } from '../lib/date-range-timeline-interactions';
 
@@ -44,11 +40,7 @@ export function useDateRangePointerGestures({
 
   function previewPointerDrag(drag: TimelinePointerDrag, event: PointerEvent<HTMLElement>) {
     const pointerIndex = getPointerIndex(event.clientX);
-    const selection = resolveTimelineGestureSelection(
-      drag.gesture,
-      pointerIndex,
-      timeline.viewport,
-    );
+    const selection = resolveTimelineGestureSelection(drag.gesture, pointerIndex, timeline.viewport);
     drag.currentSelection = selection;
     onSelectionPreview(selection);
   }

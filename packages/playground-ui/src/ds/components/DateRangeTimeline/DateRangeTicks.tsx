@@ -1,9 +1,7 @@
 import { format } from 'date-fns';
+import { parseDate } from './lib/date-range-timeline';
+import type { TimelineTick } from './lib/date-range-timeline';
 import { Txt } from '@/ds/components/Txt/Txt';
-import {
-  parseDate,
-  type TimelineTick,
-} from './lib/date-range-timeline';
 
 interface DateRangeTicksProps {
   ticks: TimelineTick[];
@@ -24,11 +22,7 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
 
   if (firstTick.date === lastTick.date) {
     return (
-      <div
-        role="group"
-        aria-label={timelineLabel}
-        className="flex h-10 items-start justify-center pt-2"
-      >
+      <div role="group" aria-label={timelineLabel} className="flex h-10 items-start justify-center pt-2">
         {/* TODO(ds): Txt needs a muted timeline-axis variant. */}
         <Txt as="span" variant="ui-sm" className="text-neutral3">
           Created today · {formatBoundaryDate(firstTick.date)}
@@ -37,8 +31,7 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
     );
   }
 
-  const startLabel =
-    firstTick.date === min ? `Created · ${formatBoundaryDate(min)}` : firstTick.label;
+  const startLabel = firstTick.date === min ? `Created · ${formatBoundaryDate(min)}` : firstTick.label;
   const endLabel = lastTick.date === max ? `Today · ${formatBoundaryDate(max)}` : lastTick.label;
   const middleTicks = ticks.slice(1, -1);
 
@@ -52,7 +45,7 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
         </Txt>
       </div>
 
-      {middleTicks.map((tick) => (
+      {middleTicks.map(tick => (
         <div
           key={tick.date}
           className="absolute top-0 hidden -translate-x-1/2 flex-col items-center sm:flex"

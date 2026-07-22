@@ -1,14 +1,11 @@
 import { useId, useRef } from 'react';
-import { Txt } from '@/ds/components/Txt/Txt';
 import { DateRangeBoundaryPickers } from './DateRangeBoundaryPickers';
 import { DateRangeTicks } from './DateRangeTicks';
 import { DateRangeTrack } from './DateRangeTrack';
 import { useDateRangeTimelineState } from './hooks/useDateRangeTimelineState';
-import {
-  createDateRangeAxisModel,
-  createDateRangeBoundaryModel,
-} from './lib/date-range-timeline-view-model';
+import { createDateRangeAxisModel, createDateRangeBoundaryModel } from './lib/date-range-timeline-view-model';
 import type { DateRangeValue } from './types';
+import { Txt } from '@/ds/components/Txt/Txt';
 
 interface DateRangeTimelineProps {
   value: DateRangeValue;
@@ -35,7 +32,7 @@ export function DateRangeTimeline({ value, min, max, onCommit }: DateRangeTimeli
       role="group"
       aria-label="Date range timeline"
       aria-describedby={hintId}
-      className="w-full select-none overflow-x-clip"
+      className="w-full overflow-x-clip select-none"
     >
       <div className="flex min-h-6 items-start justify-between gap-4 pb-1">
         {/* TODO(ds): Txt needs a muted interaction-hint variant. */}

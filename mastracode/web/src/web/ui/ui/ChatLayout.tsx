@@ -10,7 +10,6 @@ import { PanelRightIcon } from 'lucide-react';
 
 import { PageLayout } from './PageLayout';
 
-
 type ChatLayoutProps = {
   sidebar: ReactNode;
   /** Optional bar above the chat content (e.g. mobile sidebar toggle). */

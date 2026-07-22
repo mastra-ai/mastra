@@ -123,11 +123,7 @@ describe('ChatLayout', () => {
       const user = userEvent.setup();
 
       render(
-        <ChatLayout
-          sidebar={<div />}
-          content={<div>chat-content</div>}
-          rightPanel={<div>workspace-panel</div>}
-        />,
+        <ChatLayout sidebar={<div />} content={<div>chat-content</div>} rightPanel={<div>workspace-panel</div>} />,
       );
 
       await user.click(await screen.findByRole('button', { name: 'Open workspace files' }));
@@ -135,5 +131,4 @@ describe('ChatLayout', () => {
       expect(screen.getByText('workspace-panel')).toBeVisible();
     });
   });
-
 });

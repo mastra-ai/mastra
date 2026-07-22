@@ -7,7 +7,6 @@ import type { RenderedWorkspacePath } from '../config';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 
-
 interface WorkspaceViewerPanelProps {
   workspacePath: string;
   renderedPaths: RenderedWorkspacePath[];
@@ -51,7 +50,6 @@ function WorkspaceViewerPanelInner({
     onExpandedChange?.(open);
   };
 
-
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
     resizeCleanupRef.current?.();
     const startX = event.clientX;
@@ -73,10 +71,7 @@ function WorkspaceViewerPanelInner({
   };
 
   return (
-    <div
-      className="relative flex h-full w-full min-w-0 bg-surface1"
-      data-testid="workspace-viewer-panel"
-    >
+    <div className="relative flex h-full w-full min-w-0 bg-surface1" data-testid="workspace-viewer-panel">
       {viewerOpen ? (
         <div className="relative h-full min-w-0 flex-1 overflow-hidden">
           <Button

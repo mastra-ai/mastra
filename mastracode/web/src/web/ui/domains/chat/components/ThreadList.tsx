@@ -196,11 +196,7 @@ function ThreadRow({
         active ? 'bg-[var(--sidebar-nav-active)]' : 'hover:bg-[var(--sidebar-nav-hover)]'
       }`}
     >
-      <button
-        type="button"
-        className="flex w-full flex-col rounded-md px-2 py-1.5 text-left"
-        onClick={openThread}
-      >
+      <button type="button" className="flex w-full flex-col rounded-md px-2 py-1.5 text-left" onClick={openThread}>
         <span className="truncate text-ui-sm text-icon6">{thread.title || 'Untitled thread'}</span>
         <span className="text-ui-xs text-icon3">{relativeTime(thread.updatedAt ?? thread.createdAt ?? '')}</span>
       </button>

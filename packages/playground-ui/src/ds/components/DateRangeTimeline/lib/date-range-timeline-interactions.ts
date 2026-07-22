@@ -1,4 +1,5 @@
-import { clamp, type DateBoundary, type TimelineIndexRange } from './date-range-timeline';
+import { clamp } from './date-range-timeline';
+import type { DateBoundary, TimelineIndexRange } from './date-range-timeline';
 
 interface TimelineTrackGeometry {
   left: number;
@@ -11,9 +12,7 @@ export type TimelinePointerGesture =
   | { type: 'handle'; boundary: DateBoundary; originalSelection: TimelineIndexRange };
 
 export type TimelineInteraction =
-  | { type: 'selecting' }
-  | { type: 'moving' }
-  | { type: 'resizing'; boundary: DateBoundary };
+  { type: 'selecting' } | { type: 'moving' } | { type: 'resizing'; boundary: DateBoundary };
 
 const KEYBOARD_LARGE_STEP_DAYS = 7;
 
@@ -60,11 +59,7 @@ export function resolveTimelineGestureSelection(
   if (gesture.type === 'pan') {
     const selectionSpan = gesture.originalSelection.to - gesture.originalSelection.from;
     const delta = boundedPointerIndex - gesture.startIndex;
-    const from = clamp(
-      gesture.originalSelection.from + delta,
-      viewport.from,
-      viewport.to - selectionSpan,
-    );
+    const from = clamp(gesture.originalSelection.from + delta, viewport.from, viewport.to - selectionSpan);
     return { from, to: from + selectionSpan };
   }
 
@@ -81,11 +76,7 @@ export function resolveTimelineGestureSelection(
   };
 }
 
-export function moveTimelineSelectionFromKey(
-  selection: TimelineIndexRange,
-  key: string,
-  maximumIndex: number,
-) {
+export function moveTimelineSelectionFromKey(selection: TimelineIndexRange, key: string, maximumIndex: number) {
   const span = selection.to - selection.from;
   if (key === 'Home') return { from: 0, to: span };
   if (key === 'End') return { from: maximumIndex - span, to: maximumIndex };

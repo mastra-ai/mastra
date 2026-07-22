@@ -1,4 +1,5 @@
-import { useRef, type PointerEvent } from 'react';
+import { useRef } from 'react';
+import type { PointerEvent } from 'react';
 
 interface PointerDragSession<TPayload> {
   pointerId: number;
@@ -12,11 +13,7 @@ interface UsePointerDragInput<TPayload> {
   onCancel: (payload: TPayload, event: PointerEvent<HTMLElement>) => void;
 }
 
-export function usePointerDrag<TPayload>({
-  onMove,
-  onEnd,
-  onCancel,
-}: UsePointerDragInput<TPayload>) {
+export function usePointerDrag<TPayload>({ onMove, onEnd, onCancel }: UsePointerDragInput<TPayload>) {
   const sessionRef = useRef<PointerDragSession<TPayload> | undefined>(undefined);
 
   function startPointerDrag(event: PointerEvent<HTMLElement>, payload: TPayload) {

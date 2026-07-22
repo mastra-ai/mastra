@@ -1,8 +1,5 @@
-import {
-  buildTimelineTickOffsets,
-  getTimelinePosition,
-  type TimelineIndexRange,
-} from './date-range-timeline';
+import { buildTimelineTickOffsets, getTimelinePosition } from './date-range-timeline';
+import type { TimelineIndexRange } from './date-range-timeline';
 
 const MAX_GRID_INTERVALS = 24;
 
@@ -68,7 +65,7 @@ export function createDateRangeGridMarkers(
 
   return [...markerIndices]
     .sort((left, right) => left - right)
-    .map((index) => ({
+    .map(index => ({
       index,
       position: getTimelinePosition(index, viewport),
       emphasis: getMarkerEmphasis(index, majorIndices, mediumIndices),

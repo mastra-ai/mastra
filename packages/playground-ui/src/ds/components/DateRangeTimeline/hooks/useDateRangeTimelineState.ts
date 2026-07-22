@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { addDays, differenceInCalendarDays } from 'date-fns';
+import { useState } from 'react';
 import {
   clamp,
   createTimelineState,
@@ -7,9 +7,8 @@ import {
   revealTimelineSelection,
   toDateRange,
   zoomTimelineViewport,
-  type DateBoundary,
-  type TimelineIndexRange,
 } from '../lib/date-range-timeline';
+import type { DateBoundary, TimelineIndexRange } from '../lib/date-range-timeline';
 import type { DateRangeValue } from '../types';
 
 interface UseDateRangeTimelineStateInput {
@@ -27,12 +26,7 @@ function resolveTimelineBounds(min: string, max: string) {
   return { minDate, maxDate };
 }
 
-export function useDateRangeTimelineState({
-  value,
-  min,
-  max,
-  onCommit,
-}: UseDateRangeTimelineStateInput) {
+export function useDateRangeTimelineState({ value, min, max, onCommit }: UseDateRangeTimelineStateInput) {
   const { minDate, maxDate } = resolveTimelineBounds(min, max);
   const committedTimeline = createTimelineState(value, minDate, maxDate);
   const maximumIndex = Math.max(0, differenceInCalendarDays(maxDate, minDate));
@@ -55,19 +49,14 @@ export function useDateRangeTimelineState({
 
   function commitSelection(nextSelection: TimelineIndexRange) {
     setDraftSelection(undefined);
-    setViewport((current) => revealTimelineSelection(current, nextSelection, maximumIndex));
+    setViewport(current => revealTimelineSelection(current, nextSelection, maximumIndex));
     onCommit(toDateRange({ ...state, selection: nextSelection }));
   }
 
   function zoom(factor: number, anchor: number) {
-    setViewport((current) => {
+    setViewport(current => {
       const visibleViewport = revealTimelineSelection(current, state.selection, maximumIndex);
-      return zoomTimelineViewport(
-        { ...state, viewport: visibleViewport },
-        maximumIndex,
-        factor,
-        anchor,
-      ).viewport;
+      return zoomTimelineViewport({ ...state, viewport: visibleViewport }, maximumIndex, factor, anchor).viewport;
     });
   }
 

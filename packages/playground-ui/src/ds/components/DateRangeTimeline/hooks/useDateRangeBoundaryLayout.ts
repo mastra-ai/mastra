@@ -1,8 +1,7 @@
-import { useLayoutEffect, useState, type RefObject } from 'react';
-import {
-  resolveDateRangeBoundaryLayout,
-  type DateRangeBoundaryLayout,
-} from '../lib/date-range-boundary-layout';
+import { useLayoutEffect, useState } from 'react';
+import type { RefObject } from 'react';
+import { resolveDateRangeBoundaryLayout } from '../lib/date-range-boundary-layout';
+import type { DateRangeBoundaryLayout } from '../lib/date-range-boundary-layout';
 
 interface BoundaryPositions {
   from: number;
@@ -21,13 +20,13 @@ export function useDateRangeBoundaryLayout(
 
     function updateWidth(width: number) {
       if (width <= 0) return;
-      setContainerWidth((current) => (current === width ? current : width));
+      setContainerWidth(current => (current === width ? current : width));
     }
 
     updateWidth(container.getBoundingClientRect().width);
     if (typeof ResizeObserver === 'undefined') return;
 
-    const observer = new ResizeObserver((entries) => {
+    const observer = new ResizeObserver(entries => {
       const entry = entries.find(({ target }) => target === container) ?? entries[0];
       const width = entry?.contentRect.width ?? container.getBoundingClientRect().width;
       updateWidth(width);
@@ -36,7 +35,5 @@ export function useDateRangeBoundaryLayout(
     return () => observer.disconnect();
   }, [containerRef]);
 
-  return containerWidth === undefined
-    ? undefined
-    : resolveDateRangeBoundaryLayout(containerWidth, positions);
+  return containerWidth === undefined ? undefined : resolveDateRangeBoundaryLayout(containerWidth, positions);
 }

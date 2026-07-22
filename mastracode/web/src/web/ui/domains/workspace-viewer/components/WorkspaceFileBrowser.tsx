@@ -183,10 +183,7 @@ export function WorkspaceFileBrowser({
   };
 
   return (
-    <aside
-      className="flex h-full w-full min-w-0 flex-col bg-surface1"
-      aria-label="Workspace files"
-    >
+    <aside className="flex h-full w-full min-w-0 flex-col bg-surface1" aria-label="Workspace files">
       <div className="flex items-center justify-between gap-2 px-3 py-2 pl-4 lg:pr-12">
         <div className="flex min-w-0 items-center gap-2">
           <NotepadText size={15} className="shrink-0 text-icon4" />

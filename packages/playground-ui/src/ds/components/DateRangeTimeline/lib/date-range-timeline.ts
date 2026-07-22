@@ -117,8 +117,7 @@ export function revealTimelineSelection(
     return normalizedViewport;
   }
 
-  const desiredFrom =
-    selectionFrom < normalizedViewport.from ? selectionFrom : selectionTo - nextSpan;
+  const desiredFrom = selectionFrom < normalizedViewport.from ? selectionFrom : selectionTo - nextSpan;
   const from = clamp(desiredFrom, 0, boundedMaximum - nextSpan);
   return { from, to: from + nextSpan };
 }
@@ -142,7 +141,7 @@ export function buildTimelineTicks(domainFrom: Date, domainTo: Date): TimelineTi
   const span = Math.max(0, differenceInCalendarDays(domainTo, domainFrom));
   const crossesYears = domainFrom.getFullYear() !== domainTo.getFullYear();
 
-  return buildTimelineTickOffsets(span).map((dayOffset) => {
+  return buildTimelineTickOffsets(span).map(dayOffset => {
     const date = addDays(domainFrom, dayOffset);
     const labelFormat = span > 365 || crossesYears ? 'MMM yyyy' : 'MMM d';
 
@@ -154,10 +153,7 @@ export function buildTimelineTicks(domainFrom: Date, domainTo: Date): TimelineTi
   });
 }
 
-export function clampDateRangeToBounds(
-  value: DateRangeValue,
-  bounds: DateRangeBounds,
-): DateRangeValue {
+export function clampDateRangeToBounds(value: DateRangeValue, bounds: DateRangeBounds): DateRangeValue {
   const min = parseDate(bounds.min);
   const max = parseDate(bounds.max);
   if (!min || !max) return value;

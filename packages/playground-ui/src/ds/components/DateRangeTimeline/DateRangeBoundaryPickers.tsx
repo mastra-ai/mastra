@@ -14,13 +14,7 @@ interface DateRangeBoundaryPickersProps {
 
 const FALLBACK_PICKER_WIDTH = 'clamp(0px, calc(50% - 0.25rem), 10rem)';
 
-export function DateRangeBoundaryPickers({
-  positions,
-  value,
-  min,
-  max,
-  onSelect,
-}: DateRangeBoundaryPickersProps) {
+export function DateRangeBoundaryPickers({ positions, value, min, max, onSelect }: DateRangeBoundaryPickersProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const layout = useDateRangeBoundaryLayout(containerRef, positions);
 
@@ -33,13 +27,7 @@ export function DateRangeBoundaryPickers({
           width: layout?.from.width ?? FALLBACK_PICKER_WIDTH,
         }}
       >
-        <DateRangeBoundaryPicker
-          boundary="from"
-          value={value.from}
-          min={min}
-          max={value.to}
-          onSelect={onSelect}
-        />
+        <DateRangeBoundaryPicker boundary="from" value={value.from} min={min} max={value.to} onSelect={onSelect} />
       </div>
 
       <div
@@ -49,13 +37,7 @@ export function DateRangeBoundaryPickers({
           width: layout?.to.width ?? FALLBACK_PICKER_WIDTH,
         }}
       >
-        <DateRangeBoundaryPicker
-          boundary="to"
-          value={value.to}
-          min={value.from}
-          max={max}
-          onSelect={onSelect}
-        />
+        <DateRangeBoundaryPicker boundary="to" value={value.to} min={value.from} max={max} onSelect={onSelect} />
       </div>
 
       <div

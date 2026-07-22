@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import { parseISO } from 'date-fns';
+import { describe, expect, it } from 'vitest';
 import {
   clampDateRangeToBounds,
   createTimelineState,
@@ -25,10 +25,7 @@ describe('date range timeline', () => {
 
   it('clamps an existing selection to a newer database lifetime', () => {
     expect(
-      clampDateRangeToBounds(
-        { from: '2026-06-10', to: '2026-07-10' },
-        { min: '2026-07-01', max: '2026-07-10' },
-      ),
+      clampDateRangeToBounds({ from: '2026-06-10', to: '2026-07-10' }, { min: '2026-07-01', max: '2026-07-10' }),
     ).toEqual({ from: '2026-07-01', to: '2026-07-10' });
   });
 

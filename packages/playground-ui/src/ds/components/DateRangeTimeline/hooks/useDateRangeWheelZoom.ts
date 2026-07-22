@@ -1,4 +1,5 @@
-import { useEffect, useEffectEvent, type RefObject } from 'react';
+import { useEffect, useEffectEvent } from 'react';
+import type { RefObject } from 'react';
 import { clamp } from '../lib/date-range-timeline';
 
 const MAX_WHEEL_DELTA = 80;
@@ -11,12 +12,7 @@ interface UseDateRangeWheelZoomInput {
   onZoom: (factor: number, anchor: number) => void;
 }
 
-export function useDateRangeWheelZoom({
-  rootRef,
-  trackRef,
-  disabled,
-  onZoom,
-}: UseDateRangeWheelZoomInput) {
+export function useDateRangeWheelZoom({ rootRef, trackRef, disabled, onZoom }: UseDateRangeWheelZoomInput) {
   const handleWheel = useEffectEvent((event: WheelEvent) => {
     if (!event.ctrlKey) return;
     event.preventDefault();
@@ -24,9 +20,7 @@ export function useDateRangeWheelZoom({
 
     const trackRect = trackRef.current?.getBoundingClientRect();
     const anchor =
-      trackRect && trackRect.width > 0
-        ? clamp((event.clientX - trackRect.left) / trackRect.width, 0, 1)
-        : 0.5;
+      trackRect && trackRect.width > 0 ? clamp((event.clientX - trackRect.left) / trackRect.width, 0, 1) : 0.5;
     const wheelDelta = clamp(event.deltaY, -MAX_WHEEL_DELTA, MAX_WHEEL_DELTA);
     const factor = Math.exp(wheelDelta * WHEEL_ZOOM_SENSITIVITY);
     onZoom(factor, anchor);

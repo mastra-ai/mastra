@@ -1,14 +1,12 @@
-import { useState } from 'react';
 import { format } from 'date-fns';
 import { CalendarDaysIcon } from 'lucide-react';
-import { DatePicker } from '@/ds/components/DateTimePicker';
-import { Txt } from '@/ds/components/Txt/Txt';
+import { useState } from 'react';
+import { parseDate } from './lib/date-range-timeline';
+import type { DateBoundary } from './lib/date-range-timeline';
 import { Button } from '@/ds/components/Button/Button';
+import { DatePicker } from '@/ds/components/DateTimePicker';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
-import {
-  parseDate,
-  type DateBoundary,
-} from './lib/date-range-timeline';
+import { Txt } from '@/ds/components/Txt/Txt';
 
 interface DateRangeBoundaryPickerProps {
   boundary: DateBoundary;
@@ -18,13 +16,7 @@ interface DateRangeBoundaryPickerProps {
   onSelect: (boundary: DateBoundary, value: string) => void;
 }
 
-export function DateRangeBoundaryPicker({
-  boundary,
-  value,
-  min,
-  max,
-  onSelect,
-}: DateRangeBoundaryPickerProps) {
+export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }: DateRangeBoundaryPickerProps) {
   const [open, setOpen] = useState(false);
   const isFrom = boundary === 'from';
   const boundaryLabel = isFrom ? 'start date' : 'end date';

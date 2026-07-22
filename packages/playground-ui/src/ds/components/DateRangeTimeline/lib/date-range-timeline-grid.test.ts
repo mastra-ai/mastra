@@ -16,9 +16,9 @@ describe('date range timeline grid', () => {
       position: (19 / 21) * 100,
       emphasis: 'medium',
     });
-    expect(
-      markers.filter((marker) => marker.emphasis === 'major').map((marker) => marker.index),
-    ).toEqual([0, 5, 11, 16, 21]);
+    expect(markers.filter(marker => marker.emphasis === 'major').map(marker => marker.index)).toEqual([
+      0, 5, 11, 16, 21,
+    ]);
   });
 
   it('keeps selected dates on the grid when minor markers are sampled', () => {
@@ -26,8 +26,8 @@ describe('date range timeline grid', () => {
 
     expect(markers).toContainEqual({ index: 17, position: 17, emphasis: 'minor' });
     expect(markers).toContainEqual({ index: 83, position: 83, emphasis: 'minor' });
-    expect(
-      markers.filter((marker) => marker.emphasis === 'major').map((marker) => marker.index),
-    ).toEqual([0, 25, 50, 75, 100]);
+    expect(markers.filter(marker => marker.emphasis === 'major').map(marker => marker.index)).toEqual([
+      0, 25, 50, 75, 100,
+    ]);
   });
 });

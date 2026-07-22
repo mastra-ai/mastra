@@ -42,10 +42,10 @@ export async function fetchFactoryMetrics(
   range: FactoryMetricsRange,
 ): Promise<FactoryMetrics> {
   const query = new URLSearchParams({ from: range.from, to: range.to });
-  const res = await fetch(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/metrics?${query}`,
-    { headers: { Accept: 'application/json' }, credentials: 'include' },
-  );
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/metrics?${query}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
