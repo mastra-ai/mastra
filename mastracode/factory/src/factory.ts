@@ -78,6 +78,7 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { FactorySupervisorService } from './supervisor/service.js';
+import { FactorySupervisorSignalService } from './supervisor/signal-service.js';
 import { createFactorySupervisorTools } from './supervisor/tools.js';
 import { createWorkspaceFactory } from './workspace.js';
 
@@ -499,13 +500,32 @@ export class MastraFactory {
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       GithubIntegration | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
+    let supervisorService: FactorySupervisorService | undefined;
+    let supervisorSignals: FactorySupervisorSignalService | undefined;
     const transitionService = workItemsReady
-      ? new FactoryTransitionService({ rules, storage: workItemsStorage })
+      ? new FactoryTransitionService({
+          rules,
+          storage: workItemsStorage,
+          onCommitted: async input => {
+            if (!supervisorSignals || input.result.status === 'rejected') return;
+            const item = await workItemsStorage.getForProject(input.orgId, input.factoryProjectId, input.workItemId);
+            const userId =
+              (input.actor.type === 'human' ? input.actor.id : undefined) ??
+              (input.actor.type === 'agent' ? item?.sessions[input.actor.role]?.startedBy : undefined) ??
+              Object.values(item?.sessions ?? {}).find(session => session.startedBy)?.startedBy;
+            if (userId) {
+              await supervisorSignals.refresh({
+                orgId: input.orgId,
+                userId,
+                factoryProjectId: input.factoryProjectId,
+              });
+            }
+          },
+        })
       : undefined;
     const approvalService = workItemsReady
       ? new FactoryTransitionApprovalService({ storage: workItemsStorage })
       : undefined;
-    let supervisorService: FactorySupervisorService | undefined;
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           rules,
@@ -673,6 +693,11 @@ export class MastraFactory {
             approvals: approvalService,
             primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
           });
+          if (!supervisorSignals) {
+            const signals = new FactorySupervisorSignalService(supervisorService);
+            supervisorSignals = signals;
+            runLifecycleObserver?.subscribeIdle(event => signals.notifyIdle(event));
+          }
         }
         return [
           // Public `/auth/*` routes (login/callback/logout/me). Folded in as
@@ -701,6 +726,7 @@ export class MastraFactory {
             factoryTransitionService: transitionService,
             runLifecycleObserver,
             supervisorService,
+            supervisorSignals,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 controller,
@@ -709,6 +735,10 @@ export class MastraFactory {
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                dispatchSupervisorNotification: record => {
+                  if (!supervisorSignals) throw new Error('Factory supervisor signals are unavailable.');
+                  return supervisorSignals.notifyApproval(record);
+                },
               });
             },
           }),

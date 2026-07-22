@@ -81,7 +81,7 @@ function itemSummary(item: WorkItemRow, approvals: Awaited<ReturnType<FactorySup
     revision: item.revision,
     parentWorkItemId: item.parentWorkItemId,
     sessionRoles: Object.keys(item.sessions).sort(),
-    approvals: approvals.map(supervisorApprovalSummary),
+    approvals: approvals.map(approval => supervisorApprovalSummary(approval)),
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
@@ -146,7 +146,7 @@ export async function createFactorySupervisorTools(options: {
           factoryProjectId: current.factoryProjectId,
           statuses: ['pending'],
         });
-        return { approvals: approvals.slice(0, limit).map(supervisorApprovalSummary) };
+        return { approvals: approvals.slice(0, limit).map(approval => supervisorApprovalSummary(approval)) };
       },
     }),
     factory_signal_work_item: createTool({

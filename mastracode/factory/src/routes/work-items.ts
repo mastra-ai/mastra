@@ -57,6 +57,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   approvalService: Pick<FactoryTransitionApprovalService, 'list' | 'resolve'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
+  onFactoryStateChanged?: (input: { orgId: string; userId: string; factoryProjectId: string }) => Promise<unknown>;
 }
 
 function loose(c: unknown): Context {
@@ -440,6 +441,14 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     return { ...tenant, factoryProjectId: projectId, defaultModelId: project.defaultModelId };
   }
 
+  async #notifyFactoryStateChanged(input: { orgId: string; userId: string; factoryProjectId: string }): Promise<void> {
+    try {
+      await this.deps.onFactoryStateChanged?.(input);
+    } catch (error) {
+      console.warn('[factory] Supervisor state refresh failed after work-item mutation:', error);
+    }
+  }
+
   /**
    * Emit the audit events a successful work-item PATCH implies: always
    * `updated`, plus `stage_moved` when the stages actually changed and one
@@ -732,6 +741,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 patch: boundedPatch as unknown as Record<string, unknown>,
               });
             }
+            await this.#notifyFactoryStateChanged(resolved);
             return c.json({ workItem: item });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
@@ -791,6 +801,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               },
             },
           });
+          if (result.status !== 'rejected') await this.#notifyFactoryStateChanged(resolved);
           if (result.status === 'accepted') return c.json({ result });
           if (result.status === 'pending_approval') return c.json({ result }, 202);
           return c.json({ result }, result.code === 'stale' ? 409 : 422);
@@ -846,6 +857,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               },
             },
           });
+          await this.#notifyFactoryStateChanged(resolved);
           return c.json({ prepared }, 202);
         },
       }),
@@ -882,6 +894,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               previous: updated.previous,
               patch: patch as Record<string, unknown>,
             });
+            await this.#notifyFactoryStateChanged({
+              ...tenant,
+              factoryProjectId: updated.item.factoryProjectId,
+            });
             return c.json({ workItem: updated.item });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
@@ -913,6 +929,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               factoryProjectId: deleted.factoryProjectId,
               targets: [{ type: 'work_item', id: deleted.id, name: deleted.title }],
             },
+          });
+          await this.#notifyFactoryStateChanged({
+            ...tenant,
+            factoryProjectId: deleted.factoryProjectId,
           });
           return c.json({ ok: true });
         },

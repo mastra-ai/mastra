@@ -5,6 +5,7 @@ import type { Context } from 'hono';
 
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { FactorySupervisorService } from '../supervisor/service.js';
+import type { FactorySupervisorSignalService } from '../supervisor/signal-service.js';
 import type { RouteAuth } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -13,6 +14,7 @@ export interface SupervisorRoutesOptions {
   auth: RouteAuth;
   projects: FactoryProjectsStorage;
   service: FactorySupervisorService;
+  signals?: Pick<FactorySupervisorSignalService, 'refresh'>;
 }
 
 function loose(value: unknown): Context {
@@ -23,11 +25,13 @@ export class SupervisorRoutes {
   readonly #auth: RouteAuth;
   readonly #projects: FactoryProjectsStorage;
   readonly #service: FactorySupervisorService;
+  readonly #signals?: Pick<FactorySupervisorSignalService, 'refresh'>;
 
   constructor(options: SupervisorRoutesOptions) {
     this.#auth = options.auth;
     this.#projects = options.projects;
     this.#service = options.service;
+    this.#signals = options.signals;
   }
 
   async #resolveProject(
@@ -68,6 +72,7 @@ export class SupervisorRoutes {
               ...resolved,
               requestContext: context.get('requestContext') as RequestContext | undefined,
             });
+            await this.#signals?.refresh(resolved);
             return c.json({ session });
           } catch (error) {
             return c.json(

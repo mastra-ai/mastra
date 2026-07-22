@@ -230,6 +230,36 @@ export interface FactoryDeferredDecisionRecord {
   updatedAt: Date;
 }
 
+export type FactorySupervisorNotificationEvent =
+  'approval_requested' | 'approval_approved' | 'approval_rejected' | 'approval_stale';
+
+export interface FactorySupervisorNotificationRecord {
+  id: string;
+  orgId: string;
+  factoryProjectId: string;
+  approvalId: string;
+  workItemId: string;
+  event: FactorySupervisorNotificationEvent;
+  approvalStatus: FactoryApprovalStatus;
+  requestedStage: string;
+  expectedRevision: number;
+  requestingBindingId: string | null;
+  requestingRole: string | null;
+  supervisorUserId: string | null;
+  reason: string;
+  summary: string | null;
+  idempotencyKey: string;
+  status: FactoryDispatchStatus;
+  attempts: number;
+  availableAt: Date;
+  leaseOwner: string | null;
+  leaseExpiresAt: Date | null;
+  lastError: string | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface FactoryRunBindingSessionAddress {
   factoryProjectId: string;
   threadId: string;
@@ -684,6 +714,41 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
     ],
   },
   {
+    name: 'factory_supervisor_notifications',
+    columns: {
+      id: { type: 'uuid-pk' },
+      org_id: { type: 'text' },
+      factory_project_id: { type: 'text' },
+      approval_id: { type: 'text' },
+      work_item_id: { type: 'text' },
+      event_type: { type: 'text' },
+      approval_status: { type: 'text' },
+      requested_stage: { type: 'text' },
+      expected_revision: { type: 'integer' },
+      requesting_binding_id: { type: 'text', nullable: true },
+      requesting_role: { type: 'text', nullable: true },
+      supervisor_user_id: { type: 'text', nullable: true },
+      reason: { type: 'text' },
+      summary: { type: 'text', nullable: true },
+      idempotency_key: { type: 'text' },
+      status: { type: 'text' },
+      attempts: { type: 'integer' },
+      available_at: { type: 'timestamp' },
+      lease_owner: { type: 'text', nullable: true },
+      lease_expires_at: { type: 'timestamp', nullable: true },
+      last_error: { type: 'text', nullable: true },
+      completed_at: { type: 'timestamp', nullable: true },
+      created_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
+    },
+    uniqueIndexes: [
+      {
+        name: 'factory_supervisor_notifications_tenant_key_unique',
+        columns: ['org_id', 'factory_project_id', 'idempotency_key'],
+      },
+    ],
+  },
+  {
     name: 'factory_deferred_decisions',
     columns: {
       id: { type: 'uuid-pk' },
@@ -846,6 +911,80 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     updatedAt: row.updated_at as Date,
   };
 }
+function toSupervisorNotification(row: GovernanceDbRow): FactorySupervisorNotificationRecord {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    factoryProjectId: String(row.factory_project_id),
+    approvalId: String(row.approval_id),
+    workItemId: String(row.work_item_id),
+    event: row.event_type as FactorySupervisorNotificationEvent,
+    approvalStatus: row.approval_status as FactoryApprovalStatus,
+    requestedStage: String(row.requested_stage),
+    expectedRevision: Number(row.expected_revision),
+    requestingBindingId: (row.requesting_binding_id as string | null) ?? null,
+    requestingRole: (row.requesting_role as string | null) ?? null,
+    supervisorUserId: (row.supervisor_user_id as string | null) ?? null,
+    reason: String(row.reason),
+    summary: (row.summary as string | null) ?? null,
+    idempotencyKey: String(row.idempotency_key),
+    status: row.status as FactoryDispatchStatus,
+    attempts: Number(row.attempts),
+    availableAt: row.available_at as Date,
+    leaseOwner: (row.lease_owner as string | null) ?? null,
+    leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
+    lastError: (row.last_error as string | null) ?? null,
+    completedAt: (row.completed_at as Date | null) ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at as Date,
+  };
+}
+
+async function insertSupervisorNotification(
+  ops: FactoryStorageOps,
+  approval: FactoryApprovalRecord,
+  event: FactorySupervisorNotificationEvent,
+  now: Date,
+  supervisorUserId?: string | null,
+): Promise<void> {
+  const actor = approval.requestingActor;
+  const status = event === 'approval_requested' ? 'pending' : approval.status;
+  const requestNotification =
+    event === 'approval_requested'
+      ? null
+      : await ops.findOne<GovernanceDbRow>('factory_supervisor_notifications', {
+          org_id: approval.orgId,
+          factory_project_id: approval.factoryProjectId,
+          approval_id: approval.id,
+          event_type: 'approval_requested',
+        });
+  await ops.insertOne('factory_supervisor_notifications', {
+    org_id: approval.orgId,
+    factory_project_id: approval.factoryProjectId,
+    approval_id: approval.id,
+    work_item_id: approval.workItemId,
+    event_type: event,
+    approval_status: status,
+    requested_stage: approval.requestedStage,
+    expected_revision: approval.expectedRevision,
+    requesting_binding_id: actor.type === 'agent' && typeof actor.bindingId === 'string' ? actor.bindingId : null,
+    requesting_role: actor.type === 'agent' && typeof actor.role === 'string' ? actor.role : null,
+    supervisor_user_id: supervisorUserId ?? (requestNotification?.supervisor_user_id as string | null) ?? null,
+    reason: approval.reason.slice(0, 1_000),
+    summary: approval.summary?.slice(0, 1_000) ?? null,
+    idempotency_key: `${approval.id}:${event}`,
+    status: 'pending',
+    attempts: 0,
+    available_at: now,
+    lease_owner: null,
+    lease_expires_at: null,
+    last_error: null,
+    completed_at: null,
+    created_at: now,
+    updated_at: now,
+  });
+}
+
 async function insertApprovalAudit(
   ops: FactoryStorageOps,
   approval: {
@@ -985,7 +1124,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async #claimLeases<T>(
-    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    table: 'factory_deferred_decisions' | 'factory_pending_starts' | 'factory_supervisor_notifications',
     input: FactoryLeaseClaimInput,
     map: (row: GovernanceDbRow) => T,
   ): Promise<T[]> {
@@ -1032,7 +1171,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async #renewLease(
-    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    table: 'factory_deferred_decisions' | 'factory_pending_starts' | 'factory_supervisor_notifications',
     identity: FactoryLeaseIdentity,
     leaseExpiresAt: Date,
   ): Promise<boolean> {
@@ -1050,7 +1189,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async #completeLease(
-    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    table: 'factory_deferred_decisions' | 'factory_pending_starts' | 'factory_supervisor_notifications',
     identity: FactoryLeaseIdentity,
     now: Date,
   ): Promise<GovernanceDbRow | null> {
@@ -1074,7 +1213,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async #failLease(
-    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    table: 'factory_deferred_decisions' | 'factory_pending_starts' | 'factory_supervisor_notifications',
     input: FactoryDispatchFailureInput,
   ): Promise<GovernanceDbRow | null> {
     let failed = false;
@@ -1341,6 +1480,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             occurredAt: input.now,
           },
         );
+        await insertSupervisorNotification(
+          ops,
+          approval,
+          terminalStatus === 'approved'
+            ? 'approval_approved'
+            : terminalStatus === 'rejected'
+              ? 'approval_rejected'
+              : 'approval_stale',
+          input.now,
+        );
         return { status: 'resolved', approval, item };
       });
     return this.#withProjectRelationLock(input.orgId, input.factoryProjectId, resolve);
@@ -1487,7 +1636,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           if (outcome === 'pending_approval' && input.evaluation.outcome === 'pending_approval' && !existingApproval) {
             const approval = input.evaluation.approval;
-            await ops.insertOne<GovernanceDbRow>('factory_approvals', {
+            const approvalRow = await ops.insertOne<GovernanceDbRow>('factory_approvals', {
               id: approvalId!,
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
@@ -1532,6 +1681,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 status: 'pending',
                 occurredAt: now,
               },
+            );
+            const requestingRole =
+              approval.actor.type === 'agent' && typeof approval.actor.role === 'string' ? approval.actor.role : null;
+            const supervisorUserId = requestingRole
+              ? item.sessions[requestingRole]?.startedBy
+              : Object.values(item.sessions).find(session => session.startedBy)?.startedBy;
+            await insertSupervisorNotification(
+              ops,
+              toApproval(approvalRow),
+              'approval_requested',
+              now,
+              supervisorUserId,
             );
           }
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
@@ -1773,6 +1934,42 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
     return row ? toDeferredDecision(row) : null;
+  }
+
+  async listSupervisorNotifications(
+    orgId: string,
+    factoryProjectId: string,
+  ): Promise<FactorySupervisorNotificationRecord[]> {
+    return (
+      await this.#db.findMany<GovernanceDbRow>(
+        'factory_supervisor_notifications',
+        { org_id: orgId, factory_project_id: factoryProjectId },
+        { orderBy: [['created_at', 'asc']] },
+      )
+    ).map(toSupervisorNotification);
+  }
+
+  async claimSupervisorNotifications(input: FactoryLeaseClaimInput): Promise<FactorySupervisorNotificationRecord[]> {
+    return this.#claimLeases('factory_supervisor_notifications', input, toSupervisorNotification);
+  }
+
+  async renewSupervisorNotificationLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {
+    return this.#renewLease('factory_supervisor_notifications', identity, leaseExpiresAt);
+  }
+
+  async completeSupervisorNotification(
+    identity: FactoryLeaseIdentity,
+    now: Date,
+  ): Promise<FactorySupervisorNotificationRecord | null> {
+    const row = await this.#completeLease('factory_supervisor_notifications', identity, now);
+    return row ? toSupervisorNotification(row) : null;
+  }
+
+  async failSupervisorNotification(
+    input: FactoryDispatchFailureInput,
+  ): Promise<FactorySupervisorNotificationRecord | null> {
+    const row = await this.#failLease('factory_supervisor_notifications', input);
+    return row ? toSupervisorNotification(row) : null;
   }
 
   /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */

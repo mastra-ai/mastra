@@ -31,6 +31,7 @@ import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js
 import type { SourceControlStorage } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySupervisorService } from '../supervisor/service.js';
+import type { FactorySupervisorSignalService } from '../supervisor/signal-service.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
@@ -83,6 +84,7 @@ export interface FactoryApiRoutesDeps {
   factoryTransitionService?: FactoryTransitionService;
   runLifecycleObserver?: Pick<FactoryRunLifecycleObserver, 'observe' | 'subscribeIdle'>;
   supervisorService?: FactorySupervisorService;
+  supervisorSignals?: Pick<FactorySupervisorSignalService, 'refresh'>;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -418,6 +420,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           auth: deps.auth,
           projects: deps.domains.projects,
           service: deps.supervisorService,
+          signals: deps.supervisorSignals,
         }).routes()
       : []),
     ...(deps.factoryReady
@@ -430,6 +433,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           approvalService: approvalService!,
           transitionService,
           startCoordinator,
+          onFactoryStateChanged: deps.supervisorSignals ? input => deps.supervisorSignals!.refresh(input) : undefined,
         }).routes()
       : []),
   ];
