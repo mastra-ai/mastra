@@ -1,15 +1,17 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
+import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { SkeletonRows } from '../../../ui';
-import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
-import { isServerFactory, selectedRepository } from '../../workspaces/services/factories';
-import { getUserSession } from '../../workspaces/services/github';
-import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/useAgentControllerThreadMessages';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
+import { useEnsureMaterializedSandbox } from '../../../../../shared/hooks/useEnsureMaterializedSandbox';
+import { useUserSessionQuery } from '../../../../../shared/hooks/useWorkspaces';
+import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
+import { userSessionResourceId } from '../../auth/services/auth';
+import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
@@ -36,27 +38,24 @@ export function ChatSessionConfigProvider({
   threadId?: string;
   userScoped?: boolean;
 }) {
-  const { activeFactory, resourceId, sessionEnabled: activeResourceEnabled } = useActiveFactoryContext();
+  const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl } = useApiConfig();
-  const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
-  const repository = serverFactory ? selectedRepository(serverFactory) : undefined;
-  const sessionQuery = useQuery({
-    queryKey: ['factory-session', threadId],
-    queryFn: () => getUserSession(baseUrl, threadId!),
-    enabled: Boolean(threadId) && (userScoped || Boolean(serverFactory)),
-    retry: false,
-  });
+  const factoryQuery = useFactoryQuery(factoryId);
+  const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
+  const authQuery = useFactoryAuth();
+  const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
-  const resolvingStoredSession = Boolean(threadId && serverFactory) && sessionQuery.isPending;
-  const derivedProjectPath = storedSession || resolvingStoredSession ? undefined : deriveProjectPath(activeFactory);
-  const projectSessionEnabled =
-    !resolvingStoredSession &&
-    (storedSession
-      ? activeResourceEnabled
-      : activeResourceEnabled && (!repository || Boolean(derivedProjectPath)));
-  const userSessionEnabled = Boolean(storedSession) && !sessionQuery.isPending;
+  const repository = storedSession
+    ? factory?.repositories.find(
+        (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
+      )
+    : factory?.repositories[0];
+  const ensureQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
+  const resolvingSession = Boolean(userScoped ? threadId : sessionId) && sessionQuery.isPending;
+  const resourceId =
+    userScoped && authQuery.data ? userSessionResourceId(authQuery.data) : ensureQuery.data?.resourceId;
 
-  // A `?resourceId=` query param overrides the active factory's resource so the
+  // A `?resourceId=` query param overrides the resolved factory resource so the
   // whole chat session (transcript, messages, connection, thread switch) binds
   // to a thread that lives under a different resource — e.g. a Slack channel
   // session keyed `channel:slack:...`. Channel threads are not partitioned by
@@ -67,28 +66,33 @@ export function ChatSessionConfigProvider({
   // Read once from the entry URL rather than via the router's `useSearchParams`:
   // this is a deep-link entry param that the session binds to at mount and does
   // not re-read on in-app navigation, and this config provider otherwise has no
-  // router dependency.
+  // added router dependency.
   const resourceOverride = userScoped
     ? null
     : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
-  const projectPath = resourceOverride ? undefined : derivedProjectPath;
-
+  const projectPath = resourceOverride ? undefined : userScoped ? undefined : storedSession?.sessionId;
+  const sessionEnabled = userScoped
+    ? Boolean(storedSession) && !resolvingSession
+    : resourceOverride
+      ? Boolean(resourceOverride)
+      : ensureQuery.isSuccess && Boolean(projectPath);
   const value = {
-    resourceId: resourceOverride ?? storedSession?.sessionId ?? resourceId,
-    sessionEnabled: userScoped ? userSessionEnabled : projectSessionEnabled,
-    resourceEnabled: userScoped ? userSessionEnabled : activeResourceEnabled,
+    resourceId: resourceOverride ?? resourceId ?? '',
+    sessionEnabled,
+    resourceEnabled: userScoped ? Boolean(resourceId) : resourceOverride ? true : ensureQuery.isSuccess,
     projectPath,
     factorySessionState:
-      serverFactory && repository
+      factory && repository
         ? {
-            factoryProjectId: serverFactory.binding.factoryProjectId,
+            factoryProjectId: factory.id,
             projectRepositoryId: repository.projectRepositoryId,
-            sandboxId: storedSession?.sandboxId ?? repository.sandboxId,
-            sandboxWorkdir: storedSession?.sandboxWorkdir ?? repository.sandboxWorkdir,
+            sandboxId: storedSession?.sandboxId ?? ensureQuery.data?.sandboxId,
+            sandboxWorkdir:
+              storedSession?.sandboxWorkdir ?? ensureQuery.data?.sandboxWorkdir ?? repository.sandboxWorkdir,
           }
         : undefined,
     baseUrl,
-    kind: userScoped ? ('user' as const) : serverFactory ? ('factory' as const) : ('user' as const),
+    kind: userScoped ? ('user' as const) : ('factory' as const),
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;
