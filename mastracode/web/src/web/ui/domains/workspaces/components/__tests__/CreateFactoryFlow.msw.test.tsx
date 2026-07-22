@@ -153,19 +153,6 @@ describe('Create Factory wizard', () => {
     expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
   });
 
-  it('skips repository selection and lands on the Factory home with the flow cleared', async () => {
-    seedPendingVcsFlow();
-    const user = userEvent.setup();
-
-    renderFlow();
-
-    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
-
-    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
-    expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
-    expect(sessionStorage.getItem(FACTORY_KEY)).toBeNull();
-  });
-
   it('resumes at the stored step after an OAuth round-trip', async () => {
     seedPendingVcsFlow('project-management');
     server.use(

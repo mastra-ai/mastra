@@ -138,32 +138,22 @@ export function CreateFactoryPage() {
               />
             )}
             {step === 'vcs' && (
-              <>
-                <VcsFactoryStep
-                  connectingRepositoryId={connectingRepositoryId}
-                  githubRedirecting={githubRedirecting}
-                  mutationPending={linkRepository.isPending}
-                  mutationError={mutationError}
-                  onConnect={() => {
-                    setGithubRedirecting(true);
-                    flow.persistBeforeRedirect();
-                    connectGithub(baseUrl);
-                  }}
-                  onManageConnection={() => {
-                    flow.persistBeforeRedirect();
-                    manageGithubConnection(baseUrl);
-                  }}
-                  onSelectRepository={repo => void chooseRepository(repo)}
-                />
-                <Button variant="ghost" className="mt-4" disabled={finishing} onClick={() => void finish()}>
-                  Skip for now
-                </Button>
-                {completionError && (
-                  <p role="alert" className="mt-2 text-ui-sm text-notice-destructive-fg">
-                    {completionError}
-                  </p>
-                )}
-              </>
+              <VcsFactoryStep
+                connectingRepositoryId={connectingRepositoryId}
+                githubRedirecting={githubRedirecting}
+                mutationPending={linkRepository.isPending}
+                mutationError={mutationError}
+                onConnect={() => {
+                  setGithubRedirecting(true);
+                  flow.persistBeforeRedirect();
+                  connectGithub(baseUrl);
+                }}
+                onManageConnection={() => {
+                  flow.persistBeforeRedirect();
+                  manageGithubConnection(baseUrl);
+                }}
+                onSelectRepository={repo => void chooseRepository(repo)}
+              />
             )}
             {step === 'project-management' && (
               <ProjectManagementFactoryStep

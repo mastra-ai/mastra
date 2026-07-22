@@ -35,7 +35,10 @@ export function VcsFactoryStep({
   const repos = useGithubReposQuery(query || undefined, connected);
 
   return (
-    <section aria-label="GitHub repository" className="mx-auto max-w-2xl text-left">
+    <section
+      aria-label="GitHub repository"
+      className="mx-auto max-w-2xl rounded-2xl border border-border1 bg-surface2/80 p-5 text-left"
+    >
       {githubStatus.isPending ? (
         <SkeletonRows label="Loading GitHub status" rows={3} rowClassName="h-12 w-full rounded-xl" />
       ) : !connected ? (
@@ -71,7 +74,7 @@ export function VcsFactoryStep({
                 return (
                   <button
                     key={repo.id}
-                    className="group flex cursor-pointer items-center gap-3 rounded-xl px-4 py-3 text-left hover:bg-neutral6/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="group flex cursor-pointer items-center gap-3 rounded-xl bg-surface3 px-4 py-3 text-left hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={mutationPending}
                     onClick={() => onSelectRepository(repo)}
                   >
