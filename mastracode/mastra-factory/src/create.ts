@@ -1,9 +1,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as p from '@clack/prompts';
+// `mastra/internal/auth` is the CLI's internal barrel — drives the browser-auth
+// flow and reuses persisted credentials + org resolution rather than duplicating
+// them here.
+import { fetchOrgs, getToken, MASTRA_PLATFORM_API_URL, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
 
 import type { Analytics } from './analytics.js';
+import { upsertEnvFile } from './env.js';
+import type { PlatformProject } from './platform.js';
+import {
+  attachNeonDatabase,
+  createServerProject,
+  getDatabaseConnection,
+  mintOrgApiKey,
+  PlatformApiError,
+  waitForDatabaseReady,
+} from './platform.js';
 import { cloneTemplate, renameProject, DEFAULT_TEMPLATE_REPO } from './utils/clone.js';
 import { runInherit } from './utils/exec.js';
 import { detectPackageManager } from './utils/pm.js';
@@ -14,7 +28,29 @@ export interface CreateArgs {
   templateRef?: string;
   templateDir?: string;
   timeout?: number;
+  /**
+   * Skip the platform round-trip (auth, project, sk_ key, Neon). Useful for
+   * offline scaffold testing. `.env` is left as-is from the template's
+   * `.env.example`.
+   */
+  noPlatform?: boolean;
+  /** Optional Neon region id (passed to the attach endpoint verbatim). */
+  region?: string;
+  /**
+   * Optional org identifier (id or name) to skip the interactive org picker.
+   * Behaves like `MASTRA_ORG_ID` — matches the first org whose id or name
+   * equals the value. If no match, provisioning fails with a clear message.
+   */
+  org?: string;
   analytics: Analytics;
+}
+
+interface PlatformProvisionResult {
+  orgId: string;
+  orgName: string;
+  project: PlatformProject;
+  secretKey: string;
+  databaseUrl: string;
 }
 
 export async function create(args: CreateArgs): Promise<void> {
@@ -45,6 +81,7 @@ export async function create(args: CreateArgs): Promise<void> {
   args.analytics.trackEvent('sf_create_started', {
     package_manager: packageManager,
     non_interactive: Boolean(args.useDefaults),
+    no_platform: Boolean(args.noPlatform),
   });
 
   // ── Clone template ───────────────────────────────────────────────────────
@@ -58,8 +95,9 @@ export async function create(args: CreateArgs): Promise<void> {
       localDir: args.templateDir,
     });
     renameProject(projectPath, projectName);
-    // Seed .env from the example. Nothing is filled in here — configuration
-    // (model providers, integrations, database) happens in the web UI.
+    // Seed .env from the example. Platform-provisioning below rewrites the
+    // handful of platform keys idempotently; other keys stay as-is so the
+    // user can configure them from the web UI.
     fs.copyFileSync(path.join(projectPath, '.env.example'), path.join(projectPath, '.env'));
     spinner.stop('Template downloaded.');
   } catch (err) {
@@ -83,6 +121,23 @@ export async function create(args: CreateArgs): Promise<void> {
     );
   }
 
+  // ── Platform provisioning ────────────────────────────────────────────────
+  let platformResult: PlatformProvisionResult | null = null;
+  let platformError: string | null = null;
+  if (!args.noPlatform) {
+    try {
+      platformResult = await runPlatformProvisioning({
+        projectName,
+        projectPath,
+        region: args.region,
+        org: args.org,
+      });
+    } catch (err) {
+      platformError = err instanceof Error ? err.message : String(err);
+      p.log.warn(`Platform provisioning failed: ${platformError}`);
+    }
+  }
+
   // ── Git init ─────────────────────────────────────────────────────────────
   try {
     await runInherit('git', ['init', '-q'], { cwd: projectPath });
@@ -97,10 +152,12 @@ export async function create(args: CreateArgs): Promise<void> {
   args.analytics.trackEvent('sf_create_completed', {
     package_manager: packageManager,
     non_interactive: Boolean(args.useDefaults),
+    no_platform: Boolean(args.noPlatform),
+    platform_provisioned: platformResult !== null,
   });
 
   // ── Outro ────────────────────────────────────────────────────────────────
-  const lines = [
+  const lines: string[] = [
     color.green('Your Software Factory is ready!'),
     '',
     `${color.cyan('cd')} ${projectName}`,
@@ -109,10 +166,172 @@ export async function create(args: CreateArgs): Promise<void> {
     `Factory UI     ${color.underline('http://localhost:5173')}`,
     `Mastra Studio  ${color.underline('http://localhost:4111')}`,
     '',
-    'Open the Factory UI to finish setup (models, integrations, database).',
   ];
+  if (platformResult) {
+    lines.push(
+      `${color.green('Platform connected.')} Project ${color.cyan(platformResult.project.name)} in ${color.cyan(platformResult.orgName)}.`,
+      `Wrote ${color.cyan('MASTRA_PROJECT_ID')}, ${color.cyan('MASTRA_PLATFORM_SECRET_KEY')}, and ${color.cyan('DATABASE_URL')} to ${color.cyan('.env')}.`,
+    );
+  } else if (args.noPlatform) {
+    lines.push(
+      `${color.yellow('Skipped platform provisioning (--no-platform).')} Configure ${color.cyan('.env')} manually before running.`,
+    );
+  } else if (platformError) {
+    lines.push(
+      `${color.yellow('Platform provisioning failed:')} ${platformError}`,
+      `Any credentials that were minted before the failure have been written to ${color.cyan('.env')}. Re-run \`npx create factory\` after fixing, or fill in the rest manually from ${color.underline('https://platform.mastra.ai')}.`,
+    );
+  } else {
+    lines.push('Open the Factory UI to finish setup (models, integrations, database).');
+  }
   p.note(lines.join('\n'), 'Next steps');
   p.outro(`Problems or feedback? ${color.underline('https://github.com/mastra-ai/mastra/issues')}`);
+}
+
+async function runPlatformProvisioning({
+  projectName,
+  projectPath,
+  region,
+  org,
+}: {
+  projectName: string;
+  projectPath: string;
+  region?: string;
+  org?: string;
+}): Promise<PlatformProvisionResult> {
+  // Accumulator: whatever we successfully mint gets flushed to .env in a
+  // `finally` block below. That way a mid-flow failure (e.g. Neon still
+  // provisioning) doesn't strand the freshly-issued `sk_` key, which the
+  // platform never returns again.
+  const envAccumulator: Record<string, string> = {};
+  const envPath = path.join(projectPath, '.env');
+  let flushed = false;
+  const flush = () => {
+    if (flushed || Object.keys(envAccumulator).length === 0) return;
+    upsertEnvFile(envPath, envAccumulator);
+    flushed = true;
+  };
+
+  try {
+    // 1. Auth — triggers the browser-auth flow if no cached credential.
+    p.log.info('Signing in to Mastra…');
+    const token = await getToken();
+
+    // 2. Org — `--org <id-or-name>` skips the picker; otherwise prompt every
+    //    time so the user consciously chooses which org owns the new factory
+    //    (matches observability-provision behavior).
+    const { orgId, orgName } = org
+      ? await resolveOrgFromFlag(token, org)
+      : await resolveCurrentOrg(token, { forcePrompt: true });
+    p.log.info(`Using organization ${color.cyan(orgName)}.`);
+    envAccumulator.MASTRA_SHARED_API_URL = MASTRA_PLATFORM_API_URL;
+    envAccumulator.MASTRA_ORGANIZATION_ID = orgId;
+
+    // 3. Project — session-auth POST /v1/server/projects.
+    const projectSpinner = p.spinner();
+    projectSpinner.start(`Creating platform project "${projectName}"…`);
+    let project: PlatformProject;
+    try {
+      project = await createServerProject({ token, orgId, name: projectName });
+      projectSpinner.stop(`Created platform project ${color.cyan(project.slug)}.`);
+    } catch (err) {
+      projectSpinner.stop('Project creation failed.');
+      throw err;
+    }
+    envAccumulator.MASTRA_PROJECT_ID = project.id;
+
+    // 4. Mint sk_ WorkOS org API key — becomes MASTRA_PLATFORM_SECRET_KEY.
+    //    The platform shows this secret exactly once, so we record it into
+    //    the env accumulator immediately after minting.
+    const keySpinner = p.spinner();
+    keySpinner.start('Creating platform API key…');
+    let secretKey: string;
+    try {
+      secretKey = await mintOrgApiKey({
+        token,
+        orgId,
+        keyName: `create-factory: ${projectName}`,
+      });
+      keySpinner.stop('Platform API key created.');
+    } catch (err) {
+      keySpinner.stop('API key creation failed.');
+      throw err;
+    }
+    envAccumulator.MASTRA_PLATFORM_SECRET_KEY = secretKey;
+
+    // 5-7. Neon attach + poll + connection string.
+    const neonSpinner = p.spinner();
+    neonSpinner.start('Provisioning Neon Postgres database…');
+    let databaseUrl: string;
+    try {
+      const attached = await attachNeonDatabase({
+        token,
+        orgId,
+        projectId: project.id,
+        name: sanitizeDatabaseName(projectName),
+        regionId: region,
+      });
+      const ready = await waitForDatabaseReady({
+        token,
+        orgId,
+        projectId: project.id,
+        databaseId: attached.id,
+      });
+      const connection = await getDatabaseConnection({
+        token,
+        orgId,
+        projectId: project.id,
+        databaseId: ready.id,
+      });
+      // `envVars` is an array of `{ name, value, secret }` — Neon rows always
+      // include a single `DATABASE_URL` entry (see services/project-databases
+      // renderConnectionInstructions).
+      const dbEnv = connection.envVars.find(v => v.name === 'DATABASE_URL');
+      if (!dbEnv?.value) {
+        throw new PlatformApiError(500, 'Platform connection response missing DATABASE_URL.');
+      }
+      databaseUrl = dbEnv.value;
+      neonSpinner.stop('Neon database ready.');
+    } catch (err) {
+      neonSpinner.stop('Database provisioning failed.');
+      throw err;
+    }
+    envAccumulator.DATABASE_URL = databaseUrl;
+
+    // 8. Write .env (idempotent — replaces existing keys, appends missing).
+    flush();
+
+    return { orgId, orgName, project, secretKey, databaseUrl };
+  } finally {
+    // Best-effort partial write on failure so a successful `sk_` mint or
+    // project-id isn't thrown away when a later step blows up.
+    flush();
+  }
+}
+
+/**
+ * `--org <value>` matches by org id or exact name. Not a substring match —
+ * an ambiguous or non-existent value bails with a clear message instead of
+ * silently picking the wrong org.
+ */
+async function resolveOrgFromFlag(token: string, value: string): Promise<{ orgId: string; orgName: string }> {
+  const orgs = await fetchOrgs(token);
+  const match = orgs.find(o => o.id === value || o.name === value);
+  if (!match) {
+    const available = orgs.map(o => `${o.name} (${o.id})`).join(', ') || '(none)';
+    throw new Error(`No organization matched --org "${value}". Available: ${available}.`);
+  }
+  return { orgId: match.id, orgName: match.name };
+}
+
+/**
+ * Neon display-name charset: `[a-zA-Z0-9_-]+`, up to 64 chars. Drop anything
+ * outside that, and clip length.
+ */
+function sanitizeDatabaseName(projectName: string): string {
+  const cleaned = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
+  const truncated = (cleaned || 'factory').slice(0, 64);
+  return truncated;
 }
 
 function cancel(): void {
