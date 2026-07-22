@@ -13,5 +13,6 @@ export function useFactoryMetrics(factoryProjectId: string | undefined, range: F
     queryFn: () => fetchFactoryMetrics(baseUrl, factoryProjectId!, range),
     enabled: Boolean(factoryProjectId),
     staleTime: 30_000,
+    placeholderData: previousData => previousData,
   });
 }

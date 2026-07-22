@@ -942,6 +942,19 @@ describe('repos route', () => {
     vi.mocked(listInstallationRepos).mockImplementation(defaultImpl);
   });
 
+  it('lists a repository once when multiple installations return it', async () => {
+    install(7, 'octo');
+    install(8, 'octo-duplicate');
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.repos).toHaveLength(1);
+    expect(json.repos[0].fullName).toBe('octo/hello');
+    expect(tables.repositories).toHaveLength(1);
+  });
+
   it('prunes installations GitHub no longer knows (404) and keeps listing the rest', async () => {
     install(7, 'octo');
     install(8, 'stale');
