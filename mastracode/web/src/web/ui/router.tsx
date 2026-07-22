@@ -25,6 +25,7 @@ import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
+import { SupervisorPage } from './pages/SupervisorPage';
 import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../../shared/hooks/useFactories';
@@ -99,6 +100,7 @@ export function createAppRoutes(): RouteObject[] {
               element: <Chat />,
               children: [
                 { path: 'new', element: <NewPage /> },
+                { path: 'supervisor', element: <SupervisorPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'metrics', element: <MetricsPage /> },
