@@ -38,10 +38,10 @@ export function getPackageManager(): PackageManager {
 export function getInstallArgs(packageManager: PackageManager): string[] {
   switch (packageManager) {
     case 'npm':
-      return ['install', '--prefer-offline', '--no-audit', '--no-fund']
+      return ['install', '--prefer-offline', '--no-audit', '--no-fund'];
     case 'pnpm':
-      return ['install', '--prefer-offline']
+      return ['install', '--prefer-offline'];
     default:
-      return ['install']
+      return ['install'];
   }
 }

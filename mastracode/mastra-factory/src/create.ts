@@ -16,15 +16,17 @@ export interface CreateArgs {
 export async function create(args: CreateArgs): Promise<void> {
   p.intro(color.inverse(' Mastra Software Factory '));
 
-  const projectName = args.projectName ?? (await p.text({
-    message: 'What do you want to name your project?',
-    placeholder: 'my-software-factory',
-    validate: value => {
-      if (!value?.trim()) return `Project name can't be empty`;
-      if (fs.existsSync(path.resolve(value.trim()))) return `Directory ${value.trim()} already exists`;
-      return undefined;
-    },
-  }))
+  const projectName =
+    args.projectName ??
+    (await p.text({
+      message: 'What do you want to name your project?',
+      placeholder: 'my-software-factory',
+      validate: value => {
+        if (!value?.trim()) return `Project name can't be empty`;
+        if (fs.existsSync(path.resolve(value.trim()))) return `Directory ${value.trim()} already exists`;
+        return undefined;
+      },
+    }));
 
   if (p.isCancel(projectName)) {
     p.cancel('Operation cancelled');
@@ -57,7 +59,7 @@ export async function create(args: CreateArgs): Promise<void> {
     await x(packageManager, getInstallArgs(packageManager), {
       nodeOptions: {
         cwd: projectPath,
-      }
+      },
     });
     installSpinner.stop('Dependencies installed.');
   } catch (err) {

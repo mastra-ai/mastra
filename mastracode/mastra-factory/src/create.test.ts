@@ -23,8 +23,9 @@ const tinyexec = vi.hoisted(() => ({
 vi.mock('@clack/prompts', () => clack);
 vi.mock('tinyexec', () => tinyexec);
 
-import type { Analytics } from './analytics.js';
-import { create } from './create.js';
+import type { Analytics } from './analytics';
+import { create } from './create';
+import { getInstallArgs, getPackageManager } from './utils/pm';
 
 const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as Analytics;
 const TEMPLATE_REPO = 'https://github.com/mastra-ai/softwarefactory-template';
@@ -91,13 +92,10 @@ describe('create', () => {
     // Project renamed and installed.
     const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));
     expect(pkg.name).toBe('my-factory');
-    expect(tinyexec.x).toHaveBeenCalledWith(
-      expect.any(String),
-      ['install'],
-      expect.objectContaining({
-        nodeOptions: { cwd: projectPath },
-      }),
-    );
+    const packageManager = getPackageManager();
+    expect(tinyexec.x).toHaveBeenCalledWith(packageManager, getInstallArgs(packageManager), {
+      nodeOptions: { cwd: projectPath },
+    });
 
     // Git repo initialized.
     expect(tinyexec.x).toHaveBeenCalledWith('git', ['init', '-q'], { nodeOptions: { cwd: projectPath } });
