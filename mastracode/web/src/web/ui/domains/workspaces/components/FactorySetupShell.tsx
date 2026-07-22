@@ -16,7 +16,9 @@ export function FactorySetupShell({ topLeft, children }: { topLeft?: ReactNode; 
       <FactoryHalftoneField variant="backdrop" />
       {topLeft && <div className="absolute top-6 left-6 z-10 sm:top-8 sm:left-8">{topLeft}</div>}
       <div className="relative mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-6 py-8 sm:px-10 lg:px-16">
-        <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col text-center">{children}</section>
+        <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center text-center">
+          {children}
+        </section>
       </div>
     </main>
   );
@@ -25,7 +27,7 @@ export function FactorySetupShell({ topLeft, children }: { topLeft?: ReactNode; 
 /** Step header: progress dots (as children) followed by the step title and optional subcopy. */
 function Header({ title, description, children }: { title: ReactNode; description?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="pt-2 sm:pt-4">
+    <div className="w-full">
       {children}
       <h1 className="mx-auto max-w-2xl text-3xl leading-tight font-semibold tracking-[-0.035em] text-balance sm:text-4xl lg:text-5xl">
         {title}
@@ -59,7 +61,7 @@ function Progress({ steps, current }: { steps: string[]; current: string }) {
 /** Animated container for the current step; re-keys on step change to replay the entrance. */
 function Step({ stepKey, children }: { stepKey: string; children: ReactNode }) {
   return (
-    <div className="flex flex-1 items-start justify-center pt-16">
+    <div className="flex w-full justify-center pt-12">
       <div
         key={stepKey}
         className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none"
