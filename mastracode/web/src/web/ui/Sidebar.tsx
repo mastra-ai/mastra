@@ -1,3 +1,5 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';
@@ -27,6 +29,12 @@ export function Sidebar() {
   return (
     <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
+        <div className="mb-2 flex items-center justify-between gap-2 px-3 pt-1">
+          <LogoWithoutText aria-label="Mastra" role="img" className="h-4 w-auto text-icon6" />
+          <Badge variant="default" size="xs" className="uppercase tracking-wide">
+            Alpha
+          </Badge>
+        </div>
         {settingsOpen ? (
           <SettingsNavigation />
         ) : (
