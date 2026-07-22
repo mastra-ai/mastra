@@ -117,6 +117,55 @@ describe('SourceControlSection', () => {
     expect(await screen.findByText('Link')).toBeInTheDocument();
   });
 
+  it('given installations but no personal GitHub connection, when rendered, then it offers to connect the user', async () => {
+    seedServerFactory();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ ...connectedStatus, userConnected: false, userGithubUsername: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [] })),
+    );
+
+    renderSection();
+
+    expect(
+      await screen.findByText('Connect your GitHub account so issues and PRs you create are authored as you.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Connect GitHub/ })).toBeInTheDocument();
+  });
+
+  it('given a personal GitHub connection, when rendered, then it shows the linked identity instead of the button', async () => {
+    seedServerFactory();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ ...connectedStatus, userConnected: true, userGithubUsername: 'ada' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [] })),
+    );
+
+    renderSection();
+
+    expect(await screen.findByText('@ada')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect GitHub/ })).not.toBeInTheDocument();
+  });
+
+  it('given a server without per-user connection support, when rendered, then no personal connection row appears', async () => {
+    seedServerFactory();
+    server.use(
+      // Older backend: status has no userConnected/userGithubUsername fields.
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [] })),
+    );
+
+    renderSection();
+
+    expect(await screen.findByText('Manage GitHub connection')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect GitHub/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Connect your GitHub account so issues and PRs you create are authored as you.'),
+    ).not.toBeInTheDocument();
+  });
+
   it('given an active server factory, when removed, then the project is deleted and selection clears', async () => {
     seedServerFactory();
     const deleted: string[] = [];

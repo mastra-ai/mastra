@@ -50,6 +50,14 @@ export interface GithubStatus {
   organizationRequired?: boolean;
   /** Machine-readable reason for the current state; see {@link GithubStatusReason}. */
   reason?: GithubStatusReason;
+  /**
+   * Whether the signed-in user has personally authorized the GitHub App, so
+   * issues/PRs they originate are authored as them instead of the App bot.
+   * Absent on older servers that predate per-user connections.
+   */
+  userConnected?: boolean;
+  /** GitHub username backing the personal connection, when connected. */
+  userGithubUsername?: string | null;
   /** Non-secret feature-gate diagnostics from the server. */
   diagnostics?: GithubFeatureDiagnostics;
 }
@@ -105,6 +113,19 @@ export function connectGithub(baseUrl: string): void {
  */
 export function manageGithubConnection(baseUrl: string): void {
   window.location.assign(`${baseUrl}/auth/github/connect?manage=1`);
+}
+
+/**
+ * Begin the GitHub App *user authorization* flow for the signed-in user
+ * (full-page redirect). Unlike {@link connectGithub} this never installs the
+ * App into an account — it links the user's own GitHub identity so
+ * factory-originated issues and PRs are authored as them. The flow returns to
+ * the current path with `github_app_user_authorized=true`, and the fresh page
+ * load refetches `/web/github/status`.
+ */
+export function connectUserGithub(baseUrl: string): void {
+  const redirectTo = encodeURIComponent(window.location.pathname);
+  window.location.assign(`${baseUrl}/auth/github/connect-user?redirectTo=${redirectTo}`);
 }
 
 /** List repos across the user's installations, optionally filtered by query. */

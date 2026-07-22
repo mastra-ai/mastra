@@ -6,6 +6,7 @@ import { Trash2 } from 'lucide-react';
 import { useRemoveFactoryMutation } from '../../../../../shared/hooks/useFactories';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { ConnectRepositoriesPanel, isServerFactory, useActiveFactoryContext } from '../../workspaces';
+import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 
 /**
  * Settings › Source Control. Scoped to the factory the user is actively in:
@@ -32,7 +33,10 @@ export function SourceControlSection() {
       </Txt>
 
       {serverFactory ? (
-        <ConnectRepositoriesPanel factory={serverFactory} />
+        <>
+          <ConnectRepositoriesPanel factory={serverFactory} />
+          <UserGithubConnectionRow />
+        </>
       ) : (
         <Txt variant="ui-sm" className="truncate text-icon3">
           {deriveProjectPath(activeFactory)}
