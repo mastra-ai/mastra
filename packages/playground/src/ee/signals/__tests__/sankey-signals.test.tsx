@@ -13,6 +13,7 @@ import {
   stabilizeThemeFlow,
   themeFlowToSankeyData,
 } from '../sankey-signals-data';
+import type { ThemeFlowResponse } from '../types';
 import {
   duplicateLabelThemeFlowResponse,
   earlierThemeFlowResponse,
@@ -121,33 +122,52 @@ describe('stabilizeThemeFlow', () => {
         snapshot: earlierThemeFlowResponse.snapshot,
         stages: fourStageThemeFlowResponse.stages.map(stage => ({
           ...stage,
-          nodes: stage.nodes.map(node => ({
-            ...node,
-            traceCount: Math.max(1, Math.floor(node.traceCount / 2)),
-            stageShare: node.stageShare / 2,
-          })),
+          nodes: stage.nodes
+            .map(node => ({
+              ...node,
+              traceCount: Math.max(1, Math.floor(node.traceCount / 2)),
+              stageShare: node.stageShare / 2,
+            }))
+            .reverse(),
         })),
-        links: fourStageThemeFlowResponse.links.map(link => ({
-          ...link,
-          traceCount: Math.max(1, Math.floor(link.traceCount / 2)),
-          sourceShare: link.sourceShare / 2,
-          targetShare: link.targetShare / 2,
-        })),
+        links: fourStageThemeFlowResponse.links
+          .map(link => ({
+            ...link,
+            traceCount: Math.max(1, Math.floor(link.traceCount / 2)),
+            sourceShare: link.sourceShare / 2,
+            targetShare: link.targetShare / 2,
+          }))
+          .reverse(),
       };
       const windowFlows = [lowerVolumeFlow, fourStageThemeFlowResponse];
 
       const lowerFrame = stabilizeThemeFlow(lowerVolumeFlow, windowFlows);
       const higherFrame = stabilizeThemeFlow(fourStageThemeFlowResponse, windowFlows);
 
+      const getNodeOrder = (frame: typeof lowerFrame) =>
+        frame.stages.map(stage => stage.nodes.map(node => node.nodeId));
+      const getNodeCounts = (frame: Pick<ThemeFlowResponse, 'stages'>) =>
+        frame.stages.map(stage => Object.fromEntries(stage.nodes.map(node => [node.nodeId, node.traceCount])));
+      const getLinkCounts = (frame: Pick<ThemeFlowResponse, 'links'>) =>
+        Object.fromEntries(frame.links.map(link => [`${link.sourceNodeId}:${link.targetNodeId}`, link.traceCount]));
       const getLayoutLinks = (frame: typeof lowerFrame) =>
         frame.links.map(link => [link.sourceNodeId, link.targetNodeId, link.layoutTraceCount]);
+      const expectedNodeOrder = lowerVolumeFlow.stages.map(stage => stage.nodes.map(node => node.nodeId));
+      const expectedLayoutLinks = lowerVolumeFlow.links.map(link => {
+        const higherLink = fourStageThemeFlowResponse.links.find(
+          candidate => candidate.sourceNodeId === link.sourceNodeId && candidate.targetNodeId === link.targetNodeId,
+        );
+        return [link.sourceNodeId, link.targetNodeId, higherLink?.traceCount];
+      });
 
-      expect(getLayoutLinks(lowerFrame)).toEqual(getLayoutLinks(higherFrame));
-      expect(lowerFrame.stages.map(stage => stage.nodes.map(node => node.nodeId))).toEqual(
-        higherFrame.stages.map(stage => stage.nodes.map(node => node.nodeId)),
-      );
-      expect(lowerFrame.links.map(link => link.traceCount)).not.toEqual(higherFrame.links.map(link => link.traceCount));
-      expect(lowerFrame.stages[0]?.nodes[0]?.traceCount).not.toBe(higherFrame.stages[0]?.nodes[0]?.traceCount);
+      expect(getNodeOrder(lowerFrame)).toEqual(expectedNodeOrder);
+      expect(getNodeOrder(higherFrame)).toEqual(expectedNodeOrder);
+      expect(getLayoutLinks(lowerFrame)).toEqual(expectedLayoutLinks);
+      expect(getLayoutLinks(higherFrame)).toEqual(expectedLayoutLinks);
+      expect(getNodeCounts(lowerFrame)).toEqual(getNodeCounts(lowerVolumeFlow));
+      expect(getNodeCounts(higherFrame)).toEqual(getNodeCounts(fourStageThemeFlowResponse));
+      expect(getLinkCounts(lowerFrame)).toEqual(getLinkCounts(lowerVolumeFlow));
+      expect(getLinkCounts(higherFrame)).toEqual(getLinkCounts(fourStageThemeFlowResponse));
     });
   });
 });

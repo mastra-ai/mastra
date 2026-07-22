@@ -250,22 +250,13 @@ export function SankeySignals({
     return stabilizeThemeFlow(drilledFlow, [stableUnfilteredFlow, drilledFlow]);
   }, [drillIn, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
+  const isPlaybackBlockedByDrillIn = drillIn !== undefined && (pathsQuery.isFetching || pathsQuery.isError);
 
   useEffect(() => {
-    const drillInQueryBlocked = drillIn !== undefined && (pathsQuery.isFetching || pathsQuery.isError);
-    if (!isPlaying || snapshots.length < 2 || isFlowPending || hasFlowError || drillInQueryBlocked) return;
+    if (!isPlaying || snapshots.length < 2 || isFlowPending || hasFlowError || isPlaybackBlockedByDrillIn) return;
     const timer = window.setTimeout(() => setSelectedSnapshotOrdinal(nextSnapshotOrdinal), 900);
     return () => window.clearTimeout(timer);
-  }, [
-    drillIn,
-    hasFlowError,
-    isFlowPending,
-    isPlaying,
-    nextSnapshotOrdinal,
-    pathsQuery.isError,
-    pathsQuery.isFetching,
-    snapshots.length,
-  ]);
+  }, [hasFlowError, isFlowPending, isPlaying, isPlaybackBlockedByDrillIn, nextSnapshotOrdinal, snapshots.length]);
 
   if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
 
