@@ -46,6 +46,7 @@ describe('StepExecutor', () => {
     const fnSpy = vi.fn().mockReturnValue(5000);
     const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
       type: 'sleep',
+      id: 'sleep-duration',
       duration,
       fn: fnSpy,
     };
@@ -76,11 +77,13 @@ describe('StepExecutor', () => {
     // Test undefined fn case
     const undefinedStep: Extract<StepFlowEntry, { type: 'sleep' }> = {
       type: 'sleep',
+      id: 'sleep-undefined-fn',
     };
 
     // Test null fn case
     const nullStep: Extract<StepFlowEntry, { type: 'sleep' }> = {
       type: 'sleep',
+      id: 'sleep-null-fn',
       fn: null as any,
     };
 
@@ -111,8 +114,8 @@ describe('StepExecutor', () => {
     const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
       id: 'sleep-1',
       type: 'sleep',
-      fn: context => {
-        capturedContexts.push(context);
+      fn: async context => {
+        capturedContexts.push(context as unknown as SleepFnContext);
         return EXPECTED_DURATION;
       },
     };
@@ -121,10 +124,16 @@ describe('StepExecutor', () => {
       input: {
         status: 'success',
         output: { initData: 'test' },
+        payload: {},
+        startedAt: 0,
+        endedAt: 0,
       },
       'previous-step': {
         status: 'success',
         output: { prevStepData: 'test' },
+        payload: {},
+        startedAt: 0,
+        endedAt: 0,
       },
     };
 
@@ -142,7 +151,7 @@ describe('StepExecutor', () => {
 
     // Assert: Verify context passed to fn and return value
     expect(capturedContexts.length).toBe(1);
-    const capturedContext = capturedContexts[0];
+    const capturedContext = capturedContexts[0]!;
 
     expect(capturedContext.workflowId).toBe(workflowId);
     expect(capturedContext.runId).toBe(runId);
@@ -165,6 +174,7 @@ describe('StepExecutor', () => {
     // Arrange: Create a step object with fn that throws an error
     const throwingStep: Extract<StepFlowEntry, { type: 'sleep' }> = {
       type: 'sleep',
+      id: 'sleep-throwing-fn',
       fn: () => {
         throw new Error('Test error');
       },
@@ -197,7 +207,7 @@ describe('StepExecutor', () => {
 
     const result = await stepExecutor.execute({
       workflowId: 'test-workflow',
-      step: failingStep,
+      entry: { type: 'step', step: failingStep },
       runId: 'test-run',
       input: {},
       stepResults: {},
@@ -240,7 +250,7 @@ describe('StepExecutor', () => {
 
     const result = await stepExecutor.execute({
       workflowId: 'test-workflow',
-      step: failingStep,
+      entry: { type: 'step', step: failingStep },
       runId: 'test-run',
       input: {},
       stepResults: {},
@@ -276,7 +286,8 @@ describe('StepExecutor', () => {
 
       const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
         type: 'sleep',
-        fn: context => {
+        id: 'sleep-abort-propagation',
+        fn: async context => {
           receivedAbortSignal = context.abortSignal;
           return 1000;
         },
@@ -303,7 +314,8 @@ describe('StepExecutor', () => {
 
       const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
         type: 'sleep',
-        fn: context => {
+        id: 'sleep-abort-reflected',
+        fn: async context => {
           // Abort the parent controller during fn execution
           parentAbortController.abort();
           wasAbortedDuringExecution = context.abortSignal.aborted;
@@ -332,7 +344,8 @@ describe('StepExecutor', () => {
 
       const step: Extract<StepFlowEntry, { type: 'sleepUntil' }> = {
         type: 'sleepUntil',
-        fn: context => {
+        id: 'sleep-until-abort-propagation',
+        fn: async context => {
           receivedAbortSignal = context.abortSignal;
           return new Date(Date.now() + 1000);
         },
@@ -360,12 +373,13 @@ describe('StepExecutor', () => {
       const step: Extract<StepFlowEntry, { type: 'conditional' }> = {
         type: 'conditional',
         conditions: [
-          context => {
+          async context => {
             receivedAbortSignal = context.abortSignal;
             return true;
           },
         ],
-        branches: [[{ type: 'step', step: { id: 'dummy' } as any }]],
+        serializedConditions: [{ id: 'dummy-condition', fn: 'async () => true' }],
+        steps: [{ type: 'step', step: { id: 'dummy' } as any }],
       };
 
       // Act: Call evaluateConditions with parent abort controller
@@ -389,7 +403,8 @@ describe('StepExecutor', () => {
 
       const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
         type: 'sleep',
-        fn: context => {
+        id: 'sleep-no-abort-controller',
+        fn: async context => {
           receivedAbortSignal = context.abortSignal;
           return 1000;
         },

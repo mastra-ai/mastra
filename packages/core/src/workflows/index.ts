@@ -1,4 +1,5 @@
 export * from './workflow';
+export { getEntryId, getEntryWorkflow } from './step-entry';
 export * from './execution-engine';
 export * from './default';
 export * from './step';

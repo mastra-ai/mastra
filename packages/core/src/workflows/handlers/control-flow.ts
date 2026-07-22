@@ -11,8 +11,9 @@ import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
-import type { ConditionFunction, InnerOutput, LoopConditionFunction, Step } from '../step';
+import type { ConditionFunction, InnerOutput, LoopConditionFunction } from '../step';
 import { getStepResult } from '../step';
+import { getEntryId } from '../step-entry';
 import type {
   DefaultEngineType,
   ExecutionContext,
@@ -594,7 +595,7 @@ export interface ExecuteLoopParams extends ObservabilityContext {
   resourceId?: string;
   entry: {
     type: 'loop';
-    step: Step;
+    step: SingleStepEntry;
     condition: LoopConditionFunction<any, any, any, any, any, DefaultEngineType>;
     loopType: 'dowhile' | 'dountil';
   };
@@ -649,6 +650,7 @@ export async function executeLoop(
   const observabilityContext = resolveObservabilityContext(rest);
 
   const { step, condition } = entry;
+  const stepId = getEntryId(step);
 
   const loopSpan = await engine.createChildSpan({
     parentSpan: observabilityContext.tracingContext.currentSpan,
@@ -666,9 +668,9 @@ export async function executeLoop(
   });
 
   let isTrue = true;
-  const prevIterationCount = stepResults[step.id]?.metadata?.iterationCount;
+  const prevIterationCount = stepResults[stepId]?.metadata?.iterationCount;
   let iteration = prevIterationCount ? prevIterationCount - 1 : 0;
-  const prevStepResult = stepResults[step.id];
+  const prevStepResult = stepResults[stepId];
   const loopInput =
     prevStepResult && Object.prototype.hasOwnProperty.call(prevStepResult, 'payload')
       ? prevStepResult.payload
@@ -694,11 +696,10 @@ export async function executeLoop(
       return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
     }
 
-    const stepExecResult = await engine.executeStep({
+    const stepExecResult = await executeChildEntry(engine, step, {
       workflowId,
       runId,
       resourceId,
-      step,
       stepResults,
       executionContext,
       restart: currentRestart,
@@ -863,7 +864,7 @@ export interface ExecuteForeachParams extends ObservabilityContext {
   resourceId?: string;
   entry: {
     type: 'foreach';
-    step: Step;
+    step: SingleStepEntry;
     opts: ForeachOptions;
   };
   prevStep: StepFlowEntry;
@@ -918,17 +919,18 @@ export async function executeForeach(
   const observabilityContext = resolveObservabilityContext(rest);
 
   const { step, opts } = entry;
+  const stepId = getEntryId(step);
   const results: any[] = [];
   const concurrency = resolveForeachConcurrency(opts, {
     inputData: prevOutput,
     getInitData: () => stepResults?.input,
   });
-  const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
-  const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
+  const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
+  const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
 
   const stepInfo = {
-    ...stepResults[step.id],
-    ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
+    ...stepResults[stepId],
+    ...(resume?.steps[0] === stepId ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
     ...(startTime ? { startedAt: startTime } : {}),
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
   };
@@ -955,14 +957,14 @@ export async function executeForeach(
     data: {
       type: 'workflow-step-start',
       payload: {
-        id: step.id,
+        id: stepId,
         ...stepInfo,
         status: 'running',
       },
     },
   });
 
-  const prevPayload = stepResults[step.id];
+  const prevPayload = stepResults[stepId];
   const foreachIndexObj: Record<number, any> = {};
   const resumeIndex =
     prevPayload?.status === 'suspended' ? prevPayload?.suspendPayload?.__workflow_meta?.foreachIndex || 0 : 0;
@@ -981,7 +983,7 @@ export async function executeForeach(
   const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
     []) as PersistedForeachStepResult[];
   const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
-  const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, step.id);
+  const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, stepId);
 
   const totalCount = prevOutput.length;
   let completedCount = 0;
@@ -1009,7 +1011,7 @@ export async function executeForeach(
       data: {
         type: 'workflow-step-progress',
         payload: {
-          id: step.id,
+          id: stepId,
           completedCount,
           totalCount,
           currentIndex: k,
@@ -1027,11 +1029,10 @@ export async function executeForeach(
 
   /** Execute a single foreach iteration and return its result. */
   const executeForeachIteration = (item: any, k: number, resumeToUse: typeof resume) =>
-    engine.executeStep({
+    executeChildEntry(engine, step, {
       workflowId,
       runId,
       resourceId,
-      step,
       stepResults,
       restart,
       timeTravel,
@@ -1260,7 +1261,7 @@ export async function executeForeach(
       data: {
         type: 'workflow-step-result',
         payload: {
-          id: step.id,
+          id: stepId,
           ...execResults,
         },
       },
@@ -1272,7 +1273,7 @@ export async function executeForeach(
       data: {
         type: 'workflow-step-finish',
         payload: {
-          id: step.id,
+          id: stepId,
           metadata: {},
         },
       },
@@ -1296,7 +1297,7 @@ export async function executeForeach(
       data: {
         type: 'workflow-step-result',
         payload: {
-          id: step.id,
+          id: stepId,
           ...exitResult,
         },
       },
@@ -1308,7 +1309,7 @@ export async function executeForeach(
       data: {
         type: 'workflow-step-finish',
         payload: {
-          id: step.id,
+          id: stepId,
           metadata: {},
         },
       },
@@ -1334,13 +1335,13 @@ export async function executeForeach(
       data: {
         type: 'workflow-step-suspended',
         payload: {
-          id: step.id,
+          id: stepId,
           ...foreachIndexObj[foreachIndex],
         },
       },
     });
 
-    executionContext.suspendedPaths[step.id] = executionContext.executionPath;
+    executionContext.suspendedPaths[stepId] = executionContext.executionPath;
     executionContext.resumeLabels = { ...resumeLabels, ...executionContext.resumeLabels };
 
     return {
@@ -1368,7 +1369,7 @@ export async function executeForeach(
     data: {
       type: 'workflow-step-result',
       payload: {
-        id: step.id,
+        id: stepId,
         status: 'success',
         output: results,
         endedAt: Date.now(),
@@ -1382,7 +1383,7 @@ export async function executeForeach(
     data: {
       type: 'workflow-step-finish',
       payload: {
-        id: step.id,
+        id: stepId,
         metadata: {},
       },
     },

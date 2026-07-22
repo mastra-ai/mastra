@@ -460,6 +460,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           status: 'failed';
           error: Error;
           endedAt: number;
+          nonRetryable?: true;
           tripwire?: StepTripwireInfo;
         };
       }

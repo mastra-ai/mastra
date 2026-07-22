@@ -53,7 +53,7 @@ import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools/tool';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import { PUBSUB_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
@@ -66,7 +66,7 @@ import type {
   Step,
   SuspendOptions,
 } from './step';
-import { forwardAgentStreamChunk } from './stream-utils';
+import { runAgentEntry, runMappingEntry, runToolEntry, validateTemplate } from './step-entry';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -533,7 +533,7 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
   const outputSchema = toStandardSchema(
     (options?.structuredOutput?.schema ?? z.object({ text: z.string() })) as PublicSchema<TStepOutput>,
   ) as StandardSchemaWithJSON<TStepOutput>;
-  const { retries, scorers, metadata, ...agentOptions } =
+  const { retries, scorers, metadata } =
     options ??
     ({} as AgentStepOptions<TStepOutput> & {
       retries?: number;
@@ -553,145 +553,10 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
     retries,
     scorers,
     metadata,
-    execute: async ({
-      inputData,
-      runId,
-      [PUBSUB_SYMBOL]: pubsub,
-      [STREAM_FORMAT_SYMBOL]: streamFormat,
-      requestContext,
-      abortSignal,
-      abort,
-      writer,
-      ...rest
-    }) => {
-      const observabilityContext = resolveObservabilityContext(rest);
-      let streamPromise = {} as {
-        promise: Promise<string>;
-        resolve: (value: string) => void;
-        reject: (reason?: any) => void;
-      };
-
-      streamPromise.promise = new Promise((resolve, reject) => {
-        streamPromise.resolve = resolve;
-        streamPromise.reject = reject;
-      });
-
-      // Track structured output result
-      let structuredResult: any = null;
-
-      const toolData = {
-        name: params.name,
-        args: inputData,
-      };
-
-      let stream: ReadableStream<any>;
-
-      const handleFinish = (result: any) => {
-        const resultWithObject = result as typeof result & { object?: unknown };
-        if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
-          structuredResult = resultWithObject.object;
-        }
-        streamPromise.resolve(result.text);
-        void agentOptions?.onFinish?.(result);
-      };
-
-      if (
-        (await params.getModel({ requestContext })).specificationVersion === 'v1' &&
-        typeof params.streamLegacy === 'function'
-      ) {
-        const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
-          ...agentOptions,
-          requestContext,
-          ...observabilityContext,
-          onFinish: handleFinish,
-          abortSignal,
-        });
-        stream = fullStream as any;
-      } else {
-        const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
-          ...agentOptions,
-          requestContext,
-          ...observabilityContext,
-          onFinish: handleFinish,
-          abortSignal,
-        });
-
-        // handleFinish (the agent's onFinish) is the sole source of truth for the
-        // final text — the success side of .text is intentionally a no-op.
-        // `modelOutput.text` can resolve with '' if a downstream output-processor
-        // throws inside the base output's try/catch (see output.ts:970-973,978-981)
-        // and it fires BEFORE handleFinish, so racing here would poison
-        // streamPromise. Only the rejection channel below is wired up so genuine
-        // stream errors still propagate.
-        void modelOutput.text.then(
-          () => {},
-          err => streamPromise.reject(err),
-        );
-        stream = modelOutput.fullStream as ReadableStream<ChunkType>;
-      }
-
-      let tripwireChunk: any = null;
-
-      if (streamFormat === 'legacy') {
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
-        });
-        for await (const chunk of stream) {
-          if (chunk.type === 'tripwire') {
-            tripwireChunk = chunk;
-            break;
-          }
-          if (chunk.type === 'text-delta') {
-            await pubsub.publish(`workflow.events.v2.${runId}`, {
-              type: 'watch',
-              runId,
-              data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
-            });
-          }
-        }
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
-        });
-      } else {
-        for await (const chunk of stream) {
-          await forwardAgentStreamChunk({ writer, chunk });
-          if (chunk.type === 'tripwire') {
-            tripwireChunk = chunk;
-            break;
-          }
-        }
-      }
-
-      // If a tripwire was detected, throw TripWire to abort the workflow step
-      if (tripwireChunk) {
-        throw new TripWire(
-          tripwireChunk.payload?.reason || 'Agent tripwire triggered',
-          {
-            retry: tripwireChunk.payload?.retry,
-            metadata: tripwireChunk.payload?.metadata,
-          },
-          tripwireChunk.payload?.processorId,
-        );
-      }
-
-      if (abortSignal.aborted) {
-        return abort();
-      }
-
-      // Return structured output if available, otherwise default text
-      if (structuredResult !== null) {
-        return structuredResult satisfies TStepOutput;
-      }
-      return {
-        text: await streamPromise.promise,
-      } satisfies {
-        text: string;
-      };
-    },
+    // The run logic lives in `runAgentEntry` (shared with the engines'
+    // declarative-entry dispatch); this closure just binds the live agent.
+    execute: async ctx =>
+      runAgentEntry({ type: 'agent', id: params.id, agentId: params.id, agent: params, options }, ctx),
     component: 'AGENT',
     // Preserve the declarative inputs so the workflow builder can emit a
     // `{ type: 'agent', agentId, options }` graph entry instead of an opaque step.
@@ -718,39 +583,10 @@ export function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
     retries: toolOpts?.retries,
     scorers: toolOpts?.scorers,
     metadata: toolOpts?.metadata,
-    execute: async ({
-      inputData,
-      mastra,
-      requestContext,
-      suspend,
-      resumeData,
-      runId,
-      workflowId,
-      state,
-      setState,
-      abortSignal,
-      ...rest
-    }) => {
-      // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
-      const observabilityContext = resolveObservabilityContext(rest);
-      const toolContext = {
-        mastra,
-        requestContext,
-        ...observabilityContext,
-        abortSignal,
-        resumeData,
-        workflow: {
-          runId,
-          suspend,
-          resumeData,
-          workflowId,
-          state,
-          setState,
-        },
-      };
-
-      return params.execute(inputData, toolContext) as TStepOutput;
-    },
+    // The run logic lives in `runToolEntry` (shared with the engines'
+    // declarative-entry dispatch); this closure just binds the live tool.
+    execute: async ctx =>
+      runToolEntry({ type: 'tool', id: params.id, toolId: params.id, tool: params, options: toolOpts }, ctx),
     component: 'TOOL',
     // Preserve the declarative inputs so the workflow builder can emit a
     // `{ type: 'tool', toolId, options }` graph entry instead of an opaque step.
@@ -759,230 +595,22 @@ export function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   } as Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 }
 
-/** Walks a dotted path on an object. `''` or `'.'` returns the root unchanged. */
-function traverseMappingPath(root: unknown, path: string, errorLabel: string): unknown {
-  if (path === '' || path === '.') return root;
-  const parts = path.split('.');
-  let value: any = root;
-  for (const part of parts) {
-    if (typeof value === 'object' && value !== null) {
-      value = value[part];
-    } else {
-      throw new Error(`Invalid path ${path} in ${errorLabel}`);
-    }
-  }
-  return value;
-}
-
-const TEMPLATE_PLACEHOLDER = /\$\{([^}]*)\}/g;
-
-const TEMPLATE_NAMESPACES = ['inputData', 'initData', 'state', 'requestContext', 'stepResults'] as const;
-type TemplateScope = (typeof TEMPLATE_NAMESPACES)[number];
-
-/** Common error-message prefix so every template diagnostic points at the exact placeholder. */
-function describeBadPlaceholder(template: string, idx: number, rawExpr: string): string {
-  return `Template placeholder #${idx} (\${${rawExpr}}) in '${template}'`;
-}
-
-/** Split a placeholder body `scope.path.with.dots` into its leading scope and the dotted remainder. */
-function parseTemplatePlaceholder(rawExpr: string): { scope: string; rest: string } {
-  const dot = rawExpr.indexOf('.');
-  return {
-    scope: dot === -1 ? rawExpr : rawExpr.slice(0, dot),
-    rest: dot === -1 ? '' : rawExpr.slice(dot + 1),
-  };
-}
-
-/**
- * Validates a `{ template }` source's syntax at workflow-definition time.
- * Throws if any placeholder is empty, whitespace-padded, references an unknown
- * namespace, or is a malformed `stepResults.<stepId>` / `stepResults.<stepId>.<path>` shape.
- *
- * Run-time concerns (does the step actually exist, does the path resolve, is
- * the value a primitive) stay in {@link resolveTemplate}.
- */
-function validateTemplate(template: string): void {
-  let idx = 0;
-  for (const match of template.matchAll(TEMPLATE_PLACEHOLDER)) {
-    idx++;
-    const rawExpr = match[1] ?? '';
-    if (rawExpr.length === 0 || rawExpr !== rawExpr.trim()) {
-      throw new Error(
-        `${describeBadPlaceholder(template, idx, rawExpr)} has empty or whitespace-padded contents. ` +
-          `Use \${<scope>.<path>} with no surrounding whitespace.`,
-      );
-    }
-    const { scope, rest } = parseTemplatePlaceholder(rawExpr);
-    if (scope === 'stepResults') {
-      const innerDot = rest.indexOf('.');
-      const stepId = innerDot === -1 ? rest : rest.slice(0, innerDot);
-      if (!stepId) {
-        throw new Error(
-          `${describeBadPlaceholder(template, idx, rawExpr)} must be of the form \${stepResults.<stepId>} or \${stepResults.<stepId>.<path>}.`,
-        );
-      }
-      continue;
-    }
-    if (scope === 'requestContext') {
-      if (!rest) {
-        throw new Error(
-          `${describeBadPlaceholder(template, idx, rawExpr)} requires a request-context key — use \${requestContext.<key>}.`,
-        );
-      }
-      continue;
-    }
-    if ((TEMPLATE_NAMESPACES as readonly string[]).includes(scope)) continue;
-    throw new Error(
-      `${describeBadPlaceholder(template, idx, rawExpr)} references unknown namespace "${scope}". ` +
-        `Use one of: ${TEMPLATE_NAMESPACES.join(', ')}.`,
-    );
-  }
-}
-
-/**
- * Coerces a resolved placeholder value to a string. Primitives are stringified
- * the normal way; objects and arrays are JSON-encoded so downstream agents can
- * consume complex step outputs (e.g. `foreach(agent)` returns `{ text }[]`)
- * directly in a template. `null`/`undefined` render as empty. If JSON encoding
- * fails (circular references, BigInt, etc.), throws with a hint pointing at
- * the offending placeholder.
- */
-function stringifyTemplateValue(v: unknown, template: string, idx: number, rawExpr: string): string {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'object') {
-    try {
-      return JSON.stringify(v);
-    } catch (err) {
-      throw new Error(
-        `${describeBadPlaceholder(template, idx, rawExpr)} resolved to a value that could not be JSON-stringified ` +
-          `(${(err as Error).message}). Drill into a primitive path (e.g. \${${rawExpr}.someField}) or reshape the value in a preceding step.`,
-      );
-    }
-  }
-  return String(v);
-}
-
-/**
- * Resolves `${<scope>.<path>}` placeholders against the implicit namespaces
- * available in a step's execute context. See the `.map()` overload signature
- * for the full list of accepted scopes (`inputData`, `initData`, `state`,
- * `requestContext`, `stepResults.<stepId>`).
- */
-function resolveTemplate(template: string, ctx: any): string {
-  let idx = 0;
-  return template.replace(TEMPLATE_PLACEHOLDER, (_match, rawExpr: string) => {
-    idx++;
-    return resolveTemplatePlaceholder(rawExpr, template, idx, ctx);
-  });
-}
-
-function resolveTemplatePlaceholder(rawExpr: string, template: string, idx: number, ctx: any): string {
-  // validateTemplate(template) is called at definition time so we know the
-  // raw expr is well-formed (non-empty, no surrounding whitespace, known
-  // scope). Runtime only cares about path-resolution + value coercion.
-  const { scope, rest } = parseTemplatePlaceholder(rawExpr);
-  const label = describeBadPlaceholder(template, idx, rawExpr);
-  switch (scope as TemplateScope) {
-    case 'inputData':
-      return stringifyTemplateValue(traverseMappingPath(ctx.inputData, rest, label), template, idx, rawExpr);
-    case 'initData':
-      return stringifyTemplateValue(traverseMappingPath(ctx.getInitData(), rest, label), template, idx, rawExpr);
-    case 'state':
-      return stringifyTemplateValue(traverseMappingPath(ctx.state, rest, label), template, idx, rawExpr);
-    case 'requestContext':
-      return stringifyTemplateValue(ctx.requestContext.get(rest), template, idx, rawExpr);
-    case 'stepResults': {
-      const innerDot = rest.indexOf('.');
-      const stepId = innerDot === -1 ? rest : rest.slice(0, innerDot);
-      const subPath = innerDot === -1 ? '' : rest.slice(innerDot + 1);
-      const stepResult = ctx.getStepResult(stepId);
-      if (stepResult === null) {
-        throw new Error(
-          `${label} references stepResults.${stepId} but step "${stepId}" has no successful output ` +
-            `(not run yet, not registered, or failed).`,
-        );
-      }
-      return stringifyTemplateValue(traverseMappingPath(stepResult, subPath, label), template, idx, rawExpr);
-    }
-    default:
-      // validateTemplate guarantees this branch is unreachable for well-formed
-      // workflows; this is a safety net for templates that bypassed validation
-      // (e.g. constructed programmatically and pushed into stepFlow).
-      throw new Error(
-        `${label} references unknown namespace "${scope}". Use one of: ${TEMPLATE_NAMESPACES.join(', ')}.`,
-      );
-  }
-}
-
 /**
  * Builds a runnable step from a `.map()` mapping config or mapping function.
  *
- * This is the interpretation of a `{ type: 'mapping' }` graph entry: the mapping
- * logic lives here (not baked into a closure at definition time) so the entry can
- * stay declarative.
+ * The interpretation of a `{ type: 'mapping' }` graph entry lives in
+ * `runMappingEntry` (shared with the engines' declarative-entry dispatch);
+ * this factory just wraps it in a step shell.
  */
 export function createMappingStep(
   id: string,
   mappingConfig: MappingConfig | ExecuteFunction<any, any, any, any, any, DefaultEngineType>,
 ): Step<string, any, any, any, any, any, DefaultEngineType> {
-  if (typeof mappingConfig === 'function') {
-    return createStep({
-      id,
-      inputSchema: z.any(),
-      outputSchema: z.any(),
-      execute: mappingConfig as any,
-    }) as Step<string, any, any, any, any, any, DefaultEngineType>;
-  }
-
   return createStep({
     id,
     inputSchema: z.any(),
     outputSchema: z.any(),
-    execute: async ctx => {
-      const { getStepResult, getInitData, requestContext } = ctx;
-
-      const result: Record<string, any> = {};
-      for (const [key, mapping] of Object.entries(mappingConfig)) {
-        const m: any = mapping;
-
-        if (m.value !== undefined) {
-          result[key] = m.value;
-          continue;
-        }
-
-        if (m.fn !== undefined) {
-          result[key] = await m.fn(ctx);
-          continue;
-        }
-
-        if (typeof m.template === 'string') {
-          result[key] = resolveTemplate(m.template, ctx);
-          continue;
-        }
-
-        if (m.requestContextPath) {
-          result[key] = requestContext.get(m.requestContextPath);
-          continue;
-        }
-
-        const stepResult = m.initData
-          ? getInitData()
-          : getStepResult(
-              Array.isArray(m.step)
-                ? m.step.find((s: any) => {
-                    const stepRes = getStepResult(s);
-                    if (typeof stepRes === 'object' && stepRes !== null) {
-                      return Object.keys(stepRes).length > 0;
-                    }
-                    return stepRes;
-                  })
-                : m.step,
-            );
-
-        result[key] = traverseMappingPath(stepResult, m.path, `step ${m?.step?.id ?? 'initData'}`);
-      }
-      return result;
-    },
+    execute: async ctx => runMappingEntry({ type: 'mapping', id, mapConfig: mappingConfig }, ctx),
   }) as Step<string, any, any, any, any, any, DefaultEngineType>;
 }
 

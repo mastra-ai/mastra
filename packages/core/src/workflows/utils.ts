@@ -6,6 +6,7 @@ import type { StandardSchemaWithJSON } from '../schema';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
+import { getEntryId } from './step-entry';
 import type {
   ForeachConcurrencyContext,
   ForeachOptions,
@@ -50,7 +51,7 @@ export async function validateStepInput({
   validateInputs,
 }: {
   prevOutput: any;
-  step: Step<string, any, any>;
+  step: Partial<Pick<Step<string, any, any>, 'inputSchema'>>;
   validateInputs: boolean;
 }) {
   let inputData = prevOutput;
@@ -85,7 +86,13 @@ export async function validateStepInput({
   return { inputData, validationError };
 }
 
-export async function validateStepResumeData({ resumeData, step }: { resumeData?: any; step: Step<string, any, any> }) {
+export async function validateStepResumeData({
+  resumeData,
+  step,
+}: {
+  resumeData?: any;
+  step: Partial<Pick<Step<string, any, any>, 'resumeSchema'>>;
+}) {
   if (!resumeData) {
     return { resumeData: undefined, validationError: undefined };
   }
@@ -117,7 +124,7 @@ export async function validateStepSuspendData({
   validateInputs,
 }: {
   suspendData?: any;
-  step: Step<string, any, any>;
+  step: Partial<Pick<Step<string, any, any>, 'suspendSchema'>>;
   validateInputs: boolean;
 }) {
   if (!suspendData) {
@@ -274,10 +281,10 @@ export function isSingleStepEntry(entry: StepFlowEntry): entry is SingleStepEntr
 /**
  * The id of a single step-like entry. Plain `step` entries key off the wrapped
  * step's id; declarative variants (agent / tool / mapping) carry their own `id`.
+ *
+ * Public alias of {@link getEntryId} from `./step-entry`.
  */
-export function getSingleStepEntryId(entry: SingleStepEntry): string {
-  return entry.type === 'step' ? entry.step.id : entry.id;
-}
+export const getSingleStepEntryId = getEntryId;
 
 export const getStepIds = (entry: StepFlowEntry): string[] => {
   if (isSingleStepEntry(entry)) {

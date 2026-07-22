@@ -5,7 +5,6 @@ import type { PubSub } from '../../events/pubsub';
 import { resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import type { DefaultExecutionEngine } from '../default';
-import { materializeInnerStep } from '../inner-step';
 import type {
   EntryExecutionResult,
   ExecutionContext,
@@ -237,6 +236,7 @@ export interface ExecuteEntryParams extends ObservabilityContext {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     resumePayload: any;
     resumePath: number[];
+    forEachIndex?: number;
   };
   executionContext: ExecutionContext;
   pubsub: PubSub;
@@ -514,12 +514,11 @@ export async function executeEntry(
       perStep,
     });
   } else if (entry.type === 'loop') {
-    const materializedLoopStep = materializeInnerStep(entry.step as any, engine.mastra);
     execResults = await engine.executeLoop({
       workflowId,
       runId,
       resourceId,
-      entry: { ...entry, step: materializedLoopStep },
+      entry,
       prevStep,
       prevOutput,
       stepResults,
@@ -538,10 +537,10 @@ export async function executeEntry(
       perStep,
     });
   } else if (entry.type === 'foreach') {
-    const materializedForeachStep = materializeInnerStep(entry.step as any, engine.mastra);
+    const foreachStepId = getSingleStepEntryId(entry.step);
     const foreachPrevOutput = getResumeStepPrevOutput({
-      isResumedStep: resume?.steps?.includes(materializedForeachStep.id) ?? false,
-      stepId: materializedForeachStep.id,
+      isResumedStep: resume?.steps?.includes(foreachStepId) ?? false,
+      stepId: foreachStepId,
       stepResults,
       prevOutput,
     });
@@ -550,7 +549,7 @@ export async function executeEntry(
       workflowId,
       runId,
       resourceId,
-      entry: { ...entry, step: materializedForeachStep },
+      entry,
       prevStep,
       prevOutput: foreachPrevOutput,
       stepResults,

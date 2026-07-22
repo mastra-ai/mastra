@@ -15,6 +15,7 @@ import { Inngest } from 'inngest';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createStep, init } from '../index';
+import type { InngestWorkflow } from '../workflow';
 
 const inngest = new Inngest({ id: 'declarative-test' });
 const { createWorkflow } = init(inngest);
@@ -65,5 +66,40 @@ describe('inngest declarative step entries', () => {
       .commit();
 
     expect(wf.serializedStepGraph.map(e => e.type)).toEqual(['agent', 'mapping', 'tool']);
+  });
+
+  it('detects nested InngestWorkflows used as loop and foreach bodies', () => {
+    // Loop / foreach bodies are SingleStepEntry wrappers, so nested-workflow
+    // detection must unwrap `{ type: 'step', step: workflow }` bodies.
+    const loopBody = createWorkflow({
+      id: 'nested-loop-body',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+    }).commit() as unknown as InngestWorkflow;
+
+    const foreachBody = createWorkflow({
+      id: 'nested-foreach-body',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+    }).commit() as unknown as InngestWorkflow;
+
+    const parent = createWorkflow({
+      id: 'nested-bodies-parent',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.any(),
+    })
+      .dountil(loopBody as any, async ({ inputData }) => (inputData as any).value > 0)
+      .map(async ({ inputData }) => [inputData])
+      .foreach(foreachBody as any)
+      .commit() as unknown as InngestWorkflow;
+
+    // getFunctions must include the parent + both nested workflow functions.
+    expect(parent.getFunctions()).toHaveLength(3);
+
+    // The pubsub factory must propagate into loop/foreach bodies too.
+    const factory = (p: any) => p;
+    parent.__setPubsubFactory(factory);
+    expect(loopBody.__getPubsubFactory()).toBe(factory);
+    expect(foreachBody.__getPubsubFactory()).toBe(factory);
   });
 });

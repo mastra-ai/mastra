@@ -561,6 +561,18 @@ export type SingleStepEntry<TEngineType = DefaultEngineType> =
   | { type: 'tool'; id: string; toolId: string; tool?: any; options?: any }
   | { type: 'mapping'; id: string; mapConfig: MappingConfig | ExecuteFunction<any, any, any, any, any, TEngineType> };
 
+/** The `{ type: 'step' }` variant of {@link SingleStepEntry}: a plain live step. */
+export type StepEntry = Extract<SingleStepEntry, { type: 'step' }>;
+/** The `{ type: 'agent' }` variant of {@link SingleStepEntry}. */
+export type AgentStepEntry = Extract<SingleStepEntry, { type: 'agent' }>;
+/** The `{ type: 'tool' }` variant of {@link SingleStepEntry}. */
+export type ToolStepEntry = Extract<SingleStepEntry, { type: 'tool' }>;
+/** The `{ type: 'mapping' }` variant of {@link SingleStepEntry}. */
+export type MappingStepEntry<TEngineType = DefaultEngineType> = Extract<
+  SingleStepEntry<TEngineType>,
+  { type: 'mapping' }
+>;
+
 export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | SingleStepEntry<TEngineType>
   | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
