@@ -24,6 +24,7 @@ import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
 import { ThreadPage } from './pages/ThreadPage';
 import { useFactoriesQuery } from '../../shared/hooks/useFactories';
@@ -76,6 +77,7 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'metrics', element: <MetricsPage /> },
+                { path: 'rules', element: <RulesPage /> },
                 { path: 'audit', element: <AuditPage /> },
                 {
                   path: 'settings',
