@@ -441,7 +441,7 @@ export class LibSQLFactoryStorage extends FactoryStorage {
       await transaction.rollback();
       throw error;
     } finally {
-      transaction.close();
+      await transaction.close();
     }
   }
 

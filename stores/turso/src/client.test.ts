@@ -118,6 +118,11 @@ describeNative('TursoSqliteClient', () => {
     await rolledBack.rollback();
     expect(rolledBack.closed).toBe(true);
 
+    const closed = await client.transaction('write');
+    await closed.execute({ sql: 'INSERT INTO items VALUES (?)', args: ['closed'] });
+    await closed.close();
+    expect(closed.closed).toBe(true);
+
     await expect(client.execute('SELECT name FROM items')).resolves.toMatchObject({ rows: [{ name: 'committed' }] });
   });
 

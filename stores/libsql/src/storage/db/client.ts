@@ -23,6 +23,7 @@ export interface SqliteTransaction {
   execute(statement: string | SqliteStatement): Promise<SqliteResultSet>;
   commit(): Promise<void>;
   rollback(): Promise<void>;
+  close(): void | Promise<void>;
   readonly closed: boolean;
 }
 

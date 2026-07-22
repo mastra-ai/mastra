@@ -243,6 +243,7 @@ export class TursoSqliteClient implements SqliteClient {
         execute,
         commit: () => finish('commit'),
         rollback: () => finish('rollback'),
+        close: () => finish('rollback'),
         get closed() {
           return transactionClosed;
         },
