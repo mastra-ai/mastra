@@ -218,9 +218,8 @@ function SankeyNode({
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
   const visibleHeight = scaleSankeyDimension(height, numericValue, layoutValue);
   const visibleY = y + (height - visibleHeight) / 2;
-  const isTruncated = visibleLabel !== visibleDisplayLabel;
-  const textAnchor = isTruncated && isFirstColumn ? 'start' : isTruncated && isLastColumn ? 'end' : 'middle';
-  const labelX = isTruncated && isFirstColumn ? x : isTruncated && isLastColumn ? x + width : x + width / 2;
+  const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
+  const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
   const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
   const isTooltipVisible = Boolean(description && tooltipPosition && (isHovered || isFocused));

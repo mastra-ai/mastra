@@ -201,7 +201,7 @@ describe('SankeyChart utilities', () => {
       expect(targetX?.x).toBe(500);
       expect(sourceA?.centerY).toBe(45);
       expect(sourceB?.centerY).toBe(155);
-      expect(sourceA?.height).toBe(54);
+      expect(sourceA?.height).toBe(43.2);
       expect(sourceA?.height).toBeGreaterThan(sourceB?.height ?? 0);
       expect((aToX?.sourceY ?? 0) + (aToX?.sourceWidth ?? 0) / 2).toBeCloseTo(
         (aToY?.sourceY ?? 0) - (aToY?.sourceWidth ?? 0) / 2,
@@ -209,6 +209,36 @@ describe('SankeyChart utilities', () => {
       expect((aToX?.targetY ?? 0) + (aToX?.targetWidth ?? 0) / 2).toBeCloseTo(
         (bToX?.targetY ?? 0) - (bToX?.targetWidth ?? 0) / 2,
       );
+    });
+
+    it('scales percentages against one chart-wide maximum height', () => {
+      const graph = buildSankeyChartGraph(
+        [
+          { source: 'A', sourceCount: 70, model: 'X', modelCount: 100, count: 70, layoutCount: 100 },
+          { source: 'B', sourceCount: 30, model: 'X', modelCount: 100, count: 30, layoutCount: 100 },
+          { source: 'B', sourceCount: 30, model: 'Y', modelCount: 0, count: 0, layoutCount: 1 },
+          { source: 'B', sourceCount: 30, model: 'Z', modelCount: 0, count: 0, layoutCount: 1 },
+          { source: 'B', sourceCount: 30, model: 'W', modelCount: 0, count: 0, layoutCount: 1 },
+        ],
+        columns.slice(0, 2),
+        record => Number(record.count),
+        undefined,
+        undefined,
+        (record, column) => Number(record[`${column.id}Count`]),
+        record => Number(record.layoutCount),
+      );
+      const geometry = buildFixedSankeyGeometry(graph, {
+        top: 0,
+        bottom: 200,
+        left: 100,
+        right: 500,
+        nodePadding: 20,
+      });
+      const sourceA = geometry.nodes.get(graph.nodes.find(node => node.name === 'A')?.id ?? '');
+      const targetX = geometry.nodes.get(graph.nodes.find(node => node.name === 'X')?.id ?? '');
+
+      expect(targetX?.height).toBeGreaterThan(sourceA?.height ?? 0);
+      expect((sourceA?.height ?? 0) / (targetX?.height ?? 1)).toBeCloseTo(0.7);
     });
   });
 

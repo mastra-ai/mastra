@@ -126,6 +126,31 @@ describe('SankeyChart', () => {
     });
   });
 
+  describe('when first-column labels have different lengths', () => {
+    it('aligns short and truncated labels to the same column edge', async () => {
+      const { container } = render(
+        <Sankey
+          data={[
+            { channel: 'Short label', region: 'EU' },
+            { channel: 'A deliberately long channel label', region: 'US' },
+          ]}
+          columns={columns.slice(0, 2)}
+          getRecordLayoutWeight={() => 1}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+      await screen.findAllByText('Short label');
+      const labels = [...container.querySelectorAll('svg text')];
+      const shortLabel = labels.find(node => node.textContent === 'Short label');
+      const longLabel = labels.find(node => node.textContent === 'A deliberately long ch…');
+
+      expect(shortLabel?.getAttribute('x')).toBe(longLabel?.getAttribute('x'));
+      expect(shortLabel?.getAttribute('text-anchor')).toBe('start');
+      expect(longLabel?.getAttribute('text-anchor')).toBe('start');
+    });
+  });
+
   describe('when current values change within stable layout weights', () => {
     it('changes bar height without moving its center', async () => {
       const renderFrame = (count: number) => (
@@ -276,18 +301,18 @@ describe('SankeyChart', () => {
     expect(channelLabel?.getAttribute('x')).toBe('163.5');
     const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
     expect(searchLabel?.getAttribute('font-size')).toBe('11');
-    expect(searchLabel?.getAttribute('text-anchor')).toBe('middle');
-    expect(searchLabel?.getAttribute('x')).toBe('163.5');
+    expect(searchLabel?.getAttribute('text-anchor')).toBe('start');
+    expect(searchLabel?.getAttribute('x')).toBe('160');
     expect(Number(searchLabel?.getAttribute('y'))).toBeGreaterThan(Number(channelLabel?.getAttribute('y')) + 16);
     expect(Number(searchLabel?.getAttribute('y'))).toBeLessThan(Number(node?.getAttribute('y')));
     expect(searchLabel?.getAttribute('style')).toBeNull();
     const searchDetails = [...container.querySelectorAll('svg text')].find(
-      element => element.textContent === '3 (75%)' && element.getAttribute('x') === '163.5',
+      element => element.textContent === '3 (75%)' && element.getAttribute('x') === '160',
     );
-    expect(searchDetails?.getAttribute('text-anchor')).toBe('middle');
+    expect(searchDetails?.getAttribute('text-anchor')).toBe('start');
     expect(Number(searchDetails?.getAttribute('y'))).toBeLessThan(Number(node?.getAttribute('y')) - 4);
     const lostLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Lost');
-    expect(lostLabel?.getAttribute('text-anchor')).toBe('middle');
+    expect(lostLabel?.getAttribute('text-anchor')).toBe('end');
     expect(container.querySelector('svg text[font-size="9.5"]')).not.toBeNull();
   });
 

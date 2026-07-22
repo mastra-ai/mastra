@@ -219,21 +219,23 @@ export function buildFixedSankeyGeometry(
   }
 
   const columns = [...nodesByColumn.values()];
+  const slotHeights = columns.map(columnNodes =>
+    Math.max(0, (bottom - top - nodePadding * Math.max(0, columnNodes.length - 1)) / columnNodes.length),
+  );
+  const maximumNodeHeight = Math.min(...slotHeights) * 0.6;
+
   columns.forEach((columnNodes, columnIndex) => {
-    const slotHeight = Math.max(
+    const slotHeight = slotHeights[columnIndex] ?? 0;
+    const columnTotal = columnNodes.reduce(
+      (total, node) => total + (node.displayValue ?? currentNodeWeights.get(node.id) ?? 0),
       0,
-      (bottom - top - nodePadding * Math.max(0, columnNodes.length - 1)) / columnNodes.length,
-    );
-    const maximumValue = Math.max(
-      1,
-      ...columnNodes.map(node => node.displayValue ?? currentNodeWeights.get(node.id) ?? 0),
     );
     const x = columns.length > 1 ? left + ((right - left) * columnIndex) / (columns.length - 1) : left;
 
     columnNodes.forEach((node, index) => {
       const value = node.displayValue ?? currentNodeWeights.get(node.id) ?? 0;
       const centerY = top + index * (slotHeight + nodePadding) + slotHeight / 2;
-      const height = value > 0 ? Math.max(slotHeight * 0.08, slotHeight * 0.6 * (value / maximumValue)) : 0;
+      const height = columnTotal > 0 ? maximumNodeHeight * (value / columnTotal) : 0;
       nodes.set(node.id, { x, centerY, y: centerY - height / 2, height });
     });
   });
