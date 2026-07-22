@@ -23,8 +23,8 @@ interface FactoryPageShellProps {
 }
 
 /**
- * Shared frame for the Factory pages (Board, Metrics, Audit): the standard app
- * layout (sidebar + mobile header) around a titled content column. Any
+ * Shared frame for the Factory pages (Board, Metrics, Rules, Audit): the standard
+ * app layout (sidebar + mobile header) around a titled content column. Any
  * server-backed Factory renders its pages — including one with zero linked
  * repositories (the pages show connect prompts). Local folder factories get an
  * explanatory notice; when a factory links multiple repositories a picker in
@@ -53,8 +53,8 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
         children(serverFactory)
       ) : (
         <Notice variant="info">
-          Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder —
-          create a Factory from the switcher to use the Board.
+          Board, metrics, rules, and audit are available for server-backed Factories. This factory is bound to a local
+          folder — create a Factory from the switcher to use the Board.
         </Notice>
       )}
     </PageLayout>

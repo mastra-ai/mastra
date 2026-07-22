@@ -511,7 +511,7 @@ function dragTo(card: HTMLElement, target: HTMLElement) {
 }
 
 describe('Factory sidebar section', () => {
-  it('given a GitHub project, when the app renders, then Factory exposes sibling Work and Review links', async () => {
+  it('given a GitHub project, when the app renders, then Factory exposes each workflow as a sibling link', async () => {
     useBoardHandlers();
     renderAt('work');
 
@@ -529,7 +529,11 @@ describe('Factory sidebar section', () => {
       'href',
       `/factories/${githubProject.id}/metrics`,
     );
-    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute(
+    expect(within(nav).getByRole('link', { name: 'Rules' })).toHaveAttribute(
+      'href',
+      `/factories/${githubProject.id}/rules`,
+    );
+    expect(within(nav).getByRole('link', { name: 'Audit log' })).toHaveAttribute(
       'href',
       `/factories/${githubProject.id}/audit`,
     );
@@ -560,7 +564,11 @@ describe('Factory sidebar section', () => {
       'href',
       `/factories/${githubProject.id}/metrics`,
     );
-    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute(
+    expect(within(nav).getByRole('link', { name: 'Rules' })).toHaveAttribute(
+      'href',
+      `/factories/${githubProject.id}/rules`,
+    );
+    expect(within(nav).getByRole('link', { name: 'Audit log' })).toHaveAttribute(
       'href',
       `/factories/${githubProject.id}/audit`,
     );
@@ -580,7 +588,7 @@ describe('Factory workflow routing', () => {
     renderAt('work', localProject);
 
     expect(
-      await screen.findByText(/Board, metrics, and audit are available for server-backed Factories/),
+      await screen.findByText(/Board, metrics, rules, and audit are available for server-backed Factories/),
     ).toBeInTheDocument();
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
