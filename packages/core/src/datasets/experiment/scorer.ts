@@ -48,6 +48,58 @@ export function resolveScorers(
     .filter((s): s is MastraScorer<any, any, any, any> => s !== null);
 }
 
+export const EXPERIMENT_ITEM_SCORER_NOT_FOUND = 'EXPERIMENT_ITEM_SCORER_NOT_FOUND';
+
+type ResolvedScorer = MastraScorer<any, any, any, any>;
+
+export interface ItemScorerResolution {
+  scorers: ResolvedScorer[];
+  missingIds: string[];
+}
+
+/**
+ * Create a run-scoped resolver for item scorer IDs. Resolutions, including misses,
+ * are cached so concurrent items hydrate a stored scorer at most once per run.
+ */
+export function createItemScorerResolver(mastra: Mastra): (scorerIds: string[]) => Promise<ItemScorerResolution> {
+  const resolutionCache = new Map<string, Promise<ResolvedScorer | null>>();
+
+  const resolveById = (scorerId: string): Promise<ResolvedScorer | null> => {
+    const cached = resolutionCache.get(scorerId);
+    if (cached) return cached;
+
+    const resolution = (async () => {
+      let scorer = mastra.getScorerById(scorerId);
+      if (scorer) return scorer;
+
+      const editor = mastra.getEditor?.();
+      if (editor) {
+        try {
+          await editor.scorer.getById(scorerId);
+        } catch {
+          // A missing or unavailable stored scorer is handled as an unresolved item reference below.
+        }
+        scorer = mastra.getScorerById(scorerId);
+      }
+
+      return scorer ?? null;
+    })();
+
+    resolutionCache.set(scorerId, resolution);
+    return resolution;
+  };
+
+  return async scorerIds => {
+    const uniqueIds = [...new Set(scorerIds)];
+    const resolved = await Promise.all(uniqueIds.map(async id => ({ id, scorer: await resolveById(id) })));
+
+    return {
+      scorers: resolved.flatMap(({ scorer }) => (scorer ? [scorer] : [])),
+      missingIds: resolved.flatMap(({ id, scorer }) => (scorer ? [] : [id])),
+    };
+  };
+}
+
 /**
  * Attempt to extract a Trajectory from the observability trace store.
  * Falls back to undefined if storage is unavailable or the trace has no spans.

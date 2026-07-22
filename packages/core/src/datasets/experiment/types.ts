@@ -21,6 +21,11 @@ export interface DataItem<I = unknown, E = unknown> {
   /** Per-item request context merged over the global request context (item takes precedence) */
   requestContext?: Record<string, unknown>;
   /**
+   * Scorer IDs that override dataset-attached scorers for this item.
+   * An empty array explicitly disables scoring for the item.
+   */
+  scorerIds?: string[];
+  /**
    * Resume data for suspended workflow steps, keyed by step ID.
    * When a workflow suspends during experiment execution, the executor
    * looks up the suspended step's ID here and auto-resumes with the value.
