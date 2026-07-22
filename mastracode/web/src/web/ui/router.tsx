@@ -22,6 +22,7 @@ import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
 import { ThreadPage } from './pages/ThreadPage';
 import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
@@ -65,6 +66,7 @@ export function createAppRoutes(): RouteObject[] {
             { path: 'factory/work', element: <WorkBoardPage /> },
             { path: 'factory/review', element: <ReviewBoardPage /> },
             { path: 'factory/metrics', element: <MetricsPage /> },
+            { path: 'factory/rules', element: <RulesPage /> },
             { path: 'factory/audit', element: <AuditPage /> },
             { path: 'factories/create', element: <CreateFactoryPage /> },
             {

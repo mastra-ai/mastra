@@ -1,6 +1,6 @@
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChartLine, GitPullRequest, LayoutDashboard, ScrollText, SquareKanban } from 'lucide-react';
+import { ChartLine, GitPullRequest, LayoutDashboard, ListChecks, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router';
 
@@ -32,7 +32,8 @@ export function FactorySection({ children }: { children?: ReactNode }) {
         <FactoryLink to="/factory/work" icon={SquareKanban} label="Work" />
         <FactoryLink to="/factory/review" icon={GitPullRequest} label="Review" />
         <FactoryLink to="/factory/metrics" icon={ChartLine} label="Metrics" />
-        <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit" />
+        <FactoryLink to="/factory/rules" icon={ListChecks} label="Rules" />
+        <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit log" />
       </MainSidebar.NavList>
       {children}
     </nav>

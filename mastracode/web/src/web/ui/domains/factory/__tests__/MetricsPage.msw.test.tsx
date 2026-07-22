@@ -310,7 +310,7 @@ describe('Factory Metrics page', () => {
     renderAt('/factory/metrics', localProject);
 
     expect(
-      await screen.findByText(/Board, metrics, and audit are available for server-backed Factories/),
+      await screen.findByText(/Board, metrics, rules, and audit are available for server-backed Factories/),
     ).toBeInTheDocument();
     expect(screen.queryByText('Median cycle time')).not.toBeInTheDocument();
   });
