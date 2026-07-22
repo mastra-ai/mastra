@@ -243,7 +243,7 @@ describe('Factory Audit page', () => {
     });
     renderAt('/factory/audit');
 
-    expect(await screen.findByRole('heading', { name: 'Audit' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Audit' }))[0]).toBeInTheDocument();
     const list = await screen.findByRole('list', { name: 'Audit events' });
     const rows = within(list).getAllByRole('listitem');
     expect(rows).toHaveLength(2);

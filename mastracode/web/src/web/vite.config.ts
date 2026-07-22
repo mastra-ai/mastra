@@ -1,12 +1,21 @@
+import { realpathSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
 import type { Plugin } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * The standalone web package links dependencies from pnpm's store, which sits
+ * outside Vite's default workspace boundary. Allow only the font package that
+ * serves files in development rather than exposing the entire pnpm store.
+ */
+const monaSansPackageRoot = realpathSync(resolve(here, '../../node_modules/@fontsource-variable/mona-sans'));
+const fsAllow = [searchForWorkspaceRoot(here), monaSansPackageRoot];
 
 /**
  * Dev-proxy target for the API server and the UI dev-server port. Overridable
@@ -74,6 +83,11 @@ export default defineConfig(({ mode }) => ({
   },
   server: {
     port: uiPort,
+    fs: {
+      // Linked font files resolve outside the workspace; expose only that
+      // package instead of pnpm's entire global store.
+      allow: fsAllow,
+    },
     // OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the
     // configured UI origin ahead of time. Silently hopping to a free port
     // would keep the UI working while every OAuth redirect breaks — fail
