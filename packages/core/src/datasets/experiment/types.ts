@@ -16,6 +16,8 @@ export interface DataItem<I = unknown, E = unknown> {
   input: I;
   /** Ground truth for scoring */
   groundTruth?: E;
+  /** Execution timeout override for this item in milliseconds */
+  timeout?: number;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
   /** Per-item request context merged over the global request context (item takes precedence) */

@@ -2491,6 +2491,7 @@ export interface DatasetItem {
   toolMocks?: DatasetItemToolMock[];
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
   scorerIds?: string[];
+  timeout?: number;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2516,6 +2517,7 @@ export interface DatasetItemRow {
   toolMocks?: DatasetItemToolMock[];
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
   scorerIds?: string[];
+  timeout?: number;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2635,6 +2637,7 @@ export interface DatasetItemPayload {
   /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
   scorerIds?: string[];
+  timeout?: number;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
