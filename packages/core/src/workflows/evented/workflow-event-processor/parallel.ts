@@ -4,7 +4,6 @@ import type { PubSub } from '../../../events';
 import { getSingleStepEntryId } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
-import { stepRunEventType } from '.';
 import type { ProcessorArgs } from '.';
 
 export async function processWorkflowParallel(
@@ -61,10 +60,8 @@ export async function processWorkflowParallel(
       if (!pathsToRun[getSingleStepEntryId(child)]) {
         return;
       }
-      // Each child is dispatched with its own per-type run event so agent /
-      // tool / mapping children are interpreted explicitly.
       return pubsub.publish('workflows', {
-        type: stepRunEventType(child),
+        type: 'workflow.step.run',
         runId,
         data: {
           workflowId,
@@ -150,7 +147,7 @@ export async function processWorkflowConditional(
     const stepIndex = step.steps.findIndex(child => getSingleStepEntryId(child) === onlyStepToRunId);
     activeStepsPath[onlyStepToRunId] = executionPath.concat([stepIndex]);
     await pubsub.publish('workflows', {
-      type: stepRunEventType(onlyStepToRun),
+      type: 'workflow.step.run',
       runId,
       data: {
         workflowId,
@@ -178,7 +175,7 @@ export async function processWorkflowConditional(
             activeStepsPath[getSingleStepEntryId(child)] = executionPath.concat([idx]);
           }
           return pubsub.publish('workflows', {
-            type: stepRunEventType(child),
+            type: 'workflow.step.run',
             runId,
             data: {
               workflowId,

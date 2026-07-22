@@ -396,13 +396,13 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
 });
 
 /**
- * The evented engine interprets each declarative step type with its own run event
- * (`workflow.agent.run` / `workflow.tool.run` / `workflow.mapping.run`) instead of
- * materializing into a generic `workflow.step.run`. These tests drive the
+ * The evented engine schedules every entry — including declarative agent / tool /
+ * mapping entries — through the generic `workflow.step.run` event and resolves the
+ * entry type from the graph at execution time. These tests drive the
  * `WorkflowEventProcessor` directly (via `handleWorkflowEvent`, pumping the
  * `workflows` topic) since the env-gated leg above runs the default engine.
  */
-describe('evented engine - per-type run events', () => {
+describe('evented engine - declarative entries', () => {
   function bindEvented(workflow: ReturnType<typeof createWorkflow>, extra?: { agents?: Record<string, Agent> }) {
     const mastra = new Mastra({
       workflows: { [workflow.id]: workflow },
@@ -415,13 +415,18 @@ describe('evented engine - per-type run events', () => {
   }
 
   // Publish workflow.start and synchronously pump every follow-up `workflows`
-  // event back through the processor until the run drains, collecting event types.
+  // event back through the processor until the run drains, collecting event
+  // types and the final `workflow.end` result.
   async function driveEvented(mastra: Mastra, workflowId: string, runId: string, inputData: any) {
     const seen: string[] = [];
     const pending: any[] = [];
+    let endResult: any;
     await mastra.pubsub.subscribe('workflows', async (event: any) => {
       seen.push(event.type);
       pending.push(event);
+      if (event.type === 'workflow.end') {
+        endResult = event.data?.prevResult;
+      }
     });
     await mastra.pubsub.publish('workflows', {
       type: 'workflow.start',
@@ -440,21 +445,23 @@ describe('evented engine - per-type run events', () => {
     while (pending.length && guard++ < 2000) {
       await mastra.handleWorkflowEvent(pending.shift());
     }
-    return seen;
+    return { seen, endResult };
   }
 
-  it('schedules a .map() step with its own workflow.mapping.run event', async () => {
+  it('executes a .map() step through the generic workflow.step.run event', async () => {
     const wf = createWorkflow({ id: 'ev-map', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
       .map(async ({ inputData }) => ({ doubled: inputData.value * 2 }))
       .commit();
     const mastra = bindEvented(wf);
 
-    const seen = await driveEvented(mastra, 'ev-map', 'run-map', { value: 21 });
+    const { seen, endResult } = await driveEvented(mastra, 'ev-map', 'run-map', { value: 21 });
 
-    expect(seen).toContain('workflow.mapping.run');
+    expect(seen).toContain('workflow.step.run');
+    expect(seen).toContain('workflow.end');
+    expect(endResult?.output).toEqual({ doubled: 42 });
   });
 
-  it('schedules a .agent() step with its own workflow.agent.run event', async () => {
+  it('executes a .agent() step through the generic workflow.step.run event', async () => {
     const agent = textAgent('ev-agent', 'hi');
     const wf = createWorkflow({
       id: 'ev-agent-wf',
@@ -465,23 +472,27 @@ describe('evented engine - per-type run events', () => {
       .commit();
     const mastra = bindEvented(wf, { agents: { 'ev-agent': agent } });
 
-    const seen = await driveEvented(mastra, 'ev-agent-wf', 'run-agent', { prompt: 'hi' });
+    const { seen, endResult } = await driveEvented(mastra, 'ev-agent-wf', 'run-agent', { prompt: 'hi' });
 
-    expect(seen).toContain('workflow.agent.run');
+    expect(seen).toContain('workflow.step.run');
+    expect(seen).toContain('workflow.end');
+    expect(endResult?.output?.text).toBe('hi');
   });
 
-  it('schedules a .tool() step with its own workflow.tool.run event', async () => {
+  it('executes a .tool() step through the generic workflow.step.run event', async () => {
     const wf = createWorkflow({ id: 'ev-tool', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
       .tool(doubleTool)
       .commit();
     const mastra = bindEvented(wf);
 
-    const seen = await driveEvented(mastra, 'ev-tool', 'run-tool', { value: 5 });
+    const { seen, endResult } = await driveEvented(mastra, 'ev-tool', 'run-tool', { value: 5 });
 
-    expect(seen).toContain('workflow.tool.run');
+    expect(seen).toContain('workflow.step.run');
+    expect(seen).toContain('workflow.end');
+    expect(endResult?.output).toEqual({ doubled: 10 });
   });
 
-  it('dispatches a declarative tool child inside .parallel() with its per-type run event', async () => {
+  it('executes a declarative tool child inside .parallel() through generic run events', async () => {
     const passthrough = createStep({
       id: 'ev-par-passthrough',
       inputSchema: z.object({ value: z.number() }),
@@ -494,8 +505,11 @@ describe('evented engine - per-type run events', () => {
       .commit();
     const mastra = bindEvented(wf);
 
-    const seen = await driveEvented(mastra, 'ev-par', 'run-par', { value: 4 });
+    const { seen, endResult } = await driveEvented(mastra, 'ev-par', 'run-par', { value: 4 });
 
-    expect(seen).toContain('workflow.tool.run');
+    expect(seen).toContain('workflow.step.run');
+    expect(seen).toContain('workflow.end');
+    expect(endResult?.output?.[doubleTool.id]).toEqual({ doubled: 8 });
+    expect(endResult?.output?.['ev-par-passthrough']).toEqual({ value: 4 });
   });
 });

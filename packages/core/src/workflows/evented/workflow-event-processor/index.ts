@@ -87,14 +87,6 @@ export type ParentWorkflow = {
 };
 
 /**
- * The run event a graph entry should be scheduled with. Declarative single
- * step-like entries (agent / tool / mapping) each get their own per-type run
- * event so the evented engine can interpret them explicitly; every other entry
- * (plain step / loop / foreach / parallel / conditional / sleep) uses the
- * generic `workflow.step.run`. `Event.type` is just a string so no event union
- * needs widening.
- */
-/**
  * A foreach step stores its per-iteration state in a shape that layers on top
  * of {@link StepResult}: the `payload` is the input array and `output` is the
  * (partial) array of iteration results, with any per-iteration `suspendPayload`
@@ -122,32 +114,6 @@ function readForeachResult(
 ): ForeachStepResult | undefined {
   const result = stepResults[id] as (StepResult<any, any, any, any> & ForeachStepResult) | undefined;
   return result;
-}
-
-export function stepRunEventType(entry: StepFlowEntry | undefined): string {
-  switch (entry?.type) {
-    case 'agent':
-      return 'workflow.agent.run';
-    case 'tool':
-      return 'workflow.tool.run';
-    case 'mapping':
-      return 'workflow.mapping.run';
-    default:
-      return 'workflow.step.run';
-  }
-}
-
-/**
- * Resolve the graph entry targeted by an execution path, descending into the
- * picked child of a `parallel` / `conditional` block when the path points at
- * one. Mirrors the child-pick the processors do inline.
- */
-export function getEntryAtPath(stepGraph: StepFlowEntry[], executionPath: number[]): StepFlowEntry | undefined {
-  let entry: StepFlowEntry | undefined = stepGraph[executionPath[0]!];
-  if ((entry?.type === 'parallel' || entry?.type === 'conditional') && executionPath.length > 1) {
-    entry = entry.steps[executionPath[1]!];
-  }
-  return entry;
 }
 
 export class WorkflowEventProcessor extends EventProcessor {
@@ -584,9 +550,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     const startExecutionPath = executionPath ?? [0];
     await this.mastra.pubsub.publish('workflows', {
-      // Schedule the first/resumed step with its own per-type run event so a
-      // declarative agent/tool/mapping entry is interpreted explicitly.
-      type: stepRunEventType(getEntryAtPath(workflow.stepGraph, startExecutionPath)),
+      type: 'workflow.step.run',
       runId,
       data: {
         parentWorkflow,
@@ -1220,18 +1184,16 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     // Declarative single step-like entries (agent / tool / mapping) - including a
-    // child picked out of a parallel/conditional block above - are interpreted by
-    // their own per-type handlers, which build the runnable step and run it through
-    // `runLeafStep`. This branch also covers an in-flight generic `workflow.step.run`
-    // event that targets a declarative entry (cross-version compatibility).
+    // child picked out of a parallel/conditional block above - are resolved into
+    // a runnable step and run through `runLeafStep`.
     if (step.type === 'agent') {
-      return this.processWorkflowAgentRun(args);
+      return this.processWorkflowAgentRun(args, step);
     }
     if (step.type === 'tool') {
-      return this.processWorkflowToolRun(args);
+      return this.processWorkflowToolRun(args, step);
     }
     if (step.type === 'mapping') {
-      return this.processWorkflowMappingRun(args);
+      return this.processWorkflowMappingRun(args, step);
     }
 
     // Control structures (sleep / sleepUntil / parallel / conditional) already
@@ -1239,7 +1201,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     return this.runLeafStep({
       ...args,
       step: step as Extract<StepFlowEntry, { type: 'step' | 'loop' | 'foreach' }>,
-      entry: step,
     });
   }
 
@@ -1248,11 +1209,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    * default engine's `executeAgent`: resolve the agent, wrap it as a step keyed by
    * the entry's own id, and execute through the shared `runLeafStep`.
    */
-  protected async processWorkflowAgentRun(args: ProcessorArgs) {
-    const entry = getEntryAtPath(args.workflow.stepGraph, args.executionPath);
-    if (entry?.type !== 'agent') {
-      return this.runLeafStepFromMisroute(args, entry, 'agent');
-    }
+  protected async processWorkflowAgentRun(args: ProcessorArgs, entry: Extract<StepFlowEntry, { type: 'agent' }>) {
     const agent = entry.agent ?? this.mastra?.getAgent(entry.agentId);
     if (!agent) {
       throw new Error(
@@ -1260,18 +1217,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
     const step: Step = { ...createStepFromAgent(agent as any, entry.options), id: entry.id } as Step;
-    return this.runLeafStep({ ...args, step: { type: 'step', step }, entry });
+    return this.runLeafStep({ ...args, step: { type: 'step', step } });
   }
 
   /**
    * Build the runnable step for a declarative `tool` entry and run it. Mirrors the
    * default engine's `executeTool`.
    */
-  protected async processWorkflowToolRun(args: ProcessorArgs) {
-    const entry = getEntryAtPath(args.workflow.stepGraph, args.executionPath);
-    if (entry?.type !== 'tool') {
-      return this.runLeafStepFromMisroute(args, entry, 'tool');
-    }
+  protected async processWorkflowToolRun(args: ProcessorArgs, entry: Extract<StepFlowEntry, { type: 'tool' }>) {
     const tool = entry.tool ?? this.mastra?.getTool(entry.toolId);
     if (!tool) {
       throw new Error(
@@ -1279,74 +1232,27 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
     const step: Step = { ...createStepFromTool(tool as any, entry.options), id: entry.id } as Step;
-    return this.runLeafStep({ ...args, step: { type: 'step', step }, entry });
+    return this.runLeafStep({ ...args, step: { type: 'step', step } });
   }
 
   /**
    * Build the runnable step for a declarative `mapping` entry and run it. Mirrors the
    * default engine's `executeMapping`.
    */
-  protected async processWorkflowMappingRun(args: ProcessorArgs) {
-    const entry = getEntryAtPath(args.workflow.stepGraph, args.executionPath);
-    if (entry?.type !== 'mapping') {
-      return this.runLeafStepFromMisroute(args, entry, 'mapping');
-    }
+  protected async processWorkflowMappingRun(args: ProcessorArgs, entry: Extract<StepFlowEntry, { type: 'mapping' }>) {
     const step: Step = createMappingStep(entry.id, entry.mapConfig) as Step;
-    return this.runLeafStep({ ...args, step: { type: 'step', step }, entry });
-  }
-
-  /**
-   * A per-type run event whose target entry isn't of the expected type. This is
-   * only reachable if a typed run event is scheduled against the wrong entry (e.g.
-   * a graph mutation); surface it as a workflow error rather than running the wrong
-   * thing.
-   */
-  private async runLeafStepFromMisroute(args: ProcessorArgs, entry: StepFlowEntry | undefined, expected: string) {
-    const {
-      workflowId,
-      runId,
-      executionPath,
-      stepResults,
-      activeStepsPath,
-      resumeSteps,
-      prevResult,
-      resumeData,
-      parentWorkflow,
-      requestContext,
-    } = args;
-    return this.errorWorkflow(
-      {
-        workflowId,
-        runId,
-        executionPath,
-        stepResults,
-        activeStepsPath,
-        resumeSteps,
-        prevResult,
-        resumeData,
-        parentWorkflow,
-        requestContext,
-      },
-      new MastraError({
-        id: 'MASTRA_WORKFLOW',
-        text: `Expected a '${expected}' step at ${JSON.stringify(executionPath)} but found '${entry?.type ?? 'none'}'`,
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.SYSTEM,
-      }),
-    );
+    return this.runLeafStep({ ...args, step: { type: 'step', step } });
   }
 
   /**
    * Shared leaf-step runner. Executes a single concrete step - a plain `step`
    * entry, a `loop` / `foreach` body, or the step built by an agent / tool /
    * mapping handler - and emits its lifecycle events (`workflow.step.end`,
-   * retries, suspend, cancel). `entry` is the original graph entry, used to
-   * re-emit the correct per-type run event on retry.
+   * retries, suspend, cancel).
    */
   protected async runLeafStep(
     args: ProcessorArgs & {
       step: Extract<StepFlowEntry, { type: 'step' | 'loop' | 'foreach' }>;
-      entry: StepFlowEntry;
     },
   ) {
     const {
@@ -1368,7 +1274,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       outputOptions,
       forEachIndex,
       step,
-      entry,
     } = args;
     let requestContext = args.requestContext;
     const streamFormat = this.runFormats.get(runId);
@@ -1923,9 +1828,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       } else {
         return this.mastra.pubsub.publish('workflows', {
-          // Re-run the same entry on retry via its own per-type run event so the
-          // retry is interpreted the same way as the initial run.
-          type: stepRunEventType(entry),
+          type: 'workflow.step.run',
           runId,
           data: {
             parentWorkflow,
@@ -2907,9 +2810,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else {
       const nextExecutionPath = executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]);
       await this.mastra.pubsub.publish('workflows', {
-        // Schedule the next step with its own per-type run event so a declarative
-        // agent/tool/mapping step is interpreted explicitly by its handler.
-        type: stepRunEventType(getEntryAtPath(workflow.stepGraph, nextExecutionPath)),
+        type: 'workflow.step.run',
         runId,
         data: {
           workflowId,
@@ -3201,24 +3102,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         break;
       case 'workflow.step.run':
         await this.processWorkflowStepRun({
-          workflow: workflowArg,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.agent.run':
-        await this.processWorkflowAgentRun({
-          workflow: workflowArg,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.tool.run':
-        await this.processWorkflowToolRun({
-          workflow: workflowArg,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.mapping.run':
-        await this.processWorkflowMappingRun({
           workflow: workflowArg,
           ...workflowData,
         });
