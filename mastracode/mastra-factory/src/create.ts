@@ -106,6 +106,7 @@ export async function create(args: CreateArgs): Promise<void> {
   installSpinner.start(`Installing dependencies...`);
   try {
     await x(packageManager, getInstallArgs(packageManager), {
+      throwOnError: true,
       nodeOptions: { cwd: projectPath },
     });
     installSpinner.stop('Dependencies installed.');
@@ -154,9 +155,10 @@ export async function create(args: CreateArgs): Promise<void> {
   }
   if (gitignoreOk) {
     try {
-      await x('git', ['init', '-q'], { nodeOptions: { cwd: projectPath } });
-      await x('git', ['add', '-A'], { nodeOptions: { cwd: projectPath } });
+      await x('git', ['init', '-q'], { throwOnError: true, nodeOptions: { cwd: projectPath } });
+      await x('git', ['add', '-A'], { throwOnError: true, nodeOptions: { cwd: projectPath } });
       await x('git', ['commit', '-q', '-m', 'Initial commit from create-factory'], {
+        throwOnError: true,
         nodeOptions: { cwd: projectPath },
       });
     } catch {

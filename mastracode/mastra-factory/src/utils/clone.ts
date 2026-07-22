@@ -49,6 +49,7 @@ export async function cloneTemplate(repoUrl: string, targetPath: string): Promis
     try {
       const degitRepo = repoUrl.replace('https://github.com/', '');
       await x('npx', ['degit', degitRepo, tempTarget], {
+        throwOnError: true,
         nodeOptions: { cwd: process.cwd() },
       });
 
@@ -60,6 +61,7 @@ export async function cloneTemplate(repoUrl: string, targetPath: string): Promis
 
       try {
         await x('git', ['clone', repoUrl, tempTarget], {
+          throwOnError: true,
           nodeOptions: { cwd: process.cwd() },
         });
 

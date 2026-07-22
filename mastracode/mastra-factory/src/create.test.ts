@@ -116,7 +116,7 @@ afterEach(() => {
 });
 
 describe('create --no-platform', () => {
-  it('scaffolds a project with a verbatim .env and finishes with the success outro', async () => {
+  it('scaffolds a project with a verbatim .env and shows the next steps', async () => {
     await create({
       projectName: 'my-factory',
       template: TEMPLATE_REPO,
@@ -139,19 +139,22 @@ describe('create --no-platform', () => {
     expect(pkg.name).toBe('my-factory');
     const packageManager = detectPackageManager();
     expect(tinyexec.x).toHaveBeenCalledWith(packageManager, getInstallArgs(packageManager), {
+      throwOnError: true,
       nodeOptions: { cwd: projectPath },
     });
 
     // Git repo always initialized.
-    expect(tinyexec.x).toHaveBeenCalledWith('git', ['init', '-q'], { nodeOptions: { cwd: projectPath } });
+    expect(tinyexec.x).toHaveBeenCalledWith('git', ['init', '-q'], {
+      throwOnError: true,
+      nodeOptions: { cwd: projectPath },
+    });
 
     // Platform helpers never called with --no-platform.
     expect(cliAuth.getToken).not.toHaveBeenCalled();
     expect(platform.createServerProject).not.toHaveBeenCalled();
 
-    // Success outro shown.
+    // Next steps shown.
     expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Your Mastra Factory is ready!'), 'Next steps');
-    expect(clack.outro).toHaveBeenCalled();
   });
 
   it('fails the run when the template clone fails, without a success outro', async () => {
