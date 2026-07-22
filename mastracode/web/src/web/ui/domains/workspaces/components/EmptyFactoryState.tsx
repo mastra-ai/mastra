@@ -6,7 +6,7 @@ import {
   useLinkRepositoryMutation,
   useLoadFactories,
 } from '../../../../../shared/hooks/useFactories';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
+import { factoryBasePath } from '../../../../../shared/hooks/useFactoryBasePath';
 import { connectLinear } from '../../factory/services/linear';
 import { saveFactories } from '../services/factories';
 import type { Factory, ServerFactory } from '../services/factories';
@@ -33,14 +33,12 @@ function errorMessage(error: unknown): string {
 
 export function EmptyFactoryState() {
   const { baseUrl } = useApiConfig();
-  const { selectFactory } = useActiveFactoryContext();
   const persistedFactories = useLoadFactories();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
   const [step, setStep] = useState<Step>(storedStep);
   const [pendingFactory, setPendingFactory] = useState<Factory | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
-  const [completionError, setCompletionError] = useState<string | null>(null);
   const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | null>(null);
   const [githubRedirecting, setGithubRedirecting] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -103,18 +101,14 @@ export function EmptyFactoryState() {
     }
   };
 
-  const finish = async () => {
-    setCompletionError(null);
+  // Navigating to the factory URL is what activates it; repository
+  // materialization runs as an effect keyed on the :factoryId param.
+  const finish = () => {
+    if (!pendingFactory) return;
     setFinishing(true);
-    try {
-      await selectFactory(pendingFactory);
-      sessionStorage.removeItem(STEP_KEY);
-      sessionStorage.removeItem(FACTORY_KEY);
-      void navigate('/factory/work');
-    } catch (error) {
-      setCompletionError(errorMessage(error));
-      setFinishing(false);
-    }
+    sessionStorage.removeItem(STEP_KEY);
+    sessionStorage.removeItem(FACTORY_KEY);
+    void navigate(`${factoryBasePath(pendingFactory.id).base}/work`);
   };
 
   return (
@@ -157,7 +151,7 @@ export function EmptyFactoryState() {
             )}
             {step === 'project-management' && (
               <ProjectManagementFactoryStep
-                completionError={completionError}
+                completionError={null}
                 finishing={finishing}
                 onConnect={() => {
                   persistBeforeRedirect('project-management');

@@ -13,16 +13,15 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
-import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../domains/chat/context/ChatSessionTestProvider';
+import { FactoryRouteHarness, LocationProbe } from '../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { redirectToLogout } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
 import type { Factory } from '../domains/workspaces';
-import { ActiveFactoryProvider } from '../domains/workspaces';
 import { SettingsNavigationProvider } from '../domains/settings/context/SettingsNavigationProvider';
 import { OverlaysProvider } from '../lib/overlays';
 import { Sidebar } from '../Sidebar';
@@ -107,7 +106,7 @@ afterEach(() => {
 
 function seedFactory(active: Factory = project, projects: Factory[] = [active]) {
   localStorage.setItem('mastracode-factories', JSON.stringify(projects));
-  localStorage.setItem('mastracode-active-factory', active.id);
+  return active;
 }
 
 function useGithubStatusHandler() {
@@ -205,28 +204,21 @@ function useAgentControllerHandlers(): CapturedRequests {
   return captured;
 }
 
-function LocationProbe() {
-  const location = useLocation();
-  return <span data-testid="location">{location.pathname}</span>;
-}
-
-function renderSidebar() {
+function renderSidebar(active: Factory = project) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/chat']}>
+    <FactoryRouteHarness factoryId={active.id}>
       <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
-        <ActiveFactoryProvider>
-          <ChatSessionProvider>
-            <OverlaysProvider>
-              <SettingsNavigationProvider>
-                <Sidebar />
-                <LocationProbe />
-              </SettingsNavigationProvider>
-            </OverlaysProvider>
-          </ChatSessionProvider>
-        </ActiveFactoryProvider>
+        <ChatSessionProvider>
+          <OverlaysProvider>
+            <SettingsNavigationProvider>
+              <Sidebar />
+              <LocationProbe />
+            </SettingsNavigationProvider>
+          </OverlaysProvider>
+        </ChatSessionProvider>
         <Toaster position="bottom-right" />
       </MainSidebarProvider>
-    </MemoryRouter>,
+    </FactoryRouteHarness>,
   );
 }
 
@@ -375,7 +367,9 @@ describe('Sidebar', () => {
 
       await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
 
-      await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBe(secondLocalProject.id));
+      await waitFor(() =>
+        expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${secondLocalProject.id}`),
+      );
       expect(await screen.findByText('Beta')).toBeInTheDocument();
     });
   });
@@ -386,7 +380,7 @@ describe('Sidebar', () => {
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
-      renderSidebar();
+      renderSidebar(githubProject);
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
       const workSessions = within(factory).getByRole('region', { name: 'Work Sessions' });
@@ -406,7 +400,7 @@ describe('Sidebar', () => {
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
-      renderSidebar();
+      renderSidebar(githubProject);
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
       expect(within(factory).queryByRole('region', { name: 'Work Sessions' })).not.toBeInTheDocument();
@@ -418,7 +412,7 @@ describe('Sidebar', () => {
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
-      renderSidebar();
+      renderSidebar(githubProject);
 
       expect(await screen.findByRole('region', { name: 'User sessions' })).toBeInTheDocument();
       // Each worktree holds a single conversation, so GitHub projects have no

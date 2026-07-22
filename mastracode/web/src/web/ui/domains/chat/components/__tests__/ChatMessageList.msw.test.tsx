@@ -9,14 +9,13 @@ import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
+import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider } from '../../../workspaces';
 import { ChatMessageList } from '../ChatMessageList';
 import { TaskPanel } from '../TaskPanel';
 
@@ -38,7 +37,6 @@ function seedProject() {
     createdAt: 1,
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -90,21 +88,12 @@ function renderMessageList() {
   // Mounted on the thread's own page: /chat is the draft composer and hides
   // the bound thread's transcript.
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
-      <Routes>
-        <Route
-          path="/threads/:threadId"
-          element={
-            <ActiveFactoryProvider>
-              <ChatSessionProvider threadId={THREAD_ID}>
-                <ChatMessageList />
-                <TaskPanel />
-              </ChatSessionProvider>
-            </ActiveFactoryProvider>
-          }
-        />
-      </Routes>
-    </MemoryRouter>,
+    <FactoryRouteHarness factoryId="project-test" routePath="threads/:threadId" initialSuffix={`/threads/${THREAD_ID}`}>
+      <ChatSessionProvider threadId={THREAD_ID}>
+        <ChatMessageList />
+        <TaskPanel />
+      </ChatSessionProvider>
+    </FactoryRouteHarness>,
   );
 }
 

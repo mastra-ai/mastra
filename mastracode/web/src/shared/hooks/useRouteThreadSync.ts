@@ -10,6 +10,7 @@ import { createAgentControllerClient } from '../../web/ui/domains/chat/services/
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
 import { useSwitchAgentControllerThreadMutation } from './useAgentControllerThreadMutations';
 import { useAgentControllerThreads } from './useAgentControllerThreads';
+import { useFactoryBasePath } from './useFactoryBasePath';
 
 export function useRouteThreadSync() {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
@@ -30,6 +31,7 @@ export function useRouteThreadSync() {
     enabled: sessionEnabled,
   });
   const navigate = useNavigate();
+  const basePath = useFactoryBasePath();
   const queryClient = useQueryClient();
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -67,14 +69,14 @@ export function useRouteThreadSync() {
             })
           : Promise.resolve();
         void warm.finally(() => {
-          if (isLatestRequest()) void navigate(`/threads/${latest.id}`, { replace: true });
+          if (isLatestRequest()) void navigate(basePath.thread(latest.id), { replace: true });
         });
         return;
       }
 
       const message = `Failed to switch thread: thread ${targetThreadId} was not found`;
       pushNotice(message, 'error');
-      void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
+      void navigate(basePath.newThread(), { replace: true, state: { routeErrorNotice: message } });
       return;
     }
 
@@ -82,7 +84,7 @@ export function useRouteThreadSync() {
       if (!isLatestRequest()) return;
       const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
       pushNotice(message, 'error');
-      void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
+      void navigate(basePath.newThread(), { replace: true, state: { routeErrorNotice: message } });
     });
   });
 

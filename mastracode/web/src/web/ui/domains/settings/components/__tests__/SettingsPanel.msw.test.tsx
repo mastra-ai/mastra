@@ -9,10 +9,10 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../../chat/context/ChatSessionTestProvider';
+import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider } from '../../../workspaces';
 import { OverlaysProvider } from '../../../../lib/overlays';
 import { SettingsPanel } from '../../index';
 import { loadDoneSound, playDoneSound } from '../../services/doneSound';
@@ -171,7 +171,6 @@ function useAgentControllerHandlers(): CapturedRequests {
 
 function seedFactory() {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function ThemeProbe() {
@@ -199,7 +198,7 @@ function SettingsSectionControls() {
 function Harness({ children }: { children: ReactNode }) {
   return (
     <MainSidebarProvider storageKey="settings-panel-test" mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
+      <FactoryRouteHarness factoryId={project.id} initialSuffix={`/threads/${THREAD_ID}`}>
         <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
           <OverlaysProvider>
             <SettingsNavigationProvider>
@@ -210,7 +209,7 @@ function Harness({ children }: { children: ReactNode }) {
             </SettingsNavigationProvider>
           </OverlaysProvider>
         </ChatSessionProvider>
-      </ActiveFactoryProvider>
+      </FactoryRouteHarness>
     </MainSidebarProvider>
   );
 }
@@ -282,10 +281,9 @@ describe('SettingsPanel', () => {
 
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
-      await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBeNull());
+      await waitFor(() => expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]));
       await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
       await screen.findByText('Select a factory to manage its source control.');
-      expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]);
     });
 
     it('keeps the factory visible and reports storage failures', async () => {

@@ -19,6 +19,7 @@ import {
   useRenameAgentControllerThreadMutation,
 } from '../../../../../shared/hooks/useAgentControllerThreadMutations';
 import { useAgentControllerThreads } from '../../../../../shared/hooks/useAgentControllerThreads';
+import { useFactoryBasePath } from '../../../../../shared/hooks/useFactoryBasePath';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 export function ThreadList() {
@@ -93,6 +94,7 @@ function useThreadHookArgs() {
 function ThreadListHeader({ threadCount }: { threadCount: number }) {
   const overlays = useOverlays();
   const navigate = useNavigate();
+  const basePath = useFactoryBasePath();
 
   return (
     <div className="flex items-center justify-between px-1">
@@ -110,7 +112,7 @@ function ThreadListHeader({ threadCount }: { threadCount: number }) {
         aria-label="New thread"
         onClick={() => {
           overlays.close('sidebar');
-          void navigate('/new');
+          void navigate(basePath.newThread());
         }}
       >
         <Plus size={15} />
@@ -165,27 +167,28 @@ function ThreadRow({
   const hookArgs = useThreadHookArgs();
   const overlays = useOverlays();
   const navigate = useNavigate();
+  const basePath = useFactoryBasePath();
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
 
   const deleteThreadMutation = useDeleteAgentControllerThreadMutation(hookArgs);
   const cloneThreadMutation = useCloneAgentControllerThreadMutation(hookArgs);
 
   const openThread = () => {
-    void navigate(`/threads/${thread.id}`);
+    void navigate(basePath.thread(thread.id));
     overlays.close('sidebar');
   };
 
   const cloneThread = async () => {
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
     toast.success('Thread cloned');
-    void navigate(`/threads/${clonedThread.id}`);
+    void navigate(basePath.thread(clonedThread.id));
   };
 
   const deleteThread = async () => {
     await deleteThreadMutation.mutateAsync(thread.id);
     toast('Thread deleted');
     if (thread.id === routeThreadId) {
-      void navigate('/new');
+      void navigate(basePath.newThread());
     }
   };
 

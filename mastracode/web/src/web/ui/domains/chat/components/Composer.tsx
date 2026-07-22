@@ -14,6 +14,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
+import { useFactoryBasePath } from '../../../../../shared/hooks/useFactoryBasePath';
+
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatConnection } from '../context/useChatConnection';
@@ -78,6 +80,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { kind, resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const location = useLocation();
   const navigate = useNavigate();
+  const basePath = useFactoryBasePath();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
   const { busy, localUser, reset } = useChatTranscript();
@@ -209,12 +212,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const send = async (text: string, files: PendingImage[]) => {
     if (!text.trim() && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
-    if (location.pathname === '/new') {
+    if (location.pathname.endsWith('/new')) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
       await sendMutation.mutateAsync({ text, files: outgoing });
       seedThreadMessageCache(threadId, text, files);
-      void navigate(`/threads/${threadId}`, { replace: true });
+      void navigate(basePath.thread(threadId), { replace: true });
       return;
     }
     localUser(text, false, outgoing);

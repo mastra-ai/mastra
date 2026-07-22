@@ -11,15 +11,15 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
+import { FactoryRouteHarness, LocationProbe } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider } from '../../../workspaces';
+import { loadFactories } from '../../../workspaces/services/factories';
 import { ThreadList } from '../ThreadList';
 
 const RESOURCE_ID = 'res-alpha';
@@ -74,7 +74,6 @@ afterEach(() => {
 
 function seedFactory(seeded: Factory = project) {
   localStorage.setItem('mastracode-factories', JSON.stringify([seeded]));
-  localStorage.setItem('mastracode-active-factory', seeded.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -160,25 +159,20 @@ function SidebarOverlayProbe() {
   );
 }
 
-function LocationProbe() {
-  const location = useLocation();
-  return <span data-testid="location">{location.pathname}</span>;
-}
-
 function renderThreadList() {
+  // Unseeded specs mount at a factory URL that resolves to no factory.
+  const factoryId = loadFactories()[0]?.id ?? 'missing-factory';
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/chat']}>
-      <ActiveFactoryProvider>
-        <ChatSessionProvider>
-          <OverlaysProvider>
-            <ThreadList />
-            <SidebarOverlayProbe />
-            <LocationProbe />
-          </OverlaysProvider>
-        </ChatSessionProvider>
-      </ActiveFactoryProvider>
+    <FactoryRouteHarness factoryId={factoryId}>
+      <ChatSessionProvider>
+        <OverlaysProvider>
+          <ThreadList />
+          <SidebarOverlayProbe />
+          <LocationProbe />
+        </OverlaysProvider>
+      </ChatSessionProvider>
       <Toaster position="bottom-right" />
-    </MemoryRouter>,
+    </FactoryRouteHarness>,
   );
 }
 

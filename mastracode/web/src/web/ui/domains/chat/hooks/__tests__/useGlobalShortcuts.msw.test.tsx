@@ -14,12 +14,12 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
+import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { OverlayName } from '../../../../lib/overlays';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider } from '../../../workspaces';
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { useGlobalShortcuts } from '../useGlobalShortcuts';
@@ -47,7 +47,6 @@ function seedFactory() {
     },
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sse(events: AgentControllerEvent[] = []): Response {
@@ -114,13 +113,13 @@ function Probe() {
 function renderProbe(threadId?: string) {
   return renderWithProviders(
     <MainSidebarProvider storageKey="global-shortcuts-test" mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
+      <FactoryRouteHarness factoryId="project-test" initialSuffix={threadId ? `/threads/${threadId}` : '/new'}>
         <ChatSessionProvider threadId={threadId}>
           <OverlaysProvider>
             <Probe />
           </OverlaysProvider>
         </ChatSessionProvider>
-      </ActiveFactoryProvider>
+      </FactoryRouteHarness>
     </MainSidebarProvider>,
   );
 }

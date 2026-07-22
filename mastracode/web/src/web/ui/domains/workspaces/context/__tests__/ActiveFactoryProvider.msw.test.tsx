@@ -1,23 +1,26 @@
 /**
  * BDD coverage for `ActiveFactoryProvider` (`domains/workspaces/context`).
  *
- * The provider exposes the existing `useActiveFactory()` hook through context
- * so factory selection is consumed via `useActiveFactoryContext()` instead of
- * being prop-drilled from the chat composition root. Server factories with a
- * selected repository are materialized into their cloud sandbox on selection
+ * The provider exposes the existing `useActiveFactory()` hook through context.
+ * The active factory is resolved from the `/factories/:factoryId` URL param —
+ * the URL is the single source of truth (nothing is persisted in storage) and
+ * `selectFactory` navigates. Server factories with a selected repository are
+ * materialized into their cloud sandbox by an effect reacting to the param
  * (the `/ensure` SSE route); only the network is mocked (MSW).
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { FactoryRouteHarness, LocationProbe } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import type { MaterializeResult } from '../../services/github';
 import { isServerFactory, loadFactories, selectedRepository } from '../../services/factories';
 import type { Factory, LocalFactory, ServerFactory } from '../../services/factories';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../ActiveFactoryProvider';
+import { ActiveFactoryLayout, useActiveFactoryContext } from '../ActiveFactoryProvider';
 
 const LOCAL_FACTORY: LocalFactory = {
   id: 'factory-test',
@@ -63,9 +66,8 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedFactory(factory: Factory = LOCAL_FACTORY, active = true) {
-  localStorage.setItem('mastracode-factories', JSON.stringify([factory]));
-  if (active) localStorage.setItem('mastracode-active-factory', factory.id);
+function seedFactories(factories: Factory[]) {
+  localStorage.setItem('mastracode-factories', JSON.stringify(factories));
 }
 
 function Probe({ selectTarget }: { selectTarget?: Factory }) {
@@ -87,18 +89,19 @@ function Probe({ selectTarget }: { selectTarget?: Factory }) {
   );
 }
 
-function renderProbe(selectTarget?: Factory) {
+function renderProbe(options: { factoryId: string; initialSuffix?: string; selectTarget?: Factory }) {
   return renderWithProviders(
-    <ActiveFactoryProvider>
-      <Probe selectTarget={selectTarget} />
-    </ActiveFactoryProvider>,
+    <FactoryRouteHarness factoryId={options.factoryId} initialSuffix={options.initialSuffix}>
+      <Probe selectTarget={options.selectTarget} />
+      <LocationProbe />
+    </FactoryRouteHarness>,
   );
 }
 
 describe('ActiveFactoryProvider', () => {
-  it('given a seeded active factory, then it exposes the factories and active selection', async () => {
-    seedFactory();
-    renderProbe();
+  it('given a seeded factory, when its URL param is visited, then it exposes the factories and active selection', async () => {
+    seedFactories([LOCAL_FACTORY]);
+    renderProbe({ factoryId: LOCAL_FACTORY.id });
 
     await waitFor(() => expect(screen.getByTestId('active-factory')).toHaveTextContent('MastraCode Test'));
     expect(screen.getByTestId('factory-count')).toHaveTextContent('1');
@@ -107,27 +110,75 @@ describe('ActiveFactoryProvider', () => {
     expect(screen.getByTestId('session-enabled')).toHaveTextContent('yes');
     // `activeFactory` is the canonical field; the redundant id field is gone.
     expect(screen.getByTestId('has-legacy-id-field')).toHaveTextContent('no');
+    // Nothing is persisted — the URL is the source of truth.
+    expect(localStorage.getItem('mastracode-active-factory')).toBeNull();
   });
 
-  it('given an active factory, when selectFactory(null) is called, then the selection clears', async () => {
-    seedFactory();
-    renderProbe();
+  it('given a URL param that matches no factory, then no factory is active', async () => {
+    seedFactories([LOCAL_FACTORY]);
+    renderProbe({ factoryId: 'factory-unknown' });
+
+    await waitFor(() => expect(screen.getByTestId('factory-count')).toHaveTextContent('1'));
+    expect(screen.getByTestId('active-factory')).toHaveTextContent('(none)');
+    expect(screen.getByTestId('session-enabled')).toHaveTextContent('no');
+  });
+
+  it('given an active factory, when selectFactory(null) is called, then it navigates out of the factory scope', async () => {
+    seedFactories([LOCAL_FACTORY]);
+    renderProbe({ factoryId: LOCAL_FACTORY.id });
 
     await waitFor(() => expect(screen.getByTestId('active-factory')).toHaveTextContent('MastraCode Test'));
     await userEvent.click(screen.getByRole('button', { name: 'clear selection' }));
 
-    expect(screen.getByTestId('active-factory')).toHaveTextContent('(none)');
-    expect(screen.getByTestId('active-factory-id')).toHaveTextContent('(none)');
-    expect(screen.getByTestId('session-enabled')).toHaveTextContent('no');
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/'));
+  });
+
+  it('given two factories, when selecting the other from a shared sub-page, then it navigates to that factory preserving the sub-page', async () => {
+    seedFactories([LOCAL_FACTORY, SERVER_FACTORY]);
+    server.use(http.post(ENSURE_URL, () => sseResponse(sseFrame('done', materialized))));
+    renderProbe({ factoryId: LOCAL_FACTORY.id, initialSuffix: '/work', selectTarget: SERVER_FACTORY });
+
+    await waitFor(() => expect(screen.getByTestId('active-factory')).toHaveTextContent('MastraCode Test'));
+    await userEvent.click(screen.getByRole('button', { name: 'select target' }));
+
+    await waitFor(() => expect(screen.getByTestId('active-factory')).toHaveTextContent('octo/hello'));
+    expect(screen.getByTestId('location')).toHaveTextContent('/factories/factory-server/work');
+  });
+
+  it('given a thread sub-page, when selecting another factory, then it falls back to the draft composer', async () => {
+    seedFactories([SERVER_FACTORY, LOCAL_FACTORY]);
+    server.use(http.post(ENSURE_URL, () => sseResponse(sseFrame('done', materialized))));
+    renderProbe({ factoryId: SERVER_FACTORY.id, initialSuffix: '/threads/thread-1', selectTarget: LOCAL_FACTORY });
+
+    await waitFor(() => expect(screen.getByTestId('active-factory')).toHaveTextContent('octo/hello'));
+    await userEvent.click(screen.getByRole('button', { name: 'select target' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/factories/factory-test/new'));
   });
 
   it('given no provider, when useActiveFactoryContext is called, then it throws a descriptive error', () => {
     expect(() => render(<Probe />)).toThrow('useActiveFactoryContext must be used within an ActiveFactoryProvider');
   });
 
+  describe('ActiveFactoryLayout', () => {
+    it('given an unknown :factoryId, once factories hydrate, then it redirects to /', async () => {
+      seedFactories([LOCAL_FACTORY]);
+      renderWithProviders(
+        <MemoryRouter initialEntries={['/factories/factory-unknown/work']}>
+          <Routes>
+            <Route path="/factories/:factoryId/*" element={<ActiveFactoryLayout />} />
+            <Route path="*" element={<LocationProbe />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/'));
+    });
+  });
+
   describe('server factories', () => {
-    it('given a factory with a linked repository, when selected, then it is materialized via /ensure with live progress and activated with the server resourceId', async () => {
-      seedFactory(SERVER_FACTORY, false);
+    it('given a factory with a linked repository, when its URL is visited, then it is materialized via /ensure with live progress and activated with the server resourceId', async () => {
+      seedFactories([SERVER_FACTORY]);
       let release!: () => void;
       const gate = new Promise<void>(resolve => (release = resolve));
       server.use(
@@ -138,18 +189,16 @@ describe('ActiveFactoryProvider', () => {
           );
         }),
       );
-      renderProbe(SERVER_FACTORY);
+      renderProbe({ factoryId: SERVER_FACTORY.id });
 
-      await waitFor(() => expect(screen.getByTestId('factory-count')).toHaveTextContent('1'));
-      await userEvent.click(screen.getByRole('button', { name: 'select target' }));
-
-      // Preparation feedback is exposed while the server works.
+      // Preparation feedback is exposed while the server works; the factory is
+      // already active (resolved from the URL) against its project resource.
       await waitFor(() => expect(screen.getByTestId('preparing')).not.toHaveTextContent('(idle)'));
-      expect(screen.getByTestId('active-factory')).toHaveTextContent('(none)');
+      expect(screen.getByTestId('active-factory')).toHaveTextContent('octo/hello');
+      expect(screen.getByTestId('resource-id')).toHaveTextContent('fp-1');
       release();
 
-      await waitFor(() => expect(screen.getByTestId('active-factory')).toHaveTextContent('octo/hello'));
-      expect(screen.getByTestId('resource-id')).toHaveTextContent('resource-gh');
+      await waitFor(() => expect(screen.getByTestId('resource-id')).toHaveTextContent('resource-gh'));
       expect(screen.getByTestId('session-enabled')).toHaveTextContent('yes');
       expect(screen.getByTestId('preparing')).toHaveTextContent('(idle)');
 
@@ -167,16 +216,13 @@ describe('ActiveFactoryProvider', () => {
       expect(stored.id).not.toBe(stored.binding.factoryProjectId);
     });
 
-    it('given a factory without linked repositories, when selected, then it activates against the factory project resource without materialization', async () => {
+    it('given a factory without linked repositories, when its URL is visited, then it activates against the factory project resource without materialization', async () => {
       const emptyFactory: ServerFactory = {
         ...SERVER_FACTORY,
         binding: { kind: 'factory', factoryProjectId: 'fp-1', repositories: [] },
       };
-      seedFactory(emptyFactory, false);
-      renderProbe(emptyFactory);
-
-      await waitFor(() => expect(screen.getByTestId('factory-count')).toHaveTextContent('1'));
-      await userEvent.click(screen.getByRole('button', { name: 'select target' }));
+      seedFactories([emptyFactory]);
+      renderProbe({ factoryId: emptyFactory.id });
 
       await waitFor(() => expect(screen.getByTestId('active-factory')).toHaveTextContent('octo/hello'));
       // Chat scopes to the factory project itself until a repository is linked.
@@ -185,23 +231,20 @@ describe('ActiveFactoryProvider', () => {
       expect(screen.getByTestId('preparing')).toHaveTextContent('(idle)');
     });
 
-    it('given a materialization failure, when selected, then the previous selection stays put and the error is exposed', async () => {
-      localStorage.setItem('mastracode-factories', JSON.stringify([LOCAL_FACTORY, SERVER_FACTORY]));
-      localStorage.setItem('mastracode-active-factory', LOCAL_FACTORY.id);
-
+    it('given a materialization failure, then the URL stays put and the error is exposed', async () => {
+      seedFactories([LOCAL_FACTORY, SERVER_FACTORY]);
       server.use(
         http.post(ENSURE_URL, () =>
           HttpResponse.json({ error: 'Sandbox unavailable', code: 'sandbox_error' }, { status: 503 }),
         ),
       );
-      renderProbe(SERVER_FACTORY);
-
-      await waitFor(() => expect(screen.getByTestId('active-factory')).toHaveTextContent('MastraCode Test'));
-      await userEvent.click(screen.getByRole('button', { name: 'select target' }));
+      renderProbe({ factoryId: SERVER_FACTORY.id });
 
       await waitFor(() => expect(screen.getByTestId('prepare-error')).not.toHaveTextContent('(none)'));
-      expect(screen.getByTestId('active-factory')).toHaveTextContent('MastraCode Test');
-      expect(screen.getByTestId('session-enabled')).toHaveTextContent('yes');
+      // The factory stays active (URL is the source of truth); the page can
+      // surface the error while chat scopes to the factory project resource.
+      expect(screen.getByTestId('active-factory')).toHaveTextContent('octo/hello');
+      expect(screen.getByTestId('resource-id')).toHaveTextContent('fp-1');
       expect(loadFactories().find(factory => factory.id === 'factory-server')?.resourceId).toBeUndefined();
     });
   });

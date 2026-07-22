@@ -14,7 +14,6 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
-import { ChatPermissionsProvider } from './ChatPermissionsProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatSessionContext } from './useChatSessionContext';
@@ -54,7 +53,6 @@ export function ChatSessionConfigProvider({
         projectPath: userSession?.worktree.worktreePath,
         baseUrl,
         kind: 'user' as const,
-        threadBasePath: '/user/threads' as const,
       }
     : {
         resourceId,
@@ -71,7 +69,6 @@ export function ChatSessionConfigProvider({
             : undefined,
         baseUrl,
         kind: serverFactory ? ('factory' as const) : ('user' as const),
-        threadBasePath: '/threads' as const,
       };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;

@@ -10,9 +10,9 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
-import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
 import type { Factory } from '../../services/factories';
 import { FactorySwitcher } from '../FactorySwitcher';
 
@@ -29,12 +29,16 @@ const PROJECT: Factory = {
 
 afterEach(() => {
   localStorage.clear();
+  activeFactoryId = 'factory-missing';
   vi.restoreAllMocks();
 });
 
+/** The factory id the next render mounts at (`/factories/<id>`). */
+let activeFactoryId = 'factory-missing';
+
 function seedFactory(project: Factory = PROJECT) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
+  activeFactoryId = project.id;
 }
 
 function StateProbe() {
@@ -52,12 +56,12 @@ function StateProbe() {
 function renderSwitcher() {
   return renderWithProviders(
     <MainSidebarProvider storageKey="factory-switcher-test" mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
+      <FactoryRouteHarness factoryId={activeFactoryId}>
         <OverlaysProvider>
           <FactorySwitcher />
           <StateProbe />
         </OverlaysProvider>
-      </ActiveFactoryProvider>
+      </FactoryRouteHarness>
     </MainSidebarProvider>,
   );
 }

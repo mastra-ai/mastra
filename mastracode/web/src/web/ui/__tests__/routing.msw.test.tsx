@@ -5,6 +5,10 @@
  * the `useWebAuth` React Query hook) through a memory router with MSW stubbing
  * `/auth/me` and the agent-controller API, mirroring how the browser entry
  * wires `createBrowserRouter`.
+ *
+ * The active factory is resolved from the `/factories/:factoryId` URL param;
+ * legacy pre-param paths (`/new`, `/threads/:id`, `/factory/*`) redirect to the
+ * first factory.
  */
 import type { AgentControllerSessionState } from '@mastra/client-js';
 import { QueryClient } from '@tanstack/react-query';
@@ -33,16 +37,17 @@ const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
+const LOCAL_FACTORY_ID = 'project-test';
 
 afterEach(() => {
   localStorage.clear();
   vi.mocked(redirectToLogin).mockClear();
 });
 
-function seedFactories(projects?: Factory[], activeFactoryId?: string) {
+function seedFactories(projects?: Factory[]) {
   const selectedProjects: Factory[] = projects ?? [
     {
-      id: 'project-test',
+      id: LOCAL_FACTORY_ID,
       name: 'MastraCode Test',
       resourceId: RESOURCE_ID,
       createdAt: 1,
@@ -53,7 +58,6 @@ function seedFactories(projects?: Factory[], activeFactoryId?: string) {
     },
   ];
   localStorage.setItem('mastracode-factories', JSON.stringify(selectedProjects));
-  if (activeFactoryId) localStorage.setItem('mastracode-active-factory', activeFactoryId);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -100,36 +104,39 @@ const UNAUTHENTICATED = () => HttpResponse.json({ authenticated: false, user: nu
 const AUTHENTICATED = () =>
   HttpResponse.json({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } });
 
+const GITHUB_PROJECT: Factory = {
+  id: 'github-project',
+  name: 'mastra-ai/mastra',
+  resourceId: RESOURCE_ID,
+  createdAt: 1,
+  binding: {
+    kind: 'factory',
+    factoryProjectId: 'github-project-id',
+    repositories: [],
+  },
+};
+
 function renderRoutes(
   initialEntry: string,
   authMe: () => Response | Promise<Response>,
   options?: {
     project?: Factory;
     projects?: Factory[];
-    activeFactoryId?: string;
     withFactory?: boolean;
     workItemCount?: number;
-    workItemsReady?: Promise<void>;
-    workItemsError?: boolean;
   },
 ) {
   if (options?.withFactory !== false) {
     const projects = options?.projects ?? (options?.project ? [options.project] : undefined);
-    const activeFactoryId = options?.activeFactoryId ?? projects?.[0]?.id ?? 'project-test';
-    seedFactories(projects, activeFactoryId);
+    seedFactories(projects);
   }
   useAgentControllerHandlers();
   server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
   if (options?.project?.binding.kind === 'factory') {
     const workItems = Array.from({ length: options.workItemCount ?? 0 }, (_, index) => ({ id: `work-${index}` }));
     server.use(
-      http.get(
-        `${TEST_BASE_URL}/web/factory/projects/${options.project.binding.factoryProjectId}/work-items`,
-        async () => {
-          await options.workItemsReady;
-          if (options.workItemsError) return HttpResponse.json({ error: 'Factory unavailable' }, { status: 500 });
-          return HttpResponse.json({ workItems });
-        },
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${options.project.binding.factoryProjectId}/work-items`, () =>
+        HttpResponse.json({ workItems }),
       ),
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
         HttpResponse.json({ enabled: true, connected: false, installations: [] }),
@@ -160,71 +167,58 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument();
   });
 
-  it('given auth is disabled, when visiting /new, then the chat UI renders without auth affordances', async () => {
+  it('given auth is disabled, when visiting legacy /new, then it redirects to the first factory and chat renders', async () => {
     const { router } = renderRoutes('/new', AUTH_DISABLED);
 
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/new`);
     expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
-    await expectPathname(router, '/new');
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
-  it('given no factory, when visiting /new, then the first-run welcome screen is shown', async () => {
-    renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
+  it('given no factory, when visiting /new, then the first-run onboarding screen is shown', async () => {
+    const { router } = renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
 
-    expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create factory from local folder' })).toBeInTheDocument();
+    await expectPathname(router, '/onboarding');
+    expect(
+      await screen.findByRole('heading', { name: 'Build software with a Factory that knows your work.' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create my first factory' })).toBeInTheDocument();
   });
 
-  it('given no factory, when local factory creation is opened, then the creation panel replaces the welcome screen', async () => {
+  it('given no factory, when continuing from the onboarding intro, then the repository step replaces it', async () => {
     const user = userEvent.setup();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+      ),
+    );
     renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
 
-    await user.click(await screen.findByRole('button', { name: 'Create factory from local folder' }));
+    await user.click(await screen.findByRole('button', { name: 'Create my first factory' }));
 
-    const creationPanel = await screen.findByRole('region', { name: 'Create Factory' });
-    expect(within(creationPanel).getByRole('button', { name: 'Bind a local folder instead' })).toBeInTheDocument();
-    expect(screen.queryByText('Welcome to MastraCode')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Choose your codebase.' })).toBeInTheDocument();
+    const repoSection = await screen.findByRole('region', { name: 'GitHub repository' });
+    expect(within(repoSection).getByRole('button', { name: /Connect GitHub/ })).toBeInTheDocument();
+    expect(screen.queryByText('Build software with a Factory that knows your work.')).not.toBeInTheDocument();
   });
 
-  it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {
+  it('given auth is disabled, when visiting /, then the user is redirected to the factory draft composer', async () => {
     const { router } = renderRoutes('/', AUTH_DISABLED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/new`);
     expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
   });
 
-  it('given a GitHub project has persisted Factory work, when visiting /, then the user lands on the board', async () => {
-    const project: Factory = {
-      id: 'github-project',
-      name: 'mastra-ai/mastra',
-      resourceId: RESOURCE_ID,
-      createdAt: 1,
-      binding: {
-        kind: 'factory',
-        factoryProjectId: 'github-project-id',
-        repositories: [],
-      },
-    };
-    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
+  it('given a GitHub-backed factory, when visiting /, then the user lands on its work board', async () => {
+    const { router } = renderRoutes('/', AUTHENTICATED, { project: GITHUB_PROJECT, workItemCount: 1 });
 
-    await expectPathname(router, '/factory/board');
+    await expectPathname(router, '/factories/github-project/work');
     expect(await screen.findByText(/Connect a repository to start intake/)).toBeInTheDocument();
   });
 
   it('given Factory hydration is still loading, when refreshing /, then the app waits before choosing a destination', async () => {
-    const project: Factory = {
-      id: 'github-project',
-      name: 'mastra-ai/mastra',
-      resourceId: RESOURCE_ID,
-      createdAt: 1,
-      binding: {
-        kind: 'factory',
-        factoryProjectId: 'github-project-id',
-        repositories: [],
-      },
-    };
     let resolveProjects!: () => void;
     const projectsReady = new Promise<void>(resolve => {
       resolveProjects = resolve;
@@ -238,78 +232,47 @@ describe('MastraCode web routing', () => {
         HttpResponse.json({ connections: [] }),
       ),
     );
-    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
+    const { router } = renderRoutes('/', AUTHENTICATED, { project: GITHUB_PROJECT, workItemCount: 1 });
 
-    await screen.findByRole('status', { name: 'Loading Factory board' });
     expect(router.state.location.pathname).toBe('/');
     resolveProjects();
-    await expectPathname(router, '/factory/board');
+    await expectPathname(router, '/factories/github-project/work');
   });
 
-  it('given Factory work is still loading, when visiting /, then the app waits before choosing a destination', async () => {
-    const project: Factory = {
-      id: 'github-project',
-      name: 'mastra-ai/mastra',
-      resourceId: RESOURCE_ID,
-      createdAt: 1,
-      binding: {
-        kind: 'factory',
-        factoryProjectId: 'github-project-id',
-        repositories: [],
-      },
-    };
-    let resolveWorkItems!: () => void;
-    const workItemsReady = new Promise<void>(resolve => {
-      resolveWorkItems = resolve;
-    });
-    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1, workItemsReady });
+  it('given legacy /factory/board, then the user is redirected to the first factory work board', async () => {
+    const { router } = renderRoutes('/factory/board', AUTHENTICATED, { project: GITHUB_PROJECT });
 
-    await screen.findByRole('status', { name: 'Loading Factory board' });
-    expect(router.state.location.pathname).toBe('/');
-    resolveWorkItems();
-    await expectPathname(router, '/factory/board');
+    await expectPathname(router, '/factories/github-project/work');
   });
 
-  it('given persisted Factory work cannot be loaded, when visiting /, then the app does not redirect', async () => {
-    const project: Factory = {
-      id: 'github-project',
-      name: 'mastra-ai/mastra',
-      resourceId: RESOURCE_ID,
-      createdAt: 1,
-      binding: {
-        kind: 'factory',
-        factoryProjectId: 'github-project-id',
-        repositories: [],
-      },
-    };
-    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemsError: true });
+  it('given legacy /factory/metrics, then the sub-page is preserved on the first factory', async () => {
+    const { router } = renderRoutes('/factory/metrics', AUTHENTICATED, { project: GITHUB_PROJECT });
 
-    expect(await screen.findByText('Factory unavailable')).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/');
+    await expectPathname(router, '/factories/github-project/metrics');
   });
 
-  it('given a GitHub project has no persisted Factory work, when visiting /, then the user lands on /new', async () => {
-    const project: Factory = {
-      id: 'github-project',
-      name: 'mastra-ai/mastra',
-      resourceId: RESOURCE_ID,
-      createdAt: 1,
-      binding: {
-        kind: 'factory',
-        factoryProjectId: 'github-project-id',
-        repositories: [],
-      },
-    };
-    const { router } = renderRoutes('/', AUTHENTICATED, { project });
+  it('given a legacy thread URL, then it redirects to the factory-scoped thread', async () => {
+    const { router } = renderRoutes(`/threads/${THREAD_ID}`, AUTH_DISABLED);
 
-    await expectPathname(router, '/new');
-    expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/threads/${THREAD_ID}`);
   });
 
-  it('given auth is disabled, when visiting an unknown path, then the user is redirected to /new', async () => {
+  it('given a legacy user thread URL, then it redirects to the factory-scoped user thread', async () => {
+    const { router } = renderRoutes(`/user/threads/${THREAD_ID}`, AUTH_DISABLED);
+
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/user/threads/${THREAD_ID}`);
+  });
+
+  it('given an unknown :factoryId, then the user is bounced through / to a valid factory', async () => {
+    const { router } = renderRoutes('/factories/does-not-exist/work', AUTH_DISABLED);
+
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/new`);
+  });
+
+  it('given auth is disabled, when visiting an unknown path, then the user is redirected to the factory draft composer', async () => {
     const { router } = renderRoutes('/does-not-exist', AUTH_DISABLED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/new`);
   });
 
   it('given auth is enabled and the session is unauthenticated, when visiting /new, then the user lands on /signin with a sign-in action', async () => {
@@ -341,7 +304,7 @@ describe('MastraCode web routing', () => {
   it('given auth is enabled and the session is authenticated, when visiting /new, then chat renders with identity and sign-out only', async () => {
     const { router } = renderRoutes('/new', AUTHENTICATED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/new`);
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
@@ -351,24 +314,24 @@ describe('MastraCode web routing', () => {
   it('given an authenticated session, when visiting /signin, then the user is redirected through the root landing', async () => {
     const { router } = renderRoutes('/signin', AUTHENTICATED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/new`);
   });
 
   it('given an authenticated session and a safe returnTo, when visiting /signin, then the explicit destination wins', async () => {
     const { router } = renderRoutes('/signin?returnTo=%2Ffactory%2Fmetrics', AUTHENTICATED);
 
-    await expectPathname(router, '/factory/metrics');
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/metrics`);
   });
 
   it('given an authenticated session and an unsafe returnTo, when visiting /signin, then it falls back through root landing', async () => {
     const { router } = renderRoutes('/signin?returnTo=https%3A%2F%2Fevil.example', AUTHENTICATED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/new`);
   });
 
-  it('given auth is disabled, when visiting /signin, then the user is redirected to /new', async () => {
+  it('given auth is disabled, when visiting /signin, then the user is redirected to the factory draft composer', async () => {
     const { router } = renderRoutes('/signin', AUTH_DISABLED);
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, `/factories/${LOCAL_FACTORY_ID}/new`);
   });
 });

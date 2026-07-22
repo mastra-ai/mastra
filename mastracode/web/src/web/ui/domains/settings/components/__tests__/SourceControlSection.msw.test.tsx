@@ -11,9 +11,9 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { ActiveFactoryProvider } from '../../../workspaces';
 import type { GithubStatus } from '../../../workspaces/services/github';
 import { SourceControlSection } from '../SourceControlSection';
 
@@ -38,6 +38,9 @@ const availableRepo = {
   sandboxWorkdir: '/workspace/world',
 };
 
+/** The factory id the next render mounts at (`/factories/<id>`). */
+let activeFactoryId = 'factory-missing';
+
 function seedLocalFactory() {
   localStorage.setItem(
     'mastracode-factories',
@@ -51,7 +54,7 @@ function seedLocalFactory() {
       },
     ]),
   );
-  localStorage.setItem('mastracode-active-factory', 'factory-local');
+  activeFactoryId = 'factory-local';
 }
 
 function seedServerFactory() {
@@ -71,19 +74,20 @@ function seedServerFactory() {
       },
     ]),
   );
-  localStorage.setItem('mastracode-active-factory', 'factory-server');
+  activeFactoryId = 'factory-server';
 }
 
 function renderSection() {
   return renderWithProviders(
-    <ActiveFactoryProvider>
+    <FactoryRouteHarness factoryId={activeFactoryId}>
       <SourceControlSection />
-    </ActiveFactoryProvider>,
+    </FactoryRouteHarness>,
   );
 }
 
 afterEach(() => {
   localStorage.clear();
+  activeFactoryId = 'factory-missing';
 });
 
 describe('SourceControlSection', () => {
@@ -136,6 +140,5 @@ describe('SourceControlSection', () => {
 
     await waitFor(() => expect(deleted).toEqual(['fp-1']));
     await screen.findByText('Select a factory to manage its source control.');
-    expect(localStorage.getItem('mastracode-active-factory')).toBeNull();
   });
 });

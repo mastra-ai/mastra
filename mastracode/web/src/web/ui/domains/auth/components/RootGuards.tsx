@@ -1,8 +1,7 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { Navigate, Outlet, useLocation } from 'react-router';
-import { useActiveFactoryContext } from '../../workspaces';
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
 
 export const RootGuards = () => {
   return <AuthGuard />;
@@ -10,6 +9,7 @@ export const RootGuards = () => {
 
 const AuthGuard = () => {
   const auth = useWebAuth();
+  const location = useLocation();
 
   if (auth.isPending) return <AuthPendingSkeleton />;
 
@@ -27,12 +27,10 @@ const AuthGuard = () => {
 
 const OnboardingGuard = () => {
   const pathname = useLocation().pathname;
-  const { factoriesPending, factories } = useActiveFactoryContext();
-  const { isActivatingInitialFactory } = useSetInitialFactoryWhenNoActive();
+  const { data: factories, isPending: factoriesPending } = useFactoriesQuery();
 
-  if (isActivatingInitialFactory) return <AuthPendingSkeleton />;
   if (factoriesPending) return <AuthPendingSkeleton />;
-  if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
+  if ((factories ?? []).length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
 
   return <Outlet />;
 };
@@ -48,30 +46,3 @@ export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: st
     </div>
   );
 }
-
-const useSetInitialFactoryWhenNoActive = () => {
-  const { activeFactory, factoriesPending, factories, selectFactory } = useActiveFactoryContext();
-  const [isPending, setPending] = useState(true);
-  const firstFactory = factories[0];
-
-  const setInitialFactoryWhenNoActiveEffect = useEffectEvent(() => {
-    if (!firstFactory) return;
-
-    selectFactory(firstFactory);
-    setPending(false);
-  });
-
-  // Will be removed in favor of params, but for now, we'll set the initial factory selected for the first
-  // factories when no active is set.
-  // useEffect but well..
-  const factoryCount = factories.length;
-  const hasActiveFactory = Boolean(activeFactory);
-  useEffect(() => {
-    if (factoriesPending) return;
-    if (factoryCount === 0 || hasActiveFactory) return setPending(false);
-
-    setInitialFactoryWhenNoActiveEffect();
-  }, [factoriesPending, factoryCount, hasActiveFactory]);
-
-  return { isActivatingInitialFactory: isPending };
-};

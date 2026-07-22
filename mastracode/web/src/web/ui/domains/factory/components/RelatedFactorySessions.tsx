@@ -7,6 +7,7 @@ import {
   useSelectWorkspaceMutation,
   useWorkspacesQuery,
 } from '../../../../../shared/hooks/useWorkspaces';
+import { useFactoryBasePath } from '../../../../../shared/hooks/useFactoryBasePath';
 import { useWorkItemsQuery } from '../../../../../shared/hooks/useWorkItems';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
@@ -36,6 +37,7 @@ export function FactorySessionHeader() {
   const { activeFactory } = useActiveFactoryContext();
   const { threadId } = useParams();
   const navigate = useNavigate();
+  const basePath = useFactoryBasePath();
   const factoryProjectId =
     activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
   const items = useWorkItemsQuery(factoryProjectId);
@@ -61,11 +63,11 @@ export function FactorySessionHeader() {
   const destinations = relatedItems.map(item => ({ item, session: latestLiveSession(item, livePaths) }));
   const isReview = currentItem.source === 'github-pr';
   const section = isReview ? 'Review' : 'Work';
-  const sectionPath = isReview ? '/factory/review' : '/factory/work';
+  const sectionPath = `${basePath.base}${isReview ? '/review' : '/work'}`;
 
   const openSession = async (session: WorkItemSessionRef) => {
     await selectWorkspace.mutateAsync(session.projectPath);
-    void navigate(`/threads/${session.threadId}`);
+    void navigate(basePath.thread(session.threadId));
   };
 
   return (
@@ -88,7 +90,7 @@ export function FactorySessionHeader() {
                 return (
                   <Link
                     key={item.id}
-                    to={relationshipPath(item)}
+                    to={`${basePath.base}${relationshipPath(item)}`}
                     className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6"
                     aria-label={`Open ${label}: ${item.title}`}
                   >

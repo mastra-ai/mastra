@@ -201,9 +201,10 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
 
 function renderAt(initialEntry: string, project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), {
+    initialEntries: [`/factories/${project.id}${initialEntry}`],
+  });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -232,7 +233,7 @@ describe('Factory Audit page', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt('/audit');
 
     expect(await screen.findByRole('heading', { name: 'Audit' })).toBeInTheDocument();
     const list = await screen.findByRole('list', { name: 'Audit events' });
@@ -272,7 +273,7 @@ describe('Factory Audit page', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt('/audit');
 
     const list = await screen.findByRole('list', { name: 'Rule decisions' });
     expect(within(list).getAllByRole('listitem')).toHaveLength(2);
@@ -312,7 +313,7 @@ describe('Factory Audit page', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt('/audit');
 
     const list = await screen.findByRole('list', { name: 'Rule decisions' });
     await userEvent.click(screen.getByRole('button', { name: 'Load more effects' }));
@@ -323,7 +324,7 @@ describe('Factory Audit page', () => {
 
   it('given the All filter, when the user picks Git, then events are refetched with the git action list', async () => {
     const state = useAuditHandlers();
-    renderAt('/factory/audit');
+    renderAt('/audit');
 
     await screen.findByRole('list', { name: 'Audit events' });
     expect(state.requests[0]!.actions).toBeNull();
@@ -337,7 +338,7 @@ describe('Factory Audit page', () => {
 
   it('given the All filter, when the user picks Agent, then events are refetched with the agent action list', async () => {
     const state = useAuditHandlers();
-    renderAt('/factory/audit');
+    renderAt('/audit');
 
     await screen.findByRole('list', { name: 'Audit events' });
 
@@ -367,7 +368,7 @@ describe('Factory Audit page', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt('/audit');
 
     const list = await screen.findByRole('list', { name: 'Audit events' });
     const row = within(list).getAllByRole('listitem')[0]!;
@@ -387,7 +388,7 @@ describe('Factory Audit page', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt('/audit');
 
     const list = await screen.findByRole('list', { name: 'Audit events' });
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
@@ -402,7 +403,7 @@ describe('Factory Audit page', () => {
   it('given WorkOS is configured, when the user clicks Open in WorkOS, then the one-time portal link opens in a new tab', async () => {
     useAuditHandlers({ portalUrl: 'https://portal.workos.com/audit-logs/one-time' });
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
-    renderAt('/factory/audit');
+    renderAt('/audit');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Open in WorkOS' }));
 
@@ -411,14 +412,14 @@ describe('Factory Audit page', () => {
 
   it('given no events yet, when the page renders, then a friendly empty state appears', async () => {
     useAuditHandlers({ pages: [{ events: [] }] });
-    renderAt('/factory/audit');
+    renderAt('/audit');
 
     expect(await screen.findByText(/No audit events yet/)).toBeInTheDocument();
   });
 
   it('given a local project, when visiting Audit, then the GitHub-only notice renders instead of the trail', async () => {
     useAuditHandlers();
-    renderAt('/factory/audit', localProject);
+    renderAt('/audit', localProject);
 
     expect(
       await screen.findByText(/Board, metrics, and audit are available for server-backed Factories/),

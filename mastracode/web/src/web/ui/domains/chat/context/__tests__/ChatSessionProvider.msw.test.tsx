@@ -21,10 +21,11 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../ChatSessionTestProvider';
+import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../../../workspaces';
+import { useActiveFactoryContext } from '../../../workspaces';
 import { ChatMessageList } from '../../components/ChatMessageList';
 import { ModesSelection } from '../../components/StatusLine/ModesSelection';
 import { ChatMessageBoundary } from '../ChatSessionProvider';
@@ -111,9 +112,12 @@ const githubProjectWithWorktree: Factory = {
   },
 };
 
+/** The factory id the next render mounts at (`/factories/<id>`). */
+let activeFactoryId = project.id;
+
 function seedFactory(projects: Factory[] = [project], activeProject: Factory = project) {
   localStorage.setItem('mastracode-factories', JSON.stringify(projects));
-  localStorage.setItem('mastracode-active-factory', activeProject.id);
+  activeFactoryId = activeProject.id;
 }
 
 function sessionState(resourceId = RESOURCE_ID): AgentControllerSessionState {
@@ -294,9 +298,9 @@ function SessionContextProbe() {
 
 function ProbeSession({ threadId, children }: { threadId?: string; children?: ReactNode }) {
   return (
-    <ActiveFactoryProvider>
+    <FactoryRouteHarness factoryId={activeFactoryId} initialSuffix={threadId ? `/threads/${threadId}` : '/new'}>
       <ChatSessionProvider threadId={threadId}>{children ?? <Probe />}</ChatSessionProvider>
-    </ActiveFactoryProvider>
+    </FactoryRouteHarness>
   );
 }
 
@@ -310,13 +314,13 @@ function renderFocusedProbe(children: ReactNode, threadId?: string) {
 
 function renderMessageList(threadId?: string) {
   return renderWithProviders(
-    <ActiveFactoryProvider>
+    <FactoryRouteHarness factoryId={activeFactoryId} initialSuffix={threadId ? `/threads/${threadId}` : '/new'}>
       <ChatSessionProvider threadId={threadId}>
         <ChatMessageBoundary>
           <ChatMessageList />
         </ChatMessageBoundary>
       </ChatSessionProvider>
-    </ActiveFactoryProvider>,
+    </FactoryRouteHarness>,
   );
 }
 

@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
 
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useLoadFactories } from '../../../../../shared/hooks/useFactories';
@@ -31,6 +30,7 @@ function persistState(state: FactoryOnboardingState): FactoryOnboardingState {
 export function useFactoryOnboarding() {
   const queryClient = useQueryClient();
   const factoriesQuery = useLoadFactories();
+  const setState = useFactoryOnboardingSetState();
   const onboardingQuery = useQuery({
     queryKey: queryKeys.factoryOnboarding(),
     enabled: !factoriesQuery.isPending,
@@ -70,6 +70,6 @@ export const useFactoryOnboardingSetState = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (state: FactoryOnboardingState) => Promise.resolve(persistState(state)),
-    onSuccess: state => queryClient.invalidateQueries({ queryKey: queryKeys.factoryOnboarding() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.factoryOnboarding() }),
   });
 };

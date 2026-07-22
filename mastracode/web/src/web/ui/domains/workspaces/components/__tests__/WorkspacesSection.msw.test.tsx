@@ -14,15 +14,14 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { FactoryRouteHarness, LocationProbe } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { queryKeys } from '../../../../../../shared/api/keys';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
 import type { WorkItem } from '../../../factory/services/workItems';
-import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
 import type { Factory } from '../../services/factories';
 import { isServerFactory, loadFactories, saveFactories } from '../../services/factories';
 import { playDoneSound } from '../../../settings/services/doneSound';
@@ -197,25 +196,18 @@ function useAgentControllerHandlers(workItems: WorkItem[] = relatedWorkItems) {
 
 function seedActiveFactory(project: Factory) {
   saveFactories([project]);
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
-function LocationProbe() {
-  const location = useLocation();
-  return <span data-testid="location">{location.pathname}</span>;
-}
-
-function renderSection(initialPath = '/') {
+function renderSection(initialSuffix = '/new') {
+  const factoryId = loadFactories()[0]!.id;
   return renderWithProviders(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <ActiveFactoryProvider>
-        <ChatSessionConfigProvider>
-          <WorkspacesSection />
-          <LocationProbe />
-        </ChatSessionConfigProvider>
-      </ActiveFactoryProvider>
+    <FactoryRouteHarness factoryId={factoryId} initialSuffix={initialSuffix}>
+      <ChatSessionConfigProvider>
+        <WorkspacesSection />
+        <LocationProbe />
+      </ChatSessionConfigProvider>
       <Toaster position="bottom-right" />
-    </MemoryRouter>,
+    </FactoryRouteHarness>,
   );
 }
 
@@ -595,7 +587,7 @@ describe('WorkspacesSection', () => {
         }),
       ),
     );
-    renderSection('/factory/board');
+    renderSection('/work');
 
     const activeSession = await screen.findByRole('button', { name: 'Latest' });
     expect(activeSession).toHaveAttribute('aria-current', 'true');
@@ -635,7 +627,7 @@ describe('WorkspacesSection', () => {
         }),
       ),
     );
-    renderSection('/factory/board');
+    renderSection('/work');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Real work' }));
 
@@ -660,7 +652,7 @@ describe('WorkspacesSection', () => {
         }),
       ),
     );
-    renderSection('/factory/board');
+    renderSection('/work');
 
     // feat-api is the selected workspace; its row must still lead to its
     // conversation when the user is elsewhere (board, /new, …).

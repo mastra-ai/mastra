@@ -3,6 +3,7 @@ import { ChartLine, GitPullRequest, LayoutDashboard, ScrollText, SquareKanban } 
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
+import { useFactoryBasePath } from '../../../../../shared/hooks/useFactoryBasePath';
 import { useOverlays } from '../../../lib/overlays';
 import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
 
@@ -15,6 +16,7 @@ import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
  */
 export function FactorySection({ children }: { children?: ReactNode }) {
   const { activeFactory } = useActiveFactoryContext();
+  const { base } = useFactoryBasePath();
 
   if (!activeFactory || !isServerFactory(activeFactory)) return null;
 
@@ -26,11 +28,11 @@ export function FactorySection({ children }: { children?: ReactNode }) {
         </Txt>
       </div>
       <div className="flex flex-col gap-1">
-        <FactoryLink to="/factory/overview" icon={LayoutDashboard} label="Overview" />
-        <FactoryLink to="/factory/work" icon={SquareKanban} label="Work" />
-        <FactoryLink to="/factory/review" icon={GitPullRequest} label="Review" />
-        <FactoryLink to="/factory/metrics" icon={ChartLine} label="Metrics" />
-        <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit" />
+        <FactoryLink to={`${base}/overview`} icon={LayoutDashboard} label="Overview" />
+        <FactoryLink to={`${base}/work`} icon={SquareKanban} label="Work" />
+        <FactoryLink to={`${base}/review`} icon={GitPullRequest} label="Review" />
+        <FactoryLink to={`${base}/metrics`} icon={ChartLine} label="Metrics" />
+        <FactoryLink to={`${base}/audit`} icon={ScrollText} label="Audit" />
       </div>
       {children}
     </nav>

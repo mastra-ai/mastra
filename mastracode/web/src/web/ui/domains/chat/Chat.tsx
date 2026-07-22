@@ -1,13 +1,13 @@
 import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { ReactNode } from 'react';
-import { Outlet, useLocation } from 'react-router';
+import { Outlet, useLocation, useParams } from 'react-router';
 
 import { PageLayoutMainViewProvider } from '../../ui/PageLayout';
 import { OverlaysProvider, useOverlays } from '../../lib/overlays';
 import { SettingsPanel } from '../settings/components/SettingsPanel';
 import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
 import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
@@ -31,13 +31,11 @@ export default function Chat() {
 }
 
 function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
+  // Params from the matched leaf route are visible in this layout, so the
+  // thread id comes straight from `/factories/:factoryId/(user/)threads/:threadId`.
+  const { threadId } = useParams<{ threadId: string }>();
   const { pathname } = useLocation();
-  const userScoped = pathname.startsWith('/user/threads/');
-  const threadId = userScoped
-    ? decodeURIComponent(pathname.slice('/user/threads/'.length))
-    : pathname.startsWith('/threads/')
-      ? decodeURIComponent(pathname.slice('/threads/'.length))
-      : undefined;
+  const userScoped = pathname.includes('/user/threads/');
 
   return (
     <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>

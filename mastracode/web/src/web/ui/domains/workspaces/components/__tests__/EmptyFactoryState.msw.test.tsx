@@ -2,11 +2,13 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
+import { LocationProbe } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
-import { loadActiveFactoryId, loadFactories, saveFactories } from '../../services/factories';
+import { loadFactories, saveFactories } from '../../services/factories';
 import type { GithubStatus } from '../../services/github';
 import { EmptyFactoryState } from '../EmptyFactoryState';
 
@@ -34,11 +36,34 @@ const repo = {
   sandboxWorkdir: '/workspace/hello',
 };
 
+/**
+ * Onboarding renders outside any factory scope; finishing navigates to the
+ * created factory's URL where `ActiveFactoryProvider` materializes the repo.
+ */
 function renderOnboarding() {
   return renderWithProviders(
-    <ActiveFactoryProvider>
-      <EmptyFactoryState />
-    </ActiveFactoryProvider>,
+    <MemoryRouter initialEntries={['/onboarding']}>
+      <Routes>
+        <Route
+          path="/onboarding"
+          element={
+            <>
+              <EmptyFactoryState />
+              <LocationProbe />
+            </>
+          }
+        />
+        <Route
+          path="/factories/:factoryId/*"
+          element={
+            <ActiveFactoryProvider>
+              <LocationProbe />
+            </ActiveFactoryProvider>
+          }
+        />
+        <Route path="*" element={<LocationProbe />} />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
@@ -201,13 +226,16 @@ describe('EmptyFactoryState onboarding', () => {
 
     await waitFor(() => expect(calls).toEqual(['create', 'connect', 'link']));
     expect(await screen.findByRole('heading', { name: 'Connect the work behind the code.' })).toBeInTheDocument();
-    expect(loadActiveFactoryId()).toBeNull();
+    // Not activated yet: still on the onboarding URL.
+    expect(screen.getByTestId('location')).toHaveTextContent('/onboarding');
     expect(sessionStorage.getItem(FACTORY_KEY)).not.toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Skip for now' }));
 
-    await waitFor(() => expect(loadActiveFactoryId()).not.toBeNull());
-    expect(loadFactories()[0]).toMatchObject({ resourceId: 'resource-1' });
+    // Skipping navigates to the created factory's URL, which activates it.
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/factories\/.+\/work$/));
+    // Landing on the factory URL materializes the repository.
+    await waitFor(() => expect(loadFactories()[0]).toMatchObject({ resourceId: 'resource-1' }));
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
     expect(sessionStorage.getItem(FACTORY_KEY)).toBeNull();
   });
@@ -273,7 +301,7 @@ describe('EmptyFactoryState onboarding', () => {
     expect(await screen.findByText('Connected to Acme.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Finish setup' }));
 
-    await waitFor(() => expect(loadActiveFactoryId()).toBe('factory-1'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/factories/factory-1/work'));
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
     expect(sessionStorage.getItem(FACTORY_KEY)).toBeNull();
   });

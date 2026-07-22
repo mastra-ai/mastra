@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../shared/api/config';
+import { useFactoryBasePath } from '../../../../shared/hooks/useFactoryBasePath';
 import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
@@ -555,6 +556,7 @@ function BoardContent({
   const { start, pendingRuns, enabled: runEnabled } = useStartFactoryRun();
   const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(projectRepositoryId, factoryProjectId);
   const navigate = useNavigate();
+  const basePath = useFactoryBasePath();
   const boardContainerRef = useRef<HTMLDivElement>(null);
   const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());
   const boardPositionKey = `${factory.id}:${kind}`;
@@ -579,7 +581,7 @@ function BoardContent({
   });
   const openThread = async (session: WorkItemSessionRef) => {
     await selectWorkspace.mutateAsync(session.projectPath);
-    navigate(`/threads/${session.threadId}`);
+    navigate(basePath.thread(session.threadId));
   };
 
   const refreshItemAndWorktrees = async (itemId: string) => {
@@ -1052,6 +1054,7 @@ function WorkItemCard({
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
+  const basePath = useFactoryBasePath();
   const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source];
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
@@ -1083,7 +1086,7 @@ function WorkItemCard({
         <Icon size={14} className={`mt-0.5 shrink-0 ${iconClassName}`} aria-hidden />
         {threadSession !== null ? (
           <a
-            href={`/threads/${threadSession.threadId}`}
+            href={basePath.thread(threadSession.threadId)}
             onClick={event => {
               event.preventDefault();
               onOpenThread(threadSession);
@@ -1162,7 +1165,9 @@ function WorkItemCard({
         return (
           <a
             key={related.id}
-            href={relatedSession ? `/threads/${relatedSession.threadId}` : relationshipPath(related)}
+            href={
+              relatedSession ? basePath.thread(relatedSession.threadId) : `${basePath.base}${relationshipPath(related)}`
+            }
             onClick={event => {
               if (!relatedSession) return;
               event.preventDefault();

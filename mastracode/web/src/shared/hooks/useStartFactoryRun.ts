@@ -8,6 +8,7 @@ import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constant
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveFactoryContext } from '../../web/ui/domains/workspaces/context/ActiveFactoryProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
+import { useFactoryBasePath } from './useFactoryBasePath';
 import type { Factory } from '../../web/ui/domains/workspaces/services/factories';
 import { isServerFactory } from '../../web/ui/domains/workspaces/services/factories';
 import { startFactoryRun } from '../../web/ui/domains/factory/services/workItems';
@@ -69,6 +70,7 @@ export function useStartFactoryRun() {
   const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
   const { baseUrl } = useApiConfig();
   const navigate = useNavigate();
+  const basePath = useFactoryBasePath();
   const queryClient = useQueryClient();
 
   const createWorkspace = useCreateWorkspaceMutation(activeFactory, {
@@ -137,7 +139,7 @@ export function useStartFactoryRun() {
         }),
         queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) }),
       ]);
-      void navigate(`/threads/${prepared.threadId}`);
+      void navigate(basePath.thread(prepared.threadId));
     },
   });
 

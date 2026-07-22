@@ -15,26 +15,35 @@ import Chat from '../domains/chat/Chat';
 import { NewPage } from '../domains/chat/NewPage';
 import { ThreadPage } from '../domains/chat/ThreadPage';
 import type { Factory } from '../domains/workspaces';
+import { ActiveFactoryLayout } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { createAppRoutes } from '../router';
 
 /**
- * Renders <Chat /> inside a memory router mirroring the app's pathless chat
- * layout (Chat itself uses router hooks for /threads/:threadId navigation).
+ * Renders <Chat /> inside a memory router mirroring the app's factory-scoped
+ * chat layout (`/factories/:factoryId/...`), with `ActiveFactoryLayout`
+ * resolving the active factory from the URL param.
  * Auth guards are intentionally bypassed — these specs stub /auth/me directly.
  */
 function renderChat() {
   const router = createMemoryRouter(
     [
       {
-        element: <Chat />,
+        path: '/factories/:factoryId',
+        element: <ActiveFactoryLayout />,
         children: [
-          { path: '/chat', element: <NewPage /> },
-          { path: '/threads/:threadId', element: <ThreadPage /> },
+          {
+            element: <Chat />,
+            children: [
+              { path: 'new', element: <NewPage /> },
+              { path: 'threads/:threadId', element: <ThreadPage /> },
+            ],
+          },
         ],
       },
     ],
-    // The transcript only renders on the thread's own page now — /chat is the
+    // The transcript only renders on the thread's own page now — /new is the
     // draft composer and hides the bound thread's history.
-    { initialEntries: ['/threads/thread-test'] },
+    { initialEntries: ['/factories/project-test/threads/thread-test'] },
   );
   return renderWithProviders(<RouterProvider router={router} />);
 }
@@ -67,7 +76,6 @@ function seedProject() {
     createdAt: 1,
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -519,14 +527,21 @@ describe('MastraCode message rendering', () => {
     expect(streamRequests).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the first-run welcome screen after empty backend hydration', async () => {
+  it('redirects to first-run onboarding after empty backend hydration', async () => {
     useAgentControllerHandlers();
     server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
 
-    renderChat();
+    // A chat deep link whose factory no longer exists falls back to `/`, and
+    // the onboarding gate takes over because no factories are configured.
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: ['/factories/project-test/threads/thread-test'],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
 
-    expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create factory from local folder' })).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/onboarding'));
+    expect(
+      await screen.findByRole('heading', { name: 'Build software with a Factory that knows your work.' }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 

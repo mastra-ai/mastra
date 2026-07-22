@@ -1,12 +1,11 @@
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
+import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
-import { ActiveFactoryProvider } from '../../../workspaces';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
   class ResizeObserverPolyfill {
@@ -68,21 +67,18 @@ export function useOverlayControllerHandlers() {
   );
 }
 
-export function OverlayTestProviders({ children }: { children: ReactNode }) {
+export function OverlayTestProviders({
+  factoryId = 'factory-missing',
+  children,
+}: {
+  factoryId?: string;
+  children: ReactNode;
+}) {
   return (
-    <MemoryRouter initialEntries={['/threads/thread-test']}>
-      <Routes>
-        <Route
-          path="/threads/:threadId"
-          element={
-            <ActiveFactoryProvider>
-              <ChatSessionProvider>
-                <OverlaysProvider>{children}</OverlaysProvider>
-              </ChatSessionProvider>
-            </ActiveFactoryProvider>
-          }
-        />
-      </Routes>
-    </MemoryRouter>
+    <FactoryRouteHarness factoryId={factoryId} routePath="threads/:threadId" initialSuffix="/threads/thread-test">
+      <ChatSessionProvider>
+        <OverlaysProvider>{children}</OverlaysProvider>
+      </ChatSessionProvider>
+    </FactoryRouteHarness>
   );
 }

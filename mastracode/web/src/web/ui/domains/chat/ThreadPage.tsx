@@ -30,7 +30,7 @@ export function ThreadPage() {
   const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
   const activeUserSessionMatch =
     userSessionMatch && activeFactory?.id === userSessionMatch.factory.id ? userSessionMatch : undefined;
-  const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
+  const isUserThreadRoute = location.pathname.includes('/user/threads/');
   const workspaceFactory = isUserThreadRoute ? activeUserSessionMatch?.factory : activeFactory;
   const workspacePath = workspaceFactory
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)

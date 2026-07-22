@@ -11,6 +11,7 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
+import { useFactoryBasePath } from '../../../../../shared/hooks/useFactoryBasePath';
 import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { userSessionResourceId } from '../../auth/services/auth';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
@@ -57,6 +58,7 @@ export function UserSessionsSection() {
   const auth = useWebAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const basePath = useFactoryBasePath();
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -145,7 +147,7 @@ export function UserSessionsSection() {
       setCreating(false);
       setName('');
       invalidate();
-      void navigate(`/user/threads/${threadId}`);
+      void navigate(basePath.userThread(threadId));
     },
   });
 
@@ -170,8 +172,8 @@ export function UserSessionsSection() {
       setConfirmDelete(null);
       invalidate();
       toast('Session deleted');
-      if (worktree.threadId && location.pathname === `/user/threads/${worktree.threadId}`) {
-        void navigate('/new', { replace: true });
+      if (worktree.threadId && location.pathname === basePath.userThread(worktree.threadId)) {
+        void navigate(basePath.newThread(), { replace: true });
       }
     },
     onError: error => {
@@ -187,7 +189,7 @@ export function UserSessionsSection() {
   const openSession = async (worktree: Worktree) => {
     clearAttention(worktree.worktreePath);
     if (worktree.threadId) {
-      void navigate(`/user/threads/${worktree.threadId}`);
+      void navigate(basePath.userThread(worktree.threadId));
       return;
     }
     // Legacy user worktree without a recorded thread: create one now so the
@@ -198,7 +200,7 @@ export function UserSessionsSection() {
       const thread = await chatSession.createThread();
       if (activeFactory) upsertWorktree(latestFactory(activeFactory), { ...worktree, threadId: thread.id });
       invalidate();
-      void navigate(`/user/threads/${thread.id}`);
+      void navigate(basePath.userThread(thread.id));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to open session');
     }

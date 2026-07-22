@@ -10,14 +10,13 @@ import type { AgentControllerEvent, AgentControllerOMProgress, AgentControllerSe
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
+import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider } from '../../../workspaces';
 import { StatusLine } from '../StatusLine';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -65,7 +64,6 @@ function seedFactory(source: 'local' | 'github' = 'local') {
           },
         };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(modeId = 'build'): AgentControllerSessionState {
@@ -156,20 +154,11 @@ function omProgress(overrides: Partial<AgentControllerOMProgress> = {}): AgentCo
 
 function renderStatusLine() {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
-      <Routes>
-        <Route
-          path="/threads/:threadId"
-          element={
-            <ActiveFactoryProvider>
-              <ChatSessionProvider>
-                <StatusLine />
-              </ChatSessionProvider>
-            </ActiveFactoryProvider>
-          }
-        />
-      </Routes>
-    </MemoryRouter>,
+    <FactoryRouteHarness factoryId="project-test" routePath="threads/:threadId" initialSuffix={`/threads/${THREAD_ID}`}>
+      <ChatSessionProvider>
+        <StatusLine />
+      </ChatSessionProvider>
+    </FactoryRouteHarness>,
   );
 }
 

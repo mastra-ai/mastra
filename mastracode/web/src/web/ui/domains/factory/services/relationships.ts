@@ -37,8 +37,9 @@ export function inferredParentWorkItemId(metadata: Record<string, unknown>, allI
   )?.id;
 }
 
-export function relationshipPath(item: WorkItem): '/factory/work' | '/factory/review' {
-  return item.source === 'github-pr' ? '/factory/review' : '/factory/work';
+/** Factory-relative suffix; prefix with the `/factories/:factoryId` base path. */
+export function relationshipPath(item: WorkItem): '/work' | '/review' {
+  return item.source === 'github-pr' ? '/review' : '/work';
 }
 
 export function relationshipLabel(item: WorkItem): string {

@@ -11,15 +11,18 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { FactoryRouteHarness } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { ActiveFactoryProvider } from '../../../workspaces';
 import { FactoryDefaultModelSection } from '../FactoryDefaultModelSection';
 
 const models: AgentControllerAvailableModel[] = [
   { id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true, useCount: 1 },
   { id: 'anthropic/claude-sonnet', provider: 'anthropic', modelName: 'claude-sonnet', hasApiKey: true, useCount: 0 },
 ];
+
+/** The factory id the next render mounts at (`/factories/<id>`). */
+let activeFactoryId = 'factory-local';
 
 function seedLocalFactory() {
   localStorage.setItem(
@@ -34,7 +37,7 @@ function seedLocalFactory() {
       },
     ]),
   );
-  localStorage.setItem('mastracode-active-factory', 'factory-local');
+  activeFactoryId = 'factory-local';
 }
 
 function seedServerFactory() {
@@ -54,14 +57,14 @@ function seedServerFactory() {
       },
     ]),
   );
-  localStorage.setItem('mastracode-active-factory', 'factory-server');
+  activeFactoryId = 'factory-server';
 }
 
 function renderSection() {
   return renderWithProviders(
-    <ActiveFactoryProvider>
+    <FactoryRouteHarness factoryId={activeFactoryId}>
       <FactoryDefaultModelSection models={models} />
-    </ActiveFactoryProvider>,
+    </FactoryRouteHarness>,
   );
 }
 

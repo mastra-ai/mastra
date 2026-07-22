@@ -70,7 +70,7 @@ Session continuity with the terminal user interface (TUI) keeps the Software Dev
 
 Intake source config is asymmetric by provider. GitHub selections use `repositoryIds`, which contain connected repository UUIDs. Linear selections use `projectIds` because a Linear Project is an external provider concept.
 
-Browser state uses `mastracode-factories` and `mastracode-active-factory`. Prerelease `mastracode-projects` keys aren't read.
+Browser state uses `mastracode-factories`. The active factory is resolved from the `/factories/:factoryId` URL, not persisted. Prerelease `mastracode-projects` keys aren't read.
 
 ## Work and Review workflows
 

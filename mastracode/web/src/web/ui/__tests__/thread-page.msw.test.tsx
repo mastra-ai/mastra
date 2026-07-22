@@ -66,7 +66,10 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedFactory(projects?: Factory[], activeFactoryId?: string) {
+/** Factory-scoped URL base for the default seeded factory. */
+const BASE = '/factories/project-test';
+
+function seedFactory(projects?: Factory[]) {
   const project: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
@@ -79,7 +82,6 @@ function seedFactory(projects?: Factory[], activeFactoryId?: string) {
   };
   const storedProjects = projects ?? [project];
   localStorage.setItem('mastracode-factories', JSON.stringify(storedProjects));
-  localStorage.setItem('mastracode-active-factory', activeFactoryId ?? storedProjects[0]?.id ?? project.id);
 }
 
 function sessionState(threadId: string): AgentControllerSessionState {
@@ -214,11 +216,17 @@ function useAgentControllerHandlers({
   return captured;
 }
 
+/**
+ * Mounts the app route table. `initialEntry` is factory-relative (e.g.
+ * `/threads/x`, `/new`) and gets prefixed with `/factories/:factoryId` for the
+ * active factory (default seeded factory unless `activeFactoryId` is given).
+ */
 function renderRoutes(initialEntry: string, projects?: Factory[], activeFactoryId?: string) {
-  seedFactory(projects, activeFactoryId);
+  seedFactory(projects);
+  const factoryId = activeFactoryId ?? projects?.[0]?.id ?? 'project-test';
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${factoryId}${initialEntry}`] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -294,7 +302,7 @@ describe('MastraCode thread pages', () => {
 
     await userEvent.click(await screen.findByText('Second thread'));
 
-    await expectPathname(router, `/threads/${threadTwo.id}`);
+    await expectPathname(router, `${BASE}/threads/${threadTwo.id}`);
     expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
@@ -309,7 +317,7 @@ describe('MastraCode thread pages', () => {
 
     await userEvent.click(await screen.findByText('Second thread'));
 
-    await expectPathname(router, `/threads/${threadTwo.id}`);
+    await expectPathname(router, `${BASE}/threads/${threadTwo.id}`);
     await waitFor(() => expect(captured.switched).toContain(threadTwo.id));
     await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
     expect(captured.sessionsCreated).toBe(1);
@@ -326,7 +334,7 @@ describe('MastraCode thread pages', () => {
     expect(within(draftRegion).getByRole('button', { name: 'Attach image' })).toBeVisible();
     expect(within(draftRegion).getByRole('button', { name: 'Send message' })).toBeVisible();
     expect(within(draftRegion).getByText('MastraCode Test')).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/new');
+    expect(router.state.location.pathname).toBe(`${BASE}/new`);
     expect(screen.queryByText('Reply from thread one')).not.toBeInTheDocument();
     expect(captured.created).toBe(0);
   });
@@ -342,7 +350,7 @@ describe('MastraCode thread pages', () => {
     await userEvent.type(composer, 'Hello draft{Enter}');
 
     await waitFor(() => expect(captured.created).toBe(1));
-    await expectPathname(router, `/threads/${newThread.id}`);
+    await expectPathname(router, `${BASE}/threads/${newThread.id}`);
     await waitFor(() => expect(captured.sent).toEqual(['Hello draft']));
     await waitFor(() => expect(document.body).toHaveTextContent('Hello draft'));
   });
@@ -355,7 +363,7 @@ describe('MastraCode thread pages', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'New thread' }));
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, `${BASE}/new`);
     expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
     const composer = screen.getByPlaceholderText(/Ask Mastra Code/);
     await waitFor(() => expect(composer).not.toBeDisabled());
@@ -371,7 +379,7 @@ describe('MastraCode thread pages', () => {
 
     await userEvent.click(await screen.findByText('Second thread'));
 
-    await expectPathname(router, `/threads/${threadTwo.id}`);
+    await expectPathname(router, `${BASE}/threads/${threadTwo.id}`);
     await waitFor(() => expect(captured.switched).toContain(threadTwo.id));
     // The slow state re-sync must not wipe the already-hydrated history.
     await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
@@ -385,16 +393,16 @@ describe('MastraCode thread pages', () => {
 
     await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
 
-    await act(() => router.navigate(`/threads/${threadTwo.id}`));
-    await expectPathname(router, `/threads/${threadTwo.id}`);
+    await act(() => router.navigate(`${BASE}/threads/${threadTwo.id}`));
+    await expectPathname(router, `${BASE}/threads/${threadTwo.id}`);
     await waitFor(() => expect(captured.switched).toContain(threadTwo.id));
 
-    await act(() => router.navigate(`/threads/${threadOne.id}`));
-    await expectPathname(router, `/threads/${threadOne.id}`);
+    await act(() => router.navigate(`${BASE}/threads/${threadOne.id}`));
+    await expectPathname(router, `${BASE}/threads/${threadOne.id}`);
     await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
 
     await act(() => delay(200));
-    expect(router.state.location.pathname).toBe(`/threads/${threadOne.id}`);
+    expect(router.state.location.pathname).toBe(`${BASE}/threads/${threadOne.id}`);
     expect(screen.getByText('Reply from thread one')).toBeInTheDocument();
     expect(screen.queryByText('Reply from thread two')).not.toBeInTheDocument();
   });
@@ -405,21 +413,21 @@ describe('MastraCode thread pages', () => {
 
     await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
     // The thread page must survive bootstrap — no wildcard redirect to /new.
-    expect(router.state.location.pathname).toBe(`/threads/${threadOne.id}`);
+    expect(router.state.location.pathname).toBe(`${BASE}/threads/${threadOne.id}`);
 
     const row = (await screen.findByText('First thread')).closest('[role="listitem"]') as HTMLElement;
     await userEvent.click(within(row).getByRole('button', { name: 'Thread actions' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
     await waitFor(() => expect(captured.deleted).toContain(threadOne.id));
-    await expectPathname(router, '/new');
+    await expectPathname(router, `${BASE}/new`);
   });
 
   it('given an invalid thread deep link in the current scope, then it reports the failure and returns to /new', async () => {
     const captured = useAgentControllerHandlers({ failSwitchFor: ['nope'] });
     const { router } = renderRoutes('/threads/nope');
 
-    await expectPathname(router, '/new');
+    await expectPathname(router, `${BASE}/new`);
     expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
     expect(screen.getByText('Failed to switch thread: thread nope was not found')).toBeInTheDocument();
     expect(captured.switched).not.toContain('nope');

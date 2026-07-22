@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { LocationProbe } from '../../../../../../../e2e/web-ui/factory-route';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import {
@@ -26,6 +27,7 @@ function renderFactories() {
   return renderWithProviders(
     <OverlayTestProviders>
       <FactoriesPanel />
+      <LocationProbe />
     </OverlayTestProviders>,
   );
 }
@@ -79,7 +81,10 @@ describe('FactoriesPanel', () => {
       ]);
     });
     expect(received).toEqual({ name: 'Mastra' });
-    expect(localStorage.getItem('mastracode-active-factory')).toBe(loadFactories()[0]?.id);
+    // Selecting the created factory navigates to its factory-scoped URL.
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${loadFactories()[0]?.id}`),
+    );
   });
 
   it('binds a local folder through the secondary path', async () => {
@@ -102,6 +107,8 @@ describe('FactoriesPanel', () => {
         }),
       ]);
     });
-    expect(localStorage.getItem('mastracode-active-factory')).toBe(loadFactories()[0]?.id);
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${loadFactories()[0]?.id}`),
+    );
   });
 });

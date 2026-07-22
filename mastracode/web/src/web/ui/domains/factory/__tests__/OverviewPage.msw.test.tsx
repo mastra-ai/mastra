@@ -175,9 +175,10 @@ function useOverviewHandlers({ workItems, activityThreads = [], thresholds }: Ov
 
 function renderAt(initialEntry: string, project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), {
+    initialEntries: [`/factories/${project.id}${initialEntry}`],
+  });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -197,7 +198,7 @@ describe('Factory Overview page', () => {
         inStage('wi-5', 'Intake card', 'intake', 5 * HOUR_S), // hidden: intake not charted
       ],
     });
-    renderAt('/factory/overview');
+    renderAt('/overview');
 
     expect(await screen.findByRole('heading', { name: 'Queue health' })).toBeInTheDocument();
 
@@ -222,7 +223,7 @@ describe('Factory Overview page', () => {
         inStage('wi-3', 'Another aging', 'triage', 12 * HOUR_S),
       ],
     });
-    renderAt('/factory/overview');
+    renderAt('/overview');
 
     const aging = await screen.findByRole('button', { name: 'Triage Aging: 2' });
     await user.click(aging);
@@ -244,7 +245,7 @@ describe('Factory Overview page', () => {
       ],
       activityThreads: [{ id: 'thread-run', tags: { projectPath: WORKTREE }, state: 'active' }],
     });
-    renderAt('/factory/overview');
+    renderAt('/overview');
 
     // The execute bar carries the stripe overlay for its one active item.
     await waitFor(() => expect(screen.getByRole('img', { name: 'Building: 1 active' })).toBeInTheDocument());
@@ -253,7 +254,7 @@ describe('Factory Overview page', () => {
 
   it('given a local project, when visiting Overview, then the local-folder notice renders instead of the chart', async () => {
     useOverviewHandlers({ workItems: [] });
-    renderAt('/factory/overview', localProject);
+    renderAt('/overview', localProject);
 
     expect(await screen.findByText(/available for server-backed Factories/)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Queue health' })).not.toBeInTheDocument();
