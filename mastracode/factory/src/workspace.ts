@@ -15,6 +15,7 @@ import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { checkoutSessionBranch, materializeRepo, runWorktreeSetup } from './integrations/github/sandbox.js';
+import { registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
@@ -115,6 +116,7 @@ export interface CreateWorkspaceFactoryOptions {
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
   const { sandbox: sandboxConfig, github, fleet } = options;
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
+  const githubTokenInjectors = new Map<string, (token: string) => void>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
@@ -175,6 +177,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
       if (existing) {
         existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
+        const injectGithubToken = githubTokenInjectors.get(workspaceId);
+        if (injectGithubToken) registerGithubTokenInjector(requestContext, injectGithubToken);
         return existing;
       }
     } catch {
@@ -208,6 +212,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       repoFullName: repoFullName,
     });
     if (projectRepository.setupCommand) await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
+
+    const injectGithubToken = (freshToken: string) => {
+      if (!sandbox.setEnvironmentVariable) {
+        throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
+      }
+      sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
+    };
+    githubTokenInjectors.set(workspaceId, injectGithubToken);
+    registerGithubTokenInjector(requestContext, injectGithubToken);
 
     const filesystem = new SandboxFilesystem({ sandbox, workdir });
     const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];

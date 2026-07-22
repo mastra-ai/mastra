@@ -376,7 +376,12 @@ const stateSigner = {
 };
 
 const ensureProjectSandbox = vi.fn(
-  async (opts: { row: any; storage: SourceControlStorageInMemory['sandboxes']; onProgress?: (e: any) => void }) => {
+  async (opts: {
+    row: any;
+    storage: SourceControlStorageInMemory['sandboxes'];
+    token: string;
+    onProgress?: (e: any) => void;
+  }) => {
     await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
     opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
     return { id: 'sb' };
@@ -1176,6 +1181,9 @@ describe('ensure (materialize)', () => {
       projectRepositoryId: 'p1',
     });
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
+    expect(ensureProjectSandbox).toHaveBeenCalledWith(
+      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
+    );
     expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
       orgId: 'org1',
       repositoryId: 'repository-octo/hello',
