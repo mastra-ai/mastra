@@ -172,7 +172,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
     github_refresh_token: createTool({
       id: 'github_refresh_token',
       description:
-        'Mint a fresh GitHub installation token and inject it as GH_TOKEN for future commands in the active Factory sandbox. Use this when gh reports that authentication has expired or is invalid.',
+        'Refresh GitHub CLI authentication in the active Factory sandbox. Use this after a gh command fails because authentication is expired, invalid, or missing. It installs a fresh GH_TOKEN for subsequent sandbox commands. After this tool succeeds, retry the failed gh command. Takes no arguments and never returns the token.',
       inputSchema: z.object({}),
       execute: async () => {
         await refreshGithubToken(requestContext, github);
