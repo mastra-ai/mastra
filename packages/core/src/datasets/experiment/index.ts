@@ -4,7 +4,14 @@ import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
-import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
+import {
+  createItemScorerResolver,
+  EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+  resolveScorers,
+  resolveStepScorers,
+  runScorersForItem,
+  runStepScorersForItem,
+} from './scorer';
 import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED } from './tool-mocks';
 import type { ItemToolMock } from './tool-mocks';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
@@ -23,6 +30,8 @@ type ExperimentItem = {
   resumeData?: unknown;
   /** Item-level static tool mocks (agent targets only) */
   toolMocks?: ItemToolMock[];
+  /** Item-level scorer IDs. An empty array explicitly disables scoring. */
+  scorerIds?: string[];
 };
 
 // Re-export types and helpers
@@ -36,7 +45,7 @@ export type {
   StartExperimentConfig,
 } from './types';
 export { executeTarget, type Target, type ExecutionResult } from './executor';
-export { resolveScorers, runScorersForItem } from './scorer';
+export { EXPERIMENT_ITEM_SCORER_NOT_FOUND, resolveScorers, runScorersForItem } from './scorer';
 export {
   ToolMockMatcher,
   TOOL_MOCK_MISMATCH,
@@ -141,6 +150,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           resumeSteps: dataItem.resumeSteps,
           resumeData: dataItem.resumeData,
           toolMocks: dataItem.toolMocks,
+          scorerIds: dataItem.scorerIds,
         };
       });
       datasetVersion = null;
@@ -183,6 +193,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         requestContext: v.requestContext,
         metadata: v.metadata,
         toolMocks: v.toolMocks,
+        scorerIds: v.scorerIds,
       }));
     } else {
       throw new Error('No data source: provide datasetId or data');
@@ -260,49 +271,43 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       );
   }
 
-  // Normalize categorized scorer config (AgentScorerConfig | WorkflowScorerConfig) to a flat
-  // array so the existing merge/dedup/resolve logic below is unchanged.
-  // Trajectory dispatch is handled per-scorer in runScorerSafe based on scorer.type.
-  // Step scorers are kept separate (keyed by step ID) and dispatched per-step
-  // after the flat scorers run, mirroring runEvals.
+  // Preserve whether the caller supplied run-level scorers before normalizing.
+  // Empty arrays and empty categorized configs intentionally override lower-precedence sources.
+  const hasRunLevelScorers = scorerInput !== undefined;
   let stepsConfigInput: Record<string, (MastraScorer<any, any, any, any> | string)[]> | undefined;
-  const flatScorerInput: (MastraScorer<any, any, any, any> | string)[] | undefined = (() => {
-    if (!scorerInput) return undefined;
-    if (Array.isArray(scorerInput)) return scorerInput;
-    // Categorized shape — flatten flat-style buckets into one array, keep steps separate
-    const flat: (MastraScorer<any, any, any, any> | string)[] = [];
-    if ('agent' in scorerInput && scorerInput.agent) flat.push(...scorerInput.agent);
-    if ('workflow' in scorerInput && scorerInput.workflow) flat.push(...scorerInput.workflow);
-    if ('trajectory' in scorerInput && scorerInput.trajectory) flat.push(...scorerInput.trajectory);
-    if ('steps' in scorerInput && scorerInput.steps) {
-      stepsConfigInput = scorerInput.steps;
+  let flatScorerInput: (MastraScorer<any, any, any, any> | string)[] | undefined;
+  if (scorerInput !== undefined) {
+    if (Array.isArray(scorerInput)) {
+      flatScorerInput = scorerInput;
+    } else {
+      flatScorerInput = [];
+      if ('agent' in scorerInput && scorerInput.agent) flatScorerInput.push(...scorerInput.agent);
+      if ('workflow' in scorerInput && scorerInput.workflow) flatScorerInput.push(...scorerInput.workflow);
+      if ('trajectory' in scorerInput && scorerInput.trajectory) flatScorerInput.push(...scorerInput.trajectory);
+      if ('steps' in scorerInput && scorerInput.steps) stepsConfigInput = scorerInput.steps;
     }
-    return flat;
-  })();
-
-  // Merge dataset-attached scorers with explicitly provided scorers, then deduplicate
-  let mergedScorerInput = flatScorerInput;
-  const datasetScorerIds = datasetRecord?.scorerIds ?? [];
-  if (datasetScorerIds.length > 0) {
-    mergedScorerInput = [...(flatScorerInput ?? []), ...datasetScorerIds];
   }
-  if (mergedScorerInput && mergedScorerInput.length > 0) {
+
+  if (flatScorerInput?.length) {
     const seen = new Set<string>();
-    mergedScorerInput = mergedScorerInput.filter(entry => {
-      if (typeof entry === 'string') {
-        if (seen.has(entry)) return false;
-        seen.add(entry);
-        return true;
-      }
-      // Keep all scorer instances — they are resolved by reference, not by ID
+    flatScorerInput = flatScorerInput.filter(entry => {
+      if (typeof entry !== 'string') return true;
+      if (seen.has(entry)) return false;
+      seen.add(entry);
       return true;
     });
   }
 
-  // Resolve scorers
-  const scorers = resolveScorers(mastra, mergedScorerInput);
-  // Resolve per-step scorers (keyed by step ID) for workflow targets
-  const stepScorers = resolveStepScorers(mastra, stepsConfigInput);
+  const runLevelScorers = hasRunLevelScorers ? resolveScorers(mastra, flatScorerInput) : [];
+  const runLevelStepScorers = hasRunLevelScorers ? resolveStepScorers(mastra, stepsConfigInput) : {};
+  const resolveItemScorers = createItemScorerResolver(mastra);
+  let datasetScorers: MastraScorer<any, any, any, any>[] | undefined;
+  const getDatasetScorers = () => {
+    if (!datasetScorers) {
+      datasetScorers = resolveScorers(mastra, [...new Set(datasetRecord?.scorerIds ?? [])]);
+    }
+    return datasetScorers;
+  };
 
   // 5. Create experiment record (if storage available and not pre-created)
   if (experimentsStore) {
@@ -360,6 +365,26 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         }
 
         const itemStartedAt = new Date();
+        let itemScorers: MastraScorer<any, any, any, any>[];
+        let itemStepScorers = {} as ReturnType<typeof resolveStepScorers>;
+        let scorerConfigError: ExecutionResult['error'] = null;
+
+        if (hasRunLevelScorers) {
+          itemScorers = runLevelScorers;
+          itemStepScorers = runLevelStepScorers;
+        } else if (item.scorerIds !== undefined) {
+          const resolution = await resolveItemScorers(item.scorerIds);
+          itemScorers = resolution.scorers;
+          if (resolution.missingIds.length > 0) {
+            scorerConfigError = {
+              code: EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+              message: `Item scorer configuration references unregistered scorer IDs: ${resolution.missingIds.join(', ')}`,
+            };
+          }
+        } else {
+          itemScorers = getDatasetScorers();
+        }
+
         // Compose per-item signal (timeout + run-level abort)
         let itemSignal: AbortSignal | undefined = signal;
         if (itemTimeout) {
@@ -367,11 +392,14 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           itemSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
         }
 
-        // Retry loop
+        // Resolve item scorer configuration before executing the target. Invalid item
+        // references are deterministic and therefore skip both target execution and retries.
         let retryCount = 0;
-        let execResult = await execFn(item, itemSignal);
+        let execResult: ExecutionResult = scorerConfigError
+          ? { output: null, error: scorerConfigError, traceId: null }
+          : await execFn(item, itemSignal);
 
-        while (execResult.error && retryCount < maxRetries) {
+        while (execResult.error && !scorerConfigError && retryCount < maxRetries) {
           // Don't retry abort errors
           if (execResult.error.message.toLowerCase().includes('abort')) break;
 
@@ -420,46 +448,48 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
         };
 
-        // Run scorers (inline, after target completes)
-        const workflowData =
-          execResult.stepResults || execResult.stepExecutionPath
-            ? {
-                stepResults: execResult.stepResults,
-                stepExecutionPath: execResult.stepExecutionPath,
-                spanId: execResult.spanId,
-              }
-            : undefined;
+        // Run scorers (inline, after target completes). A scorer-configuration
+        // failure skips scoring because the selected source could not be resolved fully.
+        let itemScores: Awaited<ReturnType<typeof runScorersForItem>> = [];
+        if (!scorerConfigError) {
+          const workflowData =
+            execResult.stepResults || execResult.stepExecutionPath
+              ? {
+                  stepResults: execResult.stepResults,
+                  stepExecutionPath: execResult.stepExecutionPath,
+                  spanId: execResult.spanId,
+                }
+              : undefined;
 
-        const flatScores = await runScorersForItem(
-          scorers,
-          item,
-          execResult.output,
-          storage ?? null,
-          experimentId,
-          targetType ?? 'agent',
-          targetId ?? 'inline',
-          item.id,
-          execResult.scorerInput,
-          execResult.scorerOutput,
-          execResult.traceId ?? undefined,
-          workflowData,
-        );
+          const flatScores = await runScorersForItem(
+            itemScorers,
+            item,
+            execResult.output,
+            storage ?? null,
+            experimentId,
+            targetType ?? 'agent',
+            targetId ?? 'inline',
+            item.id,
+            execResult.scorerInput,
+            execResult.scorerOutput,
+            execResult.traceId ?? undefined,
+            workflowData,
+          );
 
-        // Per-step scorer dispatch (mirrors runEvals). Only meaningful for workflow
-        // targets; for non-workflow targets stepScorers will be empty.
-        const stepScores = await runStepScorersForItem(
-          stepScorers,
-          item,
-          workflowData,
-          storage ?? null,
-          experimentId,
-          targetType ?? 'agent',
-          targetId ?? 'inline',
-          item.id,
-          execResult.traceId ?? undefined,
-        );
+          const stepScores = await runStepScorersForItem(
+            itemStepScorers,
+            item,
+            workflowData,
+            storage ?? null,
+            experimentId,
+            targetType ?? 'agent',
+            targetId ?? 'inline',
+            item.id,
+            execResult.traceId ?? undefined,
+          );
 
-        const itemScores = [...flatScores, ...stepScores];
+          itemScores = [...flatScores, ...stepScores];
+        }
 
         // Persist result with scores (if storage available). A throw here does
         // NOT abort the run — persistence is best-effort and the target run's
