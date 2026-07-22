@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
       start: vi.fn(async () => {}),
       getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'sandbox-1' } })),
       executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      setEnvironmentVariable: mocks.setEnvironmentVariable,
     };
   }),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
@@ -29,6 +30,7 @@ const mocks = vi.hoisted(() => ({
     authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
   })),
   mintInstallationToken: vi.fn(async () => 'gh-token'),
+  setEnvironmentVariable: vi.fn(),
 }));
 
 vi.mock('./integrations/github/sandbox', () => ({
@@ -54,6 +56,7 @@ afterEach(async () => {
   mocks.runWorktreeSetup.mockClear();
   mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
+  mocks.setEnvironmentVariable.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -337,10 +340,9 @@ describe('GitHub session workspace preparation', () => {
     const requestContext = createGithubRequestContext('project-1', 'session-a');
 
     await workspace({ requestContext });
-    const environment = mocks.ensureSandbox.mock.calls[0]![1] as Record<string, string>;
     injectGithubToken(requestContext, 'fresh-token');
 
-    expect(environment.GH_TOKEN).toBe('fresh-token');
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'fresh-token');
   });
 
   it('re-registers the token injector when reusing a workspace on a later request', async () => {
@@ -348,7 +350,6 @@ describe('GitHub session workspace preparation', () => {
     addProject();
     addSession({ id: 'session-a' });
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    const environment = mocks.ensureSandbox.mock.calls[0]![1] as Record<string, string>;
     const requestContext = createGithubRequestContext('project-1', 'session-a');
 
     await workspace({
@@ -357,7 +358,7 @@ describe('GitHub session workspace preparation', () => {
     });
     injectGithubToken(requestContext, 'later-token');
 
-    expect(environment.GH_TOKEN).toBe('later-token');
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'later-token');
   });
 
   it('reuses an already registered workspace for the exact GitHub session', async () => {

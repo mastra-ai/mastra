@@ -192,10 +192,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const token = access.authorization?.token;
     if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
 
-    const environment = { GH_TOKEN: token };
     const sandbox = await fleet.ensureSandbox(
       binding,
-      environment,
+      { GH_TOKEN: token },
       undefined,
       isLocalSandbox ? { workingDirectory: workdir } : {},
     );
@@ -215,7 +214,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (projectRepository.setupCommand) await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
 
     const injectGithubToken = (freshToken: string) => {
-      environment.GH_TOKEN = freshToken;
+      if (!sandbox.setEnvironmentVariable) {
+        throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
+      }
+      sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
     };
     githubTokenInjectors.set(workspaceId, injectGithubToken);
     registerGithubTokenInjector(requestContext, injectGithubToken);

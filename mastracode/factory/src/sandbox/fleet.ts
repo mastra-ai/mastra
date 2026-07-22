@@ -41,6 +41,8 @@ export interface MaterializationSandbox {
     args?: string[],
     options?: { timeout?: number; env?: Record<string, string | undefined> },
   ): Promise<SandboxCommandResult>;
+  /** Update an environment variable for future commands in this sandbox. */
+  setEnvironmentVariable?(name: string, value: string): void;
   /** Tear down the underlying VM. Optional: providers without it are no-ops. */
   stop?(): Promise<void>;
 }
@@ -132,7 +134,7 @@ export interface SandboxBindingStore {
  */
 function toMaterializationSandbox(
   sandbox: WorkspaceSandbox,
-  environment: Record<string, string> = {},
+  initialEnvironment: Record<string, string> = {},
 ): MaterializationSandbox {
   if (typeof sandbox.executeCommand !== 'function') {
     throw new Error(
@@ -140,6 +142,7 @@ function toMaterializationSandbox(
     );
   }
   const lifecycle = sandbox as { _start?(): Promise<void>; _stop?(): Promise<void> };
+  const environment = { ...initialEnvironment };
   return {
     id: sandbox.id,
     start: async () => {
@@ -151,6 +154,9 @@ function toMaterializationSandbox(
         ...options,
         env: { ...environment, ...options?.env },
       }),
+    setEnvironmentVariable: (name, value) => {
+      environment[name] = value;
+    },
     stop: async () => {
       await (lifecycle._stop ?? sandbox.stop)?.call(sandbox);
     },

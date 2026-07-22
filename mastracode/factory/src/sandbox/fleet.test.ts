@@ -224,10 +224,9 @@ describe('sandbox option forwarding', () => {
       clear: vi.fn(async () => {}),
     };
 
-    const environment = { GH_TOKEN: 'initial-token' };
-    const sandbox = await subject.ensureSandbox(store, environment);
+    const sandbox = await subject.ensureSandbox(store, { GH_TOKEN: 'initial-token' });
     await sandbox.executeCommand('gh auth status');
-    environment.GH_TOKEN = 'fresh-token';
+    sandbox.setEnvironmentVariable?.('GH_TOKEN', 'fresh-token');
     await sandbox.executeCommand('gh auth status', undefined, { env: { OTHER: 'value' } });
     await sandbox.executeCommand('gh repo view');
 
