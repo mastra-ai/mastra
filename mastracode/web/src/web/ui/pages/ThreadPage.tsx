@@ -1,8 +1,11 @@
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMatch, useParams } from 'react-router';
 
+import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useRouteThreadSync } from '../../../shared/hooks/useRouteThreadSync';
+import { useUserSessionQuery } from '../../../shared/hooks/useWorkspaces';
 import { Sidebar } from '../Sidebar';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { ChatMessageList } from '../domains/chat/components/ChatMessageList';
@@ -17,55 +20,36 @@ import {
   type FactorySessionContextTab,
 } from '../domains/factory/components/FactorySessionContextPanel';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
-import { renderedPaths } from '../domains/workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../domains/workspace-viewer/components/WorkspaceViewerPanel';
-import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
-import { activeWorkspacePath, findUserSessionByThreadId } from '../domains/workspaces/services/factories';
+import { renderedPaths } from '../domains/workspace-viewer/config';
 import { ChatLayout } from '../ui/ChatLayout';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
+interface FactoryTaskPanelAddress {
+  factoryProjectId: string;
+  threadId: string;
+  resourceId: string;
+  sessionId: string;
+}
+
 export function ThreadPage() {
-  const { activeFactory, factoriesPending } = useActiveFactoryContext();
-  const { kind, resourceId, factorySessionState, sessionEnabled } = useChatSessionContext();
-  const { threadId } = useParams();
+  const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId?: string; threadId?: string }>();
   const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
   const isMobile = useIsMobile();
-  const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
-  const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
-  const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
-  const activeUserSessionMatch =
-    userSessionMatch && activeFactory?.id === userSessionMatch.factory.id ? userSessionMatch : undefined;
+  const factoryQuery = useFactoryQuery(factoryId);
+  const userSessionQuery = useUserSessionQuery(userThreadMatch ? threadId : undefined);
+  const { kind, resourceId, factorySessionState, sessionEnabled } = useChatSessionContext();
   const isUserThreadRoute = Boolean(userThreadMatch);
-  const workspaceFactory = isUserThreadRoute ? activeUserSessionMatch?.factory : activeFactory;
-  const workspacePath = workspaceFactory
-    ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
-    : undefined;
+  const workspacePath = isUserThreadRoute ? userSessionQuery.data?.sessionId : sessionId;
   const factoryProjectId = factorySessionState?.factoryProjectId;
-  const factoryEligible = Boolean(
-    kind === 'factory' && sessionEnabled && threadId && resourceId && factoryProjectId && workspacePath,
-  );
-  const factoryPanelAvailable = factoryEligible && !isMobile;
-  const currentLifecycleKey =
-    factoryPanelAvailable && threadId && factoryProjectId
-      ? `${factoryProjectId}:${threadId}:${resourceId}:${resourceId}`
+  const factoryTaskAddress =
+    !isMobile && kind === 'factory' && sessionEnabled && factoryProjectId && threadId && resourceId && sessionId
+      ? { factoryProjectId, threadId, resourceId, sessionId }
       : undefined;
-  const [factoryPanelState, setFactoryPanelState] = useState<{
-    lifecycleKey: string | undefined;
-    tab: FactorySessionContextTab;
-  }>(() => ({ lifecycleKey: currentLifecycleKey, tab: 'task' }));
-  const lifecycleKeysMatch = Boolean(currentLifecycleKey && factoryPanelState.lifecycleKey === currentLifecycleKey);
-  const activeFactoryTab = lifecycleKeysMatch ? factoryPanelState.tab : 'task';
 
-  useEffect(() => {
-    if (factoryPanelState.lifecycleKey === currentLifecycleKey) return;
-    setFactoryPanelState({ lifecycleKey: currentLifecycleKey, tab: 'task' });
-    setWorkspaceViewerExpanded(false);
-  }, [currentLifecycleKey, factoryPanelState.lifecycleKey]);
-
-  if (factoriesPending) {
+  if (factoryQuery.isPending || (isUserThreadRoute && userSessionQuery.isPending)) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner />
@@ -73,37 +57,64 @@ export function ThreadPage() {
     );
   }
 
+  const panelLifecycleKey = factoryTaskAddress
+    ? `task:${factoryProjectId}:${threadId}:${resourceId}:${sessionId}`
+    : `files:${workspacePath ?? 'none'}:${isMobile ? 'mobile' : 'desktop'}`;
+
+  return (
+    <ThreadPageLayout
+      key={panelLifecycleKey}
+      workspacePath={workspacePath}
+      workspaceFactoryName={factoryQuery.data?.name}
+      factoryTaskAddress={factoryTaskAddress}
+      isMobile={isMobile}
+      threadId={threadId}
+    />
+  );
+}
+
+function ThreadPageLayout({
+  workspacePath,
+  workspaceFactoryName,
+  factoryTaskAddress,
+  isMobile,
+  threadId,
+}: {
+  workspacePath: string | undefined;
+  workspaceFactoryName: string | undefined;
+  factoryTaskAddress: FactoryTaskPanelAddress | undefined;
+  isMobile: boolean;
+  threadId: string | undefined;
+}) {
+  const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
+  const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
+  const [activeFactoryTab, setActiveFactoryTab] = useState<FactorySessionContextTab>('task');
+
   const collapseRightPanel = () => {
     setWorkspaceViewerExpanded(false);
-    setFactoryPanelState({ lifecycleKey: currentLifecycleKey, tab: 'task' });
+    setActiveFactoryTab('task');
     setWorkspaceViewerVisible(false);
   };
 
   const openRightPanel = () => {
     setWorkspaceViewerExpanded(false);
-    setFactoryPanelState({ lifecycleKey: currentLifecycleKey, tab: 'task' });
+    setActiveFactoryTab('task');
     setWorkspaceViewerVisible(true);
   };
 
   const changeFactoryTab = (tab: FactorySessionContextTab) => {
     setWorkspaceViewerExpanded(false);
-    setFactoryPanelState({ lifecycleKey: currentLifecycleKey, tab });
+    setActiveFactoryTab(tab);
   };
 
-  const rightPanelExpanded = factoryPanelAvailable
-    ? lifecycleKeysMatch && activeFactoryTab === 'files' && workspaceViewerExpanded
-    : factoryPanelState.lifecycleKey
-      ? false
-      : workspaceViewerExpanded;
+  const rightPanelExpanded = factoryTaskAddress
+    ? activeFactoryTab === 'files' && workspaceViewerExpanded
+    : workspaceViewerExpanded;
   const rightPanelVisible = workspaceViewerVisible || isMobile;
-
-  const rightPanel = factoryPanelAvailable ? (
-    currentLifecycleKey && workspacePath && factoryProjectId && threadId && rightPanelVisible ? (
+  const rightPanel = factoryTaskAddress ? (
+    workspacePath && rightPanelVisible ? (
       <FactorySessionContextPanel
-        factoryProjectId={factoryProjectId}
-        threadId={threadId}
-        resourceId={resourceId}
-        sessionId={resourceId}
+        {...factoryTaskAddress}
         workspacePath={workspacePath}
         activeTab={activeFactoryTab}
         onTabChange={changeFactoryTab}
@@ -117,7 +128,7 @@ export function ThreadPage() {
       workspacePath={workspacePath}
       renderedPaths={renderedPaths}
       title="Workspace files"
-      context={workspaceFactory?.name}
+      context={workspaceFactoryName}
       onExpandedChange={setWorkspaceViewerExpanded}
     />
   ) : undefined;
@@ -127,10 +138,10 @@ export function ThreadPage() {
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       rightPanelExpanded={rightPanelExpanded}
-      rightPanelAvailable={factoryPanelAvailable || Boolean(workspacePath)}
-      rightPanelOpenLabel={factoryPanelAvailable ? 'Open task and workspace context' : undefined}
+      rightPanelAvailable={Boolean(factoryTaskAddress || workspacePath)}
+      rightPanelOpenLabel={factoryTaskAddress ? 'Open task and workspace context' : undefined}
       onRightPanelOpen={openRightPanel}
-      onRightPanelClose={factoryPanelAvailable ? undefined : () => setWorkspaceViewerVisible(false)}
+      onRightPanelClose={factoryTaskAddress ? undefined : () => setWorkspaceViewerVisible(false)}
       rightPanel={rightPanel}
       main={
         <ChatSessionBoundary threadId={threadId}>

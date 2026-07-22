@@ -1038,14 +1038,6 @@ async function prepareProject(options: {
 }): Promise<EnsureResult> {
   const { github, fleet, project, userId, onProgress } = options;
   const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
-  const sandbox = await ensureProjectSandbox({
-    fleet,
-    row: sandboxRow,
-    storage: github.sourceControlStorage.sandboxes,
-    onProgress,
-  });
-  // Re-read the sandbox binding so we have the freshly persisted sandboxId.
-  const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
   const access = await github.versionControl.getRepositoryAccess({
     orgId: project.installation.orgId,
     repositoryId: project.repository.id,
@@ -1053,6 +1045,15 @@ async function prepareProject(options: {
   if (!access.authorization) {
     throw new MaterializeError('Repository access did not include a bearer token.', 'clone-failed');
   }
+  const sandbox = await ensureProjectSandbox({
+    fleet,
+    row: sandboxRow,
+    storage: github.sourceControlStorage.sandboxes,
+    token: access.authorization.token,
+    onProgress,
+  });
+  // Re-read the sandbox binding so we have the freshly persisted sandboxId.
+  const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
   const finalRow = fresh ?? sandboxRow;
   await materializeRepo({
     row: finalRow,

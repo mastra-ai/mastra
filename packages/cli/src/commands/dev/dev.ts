@@ -450,7 +450,7 @@ export async function dev({
   // file-based project), prepareFsAgentsEntry auto-constructs a Mastra instance.
   const userEntryFile = findMastraEntryFile(mastraDir);
 
-  const bundler = new DevBundler(env);
+  const bundler = new DevBundler(env, factory);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
   // Discover fs-routed agents under agents/* and, if any exist, wrap the entry so

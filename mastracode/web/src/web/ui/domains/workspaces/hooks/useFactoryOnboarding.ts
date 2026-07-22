@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useLoadFactories } from '../../../../../shared/hooks/useFactories';
-import type { Factory } from '../services/factories';
+import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
+import type { FactoryProject, FactoryProjectPayload } from '../services/github';
 
 const STEP_KEY = 'mastracode.factory-onboarding.step';
 const FACTORY_KEY = 'mastracode.factory-onboarding.factory-id';
@@ -11,7 +11,7 @@ export type FactoryOnboardingStep = 'initial' | 'vcs' | 'project-management';
 
 interface FactoryOnboardingState {
   step: FactoryOnboardingStep;
-  pendingFactory?: Factory;
+  pendingFactory?: FactoryProject | FactoryProjectPayload;
 }
 
 function readStep(): FactoryOnboardingStep {
@@ -29,7 +29,7 @@ function persistState(state: FactoryOnboardingState): FactoryOnboardingState {
 
 export function useFactoryOnboarding() {
   const queryClient = useQueryClient();
-  const factoriesQuery = useLoadFactories();
+  const factoriesQuery = useFactoriesQuery();
   const setState = useFactoryOnboardingSetState();
   const onboardingQuery = useQuery({
     queryKey: queryKeys.factoryOnboarding(),
@@ -55,13 +55,14 @@ export function useFactoryOnboarding() {
     state: onboardingQuery.data,
     advanceToVcs: () => setState.mutate({ step: 'vcs' }),
     persistVcsRedirect: () => setState.mutate({ step: 'vcs', pendingFactory: onboardingQuery.data?.pendingFactory }),
-    advanceToProjectManagement: (pendingFactory: Factory) =>
+    advanceToProjectManagement: (pendingFactory: FactoryProject | FactoryProjectPayload) =>
       setState.mutateAsync({ step: 'project-management', pendingFactory }),
     persistProjectManagementRedirect: () => {
       const pendingFactory = onboardingQuery.data?.pendingFactory;
       if (pendingFactory) setState.mutate({ step: 'project-management', pendingFactory });
     },
-    recordPendingFactory: (pendingFactory: Factory) => setState.mutateAsync({ step: 'vcs', pendingFactory }),
+    recordPendingFactory: (pendingFactory: FactoryProject | FactoryProjectPayload) =>
+      setState.mutateAsync({ step: 'vcs', pendingFactory }),
     complete: complete.mutateAsync,
   };
 }

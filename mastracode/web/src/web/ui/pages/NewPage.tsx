@@ -1,15 +1,14 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { GitBranch } from 'lucide-react';
-import { Navigate, useLocation } from 'react-router';
+import { useLocation, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
 import { ChatLayout } from '../ui/ChatLayout';
 import { FolderIcon } from '../ui/icons';
-import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
-import { isLocalFactory, isServerFactory, selectedRepository } from '../domains/workspaces/services/factories';
-import type { Factory } from '../domains/workspaces/services/factories';
-import { deriveProjectPath } from '../../../shared/hooks/useWorkspaces';
+import { useFactoryQuery } from '../../../shared/hooks/useFactories';
+import { useUserSessionQuery } from '../../../shared/hooks/useWorkspaces';
+import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { TranscriptEntries } from '../domains/chat/components/Transcript';
@@ -20,28 +19,23 @@ import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
-  const { activeFactory } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
 
-  // The factory layout guarantees a resolved factory before rendering children.
-  if (!activeFactory) return null;
-
-  if (isServerFactory(activeFactory)) {
-    return <Navigate to={`/factories/${activeFactory.id}/work`} replace />;
-  }
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       main={
         <ChatSessionBoundary>
-          <NewPageContent activeFactory={activeFactory} />
+          <NewPageContent activeFactory={factoryQuery.data} />
         </ChatSessionBoundary>
       }
     />
   );
 }
 
-function NewPageContent({ activeFactory }: { activeFactory: Factory }) {
+function NewPageContent({ activeFactory }: { activeFactory: FactoryProject | undefined }) {
   useGlobalShortcuts();
   const { transcript } = useChatTranscript();
   const location = useLocation();
@@ -65,7 +59,7 @@ function NewPageContent({ activeFactory }: { activeFactory: Factory }) {
   );
 }
 
-function DraftStart({ activeFactory }: { activeFactory: Factory }) {
+function DraftStart({ activeFactory }: { activeFactory: FactoryProject | undefined }) {
   return (
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <div className="flex flex-col items-center gap-3 text-center">
@@ -90,17 +84,19 @@ function BrandLockup() {
   );
 }
 
-function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
-  // Server factories have no local `path`; show the sandbox worktree path instead.
-  const projectPath = deriveProjectPath(activeFactory);
-  const gitBranch = isLocalFactory(activeFactory)
-    ? activeFactory.binding.gitBranch
-    : selectedRepository(activeFactory)?.gitBranch;
+function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | undefined }) {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const sessionQuery = useUserSessionQuery(sessionId);
+  const repository = activeFactory?.repositories.find(
+    repo => repo.projectRepositoryId === sessionQuery.data?.projectRepositoryId,
+  );
+  const projectPath = sessionQuery.data?.sessionId;
+  const gitBranch = repository?.gitBranch;
   return (
     <div className="flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
       <div className="flex min-w-0 items-center gap-1.5">
         <FolderIcon size={13} className="shrink-0 text-icon2" />
-        <span className="shrink-0 font-medium">{activeFactory.name}</span>
+        <span className="shrink-0 font-medium">{activeFactory?.name ?? 'Factory'}</span>
         {projectPath && (
           <>
             <span className="shrink-0 text-icon2">·</span>

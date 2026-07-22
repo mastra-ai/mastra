@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
+import { defineConfig, searchForWorkspaceRoot } from 'vite';
 import type { Plugin } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -26,23 +26,15 @@ const uiPort = Number(process.env.MASTRACODE_UI_PORT ?? 5173);
 
 /**
  * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html.
- * Mirrors the server's default: auth is on unless MASTRACODE_AUTH_DISABLED=1,
- * because MastraFactory installs MastraAuthStudio by default when no explicit
- * provider is passed. Legacy WorkOS/better-auth branches also flip auth on when
- * their env vars are present so those paths keep working.
- * `web:dev` only passes the package-root `.env` to the API server, so the
- * plugin loads that file itself via `loadEnv`. Production builds are untouched
- * (`apply: 'serve'`) — the statically hosted SPA has no flag and falls back to
- * probing `/auth/me` (see ui/runtime-config.ts).
+ * `mastra factory dev` is auth-less by default. Production builds are
+ * untouched (`apply: 'serve'`) and probe `/auth/me` at runtime instead.
  */
-function runtimeConfigPlugin(mode: string): Plugin {
+function runtimeConfigPlugin(): Plugin {
   return {
     name: 'mastracode-runtime-config',
     apply: 'serve',
     transformIndexHtml() {
-      const env = { ...loadEnv(mode, resolve(here, '../..'), ''), ...process.env };
-      const authDisabled = env.MASTRACODE_AUTH_DISABLED === '1';
-      const authEnabled = !authDisabled;
+      const authEnabled = false;
       return [
         {
           tag: 'script',
@@ -57,28 +49,28 @@ function runtimeConfigPlugin(mode: string): Plugin {
 /**
  * Vite config for the MastraCode web UI.
  *
- * In dev, `pnpm web:dev` runs `mastra dev` (the API server from
+ * In dev, `pnpm web:dev` runs `mastra factory dev` (the API server from
  * `src/mastra/index.ts` on :4111) and Vite (:5173) side by side; API paths are
  * proxied to that server so the browser uses same-origin requests in dev.
  *
- * The production build outputs the static SPA to `src/mastra/public/ui`.
+ * The production build outputs the static SPA to `src/mastra/public/factory`.
  * `mastra build` copies the `public/` dir next to the Mastra entry into
  * `.mastra/output/` automatically, so the build output is self-contained and
  * the API server serves the SPA same-origin at `/` (see @mastra/factory/spa-static).
  * Hosting the SPA separately (static host / CDN, cross-origin via
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
-export default defineConfig(({ mode }) => ({
+export default defineConfig({
   root: resolve(here, 'ui'),
   envDir: resolve(here, '../..'),
-  plugins: [react(), tailwindcss(), runtimeConfigPlugin(mode)],
+  plugins: [react(), tailwindcss(), runtimeConfigPlugin()],
   resolve: {
     // Monorepo packages arrive via `link:` and would otherwise resolve their
     // own react copy from the monorepo store — force a single copy from here.
     dedupe: ['react', 'react-dom', '@tanstack/react-query'],
   },
   build: {
-    outDir: resolve(here, '../mastra/public/ui'),
+    outDir: resolve(here, '../mastra/public/factory'),
     emptyOutDir: true,
   },
   server: {
@@ -120,4 +112,4 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-}));
+});

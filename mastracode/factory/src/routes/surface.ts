@@ -19,8 +19,10 @@ import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -28,6 +30,7 @@ import type { SourceControlStorage } from '../storage/domains/source-control/bas
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { LinearTaskContextIntegration } from '../thread-context.js';
 import { ConfigRoutes } from './config.js';
+import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
 import { OAuthRoutes } from './oauth.js';
@@ -74,6 +77,8 @@ export interface FactoryApiRoutesDeps {
   domains: {
     intake: IntakeStorage;
     modelCredentials: ModelCredentialsStorage;
+    memorySettings: MemorySettingsStorage;
+    customProviders: CustomProvidersStorage;
     modelPacks: ModelPacksStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
@@ -374,7 +379,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       modelPacks: deps.domains.modelPacks,
+      memorySettings: deps.domains.memorySettings,
+      customProviders: deps.domains.customProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
+      onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),
     ...new OAuthRoutes({
       auth: deps.auth,

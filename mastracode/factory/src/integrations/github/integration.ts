@@ -1070,8 +1070,8 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   /**
-   * Session-scoped agent tools: PR subscribe/unsubscribe for sessions bound
-   * to a GitHub-backed project. Empty for sessions outside a GitHub project.
+   * Session-scoped agent tools for token refresh and PR subscriptions in
+   * sessions bound to a GitHub-backed project. Empty elsewhere.
    */
   sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
     return createGithubSubscriptionTools(requestContext, this);
