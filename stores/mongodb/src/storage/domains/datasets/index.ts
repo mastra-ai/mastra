@@ -198,6 +198,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       expectedTrajectory:
         typeof row.expectedTrajectory === 'string' ? safelyParseJSON(row.expectedTrajectory) : row.expectedTrajectory,
       toolMocks: (typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks) ?? undefined,
+      timeout: row.timeout == null ? undefined : Number(row.timeout),
       requestContext: typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext,
       metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata,
       source: typeof row.source === 'string' ? safelyParseJSON(row.source) : row.source,
@@ -513,6 +514,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             groundTruth: args.groundTruth ?? null,
             expectedTrajectory: args.expectedTrajectory ?? null,
             toolMocks: args.toolMocks ?? null,
+            timeout: args.timeout ?? null,
             requestContext: args.requestContext ?? null,
             metadata: args.metadata ?? null,
             source: args.source ?? null,
@@ -543,6 +545,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
         toolMocks: args.toolMocks,
+        timeout: args.timeout,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -588,6 +591,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         args.groundTruth !== undefined ||
         args.expectedTrajectory !== undefined ||
         args.toolMocks !== undefined ||
+        args.timeout !== undefined ||
         args.requestContext !== undefined ||
         args.metadata !== undefined ||
         args.source !== undefined;
@@ -604,6 +608,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
       const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
+      const mergedTimeout = args.timeout !== undefined ? args.timeout : existing.timeout;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -656,6 +661,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             groundTruth: mergedGroundTruth,
             expectedTrajectory: mergedExpectedTrajectory ?? null,
             toolMocks: mergedToolMocks ?? null,
+            timeout: mergedTimeout ?? null,
             requestContext: mergedRequestContext,
             metadata: mergedMetadata,
             source: mergedSource,
@@ -685,6 +691,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
         toolMocks: mergedToolMocks,
+        timeout: mergedTimeout,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -765,6 +772,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             groundTruth: existing.groundTruth,
             expectedTrajectory: existing.expectedTrajectory ?? null,
             toolMocks: existing.toolMocks ?? null,
+            timeout: existing.timeout ?? null,
             requestContext: existing.requestContext,
             metadata: existing.metadata,
             source: existing.source,
@@ -870,6 +878,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
               groundTruth: insert.item.groundTruth,
               expectedTrajectory: insert.item.expectedTrajectory,
               toolMocks: insert.item.toolMocks,
+              timeout: insert.item.timeout,
               requestContext: insert.item.requestContext,
               metadata: insert.item.metadata,
               source: insert.item.source,
@@ -968,6 +977,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           groundTruth: item.groundTruth,
           expectedTrajectory: item.expectedTrajectory ?? null,
           toolMocks: item.toolMocks ?? null,
+          timeout: item.timeout ?? null,
           requestContext: item.requestContext,
           metadata: item.metadata,
           source: item.source,

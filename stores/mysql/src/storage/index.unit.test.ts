@@ -198,7 +198,7 @@ describe('MySQLStore configuration', () => {
   });
 });
 
-describe('MySQLStore tool mocks rejection', () => {
+describe('MySQLStore unsupported dataset item controls', () => {
   beforeEach(() => {
     poolInstances.length = 0;
     const maybeMock = createPool as unknown as { mockClear?: () => void };
@@ -248,6 +248,39 @@ describe('MySQLStore tool mocks rejection', () => {
     await store.close();
   });
 
+  it('rejects _doAddItem carrying a timeout before touching the DB', async () => {
+    const store = newStore();
+    const datasets = (await store.getStore('datasets')) as any;
+    const { pool } = poolInstances[poolInstances.length - 1];
+
+    await expect(datasets._doAddItem({ datasetId: 'd1', input: { q: 'hi' }, timeout: 1_000 })).rejects.toMatchObject({
+      id: 'MYSQL_DATASET_ITEM_TIMEOUT_UNSUPPORTED',
+    });
+    expect(pool.getConnection).not.toHaveBeenCalled();
+
+    await store.close();
+  });
+
+  it('rejects _doUpdateItem and _doBatchInsertItems carrying timeouts before touching the DB', async () => {
+    const store = newStore();
+    const datasets = (await store.getStore('datasets')) as any;
+    const { pool } = poolInstances[poolInstances.length - 1];
+
+    await expect(datasets._doUpdateItem({ id: 'i1', datasetId: 'd1', timeout: 2_000 })).rejects.toMatchObject({
+      id: 'MYSQL_DATASET_ITEM_TIMEOUT_UNSUPPORTED',
+    });
+    await expect(
+      datasets._doBatchInsertItems({
+        datasetId: 'd1',
+        items: [{ input: 'ok' }, { input: 'bad', timeout: 3_000 }],
+      }),
+    ).rejects.toMatchObject({ id: 'MYSQL_DATASET_ITEM_TIMEOUT_UNSUPPORTED' });
+    expect(pool.execute).not.toHaveBeenCalled();
+    expect(pool.getConnection).not.toHaveBeenCalled();
+
+    await store.close();
+  });
+
   it('rejects addExperimentResult carrying a tool mock report', async () => {
     const store = newStore();
     const experiments = (await store.getStore('experiments')) as any;
@@ -263,20 +296,20 @@ describe('MySQLStore tool mocks rejection', () => {
     await store.close();
   });
 
-  it('does not reject mock-free dataset items at the guard', async () => {
+  it('does not reject items without unsupported controls at the guard', async () => {
     const store = newStore();
     const datasets = (await store.getStore('datasets')) as any;
 
-    // No toolMocks → guard passes; the call proceeds to DB access (stubbed),
-    // so it must NOT throw the tool-mock error. (It may reject later for other
-    // reasons in the stubbed DB, which is fine — we only assert the guard.)
+    // Without toolMocks or timeout, the call proceeds to stubbed DB access.
     let guardError: unknown;
     try {
       await datasets._doAddItem({ datasetId: 'd1', input: { q: 'hi' } });
     } catch (err) {
       guardError = err;
     }
-    expect(String(guardError ?? '')).not.toMatch(/Tool mocks are not supported/);
+    expect(String(guardError ?? '')).not.toMatch(
+      /Tool mocks are not supported|Dataset item timeouts are not supported/,
+    );
 
     await store.close();
   });

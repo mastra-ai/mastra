@@ -88,6 +88,17 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
+  #rejectItemTimeout(timeout: unknown): void {
+    if (timeout !== undefined && timeout !== null) {
+      throw new MastraError({
+        id: 'MYSQL_DATASET_ITEM_TIMEOUT_UNSUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Dataset item timeouts are not supported on the MySQL storage adapter. Use a supported adapter (LibSQL, PostgreSQL, MongoDB, or Spanner) to persist dataset item timeouts.',
+      });
+    }
+  }
+
   /**
    * Returns default index definitions for the datasets domain tables.
    * Currently no default indexes are defined for datasets.
@@ -194,6 +205,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         'source',
         'expectedTrajectory',
         'toolMocks',
+        'timeout',
         'externalId',
       ],
     });
@@ -260,6 +272,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
         : undefined,
       toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : undefined,
+      timeout: row.timeout == null ? undefined : Number(row.timeout),
       requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : undefined,
       metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
       source: row.source ? parseJSON<DatasetItem['source']>(row.source) : undefined,
@@ -284,6 +297,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
         : undefined,
       toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : undefined,
+      timeout: row.timeout == null ? undefined : Number(row.timeout),
       requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : undefined,
       metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
       source: row.source ? parseJSON<DatasetItem['source']>(row.source) : undefined,
@@ -631,6 +645,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
     this.#rejectToolMocks(args.toolMocks);
+    this.#rejectItemTimeout(args.timeout);
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -712,6 +727,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     this.#rejectToolMocks(args.toolMocks);
+    this.#rejectItemTimeout(args.timeout);
     const existing = await this.getItemById({ id: args.id });
     if (!existing) {
       throw new MastraError({
@@ -1154,6 +1170,7 @@ export class DatasetsMySQL extends DatasetsStorage {
   protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
     for (const item of input.items) {
       this.#rejectToolMocks(item.toolMocks);
+      this.#rejectItemTimeout(item.timeout);
     }
 
     const connection = await this.pool.getConnection();
