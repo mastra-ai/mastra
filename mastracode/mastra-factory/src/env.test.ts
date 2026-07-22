@@ -73,18 +73,15 @@ describe('upsertEnvFile', () => {
     expect(twice).toBe(once);
   });
 
-  it.runIf(process.platform !== 'win32')(
-    'tightens .env perms to 0600 so secrets are not world-readable',
-    () => {
-      const envPath = path.join(workDir, '.env');
-      // Start with the loose default that fs.copyFileSync leaves behind
-      // (0644-ish, depending on umask).
-      fs.writeFileSync(envPath, 'EXISTING=1\n', { mode: 0o644 });
+  it.runIf(process.platform !== 'win32')('tightens .env perms to 0600 so secrets are not world-readable', () => {
+    const envPath = path.join(workDir, '.env');
+    // Start with the loose default that fs.copyFileSync leaves behind
+    // (0644-ish, depending on umask).
+    fs.writeFileSync(envPath, 'EXISTING=1\n', { mode: 0o644 });
 
-      upsertEnvFile(envPath, { MASTRA_PLATFORM_SECRET_KEY: 'sk_secret' });
+    upsertEnvFile(envPath, { MASTRA_PLATFORM_SECRET_KEY: 'sk_secret' });
 
-      const mode = fs.statSync(envPath).mode & 0o777;
-      expect(mode).toBe(0o600);
-    },
-  );
+    const mode = fs.statSync(envPath).mode & 0o777;
+    expect(mode).toBe(0o600);
+  });
 });
