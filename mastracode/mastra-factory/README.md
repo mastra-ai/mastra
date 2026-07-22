@@ -6,7 +6,7 @@ Create your own **Mastra Software Factory**, an open-source, agent-powered softw
 npm create factory
 ```
 
-The CLI is intentionally minimal: It asks for a project name, clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and initializes git. 
+The CLI is intentionally minimal: It asks for a project name, clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and initializes git.
 
 Run `npm run dev` and finish the setup (model providers, integrations, database) from the web UI on first load.
 
