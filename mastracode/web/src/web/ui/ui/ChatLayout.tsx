@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ReactNode, RefObject } from 'react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
+import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
+import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
+import { useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
+import { Panel, usePanelRef } from 'react-resizable-panels';
+import { PanelRightIcon } from 'lucide-react';
 
 import { PageLayout } from './PageLayout';
 
-function FilledArrowLeft() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false">
-      <path d="M7 1.5L3 5L7 8.5V1.5Z" fill="currentColor" />
-    </svg>
-  );
-}
 
 type ChatLayoutProps = {
   sidebar: ReactNode;
@@ -20,11 +20,12 @@ type ChatLayoutProps = {
   main?: ReactNode;
   /** Optional pinned region below the chat content (e.g. composer). */
   footer?: ReactNode;
-  /** Optional desktop-only panel attached to the right side of chat. */
+  /** Optional workspace panel rendered inline on desktop and in a drawer on mobile. */
   rightPanel?: ReactNode;
   rightPanelExpanded?: boolean;
   rightPanelAvailable?: boolean;
   onRightPanelOpen?: () => void;
+  onRightPanelClose?: () => void;
 };
 
 const COMPACT_RIGHT_PANEL_WIDTH = 320;
@@ -43,39 +44,44 @@ export function ChatLayout({
   rightPanelExpanded = false,
   rightPanelAvailable = false,
   onRightPanelOpen,
+  onRightPanelClose,
 }: ChatLayoutProps) {
-  const frameRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   return (
     <PageLayout sidebar={sidebar} header={header}>
-      <div ref={frameRef} className="relative flex h-full min-w-0 flex-1 overflow-visible">
-        <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-          {main ?? (
-            <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
-              {content}
-              {footer}
-            </div>
-          )}
-        </div>
-        {rightPanel ? (
-          <DesktopRightPanelFrame
-            frameRef={frameRef}
-            initialWidth={rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH}
-          >
+      <div className="relative flex h-full min-w-0 flex-1 overflow-visible">
+        <DesktopRightPanelFrame
+          initialWidth={rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH}
+          rightPanel={isMobile ? undefined : rightPanel}
+          onRightPanelClose={onRightPanelClose}
+        >
+          <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+            {main ?? (
+              <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+                {content}
+                {footer}
+              </div>
+            )}
+          </div>
+        </DesktopRightPanelFrame>
+        {isMobile && rightPanel ? (
+          <PanelDrawer direction="right" label="Open workspace files">
             {rightPanel}
-          </DesktopRightPanelFrame>
+          </PanelDrawer>
         ) : null}
         {!rightPanel && rightPanelAvailable ? (
-          <button
-            type="button"
-            className="absolute right-2 top-2 hidden items-center text-icon6 lg:inline-flex"
+          <Button
+            size="icon-md"
+            variant="ghost"
+            tooltip="Open workspace files"
+            className="absolute right-2 top-2 z-10 hidden rounded-md lg:inline-flex"
             onClick={onRightPanelOpen}
             aria-label="Open workspace files"
+            aria-expanded="false"
           >
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border2 bg-surface1 shadow-sm hover:bg-surface2">
-              <FilledArrowLeft />
-            </span>
-          </button>
+            <PanelRightIcon className="rotate-180" />
+          </Button>
         ) : null}
       </div>
     </PageLayout>
@@ -83,57 +89,66 @@ export function ChatLayout({
 }
 
 function DesktopRightPanelFrame({
-  frameRef,
   initialWidth,
+  rightPanel,
   children,
+  onRightPanelClose,
 }: {
-  frameRef: RefObject<HTMLDivElement | null>;
   initialWidth: number;
+  rightPanel?: ReactNode;
   children: ReactNode;
+  onRightPanelClose?: () => void;
 }) {
-  const [resizedWidth, setResizedWidth] = useState<number | undefined>();
-  const resizeCleanupRef = useRef<(() => void) | undefined>(undefined);
-  const rightPanelWidth = resizedWidth ?? initialWidth;
+  const rightPanelRef = usePanelRef();
+  const hasRightPanel = rightPanel !== undefined;
+  const previousInitialWidthRef = useRef(initialWidth);
+  const previousHasRightPanelRef = useRef(hasRightPanel);
 
-  useEffect(() => () => resizeCleanupRef.current?.(), []);
-
-  const clampRightPanelWidth = (width: number) => {
-    const frameWidth = frameRef.current?.clientWidth ?? window.innerWidth;
-    const maxWidth = Math.max(MIN_RIGHT_PANEL_WIDTH, frameWidth - MIN_CHAT_WIDTH);
-    return Math.min(maxWidth, Math.max(MIN_RIGHT_PANEL_WIDTH, width));
-  };
-
-  const startRightPanelResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    resizeCleanupRef.current?.();
-    const startX = event.clientX;
-    const startWidth = rightPanelWidth;
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      setResizedWidth(clampRightPanelWidth(startWidth - (moveEvent.clientX - startX)));
-    };
-    const cleanup = () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', cleanup);
-      window.removeEventListener('pointercancel', cleanup);
-      resizeCleanupRef.current = undefined;
-    };
-    resizeCleanupRef.current = cleanup;
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', cleanup);
-    window.addEventListener('pointercancel', cleanup);
-  };
+  useEffect(() => {
+    const previousInitialWidth = previousInitialWidthRef.current;
+    const previouslyHadRightPanel = previousHasRightPanelRef.current;
+    previousInitialWidthRef.current = initialWidth;
+    previousHasRightPanelRef.current = hasRightPanel;
+    if (hasRightPanel && previouslyHadRightPanel && previousInitialWidth !== initialWidth) {
+      rightPanelRef.current?.resize(initialWidth);
+    }
+  }, [hasRightPanel, initialWidth, rightPanelRef]);
 
   return (
-    <>
-      <div
-        className="hidden w-1 shrink-0 cursor-col-resize bg-border1 hover:bg-accent1 lg:block"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize workspace panel"
-        onPointerDown={startRightPanelResize}
-      />
-      <div className="hidden h-full min-w-0 shrink-0 overflow-visible lg:block" style={{ width: rightPanelWidth }}>
+    <PanelGroup className="h-full min-h-0 w-full min-w-0">
+      <Panel id="chat-main-slot" minSize={MIN_CHAT_WIDTH} className="min-w-0">
         {children}
-      </div>
-    </>
+      </Panel>
+      {hasRightPanel ? (
+        <>
+          <PanelSeparator />
+          <Panel
+            id="chat-right-slot"
+            panelRef={rightPanelRef}
+            minSize={MIN_RIGHT_PANEL_WIDTH}
+            defaultSize={initialWidth}
+            groupResizeBehavior="preserve-pixel-size"
+            className="min-w-0"
+          >
+            <div className="relative h-full min-w-0">
+              {rightPanel}
+              {onRightPanelClose ? (
+                <Button
+                  size="icon-md"
+                  variant="ghost"
+                  tooltip="Close workspace files"
+                  className="absolute right-2 top-2 z-10 rounded-md"
+                  onClick={onRightPanelClose}
+                  aria-label="Close workspace files"
+                  aria-expanded="true"
+                >
+                  <PanelRightIcon />
+                </Button>
+              ) : null}
+            </div>
+          </Panel>
+        </>
+      ) : null}
+    </PanelGroup>
   );
 }

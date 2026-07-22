@@ -52,6 +52,7 @@
     "pg": "^8.21.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "react-resizable-panels": "^4.11.0",
     "react-router": "^7.13.1",
     "shiki": "^1.29.2",
     "zod": "^4.3.6"

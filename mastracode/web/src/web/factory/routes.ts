@@ -23,7 +23,7 @@ import type {
   WorkItemRow,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base';
-import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
+import { computeFactoryMetrics, parseMetricsRange } from './metrics';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base';
 import { FactoryStartCoordinator, FactoryStartTransitionError } from './rules/start-coordinator';
 import type { FactoryStartPreparedResult, FactoryStartRequest } from './rules/start-coordinator';
@@ -367,9 +367,13 @@ export function buildFactoryRoutes({
       handler: async c => {
         const resolved = await resolveProject(loose(c));
         if ('response' in resolved) return resolved.response;
-        const days = clampMetricsWindow(loose(c).req.query('days'));
+        const { windowStart, windowEnd } = parseMetricsRange(
+          loose(c).req.query('from'),
+          loose(c).req.query('to'),
+          new Date(),
+        );
         const items = await listWorkItems({ orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId });
-        return c.json({ metrics: computeFactoryMetrics(items, { days, now: new Date() }) });
+        return c.json({ metrics: computeFactoryMetrics(items, { windowStart, windowEnd }) });
       },
     }),
 

@@ -187,7 +187,7 @@ export function WorkspaceFileBrowser({
       className="flex h-full w-full min-w-0 flex-col border-l border-border1 bg-surface1"
       aria-label="Workspace files"
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border1 px-3 py-2 pl-4">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 pl-4 lg:pr-12">
         <div className="flex min-w-0 items-center gap-2">
           <NotepadText size={15} className="shrink-0 text-icon4" />
           <Txt variant="ui-sm" className="truncate font-medium text-icon6">

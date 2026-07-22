@@ -35,12 +35,22 @@ export function PageLayoutMobileHeader() {
 export function PageLayout({ sidebar, header, title, description, actions, children }: PageLayoutProps) {
   const hasHeading = title !== undefined || description !== undefined;
   const view = useContext(PageLayoutMainViewContext);
+  const mobileHeader = useContext(PageLayoutMobileHeaderContext);
+  const resolvedMobileHeader =
+    mobileHeader ??
+    (title !== undefined ? (
+      <Txt as="h1" variant="header-sm" className="min-w-0 flex-1 truncate text-icon6">
+        {title}
+      </Txt>
+    ) : undefined);
 
   return (
     <div className="relative z-1 flex h-screen overflow-hidden bg-surface1">
-      <aside className="h-full min-h-0 shrink-0 overflow-hidden py-5">{sidebar}</aside>
-      <div className="relative z-1 flex min-w-0 flex-1 flex-col overflow-hidden border-l border-border1 bg-surface2">
-        {header}
+      <aside className="h-full min-h-0 shrink-0 overflow-hidden py-2">{sidebar}</aside>
+      <div className="relative z-1 flex min-w-0 flex-1 flex-col overflow-hidden bg-surface2">
+        <PageLayoutMobileHeaderContext.Provider value={resolvedMobileHeader}>
+          {header}
+        </PageLayoutMobileHeaderContext.Provider>
         <main
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
           hidden={view !== undefined}
@@ -52,7 +62,11 @@ export function PageLayout({ sidebar, header, title, description, actions, child
               <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
                 <header className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-col gap-1">
-                    {title !== undefined && <h1 className="m-0 text-xl text-icon6">{title}</h1>}
+                    {title !== undefined && (
+                      <Txt as="h1" variant="header-sm" className="hidden text-icon6 md:block">
+                        {title}
+                      </Txt>
+                    )}
                     {description !== undefined && (
                       <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
                         {description}

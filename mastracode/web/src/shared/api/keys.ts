@@ -35,8 +35,8 @@ export const queryKeys = {
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  factoryMetrics: (githubProjectId: string | undefined, days: number) =>
-    ['factory', 'metrics', githubProjectId ?? null, days] as const,
+  factoryMetrics: (githubProjectId: string | undefined, from: string, to: string) =>
+    ['factory', 'metrics', githubProjectId ?? null, from, to] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
     ['factory', 'health-thresholds', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>

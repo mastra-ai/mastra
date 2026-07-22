@@ -8,6 +8,9 @@
 
 export interface FactoryMetrics {
   windowDays: number;
+  /** Earliest work-item creation time (ISO, window-independent) — the lower
+   * bound for the date-range control. `null` when the board is empty. */
+  earliestItemAt: string | null;
   /** Items reaching `done` per UTC day, gap-filled across the window. */
   throughput: { date: string; count: number }[];
   /** Card creation → `done` duration for items completed in the window. */
@@ -26,14 +29,21 @@ export interface FactoryMetrics {
   transitions: { human: number; total: number };
 }
 
-/** Fetch the org's aggregated flow metrics for a Factory project. */
+/** Absolute window bounds (ISO 8601) for a metrics request. */
+export interface FactoryMetricsRange {
+  from: string;
+  to: string;
+}
+
+/** Fetch the org's aggregated flow metrics for a Factory project over a window. */
 export async function fetchFactoryMetrics(
   baseUrl: string,
   factoryProjectId: string,
-  days: number,
+  range: FactoryMetricsRange,
 ): Promise<FactoryMetrics> {
+  const query = new URLSearchParams({ from: range.from, to: range.to });
   const res = await fetch(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/metrics?days=${days}`,
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/metrics?${query}`,
     { headers: { Accept: 'application/json' }, credentials: 'include' },
   );
   if (!res.ok) {

@@ -36,7 +36,7 @@ export function Sidebar() {
   const settingsOpen = overlays.isOpen('settings');
 
   return (
-    <MainSidebar className="bg-transparent h-full">
+    <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         {settingsOpen ? (
           <SettingsNavigation />

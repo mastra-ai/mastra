@@ -190,10 +190,15 @@ function ThreadRow({
   };
 
   return (
-    <div role="listitem" className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
+    <div
+      role="listitem"
+      className={`group relative rounded-md ${
+        active ? 'bg-[var(--sidebar-nav-active)]' : 'hover:bg-[var(--sidebar-nav-hover)]'
+      }`}
+    >
       <button
         type="button"
-        className="flex w-full flex-col gap-0.5 rounded-md px-2 py-2 text-left"
+        className="flex w-full flex-col rounded-md px-2 py-1.5 text-left"
         onClick={openThread}
       >
         <span className="truncate text-ui-sm text-icon6">{thread.title || 'Untitled thread'}</span>

@@ -1,3 +1,4 @@
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 
@@ -25,6 +26,7 @@ export function ThreadPage() {
   const { activeFactory, factoriesPending } = useActiveFactoryContext();
   const { threadId } = useParams();
   const location = useLocation();
+  const isMobile = useIsMobile();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
   const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
@@ -50,15 +52,15 @@ export function ThreadPage() {
       rightPanelExpanded={workspaceViewerExpanded}
       rightPanelAvailable={Boolean(workspacePath)}
       onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
+      onRightPanelClose={() => setWorkspaceViewerVisible(false)}
       rightPanel={
-        workspacePath && workspaceViewerVisible ? (
+        workspacePath && (workspaceViewerVisible || isMobile) ? (
           <WorkspaceViewerPanel
             workspacePath={workspacePath}
             renderedPaths={renderedPaths}
             title="Workspace files"
             context={workspaceFactory?.name}
             onExpandedChange={setWorkspaceViewerExpanded}
-            onCollapse={() => setWorkspaceViewerVisible(false)}
           />
         ) : undefined
       }
