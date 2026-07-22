@@ -376,6 +376,7 @@ describe('SankeySignals drill-in', () => {
 
       expect(await screen.findByText('Drill-in: Goal = "Add transcript"')).not.toBeNull();
       expect(await screen.findByText('2 traces analyzed')).not.toBeNull();
+      expect(screen.getAllByTitle('Other')).toHaveLength(2);
       expect(pathsRequestCount).toBe(2);
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));

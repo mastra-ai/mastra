@@ -358,13 +358,12 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
     snapshot?.snapshotId,
     drillInAvailable ? drillIn?.themeId : undefined,
   );
-  const flow = useMemo(
-    () =>
-      stableUnfilteredFlow && drillIn && pathsQuery.data
-        ? buildDrilledThemeFlow(stableUnfilteredFlow, pathsQuery.data, drillIn)
-        : stableUnfilteredFlow,
-    [drillIn, pathsQuery.data, stableUnfilteredFlow],
-  );
+  const flow = useMemo(() => {
+    if (!stableUnfilteredFlow || !drillIn || !pathsQuery.data) return stableUnfilteredFlow;
+
+    const drilledFlow = buildDrilledThemeFlow(stableUnfilteredFlow, pathsQuery.data, drillIn);
+    return stabilizeThemeFlow(drilledFlow, [stableUnfilteredFlow, drilledFlow]);
+  }, [drillIn, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
 
   useEffect(() => {
