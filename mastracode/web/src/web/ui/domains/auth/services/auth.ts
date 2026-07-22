@@ -26,13 +26,6 @@ export interface FactoryAuthState {
   signUpDisabled?: boolean;
 }
 
-/** The resourceId under which a user's personal (non-factory) sessions live. */
-export function userSessionResourceId(state: FactoryAuthState | undefined): string {
-  const userId = state?.user?.userId;
-  if (!userId) throw new Error('Authenticated user is missing a user id');
-  return userId;
-}
-
 /**
  * Build the hosted-login URL. `returnTo` is where the server sends the user
  * after authenticating; it defaults to the current location so contexts that

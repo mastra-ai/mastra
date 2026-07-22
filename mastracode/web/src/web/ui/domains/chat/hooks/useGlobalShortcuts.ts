@@ -9,12 +9,11 @@ import { useAbortAgentControllerMutation } from '../../../../../shared/hooks/use
 export function useGlobalShortcuts() {
   const overlays = useOverlays();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { busy } = useChatTranscript();
   const abortMutation = useAbortAgentControllerMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });

@@ -1,3 +1,4 @@
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';
@@ -18,6 +19,39 @@ function useSettingsOpen() {
 }
 
 /**
+ * Alpha status tag rendered as a dashed-outline chip (Clerk-style), so it reads
+ * as a subtle stage marker rather than a solid pill competing with the nav items.
+ * Tinted with the Mastra brand green (#7aff78, `--color-ds-green` on the website).
+ */
+function AlphaBadge() {
+  return (
+    <span className="relative bg-[#7aff78]/10 px-[0.1875rem] font-medium text-[0.625rem]/[0.875rem] text-[#7aff78] uppercase tracking-wide">
+      Alpha
+      <span className="-top-px absolute inset-x-[-0.1875rem] block transform-gpu text-[#7aff78]/40">
+        <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
+          <line x1="0" x2="100%" y1="0.5" y2="0.5" />
+        </svg>
+      </span>
+      <span className="-bottom-px absolute inset-x-[-0.1875rem] block transform-gpu text-[#7aff78]/40">
+        <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
+          <line x1="0" x2="100%" y1="0.5" y2="0.5" />
+        </svg>
+      </span>
+      <span className="-left-px absolute inset-y-[-0.1875rem] block transform-gpu text-[#7aff78]/40">
+        <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
+          <line x1="0.5" x2="0.5" y1="0" y2="100%" />
+        </svg>
+      </span>
+      <span className="-right-px absolute inset-y-[-0.1875rem] block transform-gpu text-[#7aff78]/40">
+        <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
+          <line x1="0.5" x2="0.5" y1="0" y2="100%" />
+        </svg>
+      </span>
+    </span>
+  );
+}
+
+/**
  * Composition shell: each section owns its data through local query hooks,
  * focused chat hooks, or the router location, so nothing is wired through props here.
  */
@@ -27,6 +61,10 @@ export function Sidebar() {
   return (
     <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
+        <div className="mb-2 flex items-center justify-between gap-2 px-3 pt-1">
+          <LogoWithoutText aria-label="Mastra" role="img" className="h-4 w-auto text-icon6" />
+          <AlphaBadge />
+        </div>
         {settingsOpen ? (
           <SettingsNavigation />
         ) : (

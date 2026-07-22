@@ -55,7 +55,6 @@ export function ChatSessionConfigProvider({
   // (resourceId, no scope) session to read threads and share the live run.
   // On user routes the :threadId param IS the sessionId.
   const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId);
-  const projectPath = undefined;
   const sessionEnabled = userScoped
     ? Boolean(storedSession) && !resolvingSession
     : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
@@ -63,7 +62,6 @@ export function ChatSessionConfigProvider({
     resourceId: resourceId ?? '',
     sessionEnabled,
     resourceEnabled: userScoped ? Boolean(resourceId) : ensureQuery.isSuccess,
-    projectPath,
     factorySessionState:
       factory && repository
         ? {
@@ -94,11 +92,10 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
     threadId,
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),

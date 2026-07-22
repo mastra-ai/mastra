@@ -21,23 +21,22 @@ import { useAgentControllerThreads } from '../../../../../shared/hooks/useAgentC
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 export function ThreadList() {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, kind, baseUrl } = useChatSessionContext();
   const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
 
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
-  // Workspaces hold a single conversation: show its title for context, but no
-  // "Threads" header/count, no rename/clone/delete actions, and no way to
-  // create more threads.
-  const readOnly = Boolean(projectPath);
+  // Factory workspaces hold a single conversation: show its title for context,
+  // but no "Threads" header/count, no rename/clone/delete actions, and no way
+  // to create more threads.
+  const readOnly = kind === 'factory' && sessionEnabled;
 
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;
@@ -78,11 +77,10 @@ export function ThreadList() {
 }
 
 function useThreadHookArgs() {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   return {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
