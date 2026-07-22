@@ -13,6 +13,7 @@ import type { RouteObject } from 'react-router';
 
 import Chat from './domains/chat/Chat';
 import { RootGuards } from './domains/auth/components/RootGuards';
+import { DEFAULT_SETTINGS_PATH } from './domains/settings/settingsSections';
 import { AuditPage } from './pages/AuditPage';
 import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
@@ -20,6 +21,7 @@ import { MetricsPage } from './pages/MetricsPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { SignInPage } from './pages/SignInPage';
 import { ThreadPage } from './pages/ThreadPage';
 import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
@@ -65,6 +67,13 @@ export function createAppRoutes(): RouteObject[] {
             { path: 'factory/metrics', element: <MetricsPage /> },
             { path: 'factory/audit', element: <AuditPage /> },
             { path: 'factories/create', element: <CreateFactoryPage /> },
+            {
+              path: 'settings',
+              children: [
+                { index: true, element: <Navigate to={DEFAULT_SETTINGS_PATH} replace /> },
+                { path: ':section', element: <SettingsPage /> },
+              ],
+            },
             // Compatibility routes from the former combined Board.
             { path: 'factory/board', element: <Navigate to="/factory/work" replace /> },
             { path: 'factory/intake', element: <Navigate to="/factory/work" replace /> },
