@@ -121,6 +121,20 @@ describeNative('TursoSqliteClient', () => {
     await expect(client.execute('SELECT name FROM items')).resolves.toMatchObject({ rows: [{ name: 'committed' }] });
   });
 
+  it('rolls back all writes after a multi-statement transaction fails', async () => {
+    const { client } = await createFileClient();
+    await client.batch(['CREATE TABLE items (name TEXT UNIQUE)', 'CREATE TABLE versions (value INTEGER)']);
+
+    const transaction = await client.transaction('write');
+    await transaction.execute({ sql: 'INSERT INTO items VALUES (?)', args: ['first'] });
+    await transaction.execute({ sql: 'INSERT INTO versions VALUES (?)', args: [1] });
+    await expect(transaction.execute({ sql: 'INSERT INTO items VALUES (?)', args: ['first'] })).rejects.toThrow();
+    await transaction.rollback();
+
+    await expect(client.execute('SELECT name FROM items')).resolves.toMatchObject({ rows: [] });
+    await expect(client.execute('SELECT value FROM versions')).resolves.toMatchObject({ rows: [] });
+  });
+
   it('blocks unrelated operations until an interactive transaction settles', async () => {
     const { client } = await createFileClient();
     await client.execute('CREATE TABLE items (name TEXT)');

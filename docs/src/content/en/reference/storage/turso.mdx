@@ -149,7 +149,7 @@ The package uses native bindings. Call `getTursoDatabaseSupport()` before constr
 | macOS | arm64 | Supported |
 | Windows | x64 | Supported |
 
-Other combinations, including musl-based Linux and Intel macOS, aren't supported by `@tursodatabase/database@0.7.0`. Constructing `TursoStore` on an unsupported system returns an error before loading the native binding.
+Other combinations, including musl-based Linux and Intel macOS, aren't supported by `@tursodatabase/database@0.7.0`. Constructing `TursoStore` on an unsupported system throws an error before loading the native binding.
 
 ```typescript
 import { getTursoDatabaseSupport, TursoStore } from '@mastra/turso'
