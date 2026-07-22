@@ -94,7 +94,10 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
   /**
    * Create or wholesale-replace a provider by `(orgId, providerId)` — mirrors
    * the settings.json upsert semantics (no key retention: an absent `apiKey`
-   * clears the stored key). `previousProviderId` removes the old row on rename.
+   * clears the stored key). `previousProviderId` renames the provider: the
+   * common path is a single atomic in-place update of the old row; renaming
+   * onto an id that already exists overwrites the target first and removes the
+   * old row last, so no interleaving or failure can lose the provider.
    */
   async upsert({
     orgId,
@@ -108,13 +111,64 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     previousProviderId?: string;
   }): Promise<CustomProviderRecord> {
     const now = new Date();
-    if (previousProviderId && previousProviderId !== input.providerId) {
-      await this.#db.deleteMany('custom_providers', { org_id: orgId, provider_id: previousProviderId });
+    const renameFrom = previousProviderId && previousProviderId !== input.providerId ? previousProviderId : undefined;
+
+    if (renameFrom) {
+      const target = await this.#db.findOne<CustomProviderDbRow>('custom_providers', {
+        org_id: orgId,
+        provider_id: input.providerId,
+      });
+      if (!target) {
+        // In-place rename: one atomic write with no delete/insert gap, so a
+        // failure can never drop the provider (and `created_at`/`created_by`
+        // are preserved). If a concurrent create grabs the new id between the
+        // lookup and this update, the unique index rejects the update and the
+        // old row stays intact — the request fails cleanly and a retry
+        // converges on the rename-onto-existing path below.
+        const renamed = await this.#db.updateAtomic<CustomProviderDbRow>(
+          'custom_providers',
+          { org_id: orgId, provider_id: renameFrom },
+          () => ({
+            provider_id: input.providerId,
+            name: input.name,
+            url: input.url,
+            api_key: input.apiKey ?? null,
+            models: input.models,
+            updated_at: now,
+          }),
+        );
+        if (renamed) return toRecord(renamed);
+        // Old row already gone — fall through to a plain create of the new id.
+      }
+      // Rename onto an existing id: overwrite the target below, then delete
+      // the old row last — a failure in the gap leaves a redundant duplicate
+      // (recoverable by re-submitting or deleting) instead of losing data.
     }
-    // Update-first, then insert-and-catch-unique-violation (see `queue_health`):
-    // concurrent creates of the same provider both succeed (last write wins on
-    // the single row) instead of one failing on the unique index, and a row
-    // deleted mid-flight is recreated rather than reported as a stale success.
+
+    const record = await this.#write({ orgId, userId, input, now });
+    if (renameFrom) {
+      await this.#db.deleteMany('custom_providers', { org_id: orgId, provider_id: renameFrom });
+    }
+    return record;
+  }
+
+  /**
+   * Update-first, then insert-and-catch-unique-violation (see `queue_health`):
+   * concurrent creates of the same provider both succeed (last write wins on
+   * the single row) instead of one failing on the unique index, and a row
+   * deleted mid-flight is recreated rather than reported as a stale success.
+   */
+  async #write({
+    orgId,
+    userId,
+    input,
+    now,
+  }: {
+    orgId: string;
+    userId: string;
+    input: UpsertCustomProviderInput;
+    now: Date;
+  }): Promise<CustomProviderRecord> {
     const updateExisting = () =>
       this.#db.updateAtomic<CustomProviderDbRow>(
         'custom_providers',

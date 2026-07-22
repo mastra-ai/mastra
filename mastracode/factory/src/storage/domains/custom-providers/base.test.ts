@@ -103,6 +103,70 @@ describe('CustomProvidersStorage', () => {
     expect(providers.map(p => p.providerId)).toEqual(['new-name']);
   });
 
+  it('renames in place — same row survives with original provenance', async () => {
+    const seed = await createFactoryStorageForTests();
+
+    const original = await seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { providerId: 'old-name', name: 'Old Name', url: 'https://a.example.com', models: ['m'] },
+    });
+    const renamed = await seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-2',
+      input: { providerId: 'new-name', name: 'New Name', url: 'https://b.example.com', models: ['m'] },
+      previousProviderId: 'old-name',
+    });
+
+    // The common rename path is a single atomic in-place update: the row keeps
+    // its id and provenance, so there is no delete/insert gap that could lose it.
+    expect(renamed.id).toBe(original.id);
+    expect(renamed.createdBy).toBe('user-1');
+    expect(renamed.name).toBe('New Name');
+    expect(renamed.url).toBe('https://b.example.com');
+  });
+
+  it('renames onto an existing provider id by overwriting it and removing the old row', async () => {
+    const seed = await createFactoryStorageForTests();
+
+    await seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { providerId: 'source', name: 'Source', url: 'https://source.example.com', models: ['m'] },
+    });
+    const target = await seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { providerId: 'target', name: 'Target', url: 'https://target.example.com', models: ['m'] },
+    });
+
+    const merged = await seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-2',
+      input: { providerId: 'target', name: 'Target', url: 'https://merged.example.com', models: ['m2'] },
+      previousProviderId: 'source',
+    });
+
+    expect(merged.id).toBe(target.id);
+    expect(merged.url).toBe('https://merged.example.com');
+    const providers = await seed.customProviders.list({ orgId: 'org-1' });
+    expect(providers.map(p => p.providerId)).toEqual(['target']);
+  });
+
+  it('rename whose source row is already gone still creates the new provider', async () => {
+    const seed = await createFactoryStorageForTests();
+
+    const created = await seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { providerId: 'new-name', name: 'New Name', url: 'https://a.example.com', models: ['m'] },
+      previousProviderId: 'vanished',
+    });
+
+    expect(created.providerId).toBe('new-name');
+    expect(await seed.customProviders.list({ orgId: 'org-1' })).toHaveLength(1);
+  });
+
   it('deletes only within the org', async () => {
     const seed = await createFactoryStorageForTests();
 
