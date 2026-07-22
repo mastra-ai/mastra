@@ -18,6 +18,9 @@ class TestBundler extends Bundler {
   getEnvFiles(): Promise<string[]> {
     return Promise.resolve([]);
   }
+  writeFactoryMarkerForTest(outputDirectory: string): Promise<void> {
+    return this.writeFactoryMarker(outputDirectory);
+  }
 }
 
 describe('Bundler.writeFactoryMarker', () => {
@@ -31,7 +34,7 @@ describe('Bundler.writeFactoryMarker', () => {
     await writeFile(join(outputDir, 'factory', 'index.html'), '<html></html>');
 
     const bundler = new TestBundler('Test');
-    await (bundler as any).writeFactoryMarker(tempDir);
+    await bundler.writeFactoryMarkerForTest(tempDir);
 
     const markerPath = join(outputDir, 'mastra-project.json');
     expect(existsSync(markerPath)).toBe(true);
@@ -54,7 +57,7 @@ describe('Bundler.writeFactoryMarker', () => {
 
     const bundler = new TestBundler('Test');
 
-    const error = await (bundler as any).writeFactoryMarker(tempDir).catch((error: unknown) => error);
+    const error = await bundler.writeFactoryMarkerForTest(tempDir).catch((error: unknown) => error);
     expect(error).toBeInstanceOf(MastraError);
     expect(error).toMatchObject({ id: 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' });
     expect((error as Error).message).toMatch(/factory\/index\.html.*not found/);
