@@ -1,8 +1,6 @@
 import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { Mastra } from '../mastra';
 import { createRunScopeKey } from '../mastra/run-scope';
-import type { Tool } from '../tools';
-import { isMastraTool } from '../tools/toolchecks';
 import type { InputProcessor } from './index';
 
 export type BackgroundWorkDisposition = 'deferred' | 'awaited';
@@ -33,9 +31,12 @@ type BackgroundWorkNotifier = {
 const BACKGROUND_WORK_NOTIFIERS = createRunScopeKey<Map<string, BackgroundWorkNotifier>>(
   'processors.backgroundWorkNotifiers',
 );
-const BACKGROUND_WORK_WRAPPERS = createRunScopeKey<
-  WeakMap<object, { tool: Tool<any, any, any, any, any, any, any>; binding: ToolBinding }>
->('processors.backgroundWorkWrappers');
+type ExecutableTool = object & {
+  execute?: (inputData: unknown, context?: BackgroundWorkExecutionContext) => Promise<unknown> | unknown;
+};
+const BACKGROUND_WORK_WRAPPERS = createRunScopeKey<WeakMap<object, { tool: ExecutableTool; binding: ToolBinding }>>(
+  'processors.backgroundWorkWrappers',
+);
 
 export const BACKGROUND_WORK_CONTEXT = Symbol('mastra.backgroundWorkContext');
 
@@ -143,7 +144,7 @@ type ToolBinding = {
   sendSignal: SendSignal;
 };
 
-function wrapTool(tool: Tool<any, any, any, any, any, any, any>, binding: ToolBinding) {
+function wrapTool<TTool extends ExecutableTool>(tool: TTool, binding: ToolBinding): TTool {
   const wrapped = Object.create(Object.getPrototypeOf(tool));
   Object.defineProperties(wrapped, Object.getOwnPropertyDescriptors(tool));
   Object.defineProperty(wrapped, 'execute', {
@@ -189,11 +190,15 @@ export function createBackgroundWorkSignalProcessor(): InputProcessor {
       let changed = false;
       const nextTools: Record<string, unknown> = { ...tools };
       for (const [name, candidate] of Object.entries(tools)) {
-        if (!isMastraTool(candidate)) {
+        if (
+          !candidate ||
+          typeof candidate !== 'object' ||
+          typeof (candidate as ExecutableTool).execute !== 'function'
+        ) {
           continue;
         }
 
-        const tool = candidate as Tool<any, any, any, any, any, any, any>;
+        const tool = candidate as ExecutableTool;
         let entry = wrappers.get(tool);
         if (!entry) {
           const binding = { sendSignal };

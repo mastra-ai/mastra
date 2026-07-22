@@ -898,8 +898,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
             let backgroundChunkTransformQueue: Promise<void> = Promise.resolve();
             const emittedReplayedToolCalls = new Set<string>();
-            let resolveReconciliation!: () => void;
-            const reconciliationComplete = new Promise<void>(resolve => {
+            let resolveReconciliation!: (outcome: { error?: unknown }) => void;
+            const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
               resolveReconciliation = resolve;
             });
 
@@ -1200,7 +1200,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       }
                     }
 
-                    await notifyBackgroundWorkTerminal(mastra, {
+                    resolveReconciliation({});
+                    void notifyBackgroundWorkTerminal(mastra, {
                       originRunId: runId,
                       originToolCallId: params.toolCallId,
                       ...(params.runId !== runId ? { executorRunId: params.runId } : {}),
@@ -1209,8 +1210,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
                       status: params.status === 'failed' ? 'failed' : 'completed',
                     });
-                  } finally {
-                    resolveReconciliation();
+                  } catch (error) {
+                    resolveReconciliation({ error });
+                    throw error;
                   }
                 },
                 // Execution injector — records background task lifecycle metadata on the
@@ -1286,7 +1288,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
               if (bgResolved.disposition === 'awaited') {
                 const completedTask = await bgTask.waitForCompletion();
-                await reconciliationComplete;
+                const reconciliation = await reconciliationComplete;
+                if (reconciliation.error) {
+                  throw reconciliation.error;
+                }
 
                 if (completedTask.status !== 'completed') {
                   throw new Error(

@@ -351,6 +351,26 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
   });
 
+  it.each(['work-deferred', 'work-awaited', 'work-completed', 'work-failed'] as const)(
+    'renders the custom %s notification tag as an inline notification component',
+    tagName => {
+      const state = createState();
+
+      addUserMessage(
+        state,
+        createSignal({
+          id: `${tagName}-1`,
+          type: 'notification',
+          tagName,
+          contents: `${tagName}: call-1`,
+          attributes: { source: 'background-work', status: tagName === 'work-failed' ? 'failed' : 'running' },
+        }).toDBMessage(),
+      );
+
+      expect(state.messageComponentsById.get(`${tagName}-1`)).toBeInstanceOf(NotificationComponent);
+    },
+  );
+
   it('dedupes echoed slash command messages against the optimistic slash component', () => {
     const state = createState();
     const slashComp = new SlashCommandComponent('deploy', 'custom output');

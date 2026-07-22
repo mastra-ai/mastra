@@ -186,7 +186,7 @@ export function getSignalKind(message: MastraDBMessage): SignalKind {
   if (type === 'state') return 'state';
   if (type === 'reactive' && tagName === 'system-reminder') return 'reminder';
   if (type === 'notification' && tagName === 'notification-summary') return 'notification-summary';
-  if (type === 'notification' && tagName === 'notification') return 'notification';
+  if (type === 'notification') return 'notification';
   if (type === 'reactive') return 'reactive';
   return 'user';
 }
