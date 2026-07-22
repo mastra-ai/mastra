@@ -2,6 +2,7 @@
   "name": "@mastra/memory-integration-tests",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "scripts": {
     "test": "vitest run",
     "compile:worker": "npx tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --ignoreConfig --types node --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir ./ --rootDir ./ --skipLibCheck",

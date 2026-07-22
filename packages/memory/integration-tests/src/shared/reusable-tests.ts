@@ -344,7 +344,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          vectorSearchString: 'quantum physics',
+          vectorSearchString: 'Message about quantum physics',
           threadConfig: {
             lastMessages: 0,
             semanticRecall: {

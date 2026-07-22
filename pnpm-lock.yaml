@@ -5116,6 +5116,18 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/fastembed':
+        specifier: workspace:*
+        version: link:../fastembed
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
+      '@mastra/pg':
+        specifier: workspace:*
+        version: link:../../stores/pg
+      '@mastra/upstash':
+        specifier: workspace:*
+        version: link:../../stores/upstash
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15

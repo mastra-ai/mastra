@@ -16,7 +16,7 @@ describe('Memory with LibSQL Performance', () => {
   });
 
   afterAll(async () => {
-    await rm(dbPath, { recursive: true });
+    await rm(dbPath, { recursive: true }).catch(() => {});
   });
 
   getPerformanceTests(() => {

@@ -160,7 +160,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         await vector.turso.close();
 
         try {
-          await rm(dirname(dbPath), { force: true, recursive: true });
+          await rm(dirname(dbPath), { force: true, recursive: true }).catch(() => {});
         } catch {}
       });
 

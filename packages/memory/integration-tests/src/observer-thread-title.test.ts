@@ -48,7 +48,7 @@ describe('Observer thread title generation', () => {
   });
 
   afterAll(async () => {
-    await rm(dbDir, { recursive: true, force: true });
+    await rm(dbDir, { recursive: true, force: true }).catch(() => {});
     await mock.saveAndStop();
   });
 
