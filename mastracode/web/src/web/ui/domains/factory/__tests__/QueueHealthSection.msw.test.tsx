@@ -190,9 +190,7 @@ function useQueueHealthHandlers({ workItems, activityThreads = [], thresholds }:
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/metrics`, () =>
       HttpResponse.json({ metrics: emptyMetrics }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/health/thresholds`, () =>
       HttpResponse.json({ thresholds: thresholds ?? [14400, 86400, 259200] }),
     ),
