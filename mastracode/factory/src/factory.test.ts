@@ -331,13 +331,13 @@ describe('MastraFactory.prepare', () => {
     } satisfies AuthInitContext);
   });
 
-  it('defaults publicUrl to the local Factory UI origin', async () => {
+  it('defaults publicUrl to the local Factory server origin (single server serves UI and API)', async () => {
     const auth = fakeProvider();
     const storage = fakeStorage();
     await prepareFactory({ auth, storage });
     expect(auth.init).toHaveBeenCalledExactlyOnceWith({
       database: storage.authDatabase(),
-      publicUrl: 'http://localhost:5173',
+      publicUrl: 'http://localhost:4111',
       allowedOrigins: [],
     } satisfies AuthInitContext);
   });
