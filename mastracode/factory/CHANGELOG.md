@@ -1,5 +1,14 @@
 # @mastra/factory
 
+## 0.1.0-alpha.5
+
+### Patch Changes
+
+- Fixed a server startup crash when the factory's storage backend could not be recognized by the SDK. The factory now tells the SDK explicitly whether its Mastra store is Postgres or LibSQL, so agent state wiring works even when the project's dependency graph contains duplicate copies of Mastra packages. ([#20030](https://github.com/mastra-ai/mastra/pull/20030))
+
+- Updated dependencies [[`b06a569`](https://github.com/mastra-ai/mastra/commit/b06a56958d683e45574d2e3806dca42db5fe8a7a)]:
+  - @mastra/code-sdk@1.0.0-alpha.17
+
 ## 0.1.0-alpha.4
 
 ### Patch Changes
