@@ -5,8 +5,8 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CircleCheck, CircleDashed, CircleX, ListFilter, type LucideIcon } from 'lucide-react';
-import { useState } from 'react';
+import { Check, CircleCheck, CircleDashed, CircleX, Clock, ListFilter, RefreshCw, Repeat, type LucideIcon } from 'lucide-react';
+import { Fragment, useState } from 'react';
 
 import { useFactoryDecisionHistory, useRetryFactoryDecision } from '../../../shared/hooks/useFactoryDecisions';
 import { relativeTime } from '../../../shared/lib/date/relativeTime';
@@ -25,6 +25,14 @@ const DECISION_GROUPS: ReadonlyArray<{
   { key: 'failed', label: 'Failed', icon: CircleX, statuses: ['failed'] },
   { key: 'succeeded', label: 'Succeeded', icon: CircleCheck, statuses: ['succeeded'] },
 ];
+
+const STATUS_ICON: Record<FactoryDecisionStatus, { icon: LucideIcon; className: string }> = {
+  pending: { icon: CircleDashed, className: 'text-accent1' },
+  leased: { icon: CircleDashed, className: 'text-accent1' },
+  retry: { icon: CircleDashed, className: 'text-accent1' },
+  succeeded: { icon: CircleCheck, className: 'text-green' },
+  failed: { icon: CircleX, className: 'text-red' },
+};
 
 /** Rule decisions and their durable queued effects for the active Factory. */
 export function RulesPage() {
@@ -98,16 +106,18 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
           }
         />
       ) : (
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea className="min-h-0 flex-1" revealScrollbarOnHover={false}>
           <div className="flex flex-col gap-2 pr-1">
-            <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Rule decisions">
-              {decisions.map(decision => (
-                <DecisionRow
-                  key={decision.id}
-                  decision={decision}
-                  retrying={retryDecision.isPending && retryDecision.variables === decision.id}
-                  onRetry={() => retryDecision.mutate(decision.id)}
-                />
+            <ul className="m-0 flex list-none flex-col p-0" aria-label="Rule decisions">
+              {decisions.map((decision, index) => (
+                <Fragment key={decision.id}>
+                  {index > 0 ? <li role="separator" aria-hidden className="mx-3 my-px h-px bg-border1" /> : null}
+                  <DecisionRow
+                    decision={decision}
+                    retrying={retryDecision.isPending && retryDecision.variables === decision.id}
+                    onRetry={() => retryDecision.mutate(decision.id)}
+                  />
+                </Fragment>
               ))}
             </ul>
             {decisionsQuery.hasNextPage ? (
@@ -138,34 +148,43 @@ function DecisionRow({
   onRetry: () => void;
 }) {
   const active = decision.status === 'pending' || decision.status === 'leased' || decision.status === 'retry';
-  const detail = [
-    `attempts ${decision.attempts}`,
-    `created ${relativeTime(decision.createdAt)}`,
+  const { icon: StatusIcon, className: statusIconClass } = STATUS_ICON[decision.status];
+  const metrics: ReadonlyArray<{ icon: LucideIcon; label: string; value: string }> = [
+    { icon: Repeat, label: 'attempts', value: String(decision.attempts) },
+    { icon: Clock, label: 'created', value: relativeTime(decision.createdAt) },
     decision.completedAt
-      ? `completed ${relativeTime(decision.completedAt)}`
-      : `updated ${relativeTime(decision.updatedAt)}`,
-  ].join(' · ');
+      ? { icon: Check, label: 'completed', value: relativeTime(decision.completedAt) }
+      : { icon: RefreshCw, label: 'updated', value: relativeTime(decision.updatedAt) },
+  ];
 
   return (
-    <li className="rounded-lg border border-border1 bg-surface2 px-3 py-2">
-      <div className="flex items-baseline gap-3">
-        <span
-          className={cn(
-            'inline-flex w-fit rounded-md bg-surface4 px-1.5 py-0.5 text-ui-xs',
-            decision.status === 'failed' ? 'text-error' : active ? 'text-accent1' : 'text-icon5',
-          )}
-        >
-          {decision.status}
-        </span>
+    <li className="rounded-lg px-3 py-2 transition-colors hover:bg-neutral6/5">
+      <div className="flex items-start gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <Txt as="span" variant="ui-sm" className="text-icon6">
-            {decision.type}
-          </Txt>
-          <Txt as="span" variant="ui-xs" className="text-icon3">
-            {detail}
-          </Txt>
+          <div className="flex items-center gap-2">
+            <StatusIcon className={cn('size-3 shrink-0', statusIconClass)} aria-hidden />
+            <Txt as="span" variant="ui-sm" className="text-icon6">
+              {decision.type}
+            </Txt>
+            <span
+              className={cn(
+                'inline-flex w-fit rounded-md bg-surface4 px-1.5 py-0.5 text-ui-xs',
+                decision.status === 'failed' ? 'text-error' : active ? 'text-accent1' : 'text-icon5',
+              )}
+            >
+              {decision.status}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-ui-xs leading-ui-xs text-icon3">
+            {metrics.map(({ icon: MetricIcon, label, value }) => (
+              <span key={label} className="inline-flex items-center gap-1" title={`${label} ${value}`}>
+                <MetricIcon className="size-3 shrink-0" aria-hidden />
+                {value}
+              </span>
+            ))}
+          </div>
           {decision.lastError ? (
-            <Txt as="span" variant="ui-xs" className="break-words text-error">
+            <Txt as="span" variant="ui-xs" className="break-words text-icon3">
               {decision.lastError}
             </Txt>
           ) : null}
