@@ -7,6 +7,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
@@ -62,6 +63,14 @@ interface SourcePickerItem {
 }
 
 /**
+ * Card container for a stack of picker sections: one shared border, dividers
+ * between sections, and rounding only on the group's outer edges.
+ */
+function SourcePickerGroup({ children }: { children: ReactNode }) {
+  return <div className="overflow-hidden rounded-lg border border-border1 divide-y divide-border1">{children}</div>;
+}
+
+/**
  * Collapsible picker for one source section (a Linear team or the GitHub
  * repository list). Collapsed by default with a "n selected" hint; expanded it
  * shows a client-side search bar scoped to this section plus a checkbox row
@@ -94,6 +103,8 @@ function SourcePickerSection({
   };
 
   return (
+    // Border/rounding live on the parent SourcePickerGroup so stacked cards
+    // share dividers and only the group's first/last edges are rounded.
     <div role="group" aria-label={label}>
       <Collapsible
         open={open}
@@ -102,7 +113,7 @@ function SourcePickerSection({
           if (!next) setQuery('');
         }}
       >
-        <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md py-1 text-icon4">
+        <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-3 py-2 text-icon4">
           <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
           <Txt as="span" variant="ui-sm">
             {label}
@@ -113,7 +124,7 @@ function SourcePickerSection({
             </Txt>
           )}
         </CollapsibleTrigger>
-        <CollapsibleContent className="flex flex-col gap-2 pt-1 pb-2 pl-5">
+        <CollapsibleContent className="flex flex-col gap-2 px-3 pb-3">
           <ListSearch label={`Search ${label}`} placeholder="Search…" size="sm" value={query} onSearch={setQuery} />
           <DataList columns="auto minmax(0,1fr)" variant="lined" className="max-h-64">
             {visibleItems.length === 0 ? (
@@ -126,7 +137,16 @@ function SourcePickerSection({
                     onToggle={() => toggle(item.id)}
                     aria-label={item.label}
                   />
-                  <DataList.RowButton flushLeft colStart={2} disabled={disabled} onClick={() => toggle(item.id)}>
+                  <DataList.RowButton
+                    flushLeft
+                    colStart={2}
+                    disabled={disabled}
+                    onClick={() => toggle(item.id)}
+                    // The whole row is one action here, so drop the button's own
+                    // hover/focus fill and let the root's uniform `.data-list-row`
+                    // hover overlay be the only highlight (no stacked fills).
+                    className="hover:bg-transparent focus-visible:bg-transparent"
+                  >
                     <DataList.NameCell>{item.label}</DataList.NameCell>
                   </DataList.RowButton>
                 </DataList.RowWrapper>
@@ -203,13 +223,13 @@ export function IntakeSection() {
           disabled={busy}
           onToggle={enabled => update({ ...config, github: { ...config.github, enabled } })}
         />
-        {config.github.enabled && (
-          <div className="pl-1">
-            {linkedRepositories.length === 0 ? (
-              <Txt as="span" variant="ui-xs" className="text-icon3">
-                No linked repositories yet — link a repository to a factory to add one.
-              </Txt>
-            ) : (
+        {config.github.enabled &&
+          (linkedRepositories.length === 0 ? (
+            <Txt as="span" variant="ui-xs" className="text-icon3">
+              No linked repositories yet — link a repository to a factory to add one.
+            </Txt>
+          ) : (
+            <SourcePickerGroup>
               <SourcePickerSection
                 label="Repositories"
                 items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
@@ -225,9 +245,8 @@ export function IntakeSection() {
                   })
                 }
               />
-            )}
-          </div>
-        )}
+            </SourcePickerGroup>
+          ))}
       </section>
 
       <section className="flex flex-col gap-2" aria-label="Linear intake">
@@ -264,7 +283,7 @@ export function IntakeSection() {
           </div>
         ) : (
           config.linear.enabled && (
-            <div className="flex flex-col gap-2.5 pl-1">
+            <div className="flex flex-col gap-2.5">
               <div className="flex items-center gap-2">
                 <Txt as="span" variant="ui-xs" className="text-icon3">
                   Connected to {linearStatus?.workspace?.name ?? 'a Linear workspace'}
@@ -273,21 +292,25 @@ export function IntakeSection() {
                   Reconnect
                 </Button>
               </div>
-              {groupLinearProjectsByTeam(linearProjectsQuery.data ?? []).map(group => (
-                <SourcePickerSection
-                  key={group.id}
-                  label={group.label}
-                  items={group.projects.map(project => ({ id: project.id, label: project.name }))}
-                  selectedIds={config.linear.sourceIds}
-                  disabled={busy}
-                  onToggleItem={projectId =>
-                    update({
-                      ...config,
-                      linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, projectId) },
-                    })
-                  }
-                />
-              ))}
+              {(linearProjectsQuery.data ?? []).length > 0 && (
+                <SourcePickerGroup>
+                  {groupLinearProjectsByTeam(linearProjectsQuery.data ?? []).map(group => (
+                    <SourcePickerSection
+                      key={group.id}
+                      label={group.label}
+                      items={group.projects.map(project => ({ id: project.id, label: project.name }))}
+                      selectedIds={config.linear.sourceIds}
+                      disabled={busy}
+                      onToggleItem={projectId =>
+                        update({
+                          ...config,
+                          linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, projectId) },
+                        })
+                      }
+                    />
+                  ))}
+                </SourcePickerGroup>
+              )}
             </div>
           )
         )}
