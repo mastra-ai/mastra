@@ -77,4 +77,35 @@ describe('platform entry (src/mastra/index.ts)', () => {
       expect(mod.mastra).toBeDefined();
     });
   });
+
+  // `mastra factory dev` is auth-less by default, but `MASTRACODE_AUTH_ENABLED=1`
+  // must win over the factory-dev auto-disable so local dev can exercise the
+  // real auth surface (platform-backed Studio auth) end to end.
+  describe('dev auth opt-in', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    });
+
+    it('mounts the public /auth/* routes when MASTRACODE_AUTH_ENABLED=1 overrides factory dev', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_FACTORY_DEV', 'true');
+      vi.stubEnv('MASTRACODE_AUTH_ENABLED', '1');
+      const mod = await import('./index.js');
+
+      const paths = (mod.mastra.getServer()?.apiRoutes ?? []).map(r => r.path);
+      expect(paths).toContain('/auth/me');
+      expect(paths).toContain('/auth/login');
+    });
+
+    it('stays auth-less under factory dev when the opt-in is not set', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_FACTORY_DEV', 'true');
+      vi.stubEnv('MASTRACODE_AUTH_ENABLED', '');
+      const mod = await import('./index.js');
+
+      const paths = (mod.mastra.getServer()?.apiRoutes ?? []).map(r => r.path);
+      expect(paths).not.toContain('/auth/me');
+    });
+  });
 });
