@@ -1,8 +1,8 @@
 /**
- * BDD coverage for the Factory Overview page.
+ * BDD coverage for the Metrics page's queue-health section.
  *
  * Drives the real route table through a memory router with the full provider
- * stack, so the specs exercise what a user sees at /factory/overview: the
+ * stack, so the specs exercise what a user sees at /factory/metrics: the
  * queue-health chart (aggregated client-side from the work-items + threshold
  * endpoints plus the polled workspace activity) and its drill-down task list.
  * Only the network is mocked (MSW).
@@ -18,6 +18,7 @@ import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
 import type { GithubStatus, Factory } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
+import type { FactoryMetrics } from '../services/metrics';
 import type { WorkItem } from '../services/workItems';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -29,7 +30,7 @@ const PROJECT_REPOSITORY_ID = 'repo-link-1';
 // The sandbox workdir is the repo-root checkout (dropped from the workspace
 // list); the factory workspace is a distinct feature worktree — this is also
 // the path work-item sessions point at for the active-work signal.
-const WORKTREE = '/sandbox/mastra/feat-overview';
+const WORKTREE = '/sandbox/mastra/feat-queue-health';
 
 const HOUR_S = 3600;
 // Ages chosen against the default thresholds (4h / 24h / 72h), relative to now
@@ -51,20 +52,9 @@ const githubProject: Factory = {
         gitBranch: 'main',
         sandboxWorkdir: '/sandbox/mastra',
         selectedWorktreePath: WORKTREE,
-        worktrees: [{ branch: 'feat/overview', worktreePath: WORKTREE, baseBranch: 'main' }],
+        worktrees: [{ branch: 'feat/queue-health', worktreePath: WORKTREE, baseBranch: 'main' }],
       },
     ],
-  },
-};
-
-const localProject: Factory = {
-  id: 'project-local',
-  name: 'Local',
-  resourceId: RESOURCE_ID,
-  createdAt: 1,
-  binding: {
-    kind: 'local',
-    path: '/projects/local',
   },
 };
 
@@ -72,6 +62,21 @@ const connectedStatus: GithubStatus = {
   enabled: true,
   connected: true,
   installations: [{ installationId: 1, accountLogin: 'mastra-ai', accountType: 'Organization' }],
+};
+
+/** A minimal empty-board aggregation payload for the rest of the dashboard. */
+const emptyMetrics: FactoryMetrics = {
+  windowDays: 30,
+  earliestItemAt: null,
+  throughput: [],
+  cycleTime: { medianMs: null, p90Ms: null, samples: 0 },
+  stageDurations: [],
+  wip: [],
+  wipTotal: 0,
+  agingWip: [],
+  sourceMix: [],
+  transitions: { human: 0, total: 0 },
+  stageAutomation: [],
 };
 
 /** A full WorkItem row with sensible defaults, as the server returns it. */
@@ -134,14 +139,14 @@ function sessionState() {
   };
 }
 
-interface OverviewHandlers {
+interface QueueHealthHandlers {
   workItems: WorkItem[];
   /** Threads the workspace-activity poll returns (drives the active overlay). */
   activityThreads?: unknown[];
   thresholds?: number[];
 }
 
-function useOverviewHandlers({ workItems, activityThreads = [], thresholds }: OverviewHandlers) {
+function useQueueHealthHandlers({ workItems, activityThreads = [], thresholds }: QueueHealthHandlers) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
@@ -176,6 +181,9 @@ function useOverviewHandlers({ workItems, activityThreads = [], thresholds }: Ov
     http.get(`${SESSION}/threads*`, () => HttpResponse.json({ threads: activityThreads })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/metrics`, () =>
+      HttpResponse.json({ metrics: emptyMetrics }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
       HttpResponse.json({ workItems }),
     ),
@@ -188,18 +196,24 @@ function useOverviewHandlers({ workItems, activityThreads = [], thresholds }: Ov
 function renderAt(project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${project.id}/overview`] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${project.id}/metrics`] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
+}
+
+/** The queue-health section container (heading + chart + drill-down). */
+async function findQueueHealthSection(): Promise<HTMLElement> {
+  const heading = await screen.findByRole('heading', { name: 'Queue health' });
+  return heading.closest('section')! as HTMLElement;
 }
 
 afterEach(() => {
   localStorage.clear();
 });
 
-describe('Factory Overview page', () => {
+describe('Metrics page queue-health section', () => {
   it('given work items across age buckets, when the page renders, then the chart shows per-stage bars and the empty-selection hint', async () => {
-    useOverviewHandlers({
+    useQueueHealthHandlers({
       workItems: [
         inStage('wi-1', 'Fresh task', 'triage', 1 * HOUR_S), // green (<4h)
         inStage('wi-2', 'Aging task', 'triage', 10 * HOUR_S), // amber (4–24h)
@@ -210,23 +224,23 @@ describe('Factory Overview page', () => {
     });
     renderAt();
 
-    expect(await screen.findByRole('heading', { name: 'Queue health' })).toBeInTheDocument();
+    const section = await findQueueHealthSection();
 
     // One labeled segment per populated (stage, bucket) cohort.
-    expect(await screen.findByRole('button', { name: 'Triage Fresh: 1' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Triage Aging: 1' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Building Stale: 1' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Review Critical: 1' })).toBeInTheDocument();
+    expect(await within(section).findByRole('button', { name: 'Triage Fresh: 1' })).toBeInTheDocument();
+    expect(within(section).getByRole('button', { name: 'Triage Aging: 1' })).toBeInTheDocument();
+    expect(within(section).getByRole('button', { name: 'Building Stale: 1' })).toBeInTheDocument();
+    expect(within(section).getByRole('button', { name: 'Review Critical: 1' })).toBeInTheDocument();
     // Intake is hidden from the chart even when a persisted intake card exists.
-    expect(screen.queryByRole('button', { name: /Intake/ })).not.toBeInTheDocument();
+    expect(within(section).queryByRole('button', { name: /Intake/ })).not.toBeInTheDocument();
 
     // The drill-down starts with the select-a-segment hint.
-    expect(screen.getByText('Select a segment above to see its tasks.')).toBeInTheDocument();
+    expect(within(section).getByText('Select a segment above to see its tasks.')).toBeInTheDocument();
   });
 
   it('given a selected cohort, when a segment is clicked, then the drill-down lists only that cohort', async () => {
     const user = userEvent.setup();
-    useOverviewHandlers({
+    useQueueHealthHandlers({
       workItems: [
         inStage('wi-1', 'Fresh task', 'triage', 1 * HOUR_S),
         inStage('wi-2', 'Aging task', 'triage', 10 * HOUR_S),
@@ -235,19 +249,19 @@ describe('Factory Overview page', () => {
     });
     renderAt();
 
-    const aging = await screen.findByRole('button', { name: 'Triage Aging: 2' });
+    const section = await findQueueHealthSection();
+    const aging = await within(section).findByRole('button', { name: 'Triage Aging: 2' });
     await user.click(aging);
 
-    const tasks = screen.getByRole('heading', { name: 'Tasks' }).parentElement!;
-    expect(await within(tasks).findByText(/Triage · Aging — 2 tasks/)).toBeInTheDocument();
-    expect(within(tasks).getByText('Aging task')).toBeInTheDocument();
-    expect(within(tasks).getByText('Another aging')).toBeInTheDocument();
+    expect(await within(section).findByText(/Triage · Aging — 2 tasks/)).toBeInTheDocument();
+    expect(within(section).getByText('Aging task')).toBeInTheDocument();
+    expect(within(section).getByText('Another aging')).toBeInTheDocument();
     // The other cohort's task is not listed.
-    expect(within(tasks).queryByText('Fresh task')).not.toBeInTheDocument();
+    expect(within(section).queryByText('Fresh task')).not.toBeInTheDocument();
   });
 
   it('given an active agent session on a worktree, when the page renders, then the matching stage shows the active overlay', async () => {
-    useOverviewHandlers({
+    useQueueHealthHandlers({
       workItems: [
         inStage('wi-1', 'Active build', 'execute', 1 * HOUR_S, {
           sessions: { work: { sessionId: WORKTREE, branch: 'main', threadId: 'thread-run', startedBy: 'user-1' } },
@@ -260,13 +274,5 @@ describe('Factory Overview page', () => {
     // The execute bar carries the stripe overlay for its one active item.
     await waitFor(() => expect(screen.getByRole('img', { name: 'Building: 1 active' })).toBeInTheDocument());
     expect(screen.getByText(/1 active/)).toBeInTheDocument();
-  });
-
-  it('given a local project, when visiting Overview, then the local-folder notice renders instead of the chart', async () => {
-    useOverviewHandlers({ workItems: [] });
-    renderAt(localProject);
-
-    expect(await screen.findByText(/available for server-backed Factories/)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Queue health' })).not.toBeInTheDocument();
   });
 });

@@ -162,6 +162,12 @@ function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsSta
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
+      HttpResponse.json({ workItems: [] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/health/thresholds`, () =>
+      HttpResponse.json({ thresholds: [14400, 86400, 259200] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/metrics`, ({ request }) => {
       const url = new URL(request.url);
       const range = { from: url.searchParams.get('from') ?? '', to: url.searchParams.get('to') ?? '' };
@@ -188,19 +194,8 @@ afterEach(() => {
 });
 
 describe('Factory Metrics page', () => {
-  it('given aggregated metrics, when the page renders, then stat cards, stages, aging items, and source mix appear', async () => {
-    useMetricsHandlers(
-      makeMetrics({
-        // 'blocked' exists only in wip (no duration samples, not a board column):
-        // it must still show up in the stage breakdown.
-        wip: [
-          { stage: 'execute', count: 2 },
-          { stage: 'review', count: 1 },
-          { stage: 'blocked', count: 1 },
-        ],
-        wipTotal: 4,
-      }),
-    );
+  it('given aggregated metrics, when the page renders, then stat cards, queue health, aging items, and source mix appear', async () => {
+    useMetricsHandlers(makeMetrics({ wipTotal: 4 }));
     renderAt();
 
     expect(await screen.findByRole('group', { name: 'Date range timeline' })).toBeInTheDocument();
@@ -216,15 +211,9 @@ describe('Factory Metrics page', () => {
     const agents = screen.getByText('Agents running').parentElement!;
     expect(within(agents).getByText('0')).toBeInTheDocument();
 
-    // Stage breakdown uses the board vocabulary and shows dwell + column counts.
-    const stages = screen.getByRole('heading', { name: 'Stages' }).parentElement!;
-    expect(within(stages).getByText('Building')).toBeInTheDocument();
-    expect(within(stages).getByText(/median 4h · 2 in column/)).toBeInTheDocument();
-    expect(within(stages).getByText(/median 2h · 1 in column/)).toBeInTheDocument();
-    // Stages without samples still render with their current WIP count.
-    expect(within(stages).getByText('Intake')).toBeInTheDocument();
-    // A WIP-only stage outside the board vocabulary still gets a row.
-    expect(within(stages).getByText('blocked')).toBeInTheDocument();
+    // The live queue-health section renders where the stage breakdown used to be.
+    const queueHealth = screen.getByRole('heading', { name: 'Queue health' }).closest('section')!;
+    expect(within(queueHealth as HTMLElement).getByText('Select a segment above to see its tasks.')).toBeInTheDocument();
 
     // Aging WIP: linked titles when a source URL exists, plain text otherwise.
     const aging = screen.getByRole('heading', { name: 'Oldest in-flight items' }).parentElement!;

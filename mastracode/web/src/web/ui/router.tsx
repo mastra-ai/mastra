@@ -23,7 +23,6 @@ import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { MetricsPage } from './pages/MetricsPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
@@ -83,7 +82,6 @@ export function createAppRoutes(): RouteObject[] {
                 // Personal (non-factory) sessions: same thread page, but the
                 // session provider binds to the user's own resourceId + worktree.
                 { path: 'user/threads/:threadId', element: <ThreadPage /> },
-                { path: 'overview', element: <OverviewPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'metrics', element: <MetricsPage /> },

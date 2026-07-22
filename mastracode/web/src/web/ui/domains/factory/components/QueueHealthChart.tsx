@@ -1,5 +1,5 @@
 /**
- * The Factory Overview queue-health chart: one horizontal bar per board stage,
+ * The Metrics page's queue-health chart: one horizontal bar per board stage,
  * segmented left→right by age bucket (green → amber → orange → red) with width
  * proportional to how many work items sit in that cohort. A diagonal-stripe
  * overlay marks the right-anchored portion of each bar where an agent is
