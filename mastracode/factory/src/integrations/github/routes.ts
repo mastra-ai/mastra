@@ -623,6 +623,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
 
         const query = (c.req.query('q') ?? '').toLowerCase();
         const repos = [];
+        const seenRepositoryIds = new Set<number>();
         for (const inst of installs) {
           let list;
           try {
@@ -640,6 +641,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           }
           for (const repo of list) {
             if (query && !repo.fullName.toLowerCase().includes(query)) continue;
+            if (seenRepositoryIds.has(repo.id)) continue;
+            seenRepositoryIds.add(repo.id);
             const repository = await github.sourceControlStorage.repositories.upsert({
               orgId: resolved.tenant.orgId,
               input: {

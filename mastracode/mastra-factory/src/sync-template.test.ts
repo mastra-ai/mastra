@@ -82,7 +82,7 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
 
     // README is the checked-in template with version tokens filled (no bare {{tokens}} left).
     const readme = fs.readFileSync(path.join(outDir, 'README.md'), 'utf8');
-    expect(readme).toContain('# Mastra Software Factory');
+    expect(readme).toContain('# Mastra Factory');
     expect(readme).toContain('npm create factory');
     expect(readme).not.toMatch(/\{\{[^}]+\}\}/);
     expect(readme).toMatch(/@mastra\/core@\d/);

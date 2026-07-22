@@ -38,7 +38,7 @@ export function useRouteThreadSync() {
     baseUrl,
     enabled: sessionEnabled,
   });
-  const { threadId: routeThreadId } = useParams<{ threadId: string }>();
+  const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
   const latestRouteThreadId = useRef<string | undefined>(undefined);
   const previousSessionKey = useRef<string | undefined>(undefined);
   const sessionKey = `${resourceId}:${projectPath ?? ''}`;
@@ -67,14 +67,14 @@ export function useRouteThreadSync() {
             })
           : Promise.resolve();
         void warm.finally(() => {
-          if (isLatestRequest()) void navigate(`/threads/${latest.id}`, { replace: true });
+          if (isLatestRequest()) void navigate(`/factories/${factoryId}/threads/${latest.id}`, { replace: true });
         });
         return;
       }
 
       const message = `Failed to switch thread: thread ${targetThreadId} was not found`;
       pushNotice(message, 'error');
-      void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
+      void navigate(`/factories/${factoryId}/new`, { replace: true, state: { routeErrorNotice: message } });
       return;
     }
 
@@ -82,7 +82,7 @@ export function useRouteThreadSync() {
       if (!isLatestRequest()) return;
       const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
       pushNotice(message, 'error');
-      void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
+      void navigate(`/factories/${factoryId}/new`, { replace: true, state: { routeErrorNotice: message } });
     });
   });
 

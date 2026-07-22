@@ -6,6 +6,7 @@ import * as p from '@clack/prompts';
 // them here.
 import { fetchOrgs, getToken, MASTRA_PLATFORM_API_URL, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
+import { x } from 'tinyexec';
 
 import type { Analytics } from './analytics.js';
 import { upsertEnvFile } from './env.js';
@@ -18,16 +19,12 @@ import {
   PlatformApiError,
   waitForDatabaseReady,
 } from './platform.js';
-import { cloneTemplate, renameProject, DEFAULT_TEMPLATE_REPO } from './utils/clone.js';
-import { runInherit } from './utils/exec.js';
-import { detectPackageManager } from './utils/pm.js';
+import { cloneTemplate, renameProject } from './utils/clone.js';
+import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
 export interface CreateArgs {
   projectName?: string;
-  useDefaults?: boolean;
-  templateRef?: string;
-  templateDir?: string;
-  timeout?: number;
+  template: string;
   /**
    * Skip the platform round-trip (auth, project, sk_ key, Neon). Useful for
    * offline scaffold testing. `.env` is left as-is from the template's
@@ -54,25 +51,23 @@ interface PlatformProvisionResult {
 }
 
 export async function create(args: CreateArgs): Promise<void> {
-  p.intro(color.inverse(' Mastra Software Factory '));
+  p.intro(color.inverse(' Mastra Factory '));
 
-  // ── Project name ─────────────────────────────────────────────────────────
-  let projectName = args.projectName;
-  if (!projectName && args.useDefaults) {
-    projectName = 'my-software-factory';
-  }
-  if (!projectName) {
-    const entered = await p.text({
-      message: 'What is your project named?',
-      initialValue: 'my-software-factory',
+  const projectName =
+    args.projectName ??
+    (await p.text({
+      message: 'What do you want to name your project?',
+      placeholder: 'my-mastra-factory',
       validate: value => {
-        if (!value?.trim()) return 'Required';
+        if (!value?.trim()) return `Project name can't be empty`;
         if (fs.existsSync(path.resolve(value.trim()))) return `Directory ${value.trim()} already exists`;
         return undefined;
       },
-    });
-    if (p.isCancel(entered)) return cancel();
-    projectName = entered.trim();
+    }));
+
+  if (p.isCancel(projectName)) {
+    p.cancel('Operation cancelled');
+    process.exit(0);
   }
 
   const projectPath = path.resolve(projectName);
@@ -80,21 +75,15 @@ export async function create(args: CreateArgs): Promise<void> {
 
   args.analytics.trackEvent('sf_create_started', {
     package_manager: packageManager,
-    non_interactive: Boolean(args.useDefaults),
     no_platform: Boolean(args.noPlatform),
   });
 
   // ── Clone template ───────────────────────────────────────────────────────
   const spinner = p.spinner();
-  spinner.start('Downloading the Software Factory template...');
+  spinner.start('Downloading the Mastra Factory template...');
   try {
-    await cloneTemplate({
-      repoUrl: DEFAULT_TEMPLATE_REPO,
-      projectPath,
-      ref: args.templateRef,
-      localDir: args.templateDir,
-    });
-    renameProject(projectPath, projectName);
+    await cloneTemplate(args.template, projectPath);
+    await renameProject(projectPath, projectName);
     // Seed .env from the example. Platform-provisioning below rewrites the
     // handful of platform keys idempotently; other keys stay as-is so the
     // user can configure them from the web UI.
@@ -114,11 +103,11 @@ export async function create(args: CreateArgs): Promise<void> {
 
   // ── Install dependencies ─────────────────────────────────────────────────
   const installSpinner = p.spinner();
-  installSpinner.start(`Installing dependencies with ${packageManager} (this can take a few minutes)...`);
+  installSpinner.start(`Installing dependencies...`);
   try {
-    await runInherit(packageManager, ['install'], {
-      cwd: projectPath,
-      timeoutMs: args.timeout,
+    await x(packageManager, getInstallArgs(packageManager), {
+      throwOnError: true,
+      nodeOptions: { cwd: projectPath },
     });
     installSpinner.stop('Dependencies installed.');
   } catch (err) {
@@ -166,10 +155,11 @@ export async function create(args: CreateArgs): Promise<void> {
   }
   if (gitignoreOk) {
     try {
-      await runInherit('git', ['init', '-q'], { cwd: projectPath });
-      await runInherit('git', ['add', '-A'], { cwd: projectPath });
-      await runInherit('git', ['commit', '-q', '-m', 'Initial commit from create-factory'], {
-        cwd: projectPath,
+      await x('git', ['init', '-q'], { throwOnError: true, nodeOptions: { cwd: projectPath } });
+      await x('git', ['add', '-A'], { throwOnError: true, nodeOptions: { cwd: projectPath } });
+      await x('git', ['commit', '-q', '-m', 'Initial commit from create-factory'], {
+        throwOnError: true,
+        nodeOptions: { cwd: projectPath },
       });
     } catch {
       p.log.warn('git init failed — you can initialize the repository yourself later.');
@@ -178,14 +168,13 @@ export async function create(args: CreateArgs): Promise<void> {
 
   args.analytics.trackEvent('sf_create_completed', {
     package_manager: packageManager,
-    non_interactive: Boolean(args.useDefaults),
     no_platform: Boolean(args.noPlatform),
     platform_provisioned: platformResult !== null,
   });
 
   // ── Outro ────────────────────────────────────────────────────────────────
   const lines: string[] = [
-    color.green('Your Software Factory is ready!'),
+    color.green('Your Mastra Factory is ready!'),
     '',
     `${color.cyan('cd')} ${projectName}`,
     color.cyan(`${packageManager} run dev`),
@@ -212,7 +201,6 @@ export async function create(args: CreateArgs): Promise<void> {
     lines.push('Open the Factory UI to finish setup (models, integrations, database).');
   }
   p.note(lines.join('\n'), 'Next steps');
-  p.outro(`Problems or feedback? ${color.underline('https://github.com/mastra-ai/mastra/issues')}`);
 }
 
 async function runPlatformProvisioning({
@@ -359,11 +347,6 @@ function sanitizeDatabaseName(projectName: string): string {
   const cleaned = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
   const truncated = (cleaned || 'factory').slice(0, 64);
   return truncated;
-}
-
-function cancel(): void {
-  p.cancel('Cancelled.');
-  process.exitCode = 1;
 }
 
 /**

@@ -48,7 +48,6 @@ function seedFactory() {
     },
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sse(events: AgentControllerEvent[] = []): Response {
@@ -115,7 +114,7 @@ function Probe() {
 function renderProbe(threadId?: string) {
   return renderWithProviders(
     <MainSidebarProvider storageKey="global-shortcuts-test" mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
+      <ActiveFactoryProvider factoryId="project-test">
         <ChatSessionProvider threadId={threadId}>
           <OverlaysProvider>
             <Probe />
