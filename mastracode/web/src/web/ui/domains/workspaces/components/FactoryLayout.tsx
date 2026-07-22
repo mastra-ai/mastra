@@ -3,12 +3,10 @@ import { Navigate, Outlet, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
 import { AuthPendingSkeleton } from '../../auth/components/RootGuards';
-import { ActiveFactoryProvider } from '../context/ActiveFactoryProvider';
 
 /**
  * Route element for `factories/:factoryId`. Validates the route param against
- * the factories list, then mounts `ActiveFactoryProvider` with the resolved
- * ID — the URL is the single source of truth for the active factory.
+ * the factories list; the URL is the single source of truth for the active factory.
  */
 export function FactoryLayout() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -30,9 +28,5 @@ export function FactoryLayout() {
     return <Navigate to="/" replace state={{ routeErrorNotice: 'Factory not found' }} />;
   }
 
-  return (
-    <ActiveFactoryProvider factoryId={factoryId}>
-      <Outlet />
-    </ActiveFactoryProvider>
-  );
+  return <Outlet />;
 }

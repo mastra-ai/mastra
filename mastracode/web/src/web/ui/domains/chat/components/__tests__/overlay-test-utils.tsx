@@ -6,7 +6,6 @@ import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/Ch
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../../../workspaces';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
   class ResizeObserverPolyfill {
@@ -25,26 +24,61 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoVi
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 
 const OVERLAY_FACTORY_ID = 'p-overlay';
-
-/** Seed a local factory so the route-scoped provider resolves `factoryId`. */
-function seedOverlayFactory() {
-  localStorage.setItem(
-    'mastracode-factories',
-    JSON.stringify([
-      {
-        id: OVERLAY_FACTORY_ID,
-        name: 'Overlay',
-        resourceId: 'test-resource',
-        createdAt: 1,
-        binding: { kind: 'local', path: '/tmp' },
-      },
-    ]),
-  );
-}
+const OVERLAY_PROJECT_REPOSITORY_ID = 'repo-overlay';
+const OVERLAY_SESSION_ID = 'session-overlay';
 
 /** Install real network-boundary responses used by context-backed overlay tests. */
 export function useOverlayControllerHandlers() {
   server.use(
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      HttpResponse.json({ authenticated: true, user: { userId: 'user-overlay', email: 'overlay@example.com' } }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ id: OVERLAY_FACTORY_ID, name: 'Overlay' }] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
+      HttpResponse.json({
+        connections: [
+          {
+            id: 'conn-overlay',
+            installationId: 'install-overlay',
+            repositories: [
+              {
+                id: OVERLAY_PROJECT_REPOSITORY_ID,
+                branch: 'main',
+                sandboxWorkdir: '/workspace/overlay',
+                repository: { slug: 'org/overlay', defaultBranch: 'main' },
+              },
+            ],
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, () =>
+      HttpResponse.json({
+        session: {
+          id: 'row-overlay',
+          sessionId: OVERLAY_SESSION_ID,
+          projectRepositoryId: OVERLAY_PROJECT_REPOSITORY_ID,
+          orgId: 'org-overlay',
+          userId: 'user-overlay',
+          branch: 'overlay-workspace',
+          baseBranch: 'main',
+          sandboxId: 'sandbox-overlay',
+          sandboxWorkdir: '/workspace/overlay',
+          materializedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      }),
+    ),
+    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, () =>
+      HttpResponse.json({
+        resourceId: 'test-resource',
+        sandboxId: 'sandbox-overlay',
+        sandboxWorkdir: '/workspace/overlay',
+      }),
+    ),
     http.post(`${API}/sessions`, async ({ request }) => {
       const { resourceId } = (await request.json()) as { resourceId: string };
       return HttpResponse.json({ controllerId: 'code', resourceId, threadId: 'thread-test' });
@@ -86,31 +120,18 @@ export function useOverlayControllerHandlers() {
   );
 }
 
-/**
- * Defer children until the route factory resolves so the transcript remount
- * key (which includes `resourceId`) is stable before tests interact.
- */
-function WhenFactoryResolved({ children }: { children: ReactNode }) {
-  const { activeFactory } = useActiveFactoryContext();
-  if (!activeFactory) return null;
-  return children;
-}
-
 export function OverlayTestProviders({ children }: { children: ReactNode }) {
-  seedOverlayFactory();
   return (
-    <MemoryRouter initialEntries={[`/factories/${OVERLAY_FACTORY_ID}/threads/thread-test`]}>
+    <MemoryRouter
+      initialEntries={[`/factories/${OVERLAY_FACTORY_ID}/workspaces/${OVERLAY_SESSION_ID}/threads/thread-test`]}
+    >
       <Routes>
         <Route
-          path="/factories/:factoryId/threads/:threadId"
+          path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
           element={
-            <ActiveFactoryProvider factoryId={OVERLAY_FACTORY_ID}>
-              <WhenFactoryResolved>
-                <ChatSessionProvider>
-                  <OverlaysProvider>{children}</OverlaysProvider>
-                </ChatSessionProvider>
-              </WhenFactoryResolved>
-            </ActiveFactoryProvider>
+            <ChatSessionProvider threadId="thread-test">
+              <OverlaysProvider>{children}</OverlaysProvider>
+            </ChatSessionProvider>
           }
         />
       </Routes>

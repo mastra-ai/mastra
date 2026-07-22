@@ -30,7 +30,7 @@ const DECISION_GROUPS: ReadonlyArray<{
 export function RulesPage() {
   return (
     <FactoryPageShell title="Rules" description="Monitor rule decisions, inspect failures, and retry queued effects.">
-      {project => <RulesContent factoryProjectId={project.binding.factoryProjectId} />}
+      {project => <RulesContent factoryProjectId={project.id} />}
     </FactoryPageShell>
   );
 }
