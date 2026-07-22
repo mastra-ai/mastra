@@ -35,8 +35,6 @@ import { MastraFactory } from '@mastra/factory';
 import type { FactoryIntegration } from '@mastra/factory/integrations/base';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
-import { PlatformGithubIntegration } from '@mastra/factory/integrations/platform/github/integration';
-import { PlatformLinearIntegration } from '@mastra/factory/integrations/platform/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
@@ -240,9 +238,7 @@ const github = githubEnv
       slug: githubEnv.GITHUB_APP_SLUG,
       webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET,
     })
-  : hasPlatformSecretKey()
-    ? new PlatformGithubIntegration()
-    : undefined;
+  : undefined;
 
 // Linear OAuth app: per-org workspace connections + issue intake.
 const linearEnv = envGroup(
@@ -254,9 +250,7 @@ const linearEnv = envGroup(
 );
 const linear = linearEnv
   ? new LinearIntegration({ clientId: linearEnv.LINEAR_CLIENT_ID, clientSecret: linearEnv.LINEAR_CLIENT_SECRET })
-  : hasPlatformSecretKey()
-    ? new PlatformLinearIntegration()
-    : undefined;
+  : undefined;
 
 const integrations: FactoryIntegration[] = [github, linear, workosAudit].filter(i => i !== undefined);
 
@@ -317,9 +311,9 @@ export const factory = new MastraFactory({
   // factory: webhook secret first, then the WorkOS cookie password. Unset →
   // per-process random secret (single-process local dev only).
   stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
-  // Registered integrations. Each is constructed above from its own env group
-  // (all-or-nothing); an absent integration simply isn't registered — its
-  // routes never mount and its status endpoint reports "not configured".
+  // Explicit direct-provider integrations. MastraFactory fills missing GitHub
+  // and Linear slots with Platform-backed defaults when Platform credentials
+  // are configured.
   integrations,
 });
 
