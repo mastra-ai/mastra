@@ -94,46 +94,46 @@ describe('checkConfigExport Babel plugin', () => {
     expect(runPlugin(code).hasValidConfig).toBe(true);
   });
 
-  // --- MastraFactory (software-factory) detection ---
+  // --- MastraFactory (factory) detection ---
 
-  it('detects software-factory for import { MastraFactory } + new MastraFactory()', () => {
+  it('detects factory for import { MastraFactory } + new MastraFactory()', () => {
     const code = `import { MastraFactory } from './factory'; const f = new MastraFactory()`;
-    expect(runPlugin(code).projectType).toBe('software-factory');
+    expect(runPlugin(code).projectType).toBe('factory');
   });
 
-  it('detects software-factory for aliased import { MastraFactory as Factory } + new Factory()', () => {
+  it('detects factory for aliased import { MastraFactory as Factory } + new Factory()', () => {
     const code = `import { MastraFactory as Factory } from './factory'; const f = new Factory()`;
-    expect(runPlugin(code).projectType).toBe('software-factory');
+    expect(runPlugin(code).projectType).toBe('factory');
   });
 
-  it('detects software-factory for new MastraFactory() in export declaration', () => {
+  it('detects factory for new MastraFactory() in export declaration', () => {
     const code = `import { MastraFactory } from './factory'; export const f = new MastraFactory()`;
-    expect(runPlugin(code).projectType).toBe('software-factory');
+    expect(runPlugin(code).projectType).toBe('factory');
   });
 
-  it('detects software-factory alongside valid Mastra config export', () => {
+  it('detects factory alongside valid Mastra config export', () => {
     const code = `import { MastraFactory } from './factory'; export const mastra = new Mastra(); const f = new MastraFactory()`;
     const result = runPlugin(code);
     expect(result.hasValidConfig).toBe(true);
-    expect(result.projectType).toBe('software-factory');
+    expect(result.projectType).toBe('factory');
   });
 
-  it('does not detect software-factory for unused MastraFactory import', () => {
+  it('does not detect factory for unused MastraFactory import', () => {
     const code = `import { MastraFactory } from './factory'; export const mastra = new Mastra()`;
     expect(runPlugin(code).projectType).toBeUndefined();
   });
 
-  it('does not detect software-factory for local class named MastraFactory (not imported)', () => {
+  it('does not detect factory for local class named MastraFactory (not imported)', () => {
     const code = `class MastraFactory {}; const f = new MastraFactory()`;
     expect(runPlugin(code).projectType).toBeUndefined();
   });
 
-  it('does not detect software-factory for non-imported identifier named MastraFactory', () => {
+  it('does not detect factory for non-imported identifier named MastraFactory', () => {
     const code = `const MastraFactory = class {}; const f = new MastraFactory()`;
     expect(runPlugin(code).projectType).toBeUndefined();
   });
 
-  it('does not detect software-factory for non-constructor usage of imported MastraFactory', () => {
+  it('does not detect factory for non-constructor usage of imported MastraFactory', () => {
     const code = `import { MastraFactory } from './factory'; const f = MastraFactory()`;
     expect(runPlugin(code).projectType).toBeUndefined();
   });

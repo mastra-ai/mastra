@@ -25,7 +25,7 @@ export function checkConfigExport(result: { hasValidConfig: boolean; projectType
       NewExpression(path) {
         // Detect `new MastraFactory(...)` using the tracked import binding.
         if (t.isIdentifier(path.node.callee) && factoryBindings.has(path.node.callee.name)) {
-          result.projectType = 'software-factory';
+          result.projectType = 'factory';
         }
       },
       ExportNamedDeclaration(path) {

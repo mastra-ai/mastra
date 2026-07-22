@@ -39,31 +39,22 @@ export function rewriteRelativeSpecifiers(source, resolveSuffix) {
   let result = source;
 
   // from '...' or from "..." (static import/export with from keyword)
-  result = result.replace(
-    /\bfrom\s*(['"])(\.\.?\/[^'"]+)\1/g,
-    (match, quote, specifier) => {
-      const rewritten = rewriteSpecifier(specifier, resolveSuffix);
-      return rewritten ? `from ${quote}${rewritten}${quote}` : match;
-    },
-  );
+  result = result.replace(/\bfrom\s*(['"])(\.\.?\/[^'"]+)\1/g, (match, quote, specifier) => {
+    const rewritten = rewriteSpecifier(specifier, resolveSuffix);
+    return rewritten ? `from ${quote}${rewritten}${quote}` : match;
+  });
 
   // import('...') or import("...") (dynamic import)
-  result = result.replace(
-    /\bimport\s*\(\s*(['"])(\.\.?\/[^'"]+)\1/g,
-    (match, quote, specifier) => {
-      const rewritten = rewriteSpecifier(specifier, resolveSuffix);
-      return rewritten ? `import(${quote}${rewritten}${quote}` : match;
-    },
-  );
+  result = result.replace(/\bimport\s*\(\s*(['"])(\.\.?\/[^'"]+)\1/g, (match, quote, specifier) => {
+    const rewritten = rewriteSpecifier(specifier, resolveSuffix);
+    return rewritten ? `import(${quote}${rewritten}${quote}` : match;
+  });
 
   // import '...' or import "..." (side-effect import)
-  result = result.replace(
-    /\bimport\s+(['"])(\.\.?\/[^'"]+)\1/g,
-    (match, quote, specifier) => {
-      const rewritten = rewriteSpecifier(specifier, resolveSuffix);
-      return rewritten ? `import ${quote}${rewritten}${quote}` : match;
-    },
-  );
+  result = result.replace(/\bimport\s+(['"])(\.\.?\/[^'"]+)\1/g, (match, quote, specifier) => {
+    const rewritten = rewriteSpecifier(specifier, resolveSuffix);
+    return rewritten ? `import ${quote}${rewritten}${quote}` : match;
+  });
 
   return result;
 }
@@ -76,7 +67,7 @@ export function rewriteRelativeSpecifiers(source, resolveSuffix) {
  * @returns {(specifier: string) => string | null}
  */
 export function createFilesystemResolver(fromDir) {
-  return (specifier) => {
+  return specifier => {
     const resolved = resolve(fromDir, specifier);
 
     // File import: ./foo.ts or ./foo.js exists → emit ./foo.js
@@ -86,10 +77,7 @@ export function createFilesystemResolver(fromDir) {
 
     // Directory import: ./bar/index.ts or ./bar/index.js exists → emit ./bar/index.js
     if (existsSync(resolved) && statSync(resolved).isDirectory()) {
-      if (
-        existsSync(resolve(resolved, 'index.ts')) ||
-        existsSync(resolve(resolved, 'index.js'))
-      ) {
+      if (existsSync(resolve(resolved, 'index.ts')) || existsSync(resolve(resolved, 'index.js'))) {
         return '/index.js';
       }
     }

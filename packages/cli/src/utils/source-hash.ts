@@ -117,7 +117,7 @@ export async function computeSourceHash(rootDir: string, mastraDir: string, proj
   // config live outside src/mastra. Include those UI inputs so a UI-only
   // edit triggers a staleness mismatch. Do NOT hash the generated output
   // at src/mastra/public/factory — it is a build artifact, not a source.
-  if (projectType === 'software-factory') {
+  if (projectType === 'factory') {
     patterns.push(
       // SPA source (React/TS components, styles, hooks, etc.)
       'src/web/ui/**/*.{ts,tsx,js,jsx,css,scss,json}',

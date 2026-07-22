@@ -448,7 +448,7 @@ export const tools = [${toolsExports.join(', ')}]`,
 
       // For Software Factory projects, write a deterministic deployment marker
       // after public assets (including the SPA) have been copied.
-      if (analyzedBundleInfo.projectType === 'software-factory') {
+      if (analyzedBundleInfo.projectType === 'factory') {
         await this.writeFactoryMarker(outputDirectory);
       }
 

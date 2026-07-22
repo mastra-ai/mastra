@@ -49,7 +49,7 @@ export async function build({
     let projectType: string | undefined;
     if (mastraEntryFile) {
       projectType = await analyzeEntryProjectType(mastraEntryFile);
-      if (projectType === 'software-factory') {
+      if (projectType === 'factory') {
         await buildFactoryUI(mastraDir, logger);
       }
     }

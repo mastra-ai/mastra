@@ -9,7 +9,7 @@ import { checkConfigExport } from './babel/check-config-export';
  * `prepare()` clears `.mastra` to decide whether Factory-specific assets
  * should be copied.
  *
- * Returns `'software-factory'` when the entry imports `MastraFactory` and
+ * Returns `'factory'` when the entry imports `MastraFactory` and
  * constructs it, or `undefined` for ordinary Mastra projects.
  */
 export async function analyzeEntryProjectType(mastraEntry: string): Promise<string | undefined> {
