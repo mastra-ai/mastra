@@ -680,14 +680,6 @@ export class Mastra<
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
-  /**
-   * Tracks how each registered workflow got here. `'code'` = registered via
-   * the constructor `workflows` map or a subsequent `addWorkflow()` call.
-   * `'stored'` = registered via `addStoredWorkflow()` (either at boot from
-   * persisted definitions or at runtime via the HTTP/SDK surface). Keyed by
-   * the same registry key as `#workflows`, and cleaned up in `removeWorkflow`.
-   */
-  #workflowOrigin = new Map<string, 'code' | 'stored'>();
   #observability: ObservabilityEntrypoint;
   #observabilityExplicit = false;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
@@ -4360,20 +4352,16 @@ export class Mastra<
   public removeWorkflow(keyOrId: string): boolean {
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
 
-    // Try direct key lookup first
     if (workflows[keyOrId]) {
       delete workflows[keyOrId];
       this.#hiddenWorkflowKeys.delete(keyOrId);
-      this.#workflowOrigin.delete(keyOrId);
       return true;
     }
 
-    // Try finding by workflow.id
     const key = Object.keys(workflows).find(k => workflows[k]?.id === keyOrId);
     if (key) {
       delete workflows[key];
       this.#hiddenWorkflowKeys.delete(key);
-      this.#workflowOrigin.delete(key);
       return true;
     }
 
@@ -4386,16 +4374,14 @@ export class Mastra<
    * `addStoredWorkflow()` (either at boot or through the HTTP/SDK surface).
    * Returns `undefined` if no workflow is registered under that key/id.
    *
-   * Used by the HTTP layer to surface a visual distinction (e.g. a "Stored"
-   * badge in Studio) between authored-in-code and dynamically added workflows.
+   * Reads `workflow.origin`, which is set to `'stored'` by `rehydrateWorkflow`
+   * at construction time and defaults to `'code'` otherwise. Used by the HTTP
+   * layer to surface a visual distinction (e.g. a "Stored" badge in Studio).
    */
   public getWorkflowOrigin(keyOrId: string): 'code' | 'stored' | undefined {
-    if (this.#workflowOrigin.has(keyOrId)) {
-      return this.#workflowOrigin.get(keyOrId);
-    }
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
-    const key = Object.keys(workflows).find(k => workflows[k]?.id === keyOrId);
-    return key ? this.#workflowOrigin.get(key) : undefined;
+    const workflow = workflows[keyOrId] ?? Object.values(workflows).find(wf => wf?.id === keyOrId);
+    return workflow?.origin;
   }
 
   /**
@@ -4447,12 +4433,6 @@ export class Mastra<
     }
     workflows[workflowKey] = workflow;
 
-    // Default to 'code' origin. `addStoredWorkflow` pre-stamps 'stored' before
-    // delegating here, so don't clobber an existing entry.
-    if (!this.#workflowOrigin.has(workflowKey)) {
-      this.#workflowOrigin.set(workflowKey, 'code');
-    }
-
     this.registerStaticWorkflowScorers(workflow);
 
     // If a schedule is declared, mark the flag and register into the
@@ -4499,27 +4479,11 @@ export class Mastra<
    * ```
    */
   public async addStoredWorkflow(def: StoredWorkflowGraph): Promise<void> {
-    // Pre-flight: verify every agentId / toolId in the graph exists in the
-    // correct registry. Without this, a mis-classified entry (e.g. `{ type:
-    // 'tool', toolId: 'x' }` where `x` is really an agent) reaches rehydration
-    // and surfaces as an opaque `Tool with name x not found`. Catch the
-    // mistake here and return a targeted error naming the wrong id and the
-    // shape it should have.
     this.#validateStoredWorkflowRefs(def);
-    // Pre-flight: reject JSON Schemas that use keywords `jsonSchemaToZod`
-    // can't convert (oneOf/anyOf/allOf/not/$ref/patternProperties/discriminator).
-    // Throw here — the author is right there and can fix. Boot-time loading
-    // is intentionally more lenient (degrades to z.any() + warns) so one bad
-    // pre-existing row can't take down startup for every other workflow.
     this.#validateStoredWorkflowSchemas(def);
     const { workflow } = await rehydrateWorkflow(def, this);
-    // Stored workflows are the source of truth for this id — replace any
-    // existing live registration so re-saves surface immediately instead of
-    // being silently no-op'd by addWorkflow's first-write-wins guard.
+    // Replace any existing registration — addWorkflow is first-write-wins.
     this.removeWorkflow(def.id);
-    // Pre-stamp origin as 'stored' so `addWorkflow`'s default-to-'code' guard
-    // doesn't overwrite it. Registry key === def.id for stored workflows.
-    this.#workflowOrigin.set(def.id, 'stored');
     this.addWorkflow(workflow as AnyWorkflow, def.id);
 
     const store = await this.#storage?.getStore('workflowDefinitions');
@@ -4710,13 +4674,9 @@ export class Mastra<
 
     const { definitions } = await store.list({ status: 'active' });
 
-    // Skip definitions already registered (e.g. code-registered workflow
-    // with the same id) — code wins, storage is additive.
+    // Code-registered workflows win; storage is additive.
     const pending = definitions.filter(d => !(this.#workflows as Record<string, AnyWorkflow>)[d.id]);
 
-    // Compute nested-workflow deps for each stored def so we can rehydrate
-    // in an order where every referenced workflow already exists on the
-    // live registry (either code-registered or previously loaded).
     const collectNestedWorkflowIds = (graph: readonly unknown[]): Set<string> => {
       const out = new Set<string>();
       const visit = (entry: unknown): void => {
@@ -4743,16 +4703,12 @@ export class Mastra<
     const deps = new Map<string, Set<string>>();
     for (const def of pending) {
       const all = collectNestedWorkflowIds(def.graph as readonly unknown[]);
-      // Only track deps on other pending stored defs; code-registered ones
-      // are already live and don't gate rehydration order.
       const pendingDeps = new Set<string>();
       for (const id of all) if (pendingIds.has(id) && id !== def.id) pendingDeps.add(id);
       deps.set(def.id, pendingDeps);
     }
 
-    // Kahn's algorithm: repeatedly hydrate defs whose pending deps are all
-    // satisfied. Anything left after the loop is part of a cycle — log and
-    // skip so the rest of the app boots.
+    // Hydrate in dependency order; anything left after the loop is a cycle.
     const remaining = new Map(pending.map(d => [d.id, d] as const));
     const loaded = new Set<string>();
     let progress = true;
@@ -4776,15 +4732,12 @@ export class Mastra<
               graph: def.graph,
             },
             this,
-            // Boot-time load is lenient: unsupported JSON Schema keywords
-            // degrade to z.any() and emit a warning so the app still boots.
-            // Save path is strict (see #validateStoredWorkflowSchemas).
+            // Lenient at boot (save path is strict): degrade to z.any() + warn.
             {
               onUnsupportedSchema: 'warn',
               onUnsupported: message => this.#logger?.warn?.(`Stored workflow "${def.id}": ${message}`),
             },
           );
-          this.#workflowOrigin.set(def.id, 'stored');
           this.addWorkflow(workflow as AnyWorkflow, def.id);
           loaded.add(def.id);
         } catch (error) {
@@ -5695,10 +5648,7 @@ export class Mastra<
       targets = this.#workers;
     }
 
-    // Cold-start hook: rehydrate any previously persisted static workflow
-    // definitions and register them on the live instance. Idempotent — runs
-    // once per startWorkers() call, skips ids already registered. Runs after
-    // the hoisted storage.init() above so definitions can be read.
+    // Rehydrate persisted workflow definitions (after storage.init() above).
     if (this.#storage) {
       await this.#loadStoredWorkflows();
     }

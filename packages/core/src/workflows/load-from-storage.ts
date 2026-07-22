@@ -338,6 +338,7 @@ export async function rehydrateWorkflow(
     applyGraphEntry(wf, entry, mastra, opts);
   }
   const built: any = wf.commit();
+  built.origin = 'stored';
   return { workflow: built };
 }
 

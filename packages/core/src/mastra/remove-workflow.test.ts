@@ -168,6 +168,8 @@ describe('Mastra.getWorkflowOrigin', () => {
     });
 
     expect(mastra.getWorkflowOrigin('stored-wf')).toBe('stored');
+    // Origin lives on the workflow instance itself, not in Mastra-side state.
+    expect(mastra.getWorkflow('stored-wf' as never).origin).toBe('stored');
 
     mastra.removeWorkflow('stored-wf');
     expect(mastra.getWorkflowOrigin('stored-wf')).toBeUndefined();
