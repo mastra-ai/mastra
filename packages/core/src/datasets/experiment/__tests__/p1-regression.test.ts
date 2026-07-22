@@ -167,6 +167,35 @@ describe('P1 Regression', () => {
       expect(result.results[0]!.retryCount).toBe(1);
     });
 
+    it('retries transient failures whose message contains aborted', async () => {
+      await setupDataset(1);
+
+      let callCount = 0;
+      const agent = {
+        id: 'network-aborted-agent',
+        name: 'Network Aborted Agent',
+        getModel: vi.fn().mockResolvedValue({ specificationVersion: 'v2' }),
+        generate: vi.fn().mockImplementation(async () => {
+          callCount++;
+          if (callCount === 1) throw new Error('Network request aborted by upstream');
+          return { text: 'recovered' };
+        }),
+      } as unknown as Agent;
+
+      setupMastra(agent);
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'network-aborted-agent',
+        maxRetries: 1,
+      });
+
+      expect(agent.generate).toHaveBeenCalledTimes(2);
+      expect(result.succeededCount).toBe(1);
+      expect(result.results[0]!.retryCount).toBe(1);
+    });
+
     // T-2b: Retry exhausted
     it('fails after exhausting retries', async () => {
       await setupDataset(1);

@@ -33,6 +33,7 @@ function executionFailure(error: unknown): ExecutionResult {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     },
+    ...(error instanceof Error && error.name === 'AbortError' ? { aborted: true } : {}),
     traceId: null,
   };
 }
@@ -411,8 +412,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             throw signal.reason ?? new DOMException('Aborted', 'AbortError');
           }
 
-          // The item deadline and abort errors are non-retryable.
-          if (itemSignal?.aborted || execResult.error.message.toLowerCase().includes('abort')) break;
+          // The item deadline and explicit abort errors are non-retryable.
+          if (itemSignal?.aborted || execResult.aborted) break;
 
           // Don't retry deterministic tool-mock failures — the matcher state cannot
           // change between attempts, so retrying would always fail identically.
