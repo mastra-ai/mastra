@@ -10,7 +10,12 @@ import '@fontsource-variable/mona-sans/standard.css';
 
 import { useApiConfig } from '../../../shared/api/config';
 import { useFactoryAuth } from '../../../shared/hooks/useFactoryAuth';
-import { navigateAfterSignIn, redirectToLogin, signInWithPassword, signUpWithPassword } from '../domains/auth/services/auth';
+import {
+  navigateAfterSignIn,
+  redirectToLogin,
+  signInWithPassword,
+  signUpWithPassword,
+} from '../domains/auth/services/auth';
 import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
 import '../domains/auth/components/sign-in-page.css';
 

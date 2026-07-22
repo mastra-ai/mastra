@@ -70,14 +70,18 @@ function createRequestContext(projectPath: string) {
   return requestContext;
 }
 
-function createGithubRequestContext(_projectId: string, sessionId: string) {
+function createGithubRequestContext(
+  _projectId: string,
+  sessionId: string,
+  user: Record<string, unknown> = { organizationId: 'org-1', workosId: 'user-1' },
+) {
   const requestContext = createRequestContext('/unused');
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: sessionId,
     session: { id: sessionId },
   });
-  requestContext.set('user', { organizationId: 'org-1', workosId: 'user-1' });
+  requestContext.set('user', user);
   return requestContext;
 }
 
@@ -360,6 +364,23 @@ describe('GitHub session workspace preparation', () => {
     await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
       /Factory session session-a is not available/,
     );
+  });
+
+  it('accepts session owners identified by provider-neutral id instead of workosId', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const existing = { id: 'existing', setToolsConfig: vi.fn() };
+
+    const result = await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a', {
+        organizationId: 'org-1',
+        id: 'user-1',
+      }),
+      mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+    });
+
+    expect(result).toBe(existing);
   });
 
   it('keeps ordinary local-folder projects on the dynamic workspace resolver', async () => {
