@@ -395,7 +395,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const prefix = prefixParam ?? this.prefix ?? '';
 
     // Determine if body limits should be applied
-    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+    const shouldApplyBodyLimit =
+      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
 
     // Get the body size limit for this route (route-specific or default)
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
