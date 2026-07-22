@@ -45,10 +45,7 @@ describe('liveKitConnectionRoute', () => {
     vi.stubEnv('LIVEKIT_API_SECRET', '');
     const { context, json } = fakeContext();
     await getHandler(liveKitConnectionRoute())(context);
-    expect(json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: expect.stringContaining('LIVEKIT_URL') }),
-      500,
-    );
+    expect(json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringContaining('LIVEKIT_URL') }), 500);
   });
 
   it('mints connection details with agent dispatch metadata', async () => {

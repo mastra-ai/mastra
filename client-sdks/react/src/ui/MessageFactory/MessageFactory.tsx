@@ -57,10 +57,18 @@ const getPartKey = (part: RuntimePart, index: number): string => {
     return part.toolCallId ?? `${part.type}-${index}`;
   }
   switch (part.type) {
-    case 'text':
+    case 'text': {
       // Intrinsic cast: the `'text'`-narrowed member is `(v4 text part) | MastraTextPart`;
       // only `MastraTextPart` carries `textId`, so this is an optional structural read.
-      return (part as { textId?: string }).textId ?? `text-${index}`;
+      // Include index so two segments with the same textId (e.g. DeepSeek reuses txt-0)
+      // get distinct keys after interleaved tool calls.
+      // NOTE: mixing index into the key assumes parts are append-only during
+      // streaming (they are today — the accumulator only pushes). If a part is
+      // ever inserted ahead of a streaming text block, the trailing indices shift
+      // and those text nodes remount. Revisit this key if insertion is added.
+      const textId = (part as { textId?: string }).textId;
+      return textId ? `${textId}-${index}` : `text-${index}`;
+    }
     case 'reasoning':
       // Intrinsic cast: same as `textId` — only the Mastra reasoning member has `reasoningId`.
       return (part as { reasoningId?: string }).reasoningId ?? `reasoning-${index}`;
