@@ -349,4 +349,33 @@ describe('create — .env safety before git commit', () => {
     expect(gitignore).toContain('dist');
     expect(gitignore).toMatch(/^\.env$/m);
   });
+
+  it.runIf(process.platform !== 'win32')(
+    'skips git init when .gitignore cannot be updated so .env secrets are never staged',
+    async () => {
+      // Ship a .gitignore that does NOT cover `.env` — the scaffolder must
+      // append to it. We then make the scaffolded copy read-only so the
+      // append fails and the git init step is aborted.
+      fs.writeFileSync(path.join(templateDir, '.gitignore'), 'node_modules\n');
+
+      // Intercept the copy step: after the template lands in the project dir,
+      // lock its .gitignore before ensureEnvGitignored runs. We do this via a
+      // one-shot spy that fires when the create flow calls into runInherit for
+      // the first git command — but simpler: pre-chmod the template's file
+      // itself. The scaffolder copies it into the project dir, preserving the
+      // read-only bit, so the subsequent writeFileSync throws EACCES.
+      fs.chmodSync(path.join(templateDir, '.gitignore'), 0o444);
+
+      await create({ projectName: 'my-factory', useDefaults: true, templateDir, analytics });
+
+      const runCalls = exec.runInherit.mock.calls as Array<[string, string[]]>;
+      const anyGit = runCalls.some(call => call[0] === 'git');
+      expect(anyGit).toBe(false);
+
+      // User was warned about it.
+      const warns = clack.log.warn.mock.calls.flat().join('\n');
+      expect(warns).toMatch(/\.gitignore/);
+      expect(warns).toMatch(/Skipping git init/i);
+    },
+  );
 });

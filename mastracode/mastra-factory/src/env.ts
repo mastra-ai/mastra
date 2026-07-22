@@ -41,5 +41,15 @@ export function upsertEnvFile(envPath: string, updates: Record<string, string>):
   // Preserve trailing newline behavior: input had one (empty last element)
   // → keep one; input didn't → don't force one.
   const output = patched.join('\n');
-  fs.writeFileSync(envPath, output);
+  fs.writeFileSync(envPath, output, { mode: 0o600 });
+  // `mode` only applies when the file is newly created. For existing files
+  // (which start from `.env.example` copied with default 0644 perms), we must
+  // explicitly chmod so secrets aren't left world-readable.
+  try {
+    fs.chmodSync(envPath, 0o600);
+  } catch {
+    // chmod is a best-effort tightening on Unix. On Windows it's a no-op that
+    // may still throw; swallow so we don't fail the whole flow on a platform
+    // where POSIX perms don't apply.
+  }
 }
