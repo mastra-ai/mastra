@@ -62,27 +62,11 @@ jobs:
         working-directory: ${{ runner.temp }}/template-out
         env:
           MASTRA_TELEMETRY_DISABLED: '1'
-          NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-cache
         run: |
           set -euo pipefail
-          ls -lah
-          if ! npm install --no-audit --no-fund --loglevel verbose; then
-            echo '::group::npm debug logs'
-            find "$NPM_CONFIG_CACHE/_logs" -maxdepth 1 -type f -print -exec cat {} \; || true
-            echo '::endgroup::'
-            exit 1
-          fi
+          npm install --no-audit --no-fund
           npm run check
           npm run build
-
-      - name: Upload npm debug logs
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: softwarefactory-template-npm-logs
-          path: ${{ runner.temp }}/npm-cache/_logs
-          if-no-files-found: ignore
-          retention-days: 7
 
       - name: Checkout template repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -103,13 +87,8 @@ jobs:
 
       - name: Commit and push template
         working-directory: softwarefactory-template
-        env:
-          USERNAME: '${{ steps.app-auth.outputs.app-slug }}[bot]'
-          EMAIL: '${{ steps.app-auth.outputs.user-id }}+${{ steps.app-auth.outputs.app-slug }}[bot]@users.noreply.github.com'
         run: |
           set -euo pipefail
-          git config user.name "$USERNAME"
-          git config user.email "$EMAIL"
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to sync"
