@@ -52,6 +52,14 @@ export interface GithubStatus {
   organizationRequired?: boolean;
   /** Machine-readable reason for the current state; see {@link GithubStatusReason}. */
   reason?: GithubStatusReason;
+  /**
+   * Whether the signed-in user has personally authorized the GitHub App, so
+   * issues/PRs they originate are authored as them instead of the App bot.
+   * Absent on older servers that predate per-user connections.
+   */
+  userConnected?: boolean;
+  /** GitHub username backing the personal connection, when connected. */
+  userGithubUsername?: string | null;
   /** Non-secret feature-gate diagnostics from the server. */
   diagnostics?: GithubFeatureDiagnostics;
 }
@@ -94,9 +102,13 @@ export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> 
   }
 }
 
+function currentPageRedirectTo(): string {
+  return encodeURIComponent(window.location.pathname);
+}
+
 /** Begin the GitHub App install/connect flow (full-page redirect). */
 export function connectGithub(baseUrl: string): void {
-  window.location.assign(`${baseUrl}/auth/github/connect`);
+  window.location.assign(`${baseUrl}/auth/github/connect?redirectTo=${currentPageRedirectTo()}`);
 }
 
 /**
@@ -106,7 +118,19 @@ export function connectGithub(baseUrl: string): void {
  * instantly and invisibly, which would make the manage button a silent no-op.
  */
 export function manageGithubConnection(baseUrl: string): void {
-  window.location.assign(`${baseUrl}/auth/github/connect?manage=1`);
+  window.location.assign(`${baseUrl}/auth/github/connect?manage=1&redirectTo=${currentPageRedirectTo()}`);
+}
+
+/**
+ * Begin the GitHub App *user authorization* flow for the signed-in user
+ * (full-page redirect). Unlike {@link connectGithub} this never installs the
+ * App into an account — it links the user's own GitHub identity so
+ * factory-originated issues and PRs are authored as them. The flow returns to
+ * the current path with `github_app_user_authorized=true`, and the fresh page
+ * load refetches `/web/github/status`.
+ */
+export function connectUserGithub(baseUrl: string): void {
+  window.location.assign(`${baseUrl}/auth/github/connect-user?redirectTo=${currentPageRedirectTo()}`);
 }
 
 /** List repos across the user's installations, optionally filtered by query. */
