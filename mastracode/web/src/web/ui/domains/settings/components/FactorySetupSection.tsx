@@ -13,7 +13,6 @@ import {
   useSaveRepositorySettingsMutation,
 } from '../../../../../shared/hooks/useRepositorySettings';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
-import { isServerFactory } from '../../workspaces/services/factories';
 
 /**
  * One editable setup-command row per linked repository. The field is a draft —
@@ -80,8 +79,8 @@ function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryI
  */
 export function FactorySetupSection() {
   const factoriesQuery = useFactoriesQuery();
-  const rows = (factoriesQuery.data ?? []).filter(isServerFactory).flatMap(factory =>
-    factory.binding.repositories.map(repository => ({
+  const rows = (factoriesQuery.data ?? []).flatMap(factory =>
+    factory.repositories.map(repository => ({
       projectRepositoryId: repository.projectRepositoryId,
       label: factory.name === repository.slug ? repository.slug : `${factory.name} · ${repository.slug}`,
     })),

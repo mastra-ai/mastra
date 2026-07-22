@@ -2,11 +2,9 @@ import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChartLine, GitPullRequest, LayoutDashboard, ListChecks, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
-import { NavLink, useLocation } from 'react-router';
+import { NavLink, useLocation, useParams } from 'react-router';
 
 import { useOverlays } from '../../../lib/overlays';
-import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
-import { isServerFactory } from '../../workspaces/services/factories';
 
 /**
  * The Factory menu: Board navigation plus whatever the caller nests under it
@@ -16,9 +14,9 @@ import { isServerFactory } from '../../workspaces/services/factories';
  * instead of hiding the navigation.
  */
 export function FactorySection({ children }: { children?: ReactNode }) {
-  const { activeFactory } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
 
-  if (!activeFactory || !isServerFactory(activeFactory)) return null;
+  if (!factoryId) return null;
 
   return (
     <nav className="flex flex-col gap-2" aria-label="Factory">
@@ -28,12 +26,12 @@ export function FactorySection({ children }: { children?: ReactNode }) {
         </Txt>
       </div>
       <MainSidebar.NavList>
-        <FactoryLink to={`/factories/${activeFactory.id}/overview`} icon={LayoutDashboard} label="Overview" />
-        <FactoryLink to={`/factories/${activeFactory.id}/work`} icon={SquareKanban} label="Work" />
-        <FactoryLink to={`/factories/${activeFactory.id}/review`} icon={GitPullRequest} label="Review" />
-        <FactoryLink to={`/factories/${activeFactory.id}/metrics`} icon={ChartLine} label="Metrics" />
-        <FactoryLink to={`/factories/${activeFactory.id}/rules`} icon={ListChecks} label="Rules" />
-        <FactoryLink to={`/factories/${activeFactory.id}/audit`} icon={ScrollText} label="Audit log" />
+        <FactoryLink to={`/factories/${factoryId}/overview`} icon={LayoutDashboard} label="Overview" />
+        <FactoryLink to={`/factories/${factoryId}/work`} icon={SquareKanban} label="Work" />
+        <FactoryLink to={`/factories/${factoryId}/review`} icon={GitPullRequest} label="Review" />
+        <FactoryLink to={`/factories/${factoryId}/metrics`} icon={ChartLine} label="Metrics" />
+        <FactoryLink to={`/factories/${factoryId}/rules`} icon={ListChecks} label="Rules" />
+        <FactoryLink to={`/factories/${factoryId}/audit`} icon={ScrollText} label="Audit log" />
       </MainSidebar.NavList>
       {children}
     </nav>

@@ -56,7 +56,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       vi.resetModules();
     });
 
-    it('rejects boot when the GitHub group is partially configured', { timeout: 60_000 }, async () => {
+    it('boots when the GitHub group is partially configured so diagnostics can report the missing setup', { timeout: 60_000 }, async () => {
       vi.resetModules();
       // The test env may carry a full GitHub config — blank everything but the
       // app id to force the partial state.
@@ -65,18 +65,16 @@ describe('platform entry (src/mastra/index.ts)', () => {
       vi.stubEnv('GITHUB_APP_CLIENT_ID', '');
       vi.stubEnv('GITHUB_APP_CLIENT_SECRET', '');
       vi.stubEnv('GITHUB_APP_SLUG', '');
-      await expect(import('./index.js')).rejects.toThrow(
-        /GitHub integration is partially configured — missing GITHUB_APP_PRIVATE_KEY/,
-      );
+      const mod = await import('./index.js');
+      expect(mod.mastra).toBeDefined();
     });
 
-    it('rejects boot when the Linear group is partially configured', { timeout: 60_000 }, async () => {
+    it('boots when the Linear group is partially configured so diagnostics can report the missing setup', { timeout: 60_000 }, async () => {
       vi.resetModules();
       vi.stubEnv('LINEAR_CLIENT_ID', 'lin_client');
       vi.stubEnv('LINEAR_CLIENT_SECRET', '');
-      await expect(import('./index.js')).rejects.toThrow(
-        /Linear integration is partially configured — missing LINEAR_CLIENT_SECRET/,
-      );
+      const mod = await import('./index.js');
+      expect(mod.mastra).toBeDefined();
     });
   });
 });

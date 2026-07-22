@@ -11,7 +11,6 @@ import { useNavigate, useParams } from 'react-router';
 
 import { relativeTime } from '../../../../../shared/lib/date';
 import { useOverlays } from '../../../lib/overlays';
-import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import {
   useCloneAgentControllerThreadMutation,
@@ -22,9 +21,8 @@ import { useAgentControllerThreads } from '../../../../../shared/hooks/useAgentC
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 export function ThreadList() {
-  const { activeFactory } = useActiveFactoryContext();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { threadId: routeThreadId } = useParams<{ threadId: string }>();
+  const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
 
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -36,13 +34,10 @@ export function ThreadList() {
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
-  if (!activeFactory) return null;
-
-  // Worktrees hold a single conversation: show its title for context, but no
+  // Workspaces hold a single conversation: show its title for context, but no
   // "Threads" header/count, no rename/clone/delete actions, and no way to
-  // create more threads. Every GitHub chat target is a worktree (the repo
-  // root is not a workspace), so any GitHub project path is read-only here.
-  const readOnly = isServerFactory(activeFactory) && Boolean(projectPath);
+  // create more threads.
+  const readOnly = Boolean(projectPath);
 
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;
@@ -52,9 +47,11 @@ export function ThreadList() {
     return tb.localeCompare(ta);
   });
 
+  if (!factoryId) return null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      {!readOnly && <ThreadListHeader factoryId={activeFactory.id} threadCount={threads.length} />}
+      {!readOnly && <ThreadListHeader factoryId={factoryId} threadCount={threads.length} />}
       <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {sortedThreads.length === 0 && (
           <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
@@ -68,7 +65,7 @@ export function ThreadList() {
             <ThreadRow
               key={thread.id}
               thread={thread}
-              factoryId={activeFactory.id}
+              factoryId={factoryId}
               active={thread.id === activeThreadId}
               readOnly={readOnly}
               onStartRename={() => setRenamingId(thread.id)}
