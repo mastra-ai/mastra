@@ -25,7 +25,9 @@ export function EmptyThreadState() {
   const { prefillComposer } = useChatCommands();
   if (!activeFactory) return null;
 
-  const repository = activeFactory.repositories.find(repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId);
+  const repository = activeFactory.repositories.find(
+    repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId,
+  );
   const gitBranch = repository?.gitBranch;
 
   return (

@@ -37,7 +37,6 @@ export function FactoriesPanel({ onClose }: { onClose: () => void }) {
     }
   };
 
-
   return (
     <section aria-labelledby="create-factory-title" className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
@@ -84,7 +83,6 @@ export function FactoriesPanel({ onClose }: { onClose: () => void }) {
               </Button>
             </div>
           </form>
-
         </div>
       </div>
     </section>
