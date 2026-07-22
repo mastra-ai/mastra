@@ -152,4 +152,35 @@ test.describe('Dataset items list', () => {
       await expect(page.getByRole('checkbox')).toHaveCount(0);
     });
   });
+
+  test.describe('when an item has a persisted timeout override', () => {
+    test('updates the override through the detail panel and retains it after reload', async ({ page, request }) => {
+      const seededDataset = await seedDatasetWithItems(1);
+      const itemId = seededDataset.itemIds[0];
+      const response = await request.patch(`/api/datasets/${seededDataset.id}/items/${itemId}`, {
+        data: { timeout: 15_000 },
+      });
+      expect(response.ok()).toBe(true);
+
+      await page.goto(`/datasets/${seededDataset.id}`);
+      await page.getByText('Test input 1', { exact: true }).click();
+
+      const detailPanel = page.locator('section').filter({
+        has: page.getByRole('heading', { name: new RegExp(itemId.slice(0, 12)) }),
+      });
+      await expect(detailPanel.getByText('15,000 ms')).toBeVisible();
+
+      await detailPanel.getByRole('button', { name: 'Actions menu' }).click();
+      await page.getByRole('menuitem', { name: 'Edit' }).click();
+      const timeoutInput = detailPanel.getByRole('spinbutton', { name: /item timeout/i });
+      await expect(timeoutInput).toHaveValue('15000');
+      await timeoutInput.fill('30000');
+      await detailPanel.getByRole('button', { name: 'Save Changes' }).click();
+      await expect(detailPanel.getByText('30,000 ms')).toBeVisible();
+
+      await page.reload();
+      await page.getByRole('button', { name: /Test input 1/ }).click();
+      await expect(detailPanel.getByText('30,000 ms')).toBeVisible();
+    });
+  });
 });
