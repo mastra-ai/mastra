@@ -1,42 +1,62 @@
-import { act, renderHook } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { multiThemeSnapshotsResponse } from '../__tests__/fixtures/theme-flow';
 import { useSnapshotPlayback } from './use-snapshot-playback';
 
 describe('useSnapshotPlayback', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('starts from the latest snapshot and advances while playing', () => {
+  it('advances after the playback interval', () => {
     vi.useFakeTimers();
-    const snapshots = multiThemeSnapshotsResponse.snapshots;
-    const { result } = renderHook(() => useSnapshotPlayback(snapshots, false));
+    const onAdvance = vi.fn();
 
-    expect(result.current.selectedSnapshotIndex).toBe(snapshots.length - 1);
+    renderHook(() =>
+      useSnapshotPlayback({
+        isPlaying: true,
+        isPlaybackBlocked: false,
+        nextSnapshot: 'snapshot-2',
+        onAdvance,
+        snapshotCount: 2,
+      }),
+    );
+    vi.advanceTimersByTime(900);
 
-    act(() => result.current.setIsPlaying(true));
-    act(() => vi.advanceTimersByTime(900));
-
-    expect(result.current.selectedSnapshotIndex).toBe(0);
+    expect(onAdvance).toHaveBeenCalledWith('snapshot-2');
   });
 
   it('does not advance while playback is blocked', () => {
     vi.useFakeTimers();
-    const snapshots = multiThemeSnapshotsResponse.snapshots;
-    const { result } = renderHook(() => useSnapshotPlayback(snapshots, true));
+    const onAdvance = vi.fn();
 
-    act(() => result.current.setIsPlaying(true));
-    act(() => vi.advanceTimersByTime(900));
+    renderHook(() =>
+      useSnapshotPlayback({
+        isPlaying: true,
+        isPlaybackBlocked: true,
+        nextSnapshot: 'snapshot-2',
+        onAdvance,
+        snapshotCount: 2,
+      }),
+    );
+    vi.advanceTimersByTime(900);
 
-    expect(result.current.selectedSnapshotIndex).toBe(snapshots.length - 1);
+    expect(onAdvance).not.toHaveBeenCalled();
   });
 
-  it('selects a snapshot directly', () => {
-    const snapshots = multiThemeSnapshotsResponse.snapshots;
-    const { result } = renderHook(() => useSnapshotPlayback(snapshots, false));
+  it('does not advance a single-snapshot timeline', () => {
+    vi.useFakeTimers();
+    const onAdvance = vi.fn();
 
-    act(() => result.current.selectSnapshot(0));
+    renderHook(() =>
+      useSnapshotPlayback({
+        isPlaying: true,
+        isPlaybackBlocked: false,
+        nextSnapshot: 'snapshot-1',
+        onAdvance,
+        snapshotCount: 1,
+      }),
+    );
+    vi.advanceTimersByTime(900);
 
-    expect(result.current.snapshot?.snapshotId).toBe(snapshots[0]?.snapshotId);
+    expect(onAdvance).not.toHaveBeenCalled();
   });
 });

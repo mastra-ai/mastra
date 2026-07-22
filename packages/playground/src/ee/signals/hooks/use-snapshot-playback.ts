@@ -1,27 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
-import type { ThemeSnapshot } from '../types';
+type SnapshotPlaybackOptions<SnapshotCursor> = {
+  isPlaying: boolean;
+  isPlaybackBlocked: boolean;
+  nextSnapshot: SnapshotCursor | undefined;
+  onAdvance: (snapshot: SnapshotCursor | undefined) => void;
+  snapshotCount: number;
+};
 
-export function useSnapshotPlayback(snapshots: ThemeSnapshot[], isPlaybackBlocked: boolean) {
-  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.snapshotId === selectedSnapshotId);
-  const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : snapshots.length - 1;
-  const snapshot = snapshots[selectedSnapshotIndex];
-  const nextSnapshotId = snapshots[(selectedSnapshotIndex + 1) % snapshots.length]?.snapshotId;
-
+export function useSnapshotPlayback<SnapshotCursor>({
+  isPlaying,
+  isPlaybackBlocked,
+  nextSnapshot,
+  onAdvance,
+  snapshotCount,
+}: SnapshotPlaybackOptions<SnapshotCursor>) {
   useEffect(() => {
-    if (!isPlaying || snapshots.length < 2 || isPlaybackBlocked) return;
+    if (!isPlaying || snapshotCount < 2 || isPlaybackBlocked) return;
 
-    const timer = window.setTimeout(() => setSelectedSnapshotId(nextSnapshotId), 900);
+    const timer = window.setTimeout(() => onAdvance(nextSnapshot), 900);
     return () => window.clearTimeout(timer);
-  }, [isPlaybackBlocked, isPlaying, nextSnapshotId, snapshots.length]);
-
-  return {
-    isPlaying,
-    selectedSnapshotIndex,
-    setIsPlaying,
-    snapshot,
-    selectSnapshot: (index: number) => setSelectedSnapshotId(snapshots[index]?.snapshotId),
-  };
+  }, [isPlaybackBlocked, isPlaying, nextSnapshot, onAdvance, snapshotCount]);
 }

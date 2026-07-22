@@ -2,7 +2,7 @@ import { Card, CardContent, CardFooter, CardHeader } from '@mastra/playground-ui
 import { nodeColor, Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
 import type { SankeyChartColumn, SankeyChartRecord } from '@mastra/playground-ui/components/SankeyChart';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useSnapshotPlayback } from './hooks/use-snapshot-playback';
 import { useThemeFlows } from './hooks/use-theme-flows';
@@ -176,6 +176,13 @@ function FlowCard({
 export function SankeySignals({ entityId, entityType = 'agent', signalNames, height }: SankeySignalsProps) {
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames);
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.snapshotId === selectedSnapshotId);
+  const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : snapshots.length - 1;
+  const snapshot = snapshots[selectedSnapshotIndex];
+  const selectSnapshot = (index: number) => setSelectedSnapshotId(snapshots[index]?.snapshotId);
+  const nextSnapshotId = snapshots[(selectedSnapshotIndex + 1) % snapshots.length]?.snapshotId;
   const flowQueries = useThemeFlows(
     entityId,
     entityType,
@@ -184,10 +191,13 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   );
   const isFlowPending = flowQueries.some(query => query.isPending);
   const hasFlowError = flowQueries.some(query => query.isError);
-  const { isPlaying, selectedSnapshotIndex, selectSnapshot, setIsPlaying, snapshot } = useSnapshotPlayback(
-    snapshots,
-    isFlowPending || hasFlowError,
-  );
+  useSnapshotPlayback({
+    isPlaying,
+    isPlaybackBlocked: isFlowPending || hasFlowError,
+    nextSnapshot: nextSnapshotId,
+    onAdvance: setSelectedSnapshotId,
+    snapshotCount: snapshots.length,
+  });
   const flow = flowQueries[selectedSnapshotIndex]?.data;
   const windowFlows = useMemo(() => flowQueries.flatMap(query => (query.data ? [query.data] : [])), [flowQueries]);
   const graphSummary = useMemo(
