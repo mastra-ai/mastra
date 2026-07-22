@@ -6,7 +6,7 @@ import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { GitBranch, MoreHorizontal, Plus } from 'lucide-react';
+import { GitBranch, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -208,6 +208,7 @@ export function UserSessionsSection() {
                     />
                     <DropdownMenu.Content align="end" className="min-w-28">
                       <DropdownMenu.Item variant="destructive" onClick={() => setConfirmDelete(session)}>
+                        <Trash2 />
                         Delete
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>

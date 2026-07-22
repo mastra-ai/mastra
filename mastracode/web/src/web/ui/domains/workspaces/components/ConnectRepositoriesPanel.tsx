@@ -48,9 +48,16 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
     <div className="flex flex-col gap-4" aria-label="Connect repositories">
       {linked.length > 0 && (
         <div className="flex flex-col gap-2">
-          <Txt as="h3" variant="ui-sm" className="font-medium text-icon5">
-            Linked repositories
-          </Txt>
+          <div className="flex items-center justify-between gap-3">
+            <Txt as="h3" variant="ui-sm" className="font-medium text-icon5">
+              Linked repositories
+            </Txt>
+            {/* Re-run the install flow: GitHub's own page adds/removes accounts
+                and repo access; the callback re-syncs installations here. */}
+            <Button variant="outline" size="sm" onClick={() => manageGithubConnection(baseUrl)}>
+              Manage GitHub connection
+            </Button>
+          </div>
           {linked.map(repo => (
             <div
               key={repo.projectRepositoryId}
@@ -123,39 +130,31 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
               </Txt>
             ) : (
               available.map(repo => (
-                <button
+                <div
                   key={repo.id}
-                  className="flex items-center gap-3 rounded-xl border border-border1 bg-surface2 px-3 py-2 text-left hover:border-border2 hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={busyRepoId !== null}
-                  onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-surface4"
                   title={repo.fullName}
                 >
-                  <FolderIcon size={18} className="shrink-0 text-icon3" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-ui-sm font-medium text-icon6">{repo.fullName}</span>
+                    <span className="flex items-center gap-1.5 text-ui-sm font-medium text-icon6">
+                      <FolderIcon size={14} className="shrink-0 text-icon3" />
+                      <span className="truncate">{repo.fullName}</span>
+                    </span>
                     <span className="block truncate text-ui-xs text-icon3">
                       {repo.private ? 'private' : 'public'} · {repo.defaultBranch}
                     </span>
                   </span>
-                  {busyRepoId === repo.id ? (
-                    <span className="shrink-0 text-ui-xs text-icon3">Linking…</span>
-                  ) : (
-                    <span className="shrink-0 text-ui-xs text-accent1">Link</span>
-                  )}
-                </button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busyRepoId !== null}
+                    onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
+                  >
+                    {busyRepoId === repo.id ? 'Linking…' : 'Link'}
+                  </Button>
+                </div>
               ))
             )}
-          </div>
-
-          {/* Re-run the install flow: GitHub's own page adds/removes accounts
-              and repo access; the callback re-syncs installations here. */}
-          <div className="flex items-center justify-between gap-3 border-t border-border1 pt-3">
-            <Txt as="span" variant="ui-xs" className="text-icon3">
-              Missing a repository or connected the wrong account?
-            </Txt>
-            <Button variant="outline" size="sm" onClick={() => manageGithubConnection(baseUrl)}>
-              Manage GitHub connection
-            </Button>
           </div>
         </>
       )}

@@ -5,7 +5,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { MoreHorizontal, Plus } from 'lucide-react';
+import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
@@ -223,6 +223,7 @@ function ThreadRow({
             <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
             <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
             <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
+              <Trash2 />
               Delete
             </DropdownMenu.Item>
           </DropdownMenu.Content>
