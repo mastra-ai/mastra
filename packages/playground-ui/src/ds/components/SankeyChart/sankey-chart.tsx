@@ -1,15 +1,12 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
-import {
-  buildFixedSankeyGeometry,
-  getSankeyChartCurveSelection,
-  getSankeyChartNodeWeights,
-} from './sankey-chart-utils';
+import { getSankeyChartCurveSelection, getSankeyChartNodeWeights } from './sankey-chart-utils';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
+import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
@@ -27,9 +24,12 @@ export function SankeyChart({
   onCurveClick,
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const [measuredHeight, setMeasuredHeight] = useState(typeof height === 'number' ? height : 320);
-  const [measuredWidth, setMeasuredWidth] = useState(800);
+  const { chartContainerRef, fixedGeometry } = useSankeyChartMeasurements({
+    graph,
+    height,
+    margin,
+    usesFixedGeometry,
+  });
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const [focusedSourceName, setFocusedSourceName] = useState<string>();
   const activeSourceName = hoveredSourceName ?? focusedSourceName;
@@ -40,32 +40,6 @@ export function SankeyChart({
     (sum, node) =>
       node.column.id === firstColumnId ? sum + (node.displayValue ?? nodeWeights.get(node.id) ?? 0) : sum,
     0,
-  );
-  useEffect(() => {
-    const element = chartContainerRef.current;
-    if (!element) return;
-    const updateDimensions = () => {
-      if (element.offsetHeight > 0) setMeasuredHeight(element.offsetHeight);
-      if (element.offsetWidth > 0) setMeasuredWidth(element.offsetWidth);
-    };
-    updateDimensions();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(updateDimensions);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [height]);
-  const fixedGeometry = useMemo(
-    () =>
-      usesFixedGeometry
-        ? buildFixedSankeyGeometry(graph, {
-            top: Number(margin?.top ?? 64),
-            bottom: measuredHeight - Number(margin?.bottom ?? 12),
-            left: Number(margin?.left ?? 160),
-            right: measuredWidth - Number(margin?.right ?? 160) - 7,
-            nodePadding: 8,
-          })
-        : undefined,
-    [graph, margin?.bottom, margin?.left, margin?.right, margin?.top, measuredHeight, measuredWidth, usesFixedGeometry],
   );
 
   return (
