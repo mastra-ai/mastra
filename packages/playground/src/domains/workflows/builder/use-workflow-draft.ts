@@ -67,10 +67,10 @@ export function useWorkflowDraft(
   const mountedRef = useRef(true);
   const saveMutation = useUpsertStoredWorkflow();
 
-  const replaceState = (next: WorkflowDraftAuthoringState) => {
+  const replaceState = useCallback((next: WorkflowDraftAuthoringState) => {
     stateRef.current = next;
     setAuthoringState(next);
-  };
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -85,12 +85,15 @@ export function useWorkflowDraft(
     initializationKeyRef.current = initializationKey;
     identityRef.current = identity;
     replaceState(initializeAuthoringState(initialDefinition, initialId, validationContext));
-  }, [identity, initialDefinition, initialId, initializationKey, validationContext]);
+  }, [identity, initialDefinition, initialId, initializationKey, replaceState, validationContext]);
 
-  const applyResult = (result: WorkflowDraftAuthoringResult) => {
-    if (result.state !== stateRef.current) replaceState(result.state);
-    return result;
-  };
+  const applyResult = useCallback(
+    (result: WorkflowDraftAuthoringResult) => {
+      if (result.state !== stateRef.current) replaceState(result.state);
+      return result;
+    },
+    [replaceState],
+  );
 
   const checkpoint = (expectedRevision: number, draft: WorkflowDraft) =>
     applyResult(checkpointWorkflowDraft(stateRef.current, expectedRevision, draft, validationContext));
@@ -107,20 +110,24 @@ export function useWorkflowDraft(
       if (result.state !== stateRef.current) replaceState(result.state);
       return result;
     },
-    [validationContext],
+    [replaceState, validationContext],
   );
 
   const createTools = useCallback(
     (isCurrentGeneration?: () => boolean) =>
       createWorkflowDraftTools({
-        getDraft: () => stateRef.current.draft,
-        setDraft: nextDraft => {
-          setDraft(nextDraft);
-        },
-        validationContext,
+        getState: () => stateRef.current,
+        checkpoint: (expectedRevision, draft) =>
+          applyResult(checkpointWorkflowDraft(stateRef.current, expectedRevision, draft, validationContext)),
+        finalize: expectedRevision =>
+          applyResult(finalizeWorkflowDraft(stateRef.current, expectedRevision, validationContext)),
+        mutate: (expectedRevision, mutation) =>
+          applyResult(
+            mutateWorkflowDraftAuthoringState(stateRef.current, expectedRevision, mutation, validationContext),
+          ),
         isCurrentGeneration,
       }),
-    [setDraft, validationContext],
+    [applyResult, validationContext],
   );
   const tools = useMemo(() => createTools(), [createTools]);
 
@@ -136,7 +143,7 @@ export function useWorkflowDraft(
       );
       return true;
     },
-    [initialId, validationContext],
+    [initialId, replaceState, validationContext],
   );
 
   const save = async () => {

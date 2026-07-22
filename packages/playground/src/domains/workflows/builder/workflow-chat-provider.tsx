@@ -4,12 +4,13 @@ import { useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import { serializeWorkflowDraftInstructions } from './workflow-conversation';
-import type { WorkflowDraft } from './workflow-draft';
+import type { WorkflowDraftAuthoringState, WorkflowDraftValidationContext } from './workflow-draft';
 import { StreamChatProvider } from '@/domains/agent-builder/contexts/stream-chat-provider';
 
 export interface WorkflowChatProviderProps {
   threadId: string;
-  draft: WorkflowDraft;
+  authoringState: WorkflowDraftAuthoringState;
+  validationContext?: WorkflowDraftValidationContext;
   initialMessages: MastraDBMessage[];
   initialUserMessage?: string;
   createTools: (isCurrentGeneration: () => boolean) => ClientToolsInput;
@@ -19,7 +20,8 @@ export interface WorkflowChatProviderProps {
 
 export function WorkflowChatProvider({
   threadId,
-  draft,
+  authoringState,
+  validationContext,
   initialMessages,
   initialUserMessage,
   createTools,
@@ -40,7 +42,7 @@ export function WorkflowChatProvider({
       initialMessages={initialMessages}
       initialUserMessage={initialUserMessage}
       createClientTools={createClientTools}
-      extraInstructions={serializeWorkflowDraftInstructions(draft)}
+      extraInstructions={serializeWorkflowDraftInstructions(authoringState, validationContext)}
       enableThreadSignals={false}
       debounceTime={debounceTime}
     >

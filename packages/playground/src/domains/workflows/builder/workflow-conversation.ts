@@ -1,11 +1,33 @@
-import type { WorkflowDraft } from './workflow-draft';
+import type { WorkflowDraftAuthoringState, WorkflowDraftValidationContext } from './workflow-draft';
 
 export function getWorkflowBuilderThreadId(projectId: string, workflowId: string): string {
   return `workflow-builder-${projectId}-${workflowId}`;
 }
 
-export function serializeWorkflowDraftInstructions(draft: WorkflowDraft): string {
-  return `## Current persisted workflow definition\n\`\`\`json\n${JSON.stringify(draft, null, 2)}\n\`\`\``;
+export function serializeWorkflowDraftInstructions(
+  authoringState: WorkflowDraftAuthoringState,
+  validationContext: WorkflowDraftValidationContext = {},
+): string {
+  const catalogContext = {
+    workflowCatalog: validationContext.workflowCatalog ?? 'available',
+    agents: Object.keys(validationContext.agents ?? {}),
+    tools: Object.keys(validationContext.tools ?? {}),
+    workflows: Object.keys(validationContext.workflows ?? {}),
+  };
+  return `## Current unsaved workflow authoring state
+Lifecycle: ${authoringState.lifecycle}
+Revision: ${authoringState.revision}
+Finalized revision: ${authoringState.finalizedRevision ?? 'none'}
+
+## Discovered catalogs
+\`\`\`json
+${JSON.stringify(catalogContext, null, 2)}
+\`\`\`
+
+## Current accepted workflow definition
+\`\`\`json
+${JSON.stringify(authoringState.draft, null, 2)}
+\`\`\``;
 }
 
 interface WorkflowConversationGeneration {

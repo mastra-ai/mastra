@@ -9,6 +9,18 @@ describe('EditorWorkflowBuilder', () => {
     expect(builder.getAgent().id).toBe('workflow-builder-agent');
   });
 
+  it('instructs the hidden agent to checkpoint, finalize, and leave persistence to explicit Save', async () => {
+    const builder = new EditorWorkflowBuilder();
+
+    const instructions = await builder.getAgent().getInstructions();
+
+    expect(instructions).toContain('checkpoint-workflow-draft');
+    expect(instructions).toContain('finalize-workflow-draft');
+    expect(instructions).toContain('explicit Studio Save action');
+    expect(instructions).not.toContain('set-workflow-identity');
+    expect(instructions).not.toContain('set-workflow-schemas');
+  });
+
   it('preserves the configured model policy', () => {
     const modelPolicy = {
       active: true,

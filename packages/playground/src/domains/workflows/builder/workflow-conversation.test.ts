@@ -5,7 +5,7 @@ import {
   getWorkflowBuilderThreadId,
   serializeWorkflowDraftInstructions,
 } from './workflow-conversation';
-import { createWorkflowDraft } from './workflow-draft';
+import { createWorkflowDraftAuthoringState } from './workflow-draft';
 
 describe('workflow conversation', () => {
   describe('when identifying a persisted workflow conversation', () => {
@@ -16,12 +16,18 @@ describe('workflow conversation', () => {
 
   describe('when creating hidden instructions', () => {
     it('serializes the authoritative draft without adding a visible message', () => {
-      const draft = createWorkflowDraft('daily-report');
+      const state = createWorkflowDraftAuthoringState('daily-report');
+      const instructions = serializeWorkflowDraftInstructions(state, {
+        agents: { 'support-agent': {} },
+        workflowCatalog: 'unavailable',
+      });
 
-      expect(serializeWorkflowDraftInstructions(draft)).toContain(
-        '## Current persisted workflow definition\n```json\n',
-      );
-      expect(serializeWorkflowDraftInstructions(draft)).toContain('"id": "daily-report"');
+      expect(instructions).toContain('## Current unsaved workflow authoring state');
+      expect(instructions).toContain('Lifecycle: untouched');
+      expect(instructions).toContain('Revision: 0');
+      expect(instructions).toContain('"workflowCatalog": "unavailable"');
+      expect(instructions).toContain('support-agent');
+      expect(instructions).toContain('"id": "daily-report"');
     });
   });
 

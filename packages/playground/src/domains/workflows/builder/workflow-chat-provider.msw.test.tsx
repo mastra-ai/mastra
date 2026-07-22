@@ -7,7 +7,12 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { WorkflowChatProvider } from './workflow-chat-provider';
-import { createWorkflowDraft } from './workflow-draft';
+import {
+  checkpointWorkflowDraft,
+  createWorkflowDraftAuthoringState,
+  finalizeWorkflowDraft,
+  mutateWorkflowDraftAuthoringState,
+} from './workflow-draft';
 import { createWorkflowDraftTools } from './workflow-draft-tools';
 import { useStreamSend } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { server } from '@/test/msw-server';
@@ -58,15 +63,27 @@ describe('WorkflowChatProvider', () => {
         }),
       );
 
-      const draft = createWorkflowDraft('support-workflow');
-      const tools = createWorkflowDraftTools({ getDraft: () => draft, setDraft: () => {} });
+      let authoringState = createWorkflowDraftAuthoringState('support-workflow');
+      const apply = (result: ReturnType<typeof checkpointWorkflowDraft>) => {
+        authoringState = result.state;
+        return result;
+      };
+      const tools = createWorkflowDraftTools({
+        getState: () => authoringState,
+        checkpoint: (expectedRevision, draft) =>
+          apply(checkpointWorkflowDraft(authoringState, expectedRevision, draft)),
+        finalize: expectedRevision => apply(finalizeWorkflowDraft(authoringState, expectedRevision)),
+        mutate: (expectedRevision, mutation) =>
+          apply(mutateWorkflowDraftAuthoringState(authoringState, expectedRevision, mutation)),
+      });
 
       await act(async () => {
         render(
           <Providers>
             <WorkflowChatProvider
               threadId="workflow-builder-project-support-workflow"
-              draft={draft}
+              authoringState={authoringState}
+              validationContext={{ agents: { 'support-agent': {} }, workflowCatalog: 'unavailable' }}
               initialMessages={[]}
               createTools={() => tools}
             >
@@ -81,7 +98,10 @@ describe('WorkflowChatProvider', () => {
       });
 
       expect(capturedBody).toBeDefined();
-      expect(capturedBody?.instructions).toContain('Current persisted workflow definition');
+      expect(capturedBody?.instructions).toContain('Current unsaved workflow authoring state');
+      expect(capturedBody?.instructions).toContain('Lifecycle: untouched');
+      expect(capturedBody?.instructions).toContain('"workflowCatalog": "unavailable"');
+      expect(capturedBody?.instructions).toContain('support-agent');
       expect(capturedBody?.instructions).toContain('support-workflow');
       expect(JSON.stringify(capturedBody?.messages)).toContain('Build a support workflow');
       expect(JSON.stringify(capturedBody?.messages)).not.toContain('Current persisted workflow definition');

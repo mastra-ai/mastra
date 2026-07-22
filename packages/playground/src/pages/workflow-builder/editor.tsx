@@ -136,7 +136,8 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   return (
     <WorkflowChatProvider
       threadId={threadId}
-      draft={workflowDraft.draft}
+      authoringState={workflowDraft.authoringState}
+      validationContext={validationContext}
       initialMessages={EMPTY_MESSAGES}
       createTools={workflowDraft.createTools}
     >
