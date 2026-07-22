@@ -67,30 +67,10 @@ function startRequest(
   };
 }
 
-async function eventually(assertion: () => Promise<void>): Promise<void> {
-  let failure: unknown;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    try {
-      await assertion();
-      return;
-    } catch (error) {
-      failure = error;
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
-  }
-  throw failure;
-}
-
 describe('FactoryStartCoordinator', () => {
-  it('commits the item session, exact binding, and pending start before kickoff', async () => {
+  it('commits the item session, exact binding, and durable pending start without dispatching inline', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
-    let bindingsAtSend = 0;
-    let pendingAtSend = 0;
-    const sendMessage = vi.fn(async () => {
-      bindingsAtSend = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
-      pendingAtSend = (await storage.listPendingStarts('org-1', PROJECT_ID)).length;
-    });
-    const { controller } = makeController(sendMessage);
+    const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(controller as never, storage);
 
     const prepared = await coordinator.prepare(startRequest());
@@ -100,11 +80,9 @@ describe('FactoryStartCoordinator', () => {
       kickoffStatus: 'pending',
       replayed: false,
     });
-    await eventually(async () =>
-      expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent'),
-    );
-    expect(bindingsAtSend).toBe(1);
-    expect(pendingAtSend).toBe(1);
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
+    expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
+    expect(sendMessage).not.toHaveBeenCalled();
     const item = await storage.get({ orgId: 'org-1', id: prepared.workItemId });
     expect(item?.sessions.work).toMatchObject({
       threadId: 'thread-1',
@@ -141,7 +119,8 @@ describe('FactoryStartCoordinator', () => {
     expect(prepared.revision).toBe(2);
     expect((await storage.get({ orgId: 'org-1', id: prepared.workItemId }))?.stages).toEqual(['execute']);
     expect(bindingsDuringRule).toBe(1);
-    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
   });
 
   it('reuses the newest server-resolved tagged thread instead of creating one in the browser', async () => {
@@ -217,28 +196,18 @@ describe('FactoryStartCoordinator', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-  it('persists post-commit send failure and retries idempotently against the same binding', async () => {
+  it('replays the same durable pending kickoff and binding without dispatching it inline', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
-    const sendMessage = vi
-      .fn<() => Promise<void>>()
-      .mockRejectedValueOnce(new Error('model unavailable'))
-      .mockResolvedValueOnce();
-    const { controller } = makeController(sendMessage);
+    const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(controller as never, storage);
     const input = startRequest();
 
     const first = await coordinator.prepare(input);
-    await eventually(async () => {
-      const [pending] = await storage.listPendingStarts('org-1', PROJECT_ID);
-      expect(pending).toMatchObject({ status: 'failed', lastError: 'model unavailable' });
-    });
-
     const replay = await coordinator.prepare(input);
+
     expect(replay).toMatchObject({ workItemId: first.workItemId, bindingId: first.bindingId, replayed: true });
-    await eventually(async () =>
-      expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent'),
-    );
-    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'pending' });
+    expect(sendMessage).not.toHaveBeenCalled();
     expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
   });
 

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraWorker } from '@mastra/core/worker';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import type { VersionControl } from './capabilities/version-control.js';
 import { PgVector } from '@mastra/pg';
@@ -126,13 +127,14 @@ describe('MastraFactory.prepare', () => {
 
   it('seeds conservative versioned Factory rules when the slot is omitted', async () => {
     await prepareFactory({ storage: fakeStorage() });
-    expect(getSeededFactoryRules()).toEqual({
-      version: DEFAULT_FACTORY_RULE_VERSION,
-      work: {},
-      review: {},
-      tools: {},
-      github: {},
-    });
+    const rules = getSeededFactoryRules();
+    expect(rules?.version).toBe(DEFAULT_FACTORY_RULE_VERSION);
+    expect(rules?.work.triage?.issue?.onEnter).toBeTypeOf('function');
+    expect(rules?.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(rules?.tools.submit_plan?.onResult).toBeTypeOf('function');
+    expect(rules?.github.issueOpened?.onEvent).toBeTypeOf('function');
+    expect(rules?.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
+    expect(rules?.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
   });
 
   it('seeds explicitly configured Factory rules without composing handler leaves', async () => {
@@ -281,6 +283,43 @@ describe('MastraFactory.prepare', () => {
     expect(paths).toContain('/auth/callback');
     expect(paths).toContain('/auth/logout');
     expect(paths).toContain('/auth/me');
+  });
+
+  it('registers the Factory transition tool only for exact active bindings', async () => {
+    const storage = fakeStorage();
+    const config = await prepareFactory({ storage });
+    const workItems =
+      getFactoryStorage().getDomain<import('./storage/domains/work-items/base').WorkItemsStorage>('work-items');
+    const binding = {
+      id: 'binding-1',
+      orgId: 'org-1',
+      factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      workItemId: 'item-1',
+      role: 'work',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      projectPath: '/worktree',
+      branch: 'factory/item',
+      status: 'active' as const,
+      createdAt: new Date(),
+      revokedAt: null,
+    };
+    const lookup = vi.spyOn(workItems, 'findActiveRunBinding').mockResolvedValue(binding);
+    const extraTools = config.extraTools as (args: {
+      requestContext: RequestContext;
+    }) => Promise<Record<string, unknown>>;
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    requestContext.set('controller', {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      scope: '/worktree',
+      getState: () => ({ factoryProjectId: binding.factoryProjectId }),
+    });
+
+    await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_transition_work_item');
+    lookup.mockResolvedValue(null);
+    await expect(extraTools({ requestContext })).resolves.toEqual({});
   });
 
   it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
@@ -589,9 +628,12 @@ describe('MastraFactory.prepare integrations', () => {
     );
   });
 
-  it('omits extraTools when no integration contributes tools', async () => {
+  it('keeps the bound Factory tool resolver when no integration contributes tools', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), integrations: [fakeIntegration({ id: 'custom' })] });
-    expect(config).not.toHaveProperty('extraTools');
+    const extraTools = config.extraTools as (args: {
+      requestContext: RequestContext;
+    }) => Promise<Record<string, unknown>>;
+    await expect(extraTools({ requestContext: new RequestContext() })).resolves.toEqual({});
   });
 
   it('fails loud when a ready integration requires a stable signer but none is configured', async () => {

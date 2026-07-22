@@ -8,10 +8,27 @@
  * Factory transition path keeps one exclusive current stage per item.
  */
 
+import { createHash } from 'node:crypto';
+
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 export type WorkItemStage = string;
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+export function factoryDecisionHash(decision: Record<string, unknown>): string {
+  return createHash('sha256').update(stableJson(decision)).digest('hex');
+}
 
 export interface ExternalWorkItemSource {
   integrationId: string;
@@ -45,16 +62,60 @@ export interface FactoryRuleIngressRecord {
   createdAt: Date;
 }
 
+export interface CommitFactoryRuleEvaluationInput {
+  orgId: string;
+  factoryProjectId: string;
+  workItemId: string | null;
+  ingress: { identity: string; triggerType: string };
+  ruleSetVersion: string;
+  expectedRevision: number | null;
+  actor: Record<string, unknown> | null;
+  outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string };
+  decisions: Record<string, unknown>[];
+  causalChain: Array<{ ingressId: string; decisionType: string }>;
+  now: Date;
+}
+
+export type CommitFactoryRuleEvaluationResult =
+  | { status: 'committed'; result: Record<string, unknown> }
+  | { status: 'replayed'; result: Record<string, unknown> }
+  | { status: 'missing' };
+
+export interface FactoryToolResultCursorRecord {
+  bindingId: string;
+  orgId: string;
+  factoryProjectId: string;
+  lastMessageId: string;
+  lastMessageCreatedAt: Date;
+  updatedAt: Date;
+}
+
 export interface FactoryRuleEvaluationRecord {
   id: string;
   ingressId: string;
-  workItemId: string;
+  workItemId: string | null;
   ruleSetVersion: string;
-  expectedRevision: number;
+  expectedRevision: number | null;
   outcome: 'accepted' | 'rejected';
   code: string | null;
   reason: string | null;
+  causalChain: Array<{ ingressId: string; decisionType: string }>;
   createdAt: Date;
+}
+
+export type FactoryDispatchStatus = 'pending' | 'leased' | 'retry' | 'succeeded' | 'failed';
+
+export interface FactoryDeferredDecisionPageInput {
+  orgId: string;
+  factoryProjectId: string;
+  statuses?: FactoryDispatchStatus[];
+  before?: { createdAt: Date; id: string };
+  limit: number;
+}
+
+export interface FactoryDeferredDecisionPage {
+  decisions: FactoryDeferredDecisionRecord[];
+  hasMore: boolean;
 }
 
 export interface FactoryDeferredDecisionRecord {
@@ -62,11 +123,40 @@ export interface FactoryDeferredDecisionRecord {
   orgId: string;
   factoryProjectId: string;
   evaluationId: string;
-  workItemId: string;
+  workItemId: string | null;
   idempotencyKey: string;
+  effectOrdinal: number;
+  effectHash: string;
+  causalChain: Array<{ ingressId: string; decisionType: string }>;
+  actor: Record<string, unknown> | null;
   decision: Record<string, unknown>;
-  status: 'pending';
+  status: FactoryDispatchStatus;
+  attempts: number;
+  availableAt: Date;
+  leaseOwner: string | null;
+  leaseExpiresAt: Date | null;
+  lastError: string | null;
+  completedAt: Date | null;
   createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FactoryRunBindingSessionAddress {
+  factoryProjectId: string;
+  threadId: string;
+  resourceId: string;
+  projectPath: string;
+}
+
+export interface FactoryRunBindingAddress extends FactoryRunBindingSessionAddress {
+  orgId: string;
+}
+
+export interface RevokeFactoryRunBindingInput {
+  orgId: string;
+  factoryProjectId: string;
+  bindingId: string;
+  revokedAt: Date;
 }
 
 export interface FactoryRunBindingRecord {
@@ -91,10 +181,36 @@ export interface FactoryPendingStartRecord {
   bindingId: string;
   kickoffKey: string;
   message: string | null;
-  status: 'pending' | 'sent' | 'failed';
+  status: 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
+  attempts: number;
+  availableAt: Date;
+  leaseOwner: string | null;
+  leaseExpiresAt: Date | null;
   lastError: string | null;
+  completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface FactoryLeaseClaimInput {
+  ownerId: string;
+  now: Date;
+  leaseExpiresAt: Date;
+  limit: number;
+}
+
+export interface FactoryLeaseIdentity {
+  id: string;
+  orgId: string;
+  factoryProjectId: string;
+  ownerId: string;
+}
+
+export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
+  now: Date;
+  availableAt: Date;
+  lastError: string;
+  terminal: boolean;
 }
 
 export interface CommitFactoryTransitionInput {
@@ -106,6 +222,7 @@ export interface CommitFactoryTransitionInput {
   actorId: string;
   ingress: { identity: string; triggerType: string; transitionId: string };
   ruleSetVersion: string;
+  causalChain: Array<{ ingressId: string; decisionType: string }>;
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
     | { outcome: 'rejected'; code: string; reason: string };
@@ -252,7 +369,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
   return {
     id: row.id,
     orgId: row.org_id,
-    factoryProjectId: row.factory_project_id,
+    factoryProjectId: String(row.factory_project_id),
     externalSource: row.external_source,
     parentWorkItemId: row.parent_work_item_id,
     title: row.title,
@@ -414,12 +531,13 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
     columns: {
       id: { type: 'uuid-pk' },
       ingress_id: { type: 'text' },
-      work_item_id: { type: 'text' },
+      work_item_id: { type: 'text', nullable: true },
       rule_set_version: { type: 'text' },
-      expected_revision: { type: 'integer' },
+      expected_revision: { type: 'integer', nullable: true },
       outcome: { type: 'text' },
       code: { type: 'text', nullable: true },
       reason: { type: 'text', nullable: true },
+      causal_chain: { type: 'json' },
       created_at: { type: 'timestamp' },
     },
   },
@@ -430,11 +548,22 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       org_id: { type: 'text' },
       factory_project_id: { type: 'text' },
       evaluation_id: { type: 'text' },
-      work_item_id: { type: 'text' },
+      work_item_id: { type: 'text', nullable: true },
       idempotency_key: { type: 'text' },
+      effect_ordinal: { type: 'integer' },
+      effect_hash: { type: 'text' },
+      causal_chain: { type: 'json' },
+      actor: { type: 'json', nullable: true },
       decision: { type: 'json' },
       status: { type: 'text' },
+      attempts: { type: 'integer' },
+      available_at: { type: 'timestamp' },
+      lease_owner: { type: 'text', nullable: true },
+      lease_expires_at: { type: 'timestamp', nullable: true },
+      last_error: { type: 'text', nullable: true },
+      completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
     },
     uniqueIndexes: [
       {
@@ -461,6 +590,17 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
     },
   },
   {
+    name: 'factory_tool_result_cursors',
+    columns: {
+      binding_id: { type: 'text', primaryKey: true },
+      org_id: { type: 'text' },
+      factory_project_id: { type: 'text' },
+      last_message_id: { type: 'text' },
+      last_message_created_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
+    },
+  },
+  {
     name: 'factory_pending_starts',
     columns: {
       id: { type: 'uuid-pk' },
@@ -470,7 +610,12 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       kickoff_key: { type: 'text' },
       message: { type: 'text', nullable: true },
       status: { type: 'text' },
+      attempts: { type: 'integer' },
+      available_at: { type: 'timestamp' },
+      lease_owner: { type: 'text', nullable: true },
+      lease_expires_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
+      completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -495,7 +640,7 @@ function toBinding(row: GovernanceDbRow): FactoryRunBindingRecord {
   return {
     id: row.id,
     orgId: row.org_id,
-    factoryProjectId: row.factory_project_id,
+    factoryProjectId: String(row.factory_project_id),
     workItemId: String(row.work_item_id),
     role: String(row.role),
     threadId: String(row.thread_id),
@@ -511,25 +656,41 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
   return {
     id: row.id,
     orgId: row.org_id,
-    factoryProjectId: row.factory_project_id,
+    factoryProjectId: String(row.factory_project_id),
     evaluationId: String(row.evaluation_id),
-    workItemId: String(row.work_item_id),
+    workItemId: row.work_item_id === null || row.work_item_id === undefined ? null : String(row.work_item_id),
     idempotencyKey: String(row.idempotency_key),
+    effectOrdinal: Number(row.effect_ordinal),
+    effectHash: String(row.effect_hash),
+    causalChain: (row.causal_chain as FactoryDeferredDecisionRecord['causalChain']) ?? [],
+    actor: (row.actor as Record<string, unknown> | null) ?? null,
     decision: row.decision as Record<string, unknown>,
-    status: 'pending',
+    status: row.status as FactoryDispatchStatus,
+    attempts: Number(row.attempts),
+    availableAt: row.available_at as Date,
+    leaseOwner: (row.lease_owner as string | null) ?? null,
+    leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
+    lastError: (row.last_error as string | null) ?? null,
+    completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
+    updatedAt: row.updated_at as Date,
   };
 }
 function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
   return {
     id: row.id,
     orgId: row.org_id,
-    factoryProjectId: row.factory_project_id,
+    factoryProjectId: String(row.factory_project_id),
     bindingId: String(row.binding_id),
     kickoffKey: String(row.kickoff_key),
     message: (row.message as string | null) ?? null,
     status: row.status as FactoryPendingStartRecord['status'],
+    attempts: Number(row.attempts),
+    availableAt: row.available_at as Date,
+    leaseOwner: (row.lease_owner as string | null) ?? null,
+    leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
+    completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
   };
@@ -548,8 +709,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await this.ops.deleteMany('work_items', {});
   }
 
+  #leaseQueue: Promise<void> = Promise.resolve();
+
   get #db(): FactoryStorageOps {
     return this.ops;
+  }
+
+  async #withLocalLeaseLock<T>(fn: () => Promise<T>): Promise<T> {
+    const prior = this.#leaseQueue;
+    let release!: () => void;
+    this.#leaseQueue = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    await prior;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
   }
 
   async #withProjectRelationLock<T>(orgId: string, factoryProjectId: string, fn: () => Promise<T>): Promise<T> {
@@ -559,6 +736,121 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     );
   }
 
+  async #claimLeases<T>(
+    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    input: FactoryLeaseClaimInput,
+    map: (row: GovernanceDbRow) => T,
+  ): Promise<T[]> {
+    const claim = () =>
+      this.storage.withTransaction(async ops => {
+        const candidates = await ops.findMany<GovernanceDbRow>(table, {}, { orderBy: [['created_at', 'asc']] });
+        const claimed: T[] = [];
+        for (const candidate of candidates) {
+          if (claimed.length >= input.limit) break;
+          const availableAt = new Date(candidate.available_at as Date | string).getTime();
+          const leaseExpiresAt = candidate.lease_expires_at
+            ? new Date(candidate.lease_expires_at as Date | string).getTime()
+            : 0;
+          const claimable =
+            (candidate.status === 'pending' || candidate.status === 'retry') && availableAt <= input.now.getTime();
+          const expired = candidate.status === 'leased' && leaseExpiresAt <= input.now.getTime();
+          if (!claimable && !expired) continue;
+          let didClaim = false;
+          const row = await ops.updateAtomic<GovernanceDbRow>(table, { id: candidate.id }, current => {
+            const currentAvailable = new Date(current.available_at as Date | string).getTime();
+            const currentExpiry = current.lease_expires_at
+              ? new Date(current.lease_expires_at as Date | string).getTime()
+              : 0;
+            const currentClaimable =
+              (current.status === 'pending' || current.status === 'retry') && currentAvailable <= input.now.getTime();
+            const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
+            if (!currentClaimable && !currentExpired) return null;
+            didClaim = true;
+            return {
+              status: 'leased',
+              attempts: Number(current.attempts) + 1,
+              lease_owner: input.ownerId,
+              lease_expires_at: input.leaseExpiresAt,
+              updated_at: input.now,
+            };
+          });
+          if (didClaim && row) claimed.push(map(row));
+        }
+        return claimed;
+      });
+    return this.storage.withDistributedLock
+      ? this.storage.withDistributedLock(`factory-lease:${table}`, claim)
+      : this.#withLocalLeaseLock(claim);
+  }
+
+  async #renewLease(
+    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    identity: FactoryLeaseIdentity,
+    leaseExpiresAt: Date,
+  ): Promise<boolean> {
+    let renewed = false;
+    await this.#db.updateAtomic<GovernanceDbRow>(
+      table,
+      { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
+        renewed = true;
+        return { lease_expires_at: leaseExpiresAt, updated_at: new Date() };
+      },
+    );
+    return renewed;
+  }
+
+  async #completeLease(
+    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    identity: FactoryLeaseIdentity,
+    now: Date,
+  ): Promise<GovernanceDbRow | null> {
+    let completed = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      table,
+      { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
+        completed = true;
+        return {
+          status: table === 'factory_pending_starts' ? 'sent' : 'succeeded',
+          lease_owner: null,
+          lease_expires_at: null,
+          completed_at: now,
+          updated_at: now,
+        };
+      },
+    );
+    return completed ? row : null;
+  }
+
+  async #failLease(
+    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    input: FactoryDispatchFailureInput,
+  ): Promise<GovernanceDbRow | null> {
+    let failed = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      table,
+      { id: input.id, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== input.ownerId) return null;
+        failed = true;
+        return {
+          status: input.terminal ? 'failed' : 'retry',
+          available_at: input.availableAt,
+          lease_owner: null,
+          lease_expires_at: null,
+          last_error: input.lastError,
+          completed_at: input.terminal ? input.now : null,
+          updated_at: input.now,
+        };
+      },
+    );
+    return failed ? row : null;
+  }
+
+  /** List the org's work items for a project, newest first. */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
     const rows = await this.#db.findMany<WorkItemDbRow>(
       'work_items',
@@ -686,6 +978,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             outcome,
             code,
             reason,
+            causal_chain: input.causalChain,
             created_at: now,
           });
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
@@ -696,9 +989,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 evaluation_id: evaluation.id,
                 work_item_id: item.id,
                 idempotency_key: String(decision.idempotencyKey),
+                effect_ordinal: index,
+                effect_hash: factoryDecisionHash(decision),
+                causal_chain: input.causalChain,
+                actor: null,
                 decision,
                 status: 'pending',
+                attempts: 0,
+                available_at: now,
+                lease_owner: null,
+                lease_expires_at: null,
+                last_error: null,
+                completed_at: null,
                 created_at: new Date(now.getTime() + index),
+                updated_at: now,
               });
             }
           }
@@ -713,6 +1017,173 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       : commit();
   }
 
+  async commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult> {
+    const commit = () =>
+      this.storage.withTransaction<CommitFactoryRuleEvaluationResult>(async ops => {
+        const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
+          org_id: input.orgId,
+          factory_project_id: input.factoryProjectId,
+          identity: input.ingress.identity,
+        });
+        if (prior) {
+          const result = prior.result as Record<string, unknown>;
+          const decisions = Array.isArray(result.decisions) ? result.decisions : [];
+          const evaluation = await ops.findOne<GovernanceDbRow>('factory_rule_evaluations', { ingress_id: prior.id });
+          for (const decision of decisions) {
+            if (
+              !evaluation ||
+              !decision ||
+              typeof decision !== 'object' ||
+              (decision as Record<string, unknown>).type !== 'upsertLinkedWorkItem' ||
+              typeof (decision as Record<string, unknown>).sourceKey !== 'string' ||
+              typeof (decision as Record<string, unknown>).idempotencyKey !== 'string'
+            ) {
+              continue;
+            }
+            const materialization = decision as Record<string, unknown> & { sourceKey: string; idempotencyKey: string };
+            const item = await ops.findOne<WorkItemDbRow>('work_items', {
+              org_id: input.orgId,
+              factory_project_id: input.factoryProjectId,
+              source_key: materialization.sourceKey,
+            });
+            if (item) continue;
+            await ops.updateAtomic<GovernanceDbRow>(
+              'factory_deferred_decisions',
+              {
+                org_id: input.orgId,
+                factory_project_id: input.factoryProjectId,
+                evaluation_id: evaluation.id,
+                idempotency_key: materialization.idempotencyKey,
+              },
+              current =>
+                current.status === 'succeeded'
+                  ? {
+                      status: 'retry',
+                      attempts: 0,
+                      available_at: input.now,
+                      lease_owner: null,
+                      lease_expires_at: null,
+                      last_error: null,
+                      completed_at: null,
+                      updated_at: input.now,
+                    }
+                  : null,
+            );
+          }
+          return { status: 'replayed' as const, result };
+        }
+        const itemRow = input.workItemId
+          ? await ops.findOne<WorkItemDbRow>('work_items', {
+              id: input.workItemId,
+              org_id: input.orgId,
+              factory_project_id: input.factoryProjectId,
+            })
+          : null;
+        if (input.workItemId !== null && !itemRow) return { status: 'missing' as const };
+        const item = itemRow ? toRow(itemRow) : null;
+        const stale = item !== null && item.revision !== input.expectedRevision;
+        const outcome = stale ? 'rejected' : input.outcome.status;
+        const code = stale ? 'stale' : (input.outcome.code ?? null);
+        const reason = stale
+          ? 'The work item changed before this rule evaluation committed.'
+          : (input.outcome.reason ?? null);
+        const decisions = outcome === 'accepted' ? input.decisions : [];
+        const result = {
+          status: outcome,
+          itemId: item?.id ?? null,
+          revision: item?.revision ?? null,
+          code,
+          reason,
+          decisions,
+        };
+        const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
+          org_id: input.orgId,
+          factory_project_id: input.factoryProjectId,
+          identity: input.ingress.identity,
+          trigger_type: input.ingress.triggerType,
+          transition_id: input.ingress.identity,
+          result,
+          created_at: input.now,
+        });
+        const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
+          ingress_id: ingress.id,
+          work_item_id: item?.id ?? null,
+          rule_set_version: input.ruleSetVersion,
+          expected_revision: input.expectedRevision,
+          outcome,
+          code,
+          reason,
+          causal_chain: input.causalChain,
+          created_at: input.now,
+        });
+        for (const [effectOrdinal, decision] of decisions.entries()) {
+          await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            evaluation_id: evaluation.id,
+            work_item_id: item?.id ?? null,
+            idempotency_key: String(decision.idempotencyKey),
+            effect_ordinal: effectOrdinal,
+            effect_hash: factoryDecisionHash(decision),
+            causal_chain: input.causalChain,
+            actor: input.actor,
+            decision,
+            status: 'pending',
+            attempts: 0,
+            available_at: input.now,
+            lease_owner: null,
+            lease_expires_at: null,
+            last_error: null,
+            completed_at: null,
+            created_at: new Date(input.now.getTime() + effectOrdinal),
+            updated_at: input.now,
+          });
+        }
+        return { status: 'committed' as const, result };
+      });
+    return this.storage.withDistributedLock
+      ? this.storage.withDistributedLock(
+          `factory-ingress:${input.orgId}:${input.factoryProjectId}:${input.ingress.identity}`,
+          commit,
+        )
+      : commit();
+  }
+
+  async getToolResultCursor(
+    orgId: string,
+    factoryProjectId: string,
+    bindingId: string,
+  ): Promise<FactoryToolResultCursorRecord | null> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_tool_result_cursors', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      binding_id: bindingId,
+    });
+    return row
+      ? {
+          bindingId: String(row.binding_id),
+          orgId: row.org_id,
+          factoryProjectId: String(row.factory_project_id),
+          lastMessageId: String(row.last_message_id),
+          lastMessageCreatedAt: row.last_message_created_at as Date,
+          updatedAt: row.updated_at as Date,
+        }
+      : null;
+  }
+
+  async advanceToolResultCursor(cursor: FactoryToolResultCursorRecord): Promise<void> {
+    const current = await this.getToolResultCursor(cursor.orgId, cursor.factoryProjectId, cursor.bindingId);
+    if (current && current.lastMessageCreatedAt > cursor.lastMessageCreatedAt) return;
+    await this.#db.upsertOne<GovernanceDbRow>('factory_tool_result_cursors', ['binding_id'], {
+      binding_id: cursor.bindingId,
+      org_id: cursor.orgId,
+      factory_project_id: cursor.factoryProjectId,
+      last_message_id: cursor.lastMessageId,
+      last_message_created_at: cursor.lastMessageCreatedAt,
+      updated_at: cursor.updatedAt,
+    });
+  }
+
   async listDeferredDecisions(orgId: string, factoryProjectId: string): Promise<FactoryDeferredDecisionRecord[]> {
     return (
       await this.#db.findMany<GovernanceDbRow>(
@@ -723,6 +1194,128 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     ).map(toDeferredDecision);
   }
 
+  /** Read a bounded newest-first status page without exposing another tenant. */
+  async listDeferredDecisionPage(input: FactoryDeferredDecisionPageInput): Promise<FactoryDeferredDecisionPage> {
+    const rows = await this.#db.findMany<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        ...(input.statuses ? { status: { in: input.statuses } } : {}),
+      },
+      {
+        orderBy: [
+          ['created_at', 'desc'],
+          ['id', 'desc'],
+        ],
+        limit: input.limit + 1,
+        ...(input.before ? { cursor: { values: [input.before.createdAt, input.before.id] } } : {}),
+      },
+    );
+    return { decisions: rows.slice(0, input.limit).map(toDeferredDecision), hasMore: rows.length > input.limit };
+  }
+
+  async claimDeferredDecisions(input: FactoryLeaseClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
+    return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision);
+  }
+
+  async renewDeferredDecisionLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {
+    return this.#renewLease('factory_deferred_decisions', identity, leaseExpiresAt);
+  }
+
+  async completeDeferredDecision(
+    identity: FactoryLeaseIdentity,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    const row = await this.#completeLease('factory_deferred_decisions', identity, now);
+    return row ? toDeferredDecision(row) : null;
+  }
+
+  async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
+    const row = await this.#failLease('factory_deferred_decisions', input);
+    return row ? toDeferredDecision(row) : null;
+  }
+
+  /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */
+  async retryDeferredDecision(
+    orgId: string,
+    factoryProjectId: string,
+    decisionId: string,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let retried = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+      current => {
+        if (current.status !== 'failed') return null;
+        retried = true;
+        return {
+          status: 'retry',
+          attempts: 0,
+          available_at: now,
+          lease_owner: null,
+          lease_expires_at: null,
+          last_error: null,
+          completed_at: null,
+          updated_at: now,
+        };
+      },
+    );
+    return retried && row ? toDeferredDecision(row) : null;
+  }
+
+  /** Resolve exact active agent authority; partial session matches never authorize. */
+  async findActiveRunBinding(address: FactoryRunBindingAddress): Promise<FactoryRunBindingRecord | null> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      org_id: address.orgId,
+      factory_project_id: address.factoryProjectId,
+      thread_id: address.threadId,
+      resource_id: address.resourceId,
+      project_path: address.projectPath,
+      status: 'active',
+    });
+    return row ? toBinding(row) : null;
+  }
+
+  /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
+  async findRunBindingBySession(address: FactoryRunBindingSessionAddress): Promise<FactoryRunBindingRecord | null> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      factory_project_id: address.factoryProjectId,
+      thread_id: address.threadId,
+      resource_id: address.resourceId,
+      project_path: address.projectPath,
+    });
+    if (new Set(rows.map(row => row.org_id)).size !== 1) return null;
+    const row = rows.sort((left, right) => {
+      if (left.status === 'active' && right.status !== 'active') return -1;
+      if (right.status === 'active' && left.status !== 'active') return 1;
+      return right.created_at.getTime() - left.created_at.getTime();
+    })[0];
+    return row ? toBinding(row) : null;
+  }
+
+  /** Revoke one exact tenant-scoped binding. */
+  async revokeRunBinding(input: RevokeFactoryRunBindingInput): Promise<FactoryRunBindingRecord | null> {
+    let revoked = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_run_bindings',
+      { id: input.bindingId, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+      current => {
+        if (current.status !== 'active') return null;
+        revoked = true;
+        return { status: 'revoked', revoked_at: input.revokedAt };
+      },
+    );
+    return revoked && row ? toBinding(row) : null;
+  }
+
+  /** Enumerate active bindings for the server-owned restart reconciler. */
+  async listActiveRunBindings(): Promise<FactoryRunBindingRecord[]> {
+    return (await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', { status: 'active' })).map(toBinding);
+  }
+
+  /** List binding history, optionally narrowed to one work item. */
   async listRunBindings(
     orgId: string,
     factoryProjectId: string,
@@ -749,6 +1342,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         { orderBy: [['created_at', 'asc']] },
       )
     ).map(toPendingStart);
+  }
+
+  async claimPendingStarts(input: FactoryLeaseClaimInput): Promise<FactoryPendingStartRecord[]> {
+    return this.#claimLeases('factory_pending_starts', input, toPendingStart);
+  }
+
+  async renewPendingStartLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {
+    return this.#renewLease('factory_pending_starts', identity, leaseExpiresAt);
+  }
+
+  async completePendingStart(identity: FactoryLeaseIdentity, now: Date): Promise<FactoryPendingStartRecord | null> {
+    const row = await this.#completeLease('factory_pending_starts', identity, now);
+    return row ? toPendingStart(row) : null;
+  }
+
+  async failPendingStart(input: FactoryDispatchFailureInput): Promise<FactoryPendingStartRecord | null> {
+    const row = await this.#failLease('factory_pending_starts', input);
+    return row ? toPendingStart(row) : null;
   }
 
   async prepareRunStart(input: PrepareFactoryRunStartInput): Promise<PrepareFactoryRunStartResult> {
@@ -864,7 +1475,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           kickoff_key: input.kickoffKey,
           message: input.kickoffMessage,
           status: 'pending',
+          attempts: 0,
+          available_at: now,
+          lease_owner: null,
+          lease_expires_at: null,
           last_error: null,
+          completed_at: null,
           created_at: now,
           updated_at: now,
         });
@@ -917,22 +1533,43 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     userId,
     factoryProjectId,
     input,
+    reuseMode = 'update',
   }: {
     orgId: string;
     userId: string;
     factoryProjectId: string;
     input: CreateWorkItemInput;
+    reuseMode?: 'update' | 'preserve' | 'non-stage';
   }): Promise<UpsertWorkItemResult> {
     const key = sourceKey(input.externalSource);
     const reuse = async (): Promise<UpsertWorkItemResult | null> => {
       if (!key) return null;
+      const existing = await this.#db.findOne<WorkItemDbRow>('work_items', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        source_key: key,
+      });
+      if (!existing) return null;
+      if (reuseMode === 'preserve') {
+        const item = toWorkItem(existing);
+        return { created: false, item, previous: priorState(existing) };
+      }
+
       let previous = emptyPrior();
       const updated = await this.#db.updateAtomic<WorkItemDbRow>(
         'work_items',
         { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
         async current => {
           previous = priorState(current);
-          const patch = input.parentWorkItemId === null ? { ...input, parentWorkItemId: undefined } : input;
+          const fullPatch = input.parentWorkItemId === null ? { ...input, parentWorkItemId: undefined } : input;
+          const patch: UpdateWorkItemInput =
+            reuseMode === 'non-stage'
+              ? {
+                  title: input.title,
+                  parentWorkItemId: input.parentWorkItemId ?? undefined,
+                  metadata: input.metadata,
+                }
+              : fullPatch;
           if (patch.parentWorkItemId !== undefined) {
             validateParentRelation(await this.list({ orgId, factoryProjectId }), current.id, patch.parentWorkItemId);
           }

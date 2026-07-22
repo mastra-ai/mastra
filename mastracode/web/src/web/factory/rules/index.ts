@@ -1,8 +1,14 @@
 export { builtInFactoryRules, defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './defaults.js';
-export { resolveFactoryGithubRule, resolveFactoryStageRules, resolveFactoryToolRule } from './resolve.js';
+export {
+  resolveFactoryGithubRule,
+  resolveFactoryLinearRule,
+  resolveFactoryStageRules,
+  resolveFactoryToolRule,
+} from './resolve.js';
 export type { ResolvedFactoryStageRule, ResolvedFactoryToolRule } from './resolve.js';
 export {
   FACTORY_GITHUB_EVENTS,
+  FACTORY_LINEAR_EVENTS,
   FACTORY_RULE_BOARDS,
   FACTORY_RULE_SOURCES,
   FACTORY_RULE_STAGES,
@@ -16,6 +22,9 @@ export type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryGithubRuleLeaf,
+  FactoryLinearEventName,
+  FactoryLinearRuleContext,
+  FactoryLinearRuleLeaf,
   FactoryInvokeSkillDecision,
   FactoryNotifyDecision,
   FactoryRuleActor,

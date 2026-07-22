@@ -17,6 +17,7 @@ import type { Context } from 'hono';
 
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
+import type { IntegrationHooks } from '../factory-integration';
 import type { StateSigner } from '../state-signing';
 import type { LinearIntegration } from './integration';
 import { getIntakeConfig } from '../intake/store';
@@ -30,6 +31,8 @@ import {
 import { upsertLinearConnection } from './storage';
 
 type RouteContext = Context;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Erase a route handler's path-parameterized context to a plain `Context`. */
 function loose(c: unknown): RouteContext {
@@ -55,6 +58,7 @@ export interface MountLinearRoutesOptions {
    * `status` route is served.
    */
   stateSigner?: StateSigner;
+  hooks?: IntegrationHooks;
 }
 
 /**
@@ -261,6 +265,10 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
 
         const after = parseAfterCursor(c.req.query('after'));
         if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
+        const factoryProjectId = c.req.query('factoryProjectId');
+        if (factoryProjectId && !UUID_RE.test(factoryProjectId)) {
+          return c.json({ error: 'invalid_factory_project_id' }, 400);
+        }
 
         const connection = await loadConnection(resolved.tenant.orgId);
         if (!connection) {
@@ -290,23 +298,29 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
             sourceIds: projectIds,
             cursor: after,
           });
-          return c.json({
-            issues: issues.map(issue => ({
-              id: issue.id,
-              identifier: issue.identifier,
-              title: issue.title,
-              url: issue.url,
-              state: issue.state,
-              stateType: issue.stateType,
-              priorityLabel: issue.priority,
-              assignee: issue.assignee,
-              team: issue.source,
-              labels: issue.labels,
-              createdAt: issue.createdAt,
-              updatedAt: issue.updatedAt,
-            })),
-            nextCursor,
-          });
+          const issuePayload = issues.map(issue => ({
+            id: issue.id,
+            identifier: issue.identifier,
+            title: issue.title,
+            url: issue.url,
+            state: issue.state ?? '',
+            stateType: issue.stateType ?? '',
+            priorityLabel: issue.priority ?? '',
+            assignee: issue.assignee,
+            team: issue.source,
+            labels: issue.labels,
+            createdAt: issue.createdAt,
+            updatedAt: issue.updatedAt,
+          }));
+          if (factoryProjectId && options.hooks?.ingestLinearIssues) {
+            await options.hooks.ingestLinearIssues({
+              orgId: resolved.tenant.orgId,
+              userId: resolved.tenant.userId,
+              factoryProjectId,
+              issues: issuePayload,
+            });
+          }
+          return c.json({ issues: issuePayload, nextCursor });
         } catch (err) {
           return linearFetchError(loose(c), err);
         }

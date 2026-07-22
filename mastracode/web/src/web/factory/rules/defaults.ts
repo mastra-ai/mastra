@@ -4,16 +4,177 @@ import type {
   FactoryBoardRules,
   FactoryGithubRuleLeaf,
   FactoryGithubEventName,
+  FactoryGithubRuleContext,
+  FactoryLinearEventName,
+  FactoryLinearRuleContext,
+  FactoryLinearRuleLeaf,
   FactoryRules,
   FactoryRulesOverrides,
   FactoryRuleSource,
   FactoryRuleStage,
+  FactoryStageRuleContext,
+  FactoryToolResultRuleContext,
   FactoryToolRuleLeaf,
 } from './types.js';
 
 export const DEFAULT_FACTORY_RULE_VERSION = 'factory-default-v1';
 
-const PASS_THROUGH_DEFAULTS: FactoryRulesOverrides = {};
+function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): boolean {
+  return context.actor.type === 'github' && context.actor.trusted;
+}
+
+function invokeIssueInvestigation(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:understand-issue`,
+    role: 'triage',
+    skillName: 'understand-issue',
+    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
+  } as const;
+}
+
+function investigateTriagedIssue(context: FactoryStageRuleContext) {
+  return invokeIssueInvestigation(context);
+}
+
+function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
+  const identifier = context.item.sourceKey?.startsWith('linear:')
+    ? context.item.sourceKey.slice('linear:'.length)
+    : context.item.title;
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:understand-linear-issue`,
+    role: 'triage',
+    skillName: 'understand-issue',
+    arguments: `Linear issue ${identifier}${context.item.url ? ` (${context.item.url})` : ''}`,
+  } as const;
+}
+
+function reviewPullRequest(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:understand-pr`,
+    role: 'review',
+    skillName: 'understand-pr',
+    arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
+  } as const;
+}
+
+function resultContent(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const content = (value as { content?: unknown }).content;
+  return typeof content === 'string' ? content : undefined;
+}
+
+function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
+  if (
+    context.result.status !== 'success' ||
+    context.board !== 'work' ||
+    context.item.stages.length !== 1 ||
+    context.item.stages[0] !== 'planning' ||
+    context.actor.type !== 'agent' ||
+    context.actor.role !== 'plan' ||
+    !resultContent(context.result.value)?.startsWith('Plan approved.')
+  ) {
+    return;
+  }
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:approved-plan`,
+    board: 'work',
+    stage: 'execute',
+  } as const;
+}
+
+function issueOpened(context: FactoryGithubRuleContext) {
+  if (!context.issue) return;
+  return {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: `${context.ingress.id}:issue-intake`,
+    board: 'work',
+    source: 'github-issue',
+    sourceKey: `github-issue:${context.issue.number}`,
+    title: context.issue.title,
+    url: context.issue.url,
+    stage: trustedGithubActor(context) ? 'triage' : 'intake',
+    metadata: {
+      githubRepositoryId: context.repository.id,
+      githubIssueNumber: context.issue.number,
+    },
+  } as const;
+}
+
+function pullRequestOpened(context: FactoryGithubRuleContext) {
+  if (!context.pullRequest) return;
+  return {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: `${context.ingress.id}:pull-request-intake`,
+    board: 'review',
+    source: 'github-pr',
+    sourceKey: `github-pr:${context.pullRequest.number}`,
+    title: context.pullRequest.title,
+    url: context.pullRequest.url,
+    stage: trustedGithubActor(context) ? 'review' : 'intake',
+    metadata: {
+      githubRepositoryId: context.repository.id,
+      githubPullRequestNumber: context.pullRequest.number,
+      factoryAuthored: context.actor.type === 'github' && context.actor.factoryAuthored,
+    },
+  } as const;
+}
+
+function pullRequestMerged(context: FactoryGithubRuleContext) {
+  if (!context.item || !context.pullRequest?.merged) return;
+  return {
+    type: 'sendMessage',
+    idempotencyKey: `${context.ingress.id}:assess-work-completion`,
+    role: 'work',
+    message:
+      `Pull request #${context.pullRequest.number} merged. Assess whether the linked Work item is complete. ` +
+      'Do not mark it Done solely because this PR merged; use factory_transition_work_item only after verifying the work.',
+  } as const;
+}
+
+function linearIssueObserved(context: FactoryLinearRuleContext) {
+  if (context.item) return;
+  return {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: `${context.ingress.id}:issue-triage`,
+    board: 'work',
+    source: 'linear-issue',
+    sourceKey: `linear:${context.issue.identifier}`,
+    title: `${context.issue.identifier}: ${context.issue.title}`,
+    url: context.issue.url,
+    stage: 'triage',
+    metadata: {
+      linearIssueId: context.issue.id,
+      linearIssueIdentifier: context.issue.identifier,
+      linearState: context.issue.state,
+      linearStateType: context.issue.stateType,
+      linearPriority: context.issue.priorityLabel,
+      linearAssignee: context.issue.assignee,
+      linearTeam: context.issue.team,
+    },
+  } as const;
+}
+
+const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
+  work: {
+    triage: {
+      issue: { onEnter: investigateTriagedIssue },
+      linearIssue: { onEnter: investigateTriagedLinearIssue },
+    },
+  },
+  review: { review: { pullRequest: { onEnter: reviewPullRequest } } },
+  tools: { submit_plan: { onResult: advanceApprovedPlan } },
+  github: {
+    issueOpened: { onEvent: issueOpened },
+    pullRequestOpened: { onEvent: pullRequestOpened },
+    pullRequestMerged: { onEvent: pullRequestMerged },
+  },
+  linear: { issueObserved: { onEvent: linearIssueObserved } },
+};
 
 function mergeBoardRules(
   base: FactoryBoardRules | undefined,
@@ -77,6 +238,23 @@ function mergeGithubRules(
   return result;
 }
 
+function mergeLinearRules(
+  base: FactoryRulesOverrides['linear'],
+  overrides: FactoryRulesOverrides['linear'],
+): NonNullable<FactoryRulesOverrides['linear']> {
+  const result: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>> = {};
+  const events = new Set([...Object.keys(base ?? {}), ...Object.keys(overrides ?? {})]) as Set<FactoryLinearEventName>;
+  for (const event of events) {
+    const baseLeaf = base?.[event];
+    const overrideLeaf = overrides?.[event];
+    result[event] = {
+      ...(baseLeaf?.onEvent ? { onEvent: baseLeaf.onEvent } : {}),
+      ...(overrideLeaf && 'onEvent' in overrideLeaf ? { onEvent: overrideLeaf.onEvent } : {}),
+    };
+  }
+  return result;
+}
+
 export function mergeFactoryRuleOverrides(
   base: FactoryRulesOverrides,
   overrides: FactoryRulesOverrides = {},
@@ -86,6 +264,7 @@ export function mergeFactoryRuleOverrides(
     review: mergeBoardRules(base.review, overrides.review),
     tools: mergeToolRules(base.tools, overrides.tools),
     github: mergeGithubRules(base.github, overrides.github),
+    linear: mergeLinearRules(base.linear, overrides.linear),
   };
 }
 
@@ -96,7 +275,7 @@ export function defaultFactoryRules(input: { version: string; overrides?: Factor
 
   const rules: FactoryRules = {
     version: input.version.trim(),
-    ...mergeFactoryRuleOverrides(PASS_THROUGH_DEFAULTS, input.overrides),
+    ...mergeFactoryRuleOverrides(BUILT_IN_DEFAULTS, input.overrides),
   };
   assertFactoryRules(rules);
   return rules;
