@@ -977,6 +977,8 @@ export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENE
   usage?: LanguageModelUsage;
   /** Provider-specific metadata for extracting cache tokens */
   providerMetadata?: ProviderMetadata;
+  /** Provider metadata for every completed model step, when the caller has it available. */
+  stepProviderMetadata?: readonly (ProviderMetadata | undefined)[];
 }
 
 /**
