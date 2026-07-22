@@ -61,7 +61,7 @@ export function Sidebar() {
   return (
     <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
-        <div className="mt-2 mb-2 flex items-center justify-between gap-2 px-3 pt-1">
+        <div className="mt-1 mb-2 flex items-center justify-between gap-2 px-3 pt-1">
           <LogoWithoutText aria-label="Mastra" role="img" className="h-4 w-auto text-icon6" />
           <AlphaBadge />
         </div>
