@@ -91,7 +91,7 @@ function renderIntakeSection() {
 
 describe('IntakeSection', () => {
   describe('given a config with both sources enabled', () => {
-    it('renders the GitHub repository and Linear project pickers', async () => {
+    it('renders the GitHub repository and Linear project pickers behind collapsible sections', async () => {
       seedGithubProject();
       useIntakeHandlers();
 
@@ -100,9 +100,15 @@ describe('IntakeSection', () => {
       expect(await screen.findByText('Intake sources')).toBeInTheDocument();
       expect(await screen.findByRole('switch', { name: 'Sync GitHub repositories' })).toBeChecked();
       expect(await screen.findByRole('switch', { name: 'Sync Linear projects' })).toBeChecked();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Repositories' }));
       expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'ENG · Engineering' }));
       expect(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
-      expect(screen.getByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'No team' }));
+      expect(await screen.findByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
     });
 
     it('groups Linear projects by team, listing shared projects under each team', async () => {
@@ -112,14 +118,94 @@ describe('IntakeSection', () => {
       renderIntakeSection();
 
       const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
+      await userEvent.click(within(eng).getByRole('button', { name: 'ENG · Engineering' }));
       expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
       expect(within(eng).getByRole('checkbox', { name: 'Shared initiative' })).toBeInTheDocument();
 
       const design = screen.getByRole('group', { name: 'DES · Design' });
+      await userEvent.click(within(design).getByRole('button', { name: 'DES · Design' }));
       expect(within(design).getByRole('checkbox', { name: 'Shared initiative' })).toBeInTheDocument();
 
       const noTeam = screen.getByRole('group', { name: 'No team' });
+      await userEvent.click(within(noTeam).getByRole('button', { name: 'No team' }));
       expect(within(noTeam).getByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
+    });
+
+    it('starts every section collapsed, hiding the checkboxes until expanded', async () => {
+      seedGithubProject();
+      useIntakeHandlers();
+
+      renderIntakeSection();
+
+      expect(await screen.findByRole('button', { name: 'ENG · Engineering' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Repositories' })).toBeInTheDocument();
+      expect(screen.queryByRole('checkbox', { name: 'Q3 Roadmap' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('checkbox', { name: 'mastra' })).not.toBeInTheDocument();
+    });
+
+    it('shows a selected count on the collapsed trigger', async () => {
+      seedGithubProject();
+      useIntakeHandlers({
+        config: {
+          github: { enabled: true, sourceIds: ['mastra'] },
+          linear: { enabled: true, sourceIds: ['lproj-1'] },
+        },
+      });
+
+      renderIntakeSection();
+
+      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
+      expect(within(eng).getByText('1 selected')).toBeInTheDocument();
+      expect(screen.queryByRole('checkbox', { name: 'Q3 Roadmap' })).not.toBeInTheDocument();
+
+      const repos = screen.getByRole('group', { name: 'Repositories' });
+      expect(within(repos).getByText('1 selected')).toBeInTheDocument();
+
+      const design = screen.getByRole('group', { name: 'DES · Design' });
+      expect(within(design).queryByText(/selected/)).not.toBeInTheDocument();
+    });
+
+    it('filters the section list from its search bar', async () => {
+      useIntakeHandlers();
+
+      renderIntakeSection();
+
+      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
+      await userEvent.click(within(eng).getByRole('button', { name: 'ENG · Engineering' }));
+      expect(within(eng).getByRole('checkbox', { name: 'Shared initiative' })).toBeInTheDocument();
+
+      await userEvent.type(within(eng).getByRole('textbox', { name: 'Search ENG · Engineering' }), 'road');
+
+      // ListSearch debounces before filtering.
+      await waitFor(() =>
+        expect(within(eng).queryByRole('checkbox', { name: 'Shared initiative' })).not.toBeInTheDocument(),
+      );
+      expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
+
+      await userEvent.clear(within(eng).getByRole('textbox', { name: 'Search ENG · Engineering' }));
+      await userEvent.type(within(eng).getByRole('textbox', { name: 'Search ENG · Engineering' }), 'zzz');
+      expect(await within(eng).findByText('No matches')).toBeInTheDocument();
+    });
+
+    it('clears the search when the section is collapsed', async () => {
+      useIntakeHandlers();
+
+      renderIntakeSection();
+
+      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
+      const trigger = within(eng).getByRole('button', { name: 'ENG · Engineering' });
+      await userEvent.click(trigger);
+      await userEvent.type(within(eng).getByRole('textbox', { name: 'Search ENG · Engineering' }), 'road');
+      await waitFor(() =>
+        expect(within(eng).queryByRole('checkbox', { name: 'Shared initiative' })).not.toBeInTheDocument(),
+      );
+
+      await userEvent.click(trigger); // collapse
+      await userEvent.click(trigger); // reopen
+
+      expect(within(eng).getByRole('textbox', { name: 'Search ENG · Engineering' })).toHaveValue('');
+      expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
+      expect(within(eng).getByRole('checkbox', { name: 'Shared initiative' })).toBeInTheDocument();
     });
   });
 
@@ -145,10 +231,26 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
+      await userEvent.click(await screen.findByRole('button', { name: 'ENG · Engineering' }));
       await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
       expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
+    });
+
+    it('persists the selection when the row itself is clicked instead of the checkbox', async () => {
+      const saved = useIntakeHandlers();
+
+      renderIntakeSection();
+
+      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
+      await userEvent.click(within(eng).getByRole('button', { name: 'ENG · Engineering' }));
+      await userEvent.click(within(eng).getByRole('button', { name: 'Q3 Roadmap' }));
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
+      // Row click and checkbox click share one toggle — no duplicate PUT.
+      expect(saved).toHaveLength(1);
     });
   });
 
@@ -159,6 +261,7 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
+      await userEvent.click(await screen.findByRole('button', { name: 'Repositories' }));
       await userEvent.click(await screen.findByRole('checkbox', { name: 'mastra' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
