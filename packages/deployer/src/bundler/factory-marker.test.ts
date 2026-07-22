@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { MastraError } from '@mastra/core/error';
 import { noopLogger } from '@mastra/core/logger';
 import { afterEach, describe, expect, it } from 'vitest';
 import { analyzeBundle } from '../build/analyze';
@@ -122,7 +123,10 @@ describe('Bundler.writeFactoryMarker', () => {
 
     const bundler = new TestBundler('Test');
 
-    await expect((bundler as any).writeFactoryMarker(tempDir)).rejects.toThrow(/factory\/index\.html.*not found/);
+    const error = await (bundler as any).writeFactoryMarker(tempDir).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(MastraError);
+    expect(error).toMatchObject({ id: 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' });
+    expect((error as Error).message).toMatch(/factory\/index\.html.*not found/);
 
     // Marker should not have been written
     expect(existsSync(join(outputDir, 'mastra-project.json'))).toBe(false);
