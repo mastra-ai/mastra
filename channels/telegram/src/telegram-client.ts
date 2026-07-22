@@ -33,9 +33,16 @@ async function botApiRequest<TResult>(
       : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) };
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}/bot${botToken}/${method}`, init);
+    response = await fetch(`${apiBaseUrl}/bot${botToken}/${method}`, {
+      ...init,
+      signal: AbortSignal.timeout(10_000),
+    });
   } catch (cause) {
-    throw new Error(`Telegram ${method} request failed`, { cause });
+    // Tag transport/timeout failures so callers can tell them apart from an
+    // `ok: false` API response (see getMe).
+    throw Object.assign(new Error(`Telegram ${method} request failed`, { cause }), {
+      isTransportError: true,
+    });
   }
   const body = (await response.json().catch(() => null)) as TelegramApiResponse<TResult> | null;
   if (!response.ok || !body?.ok) {
@@ -56,6 +63,11 @@ export async function getMe(botToken: string, apiBaseUrl: string = TELEGRAM_API_
   try {
     result = await botApiRequest<TelegramUser>(botToken, 'getMe', apiBaseUrl);
   } catch (cause) {
+    // A transport/timeout failure is a connectivity problem, not a token
+    // rejection — surface it as-is rather than mislabeling it as a bad token.
+    if (cause instanceof Error && (cause as { isTransportError?: boolean }).isTransportError) {
+      throw cause;
+    }
     throw new Error(`Telegram rejected the bot token: ${cause instanceof Error ? cause.message : String(cause)}`, {
       cause,
     });

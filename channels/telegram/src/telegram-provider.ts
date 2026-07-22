@@ -88,6 +88,7 @@ export class TelegramProvider implements ChannelProvider {
       this.#initPromise = null;
       this.#store = undefined;
       this.#adapters.clear();
+      this.#configured = false;
     }
     this.#mastra = mastra;
   }

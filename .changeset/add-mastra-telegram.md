@@ -2,7 +2,7 @@
 '@mastra/telegram': minor
 ---
 
-Added `@mastra/telegram` — a Telegram channel wrapper (`ChannelProvider`) for Mastra agents, to parity with `@mastra/slack`. It wraps the `@chat-adapter/telegram` protocol adapter and adds the install/lifecycle layer: a multi-bot token store, `setWebhook` + secret-token verification, `setMyCommands` command registration, webhook/polling transport selection, and post-and-edit streaming with a typing keepalive. Bot tokens/secrets are encrypted at rest. Ships a dual ESM + CJS build.
+Added `@mastra/telegram` for connecting Mastra agents to Telegram bots. It supports multiple bots, webhook or polling delivery, commands, and streaming replies, and ships a dual ESM + CJS build. Set `encryptionKey` or `MASTRA_ENCRYPTION_KEY` to encrypt stored bot tokens and webhook secret tokens at rest.
 
 ```ts
 import { Mastra } from '@mastra/core';
