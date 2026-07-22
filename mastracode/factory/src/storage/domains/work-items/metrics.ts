@@ -7,7 +7,7 @@
  * testable and lets the route stay a thin shell.
  */
 
-import type { WorkItemRow, WorkItemStageEntry } from './base';
+import type { WorkItemRow, WorkItemStageEntry } from './base.js';
 
 /** Windows the metrics endpoint accepts; anything else clamps to the default. */
 export const METRICS_WINDOWS = [7, 30, 90] as const;

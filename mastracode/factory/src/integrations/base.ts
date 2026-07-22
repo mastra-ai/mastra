@@ -23,17 +23,17 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
-import type { Intake } from '../capabilities/intake';
-import type { VersionControl } from '../capabilities/version-control';
+import type { Intake } from '../capabilities/intake.js';
+import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { StateSigner } from '../state-signing.js';
-import type { AuditEventRow } from '../storage/domains/audit/base';
+import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
-import type { IntakeStorage } from '../storage/domains/intake/base';
-import type { IntegrationStorageHandle } from '../storage/domains/integrations/base';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import type { IntakeStorage } from '../storage/domains/intake/base.js';
+import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { ParsedGithubWebhook } from './github/webhook.js';
 
 export interface LinearIssueIngress {

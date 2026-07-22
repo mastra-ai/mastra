@@ -1,11 +1,11 @@
 import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ListIntakeIssuesInput } from '../../capabilities/intake';
-import type { CreatePullRequestInput, ListPullRequestsInput } from '../../capabilities/version-control';
-import type { RouteAuth } from '../../routes/route';
-import { mountApiRoutes } from '../../routes/test-utils';
-import type { SandboxFleet } from '../../sandbox/fleet';
+import type { ListIntakeIssuesInput } from '../../capabilities/intake.js';
+import type { CreatePullRequestInput, ListPullRequestsInput } from '../../capabilities/version-control.js';
+import type { RouteAuth } from '../../routes/route.js';
+import { mountApiRoutes } from '../../routes/test-utils.js';
+import type { SandboxFleet } from '../../sandbox/fleet.js';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock drizzle's `eq`/`and` so the fake DB below can honour `where` predicates.
@@ -39,7 +39,7 @@ const tables: Tables = {
   subscriptions: [],
 };
 
-import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory';
+import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
 const sourceControlStorage = new SourceControlStorageInMemory();
 
 function installationRow(row: Record<string, any>) {
@@ -471,7 +471,7 @@ const testAuth: RouteAuth = {
   isOrganizationAdmin: async () => true,
 };
 
-import { buildGithubRoutes } from './routes';
+import { buildGithubRoutes } from './routes.js';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
 function tableKind(table: any): keyof Tables {

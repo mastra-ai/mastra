@@ -34,12 +34,12 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { ModelCredentialsStorage } from '../storage/domains/credentials/base';
-import type { LoginSessionKind, LoginSessionRow } from '../storage/domains/credentials/base';
-import { getAuthProviderId, resolveCredentialContext } from './provider-credentials';
-import type { CredentialContext } from './provider-credentials';
-import { Route } from './route';
-import type { RouteDependencies } from './route';
+import { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { LoginSessionKind, LoginSessionRow } from '../storage/domains/credentials/base.js';
+import { getAuthProviderId, resolveCredentialContext } from './provider-credentials.js';
+import type { CredentialContext } from './provider-credentials.js';
+import { Route } from './route.js';
+import type { RouteDependencies } from './route.js';
 
 /** Lifetime of a paste-code session (Anthropic gives no explicit expiry). */
 const PASTE_CODE_TTL_MS = 10 * 60 * 1000;

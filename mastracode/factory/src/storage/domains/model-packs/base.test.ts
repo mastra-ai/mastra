@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createFactoryStorageForTests } from '../../test-utils';
+import { createFactoryStorageForTests } from '../../test-utils.js';
 
 describe('ModelPacksStorage', () => {
   it('creates an org-owned pack and scopes reads to the organization', async () => {

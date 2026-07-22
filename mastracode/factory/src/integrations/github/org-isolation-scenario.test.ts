@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RouteAuth } from '../../routes/route';
-import { mountApiRoutes } from '../../routes/test-utils';
-import type { SandboxFleet } from '../../sandbox/fleet';
-import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory';
-import { buildGithubRoutes } from './routes';
+import type { RouteAuth } from '../../routes/route.js';
+import { mountApiRoutes } from '../../routes/test-utils.js';
+import type { SandboxFleet } from '../../sandbox/fleet.js';
+import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
+import { buildGithubRoutes } from './routes.js';
 
 // ── Phase 2 org-isolation scenario tests ─────────────────────────────────
 // These prove the org-tenancy boundary end to end through the real GitHub

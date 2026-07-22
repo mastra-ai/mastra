@@ -8,14 +8,14 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { VersionControl } from './capabilities/version-control';
-import { MastraFactory } from './factory';
-import type { FactoryIntegration, IntegrationContext } from './integrations/base';
-import type * as surfaceModule from './routes/surface';
-import type * as tenantCredentialsModule from './routes/tenant-credentials';
-import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults';
-import type { WorkItemsStorage } from './storage/domains/work-items/base';
-import { getFactoryWorkspace } from './workspace';
+import type { VersionControl } from './capabilities/version-control.js';
+import { MastraFactory } from './factory.js';
+import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
+import type * as surfaceModule from './routes/surface.js';
+import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
+import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
+import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { getFactoryWorkspace } from './workspace.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });

@@ -7,7 +7,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_QUEUE_HEALTH_CONFIG, QueueHealthStorage, thresholdsOrDefault } from './base';
+import { DEFAULT_QUEUE_HEALTH_CONFIG, QueueHealthStorage, thresholdsOrDefault } from './base.js';
 
 async function makeStorage(): Promise<QueueHealthStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'queue-health-test', url: ':memory:' });

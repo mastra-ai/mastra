@@ -7,9 +7,9 @@ import type {
   ProjectSourceControlConnection,
   SourceControlInstallation,
   SourceControlRepository,
-} from '../../storage/domains/source-control/base';
-import type { GithubIntegration } from './integration';
-import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions';
+} from '../../storage/domains/source-control/base.js';
+import type { GithubIntegration } from './integration.js';
+import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
 
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 

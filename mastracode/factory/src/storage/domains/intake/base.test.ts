@@ -1,7 +1,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_INTAKE_CONFIG, IntakeStorage } from './base';
+import { DEFAULT_INTAKE_CONFIG, IntakeStorage } from './base.js';
 
 async function makeStorage(): Promise<IntakeStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'intake-test', url: ':memory:' });

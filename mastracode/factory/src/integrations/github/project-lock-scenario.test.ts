@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { LockClient, LockPool } from './project-lock';
-import { __resetProjectLocksForTests, hashKey, withDbAdvisoryLock, withProjectLock } from './project-lock';
+import type { LockClient, LockPool } from './project-lock.js';
+import { __resetProjectLocksForTests, hashKey, withDbAdvisoryLock, withProjectLock } from './project-lock.js';
 
 // ── Phase 5 distributed project-lock scenario tests ──────────────────────
 // These prove cross-replica serialization on the same key using a fake pg

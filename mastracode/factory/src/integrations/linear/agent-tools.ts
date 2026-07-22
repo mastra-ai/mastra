@@ -18,8 +18,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { LinearIntegration } from './integration';
-import { LinearReauthRequiredError } from './integration';
+import type { LinearIntegration } from './integration.js';
+import { LinearReauthRequiredError } from './integration.js';
 
 function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
   return createTool({

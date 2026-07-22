@@ -2,7 +2,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlStorageHandle,
-} from '../storage/domains/source-control/base';
+} from '../storage/domains/source-control/base.js';
 import type { IntegrationConnection } from './connection.js';
 
 export interface InstallationInput {
