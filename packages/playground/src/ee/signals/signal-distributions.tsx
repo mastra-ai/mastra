@@ -8,6 +8,8 @@ import { GripVertical } from 'lucide-react';
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeFlowResponse, ThemeNode, TraceSignalName } from './types';
 
+const DRAG_SENSORS = [useMouseSensor, useTouchSensor];
+
 function formatSignalName(signalName: TraceSignalName) {
   return signalName.charAt(0).toUpperCase() + signalName.slice(1);
 }
@@ -217,7 +219,7 @@ export function SignalDistributions({
   };
 
   return (
-    <DragDropContext enableDefaultSensors={false} sensors={[useMouseSensor, useTouchSensor]} onDragEnd={handleDragEnd}>
+    <DragDropContext enableDefaultSensors={false} sensors={DRAG_SENSORS} onDragEnd={handleDragEnd}>
       <Droppable direction="horizontal" droppableId="signal-distributions">
         {(provided: DroppableProvided) => (
           <section
