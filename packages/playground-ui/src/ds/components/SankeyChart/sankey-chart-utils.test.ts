@@ -191,6 +191,7 @@ describe('SankeyChart utilities', () => {
 
       expect(sourceA?.centerY).toBe(45);
       expect(sourceB?.centerY).toBe(155);
+      expect(sourceA?.height).toBe(54);
       expect(sourceA?.height).toBeGreaterThan(sourceB?.height ?? 0);
       expect((aToX?.sourceY ?? 0) + (aToX?.sourceWidth ?? 0) / 2).toBeCloseTo(
         (aToY?.sourceY ?? 0) - (aToY?.sourceWidth ?? 0) / 2,

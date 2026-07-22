@@ -224,7 +224,7 @@ export function buildFixedSankeyGeometry(
     columnNodes.forEach((node, index) => {
       const value = node.displayValue ?? currentNodeWeights.get(node.id) ?? 0;
       const centerY = top + index * (slotHeight + nodePadding) + slotHeight / 2;
-      const height = value > 0 ? Math.max(slotHeight * 0.1, slotHeight * 0.94 * (value / maximumValue)) : 0;
+      const height = value > 0 ? Math.max(slotHeight * 0.08, slotHeight * 0.6 * (value / maximumValue)) : 0;
       nodes.set(node.id, { centerY, y: centerY - height / 2, height });
     });
   }
