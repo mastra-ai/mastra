@@ -1220,6 +1220,8 @@ export type ProviderModelsMap = {
     'gemini-3.1-flash-lite',
     'gemini-3.1-pro-preview',
     'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.6-flash',
     'gemini-pro-latest',
     'gemma-4-26b-a4b-it',
     'gemma-4-31b-it',
@@ -2793,6 +2795,14 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-6',
     'claude-sonnet-5',
   ];
+  readonly 'aki-io': readonly [
+    'gemma4-26b',
+    'gpt-oss-120b',
+    'kimi-k2.7-code-1100b',
+    'minimax-m2.5-230b',
+    'mistral4-119b',
+    'qwen3.6-35b',
+  ];
   readonly kilo: readonly [
     'ai21/jamba-large-1.7',
     'aion-labs/aion-1.0',
@@ -3452,6 +3462,8 @@ export type ProviderModelsMap = {
     'perplexity/sonar-reasoning-pro',
     'poolside/laguna-m.1',
     'poolside/laguna-m.1:free',
+    'poolside/laguna-s-2.1',
+    'poolside/laguna-s-2.1:free',
     'poolside/laguna-xs-2.1',
     'poolside/laguna-xs-2.1:free',
     'qwen/qwen-2.5-72b-instruct',
