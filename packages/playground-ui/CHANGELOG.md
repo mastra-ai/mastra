@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 42.0.0-alpha.16
+
+### Patch Changes
+
+- Removed interaction hints from the date range timeline. ([#19987](https://github.com/mastra-ai/mastra/pull/19987))
+
 ## 42.0.0-alpha.15
 
 ### Minor Changes
