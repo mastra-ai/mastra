@@ -301,6 +301,7 @@ describe('PlatformLinearIntegration', () => {
         intake: seed.intake,
       },
       stateSigner: {},
+      baseUrl: 'https://factory.example',
     } as unknown as IntegrationContext;
     integration.initialize?.({
       storage: context.storage.generic,
@@ -337,7 +338,7 @@ describe('PlatformLinearIntegration', () => {
     expect(connect.status).toBe(302);
     expect(connect.headers.get('location')).toBe('https://linear.app/oauth/authorize?state=abc');
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://platform.example.com/v1/server/linear/authorize?return_to=%2Forgs%2Forg-1%2Fsettings%2Fgeneral',
+      'https://platform.example.com/v1/server/linear/authorize?return_to=%2F&originator=https%3A%2F%2Ffactory.example',
       expect.objectContaining({ redirect: 'manual' }),
     );
     await expect(integration.agentTools({ requestContext })).resolves.toEqual(

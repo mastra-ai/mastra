@@ -126,6 +126,10 @@ function loose(c: unknown): Context {
   return c as Context;
 }
 
+function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
+  return (ctx.baseUrl || new URL(requestUrl).origin).replace(/\/+$/, '');
+}
+
 export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
   readonly #client: PlatformApiClient;
@@ -422,7 +426,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         const tenant = ctx.auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
-        const query = new URLSearchParams({ action: 'install' });
+        const redirectTo = c.req.query('redirectTo') || c.req.query('return_to') || '/';
+        const query = new URLSearchParams({
+          action: 'install',
+          redirectTo,
+          originator: routeBaseUrl(ctx, c.req.url),
+        });
         const { url } = await this.#client.request<{ url: string }>(
           'GET',
           `${API_PREFIX}/github-app/install-url?${query}`,
