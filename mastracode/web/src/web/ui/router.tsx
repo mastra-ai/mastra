@@ -21,6 +21,7 @@ import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
 import { OverviewPage } from './domains/factory/OverviewPage';
 import { RootGuards } from './domains/auth/components/RootGuards';
+import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
 import { isServerFactory } from './domains/workspaces/services/factories';
@@ -64,6 +65,7 @@ export function createAppRoutes(): RouteObject[] {
             { path: 'factory/review', element: <ReviewBoardPage /> },
             { path: 'factory/metrics', element: <MetricsPage /> },
             { path: 'factory/audit', element: <AuditPage /> },
+            { path: 'factories/create', element: <CreateFactoryPage /> },
             // Compatibility routes from the former combined Board.
             { path: 'factory/board', element: <Navigate to="/factory/work" replace /> },
             { path: 'factory/intake', element: <Navigate to="/factory/work" replace /> },

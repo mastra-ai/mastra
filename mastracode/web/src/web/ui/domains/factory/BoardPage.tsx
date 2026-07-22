@@ -1077,7 +1077,10 @@ function WorkItemCard({
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
-  const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source];
+  const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source] ?? {
+    icon: CircleDot,
+    className: 'text-icon3',
+  };
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   // Session refs whose worktree was deleted are stale: their threads went with

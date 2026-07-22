@@ -4,21 +4,20 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, ChevronsUpDown, Factory as FactoryIcon, Folder, Plus } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
-import { useOverlays } from '../../../lib/overlays';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { isServerFactory } from '../services/factories';
 
 /** Inline factory selection with a single Create Factory action. */
 export function FactorySwitcher() {
   const { factories, activeFactory, selectFactory } = useActiveFactoryContext();
-  const overlays = useOverlays();
   const navigate = useNavigate();
+  const location = useLocation();
   const { setOpenMobile } = useMainSidebar();
 
   const openFactories = () => {
-    overlays.open('factories');
+    void navigate('/factories/create', { state: { from: location.pathname } });
     setOpenMobile(false);
   };
 
