@@ -9,8 +9,8 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
-import type { CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderInfo } from '../../web/config-routes.js';
-import type { FactoryThreadTaskContext } from '../../web/factory/thread-context.js';
+import type { FactoryThreadTaskContext } from '@mastra/factory/thread-context';
+import type { CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderInfo } from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
   ArtifactListing,
@@ -19,7 +19,7 @@ import type {
   WorkspaceFile,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
-} from '../../web/fs-routes.js';
+} from '@mastra/factory/routes/fs';
 
 export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo, FactoryThreadTaskContext };
 export type {

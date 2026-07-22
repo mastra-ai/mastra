@@ -8,7 +8,7 @@ import { Navigate, useSearchParams } from 'react-router';
 import '@fontsource-variable/mona-sans/standard.css';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
+import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
 import { navigateAfterSignIn, redirectToLogin, signInWithPassword, signUpWithPassword } from '../services/auth';
 import { FactoryHalftoneField } from './FactoryHalftoneField';
 import './sign-in-page.css';
@@ -139,12 +139,15 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
  */
 export function SignInPage() {
   const { baseUrl } = useApiConfig();
-  const auth = useWebAuth();
+  const auth = useFactoryAuth();
   const [searchParams] = useSearchParams();
   const [redirecting, setRedirecting] = useState(false);
   const returnTo = safeReturnTo(searchParams.get('returnTo')?.toString());
   const credentialForm = auth.data?.provider === 'better-auth';
 
+  // Mirror of the root auth guard: signed-in (or auth-disabled) visitors have
+  // nothing to do here, so send them to their destination (or the root landing
+  // when returnTo is absent/unsafe).
   if (!auth.isPending && (!auth.data?.authEnabled || auth.data.authenticated)) {
     return <Navigate to={returnTo} replace />;
   }

@@ -29,6 +29,9 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
+      '@mastra/factory':
+        specifier: link:../factory
+        version: link:../factory
       '@mastra/hono':
         specifier: link:../../server-adapters/hono
         version: link:../../server-adapters/hono
