@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { buildSankeyChartGraph } from '@mastra/playground-ui/components/SankeyChart';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +21,8 @@ import {
   fourStageThemeFlowResponse,
   inconsistentTraceCountThemeFlowResponse,
   multiThemeSnapshotsResponse,
+  reorderedFourStageThemeFlowResponse,
+  reorderedMultiThemeSnapshotsResponse,
   sameDayThemeSnapshotsResponse,
   singleStageThemeFlowResponse,
   themeFlowResponse,
@@ -59,6 +61,45 @@ function renderSankeySignals() {
       </QueryClientProvider>
     </MemoryRouter>,
   );
+}
+
+function rectangle(left: number, width: number, height: number) {
+  return {
+    x: left,
+    y: 0,
+    top: 0,
+    right: left + width,
+    bottom: height,
+    left,
+    width,
+    height,
+    toJSON: () => ({}),
+  };
+}
+
+async function reorderOutcomeAfterBehavior(beforeDrop?: () => void) {
+  const distributionCards = within(screen.getByRole('region', { name: 'Signal distributions' })).getAllByRole(
+    'article',
+  );
+  distributionCards.forEach((card, index) => {
+    const draggable = card.parentElement;
+    if (!draggable) throw new Error('Signal distribution draggable was not rendered');
+    vi.spyOn(draggable, 'getBoundingClientRect').mockReturnValue(rectangle(index * 250, 240, 300));
+  });
+  vi.spyOn(screen.getByRole('region', { name: 'Signal distributions' }), 'getBoundingClientRect').mockReturnValue(
+    rectangle(0, 990, 300),
+  );
+  const outcomeCard = screen.getByRole('article', { name: 'Outcome distribution' });
+  const outcomeHandle = screen.getByLabelText('Reorder Outcome');
+  expect(outcomeCard.parentElement?.getAttribute('draggable')).not.toBe('true');
+  expect(outcomeHandle.getAttribute('draggable')).not.toBe('true');
+  fireEvent.mouseDown(outcomeHandle, { button: 0, buttons: 1, clientX: 375, clientY: 100 });
+  fireEvent.mouseMove(window, { buttons: 1, clientX: 390, clientY: 100 });
+  await waitFor(() => expect(outcomeCard.parentElement?.style.position).toBe('fixed'));
+  fireEvent.mouseMove(window, { buttons: 1, clientX: 650, clientY: 100 });
+  await waitFor(() => expect(outcomeCard.parentElement?.style.transform).not.toBe(''));
+  beforeDrop?.();
+  fireEvent.mouseUp(window, { button: 0, buttons: 0, clientX: 650, clientY: 100 });
 }
 
 beforeEach(() => {
@@ -364,6 +405,168 @@ describe('SankeySignals', () => {
       await screen.findByTestId('signals-page-header');
       expect(screen.queryByTestId('signals-analysis-scroll')).toBeNull();
       expect(screen.queryByTestId('signals-analysis-canvas')).toBeNull();
+    });
+  });
+
+  describe('when a signal distribution is reordered', () => {
+    it('requests the new perspective only after the column is dropped', async () => {
+      const snapshotOrders: string[] = [];
+      const flowOrders: string[] = [];
+      const reorderedSnapshot = {
+        ...themeSnapshotsResponse.snapshots[0],
+        snapshotId: 'reordered-snapshot',
+        availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+      };
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames') ?? '';
+          snapshotOrders.push(signalNames);
+          return HttpResponse.json(
+            signalNames === 'goal,behavior,outcome,sentiment'
+              ? { snapshots: [reorderedSnapshot] }
+              : themeSnapshotsResponse,
+          );
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames') ?? '';
+          flowOrders.push(signalNames);
+          const flow =
+            signalNames === 'goal,behavior,outcome,sentiment'
+              ? reorderedFourStageThemeFlowResponse
+              : fourStageThemeFlowResponse;
+          return HttpResponse.json({
+            ...flow,
+            snapshot:
+              signalNames === 'goal,behavior,outcome,sentiment'
+                ? reorderedSnapshot
+                : themeSnapshotsResponse.snapshots[0],
+          });
+        }),
+      );
+      renderSankeySignals();
+
+      await screen.findByLabelText('Reorder Outcome');
+      expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment']);
+      await reorderOutcomeAfterBehavior(() => {
+        expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment']);
+        expect(flowOrders).toEqual(['goal,outcome,behavior,sentiment']);
+      });
+
+      await waitFor(() =>
+        expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment', 'goal,behavior,outcome,sentiment']),
+      );
+      await waitFor(() =>
+        expect(flowOrders).toEqual(['goal,outcome,behavior,sentiment', 'goal,behavior,outcome,sentiment']),
+      );
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole('region', { name: 'Signal distributions' }))
+            .getAllByRole('article')
+            .map(card => card.getAttribute('aria-label')),
+        ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']),
+      );
+      const chart = within(screen.getByRole('region', { name: 'Signal theme flow' }));
+      expect(chart.getByText('GOAL')).not.toBeNull();
+      expect(chart.getByText('BEHAVIOR')).not.toBeNull();
+      expect(chart.getByText('OUTCOME')).not.toBeNull();
+      expect(chart.getByText('SENTIMENT')).not.toBeNull();
+      expect(chart.getByLabelText(/Resolve support request.*22 traces/)).not.toBeNull();
+      expect(chart.getByLabelText(/Frustrated.*29 traces/)).not.toBeNull();
+    });
+
+    it('keeps the current perspective visible while the new perspective loads', async () => {
+      let releaseReorderedSnapshots = () => {};
+      const reorderedSnapshotsPending = new Promise<void>(resolve => {
+        releaseReorderedSnapshots = resolve;
+      });
+      const reorderedSnapshot = {
+        ...themeSnapshotsResponse.snapshots[0],
+        snapshotId: 'reordered-snapshot',
+        availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+      };
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, async ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames');
+          if (signalNames !== 'goal,behavior,outcome,sentiment') {
+            return HttpResponse.json(themeSnapshotsResponse);
+          }
+          await reorderedSnapshotsPending;
+          return HttpResponse.json({ snapshots: [reorderedSnapshot] });
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames');
+          return HttpResponse.json(
+            signalNames === 'goal,behavior,outcome,sentiment'
+              ? { ...reorderedFourStageThemeFlowResponse, snapshot: reorderedSnapshot }
+              : fourStageThemeFlowResponse,
+          );
+        }),
+      );
+      renderSankeySignals();
+      await screen.findByLabelText('Reorder Outcome');
+
+      await reorderOutcomeAfterBehavior();
+
+      expect(await screen.findByText('Reloading snapshots for new signal perspective…')).not.toBeNull();
+      expect(screen.queryByTestId('signals-loading-skeleton')).toBeNull();
+      expect(
+        within(screen.getByRole('region', { name: 'Signal distributions' }))
+          .getAllByRole('article')
+          .map(card => card.getAttribute('aria-label')),
+      ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']);
+
+      releaseReorderedSnapshots();
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole('region', { name: 'Signal distributions' }))
+            .getAllByRole('article')
+            .map(card => card.getAttribute('aria-label')),
+        ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']),
+      );
+    });
+
+    it('keeps the selected snapshot ordinal when the new perspective returns opaque cursors', async () => {
+      const reorderedFlowSnapshots: Array<string> = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames');
+          return HttpResponse.json(
+            signalNames === 'goal,behavior,outcome,sentiment'
+              ? reorderedMultiThemeSnapshotsResponse
+              : multiThemeSnapshotsResponse,
+          );
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const url = new URL(request.url);
+          const signalNames = url.searchParams.get('signalNames')?.split(',') ?? [];
+          const snapshotId = url.searchParams.get('snapshotId');
+          if (!snapshotId) return HttpResponse.json({ error: 'Missing snapshot' }, { status: 400 });
+          const reordered = signalNames.join(',') === 'goal,behavior,outcome,sentiment';
+          const snapshots = reordered
+            ? reorderedMultiThemeSnapshotsResponse.snapshots
+            : multiThemeSnapshotsResponse.snapshots;
+          const snapshot = snapshots.find(candidate => candidate.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          if (snapshotId.startsWith('reordered-')) reorderedFlowSnapshots.push(snapshotId);
+          const sourceFlow = reordered
+            ? reorderedFourStageThemeFlowResponse
+            : snapshot.ordinal === 3
+              ? earlierThemeFlowResponse
+              : fourStageThemeFlowResponse;
+          return HttpResponse.json({ ...sourceFlow, snapshot });
+        }),
+      );
+      const { container } = renderSankeySignals();
+      await screen.findByLabelText('Reorder Outcome');
+      const sliderInput = container.querySelector('input[type="range"]');
+      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
+      fireEvent.change(sliderInput, { target: { value: '0' } });
+      await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces');
+
+      await reorderOutcomeAfterBehavior();
+
+      expect(await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces')).not.toBeNull();
+      await waitFor(() => expect(reorderedFlowSnapshots).toContain('reordered-snapshot-3'));
     });
   });
 

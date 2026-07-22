@@ -15,5 +15,6 @@ export function useThemePaths(
     queryKey: ['entity-learning', entityType, entityId, 'theme-paths', signalNames, snapshotId],
     queryFn: () => fetchThemePaths(entityId, entityType, signalNames, requireSnapshotId(snapshotId)),
     enabled: snapshotId !== undefined && isNumericThemeId(themeId),
+    staleTime: 30_000,
   });
 }

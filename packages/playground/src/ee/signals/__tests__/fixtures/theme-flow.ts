@@ -127,6 +127,14 @@ export const multiThemeSnapshotsResponse: ThemeSnapshotsResponse = {
   ],
 };
 
+export const reorderedMultiThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: multiThemeSnapshotsResponse.snapshots.map(snapshot => ({
+    ...snapshot,
+    snapshotId: `reordered-${snapshot.snapshotId}`,
+    availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+  })),
+};
+
 export const emptyThemeSnapshotsResponse: ThemeSnapshotsResponse = { snapshots: [] };
 
 export const themeFlowResponse: ThemeFlowResponse = {
@@ -377,6 +385,116 @@ export const fourStageThemeFlowResponse: ThemeFlowResponse = {
       targetNodeId: 'sentiment-neutral',
       traceCount: 8,
       sourceShare: 0.5,
+      targetShare: 8 / 21,
+    },
+  ],
+};
+
+export const reorderedFourStageThemeFlowResponse: ThemeFlowResponse = {
+  ...fourStageThemeFlowResponse,
+  stages: [
+    fourStageThemeFlowResponse.stages[0],
+    fourStageThemeFlowResponse.stages[2],
+    fourStageThemeFlowResponse.stages[1],
+    fourStageThemeFlowResponse.stages[3],
+  ],
+  links: [
+    {
+      sourceNodeId: 'goal-support',
+      targetNodeId: 'behavior-search',
+      traceCount: 15,
+      sourceShare: 15 / 22,
+      targetShare: 15 / 34,
+    },
+    {
+      sourceNodeId: 'goal-support',
+      targetNodeId: 'behavior-escalate',
+      traceCount: 7,
+      sourceShare: 7 / 22,
+      targetShare: 7 / 16,
+    },
+    {
+      sourceNodeId: 'goal-billing',
+      targetNodeId: 'behavior-search',
+      traceCount: 12,
+      sourceShare: 12 / 17,
+      targetShare: 12 / 34,
+    },
+    {
+      sourceNodeId: 'goal-billing',
+      targetNodeId: 'behavior-escalate',
+      traceCount: 5,
+      sourceShare: 5 / 17,
+      targetShare: 5 / 16,
+    },
+    {
+      sourceNodeId: 'goal-account',
+      targetNodeId: 'behavior-search',
+      traceCount: 7,
+      sourceShare: 7 / 11,
+      targetShare: 7 / 34,
+    },
+    {
+      sourceNodeId: 'goal-account',
+      targetNodeId: 'behavior-escalate',
+      traceCount: 4,
+      sourceShare: 4 / 11,
+      targetShare: 4 / 16,
+    },
+    {
+      sourceNodeId: 'behavior-search',
+      targetNodeId: 'outcome-resolved',
+      traceCount: 23,
+      sourceShare: 23 / 34,
+      targetShare: 23 / 31,
+    },
+    {
+      sourceNodeId: 'behavior-search',
+      targetNodeId: 'outcome-follow-up',
+      traceCount: 11,
+      sourceShare: 11 / 34,
+      targetShare: 11 / 19,
+    },
+    {
+      sourceNodeId: 'behavior-escalate',
+      targetNodeId: 'outcome-resolved',
+      traceCount: 8,
+      sourceShare: 8 / 16,
+      targetShare: 8 / 31,
+    },
+    {
+      sourceNodeId: 'behavior-escalate',
+      targetNodeId: 'outcome-follow-up',
+      traceCount: 8,
+      sourceShare: 8 / 16,
+      targetShare: 8 / 19,
+    },
+    {
+      sourceNodeId: 'outcome-resolved',
+      targetNodeId: 'sentiment-frustrated',
+      traceCount: 18,
+      sourceShare: 18 / 31,
+      targetShare: 18 / 29,
+    },
+    {
+      sourceNodeId: 'outcome-resolved',
+      targetNodeId: 'sentiment-neutral',
+      traceCount: 13,
+      sourceShare: 13 / 31,
+      targetShare: 13 / 21,
+    },
+    {
+      sourceNodeId: 'outcome-follow-up',
+      targetNodeId: 'sentiment-frustrated',
+      traceCount: 11,
+      sourceShare: 11 / 19,
+      targetShare: 11 / 29,
+    },
+    {
+      sourceNodeId: 'outcome-follow-up',
+      targetNodeId: 'sentiment-neutral',
+      traceCount: 8,
+      sourceShare: 8 / 19,
       targetShare: 8 / 21,
     },
   ],

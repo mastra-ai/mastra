@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Card, CardContent, CardFooter, CardHeader } from '@mastra/playground-ui/components/Card';
+import { Card, CardContent, CardFooter } from '@mastra/playground-ui/components/Card';
 import { nodeColor, Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
 import type {
   SankeyChartColumn,
@@ -7,8 +7,10 @@ import type {
   SankeyChartRecord,
 } from '@mastra/playground-ui/components/SankeyChart';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
+import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
 import { useSnapshotPlayback } from './hooks/use-snapshot-playback';
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { useThemePaths } from './hooks/use-theme-paths';
@@ -21,6 +23,7 @@ import {
   getSignalRecordNodeValue,
   stabilizeThemeFlow,
 } from './sankey-signals-data';
+import { SignalDistributions } from './signal-distributions';
 import { formatSignalName, formatSnapshotWindow, traceLabel } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
@@ -28,7 +31,7 @@ import { SnapshotTimeline } from './snapshot-timeline';
 import { ThemeDetailPanel } from './theme-detail-panel';
 import { buildDrilledThemeFlow, findThemeSelection } from './theme-drilldown-data';
 import type { ThemeSelection } from './theme-drilldown-data';
-import type { ThemeFlowResponse, ThemeNode, TraceSignalName } from './types';
+import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { Link } from '@/lib/link';
 
 export interface SankeySignalsProps {
@@ -38,191 +41,7 @@ export interface SankeySignalsProps {
   height?: number;
 }
 
-function SignalDistributionRow({
-  color,
-  index,
-  node,
-  onViewThemeDetails,
-  signalName,
-}: {
-  color: string;
-  index: number;
-  node: ThemeNode;
-  onViewThemeDetails: (selection: ThemeSelection) => void;
-  signalName: TraceSignalName;
-}) {
-  const content = (
-    <>
-      <span className="flex min-w-0 items-center gap-2 text-neutral5">
-        <span
-          aria-hidden="true"
-          className="size-2 shrink-0 rounded-[2px]"
-          style={{ backgroundColor: color, opacity: Math.max(0.35, 1 - index * 0.2) }}
-        />
-        <span className="truncate" title={node.label}>
-          {node.label}
-        </span>
-      </span>
-      <span className="shrink-0 font-mono text-neutral3">
-        {node.traceCount} · {Math.round(node.stageShare * 100)}%
-      </span>
-    </>
-  );
-
-  if (node.kind === 'theme' && node.themeId && /^\d+$/.test(node.themeId)) {
-    return (
-      <li title={node.description ? `${node.label}\n${node.description}` : node.label}>
-        <button
-          aria-label={`View theme details for ${node.label}`}
-          className="flex w-full min-w-0 items-center justify-between gap-3 rounded-sm text-left text-xs outline-hidden hover:bg-surface3 focus-visible:ring-1 focus-visible:ring-border2"
-          onClick={() => onViewThemeDetails({ signalName, themeId: node.themeId, label: node.label })}
-          type="button"
-        >
-          {content}
-        </button>
-      </li>
-    );
-  }
-
-  return <li className="flex min-w-0 items-center justify-between gap-3 text-xs">{content}</li>;
-}
-
-function NoiseDistributionRow({
-  color,
-  signalName,
-  traceCount,
-  stageShare,
-  onViewNoiseDetails,
-}: {
-  color: string;
-  signalName: TraceSignalName;
-  traceCount: number;
-  stageShare: number;
-  onViewNoiseDetails: (signalName: TraceSignalName) => void;
-}) {
-  const signalLabel = formatSignalName(signalName);
-
-  return (
-    <li>
-      <button
-        aria-label={`View Noise details for ${signalLabel}`}
-        className="flex w-full min-w-0 items-center justify-between gap-3 rounded-sm text-left text-xs outline-hidden hover:bg-surface3 focus-visible:ring-1 focus-visible:ring-border2"
-        onClick={() => onViewNoiseDetails(signalName)}
-        type="button"
-      >
-        <span className="flex min-w-0 items-center gap-2 text-neutral5">
-          <span
-            aria-hidden="true"
-            className="size-2 shrink-0 rounded-[2px]"
-            style={{ backgroundColor: color, opacity: 0.35 }}
-          />
-          <span>Noise</span>
-        </span>
-        <span className="shrink-0 font-mono text-neutral3">
-          {traceCount} · {Math.round(stageShare * 100)}%
-        </span>
-      </button>
-    </li>
-  );
-}
-
-function SignalDistribution({
-  signalName,
-  traceCount,
-  nodes,
-  onViewThemeDetails,
-  onViewNoiseDetails,
-}: {
-  signalName: TraceSignalName;
-  traceCount: number;
-  nodes: ThemeNode[];
-  onViewThemeDetails: (selection: ThemeSelection) => void;
-  onViewNoiseDetails: (signalName: TraceSignalName) => void;
-}) {
-  const label = formatSignalName(signalName);
-  const color = nodeColor(getSignalHue(signalName));
-  const displayNodes = nodes.filter(node => node.kind !== 'noise');
-  const noiseNode = nodes.find(node => node.kind === 'noise');
-
-  return (
-    <Card aria-label={`${label} distribution`} as="article" className="min-w-0" elevation="elevated">
-      <CardHeader className="border-b border-border1 px-4 py-3">
-        <h3 className="font-mono text-xs font-semibold tracking-wider" style={{ color }}>
-          {label.toUpperCase()}
-        </h3>
-      </CardHeader>
-      <CardContent className="space-y-4 p-4">
-        <p className="font-mono text-[10px] tracking-wider text-neutral3">{traceLabel(traceCount)}</p>
-        <div
-          aria-label={`${label} stacked distribution`}
-          className="flex h-1.5 overflow-hidden rounded-sm bg-surface4"
-          data-testid="distribution-stack"
-        >
-          {nodes.map((node, index) => (
-            <span
-              key={node.nodeId}
-              aria-hidden="true"
-              className="h-full"
-              style={{
-                backgroundColor: color,
-                opacity: Math.max(0.35, 1 - index * 0.2),
-                width: `${Math.min(node.stageShare * 100, 100)}%`,
-              }}
-            />
-          ))}
-        </div>
-        <ul className="space-y-2.5">
-          {displayNodes.length > 0 ? (
-            displayNodes.map((node, index) => (
-              <SignalDistributionRow
-                key={node.nodeId}
-                color={color}
-                index={index}
-                node={node}
-                onViewThemeDetails={onViewThemeDetails}
-                signalName={signalName}
-              />
-            ))
-          ) : (
-            <li className="text-xs text-neutral3">No themes detected</li>
-          )}
-          <NoiseDistributionRow
-            color={color}
-            signalName={signalName}
-            traceCount={noiseNode?.traceCount ?? 0}
-            stageShare={noiseNode?.stageShare ?? 0}
-            onViewNoiseDetails={onViewNoiseDetails}
-          />
-        </ul>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SignalDistributions({
-  stages,
-  onViewThemeDetails,
-  onViewNoiseDetails,
-}: {
-  stages: ThemeFlowResponse['stages'];
-  onViewThemeDetails: (selection: ThemeSelection) => void;
-  onViewNoiseDetails: (signalName: TraceSignalName) => void;
-}) {
-  return (
-    <section aria-label="Signal distributions" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {stages.map(stage => (
-        <SignalDistribution
-          key={stage.signalName}
-          signalName={stage.signalName}
-          traceCount={stage.traceCount}
-          nodes={stage.nodes}
-          onViewThemeDetails={onViewThemeDetails}
-          onViewNoiseDetails={onViewNoiseDetails}
-        />
-      ))}
-    </section>
-  );
-}
+const DRILL_IN_TRACE_LIMIT = 2000;
 
 function FlowCard({
   columns,
@@ -255,6 +74,7 @@ function FlowCard({
         <Sankey
           data={records}
           columns={chartColumns}
+          columnOrder={chartColumns.map(column => column.id)}
           getColumnHue={column => getSignalHue(column.id)}
           getRecordNodeId={getSignalRecordNodeId}
           getRecordNodeLabel={getSignalRecordNodeLabel}
@@ -297,20 +117,27 @@ function FlowCard({
   );
 }
 
-export function SankeySignals({ entityId, entityType = 'agent', signalNames, height }: SankeySignalsProps) {
+export function SankeySignals({
+  entityId,
+  entityType = 'agent',
+  signalNames: initialSignalNames,
+  height,
+}: SankeySignalsProps) {
+  const queryClient = useQueryClient();
+  const [signalNames, setSignalNames] = useState(() => initialSignalNames);
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames);
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
-  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>();
+  const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
   const [isPlaying, setIsPlaying] = useState(false);
   const [drillIn, setDrillIn] = useState<ThemeSelection>();
   const [detailSelection, setDetailSelection] = useState<ThemeSelection>();
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
-  const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.snapshotId === selectedSnapshotId);
+  const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.ordinal === selectedSnapshotOrdinal);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : snapshots.length - 1;
   const snapshot = snapshots[selectedSnapshotIndex];
-  const selectSnapshot = (index: number) => setSelectedSnapshotId(snapshots[index]?.snapshotId);
+  const selectSnapshot = (index: number) => setSelectedSnapshotOrdinal(snapshots[index]?.ordinal);
 
-  const nextSnapshotId = snapshots[(selectedSnapshotIndex + 1) % snapshots.length]?.snapshotId;
+  const nextSnapshotOrdinal = snapshots[(selectedSnapshotIndex + 1) % snapshots.length]?.ordinal;
   const flowQueries = useThemeFlows(
     entityId,
     entityType,
@@ -326,7 +153,7 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
     () => (currentFlow ? stabilizeThemeFlow(currentFlow, windowFlows) : undefined),
     [currentFlow, windowFlows],
   );
-  const drillInAvailable = Boolean(currentFlow && currentFlow.snapshot.traceCount <= 2000);
+  const drillInAvailable = Boolean(currentFlow && currentFlow.snapshot.traceCount <= DRILL_IN_TRACE_LIMIT);
   const pathsQuery = useThemePaths(
     entityId,
     entityType,
@@ -347,9 +174,37 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   useSnapshotPlayback({
     isPlaying,
     isPlaybackBlocked: isFlowPending || hasFlowError || isPlaybackBlockedByDrillIn,
-    nextSnapshot: nextSnapshotId,
-    onAdvance: setSelectedSnapshotId,
+    nextSnapshot: nextSnapshotOrdinal,
+    onAdvance: setSelectedSnapshotOrdinal,
     snapshotCount: snapshots.length,
+  });
+
+  const perspectiveMutation = useMutation({
+    mutationFn: async (nextSignalNames: TraceSignalName[]) => {
+      const nextSnapshots = await queryClient.fetchQuery({
+        queryKey: ['entity-learning', entityType, entityId, 'theme-snapshots', nextSignalNames],
+        queryFn: () => fetchThemeSnapshots(entityId, entityType, nextSignalNames),
+      });
+      await Promise.all(
+        nextSnapshots.snapshots.map(nextSnapshot =>
+          queryClient.fetchQuery({
+            queryKey: ['entity-learning', entityType, entityId, 'theme-flow', nextSignalNames, nextSnapshot.snapshotId],
+            queryFn: () => fetchThemeFlow(entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
+          }),
+        ),
+      );
+      const nextSnapshot =
+        nextSnapshots.snapshots.find(candidate => candidate.ordinal === snapshot?.ordinal) ??
+        nextSnapshots.snapshots.at(-1);
+      if (drillIn && nextSnapshot && nextSnapshot.traceCount <= DRILL_IN_TRACE_LIMIT) {
+        await queryClient.fetchQuery({
+          queryKey: ['entity-learning', entityType, entityId, 'theme-paths', nextSignalNames, nextSnapshot.snapshotId],
+          queryFn: () => fetchThemePaths(entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
+        });
+      }
+      return nextSignalNames;
+    },
+    onSuccess: setSignalNames,
   });
 
   if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
@@ -393,6 +248,13 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   }
 
   const stages = flow.stages;
+  const distributionSignalNames = perspectiveMutation.isPending ? perspectiveMutation.variables : signalNames;
+  const distributionPositions = new Map(distributionSignalNames.map((signalName, index) => [signalName, index]));
+  const distributionStages = [...stages].sort(
+    (left, right) =>
+      (distributionPositions.get(left.signalName) ?? stages.length) -
+      (distributionPositions.get(right.signalName) ?? stages.length),
+  );
   const themeCount = stages.reduce(
     (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
     0,
@@ -411,6 +273,13 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
     ? undefined
     : 'Drill-in is unavailable for snapshots with more than 2,000 traces.';
   const isDrilledEmpty = drillIn !== undefined && pathsQuery.data !== undefined && flow.snapshot.traceCount === 0;
+  const handleSignalOrderChange = (nextSignalNames: TraceSignalName[]) => {
+    if (perspectiveMutation.isPending) return;
+    setIsPlaying(false);
+    setDetailSelection(undefined);
+    setNoiseSignalName(undefined);
+    perspectiveMutation.mutate(nextSignalNames);
+  };
 
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">
@@ -493,17 +362,31 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
         onSnapshotChange={selectSnapshot}
       />
       {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
-        <SignalDistributions
-          stages={stages}
-          onViewThemeDetails={selection => {
-            setNoiseSignalName(undefined);
-            setDetailSelection(selection);
-          }}
-          onViewNoiseDetails={signalName => {
-            setDetailSelection(undefined);
-            setNoiseSignalName(signalName);
-          }}
-        />
+        <>
+          {perspectiveMutation.isPending ? (
+            <p className="font-mono text-xs text-neutral3" role="status">
+              Reloading snapshots for new signal perspective…
+            </p>
+          ) : null}
+          {perspectiveMutation.isError ? (
+            <p className="text-xs text-red-500" role="alert">
+              Unable to load that signal perspective. Try reordering the columns again.
+            </p>
+          ) : null}
+          <SignalDistributions
+            disabled={perspectiveMutation.isPending}
+            stages={distributionStages}
+            onOrderChange={handleSignalOrderChange}
+            onViewThemeDetails={selection => {
+              setNoiseSignalName(undefined);
+              setDetailSelection(selection);
+            }}
+            onViewNoiseDetails={signalName => {
+              setDetailSelection(undefined);
+              setNoiseSignalName(signalName);
+            }}
+          />
+        </>
       )}
       <ThemeDetailPanel
         key={`${snapshot.snapshotId}:${detailSelection?.signalName ?? ''}:${detailSelection?.themeId ?? ''}`}
