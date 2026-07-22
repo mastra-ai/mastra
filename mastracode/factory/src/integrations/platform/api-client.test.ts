@@ -35,16 +35,10 @@ describe('PlatformApiClient', () => {
     expect(() => platformApiClientConfigFromEnv()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 
-  it('prefers MASTRA_PLATFORM_SECRET_KEY over the deprecated MASTRA_PLATFORM_ACCESS_TOKEN', () => {
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
-    expect(platformApiClientConfigFromEnv()).toMatchObject({ accessToken });
-  });
-
-  it('falls back to the deprecated MASTRA_PLATFORM_ACCESS_TOKEN', () => {
+  it('requires MASTRA_PLATFORM_SECRET_KEY even when the deprecated access token is set', () => {
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
-    expect(platformApiClientConfigFromEnv()).toMatchObject({ accessToken: 'legacy-token' });
+    expect(() => platformApiClientConfigFromEnv()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 
   it('uses bearer authentication without ambient cookie credentials', async () => {

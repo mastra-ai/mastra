@@ -42,6 +42,37 @@ export interface WorkItemStageEntry {
   enteredAt: string;
   exitedAt?: string;
   by: string;
+  /**
+   * Actor that closed this entry; absent on entries written before exit
+   * stamping existed — treat as human.
+   */
+  exitedBy?: string;
+}
+
+/**
+ * Sentinel actor ids that mark a stage transition as automation-driven (vs a
+ * human's WorkOS user id): generic sentinels plus the system ids the Factory
+ * rules engine stamps (see `actorId` in factory/rules/transition-service.ts).
+ * Metrics treat any other actor — including a missing `exitedBy` on
+ * pre-existing entries — as human.
+ */
+export const AUTOMATION_ACTORS = new Set([
+  'factory',
+  'system',
+  'automation',
+  'factory-rule-dispatcher',
+  'factory-tool-result-rule',
+]);
+
+/**
+ * Whether an actor id marks a transition no human performed on the Factory
+ * board: a sentinel automation id, an agent binding (`agent:*`), or an
+ * external-webhook actor (`github:*` — a human may have acted on GitHub, but
+ * the board move itself was automated).
+ */
+export function isAutomationActor(by: string | undefined): boolean {
+  if (by === undefined) return false;
+  return AUTOMATION_ACTORS.has(by) || by.startsWith('agent:') || by.startsWith('github:');
 }
 
 export interface WorkItemSessionRef {
@@ -437,6 +468,11 @@ export function validateParentRelation(
   }
 }
 
+/**
+ * Diff `oldStages` → `newStages` and return the updated history: exited stages
+ * get `exitedAt` + `exitedBy` stamped on their open entry, entered stages get
+ * a new entry.
+ */
 export function applyStageTransition(
   history: WorkItemStageEntry[],
   oldStages: WorkItemStage[],
@@ -452,6 +488,7 @@ export function applyStageTransition(
       const entry = next[i]!;
       if (entry.stage === stage && entry.exitedAt === undefined) {
         entry.exitedAt = timestamp;
+        entry.exitedBy = by;
         break;
       }
     }

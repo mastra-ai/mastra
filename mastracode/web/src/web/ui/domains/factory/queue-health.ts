@@ -25,11 +25,11 @@ export type QueueHealthWorkItem = Omit<WorkItem, 'createdAt' | 'updatedAt'> & {
 };
 
 /**
- * Terminal stage — items here are completed, not in the queue. Redefined
- * locally (the server constant in `factory/metrics.ts`) rather than imported
- * from the UI `stages.ts`, which is explicitly UI-only.
+ * Terminal stages — items here are completed or canceled, not in the queue.
+ * Redefined locally (the server set in `factory/metrics.ts`) rather than
+ * imported from the UI `stages.ts`, which is explicitly UI-only.
  */
-const DONE_STAGE = 'done';
+const TERMINAL_STAGES = new Set(['done', 'canceled']);
 
 /** Age-bucket keys, in left→right segment order. */
 export const AGE_BUCKETS = ['green', 'amber', 'orange', 'red'] as const;
@@ -67,13 +67,14 @@ function parseTime(iso: string): number {
 }
 
 /**
- * Open (no `exitedAt`) history entries for currently-held non-done stages —
- * one per held stage. Replicated from `factory/metrics.ts:openEntries` (that
- * helper is module-private and `metrics.ts` stays untouched per the plan).
+ * Open (no `exitedAt`) history entries for currently-held non-terminal stages —
+ * one per held stage. Replicated from `factory/metrics.ts:openEntries` — that
+ * helper is module-private, and this UI-only module must not import server
+ * modules.
  */
 function openEntries(item: QueueHealthWorkItem): WorkItemStageEntry[] {
   return item.stageHistory.filter(
-    entry => entry.exitedAt === undefined && entry.stage !== DONE_STAGE && item.stages.includes(entry.stage),
+    entry => entry.exitedAt === undefined && !TERMINAL_STAGES.has(entry.stage) && item.stages.includes(entry.stage),
   );
 }
 
@@ -101,7 +102,7 @@ function latestOpenEntryFor(open: WorkItemStageEntry[], stage: string): WorkItem
 }
 
 /**
- * Board stage ids in column order, minus the terminal `done` stage and the
+ * Board stage ids in column order, minus the terminal stages and the
  * `intake` stage. Intake is intentionally hidden: the Board's Intake column
  * merges persisted `intake` cards with live GitHub/Linear candidates that have
  * no `work_items` row yet (they're materialized only when acted on), so this
@@ -112,7 +113,7 @@ function latestOpenEntryFor(open: WorkItemStageEntry[], stage: string): WorkItem
  * age-semantics decision: upstream open-date vs. time-in-stage).
  */
 function chartStages(): string[] {
-  return BOARD_STAGES.map(s => s.id).filter(id => id !== DONE_STAGE && id !== 'intake');
+  return BOARD_STAGES.map(s => s.id).filter(id => !TERMINAL_STAGES.has(id) && id !== 'intake');
 }
 
 /**
@@ -141,7 +142,7 @@ export function computeQueueHealth(
   const entries: QueueHealthEntry[] = [];
 
   for (const item of items) {
-    const inFlightStages = item.stages.filter(stage => stage !== DONE_STAGE);
+    const inFlightStages = item.stages.filter(stage => !TERMINAL_STAGES.has(stage));
     if (inFlightStages.length === 0) continue;
 
     const open = openEntries(item);
