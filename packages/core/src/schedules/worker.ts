@@ -251,13 +251,31 @@ export async function executeAgentSchedule(
   };
   const log = ctx.logger ?? mastra.getLogger?.();
 
-  const agent = (() => {
+  let agent = (() => {
     try {
       return mastra.getAgentById(agentId);
     } catch {
       return null;
     }
   })();
+  if (!agent) {
+    // Stored (editor) agents aren't registered on the Mastra instance until
+    // they've been hydrated once in this process, so a registry miss doesn't
+    // mean the agent is gone. Fall back to the editor before self-cleaning —
+    // hydration re-registers the agent, so later fires take the fast path.
+    try {
+      agent = (await mastra.getEditor?.()?.agent.getById(agentId)) ?? null;
+    } catch (error) {
+      // A transient editor/storage failure does not prove the agent was
+      // removed. Preserve the schedule so a later fire can retry resolution.
+      log?.error?.('Failed to resolve stored agent for schedule', { scheduleId, agentId, error });
+      return {
+        status: 'agent-missing',
+        outcome: 'failed',
+        reason: `failed to resolve agent "${agentId}"`,
+      };
+    }
+  }
   if (!agent) {
     await selfClean(mastra, scheduleId);
     return {
