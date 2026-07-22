@@ -515,7 +515,7 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
       <div className="flex min-h-0 flex-1 items-center justify-center-safe overflow-y-auto py-8">
         <section
           aria-label="Connect a repository"
-          className="w-full max-w-2xl rounded-xl border border-border1 bg-surface1"
+          className="w-full max-w-2xl rounded-2xl border border-border1 bg-surface2/80"
         >
           <EmptyState
             as="h2"
