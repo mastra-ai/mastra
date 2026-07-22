@@ -279,7 +279,13 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
         const returnTo = c.req.query('return_to') || '/';
-        const query = new URLSearchParams({ return_to: returnTo, originator: routeBaseUrl(ctx, c.req.url) });
+        const originator = routeBaseUrl(ctx, c.req.url);
+        console.info('[MastraCode Web] Starting Platform Linear connect flow', {
+          orgId: tenant.orgId,
+          returnTo,
+          originator,
+        });
+        const query = new URLSearchParams({ return_to: returnTo, originator });
         const location = await this.#client.requestRedirect('GET', `${API_PREFIX}/authorize?${query}`);
         return c.redirect(location);
       },

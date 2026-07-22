@@ -131,6 +131,10 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#startedAt = this.#now() - 1;
     this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
     this.#running = true;
+    this.deps.logger.info('Platform GitHub event polling started', {
+      intervalMs: this.#intervalMs,
+      leaseTtlMs: this.#leaseTtlMs,
+    });
     this.#schedule(0);
   }
 
@@ -171,7 +175,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
       nextDelay = await this.#poll();
     } catch (error) {
       nextDelay = retryDelay(error, this.#intervalMs);
-      this.deps?.logger.warn('Platform GitHub event polling cycle failed', {
+      this.deps?.logger.error('Platform GitHub event polling cycle failed', {
         error: error instanceof Error ? error.message : String(error),
         retryInMs: nextDelay,
       });
@@ -229,7 +233,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
       } catch (error) {
         const delay = retryDelay(error, this.#intervalMs);
         retryInMs = Math.max(retryInMs, delay);
-        this.deps?.logger.warn('Platform GitHub repository event polling failed', {
+        this.deps?.logger.error('Platform GitHub repository event polling failed', {
           repositoryId: repository.id,
           error: error instanceof Error ? error.message : String(error),
           retryInMs: delay,
@@ -300,7 +304,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
             retirePullRequestSubscription(id, status, this.#github.integrationStorage),
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
           onTargetError: (subscription, error) => {
-            this.deps?.logger.warn('Platform GitHub event delivery failed for a subscription', {
+            this.deps?.logger.error('Platform GitHub event delivery failed for a subscription', {
               subscriptionId: subscription.id,
               resourceId: subscription.resourceId,
               threadId: subscription.threadId,

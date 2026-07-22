@@ -427,10 +427,16 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
         const redirectTo = c.req.query('redirectTo') || c.req.query('return_to') || '/';
+        const originator = routeBaseUrl(ctx, c.req.url);
+        console.info('[MastraCode Web] Starting Platform GitHub connect flow', {
+          orgId: tenant.orgId,
+          redirectTo,
+          originator,
+        });
         const query = new URLSearchParams({
           action: 'install',
           redirectTo,
-          originator: routeBaseUrl(ctx, c.req.url),
+          originator,
         });
         const { url } = await this.#client.request<{ url: string }>(
           'GET',

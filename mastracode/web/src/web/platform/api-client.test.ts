@@ -73,7 +73,8 @@ describe('PlatformApiClient', () => {
     );
   });
 
-  it('propagates rate-limit status and retry timing', async () => {
+  it('propagates rate-limit status and retry timing with an error log', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ detail: 'Rate limited' }), {
         status: 429,
@@ -86,9 +87,20 @@ describe('PlatformApiClient', () => {
       .catch(caught => caught);
     expect(error).toBeInstanceOf(PlatformApiError);
     expect(error).toMatchObject({ message: 'Rate limited', status: 429, retryAfterSeconds: 17 });
+    expect(errorLog).toHaveBeenCalledWith(
+      '[MastraCode Web] Platform API request failed',
+      expect.objectContaining({
+        method: 'GET',
+        path: '/v1/test',
+        status: 429,
+        retryAfterSeconds: 17,
+        message: 'Rate limited',
+      }),
+    );
   });
 
-  it('redacts the access token from HTTP and transport errors', async () => {
+  it('redacts the access token from HTTP, transport errors, and logs', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const httpFetch = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ detail: `Rejected Bearer ${accessToken}` }), {
         status: 502,
@@ -103,6 +115,8 @@ describe('PlatformApiClient', () => {
     await expect(client(transportFetch).request('GET', '/v1/test')).rejects.toMatchObject({
       message: 'socket failure for [REDACTED]',
     });
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain(accessToken);
+    expect(JSON.stringify(errorLog.mock.calls)).toContain('[REDACTED]');
   });
 
   it('honors a caller-supplied abort signal', async () => {
