@@ -159,6 +159,22 @@ const notConnectedStatus: GithubStatus = {
   reason: 'not_connected',
 };
 
+const missingGithubConfigStatus: GithubStatus = {
+  enabled: false,
+  connected: false,
+  installations: [],
+  reason: 'missing_config',
+  diagnostics: {
+    githubAppConfigured: false,
+    factoryAuthEnabled: true,
+    appDbConfigured: true,
+    stateSecretConfigured: true,
+    sandboxEnabled: true,
+    sandboxProvider: 'local',
+    missingGithubAppEnvVars: ['GITHUB_APP_ID'],
+  },
+};
+
 /** Both sources selected so GitHub/Linear specs see data by default. */
 const defaultIntakeConfig: IntakeConfig = {
   github: { enabled: true, sourceIds: [githubRepository.slug] },
@@ -651,6 +667,19 @@ describe('Factory workflow routing', () => {
 
     expect(await screen.findByText(/Connect a repository to start intake/)).toBeInTheDocument();
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
+  });
+
+  it('given GitHub server config is missing, when visiting Work, then local setup instructions are actionable', async () => {
+    const emptyFactory: Factory = {
+      ...githubProject,
+      binding: { kind: 'factory', factoryProjectId: FACTORY_PROJECT_ID, repositories: [] },
+    };
+    renderAt('work', emptyFactory, missingGithubConfigStatus);
+
+    expect(await screen.findByText('GitHub is disabled on the server.')).toBeInTheDocument();
+    expect(screen.getByText('mastracode/web/.env')).toBeInTheDocument();
+    expect(screen.getByText('http://localhost:5173/auth/github/callback')).toBeInTheDocument();
+    expect(screen.getByText('pnpm web:dev')).toBeInTheDocument();
   });
 });
 

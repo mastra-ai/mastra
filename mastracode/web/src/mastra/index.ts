@@ -28,6 +28,9 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraFactory } from '@mastra/factory';
+import type { FactoryIntegration } from '@mastra/factory/integrations/base';
+import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
@@ -41,6 +44,80 @@ function positiveInt(raw: string | undefined): number | undefined {
   const parsed = Number(raw);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined;
   return parsed;
+}
+
+interface IntegrationEnvField {
+  name: string;
+  value: string | undefined;
+}
+
+/**
+ * Integration credential groups are all-or-nothing. A partial group usually
+ * means a typo in `.env`; fail at boot instead of serving a misleading
+ * "integration disabled" status.
+ */
+function assertCompleteIntegrationEnv(label: string, fields: readonly IntegrationEnvField[]): void {
+  let configured = 0;
+  const missing: string[] = [];
+  for (const field of fields) {
+    if (field.value) configured += 1;
+    else missing.push(field.name);
+  }
+  if (configured === 0 || configured === fields.length) return;
+  throw new Error(`${label} integration is partially configured — missing ${missing.join(', ')}.`);
+}
+
+const githubConfig = {
+  appId: process.env.GITHUB_APP_ID?.trim(),
+  privateKey: process.env.GITHUB_APP_PRIVATE_KEY?.trim(),
+  clientId: process.env.GITHUB_APP_CLIENT_ID?.trim(),
+  clientSecret: process.env.GITHUB_APP_CLIENT_SECRET?.trim(),
+  slug: process.env.GITHUB_APP_SLUG?.trim(),
+  webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim(),
+};
+assertCompleteIntegrationEnv('GitHub', [
+  { name: 'GITHUB_APP_ID', value: githubConfig.appId },
+  { name: 'GITHUB_APP_PRIVATE_KEY', value: githubConfig.privateKey },
+  { name: 'GITHUB_APP_CLIENT_ID', value: githubConfig.clientId },
+  { name: 'GITHUB_APP_CLIENT_SECRET', value: githubConfig.clientSecret },
+  { name: 'GITHUB_APP_SLUG', value: githubConfig.slug },
+]);
+
+const linearConfig = {
+  clientId: process.env.LINEAR_CLIENT_ID?.trim(),
+  clientSecret: process.env.LINEAR_CLIENT_SECRET?.trim(),
+};
+assertCompleteIntegrationEnv('Linear', [
+  { name: 'LINEAR_CLIENT_ID', value: linearConfig.clientId },
+  { name: 'LINEAR_CLIENT_SECRET', value: linearConfig.clientSecret },
+]);
+
+const integrations: FactoryIntegration[] = [];
+if (
+  githubConfig.appId &&
+  githubConfig.privateKey &&
+  githubConfig.clientId &&
+  githubConfig.clientSecret &&
+  githubConfig.slug
+) {
+  integrations.push(
+    new GithubIntegration({
+      appId: githubConfig.appId,
+      privateKey: githubConfig.privateKey,
+      clientId: githubConfig.clientId,
+      clientSecret: githubConfig.clientSecret,
+      slug: githubConfig.slug,
+      webhookSecret: githubConfig.webhookSecret,
+    }),
+  );
+}
+if (linearConfig.clientId && linearConfig.clientSecret) {
+  integrations.push(
+    new LinearIntegration({
+      clientId: linearConfig.clientId,
+      clientSecret: linearConfig.clientSecret,
+    }),
+  );
 }
 
 // Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
@@ -149,6 +226,7 @@ const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectio
 
 export const factory = new MastraFactory({
   auth,
+  integrations,
   sandbox: {
     machine: sandbox,
     // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores

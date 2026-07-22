@@ -56,6 +56,24 @@ describe('platform entry (src/mastra/index.ts)', () => {
       vi.resetModules();
     });
 
+    it('registers integrations when their complete env groups are configured', { timeout: 60_000 }, async () => {
+      vi.stubEnv('GITHUB_APP_ID', '12345');
+      vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+      vi.stubEnv('GITHUB_APP_CLIENT_ID', 'github-client');
+      vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'github-secret');
+      vi.stubEnv('GITHUB_APP_SLUG', 'mastra-test');
+      vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'webhook-secret');
+      vi.stubEnv('LINEAR_CLIENT_ID', 'linear-client');
+      vi.stubEnv('LINEAR_CLIENT_SECRET', 'linear-secret');
+
+      // The env must be complete before the entry module evaluates its integration wiring.
+      const mod = await import('./index.js');
+      const paths = (mod.mastra.getServer()?.apiRoutes ?? []).map(route => route.path);
+
+      expect(paths).toContain('/auth/github/connect');
+      expect(paths).toContain('/auth/linear/connect');
+    });
+
     it('rejects boot when the GitHub group is partially configured', { timeout: 60_000 }, async () => {
       vi.resetModules();
       // The test env may carry a full GitHub config — blank everything but the
