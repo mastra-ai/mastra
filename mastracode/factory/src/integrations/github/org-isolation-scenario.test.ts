@@ -58,6 +58,7 @@ interface Tables {
   projectRepositories: Array<Record<string, any>>;
   sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
+  sessions: Array<Record<string, any>>;
 }
 const tables: Tables = {
   installations: [],
@@ -66,6 +67,7 @@ const tables: Tables = {
   projectRepositories: [],
   sandboxes: [],
   worktrees: [],
+  sessions: [],
 };
 const sourceControlStorage = new SourceControlStorageInMemory();
 
@@ -379,12 +381,14 @@ beforeEach(() => {
   tables.projectRepositories = [];
   tables.sandboxes = [];
   tables.worktrees = [];
+  tables.sessions = [];
   sourceControlStorage.installationsRows = tables.installations as any;
   sourceControlStorage.repositoriesRows = tables.repositories as any;
   sourceControlStorage.connectionsRows = tables.connections as any;
   sourceControlStorage.projectRepositoriesRows = tables.projectRepositories as any;
   sourceControlStorage.sandboxesRows = tables.sandboxes as any;
   sourceControlStorage.worktreesRows = tables.worktrees as any;
+  sourceControlStorage.sessionsRows = tables.sessions as any;
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
@@ -431,7 +435,7 @@ describe('same repo connected by two orgs stays isolated', () => {
     // Org A cannot ensure / worktree / push against Org B's project-repository id.
     expect((await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/ensure`, {})).status).toBe(404);
     expect(
-      (await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/worktree`, { branch: 'feat/x' })).status,
+      (await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/sessions`, { branch: 'feat/x' })).status,
     ).toBe(404);
     expect(
       (await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/push`, { branch: 'feat/x' })).status,
@@ -440,12 +444,12 @@ describe('same repo connected by two orgs stays isolated', () => {
 });
 
 // ── Scenario 2: two users, one org, own sandboxes ────────────────────────
-describe('two users in one org each get their own sandbox + worktree', () => {
+describe('two users in one org each get their own sandbox + session workspace', () => {
   function seedOrgProject() {
     tables.projectRepositories.push(projectRepositoryRow({ id: 'p1', orgId: 'orgA', userId: 'a1', installationId: 7 }));
   }
 
-  it('creates a distinct (project,user) sandbox row per user and hides worktrees across users', async () => {
+  it('creates a distinct (project,user) sandbox row per user and hides sessions across users', async () => {
     seedOrgProject();
     const user1 = buildApp({ workosId: 'a1', organizationId: 'orgA' });
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
@@ -459,37 +463,43 @@ describe('two users in one org each get their own sandbox + worktree', () => {
     expect(tables.sandboxes.filter(s => s.projectRepositoryId === 'p1' && s.userId === 'a1')).toHaveLength(1);
     expect(tables.sandboxes.filter(s => s.projectRepositoryId === 'p1' && s.userId === 'a2')).toHaveLength(1);
 
-    // User 1 creates a worktree; it is owned by user 1 only.
-    const wt = await postJson(user1, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    expect(wt.status).toBe(200);
-    const wtPath = (await wt.json()).worktreePath as string;
-    expect(tables.worktrees).toHaveLength(1);
-    expect(tables.worktrees[0]).toMatchObject({ userId: 'a1', projectRepositoryId: 'p1' });
+    // User 1 creates a session identity; materialization happens in the workspace factory.
+    const created = await postJson(user1, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    expect(created.status).toBe(200);
+    const session = (await created.json()).session;
+    expect(tables.sessions).toHaveLength(1);
+    expect(tables.sessions[0]).toMatchObject({ userId: 'a1', projectRepositoryId: 'p1' });
+    await sourceControlStorage.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'sb-a1-session',
+      sandboxWorkdir: '/workspace/a1/feat-x',
+    });
 
-    // User 2 cannot commit against user 1's worktree path (scoped to (p,user)).
+    // User 2 cannot address user 1's session workspace.
     const crossCommit = await postJson(user2, '/web/github/projects/p1/commit', {
       message: 'sneaky',
-      worktreePath: wtPath,
+      sessionId: session.sessionId,
     });
     expect(crossCommit.status).toBe(400);
-    expect((await crossCommit.json()).error).toBe('Invalid worktreePath');
+    expect((await crossCommit.json()).error).toBe('Invalid sessionId');
 
-    // User 1 can commit against their own worktree path.
+    // User 1 can commit against their own materialized session workspace.
     const ownCommit = await postJson(user1, '/web/github/projects/p1/commit', {
       message: 'wip',
-      worktreePath: wtPath,
+      sessionId: session.sessionId,
     });
     expect(ownCommit.status).toBe(200);
     expect(await ownCommit.json()).toMatchObject({ committed: true });
   });
 });
 
-// ── Scenario 3: cross-user worktree path rejected even with same branch ───
-describe('cross-user worktree paths are rejected', () => {
-  it('does not let user 2 push user 1 worktree path when both share a branch name', async () => {
+// ── Scenario 3: cross-user session workspace rejected even with same branch ───
+describe('cross-user session workspaces are rejected', () => {
+  it('does not let user 2 push user 1 session workspace when both share a branch name', async () => {
     tables.projectRepositories.push(projectRepositoryRow({ id: 'p1', orgId: 'orgA', userId: 'a1', installationId: 7 }));
-    // Both users have their own sandbox bindings + a worktree row on the same
-    // branch name; uniqueness is (project,user,branch) so both can coexist.
+    // Both users have a materialized session on the same branch; ownership is
+    // still scoped by project and user.
+    const sessions = new Map<string, { id: string; sessionId: string }>();
     for (const userId of ['a1', 'a2']) {
       tables.sandboxes.push({
         id: `sbrow-${userId}`,
@@ -499,32 +509,37 @@ describe('cross-user worktree paths are rejected', () => {
         sandboxWorkdir: '/workspace/hello',
         materializedAt: new Date(),
       });
-      tables.worktrees.push({
-        id: `wt-${userId}`,
+      const session = await sourceControlStorage.sessions.create({
+        sessionId: `session-${userId}`,
+        projectRepositoryId: 'p1',
         orgId: 'orgA',
         userId,
-        projectRepositoryId: 'p1',
         branch: 'feat/x',
         baseBranch: 'main',
-        worktreePath: `/workspace/hello/../worktrees/${userId}/feat/x`,
       });
+      await sourceControlStorage.sessions.setSandbox({
+        id: session.id,
+        sandboxId: `sb-${userId}`,
+        sandboxWorkdir: `/workspace/sessions/${userId}/feat-x`,
+      });
+      sessions.set(userId, session);
     }
 
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
 
-    // User 2 supplies user 1's worktree path → rejected (path not owned).
+    // User 2 supplies user 1's session id → rejected (session not owned).
     const res = await postJson(user2, '/web/github/projects/p1/push', {
       branch: 'feat/x',
-      worktreePath: '/workspace/hello/../worktrees/a1/feat/x',
+      sessionId: sessions.get('a1')!.sessionId,
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('Invalid worktreePath');
+    expect((await res.json()).error).toBe('Invalid sessionId');
     expect(pushBranch).not.toHaveBeenCalled();
 
-    // User 2 with their own worktree path succeeds.
+    // User 2 with their own session id succeeds.
     const ok = await postJson(user2, '/web/github/projects/p1/push', {
       branch: 'feat/x',
-      worktreePath: '/workspace/hello/../worktrees/a2/feat/x',
+      sessionId: sessions.get('a2')!.sessionId,
     });
     expect(ok.status).toBe(200);
     expect(pushBranch).toHaveBeenCalledOnce();

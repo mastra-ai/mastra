@@ -8,7 +8,7 @@
  */
 import type { AgentControllerSessionState } from '@mastra/client-js';
 import { QueryClient } from '@tanstack/react-query';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -170,22 +170,29 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
-  it('given no factory, when visiting /new, then the first-run welcome screen is shown', async () => {
+  it('given no factory, when visiting /new, then the Factory onboarding is shown', async () => {
     renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
 
-    expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create factory from local folder' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Build software with a Factory that knows your work.' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create my first factory' })).toBeInTheDocument();
   });
 
-  it('given no factory, when local factory creation is opened, then the creation panel replaces the welcome screen', async () => {
+  it('given no factory, when onboarding starts, then repository selection replaces the introduction', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: false, connected: false, installations: [], reason: 'missing_config' }),
+      ),
+    );
     const user = userEvent.setup();
     renderRoutes('/new', AUTH_DISABLED, { withFactory: false });
 
-    await user.click(await screen.findByRole('button', { name: 'Create factory from local folder' }));
+    await user.click(await screen.findByRole('button', { name: 'Create my first factory' }));
 
-    const creationPanel = await screen.findByRole('region', { name: 'Create Factory' });
-    expect(within(creationPanel).getByRole('button', { name: 'Bind a local folder instead' })).toBeInTheDocument();
-    expect(screen.queryByText('Welcome to MastraCode')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Choose your codebase.' })).toBeInTheDocument();
+    expect(screen.queryByText('Build software with a Factory that knows your work.')).not.toBeInTheDocument();
   });
 
   it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {

@@ -508,79 +508,72 @@ async function postRepositoryGitOp<T>(
   return (await res.json()) as T;
 }
 
-export interface WorktreeResult {
-  worktreePath: string;
+export interface FactoryUserSession {
+  id: string;
+  sessionId: string;
+  projectRepositoryId: string;
+  orgId: string;
+  userId: string;
   branch: string;
   baseBranch: string;
-  resourceId: string;
+  sandboxId: string | null;
+  sandboxWorkdir: string | null;
+  materializedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface PersistedWorktree {
-  worktreePath: string;
-  branch: string;
-  baseBranch: string;
-}
-
-/** List the signed-in user's server-persisted worktrees for a project repository. */
-export async function listWorktrees(baseUrl: string, projectRepositoryId: string): Promise<PersistedWorktree[]> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/worktrees`, {
-    credentials: 'include',
+export async function listUserSessions(baseUrl: string, projectRepositoryId: string): Promise<FactoryUserSession[]> {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/sessions`, {
     headers: { Accept: 'application/json' },
+    credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to list worktrees (${res.status})`);
-  const body = (await res.json()) as { worktrees: PersistedWorktree[] };
-  return body.worktrees;
+  if (!res.ok) throw new Error(`Failed to list sessions (${res.status})`);
+  return ((await res.json()) as { sessions: FactoryUserSession[] }).sessions;
 }
 
-/**
- * Create (or reuse) a git worktree + feature branch for a unit of work inside
- * the project's cloud sandbox. `baseBranch` defaults to the project's default
- * branch server-side when omitted.
- */
-export async function createWorktree(
+export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,
   branch: string,
   baseBranch?: string,
-): Promise<WorktreeResult> {
-  return postRepositoryGitOp<WorktreeResult>(baseUrl, projectRepositoryId, 'worktree', { branch, baseBranch });
+): Promise<FactoryUserSession> {
+  const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(baseUrl, projectRepositoryId, 'sessions', {
+    branch,
+    baseBranch,
+  });
+  return result.session;
 }
 
-export interface DeleteWorktreeResult {
-  removed: boolean;
-  branch: string;
-  worktreePath: string;
+export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
+  return ((await res.json()) as { session: FactoryUserSession }).session;
 }
 
-/**
- * Delete a worktree's checkout (and local feature branch) from the project's
- * sandbox and drop its persisted row. Destructive: any uncommitted work in the
- * checkout is discarded, so callers must confirm with the user first.
- */
-export async function deleteWorktree(
-  baseUrl: string,
-  projectRepositoryId: string,
-  branch: string,
-): Promise<DeleteWorktreeResult> {
-  return postRepositoryGitOp<DeleteWorktreeResult>(baseUrl, projectRepositoryId, 'worktree/delete', { branch });
+export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
 }
 
 export interface CommitResult {
   committed: boolean;
 }
 
-/**
- * Stage all changes and commit them inside the given worktree. `worktreePath`
- * is validated server-side against persisted worktrees; omit it to commit on the
- * base checkout. Resolves with `committed: false` when there was nothing to commit.
- */
+/** Stage and commit all changes in a Factory session workspace. */
 export async function commitChanges(
   baseUrl: string,
   projectRepositoryId: string,
   message: string,
-  worktreePath?: string,
+  sessionId: string,
 ): Promise<CommitResult> {
-  return postRepositoryGitOp<CommitResult>(baseUrl, projectRepositoryId, 'commit', { message, worktreePath });
+  return postRepositoryGitOp<CommitResult>(baseUrl, projectRepositoryId, 'commit', { message, sessionId });
 }
 
 export interface PushResult {
@@ -588,14 +581,14 @@ export interface PushResult {
   branch: string;
 }
 
-/** Push a branch back to GitHub from inside the sandbox (token minted server-side). */
+/** Push a Factory session branch back to GitHub (token minted server-side). */
 export async function pushBranch(
   baseUrl: string,
   projectRepositoryId: string,
   branch: string,
-  worktreePath?: string,
+  sessionId: string,
 ): Promise<PushResult> {
-  return postRepositoryGitOp<PushResult>(baseUrl, projectRepositoryId, 'push', { branch, worktreePath });
+  return postRepositoryGitOp<PushResult>(baseUrl, projectRepositoryId, 'push', { branch, sessionId });
 }
 
 export interface PullRequestResult {
@@ -611,9 +604,7 @@ export async function openPullRequest(
     title: string;
     body?: string;
     base?: string;
-    worktreePath?: string;
-    sessionId?: string;
-    threadId?: string;
+    sessionId: string;
   },
 ): Promise<PullRequestResult> {
   return postRepositoryGitOp<PullRequestResult>(baseUrl, projectRepositoryId, 'pr', args);

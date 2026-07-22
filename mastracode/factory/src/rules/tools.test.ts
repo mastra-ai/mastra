@@ -48,7 +48,7 @@ async function prepareBoundItem(storage: WorkItemsStorage, source: 'github-issue
       },
     },
     role: source === 'github-pr' ? 'review' : 'work',
-    session: { projectPath: '/worktree', branch: 'factory/item', threadId: 'thread-1' },
+    session: { sessionId: 'resource-1', branch: 'factory/item', threadId: 'thread-1' },
     resourceId: 'resource-1',
     kickoffKey: 'kickoff-1',
     kickoffMessage: null,
@@ -60,7 +60,7 @@ async function execute(tool: ExecutableTool, context: RequestContext, input: unk
 }
 
 describe('factory_transition_work_item', () => {
-  it('is exposed only for the exact active tenant/thread/resource/scope binding', async () => {
+  it('is exposed only for the exact active tenant/thread/resource/session binding', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
     const prepared = await prepareBoundItem(storage);
@@ -83,7 +83,7 @@ describe('factory_transition_work_item', () => {
     ).resolves.toHaveProperty('factory_transition_work_item');
     await expect(
       createFactoryTransitionTools({
-        requestContext: requestContext({ scope: '/other-worktree' }),
+        requestContext: requestContext({ threadId: 'other-thread' }),
         storage,
         transitionService: service,
       }),

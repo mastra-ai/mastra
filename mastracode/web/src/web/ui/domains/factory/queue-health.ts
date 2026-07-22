@@ -145,7 +145,7 @@ export function computeQueueHealth(
     if (inFlightStages.length === 0) continue;
 
     const open = openEntries(item);
-    const active = Object.values(item.sessions).some(ref => activePaths.has(ref.projectPath));
+    const active = Object.values(item.sessions).some(ref => activePaths.has(ref.sessionId));
 
     for (const stage of inFlightStages) {
       const stageAgg = byStage.get(stage);

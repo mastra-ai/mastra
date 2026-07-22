@@ -70,7 +70,7 @@ import { FactoryProjectsStorage } from './storage/domains/projects/base';
 import { QueueHealthStorage } from './storage/domains/queue-health/base';
 import { SourceControlStorage } from './storage/domains/source-control/base';
 import { WorkItemsStorage } from './storage/domains/work-items/base';
-import { getFactoryWorkspace } from './workspace';
+import { createWorkspaceFactory } from './workspace';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
 
@@ -484,16 +484,12 @@ export class MastraFactory {
                   ),
               }
             : {}),
-          ...(storage
-            ? {
-                messageReader: {
-                  listMessages: async input => {
-                    const memory = await storage.getMastraStorage().getStore('memory');
-                    return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
-                  },
-                },
-              }
-            : {}),
+          messageReader: {
+            listMessages: async input => {
+              const memory = await storage.getMastraStorage().getStore('memory');
+              return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
+            },
+          },
         })
       : undefined;
 
@@ -522,7 +518,11 @@ export class MastraFactory {
     // one shared database for all users, separated by `resourceId` scoping.
     const prepared = await prepareAgentControllerMount({
       controllerId: CONTROLLER_ID,
-      workspace: getFactoryWorkspace,
+      workspace: createWorkspaceFactory({
+        ...(this.#config.sandbox ? { sandbox: this.#config.sandbox } : {}),
+        ...(githubIntegration ? { github: githubIntegration } : {}),
+        fleet,
+      }),
       disableGithubSignals: true,
       storage: storage.getMastraStorage(),
       ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
@@ -664,7 +664,6 @@ export class MastraFactory {
     });
 
     this.#prepared = prepared;
-
     this.#factoryProcessor = factoryProcessor;
 
     // Integration lifecycle workers (e.g. polling an upstream without

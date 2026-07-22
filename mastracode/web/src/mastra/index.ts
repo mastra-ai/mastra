@@ -149,7 +149,7 @@ function localSandboxEnv(): Record<string, string> {
 // MASTRACODE_LOCAL_SANDBOX_ROOT (local checkout root, default
 // ~/.mastracode/web/sandboxes).
 const sandboxKind = process.env.MASTRACODE_SANDBOX_PROVIDER ?? (process.env.RAILWAY_API_TOKEN ? 'railway' : 'local');
-const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES);
+const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES) ?? 5;
 let sandbox: WorkspaceSandbox;
 if (sandboxKind === 'railway') {
   const railwayToken = process.env.RAILWAY_API_TOKEN;

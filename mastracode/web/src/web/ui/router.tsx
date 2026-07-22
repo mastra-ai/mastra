@@ -22,15 +22,15 @@ import { MetricsPage } from './domains/factory/MetricsPage';
 import { OverviewPage } from './domains/factory/OverviewPage';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { useActiveFactoryContext } from './domains/workspaces';
+import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
+import { isServerFactory } from './domains/workspaces/services/factories';
 
 function RootLanding() {
   const { activeFactory } = useActiveFactoryContext();
 
-  // RootGuards is fetching and guarding stuff
   if (!activeFactory) return null;
 
-  return <Navigate to={'/factory/board'} replace />;
+  return <Navigate to={isServerFactory(activeFactory) ? '/factory/work' : '/new'} replace />;
 }
 
 function RedirectToDraftThread() {

@@ -5,9 +5,10 @@ import { Outlet, useLocation } from 'react-router';
 import { PageLayoutMainViewProvider } from '../../ui/PageLayout';
 import { OverlaysProvider, useOverlays } from '../../lib/overlays';
 import { SettingsPanel } from '../settings/components/SettingsPanel';
+import { SettingsHeader } from '../settings/components/SettingsHeader';
 import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
 import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
@@ -55,6 +56,7 @@ function ChatShell() {
   // action (or the switcher) rather than being forced open, but stays
   // non-dismissable until a first factory exists.
   const factoriesOpen = overlays.isOpen('factories');
+  const settingsOpen = overlays.isOpen('settings');
 
   const closeFactories = () => {
     overlays.close('factories');
@@ -62,7 +64,7 @@ function ChatShell() {
     requestAnimationFrame(() => document.getElementById(focusTargetId)?.focus());
   };
 
-  const mainView = overlays.isOpen('settings') ? (
+  const mainView = settingsOpen ? (
     <SettingsPanel />
   ) : factoriesOpen ? (
     <FactoriesPanel onClose={factorySetupRequired ? undefined : closeFactories} />
@@ -71,9 +73,15 @@ function ChatShell() {
   return (
     <>
       {!activeFactory && mainView !== undefined ? (
-        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">{mainView}</main>
+        <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">
+          {settingsOpen && isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined}
+          {mainView}
+        </main>
       ) : (
-        <PageLayoutMainViewProvider view={mainView}>
+        <PageLayoutMainViewProvider
+          view={mainView}
+          mobileHeader={settingsOpen ? <SettingsHeader autoFocus={isMobile} placement="mobile" /> : undefined}
+        >
           <Outlet />
         </PageLayoutMainViewProvider>
       )}

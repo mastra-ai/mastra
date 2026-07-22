@@ -84,7 +84,7 @@ export function WorkspacesSection() {
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
     allWorkItems.flatMap(item =>
-      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.projectPath, item] as const),
+      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.sessionId, item] as const),
     ),
   );
   const rows = worktrees.flatMap(worktree => {

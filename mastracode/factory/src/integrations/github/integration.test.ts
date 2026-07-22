@@ -361,7 +361,7 @@ describe('GithubIntegration FactoryIntegration surface', () => {
     });
     expect(routes.length).toBeGreaterThan(0);
     for (const route of routes) {
-      expect(route.path).toMatch(/^\/(web|auth)\/github\//);
+      expect(route.path).toMatch(/^\/(web|auth)\/github\/|^\/web\/user-sessions\//);
     }
   });
 

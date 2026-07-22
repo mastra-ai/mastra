@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MemoryRouter } from 'react-router';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
@@ -36,9 +37,11 @@ const repo = {
 
 function renderOnboarding() {
   return renderWithProviders(
-    <ActiveFactoryProvider>
-      <EmptyFactoryState />
-    </ActiveFactoryProvider>,
+    <MemoryRouter>
+      <ActiveFactoryProvider>
+        <EmptyFactoryState />
+      </ActiveFactoryProvider>
+    </MemoryRouter>,
   );
 }
 

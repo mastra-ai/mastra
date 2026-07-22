@@ -24,7 +24,7 @@ async function prepareBinding(storage: WorkItemsStorage) {
       },
     },
     role: 'work',
-    session: { projectPath: '/worktree', branch: 'factory/issue-1', threadId: 'thread-1' },
+    session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
     resourceId: 'resource-1',
     kickoffKey: 'kickoff-1',
     kickoffMessage: null,
@@ -32,7 +32,7 @@ async function prepareBinding(storage: WorkItemsStorage) {
 }
 
 describe('Factory run binding authority', () => {
-  it('requires the complete tenant, project, thread, resource, and scope tuple', async () => {
+  it('requires the complete tenant, project, thread, resource, and session tuple', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBinding(storage);
     const exact = {
@@ -40,7 +40,7 @@ describe('Factory run binding authority', () => {
       factoryProjectId: PROJECT_ID,
       threadId: 'thread-1',
       resourceId: 'resource-1',
-      projectPath: '/worktree',
+      sessionId: 'session-1',
     };
 
     await expect(storage.findActiveRunBinding(exact)).resolves.toMatchObject({ id: prepared.binding.id });
@@ -49,7 +49,7 @@ describe('Factory run binding authority', () => {
       { factoryProjectId: '22222222-2222-4222-8222-222222222222' },
       { threadId: 'other-thread' },
       { resourceId: 'other-resource' },
-      { projectPath: '/other-worktree' },
+      { sessionId: 'other-session' },
     ]) {
       await expect(storage.findActiveRunBinding({ ...exact, ...mismatch })).resolves.toBeNull();
     }
@@ -63,7 +63,7 @@ describe('Factory run binding authority', () => {
       factoryProjectId: PROJECT_ID,
       threadId: 'thread-1',
       resourceId: 'resource-1',
-      projectPath: '/worktree',
+      sessionId: 'session-1',
     };
 
     await expect(

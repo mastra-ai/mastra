@@ -7,7 +7,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config';
-import { ensureFactoryRuleWorktree } from '../integrations/github/factory-worktree';
+import { ensureFactoryRuleSession } from '../integrations/github/factory-session';
 import type { GithubIntegration } from '../integrations/github/integration';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher';
 import { FactoryGithubEventService } from '../rules/github-service';
@@ -147,7 +147,6 @@ export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']):
 }
 
 async function prepareFactoryRuleBinding(
-  deps: Pick<FactoryApiRoutesDeps, 'fleet' | 'factoryStorage'>,
   github: GithubIntegration,
   coordinator: FactoryStartCoordinator,
   input: FactoryBindingPreparationInput,
@@ -155,10 +154,8 @@ async function prepareFactoryRuleBinding(
   const branch = factoryRuleBranch(input.item);
   const repositorySlug =
     typeof input.item.metadata?.repository === 'string' ? input.item.metadata.repository : undefined;
-  const preparedWorktree = await ensureFactoryRuleWorktree({
+  const preparedSession = await ensureFactoryRuleSession({
     github,
-    fleet: deps.fleet,
-    factoryStorage: deps.factoryStorage,
     orgId: input.record.orgId,
     factoryProjectId: input.record.factoryProjectId,
     repositorySlug,
@@ -169,14 +166,11 @@ async function prepareFactoryRuleBinding(
 
   await coordinator.prepare({
     orgId: input.record.orgId,
-    userId: preparedWorktree.userId,
+    userId: preparedSession.userId,
     factoryProjectId: input.record.factoryProjectId,
-    resourceId: input.record.factoryProjectId,
-    projectPath: preparedWorktree.projectPath,
-    branch,
+    sessionId: preparedSession.sessionId,
     threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
     kickoffKey: input.record.id,
-    kickoffMessage: null,
     destinationStage: destinationStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
     workItem: {
       id: input.item.id,
@@ -321,34 +315,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       context.hooks = {
         ...context.hooks,
         ...(githubEventService ? { ingestGithubEvent: event => githubEventService.ingest(event) } : {}),
-        ...(workItems
-          ? {
-              revokeFactoryBindingsForProjectPath: async (input: {
-                orgId: string;
-                factoryProjectId: string;
-                projectPath: string;
-              }) => {
-                const bindings = await workItems.listActiveRunBindings();
-                await Promise.all(
-                  bindings
-                    .filter(
-                      binding =>
-                        binding.orgId === input.orgId &&
-                        binding.factoryProjectId === input.factoryProjectId &&
-                        binding.projectPath === input.projectPath,
-                    )
-                    .map(binding =>
-                      workItems.revokeRunBinding({
-                        orgId: binding.orgId,
-                        factoryProjectId: binding.factoryProjectId,
-                        bindingId: binding.id,
-                        revokedAt: new Date(),
-                      }),
-                    ),
-                );
-              },
-            }
-          : {}),
       };
     }
     if (integration.id === 'linear' && linearIssueService) {
@@ -366,7 +332,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       new FactoryTransitionService({ rules: deps.rules, storage: deps.domains.workItems }))
     : undefined;
   const startCoordinator = transitionService
-    ? new FactoryStartCoordinator(deps.controller, deps.domains.workItems, transitionService)
+    ? new FactoryStartCoordinator(
+        deps.controller,
+        deps.domains.workItems,
+        transitionService,
+        githubIntegration?.sourceControlStorage,
+      )
     : undefined;
   if (transitionService && startCoordinator) {
     deps.onFactoryRuntime?.({
@@ -374,7 +345,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       ...(githubIntegration
         ? {
             prepareBinding: (input: FactoryBindingPreparationInput) =>
-              prepareFactoryRuleBinding(deps, githubIntegration, startCoordinator, input),
+              prepareFactoryRuleBinding(githubIntegration, startCoordinator, input),
           }
         : {}),
     });

@@ -36,7 +36,7 @@ async function setup(permission: string | undefined) {
     installationId: installation.id,
     createdByUserId: 'user-1',
   });
-  await sourceControl.projectRepositories.link({
+  const projectRepository = await sourceControl.projectRepositories.link({
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
@@ -47,7 +47,15 @@ async function setup(permission: string | undefined) {
   const github = {
     getRepositoryCollaboratorPermission: vi.fn().mockResolvedValue(permission),
   } as unknown as GithubIntegration;
-  return { sourceControl, integrationStorage, workItems, projects: seeded.projects, project, github };
+  return {
+    sourceControl,
+    integrationStorage,
+    workItems,
+    projects: seeded.projects,
+    project,
+    projectRepository,
+    github,
+  };
 }
 
 function issueOpened(deliveryId = 'delivery-1') {
@@ -106,7 +114,7 @@ describe('FactoryGithubEventService', () => {
   });
 
   it('moves a trusted issue to Triage and rematerializes it after deletion', async () => {
-    const { github, sourceControl, integrationStorage, workItems, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, project, projectRepository } = await setup('write');
     const rules = builtInFactoryRules();
     const transitionService = new FactoryTransitionService({ storage: workItems, rules });
     const service = new FactoryGithubEventService({
@@ -119,8 +127,8 @@ describe('FactoryGithubEventService', () => {
     const deliveredSignals: Array<{ id: string; contents: string; threadId: string; user: unknown }> = [];
     const sessions = new Map<string, ReturnType<typeof makeSession>>();
 
-    function makeSession(scope: string) {
-      let threadId: string | undefined;
+    function makeSession(key: string, initialThreadId?: string) {
+      let threadId: string | undefined = initialThreadId;
       const session = {
         thread: {
           list: vi.fn(async () => []),
@@ -132,6 +140,7 @@ describe('FactoryGithubEventService', () => {
             threadId = next;
           }),
           setSetting: vi.fn(async () => {}),
+          rename: vi.fn(async () => {}),
           requireId: vi.fn(() => {
             if (!threadId) throw new Error('Thread was not persisted before binding creation.');
             return threadId;
@@ -154,15 +163,23 @@ describe('FactoryGithubEventService', () => {
         sendMessage: vi.fn(async () => {}),
         sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
       };
-      sessions.set(scope, session);
+      sessions.set(key, session);
       return session;
     }
 
     const controller = {
-      createSession: vi.fn(async ({ scope }: { scope: string }) => makeSession(scope)),
-      getSessionByResource: vi.fn(async (_resourceId: string, scope: string) => sessions.get(scope)),
+      createSession: vi.fn(async ({ id, threadId }: { id: string; threadId: string }) => makeSession(id, threadId)),
+      getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId)),
     };
-    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService);
+    await sourceControl.sessions.create({
+      sessionId: 'session-issue-42',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/issue-42',
+      baseBranch: 'main',
+    });
+    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -175,12 +192,9 @@ describe('FactoryGithubEventService', () => {
           orgId: record.orgId,
           userId: 'user-1',
           factoryProjectId: record.factoryProjectId,
-          resourceId: project.id,
-          projectPath: '/workspace/factory-issue-42',
-          branch: 'factory/issue-42',
+          sessionId: 'session-issue-42',
           threadTitle: `Issue: ${item.title}`,
           kickoffKey: record.idempotencyKey,
-          kickoffMessage: null,
           destinationStage: 'triage',
           workItem: { id: item.id, role, input: item },
         });
@@ -197,16 +211,16 @@ describe('FactoryGithubEventService', () => {
       stages: ['triage'],
       sessions: {
         triage: {
-          projectPath: '/workspace/factory-issue-42',
+          sessionId: 'session-issue-42',
           branch: 'factory/issue-42',
-          threadId: 'thread-issue-42',
+          threadId: 'session-issue-42',
         },
       },
     });
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(deliveredSignals).toEqual([
       expect.objectContaining({
-        threadId: 'thread-issue-42',
+        threadId: 'session-issue-42',
         contents: expect.stringContaining('<skill name="understand-issue">'),
         user: { workosId: 'user-1', organizationId: 'org-1' },
       }),

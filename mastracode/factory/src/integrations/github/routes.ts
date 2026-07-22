@@ -11,6 +11,7 @@
  * so the SPA can cleanly hide all GitHub UI.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -33,17 +34,15 @@ import type {
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config';
 import type { GithubIntegration } from './integration';
 import { withProjectLock } from './project-lock';
+
 import {
   commitAll,
   computeWorktreePath,
   ensureProjectSandbox,
-  ensureWorktree,
   isValidGitRef as isValidGitRefSandbox,
   materializeRepo,
   MaterializeError,
   pushBranch,
-  removeWorktree,
-  runWorktreeSetup,
   teardownProjectSandbox,
   WorktreeError,
 } from './sandbox';
@@ -109,12 +108,6 @@ export interface MountGithubRoutesOptions {
   projects?: FactoryProjectsStorage;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
-  /** Revoke Factory agent authority before deleting the worktree that scopes it. */
-  revokeFactoryBindingsForProjectPath?: (input: {
-    orgId: string;
-    factoryProjectId: string;
-    projectPath: string;
-  }) => Promise<void>;
 }
 
 /**
@@ -949,17 +942,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
-  // ── Worktree / branch / commit / push / PR ──────────────────────────────
-  routes.push(
-    ...buildProjectGitRoutes({
-      github,
-      auth,
-      fleet,
-      storage,
-      emitAudit,
-      revokeFactoryBindingsForProjectPath: options.revokeFactoryBindingsForProjectPath,
-    }),
-  );
+  // ── Sessions / commit / push / PR ────────────────────────────────────────
+  routes.push(...buildProjectGitRoutes({ github, auth, fleet, storage, emitAudit }));
 
   return routes;
 }
@@ -1152,204 +1136,123 @@ function buildProjectGitRoutes({
   fleet,
   storage,
   emitAudit,
-  revokeFactoryBindingsForProjectPath,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   fleet: SandboxFleet;
   storage?: FactoryStorage;
   emitAudit?: AuditEmitter['emit'];
-  revokeFactoryBindingsForProjectPath?: (input: {
-    orgId: string;
-    factoryProjectId: string;
-    projectPath: string;
-  }) => Promise<void>;
 }): ApiRoute[] {
   return [
-    // ── List the signed-in user's persisted worktrees ───────────────────────
-    registerApiRoute('/web/github/projects/:id/worktrees', {
+    // ── Create / list Factory sessions ──────────────────────────────────────
+    registerApiRoute('/web/github/projects/:id/sessions', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOrgProject({ github, auth, c: loose(c) });
-        if ('response' in owned) return owned.response;
-        const rows = await github.sourceControlStorage.worktrees.list({
-          projectRepositoryId: owned.project.id,
-          userId: owned.userId,
-        });
-        return c.json({
-          worktrees: rows.map(row => ({
-            branch: row.branch,
-            baseBranch: row.baseBranch,
-            worktreePath: row.worktreePath,
-          })),
-        });
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+        const projectRepositoryId = c.req.param('id');
+        const project = projectRepositoryId
+          ? await resolveProjectRepository({ github, orgId, projectRepositoryId })
+          : null;
+        if (!project) return c.json({ error: 'Project repository not found' }, 404);
+        const sessions = await github.sourceControlStorage.sessions.list({ projectRepositoryId: project.id, userId });
+        return c.json({ sessions });
       },
     }),
-
-    // ── Create / reuse a worktree + feature branch ──────────────────────────
-    registerApiRoute('/web/github/projects/:id/worktree', {
+    registerApiRoute('/web/github/projects/:id/sessions', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
-        if ('response' in owned) return owned.response;
-        const { userId, project, sandboxRow } = owned;
-
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+        const projectRepositoryId = c.req.param('id');
+        const project = projectRepositoryId
+          ? await resolveProjectRepository({ github, orgId, projectRepositoryId })
+          : null;
+        if (!project) return c.json({ error: 'Project repository not found' }, 404);
         let body: { branch?: unknown; baseBranch?: unknown };
         try {
           body = await c.req.json();
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
-        if (!isValidGitRefSandbox(body.branch)) {
-          return c.json({ error: 'Invalid branch' }, 400);
-        }
+        if (!isValidGitRefSandbox(body.branch)) return c.json({ error: 'Invalid branch' }, 400);
         const baseBranch = body.baseBranch === undefined ? project.defaultBranch : body.baseBranch;
-        if (!isValidGitRefSandbox(baseBranch)) {
-          return c.json({ error: 'Invalid baseBranch' }, 400);
-        }
-        const branch = body.branch;
-
-        try {
-          return await withProjectLock({
-            key: `${project.id}:${userId}`,
-            storage,
-            fn: async () => {
-              const sandbox = await resolveProjectSandbox({ fleet, sandboxRow });
-              const token = await github.mintInstallationToken(Number(project.installation.externalId));
-              const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, {
-                branch,
-                baseBranch,
-                token,
-                repoFullName: project.repository.slug,
-              });
-
-              // Run the project's setup command in the fresh checkout before the
-              // route resolves — callers only start agent runs after this request
-              // succeeds, so the tree is guaranteed set up before any agent
-              // execution. Reused worktrees were already set up on creation.
-              if (!result.reused && project.setupCommand) {
-                await runWorktreeSetup(sandbox, result.worktreePath, project.setupCommand);
-              }
-
-              await github.sourceControlStorage.worktrees.upsert({
-                projectRepositoryId: project.id,
-                userId,
-                branch: result.branch,
-                baseBranch: result.baseBranch,
-                worktreePath: result.worktreePath,
-              });
-
-              if (!result.reused) {
-                await emitAudit?.({
-                  context: loose(c),
-                  input: {
-                    action: 'factory.worktree.created',
-                    factoryProjectId: project.factoryProjectId,
-                    projectRepositoryId: project.id,
-                    targets: [{ type: 'worktree', id: result.worktreePath, name: result.branch }],
-                    metadata: {
-                      branch: result.branch,
-                      baseBranch: result.baseBranch,
-                      worktreePath: result.worktreePath,
-                    },
-                  },
-                });
-              }
-
-              return c.json({
-                worktreePath: result.worktreePath,
-                branch: result.branch,
-                baseBranch: result.baseBranch,
-                resourceId: project.factoryProjectId,
-                projectRepositoryId: project.id,
-              });
-            },
-          });
-        } catch (err) {
-          return gitErrorResponse(loose(c), err);
-        }
+        if (!isValidGitRefSandbox(baseBranch)) return c.json({ error: 'Invalid baseBranch' }, 400);
+        const session = await github.sourceControlStorage.sessions.create({
+          sessionId: randomUUID(),
+          projectRepositoryId: project.id,
+          orgId,
+          userId,
+          branch: body.branch,
+          baseBranch,
+        });
+        return c.json({ session });
       },
     }),
-
-    // ── Delete a worktree + its local feature branch ────────────────────────
-    registerApiRoute('/web/github/projects/:id/worktree/delete', {
-      method: 'POST',
+    registerApiRoute('/web/user-sessions/:sessionId', {
+      method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
-        if ('response' in owned) return owned.response;
-        const { orgId, userId, project, sandboxRow } = owned;
-
-        let body: { branch?: unknown };
-        try {
-          body = await c.req.json();
-        } catch {
-          return c.json({ error: 'Invalid JSON body' }, 400);
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
+        if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
         }
-        if (!isValidGitRefSandbox(body.branch)) {
-          return c.json({ error: 'Invalid branch' }, 400);
+        return c.json({ session });
+      },
+    }),
+    registerApiRoute('/web/user-sessions/:sessionId', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
+        if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
         }
-        const branch = body.branch;
-
-        // Only server-created worktrees (persisted rows owned by this user)
-        // can be deleted; the repo root checkout is never a worktree row.
-        const worktreeRow = await github.sourceControlStorage.worktrees.get({
-          projectRepositoryId: project.id,
-          userId,
-          branch,
-        });
-        if (!worktreeRow) return c.json({ error: 'Unknown worktree' }, 404);
-        if (worktreeRow.worktreePath === sandboxRow.sandboxWorkdir) {
-          return c.json({ error: 'Cannot delete the repo root workspace' }, 400);
-        }
-
-        try {
-          return await withProjectLock({
-            key: `${project.id}:${userId}`,
-            storage,
-            fn: async () => {
-              const sandbox = await resolveProjectSandbox({ fleet, sandboxRow });
-              await revokeFactoryBindingsForProjectPath?.({
-                orgId,
-                factoryProjectId: project.factoryProjectId,
-                projectPath: worktreeRow.worktreePath,
-              });
-              await removeWorktree(sandbox, sandboxRow.sandboxWorkdir, {
-                branch,
-                worktreePath: worktreeRow.worktreePath,
-              });
-              await github.sourceControlStorage.worktrees.delete({ projectRepositoryId: project.id, userId, branch });
-              await emitAudit?.({
-                context: loose(c),
-                input: {
-                  action: 'factory.worktree.deleted',
-                  factoryProjectId: project.factoryProjectId,
-                  projectRepositoryId: project.id,
-                  targets: [{ type: 'worktree', id: worktreeRow.worktreePath, name: branch }],
-                  metadata: { branch, worktreePath: worktreeRow.worktreePath },
-                },
-              });
-              return c.json({ removed: true, branch, worktreePath: worktreeRow.worktreePath });
+        let sandbox: MaterializationSandbox | undefined;
+        if (session.sandboxId) {
+          try {
+            sandbox = await fleet.reattachSandbox(session.sandboxId);
+          } catch {
+            // The provider may already have reclaimed the sandbox.
+          }
+          await fleet.teardownSandbox(
+            {
+              sandboxId: session.sandboxId,
+              setSandboxId: async () => {},
+              clear: async () => {
+                await github.sourceControlStorage.sessions.setSandbox({
+                  id: session.id,
+                  sandboxId: null,
+                  sandboxWorkdir: session.sandboxWorkdir ?? '',
+                });
+              },
             },
-          });
-        } catch (err) {
-          return gitErrorResponse(loose(c), err);
+            sandbox,
+          );
         }
+        await github.sourceControlStorage.sessions.delete(session.id);
+        return c.json({ removed: true });
       },
     }),
 
-    // ── Stage all + commit inside a worktree ────────────────────────────────
+    // ── Stage all + commit inside a Factory session workspace ──────────────
     registerApiRoute('/web/github/projects/:id/commit', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
         if ('response' in owned) return owned.response;
-        const { userId, project, sandboxRow } = owned;
+        const { userId, project } = owned;
 
-        let body: { message?: unknown; worktreePath?: unknown };
+        let body: { message?: unknown; sessionId?: unknown };
         try {
           body = await c.req.json();
         } catch {
@@ -1358,23 +1261,18 @@ function buildProjectGitRoutes({
         if (typeof body.message !== 'string' || body.message.trim().length === 0 || body.message.length > 5000) {
           return c.json({ error: 'Invalid message' }, 400);
         }
-        const workdir = await resolveWorktreePath(
-          github,
-          project.id,
-          userId,
-          body.worktreePath,
-          sandboxRow.sandboxWorkdir,
-        );
-        if (!workdir) {
-          return c.json({ error: 'Invalid worktreePath' }, 400);
+        const sessionWorkspace = await resolveSessionWorkspace(github, project.id, userId, body.sessionId);
+        if (!sessionWorkspace) {
+          return c.json({ error: 'Invalid sessionId' }, 400);
         }
+        const { workdir, sandboxBinding } = sessionWorkspace;
 
         try {
           return await withProjectLock({
             key: `${project.id}:${userId}`,
             storage,
             fn: async () => {
-              const sandbox = await resolveProjectSandbox({ fleet, sandboxRow });
+              const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
               const result = await commitAll(
                 sandbox,
                 workdir,
@@ -1388,8 +1286,8 @@ function buildProjectGitRoutes({
                     action: 'factory.git.commit',
                     factoryProjectId: project.factoryProjectId,
                     projectRepositoryId: project.id,
-                    targets: [{ type: 'worktree', id: workdir }],
-                    metadata: { worktreePath: workdir },
+                    targets: [{ type: 'session', id: sessionWorkspace.session.sessionId }],
+                    metadata: { sessionId: sessionWorkspace.session.sessionId },
                   },
                 });
               }
@@ -1409,9 +1307,9 @@ function buildProjectGitRoutes({
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
         if ('response' in owned) return owned.response;
-        const { userId, project, sandboxRow } = owned;
+        const { userId, project } = owned;
 
-        let body: { branch?: unknown; worktreePath?: unknown };
+        let body: { branch?: unknown; sessionId?: unknown };
         try {
           body = await c.req.json();
         } catch {
@@ -1421,23 +1319,18 @@ function buildProjectGitRoutes({
           return c.json({ error: 'Invalid branch' }, 400);
         }
         const branch = body.branch;
-        const workdir = await resolveWorktreePath(
-          github,
-          project.id,
-          userId,
-          body.worktreePath,
-          sandboxRow.sandboxWorkdir,
-        );
-        if (!workdir) {
-          return c.json({ error: 'Invalid worktreePath' }, 400);
+        const sessionWorkspace = await resolveSessionWorkspace(github, project.id, userId, body.sessionId);
+        if (!sessionWorkspace) {
+          return c.json({ error: 'Invalid sessionId' }, 400);
         }
+        const { workdir, sandboxBinding } = sessionWorkspace;
 
         try {
           return await withProjectLock({
             key: `${project.id}:${userId}`,
             storage,
             fn: async () => {
-              const sandbox = await resolveProjectSandbox({ fleet, sandboxRow });
+              const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
               const token = await github.mintInstallationToken(Number(project.installation.externalId));
               await pushBranch(sandbox, workdir, branch, token, project.repository.slug);
               await emitAudit?.({
@@ -1447,7 +1340,7 @@ function buildProjectGitRoutes({
                   factoryProjectId: project.factoryProjectId,
                   projectRepositoryId: project.id,
                   targets: [{ type: 'branch', id: branch }],
-                  metadata: { branch, worktreePath: workdir },
+                  metadata: { branch, sessionId: sessionWorkspace.session.sessionId },
                 },
               });
               return c.json({ pushed: true, branch });
@@ -1466,16 +1359,14 @@ function buildProjectGitRoutes({
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
         if ('response' in owned) return owned.response;
-        const { orgId, userId, project, sandboxRow } = owned;
+        const { orgId, userId, project } = owned;
 
         let body: {
           branch?: unknown;
           base?: unknown;
           title?: unknown;
           body?: unknown;
-          worktreePath?: unknown;
           sessionId?: unknown;
-          threadId?: unknown;
         };
         try {
           body = await c.req.json();
@@ -1498,15 +1389,9 @@ function buildProjectGitRoutes({
         const head = body.branch;
         const title = body.title;
         const prBody = body.body as string | undefined;
-        const workdir = await resolveWorktreePath(
-          github,
-          project.id,
-          userId,
-          body.worktreePath,
-          sandboxRow.sandboxWorkdir,
-        );
-        if (!workdir) {
-          return c.json({ error: 'Invalid worktreePath' }, 400);
+        const sessionWorkspace = await resolveSessionWorkspace(github, project.id, userId, body.sessionId);
+        if (!sessionWorkspace) {
+          return c.json({ error: 'Invalid sessionId' }, 400);
         }
 
         try {
@@ -1535,38 +1420,31 @@ function buildProjectGitRoutes({
                   metadata: { branch: head, base, url: result.url },
                 },
               });
-              if (
-                typeof body.sessionId === 'string' &&
-                body.sessionId &&
-                typeof body.threadId === 'string' &&
-                body.threadId
-              ) {
-                const pullRequestNumber = pullRequestNumberFromUrl(result.url, project.repository.slug);
-                if (pullRequestNumber) {
-                  await subscribeToPullRequest(
-                    {
-                      orgId,
-                      installationExternalId: project.installation.externalId,
-                      projectRepositoryId: project.id,
-                      repositoryExternalId: project.repository.externalId,
-                      repositorySlug: project.repository.slug,
-                      changeRequestId: pullRequestNumber.toString(),
-                      sessionId: body.sessionId,
-                      ownerId: userId,
-                      resourceId: project.factoryProjectId,
-                      threadId: body.threadId,
-                      sessionScope: workdir,
-                      source: 'factory-pr-create',
-                      subscribedByUserId: userId,
-                    },
-                    github.integrationStorage,
-                  ).catch((error: unknown) => {
-                    console.warn(
-                      `[GitHub] Pull request ${result.url} was created but automatic subscription failed.`,
-                      error,
-                    );
-                  });
-                }
+              const pullRequestNumber = pullRequestNumberFromUrl(result.url, project.repository.slug);
+              if (pullRequestNumber) {
+                const sessionId = sessionWorkspace.session.sessionId;
+                await subscribeToPullRequest(
+                  {
+                    orgId,
+                    installationExternalId: project.installation.externalId,
+                    projectRepositoryId: project.id,
+                    repositoryExternalId: project.repository.externalId,
+                    repositorySlug: project.repository.slug,
+                    changeRequestId: pullRequestNumber.toString(),
+                    sessionId,
+                    ownerId: userId,
+                    resourceId: sessionId,
+                    threadId: sessionId,
+                    source: 'factory-pr-create',
+                    subscribedByUserId: userId,
+                  },
+                  github.integrationStorage,
+                ).catch((error: unknown) => {
+                  console.warn(
+                    `[GitHub] Pull request ${result.url} was created but automatic subscription failed.`,
+                    error,
+                  );
+                });
               }
               return c.json({ url: result.url });
             },
@@ -1620,30 +1498,36 @@ function buildProjectGitRoutes({
   ];
 }
 
-/**
- * Resolve and validate the worktree path a git write operation targets. The
- * path is never trusted from the client verbatim: it must either be the
- * project's repo workdir (committing/pushing on the base checkout) or match a
- * persisted worktree row for this project. Returns the validated path or
- * `undefined` when it isn't recognized.
- */
-async function resolveWorktreePath(
+/** Resolve the materialized workspace owned by a Factory session. */
+async function resolveSessionWorkspace(
   github: GithubIntegration,
   projectId: string,
   userId: string,
-  worktreePath: unknown,
-  repoWorkdir: string,
-): Promise<string | undefined> {
-  if (worktreePath === undefined || worktreePath === repoWorkdir) {
-    return repoWorkdir;
-  }
-  if (typeof worktreePath !== 'string') {
+  sessionId: unknown,
+) {
+  if (typeof sessionId !== 'string') {
     return undefined;
   }
-  const row = await github.sourceControlStorage.worktrees.findByPath({
-    projectRepositoryId: projectId,
-    userId,
-    worktreePath,
-  });
-  return row ? row.worktreePath : undefined;
+  const session = await github.sourceControlStorage.sessions.getBySessionId(sessionId);
+  if (
+    session?.projectRepositoryId !== projectId ||
+    session.userId !== userId ||
+    !session.sandboxId ||
+    !session.sandboxWorkdir
+  ) {
+    return undefined;
+  }
+  return {
+    session,
+    workdir: session.sandboxWorkdir,
+    sandboxBinding: {
+      id: session.id,
+      projectRepositoryId: session.projectRepositoryId,
+      userId: session.userId,
+      sandboxId: session.sandboxId,
+      sandboxWorkdir: session.sandboxWorkdir,
+      materializedAt: session.materializedAt,
+      createdAt: session.createdAt,
+    },
+  };
 }

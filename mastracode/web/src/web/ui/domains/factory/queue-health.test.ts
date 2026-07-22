@@ -97,10 +97,10 @@ describe('computeQueueHealth', () => {
 
   it('counts an entry active when the item has a session whose projectPath is active', () => {
     const active = inStage('execute', 100, {
-      sessions: { work: { projectPath: '/wt/a', branch: 'b', threadId: 't', startedBy: 'u1' } },
+      sessions: { work: { sessionId: '/wt/a', branch: 'b', threadId: 't', startedBy: 'u1' } },
     });
     const idle = inStage('execute', 100, {
-      sessions: { work: { projectPath: '/wt/b', branch: 'b', threadId: 't', startedBy: 'u1' } },
+      sessions: { work: { sessionId: '/wt/b', branch: 'b', threadId: 't', startedBy: 'u1' } },
     });
     const health = computeQueueHealth([active, idle], new Set(['/wt/a']), DEFAULT, NOW);
     const execute = health.stages.find(s => s.stage === 'execute')!;
