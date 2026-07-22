@@ -63,13 +63,9 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-// Factory dev is auth-less by default. `MASTRACODE_AUTH_ENABLED=1` opts dev
-// back in (platform-backed Studio auth); production can opt out explicitly.
-// Otherwise MastraFactory installs its platform-backed auth provider.
-const authExplicitlyEnabled = process.env.MASTRACODE_AUTH_ENABLED === '1';
-const authDisabled =
-  !authExplicitlyEnabled &&
-  (process.env.MASTRACODE_AUTH_DISABLED === '1' || process.env.MASTRA_FACTORY_DEV === 'true');
+// Factory dev is auth-less by default. Production can opt out explicitly;
+// otherwise MastraFactory installs its platform-backed auth provider.
+const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 let auth: IMastraAuthProvider | null | undefined;
 
 if (authDisabled) {

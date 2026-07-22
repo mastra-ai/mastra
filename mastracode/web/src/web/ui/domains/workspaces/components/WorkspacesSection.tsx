@@ -56,7 +56,9 @@ export function WorkspacesSection() {
 
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
-    allWorkItems.flatMap(item => Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.sessionId, item] as const)),
+    allWorkItems.flatMap(item =>
+      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.sessionId, item] as const),
+    ),
   );
   const rows = workspaceRows.flatMap(workspace => {
     const item = workItemByPath.get(workspace.sessionId);
@@ -77,7 +79,9 @@ export function WorkspacesSection() {
     ];
   });
   const latestRows = (review: boolean) => {
-    const sorted = [...rows.filter(row => row.review === review)].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const sorted = [...rows.filter(row => row.review === review)].sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt),
+    );
     const visible = sorted.slice(0, 5);
     for (const pinned of sorted.slice(5).filter(row => row.active || row.running || row.attention)) {
       let replaceIndex = visible.length - 1;
@@ -128,7 +132,9 @@ export function WorkspacesSection() {
           queryKey: messagesKey,
           queryFn: () => chatSession.listMessages(thread, INITIAL_THREAD_MESSAGE_LIMIT),
         });
-        void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}/threads/${thread}`, { state: { from: location } });
+        void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}/threads/${thread}`, {
+          state: { from: location },
+        });
       } else {
         void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}`, { state: { from: location } });
       }
@@ -147,10 +153,22 @@ export function WorkspacesSection() {
   return (
     <section className="flex flex-col gap-4" aria-label="Factory sessions">
       {workRows.length > 0 && (
-        <WorkspaceGroup title="Work Sessions" rows={workRows} pending={pending} onSelect={openWorkspaceThread} onDelete={setConfirmDelete} />
+        <WorkspaceGroup
+          title="Work Sessions"
+          rows={workRows}
+          pending={pending}
+          onSelect={openWorkspaceThread}
+          onDelete={setConfirmDelete}
+        />
       )}
       {reviewRows.length > 0 && (
-        <WorkspaceGroup title="Review Sessions" rows={reviewRows} pending={pending} onSelect={openWorkspaceThread} onDelete={setConfirmDelete} />
+        <WorkspaceGroup
+          title="Review Sessions"
+          rows={reviewRows}
+          pending={pending}
+          onSelect={openWorkspaceThread}
+          onDelete={setConfirmDelete}
+        />
       )}
 
       {confirmDelete && (

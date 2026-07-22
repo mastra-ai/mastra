@@ -1,5 +1,14 @@
 # @mastra/next
 
+## 0.2.7-alpha.13
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/hono@1.5.8-alpha.13
+  - @mastra/core@1.52.0-alpha.13
+  - @mastra/server@1.52.0-alpha.13
+
 ## 0.2.7-alpha.12
 
 ### Patch Changes

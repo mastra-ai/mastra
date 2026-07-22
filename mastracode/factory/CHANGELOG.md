@@ -1,5 +1,38 @@
 # @mastra/factory
 
+## 0.1.0-alpha.4
+
+### Patch Changes
+
+- Moved custom model providers and custom model packs off settings.json in the factory web app: both now live in the app database (org-scoped rows in deployed mode, a sentinel local scope in no-auth mode). Custom providers saved in the web settings page are picked up by model resolution and the model catalog through a new pluggable custom-providers source in the SDK, so the gateway no longer reads the host machine's settings.json for them, and models from your custom providers appear in the web model pickers. ([#19964](https://github.com/mastra-ai/mastra/pull/19964))
+
+  Hosts that store custom providers elsewhere (like the factory's database) register a source at boot; when none is registered, the SDK keeps reading settings.json as before:
+
+  ```ts
+  import { setCustomProvidersSource } from '@mastra/code-sdk/agents/custom-provider-source';
+
+  setCustomProvidersSource(tenant => (tenant ? snapshotForOrg(tenant.orgId) : []));
+  ```
+
+- Added a memory-settings storage domain: observational memory settings (observer and reflector models, thresholds, attachment observation) changed in the web app are now stored in the app database — one row per user — instead of settings.json, and the settings page reads them back from the database. Factory-mounted agent controllers no longer seed observational memory settings from the host machine's settings.json (new `disableSettingsOmSeed` SDK option), so server sessions start from built-in defaults plus whatever is stored in the database. The OM settings model pickers in the web UI are now searchable comboboxes. ([#19964](https://github.com/mastra-ai/mastra/pull/19964))
+
+  Server embedders that persist memory settings in their own database can opt out of the settings.json seed:
+
+  ```ts
+  import { createMastraCode } from '@mastra/code-sdk';
+
+  const mastraCode = await createMastraCode({
+    cwd: process.cwd(),
+    // Don't seed observer/reflector models or thresholds from the host
+    // machine's settings.json — sessions start from built-in defaults.
+    disableSettingsOmSeed: true,
+  });
+  ```
+
+- Updated dependencies [[`eec6a54`](https://github.com/mastra-ai/mastra/commit/eec6a54c64cd365c9b75c14a02e32122ad5f657c), [`eec6a54`](https://github.com/mastra-ai/mastra/commit/eec6a54c64cd365c9b75c14a02e32122ad5f657c)]:
+  - @mastra/code-sdk@1.0.0-alpha.16
+  - @mastra/core@1.52.0-alpha.13
+
 ## 0.1.0-alpha.3
 
 ### Patch Changes
