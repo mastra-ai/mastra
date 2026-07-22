@@ -1,5 +1,11 @@
 # create-factory
 
+## 0.1.0-alpha.5
+
+### Patch Changes
+
+- Stopped writing MASTRA_SHARED_API_URL to the scaffolded project's .env during platform provisioning. Platform consumers now use their built-in default platform URL, so scaffolded factories no longer pin the API endpoint at create time. ([#20021](https://github.com/mastra-ai/mastra/pull/20021))
+
 ## 0.1.0-alpha.4
 
 ### Minor Changes
