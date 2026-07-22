@@ -116,6 +116,55 @@ function SnapshotTimeline({
   );
 }
 
+function SignalDistributionRow({
+  color,
+  index,
+  node,
+  onViewThemeDetails,
+  signalName,
+}: {
+  color: string;
+  index: number;
+  node: ThemeNode;
+  onViewThemeDetails: (selection: ThemeSelection) => void;
+  signalName: TraceSignalName;
+}) {
+  const content = (
+    <>
+      <span className="flex min-w-0 items-center gap-2 text-neutral5">
+        <span
+          aria-hidden="true"
+          className="size-2 shrink-0 rounded-[2px]"
+          style={{ backgroundColor: color, opacity: Math.max(0.35, 1 - index * 0.2) }}
+        />
+        <span className="truncate" title={node.label}>
+          {node.label}
+        </span>
+      </span>
+      <span className="shrink-0 font-mono text-neutral3">
+        {node.traceCount} · {Math.round(node.stageShare * 100)}%
+      </span>
+    </>
+  );
+
+  if (node.kind === 'theme' && node.themeId && /^\d+$/.test(node.themeId)) {
+    return (
+      <li title={node.description ? `${node.label}\n${node.description}` : node.label}>
+        <button
+          aria-label={`View theme details for ${node.label}`}
+          className="flex w-full min-w-0 items-center justify-between gap-3 rounded-sm text-left text-xs outline-hidden hover:bg-surface3 focus-visible:ring-1 focus-visible:ring-border2"
+          onClick={() => onViewThemeDetails({ signalName, themeId: node.themeId, label: node.label })}
+          type="button"
+        >
+          {content}
+        </button>
+      </li>
+    );
+  }
+
+  return <li className="flex min-w-0 items-center justify-between gap-3 text-xs">{content}</li>;
+}
+
 function SignalDistribution({
   signalName,
   traceCount,
@@ -160,39 +209,14 @@ function SignalDistribution({
         <ul className="space-y-2.5">
           {nodes.length > 0 ? (
             nodes.map((node, index) => (
-              <li
+              <SignalDistributionRow
                 key={node.nodeId}
-                className="flex min-w-0 items-center justify-between gap-3 text-xs"
-                title={node.description ? `${node.label}\n${node.description}` : node.label}
-              >
-                <span className="flex min-w-0 items-center gap-2 text-neutral5">
-                  <span
-                    aria-hidden="true"
-                    className="size-2 shrink-0 rounded-[2px]"
-                    style={{ backgroundColor: color, opacity: Math.max(0.35, 1 - index * 0.2) }}
-                  />
-                  <span className="truncate" title={node.label}>
-                    {node.label}
-                  </span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="font-mono text-neutral3">
-                    {node.traceCount} · {Math.round(node.stageShare * 100)}%
-                  </span>
-                  {node.kind === 'theme' && node.themeId && /^\d+$/.test(node.themeId) && (
-                    <button
-                      type="button"
-                      className="text-neutral3 underline decoration-border2 underline-offset-2 hover:text-neutral5"
-                      aria-label={`View ${node.label} theme details`}
-                      onClick={() =>
-                        onViewThemeDetails({ signalName, themeId: node.themeId as string, label: node.label })
-                      }
-                    >
-                      Details
-                    </button>
-                  )}
-                </span>
-              </li>
+                color={color}
+                index={index}
+                node={node}
+                onViewThemeDetails={onViewThemeDetails}
+                signalName={signalName}
+              />
             ))
           ) : (
             <li className="text-xs text-neutral3">No themes detected</li>
@@ -449,13 +473,6 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
           </li>
         </ul>
       </header>
-      <SnapshotTimeline
-        snapshots={snapshots}
-        selectedIndex={selectedSnapshotIndex}
-        isPlaying={isPlaying}
-        onPlayingChange={setIsPlaying}
-        onSnapshotChange={selectSnapshot}
-      />
       {drillIn ? (
         <nav aria-label="Active theme drill-in" className="flex flex-wrap items-center gap-2 text-sm text-neutral4">
           <span>
@@ -488,18 +505,25 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
           flow.
         </section>
       ) : (
-        <>
-          <SignalDistributions stages={stages} onViewThemeDetails={setDetailSelection} />
-          <FlowCard
-            columns={graphSummary.columns}
-            records={graphSummary.records}
-            stages={stages}
-            height={height}
-            onNodeClick={handleNodeClick}
-            isNodeClickable={isNodeClickable}
-            drillInDisabledReason={drillInDisabledReason}
-          />
-        </>
+        <FlowCard
+          columns={graphSummary.columns}
+          records={graphSummary.records}
+          stages={stages}
+          height={height}
+          onNodeClick={handleNodeClick}
+          isNodeClickable={isNodeClickable}
+          drillInDisabledReason={drillInDisabledReason}
+        />
+      )}
+      <SnapshotTimeline
+        snapshots={snapshots}
+        selectedIndex={selectedSnapshotIndex}
+        isPlaying={isPlaying}
+        onPlayingChange={setIsPlaying}
+        onSnapshotChange={selectSnapshot}
+      />
+      {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
+        <SignalDistributions stages={stages} onViewThemeDetails={setDetailSelection} />
       )}
       <ThemeDetailPanel
         key={`${snapshot.snapshotId}:${detailSelection?.signalName ?? ''}:${detailSelection?.themeId ?? ''}`}

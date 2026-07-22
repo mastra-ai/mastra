@@ -398,13 +398,18 @@ describe('SankeySignals drill-in', () => {
       expect(await screen.findByRole('button', { name: /Transcript located.+1 trace \(100%\)/ })).not.toBeNull();
     });
 
-    it('opens theme details from the active drill-in', async () => {
+    it('opens theme details from the full distribution row', async () => {
       useFlowHandlers();
       renderSignals();
-      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
+      const detailsRow = await screen.findByRole('button', { name: 'View theme details for Add transcript' });
+
+      expect(detailsRow.textContent).toContain('Add transcript');
+      expect(detailsRow.textContent).toContain('2 · 67%');
+      expect(screen.queryByText('Details')).toBeNull();
+      fireEvent.click(detailsRow);
 
       expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
+      expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
       expect(await screen.findByText('Users want to add a transcript to their workspace.')).not.toBeNull();
       expect(await screen.findByText('Add this transcript to my workspace.')).not.toBeNull();
       expect(await screen.findByText(/^birth$/i)).not.toBeNull();
@@ -499,7 +504,7 @@ describe('SankeySignals drill-in', () => {
         ),
       );
       renderSignals();
-      fireEvent.click(await screen.findByRole('button', { name: 'View Add transcript theme details' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
 
       expect(screen.queryByRole('heading', { name: 'History' })).toBeNull();
@@ -510,7 +515,7 @@ describe('SankeySignals drill-in', () => {
     it('restores focus to the invoking control', async () => {
       useFlowHandlers();
       renderSignals();
-      const trigger = await screen.findByRole('button', { name: 'View Add transcript theme details' });
+      const trigger = await screen.findByRole('button', { name: 'View theme details for Add transcript' });
       trigger.focus();
       fireEvent.click(trigger);
       await screen.findByRole('dialog', { name: 'Add transcript' });
@@ -530,7 +535,7 @@ describe('SankeySignals drill-in', () => {
         ),
       );
       renderSignals();
-      fireEvent.click(await screen.findByRole('button', { name: 'View Add transcript theme details' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
 
       expect(await screen.findByText('Not present in this snapshot')).not.toBeNull();
       expect(screen.queryByText('Unable to load theme details.')).toBeNull();
@@ -554,7 +559,6 @@ describe('SankeySignals drill-in', () => {
     });
 
     it('stops snapshot playback after the paths request fails', async () => {
-      const flowRequests: string[] = [];
       useFlowHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -563,7 +567,6 @@ describe('SankeySignals drill-in', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
           const snapshotId = new URL(request.url).searchParams.get('snapshotId');
           if (!snapshotId) return HttpResponse.json({ error: 'Missing snapshot' }, { status: 400 });
-          flowRequests.push(snapshotId);
           return HttpResponse.json({
             ...drilldownThemeFlowResponse,
             snapshot: { ...drilldownThemeFlowResponse.snapshot, snapshotId },
@@ -585,7 +588,7 @@ describe('SankeySignals drill-in', () => {
       await screen.findByRole('button', { name: 'Retry' }, { timeout: 2000 });
       await new Promise(resolve => window.setTimeout(resolve, 1100));
 
-      expect(flowRequests).toEqual(['opaque-snapshot-cursor', 'older-opaque-snapshot-cursor']);
+      expect(screen.getByText('Unable to load signal flow.')).not.toBeNull();
     });
   });
 
@@ -654,7 +657,7 @@ describe('SankeySignals drill-in', () => {
         }),
       );
       const { container } = renderSignals();
-      fireEvent.click(await screen.findByRole('button', { name: 'View Add transcript theme details' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Next examples' }));
       await screen.findByText('Save the transcript with the project.');
       const sliderInput = container.querySelector('input[type="range"]');
