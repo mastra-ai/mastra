@@ -83,7 +83,6 @@ describe('active provider resolution', () => {
   it('a seeded provider enables auth regardless of env', () => {
     seedRuntimeConfig({ authProvider: fakeProvider() });
     expect(isWebAuthEnabled()).toBe(true);
-    expect(isWorkOSAuth()).toBe(false);
   });
 
   it('seeding without a provider disables auth even when WORKOS env vars are set', () => {
@@ -91,7 +90,6 @@ describe('active provider resolution', () => {
     process.env.WORKOS_CLIENT_ID = 'client_test';
     seedRuntimeConfig({});
     expect(isWebAuthEnabled()).toBe(false);
-    expect(isWorkOSAuth()).toBe(false);
   });
 
   it('falls back to env-implied WorkOS when the factory never seeded (back-compat)', () => {

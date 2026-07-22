@@ -23,7 +23,7 @@ const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-gh';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
-const GITHUB_PROJECT_ID = 'github-project-1';
+const FACTORY_PROJECT_ID = 'fp-1';
 
 const githubProject: Factory = {
   id: 'project-gh',
@@ -31,12 +31,18 @@ const githubProject: Factory = {
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: GITHUB_PROJECT_ID,
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra',
-    worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
+    kind: 'factory',
+    factoryProjectId: FACTORY_PROJECT_ID,
+    repositories: [
+      {
+        projectRepositoryId: 'pr-1',
+        slug: 'mastra-ai/mastra',
+        gitBranch: 'main',
+        sandboxWorkdir: '/sandbox/mastra',
+        selectedWorktreePath: '/sandbox/mastra',
+        worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
+      },
+    ],
   },
 };
 
@@ -146,7 +152,7 @@ function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsSta
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
-    http.get(`${TEST_BASE_URL}/web/factory/repositories/${GITHUB_PROJECT_ID}/metrics`, ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/metrics`, ({ request }) => {
       const days = new URL(request.url).searchParams.get('days') ?? '';
       state.requestedDays.push(days);
       return HttpResponse.json({ metrics: { ...metrics, windowDays: Number(days) || metrics.windowDays } });
@@ -257,12 +263,12 @@ describe('Factory Metrics page', () => {
     expect(within(cycle).getByText('—')).toBeInTheDocument();
   });
 
-  it('given a local project, when visiting Metrics, then the GitHub-only notice renders instead of the dashboard', async () => {
+  it('given a local project, when visiting Metrics, then the server-factory notice renders instead of the dashboard', async () => {
     useMetricsHandlers();
     renderAt('/factory/metrics', localProject);
 
     expect(
-      await screen.findByText(/Board, metrics, and audit require a Factory connected to GitHub/),
+      await screen.findByText(/Board, metrics, and audit are available for server-backed Factories/),
     ).toBeInTheDocument();
     expect(screen.queryByText('Median cycle time')).not.toBeInTheDocument();
   });

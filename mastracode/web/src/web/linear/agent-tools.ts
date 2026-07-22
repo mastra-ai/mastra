@@ -18,7 +18,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { getSeededGithubIntegration } from '../runtime-config';
+import { getFactoryStorage } from '../runtime-config';
+import { FactoryProjectsStorage } from '../storage/domains/projects/base';
 import { isLinearFeatureEnabled } from './config';
 import type { LinearIntegration } from './integration';
 import {
@@ -58,8 +59,10 @@ async function resolveOrgId(resourceId: string): Promise<string | null> {
   }
   let orgId: string | null;
   try {
-    const github = getSeededGithubIntegration();
-    const project = github ? await github.sourceControlStorage.projects.getById(resourceId) : null;
+    const storage = getFactoryStorage();
+    await storage.ensureDomainReady('projects');
+    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    const project = await projects.getById({ id: resourceId });
     orgId = project?.orgId ?? null;
   } catch {
     // Transient database failure: skip the tools for this request but don't
@@ -113,7 +116,10 @@ function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
       }
       try {
         const accessToken = await getFreshLinearAccessToken(linear, connection);
-        const detail = await linear.fetchIssueDetail(accessToken, issue.trim());
+        const detail = await linear.intake.getIssue({
+          connection: { type: 'oauth', accessToken },
+          issueId: issue.trim(),
+        });
         if (!detail) {
           return { error: `Linear issue "${issue}" was not found in this workspace.` };
         }
@@ -149,7 +155,11 @@ function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
       }
       try {
         const accessToken = await getFreshLinearAccessToken(linear, connection);
-        const comment = await linear.createIssueComment(accessToken, issue.trim(), body);
+        const comment = await linear.intake.createComment({
+          connection: { type: 'oauth', accessToken },
+          issueId: issue.trim(),
+          body,
+        });
         if (!comment) {
           return { error: `Linear issue "${issue}" was not found in this workspace.` };
         }

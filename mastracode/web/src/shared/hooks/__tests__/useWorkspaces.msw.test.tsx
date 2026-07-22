@@ -1,11 +1,17 @@
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
-import type { GithubFactory } from '../../../web/ui/domains/workspaces/services/factories';
-import { isGithubFactory, loadFactories, saveFactories } from '../../../web/ui/domains/workspaces/services/factories';
+import { queryKeys } from '../../api/keys';
+import type { Factory, ServerFactory } from '../../../web/ui/domains/workspaces/services/factories';
+import {
+  isServerFactory,
+  loadFactories,
+  saveFactories,
+  selectedRepository,
+} from '../../../web/ui/domains/workspaces/services/factories';
 import { useFactoriesQuery } from '../useFactories';
 import {
   deriveProjectPath,
@@ -17,47 +23,103 @@ import {
 import type { WorkspaceThreadSession } from '../useWorkspaces';
 
 const ORIGIN = TEST_BASE_URL;
-const FACTORY_ID = 'factory-gh';
-const GITHUB_PROJECT_ID = 'github-project-1';
+const FACTORY_ID = 'factory-server';
+const PROJECT_REPOSITORY_ID = 'pr-1';
 
 // The persisted shape intentionally includes a personal user-session worktree:
 // it is not a board workspace, so it must be filtered out of the workspaces data.
-const rootFactory: GithubFactory = {
+const rootFactory: ServerFactory = {
   id: FACTORY_ID,
   name: 'Mastra',
-  resourceId: 'resource-gh',
+  resourceId: 'resource-server',
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: GITHUB_PROJECT_ID,
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    worktrees: [
-      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-      { branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api', baseBranch: 'main' },
+    kind: 'factory',
+    factoryProjectId: 'fp-1',
+    selectedRepositoryId: PROJECT_REPOSITORY_ID,
+    repositories: [
       {
-        branch: 'user/alice-notes',
-        worktreePath: '/sandbox/mastra-worktrees/user-alice-notes',
-        baseBranch: 'main',
-        threadId: 'thread-user',
+        projectRepositoryId: PROJECT_REPOSITORY_ID,
+        slug: 'acme/mastra',
+        gitBranch: 'main',
+        sandboxWorkdir: '/sandbox/mastra',
+        worktrees: [
+          { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+          { branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api', baseBranch: 'main' },
+          {
+            branch: 'user/alice-notes',
+            worktreePath: '/sandbox/mastra-worktrees/user-alice-notes',
+            baseBranch: 'main',
+            threadId: 'thread-user',
+          },
+        ],
+        selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
       },
     ],
-    selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
   },
 };
 
-function saveFactory(factory: GithubFactory) {
+function saveFactory(factory: ServerFactory) {
   saveFactories([factory]);
 }
 
+function storedSelectedWorktreePath(): string | undefined {
+  const stored = loadFactories()[0];
+  if (!stored || !isServerFactory(stored)) throw new Error('expected server factory');
+  return selectedRepository(stored)?.selectedWorktreePath;
+}
+
+function storedWorktreeBranches(): string[] {
+  const stored = loadFactories()[0];
+  if (!stored || !isServerFactory(stored)) throw new Error('expected server factory');
+  return (selectedRepository(stored)?.worktrees ?? []).map(worktree => worktree.branch);
+}
+
+beforeEach(() => {
+  server.use(
+    http.get(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktrees`, () =>
+      HttpResponse.json({ worktrees: rootFactory.binding.repositories[0]!.worktrees }),
+    ),
+  );
+});
+
 describe('workspaces query hooks', () => {
-  it('reads factory worktrees only: user/ session entries are excluded', async () => {
+  it('reads repository worktrees only: user/ session entries are excluded', async () => {
     saveFactory(rootFactory);
 
     const { result } = renderHookWithProviders(() => useWorkspacesQuery(rootFactory));
 
     await waitFor(() => expect(result.current.data?.selected?.branch).toBe('feat-ui'));
     expect(result.current.data?.worktrees.map(worktree => worktree.branch)).toEqual(['feat-ui', 'feat-api']);
+  });
+
+  it('discovers server-created worktrees that are absent from local storage', async () => {
+    const local: ServerFactory = {
+      ...rootFactory,
+      binding: {
+        ...rootFactory.binding,
+        repositories: rootFactory.binding.repositories.map(repository => ({ ...repository, worktrees: [] })),
+      },
+    };
+    saveFactory(local);
+    server.use(
+      http.get(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktrees`, () =>
+        HttpResponse.json({
+          worktrees: [
+            {
+              branch: 'factory/issue-41',
+              worktreePath: '/sandbox/mastra-worktrees/factory-issue-41',
+              baseBranch: 'main',
+            },
+          ],
+        }),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() => useWorkspacesQuery(local));
+
+    await waitFor(() => expect(result.current.data?.worktrees[0]?.branch).toBe('factory/issue-41'));
+    expect(storedWorktreeBranches()).toEqual(['factory/issue-41']);
   });
 
   it('selects a workspace, persists it, and refreshes factory consumers', async () => {
@@ -78,23 +140,45 @@ describe('workspaces query hooks', () => {
     await act(async () => {
       await result.current.selectWorkspace.mutateAsync('/sandbox/mastra-worktrees/feat-api');
     });
-    await waitForMutationsIdle(client);
 
-    const stored = loadFactories()[0];
-    expect(isGithubFactory(stored!) && stored.binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
+    expect(storedSelectedWorktreePath()).toBe('/sandbox/mastra-worktrees/feat-api');
+    const cached = client.getQueryData<Factory[]>(queryKeys.factories())?.[0];
+    expect(cached && isServerFactory(cached) ? selectedRepository(cached)?.selectedWorktreePath : undefined).toBe(
+      '/sandbox/mastra-worktrees/feat-api',
+    );
     await waitFor(() => expect(result.current.workspaces.data?.selected?.branch).toBe('feat-api'));
+    await waitForMutationsIdle(client);
   });
 
   it('creates a workspace, upserts it, selects it, and refreshes consumers', async () => {
     saveFactory(rootFactory);
+    let created = false;
     server.use(
-      http.post(`${ORIGIN}/web/github/repositories/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
+      http.get(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktrees`, () =>
+        HttpResponse.json({
+          worktrees: [
+            ...rootFactory.binding.repositories[0]!.worktrees,
+            ...(created
+              ? [
+                  {
+                    branch: 'feat-docs',
+                    worktreePath: '/sandbox/mastra-worktrees/feat-docs',
+                    baseBranch: 'main',
+                  },
+                ]
+              : []),
+          ],
+        }),
+      ),
+      http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree`, async ({ request }) => {
         const body = (await request.json()) as { branch: string };
         expect(body.branch).toBe('feat-docs');
+        created = true;
         return HttpResponse.json({
           branch: 'feat-docs',
           worktreePath: '/sandbox/mastra-worktrees/feat-docs',
           baseBranch: 'main',
+          resourceId: 'resource-server',
         });
       }),
     );
@@ -113,21 +197,27 @@ describe('workspaces query hooks', () => {
     });
     await waitForMutationsIdle(client);
 
-    const stored = loadFactories()[0];
-    expect(isGithubFactory(stored!)).toBe(true);
-    if (!isGithubFactory(stored!)) throw new Error('expected github factory');
-    expect(stored.binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-docs');
-    expect(stored.binding.worktrees.map(worktree => worktree.branch)).toEqual(
+    expect(storedSelectedWorktreePath()).toBe('/sandbox/mastra-worktrees/feat-docs');
+    expect(storedWorktreeBranches()).toEqual(
       expect.arrayContaining(['feat-ui', 'feat-api', 'feat-docs', 'user/alice-notes']),
     );
   });
 
   it('deletes a workspace, cascades threads, and falls back selection', async () => {
     saveFactory(rootFactory);
+    let deleted = false;
     server.use(
-      http.post(`${ORIGIN}/web/github/repositories/${GITHUB_PROJECT_ID}/worktree/delete`, async ({ request }) => {
+      http.get(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktrees`, () =>
+        HttpResponse.json({
+          worktrees: deleted
+            ? rootFactory.binding.repositories[0]!.worktrees.filter(worktree => worktree.branch !== 'feat-ui')
+            : rootFactory.binding.repositories[0]!.worktrees,
+        }),
+      ),
+      http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree/delete`, async ({ request }) => {
         const body = (await request.json()) as { branch: string };
         expect(body.branch).toBe('feat-ui');
+        deleted = true;
         return HttpResponse.json({ ok: true });
       }),
     );
@@ -161,14 +251,11 @@ describe('workspaces query hooks', () => {
     expect(deleteThread).toHaveBeenCalledWith('thread-1');
     expect(deleteThread).toHaveBeenCalledWith('thread-2');
 
-    const stored = loadFactories()[0];
-    expect(isGithubFactory(stored!)).toBe(true);
-    if (!isGithubFactory(stored!)) throw new Error('expected github factory');
-    expect(stored.binding.worktrees.map(worktree => worktree.branch)).toEqual(['feat-api', 'user/alice-notes']);
-    expect(stored.binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
+    expect(storedWorktreeBranches()).toEqual(['feat-api', 'user/alice-notes']);
+    expect(storedSelectedWorktreePath()).toBe('/sandbox/mastra-worktrees/feat-api');
   });
 
-  it('derives projectPath from the selected worktree for GitHub factories', () => {
+  it('derives projectPath from the selected worktree for server factories', () => {
     expect(deriveProjectPath(rootFactory)).toBe('/sandbox/mastra-worktrees/feat-ui');
     expect(
       deriveProjectPath({

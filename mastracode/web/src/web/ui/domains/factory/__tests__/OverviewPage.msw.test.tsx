@@ -24,7 +24,8 @@ const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-gh';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
-const GITHUB_PROJECT_ID = 'github-project-1';
+const FACTORY_PROJECT_ID = 'fp-github-project-1';
+const PROJECT_REPOSITORY_ID = 'repo-link-1';
 // The sandbox workdir is the repo-root checkout (dropped from the workspace
 // list); the factory workspace is a distinct feature worktree — this is also
 // the path work-item sessions point at for the active-work signal.
@@ -41,12 +42,18 @@ const githubProject: Factory = {
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: GITHUB_PROJECT_ID,
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: WORKTREE,
-    worktrees: [{ branch: 'feat/overview', worktreePath: WORKTREE, baseBranch: 'main' }],
+    kind: 'factory',
+    factoryProjectId: FACTORY_PROJECT_ID,
+    repositories: [
+      {
+        projectRepositoryId: PROJECT_REPOSITORY_ID,
+        slug: 'mastra-ai/mastra',
+        gitBranch: 'main',
+        sandboxWorkdir: '/sandbox/mastra',
+        selectedWorktreePath: WORKTREE,
+        worktrees: [{ branch: 'feat/overview', worktreePath: WORKTREE, baseBranch: 'main' }],
+      },
+    ],
   },
 };
 
@@ -72,7 +79,8 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
   return {
     orgId: 'org-1',
     createdBy: 'user-1',
-    githubProjectId: GITHUB_PROJECT_ID,
+    githubProjectId: FACTORY_PROJECT_ID,
+    parentWorkItemId: null,
     source: 'manual',
     sourceKey: null,
     url: null,
@@ -80,6 +88,7 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
     stageHistory: [],
     sessions: {},
     metadata: {},
+    revision: 1,
     createdAt: ago(30 * HOUR_S),
     updatedAt: ago(30 * HOUR_S),
     ...overrides,
@@ -155,10 +164,10 @@ function useOverviewHandlers({ workItems, activityThreads = [], thresholds }: Ov
     http.get(`${SESSION}/threads*`, () => HttpResponse.json({ threads: activityThreads })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
-    http.get(`${TEST_BASE_URL}/web/factory/repositories/${GITHUB_PROJECT_ID}/work-items`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
       HttpResponse.json({ workItems }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/repositories/${GITHUB_PROJECT_ID}/health/thresholds`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/health/thresholds`, () =>
       HttpResponse.json({ thresholds: thresholds ?? [14400, 86400, 259200] }),
     ),
   );
@@ -242,11 +251,11 @@ describe('Factory Overview page', () => {
     expect(screen.getByText(/1 active/)).toBeInTheDocument();
   });
 
-  it('given a local project, when visiting Overview, then the GitHub-only notice renders instead of the chart', async () => {
+  it('given a local project, when visiting Overview, then the local-folder notice renders instead of the chart', async () => {
     useOverviewHandlers({ workItems: [] });
     renderAt('/factory/overview', localProject);
 
-    expect(await screen.findByText(/require a Factory connected to GitHub/)).toBeInTheDocument();
+    expect(await screen.findByText(/available for server-backed Factories/)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Queue health' })).not.toBeInTheDocument();
   });
 });

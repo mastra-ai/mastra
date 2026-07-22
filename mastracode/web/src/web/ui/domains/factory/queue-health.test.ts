@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { QueueHealthConfig } from '../../../storage/domains/queue-health/base';
-import type { WorkItemRow } from '../../../storage/domains/work-items/base';
+import type { QueueHealthWorkItem } from './queue-health';
 import { computeQueueHealth } from './queue-health';
 
 const NOW = new Date('2026-07-17T12:00:00.000Z');
@@ -10,13 +10,14 @@ const DEFAULT: QueueHealthConfig = { thresholdsSeconds: [14400, 86400, 259200] }
 const secondsAgo = (s: number) => new Date(NOW.getTime() - s * 1000).toISOString();
 
 let nextId = 0;
-function makeItem(overrides: Partial<WorkItemRow> = {}): WorkItemRow {
+function makeItem(overrides: Partial<QueueHealthWorkItem> = {}): QueueHealthWorkItem {
   nextId += 1;
   return {
     id: `item-${nextId}`,
     orgId: 'org1',
     createdBy: 'u1',
     githubProjectId: 'proj1',
+    parentWorkItemId: null,
     source: 'github-issue',
     sourceKey: null,
     title: `Item ${nextId}`,
@@ -25,6 +26,7 @@ function makeItem(overrides: Partial<WorkItemRow> = {}): WorkItemRow {
     stageHistory: [],
     sessions: {},
     metadata: {},
+    revision: 1,
     createdAt: new Date(NOW.getTime() - 1000),
     updatedAt: NOW,
     ...overrides,
@@ -32,7 +34,7 @@ function makeItem(overrides: Partial<WorkItemRow> = {}): WorkItemRow {
 }
 
 /** Item in one stage, entered `ageSeconds` ago (open history entry). */
-function inStage(stage: string, ageSeconds: number, overrides: Partial<WorkItemRow> = {}): WorkItemRow {
+function inStage(stage: string, ageSeconds: number, overrides: Partial<QueueHealthWorkItem> = {}): QueueHealthWorkItem {
   return makeItem({
     stages: [stage],
     stageHistory: [{ stage, enteredAt: secondsAgo(ageSeconds), by: 'u1' }],
