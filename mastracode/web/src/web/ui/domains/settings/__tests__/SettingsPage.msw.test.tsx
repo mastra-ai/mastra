@@ -266,14 +266,14 @@ describe('SettingsPage', () => {
   });
 
   describe('when leaving settings', () => {
-    it('returns to the origin page carried in navigation state when pressing Escape', async () => {
+    it('returns to the origin page carried in navigation state via Back to app', async () => {
       const user = userEvent.setup();
       const { router } = await renderSettingsPage({
         initialEntry: { pathname: '/settings/general', state: { from: { pathname: '/threads/t1' } } },
       });
       await screen.findByRole('region', { name: 'Settings' });
 
-      await user.keyboard('{Escape}');
+      await user.click(screen.getByRole('button', { name: 'Back to app' }));
 
       await waitFor(() => expect(router.state.location.pathname).toBe('/threads/t1'));
     });
@@ -283,9 +283,21 @@ describe('SettingsPage', () => {
       const { router } = await renderSettingsPage();
       await screen.findByRole('region', { name: 'Settings' });
 
-      await user.keyboard('{Escape}');
+      await user.click(screen.getByRole('button', { name: 'Back to app' }));
 
       await waitFor(() => expect(router.state.location.pathname).toBe('/new'));
+    });
+
+    it('does not navigate away when pressing Escape', async () => {
+      const user = userEvent.setup();
+      const { router } = await renderSettingsPage({
+        initialEntry: { pathname: '/settings/general', state: { from: { pathname: '/threads/t1' } } },
+      });
+      await screen.findByRole('region', { name: 'Settings' });
+
+      await user.keyboard('{Escape}');
+
+      expect(router.state.location.pathname).toBe('/settings/general');
     });
   });
 

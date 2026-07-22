@@ -1,14 +1,12 @@
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Navigate, useLocation, useParams } from 'react-router';
 
-import { useKeyDown } from '../lib/hooks';
 import { Sidebar } from '../Sidebar';
 import { PageLayout } from '../ui/PageLayout';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
-import { useCloseSettings } from '../domains/settings/hooks/useCloseSettings';
 import { DEFAULT_SETTINGS_PATH, isSettingsSection } from '../domains/settings/settingsSections';
 
 /**
@@ -30,9 +28,6 @@ export function SettingsPage() {
 function SettingsPageContent() {
   const { activeFactory } = useActiveFactoryContext();
   const { isMobile } = useMainSidebar();
-  const closeSettings = useCloseSettings();
-
-  useKeyDown({ escape: closeSettings });
 
   if (!activeFactory) {
     return (

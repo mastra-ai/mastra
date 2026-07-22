@@ -497,7 +497,7 @@ describe('MastraCode message rendering', () => {
     expect(await screen.findByRole('region', { name: 'Settings' })).toBeInTheDocument();
 
     await stream.emit();
-    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Back to app' }));
 
     expect(await screen.findByText('Streaming while settings are open')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
