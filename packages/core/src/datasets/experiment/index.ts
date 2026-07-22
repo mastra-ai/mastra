@@ -3,7 +3,7 @@ import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
-import { executeTarget } from './executor';
+import { executeTarget, raceWithSignal } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import {
   createItemScorerResolver,
@@ -23,6 +23,7 @@ type ExperimentItem = {
   datasetVersion: number | null; // null for inline experiments
   input: unknown;
   groundTruth?: unknown;
+  timeout?: number;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   /** Resume data for suspended workflow steps, keyed by step ID */
@@ -36,6 +37,38 @@ type ExperimentItem = {
   /** Item-level scorer IDs. An empty array explicitly disables scoring. */
   scorerIds?: string[];
 };
+
+function executionFailure(error: unknown): ExecutionResult {
+  return {
+    output: null,
+    error: {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    },
+    traceId: null,
+  };
+}
+
+function waitForRetry(delay: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    return new Promise(resolve => setTimeout(resolve, delay));
+  }
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+  }
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, delay);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 // Re-export types and helpers
 export type {
@@ -190,6 +223,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           datasetVersion: null,
           input: dataItem.input,
           groundTruth: dataItem.groundTruth,
+          timeout: dataItem.timeout,
           requestContext: dataItem.requestContext,
           metadata: dataItem.metadata,
           resumeSteps: dataItem.resumeSteps,
@@ -236,6 +270,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         datasetVersion: v.datasetVersion,
         input: v.input,
         groundTruth: v.groundTruth,
+        timeout: v.timeout,
         requestContext: v.requestContext,
         metadata: v.metadata,
         toolMocks: v.toolMocks,
@@ -259,23 +294,19 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       const taskFn = config.task;
       execFn = async (item, itemSignal) => {
         try {
-          const result = await taskFn({
-            input: item.input,
-            mastra,
-            groundTruth: item.groundTruth,
-            metadata: item.metadata,
-            signal: itemSignal,
-          });
+          const taskPromise = Promise.resolve(
+            taskFn({
+              input: item.input,
+              mastra,
+              groundTruth: item.groundTruth,
+              metadata: item.metadata,
+              signal: itemSignal,
+            }),
+          );
+          const result = itemSignal ? await raceWithSignal(taskPromise, itemSignal) : await taskPromise;
           return { output: result, error: null, traceId: null };
         } catch (err: unknown) {
-          return {
-            output: null,
-            error: {
-              message: err instanceof Error ? err.message : String(err),
-              stack: err instanceof Error ? err.stack : undefined,
-            },
-            traceId: null,
-          };
+          return executionFailure(err);
         }
       };
     } else if (targetType && targetId) {
@@ -456,10 +487,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             itemScorers = datasetScorers;
           }
 
-          // Compose per-item signal (timeout + run-level abort)
+          // Compose one per-item signal before the first attempt so timeout is a whole-item budget.
+          const effectiveTimeout = item.timeout ?? itemTimeout;
           let itemSignal: AbortSignal | undefined = executionSignal;
-          if (itemTimeout) {
-            const timeoutSignal = AbortSignal.timeout(itemTimeout);
+          if (effectiveTimeout) {
+            const timeoutSignal = AbortSignal.timeout(effectiveTimeout);
             itemSignal = executionSignal ? AbortSignal.any([executionSignal, timeoutSignal]) : timeoutSignal;
           }
 
@@ -469,10 +501,17 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           let execResult: ExecutionResult = scorerConfigError
             ? { output: null, error: scorerConfigError, traceId: null }
             : await execFn(item, itemSignal);
+          if (executionSignal?.aborted) {
+            throw executionSignal.reason ?? new DOMException('Aborted', 'AbortError');
+          }
 
           while (execResult.error && !scorerConfigError && retryCount < maxRetries) {
-            // Don't retry abort errors
-            if (execResult.error.message.toLowerCase().includes('abort')) break;
+            if (executionSignal?.aborted) {
+              throw executionSignal.reason ?? new DOMException('Aborted', 'AbortError');
+            }
+
+            // The item deadline and abort errors are non-retryable.
+            if (itemSignal?.aborted || execResult.error.message.toLowerCase().includes('abort')) break;
 
             // Don't retry deterministic tool-mock failures — the matcher state cannot
             // change between attempts, so retrying would always fail identically.
@@ -484,17 +523,28 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               break;
             }
 
-            retryCount++;
-            const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
+            const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
             const jitter = delay * 0.2 * Math.random();
-            await new Promise(r => setTimeout(r, delay + jitter));
-
-            // Re-check cancellation before retry
-            if (executionSignal?.aborted) {
-              throw new DOMException('Aborted', 'AbortError');
+            try {
+              await waitForRetry(delay + jitter, itemSignal);
+            } catch (error) {
+              if (executionSignal?.aborted) {
+                throw executionSignal.reason ?? error;
+              }
+              execResult = executionFailure(error);
+              break;
             }
 
+            if (itemSignal?.aborted) {
+              execResult = executionFailure(itemSignal.reason);
+              break;
+            }
+
+            retryCount++;
             execResult = await execFn(item, itemSignal);
+            if (executionSignal?.aborted) {
+              throw executionSignal.reason ?? new DOMException('Aborted', 'AbortError');
+            }
           }
 
           const itemCompletedAt = new Date();
