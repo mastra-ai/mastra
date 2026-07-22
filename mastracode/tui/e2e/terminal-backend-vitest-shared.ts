@@ -262,8 +262,8 @@ async function runScenarioInProcess(scenario: McE2eScenario): Promise<void> {
     }
     passed = true;
   } finally {
-    await aimock?.stop();
     if (passed) completedRunRoots.add(runRoot);
+    await aimock?.stop();
   }
 }
 

@@ -158,14 +158,13 @@ export async function createOwnedVectorStore(
     if (!pgConfig.connectionString && !pgConfig.host) return undefined;
 
     const { PgVector } = await import('@mastra/pg');
-    return {
-      vector: new PgVector({
-        id: 'mastra-code-vectors',
-        connectionString:
-          pgConfig.connectionString ??
-          `postgresql://${pgConfig.user}:${pgConfig.password}@${pgConfig.host}:${pgConfig.port ?? 5432}/${pgConfig.database}`,
-      }),
-    };
+    const vector = new PgVector({
+      id: 'mastra-code-vectors',
+      connectionString:
+        pgConfig.connectionString ??
+        `postgresql://${pgConfig.user}:${pgConfig.password}@${pgConfig.host}:${pgConfig.port ?? 5432}/${pgConfig.database}`,
+    });
+    return { vector, close: () => vector.disconnect() };
   }
 
   // LibSQL: separate file for vectors. Per-tenant configs supply an explicit

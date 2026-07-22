@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createClient } from '@libsql/client';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { PgVector } from '@mastra/pg';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 describe('getStorageConfig', () => {
   const originalEnv = { ...process.env };
@@ -192,6 +193,22 @@ describe('createStorage', () => {
       await result.storage.close?.();
       await (vector as { close?: () => Promise<void> })?.close?.();
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('closes the owned PostgreSQL vector pool', async () => {
+    const disconnect = vi.spyOn(PgVector.prototype, 'disconnect').mockResolvedValue();
+    const { createOwnedVectorStore } = await import('../storage-factory.js');
+    const ownedVector = await createOwnedVectorStore({
+      backend: 'pg',
+      connectionString: 'postgresql://user:pass@localhost:5432/testdb',
+    });
+
+    try {
+      await ownedVector?.close?.();
+      expect(disconnect).toHaveBeenCalledOnce();
+    } finally {
+      disconnect.mockRestore();
     }
   });
 

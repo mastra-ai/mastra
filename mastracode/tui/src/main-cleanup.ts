@@ -7,16 +7,22 @@ export function createTuiCleanup(options: {
   let cleanupPromise: Promise<void> | undefined;
   return () => {
     cleanupPromise ??= (async () => {
+      await Promise.allSettled(options.stopWork.map(stop => Promise.resolve().then(stop)));
+      const errors: unknown[] = [];
       try {
-        await Promise.allSettled(options.stopWork.map(stop => Promise.resolve().then(stop)));
         await options.closeStorage();
-      } finally {
-        try {
-          await options.shutdownAnalytics();
-        } finally {
-          options.releaseLocks();
-        }
+      } catch (error) {
+        errors.push(error);
       }
+      try {
+        await options.shutdownAnalytics();
+      } catch (error) {
+        errors.push(error);
+      } finally {
+        options.releaseLocks();
+      }
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) throw new AggregateError(errors, 'TUI cleanup failed');
     })();
     return cleanupPromise;
   };

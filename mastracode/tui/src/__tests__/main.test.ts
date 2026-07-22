@@ -40,4 +40,22 @@ describe('Mastra Code TUI cleanup', () => {
     expect(shutdownAnalytics).toHaveBeenCalledOnce();
     expect(releaseLocks).toHaveBeenCalledOnce();
   });
+
+  it('reports both storage and analytics shutdown failures', async () => {
+    const storageError = new Error('close failed');
+    const analyticsError = new Error('analytics failed');
+    const releaseLocks = vi.fn();
+    const cleanup = createTuiCleanup({
+      stopWork: [],
+      closeStorage: vi.fn().mockRejectedValue(storageError),
+      shutdownAnalytics: vi.fn().mockRejectedValue(analyticsError),
+      releaseLocks,
+    });
+
+    const error = await cleanup().catch(error => error);
+
+    expect(error).toBeInstanceOf(AggregateError);
+    expect(error.errors).toEqual([storageError, analyticsError]);
+    expect(releaseLocks).toHaveBeenCalledOnce();
+  });
 });

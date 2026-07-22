@@ -2,6 +2,9 @@ import { createClient } from '@libsql/client';
 
 const [dbPath, workerId, writeCountArg] = process.argv.slice(2);
 const writeCount = Number(writeCountArg);
+if (!dbPath || !workerId || !Number.isSafeInteger(writeCount) || writeCount < 1) {
+  throw new Error('Expected a database path, worker ID, and positive integer write count');
+}
 const client = createClient({ url: `file:${dbPath}`, timeout: 5000 });
 
 async function executeWithRetry(statement) {
