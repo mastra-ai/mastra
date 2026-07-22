@@ -62,8 +62,67 @@ export interface CreateWorkItemInput {
   metadata?: Record<string, unknown>;
 }
 
+interface ExternalWorkItemSource {
+  integrationId: string;
+  type: string;
+  externalId: string;
+  url?: string;
+}
+
+interface WireWorkItem extends Omit<WorkItem, 'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata'> {
+  factoryProjectId: string;
+  externalSource: ExternalWorkItemSource | null;
+  metadata: Record<string, unknown> | null;
+}
+
+interface WireCreateWorkItemInput extends Omit<CreateWorkItemInput, 'source' | 'sourceKey' | 'url'> {
+  externalSource?: ExternalWorkItemSource;
+}
+
+function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkItemSource {
+  if (!source) return 'manual';
+  if (source.integrationId === 'github' && source.type === 'issue') return 'github-issue';
+  if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
+  if (source.integrationId === 'linear' && source.type === 'issue') return 'linear-issue';
+  return 'manual';
+}
+
+function toExternalSource(input: CreateWorkItemInput): ExternalWorkItemSource | undefined {
+  if (input.source === 'manual' || !input.sourceKey) return undefined;
+  const [integrationId, type] =
+    input.source === 'github-issue'
+      ? ['github', 'issue']
+      : input.source === 'github-pr'
+        ? ['github', 'pull-request']
+        : ['linear', 'issue'];
+  return {
+    integrationId,
+    type,
+    externalId: input.sourceKey,
+    ...(input.url ? { url: input.url } : {}),
+  };
+}
+
+function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput {
+  const { source: _source, sourceKey: _sourceKey, url: _url, ...rest } = input;
+  const externalSource = toExternalSource(input);
+  return { ...rest, ...(externalSource ? { externalSource } : {}) };
+}
+
+function fromWireWorkItem(item: WireWorkItem): WorkItem {
+  const { factoryProjectId, externalSource, metadata, ...rest } = item;
+  return {
+    ...rest,
+    githubProjectId: factoryProjectId,
+    source: sourceFromExternalSource(externalSource),
+    sourceKey: externalSource?.externalId ?? null,
+    url: externalSource?.url ?? null,
+    metadata: metadata ?? {},
+  };
+}
+
 export type FactoryBoard = 'work' | 'review';
-export type FactoryStage = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done';
+export type FactoryStage = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled';
 
 export type FactoryTransitionResult =
   | {
@@ -79,7 +138,6 @@ export type FactoryTransitionResult =
 export interface UpdateWorkItemInput {
   parentWorkItemId?: string | null;
   title?: string;
-  url?: string | null;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
 }
@@ -123,23 +181,23 @@ export async function fetchFactoryThreadTaskContext(
 
 /** List the org's work items for a Factory project. */
 export async function listWorkItems(baseUrl: string, factoryProjectId: string): Promise<WorkItem[]> {
-  const data = await requestJson<{ workItems: WorkItem[] }>(
+  const data = await requestJson<{ workItems: WireWorkItem[] }>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
   );
-  return data.workItems;
+  return data.workItems.map(fromWireWorkItem);
 }
 
-/** Create a work item; the server upserts on `sourceKey` so repeats reuse the card. */
+/** Create a work item; the server upserts on its external source identity so repeats reuse the card. */
 export async function createWorkItem(
   baseUrl: string,
   factoryProjectId: string,
   input: CreateWorkItemInput,
 ): Promise<WorkItem> {
-  const data = await requestJson<{ workItem: WorkItem }>(
+  const data = await requestJson<{ workItem: WireWorkItem }>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
-    { method: 'POST', body: JSON.stringify(input) },
+    { method: 'POST', body: JSON.stringify(toWireCreateInput(input)) },
   );
-  return data.workItem;
+  return fromWireWorkItem(data.workItem);
 }
 
 export async function transitionWorkItem(
@@ -164,11 +222,11 @@ export async function transitionWorkItem(
 
 /** Patch a work item's non-stage metadata, session refs, or title. */
 export async function updateWorkItem(baseUrl: string, id: string, patch: UpdateWorkItemInput): Promise<WorkItem> {
-  const data = await requestJson<{ workItem: WorkItem }>(
+  const data = await requestJson<{ workItem: WireWorkItem }>(
     `${baseUrl}/web/factory/work-items/${encodeURIComponent(id)}`,
     { method: 'PATCH', body: JSON.stringify(patch) },
   );
-  return data.workItem;
+  return fromWireWorkItem(data.workItem);
 }
 
 export interface StartFactoryRunRequest {
@@ -199,12 +257,19 @@ export interface StartFactoryRunPrepared {
 
 export async function startFactoryRun(
   baseUrl: string,
-  githubProjectId: string,
+  factoryProjectId: string,
   input: StartFactoryRunRequest,
 ): Promise<StartFactoryRunPrepared> {
+  const request = {
+    ...input,
+    workItem: {
+      ...input.workItem,
+      input: toWireCreateInput(input.workItem.input),
+    },
+  };
   const data = await requestJson<{ prepared: StartFactoryRunPrepared }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/runs/start`,
-    { method: 'POST', body: JSON.stringify(input) },
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/runs/start`,
+    { method: 'POST', body: JSON.stringify(request) },
   );
   return data.prepared;
 }

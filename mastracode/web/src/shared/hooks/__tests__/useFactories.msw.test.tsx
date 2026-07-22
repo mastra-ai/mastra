@@ -5,12 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import type { LocalFactory, ServerFactory } from '../../../web/ui/domains/workspaces/services/factories';
-import {
-  loadActiveFactoryId,
-  loadFactories,
-  saveActiveFactoryId,
-  saveFactories,
-} from '../../../web/ui/domains/workspaces/services/factories';
+import { loadFactories, saveFactories } from '../../../web/ui/domains/workspaces/services/factories';
 import { useActiveFactory } from '../useActiveFactory';
 import {
   useAddFactoryMutation,
@@ -317,9 +312,8 @@ describe('factories query hooks', () => {
     });
   });
 
-  it('removes the active factory, clears active id, and refreshes factory query consumers', async () => {
+  it('removes a factory and refreshes factory query consumers', async () => {
     saveFactories([localFactory, { ...serverFactory, resourceId: 'resource-server' }]);
-    saveActiveFactoryId(localFactory.id);
     server.use(...factoryProjectListHandlers(() => []));
 
     const { result, client } = renderHookWithProviders(() => {
@@ -336,7 +330,6 @@ describe('factories query hooks', () => {
     await waitForMutationsIdle(client);
 
     expect(loadFactories().map(factory => factory.id)).toEqual(['factory-server']);
-    expect(loadActiveFactoryId()).toBeNull();
     await waitFor(() => expect(result.current.factories.data?.map(factory => factory.id)).toEqual(['factory-server']));
   });
 
@@ -396,23 +389,20 @@ describe('factories query hooks', () => {
     expect(loadFactories()).toEqual([]);
   });
 
-  it('keeps active factory selection across reloads when stored under the new key', async () => {
+  it('resolves the active factory from the route factoryId', async () => {
     saveFactories([localFactory]);
-    saveActiveFactoryId(localFactory.id);
 
-    const { result } = renderHookWithProviders(() => useActiveFactory());
+    const { result } = renderHookWithProviders(() => useActiveFactory(localFactory.id));
     await waitFor(() => expect(result.current.activeFactory?.id).toBe('factory-local'));
-    expect(loadActiveFactoryId()).toBe('factory-local');
   });
 
-  it('does not clear a persisted backend selection when repository hydration fails', async () => {
-    saveActiveFactoryId('factory-server');
+  it('resolves no active factory when repository hydration fails for a server factoryId', async () => {
     server.use(http.get(`${ORIGIN}/web/factory/projects`, () => new HttpResponse(null, { status: 503 })));
 
-    const { result } = renderHookWithProviders(() => useActiveFactory());
+    const { result } = renderHookWithProviders(() => useActiveFactory('factory-server'));
 
     await waitFor(() => expect(result.current.factoriesPending).toBe(false));
     expect(result.current.activeFactory).toBeNull();
-    expect(loadActiveFactoryId()).toBe('factory-server');
+    expect(result.current.sessionEnabled).toBe(false);
   });
 });

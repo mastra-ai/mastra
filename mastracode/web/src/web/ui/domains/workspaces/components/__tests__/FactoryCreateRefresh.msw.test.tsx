@@ -1,14 +1,13 @@
 /**
  * Regression: after creating a factory, the switcher must reflect it — both as
- * the active selection and in its dropdown. `useCreateFactoryMutation` refetches
- * the factories query before resolving, so the panel's post-create
- * `selectFactory` + navigate always sees the fresh list.
+ * the active route factory and in its dropdown. `useCreateFactoryMutation`
+ * refetches the factories query before the panel navigates to the new route.
  */
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -28,16 +27,26 @@ beforeEach(() => {
 
 afterEach(() => localStorage.clear());
 
+function FactoryRouteHarness() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  return (
+    <ActiveFactoryProvider factoryId={factoryId ?? 'missing-factory'}>
+      <FactorySwitcher />
+      <FactoriesPanel onClose={vi.fn()} />
+    </ActiveFactoryProvider>
+  );
+}
+
 describe('factory creation refresh', () => {
   it('the switcher lists the newly created factory', async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <MemoryRouter initialEntries={['/factories/create']}>
         <MainSidebarProvider storageKey="repro" mobileBreakpoint={768}>
-          <ActiveFactoryProvider>
-            <FactorySwitcher />
-            <FactoriesPanel onClose={vi.fn()} />
-          </ActiveFactoryProvider>
+          <Routes>
+            <Route path="/factories/create" element={<FactoryRouteHarness />} />
+            <Route path="/factories/:factoryId/*" element={<FactoryRouteHarness />} />
+          </Routes>
         </MainSidebarProvider>
       </MemoryRouter>,
     );

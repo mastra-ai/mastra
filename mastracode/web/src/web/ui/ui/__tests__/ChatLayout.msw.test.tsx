@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatLayout } from '../ChatLayout';
 
@@ -14,6 +14,22 @@ function StatefulRightPanel() {
     </button>
   );
 }
+function mockMobileViewport() {
+  vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('ChatLayout', () => {
   describe('given all chat slots are provided', () => {
@@ -73,55 +89,89 @@ describe('ChatLayout', () => {
       expect(screen.getByRole('button', { name: 'right-panel-opened' })).toBeInTheDocument();
     });
 
-    it('uses the shipped compact and expanded widths', () => {
-      const { rerender } = render(
-        <ChatLayout sidebar={<div />} content={<div />} rightPanel={<div>right-panel-content</div>} />,
+    it('closes the panel from its top-right toggle', async () => {
+      const onRightPanelClose = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <ChatLayout
+          sidebar={<div />}
+          content={<div />}
+          rightPanel={<div>workspace-panel</div>}
+          onRightPanelClose={onRightPanelClose}
+        />,
       );
-      const panelContent = screen.getByText('right-panel-content');
-      const panelFrame = panelContent.parentElement;
-      if (!panelFrame) throw new Error('Right panel frame was not rendered');
-      expect(panelFrame).toHaveStyle({ width: '320px' });
+
+      await user.click(screen.getByRole('button', { name: 'Close workspace files' }));
+
+      expect(onRightPanelClose).toHaveBeenCalledOnce();
+    });
+
+    it('can remove and restore the right panel repeatedly', () => {
+      const { rerender } = render(
+        <ChatLayout sidebar={<div />} content={<div />} rightPanel={<div>workspace-panel</div>} />,
+      );
+
+      rerender(<ChatLayout sidebar={<div />} content={<div />} />);
+      rerender(<ChatLayout sidebar={<div />} content={<div />} rightPanel={<div>workspace-panel</div>} />);
+
+      expect(screen.getByText('workspace-panel')).toBeInTheDocument();
+    });
+  });
+
+  describe('given contextual right-panel labels', () => {
+    it('uses them for the desktop open and close controls', () => {
+      const { rerender } = render(
+        <ChatLayout
+          sidebar={<div />}
+          content={<div />}
+          rightPanelAvailable
+          rightPanelOpenLabel="Open task and workspace context"
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Open task and workspace context' })).toBeInTheDocument();
 
       rerender(
         <ChatLayout
           sidebar={<div />}
           content={<div />}
-          rightPanel={<div>right-panel-content</div>}
-          rightPanelExpanded
+          rightPanel={<div>context-panel</div>}
+          rightPanelCloseLabel="Close task and workspace context"
+          onRightPanelClose={() => {}}
         />,
       );
 
-      expect(panelFrame).toHaveStyle({ width: '720px' });
+      expect(screen.getByRole('button', { name: 'Close task and workspace context' })).toBeInTheDocument();
     });
   });
 
-  describe('given the right panel is available but closed', () => {
-    it('uses the existing Files reopen copy by default', () => {
-      render(<ChatLayout sidebar={<div />} content={<div />} rightPanelAvailable />);
+  describe('given a workspace panel on mobile', () => {
+    it('opens the panel from the top-right drawer trigger', async () => {
+      mockMobileViewport();
+      const user = userEvent.setup();
 
-      expect(screen.getByRole('button', { name: 'Open workspace files' })).toHaveTextContent('Files');
+      render(
+        <ChatLayout sidebar={<div />} content={<div>chat-content</div>} rightPanel={<div>workspace-panel</div>} />,
+      );
+
+      await user.click(await screen.findByRole('button', { name: 'Open workspace files' }));
+
+      expect(screen.getByText('workspace-panel')).toBeVisible();
     });
 
-    it('supports contextual reopen copy without changing the trigger behavior', async () => {
-      const user = userEvent.setup();
-      let opened = 0;
+    it('uses the contextual open label for the drawer trigger', () => {
+      mockMobileViewport();
+
       render(
         <ChatLayout
           sidebar={<div />}
-          content={<div />}
-          rightPanelAvailable
-          rightPanelOpenLabel="Context"
-          rightPanelOpenAriaLabel="Open task and workspace context"
-          onRightPanelOpen={() => {
-            opened += 1;
-          }}
+          content={<div>chat-content</div>}
+          rightPanel={<div>context-panel</div>}
+          rightPanelOpenLabel="Open task and workspace context"
         />,
       );
 
-      await user.click(screen.getByRole('button', { name: 'Open task and workspace context' }));
-
-      expect(screen.getByRole('button', { name: 'Open task and workspace context' })).toHaveTextContent('Context');
-      expect(opened).toBe(1);
+      expect(screen.getByRole('button', { name: 'Open task and workspace context' })).toBeInTheDocument();
     });
   });
 });

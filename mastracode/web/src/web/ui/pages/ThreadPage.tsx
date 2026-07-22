@@ -1,5 +1,6 @@
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useEffect, useState } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { useMatch, useParams } from 'react-router';
 
 import { useRouteThreadSync } from '../../../shared/hooks/useRouteThreadSync';
 import { Sidebar } from '../Sidebar';
@@ -18,7 +19,6 @@ import {
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { renderedPaths } from '../domains/workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../domains/workspace-viewer/components/WorkspaceViewerPanel';
-import { EmptyFactoryState } from '../domains/workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
 import { activeWorkspacePath, findUserSessionByThreadId } from '../domains/workspaces/services/factories';
 import { ChatLayout } from '../ui/ChatLayout';
@@ -26,54 +26,31 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
-const DESKTOP_RIGHT_PANEL_QUERY = '(min-width: 64rem)';
-
-function useDesktopRightPanelAvailable() {
-  const [available, setAvailable] = useState(() => window.matchMedia(DESKTOP_RIGHT_PANEL_QUERY).matches);
-
-  useEffect(() => {
-    const media = window.matchMedia(DESKTOP_RIGHT_PANEL_QUERY);
-    const onChange = (event: MediaQueryListEvent) => setAvailable(event.matches);
-    media.addEventListener('change', onChange);
-    return () => media.removeEventListener('change', onChange);
-  }, []);
-
-  return available;
-}
 
 export function ThreadPage() {
   const { activeFactory, factoriesPending } = useActiveFactoryContext();
-  const { kind, threadBasePath, resourceId, projectPath, factorySessionState, sessionEnabled } =
-    useChatSessionContext();
+  const { kind, resourceId, factorySessionState, sessionEnabled } = useChatSessionContext();
   const { threadId } = useParams();
-  const location = useLocation();
-  const desktopRightPanelAvailable = useDesktopRightPanelAvailable();
+  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
+  const isMobile = useIsMobile();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
   const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
   const activeUserSessionMatch =
     userSessionMatch && activeFactory?.id === userSessionMatch.factory.id ? userSessionMatch : undefined;
-  const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
+  const isUserThreadRoute = Boolean(userThreadMatch);
   const workspaceFactory = isUserThreadRoute ? activeUserSessionMatch?.factory : activeFactory;
   const workspacePath = workspaceFactory
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
   const factoryProjectId = factorySessionState?.factoryProjectId;
-  const bindingSessionId = sessionEnabled && projectPath === undefined ? resourceId : undefined;
-  const factoryEligible =
-    kind === 'factory' &&
-    threadBasePath === '/threads' &&
-    Boolean(
-      threadId &&
-      resourceId &&
-      bindingSessionId &&
-      factoryProjectId &&
-      factorySessionState?.projectRepositoryId &&
-      workspacePath,
-    );
+  const factoryEligible = Boolean(
+    kind === 'factory' && sessionEnabled && threadId && resourceId && factoryProjectId && workspacePath,
+  );
+  const factoryPanelAvailable = factoryEligible && !isMobile;
   const currentLifecycleKey =
-    factoryEligible && desktopRightPanelAvailable && threadId && factoryProjectId && bindingSessionId
-      ? `${factoryProjectId}:${threadId}:${resourceId}:${bindingSessionId}`
+    factoryPanelAvailable && threadId && factoryProjectId
+      ? `${factoryProjectId}:${threadId}:${resourceId}:${resourceId}`
       : undefined;
   const [factoryPanelState, setFactoryPanelState] = useState<{
     lifecycleKey: string | undefined;
@@ -96,10 +73,6 @@ export function ThreadPage() {
     );
   }
 
-  if (!activeFactory) {
-    return <EmptyFactoryState />;
-  }
-
   const collapseRightPanel = () => {
     setWorkspaceViewerExpanded(false);
     setFactoryPanelState({ lifecycleKey: currentLifecycleKey, tab: 'task' });
@@ -117,24 +90,20 @@ export function ThreadPage() {
     setFactoryPanelState({ lifecycleKey: currentLifecycleKey, tab });
   };
 
-  const rightPanelExpanded = factoryEligible
+  const rightPanelExpanded = factoryPanelAvailable
     ? lifecycleKeysMatch && activeFactoryTab === 'files' && workspaceViewerExpanded
     : factoryPanelState.lifecycleKey
       ? false
       : workspaceViewerExpanded;
+  const rightPanelVisible = workspaceViewerVisible || isMobile;
 
-  const rightPanel = factoryEligible ? (
-    currentLifecycleKey &&
-    workspacePath &&
-    bindingSessionId &&
-    factoryProjectId &&
-    threadId &&
-    workspaceViewerVisible ? (
+  const rightPanel = factoryPanelAvailable ? (
+    currentLifecycleKey && workspacePath && factoryProjectId && threadId && rightPanelVisible ? (
       <FactorySessionContextPanel
         factoryProjectId={factoryProjectId}
         threadId={threadId}
         resourceId={resourceId}
-        sessionId={bindingSessionId}
+        sessionId={resourceId}
         workspacePath={workspacePath}
         activeTab={activeFactoryTab}
         onTabChange={changeFactoryTab}
@@ -143,14 +112,13 @@ export function ThreadPage() {
         onCollapse={collapseRightPanel}
       />
     ) : undefined
-  ) : workspacePath && workspaceViewerVisible ? (
+  ) : workspacePath && rightPanelVisible ? (
     <WorkspaceViewerPanel
       workspacePath={workspacePath}
       renderedPaths={renderedPaths}
       title="Workspace files"
       context={workspaceFactory?.name}
       onExpandedChange={setWorkspaceViewerExpanded}
-      onCollapse={collapseRightPanel}
     />
   ) : undefined;
 
@@ -159,10 +127,10 @@ export function ThreadPage() {
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       rightPanelExpanded={rightPanelExpanded}
-      rightPanelAvailable={Boolean(workspacePath)}
-      rightPanelOpenLabel={factoryEligible ? 'Context' : undefined}
-      rightPanelOpenAriaLabel={factoryEligible ? 'Open task and workspace context' : undefined}
+      rightPanelAvailable={factoryPanelAvailable || Boolean(workspacePath)}
+      rightPanelOpenLabel={factoryPanelAvailable ? 'Open task and workspace context' : undefined}
       onRightPanelOpen={openRightPanel}
+      onRightPanelClose={factoryPanelAvailable ? undefined : () => setWorkspaceViewerVisible(false)}
       rightPanel={rightPanel}
       main={
         <ChatSessionBoundary threadId={threadId}>

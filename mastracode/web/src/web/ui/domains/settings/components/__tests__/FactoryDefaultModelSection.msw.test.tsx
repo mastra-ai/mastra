@@ -34,7 +34,6 @@ function seedLocalFactory() {
       },
     ]),
   );
-  localStorage.setItem('mastracode-active-factory', 'factory-local');
 }
 
 function seedServerFactory() {
@@ -54,12 +53,27 @@ function seedServerFactory() {
       },
     ]),
   );
-  localStorage.setItem('mastracode-active-factory', 'factory-server');
+  // Mounting the provider on a server factory triggers mount-driven sandbox
+  // materialization; stub `/ensure` so it settles quietly.
+  server.use(
+    http.post(`${TEST_BASE_URL}/web/github/projects/pr-1/ensure`, () => {
+      const done = {
+        resourceId: 'resource-server',
+        factoryProjectId: 'fp-1',
+        projectRepositoryId: 'pr-1',
+        sandboxId: 'sbx-1',
+        sandboxWorkdir: '/sandbox/hello',
+      };
+      return new HttpResponse(`event: done\ndata: ${JSON.stringify(done)}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }),
+  );
 }
 
-function renderSection() {
+function renderSection(factoryId: string) {
   return renderWithProviders(
-    <ActiveFactoryProvider>
+    <ActiveFactoryProvider factoryId={factoryId}>
       <FactoryDefaultModelSection models={models} />
     </ActiveFactoryProvider>,
   );
@@ -81,7 +95,7 @@ describe('FactoryDefaultModelSection', () => {
   it('given a local factory, when rendered, then no default-model picker appears', async () => {
     seedLocalFactory();
 
-    renderSection();
+    renderSection('factory-local');
 
     expect(screen.queryByLabelText('Factory default model')).not.toBeInTheDocument();
   });
@@ -94,7 +108,7 @@ describe('FactoryDefaultModelSection', () => {
       ),
     );
 
-    renderSection();
+    renderSection('factory-server');
 
     const picker = await screen.findByLabelText('Factory default model');
     await waitFor(() => expect(picker).not.toBeDisabled());
@@ -116,7 +130,7 @@ describe('FactoryDefaultModelSection', () => {
     );
     const user = userEvent.setup();
 
-    renderSection();
+    renderSection('factory-server');
 
     const picker = await screen.findByLabelText('Factory default model');
     await waitFor(() => expect(picker).not.toBeDisabled());
@@ -141,7 +155,7 @@ describe('FactoryDefaultModelSection', () => {
     );
     const user = userEvent.setup();
 
-    renderSection();
+    renderSection('factory-server');
 
     const picker = await screen.findByLabelText('Factory default model');
     await waitFor(() => expect(picker).toHaveTextContent('openai/gpt-4o-mini'));

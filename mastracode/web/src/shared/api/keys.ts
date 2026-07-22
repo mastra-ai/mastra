@@ -35,10 +35,22 @@ export const queryKeys = {
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  factoryThreadTaskContext: (factoryProjectId: string, threadId: string, resourceId: string, sessionId: string) =>
-    ['factory', 'thread-task-context', factoryProjectId, threadId, resourceId, sessionId] as const,
-  factoryMetrics: (githubProjectId: string | undefined, days: number) =>
-    ['factory', 'metrics', githubProjectId ?? null, days] as const,
+  factoryThreadTaskContext: (
+    factoryProjectId: string | undefined,
+    threadId: string | undefined,
+    resourceId: string | undefined,
+    sessionId: string | undefined,
+  ) =>
+    [
+      'factory',
+      'thread-task-context',
+      factoryProjectId ?? null,
+      threadId ?? null,
+      resourceId ?? null,
+      sessionId ?? null,
+    ] as const,
+  factoryMetrics: (githubProjectId: string | undefined, from: string, to: string) =>
+    ['factory', 'metrics', githubProjectId ?? null, from, to] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
     ['factory', 'health-thresholds', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>

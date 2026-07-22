@@ -28,7 +28,7 @@ function renderFactories() {
   const onClose = vi.fn();
   const view = renderWithProviders(
     <MemoryRouter initialEntries={['/factories/create']}>
-      <ActiveFactoryProvider>
+      <ActiveFactoryProvider factoryId="missing-factory">
         <FactoriesPanel onClose={onClose} />
         <LocationProbe />
       </ActiveFactoryProvider>
@@ -86,8 +86,9 @@ describe('FactoriesPanel', () => {
       ]);
     });
     expect(received).toEqual({ name: 'Mastra' });
-    expect(localStorage.getItem('mastracode-active-factory')).toBe(loadFactories()[0]?.id);
-    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factory/board'));
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${loadFactories()[0]?.id}/work`),
+    );
   });
 
   it('binds a local folder through the secondary path, then lands on /new', async () => {
@@ -110,8 +111,9 @@ describe('FactoriesPanel', () => {
         }),
       ]);
     });
-    expect(localStorage.getItem('mastracode-active-factory')).toBe(loadFactories()[0]?.id);
-    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/new'));
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${loadFactories()[0]?.id}/new`),
+    );
   });
 
   it('calls onClose from the Cancel button and from Escape', async () => {

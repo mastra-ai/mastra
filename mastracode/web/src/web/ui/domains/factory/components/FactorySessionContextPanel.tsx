@@ -79,17 +79,15 @@ export function FactorySessionContextPanel({
             <Tab value="task">Task</Tab>
             <Tab value="files">Files</Tab>
           </TabList>
-          {activeTab === 'task' ? (
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              onClick={onCollapse}
-              aria-label="Close task and workspace context"
-            >
-              <ChevronRight />
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            onClick={onCollapse}
+            aria-label="Close task and workspace context"
+          >
+            <ChevronRight />
+          </Button>
         </div>
 
         {activeTab === 'task' ? (
@@ -109,7 +107,6 @@ export function FactorySessionContextPanel({
               renderedPaths={renderedPaths}
               title="Workspace files"
               onExpandedChange={onExpandedChange}
-              onCollapse={onCollapse}
             />
           </TabContent>
         ) : null}

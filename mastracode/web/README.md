@@ -70,14 +70,14 @@ Session continuity with the terminal user interface (TUI) keeps the Software Dev
 
 Intake source config is asymmetric by provider. GitHub selections use `repositoryIds`, which contain connected repository UUIDs. Linear selections use `projectIds` because a Linear Project is an external provider concept.
 
-Browser state uses `mastracode-factories` and `mastracode-active-factory`. Prerelease `mastracode-projects` keys aren't read.
+Browser state uses `mastracode-factories`. The active Factory comes from the `/factories/:factoryId/**` URL, and prerelease `mastracode-projects` keys aren't read.
 
 ## Work and Review workflows
 
 Server-backed Factories split repository work across two boards:
 
-- **Work** (`/factory/work`): Shows manual work items, GitHub issues, and Linear issues. Its stages are **Intake**, **Triage**, **Planning**, **Building**, **Review**, and **Done**.
-- **Review** (`/factory/review`): Shows GitHub pull requests only. Its stages are **Intake**, **Reviewing**, and **Done**.
+- **Work** (`/factories/:factoryId/work`): Shows manual work items, GitHub issues, and Linear issues. Its stages are **Intake**, **Triage**, **Planning**, **Building**, **Review**, and **Done**.
+- **Review** (`/factories/:factoryId/review`): Shows GitHub pull requests only. Its stages are **Intake**, **Reviewing**, and **Done**.
 
 Open GitHub issues appear as **Work** intake candidates. Open pull requests appear as **Review** intake candidates. Adding a candidate to a board creates or updates its persisted Factory work item. The source type determines which board owns that item, so a GitHub issue can't appear on **Review** and a pull request can't appear on **Work**.
 
@@ -93,7 +93,7 @@ The private Web API can activate a user-invocable skill on an existing scoped Ag
 
 ## Factory metrics
 
-The **Metrics** page at `/factory/metrics` shows queue health for the active Factory. The Queue Health Chart contains one horizontal bar per Work stage. Each bar is segmented by item age and overlays diagonal stripes where agent work is active. Selecting a segment filters the item list below the chart. Age comes from the open `stageHistory` entry and falls back to `createdAt`. The pure `computeQueueHealth()` function in `src/web/ui/domains/factory/queue-health.ts` performs the client-side aggregation.
+The **Metrics** page at `/factories/:factoryId/metrics` shows queue health for the active Factory. The Queue Health Chart contains one horizontal bar per Work stage. Each bar is segmented by item age and overlays diagonal stripes where agent work is active. Selecting a segment filters the item list below the chart. Age comes from the open `stageHistory` entry and falls back to `createdAt`. The pure `computeQueueHealth()` function in `src/web/ui/domains/factory/queue-health.ts` performs the client-side aggregation.
 
 Queue age thresholds are server-side Factory project config in seconds. `GET /web/factory/projects/:factoryProjectId/health/thresholds` reads them from the `queue-health` storage domain. The `queue_health_settings` table keys records by `(org_id, factory_project_id)`. Defaults are `[14400, 86400, 259200]` (4h, 24h, and 72h). `saveConfig` rejects empty or non-ascending `thresholdsSeconds` values.
 

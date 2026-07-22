@@ -1,4 +1,4 @@
-# Mastra Software Factory
+# Mastra Factory
 
 An open source, agent-powered software delivery environment built on [Mastra](https://mastra.ai). Connect GitHub and Linear, pull issues into an intake board, hand them to coding agents, and ship pull requests — from a web app you own and can deploy anywhere.
 
@@ -86,7 +86,7 @@ Create a Linear OAuth app (Linear → Settings → API → OAuth applications �
 
 ## Versions
 
-The Mastra packages use caret ranges (currently anchored on `@mastra/core@{{@mastra/core}}` and `@mastra/code-sdk@{{@mastra/code-sdk}}`). Upgrade them together when updating.
+The Mastra packages are pinned to `latest`, so `npm install` pulls the current published release. Upgrade them together by re-running `npm install` (or by rescaffolding).
 
 ## License
 

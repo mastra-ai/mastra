@@ -69,7 +69,6 @@ export function ChatSessionConfigProvider({
         : undefined,
     baseUrl,
     kind: userScoped ? ('user' as const) : serverFactory ? ('factory' as const) : ('user' as const),
-    threadBasePath: userScoped ? ('/user/threads' as const) : ('/threads' as const),
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;
