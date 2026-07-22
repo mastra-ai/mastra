@@ -57,14 +57,30 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData } from '
  * closure on top — keys that survived serialisation are preserved while
  * non-serializable keys from the closure (like `controller`) are restored.
  */
+/**
+ * Detect RequestContext-like objects structurally. We cannot use `instanceof`
+ * here because duplicate copies of @mastra/core may be loaded in the same
+ * process (bundlers, monorepos) and the prototype identity is not guaranteed.
+ */
+function isRequestContextLike(value: unknown): value is RequestContext {
+  if (!value || typeof value !== 'object') return false;
+  const rc = value as RequestContext;
+  return (
+    typeof rc.get === 'function' &&
+    typeof rc.set === 'function' &&
+    typeof rc.entries === 'function' &&
+    typeof rc.size === 'function'
+  );
+}
+
 function mergeRequestContexts(
   closureRC: RequestContext | undefined,
   execRC: RequestContext | undefined,
 ): RequestContext {
   if (closureRC && closureRC === execRC) return closureRC;
   if (!closureRC && !execRC) return new RequestContext();
-  if (!closureRC) return execRC instanceof RequestContext ? execRC : new RequestContext();
-  if (!execRC || !(execRC instanceof RequestContext) || execRC.size() === 0) return closureRC;
+  if (!closureRC) return isRequestContextLike(execRC) ? execRC : new RequestContext();
+  if (!execRC || !isRequestContextLike(execRC) || execRC.size() === 0) return closureRC;
 
   const merged = new RequestContext();
   // Start with the evented engine's serialised snapshot
