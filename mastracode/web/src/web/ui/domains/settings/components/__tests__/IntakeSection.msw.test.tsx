@@ -257,7 +257,9 @@ describe('IntakeSection', () => {
       await userEvent.click(within(eng).getByRole('button', { name: 'ENG · Engineering' }));
       await userEvent.click(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' }));
 
-      expect(await within(eng).findByRole('status', { name: 'Saving ENG · Engineering selection' })).toBeInTheDocument();
+      expect(
+        await within(eng).findByRole('status', { name: 'Saving ENG · Engineering selection' }),
+      ).toBeInTheDocument();
       // Base UI's checkbox root is a span, so disabled state is exposed via aria-disabled.
       expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).toHaveAttribute('aria-disabled', 'true');
 
