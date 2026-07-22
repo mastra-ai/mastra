@@ -110,6 +110,18 @@ describe('parseMetricsRange', () => {
       windowEnd: END_OF_TODAY,
     });
   });
+
+  it('rejects timezone-less datetimes so the window is deployment-independent', () => {
+    // No Z/offset → Date.parse reads server-local; treated as absent (default window).
+    expect(parseMetricsRange('2026-07-01T10:00:00', '2026-07-05T10:00:00', NOW)).toEqual({
+      windowStart: Date.parse('2026-06-16T00:00:00.000Z'),
+      windowEnd: END_OF_TODAY,
+    });
+    // An explicit offset is honored.
+    expect(parseMetricsRange('2026-07-01T00:00:00+00:00', undefined, NOW).windowStart).toBe(
+      Date.parse('2026-07-01T00:00:00Z'),
+    );
+  });
 });
 
 describe('computeFactoryMetrics', () => {

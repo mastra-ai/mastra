@@ -76,12 +76,18 @@ export interface FactoryMetrics {
 }
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Datetime carrying an explicit `Z` or `±HH:MM` offset. */
+const ZONED_DATETIME_RE = /(?:[Zz]|[+-]\d{2}:?\d{2})$/;
 
 function parseRangeParam(value: unknown, boundary: 'from' | 'to'): number | undefined {
   if (typeof value !== 'string' || value.length === 0) return undefined;
+  const dateOnly = DATE_ONLY_RE.test(value);
+  // Timezone-less datetimes are parsed as server-local by Date.parse, so the
+  // window would shift by deployment region — reject them as invalid.
+  if (!dateOnly && !ZONED_DATETIME_RE.test(value)) return undefined;
   const time = Date.parse(value);
   if (Number.isNaN(time)) return undefined;
-  return boundary === 'to' && DATE_ONLY_RE.test(value) ? time + DAY_MS : time;
+  return boundary === 'to' && dateOnly ? time + DAY_MS : time;
 }
 
 function utcDayStart(time: number): number {

@@ -80,7 +80,9 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
     return <Notice variant="destructive">{message}</Notice>;
   }
   const metrics = metricsQuery.data;
-  const windowDays = inclusiveRangeDays(range);
+  // Prefer the server's count so the label stays paired with the rendered data
+  // (placeholderData keeps the old range's metrics during a refetch).
+  const windowDays = metrics?.windowDays ?? inclusiveRangeDays(range);
 
   // Keep the selected range inside the domain until the board's earliest item is known.
   const earliestDay = metrics?.earliestItemAt
