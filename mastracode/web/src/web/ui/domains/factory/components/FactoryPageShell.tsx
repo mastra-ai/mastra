@@ -7,13 +7,13 @@ import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useOverlays } from '../../../lib/overlays';
 import { Sidebar } from '../../../Sidebar';
 import { PageLayout } from '../../../ui';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { EmptyFactoryState, useActiveFactoryContext } from '../../workspaces';
+import { useActiveFactoryContext } from '../../workspaces';
 import type { ServerFactory } from '../../workspaces';
 import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 interface FactoryPageShellProps {
   title: string;
@@ -31,9 +31,16 @@ interface FactoryPageShellProps {
  * the header scopes repository-based intake.
  */
 export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
-  const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending } = useActiveFactoryContext();
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
+
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
 
   return (
     <PageLayout
@@ -43,17 +50,13 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
       description={activeFactory ? description : undefined}
       actions={serverFactory ? <RepositoryPicker factory={serverFactory} /> : undefined}
     >
-      {activeFactory ? (
-        serverFactory ? (
-          children(serverFactory)
-        ) : (
-          <Notice variant="info">
-            Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder
-            — create a Factory from the switcher to use the Board.
-          </Notice>
-        )
+      {serverFactory ? (
+        children(serverFactory)
       ) : (
-        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+        <Notice variant="info">
+          Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder —
+          create a Factory from the switcher to use the Board.
+        </Notice>
       )}
     </PageLayout>
   );

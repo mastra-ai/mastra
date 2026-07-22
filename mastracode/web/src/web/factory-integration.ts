@@ -23,85 +23,44 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { AuditEmitter } from './audit/domain.js';
+import type { ParsedGithubWebhook } from './github/webhook.js';
 import type { AuditEventRow } from './storage/domains/audit/base.js';
 import type { StateSigner } from './state-signing.js';
 import type { IntegrationStorageHandle } from './storage/domains/integrations/base.js';
-import type {
-  SourceControlInstallation,
-  SourceControlRepository,
-  SourceControlStorageHandle,
-} from './storage/domains/source-control/base.js';
+import type { Intake } from './capabilities/intake.js';
+import type { VersionControl } from './capabilities/version-control.js';
+import type { SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 
-export interface IntakeSource {
+export interface LinearIssueIngress {
   id: string;
-  name: string;
-  type: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface IntakeItem {
-  source: {
-    type: string;
-    externalId: string;
-    url?: string;
-  };
-  sourceId: string;
+  identifier: string;
   title: string;
-  status?: string;
-  labels?: string[];
-  assignee?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface IntakePage {
-  items: IntakeItem[];
-  nextCursor: string | null;
-}
-
-export interface IntakeIntegrationCapability {
-  listSources(args: { orgId: string; userId: string }): Promise<IntakeSource[]>;
-  listItems(args: { orgId: string; userId: string; sourceIds: string[]; cursor?: string }): Promise<IntakePage>;
-}
-
-export interface SourceControlInstallationInput {
-  externalId: string;
-  accountName?: string | null;
-  accountType?: string | null;
-  metadata?: Record<string, unknown>;
-}
-
-export interface SourceControlRepositoryInput {
-  externalId: string;
-  slug: string;
-  defaultBranch: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface SourceControlRepositoryAccess {
-  cloneUrl: string;
-  authorization?: { scheme: 'bearer'; token: string };
-}
-
-export interface SourceControlIntegrationCapability {
-  initialize(args: { storage: SourceControlStorageHandle }): void;
-  registerInstallation(args: {
-    orgId: string;
-    userId: string;
-    installation: SourceControlInstallationInput;
-  }): Promise<SourceControlInstallation>;
-  registerRepositories(args: {
-    orgId: string;
-    installationId: string;
-    repositories: SourceControlRepositoryInput[];
-  }): Promise<SourceControlRepository[]>;
-  getRepositoryAccess(args: { orgId: string; repositoryId: string }): Promise<SourceControlRepositoryAccess>;
+  url: string;
+  state: string;
+  stateType: string;
+  priorityLabel: string;
+  assignee: string | null;
+  team: string | null;
+  labels: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
+  ingestGithubEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  ingestLinearIssues?: (input: {
+    orgId: string;
+    userId: string;
+    factoryProjectId: string;
+    issues: LinearIssueIngress[];
+  }) => Promise<unknown>;
+  revokeFactoryBindingsForProjectPath?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    projectPath: string;
+  }) => Promise<void>;
 }
 
 /**
@@ -149,10 +108,10 @@ export interface IntegrationContext {
 export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
   readonly id: string;
-  /** Optional normalized external-work intake capability. */
-  readonly intake?: IntakeIntegrationCapability;
-  /** Optional provider-neutral source-control capability. */
-  readonly sourceControl?: SourceControlIntegrationCapability;
+  /** Issue-oriented capability consumed by Intake. */
+  readonly intake?: Intake;
+  /** Repository, installation, and pull-request capability. */
+  readonly versionControl?: VersionControl;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds

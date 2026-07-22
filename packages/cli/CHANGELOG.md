@@ -1,5 +1,76 @@
 # mastra
 
+## 2.0.0-alpha.11
+
+### Minor Changes
+
+- Improved project creation with a new default template, provider-native OpenAI, Anthropic, Google Gemini, and xAI setup, an empty scaffold mode, automatic skills, automatic git initialization, and interactive Mastra platform setup. ([#19825](https://github.com/mastra-ai/mastra/pull/19825))
+
+  **Breaking change**
+
+  The following `create-mastra`/`mastra create` flags and aliases were removed:
+
+  - `-p, --project-name`
+  - `--default`
+  - `-d, --dir`
+  - `-c, --components`
+  - `-e, --example` and `--no-example`
+  - `-m, --mcp`
+  - `--skills`
+  - `--observe`, `--no-observe`, `--observability`, `--no-observability`, and `--observability-project`
+
+  This removes the classic component and example scaffold controls, custom source-directory selection, MCP editor setup, interactive skills selection, and observability CLI flags from `create-mastra`/`mastra create`. Project names are now positional, managed projects use a new default template, skills are installed automatically for detected coding assistants, and git is initialized automatically. Interactive managed creation offers Mastra platform setup through a browser authentication prompt, creates a platform project with the local project name, and writes its credentials to `.env`. Prompt-free creation can add platform afterward with `mastra init`. Use `--empty` for a minimal project, `--no-skills` to skip skills installation, or `--no-git` to skip git initialization. The separate `mastra init` command retains its existing MCP, skills, and observability setup.
+
+  **Migration examples**
+
+  Create the default managed project:
+
+  ```bash
+  # Before
+  npx create-mastra@latest --project-name my-app --default
+
+  # After
+  npx create-mastra@latest my-app --llm openai
+  ```
+
+  Create a minimal project instead of configuring components or examples:
+
+  ```bash
+  # Before
+  npx create-mastra@latest --project-name my-app --components agents,tools --no-example
+
+  # After
+  npx create-mastra@latest my-app --empty
+  ```
+
+  Skip the new automatic post-create setup when needed:
+
+  ```bash
+  npx create-mastra@latest my-app --llm openai --no-skills --no-git
+  ```
+
+### Patch Changes
+
+- Fixed `mastra init` writing corrupted API keys to `.env` on Windows, including values containing `=` or shell metacharacters. ([#19825](https://github.com/mastra-ai/mastra/pull/19825))
+
+- Updated dependencies [[`c7d30cd`](https://github.com/mastra-ai/mastra/commit/c7d30cd86009c407df91105591f03cd6e3d2854d), [`ef03fbc`](https://github.com/mastra-ai/mastra/commit/ef03fbcc556bcbc04c9b3d06fab88771ecaa043c), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`4e68363`](https://github.com/mastra-ai/mastra/commit/4e683634f94ebd062d26a3bb6093a8dfc7263d37), [`9251370`](https://github.com/mastra-ai/mastra/commit/9251370ad413af464aa22d7566338bec5613e8de)]:
+  - @mastra/core@1.52.0-alpha.11
+  - @mastra/deployer@1.52.0-alpha.11
+
+## 1.20.0-alpha.10
+
+### Patch Changes
+
+- Added request-scoped model overrides to agent execution and approvals, and fixed Studio model selection so each tab can use a different model without changing the agent's configured default. ([#19749](https://github.com/mastra-ai/mastra/pull/19749))
+
+  ```ts
+  await agent.stream(messages, { model: 'google/gemini-2.5-flash' });
+  ```
+
+- Updated dependencies [[`41a5392`](https://github.com/mastra-ai/mastra/commit/41a5392d9f6c5e18d6b227f0fc0ddf49c50774e9), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`da009e1`](https://github.com/mastra-ai/mastra/commit/da009e1aacd89ed94b8d1b2af09c9d4fe7c4db49), [`35c2181`](https://github.com/mastra-ai/mastra/commit/35c2181e6a50e47c90ba36260db7c9723d54696f), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`675fbff`](https://github.com/mastra-ai/mastra/commit/675fbff84d3274391b33e852f76083c38a5514e5), [`eac4537`](https://github.com/mastra-ai/mastra/commit/eac453795531df0d5fe3729d80e93a91f8c1bc91), [`c328769`](https://github.com/mastra-ai/mastra/commit/c3287698ff8ef98dba86d415faa566fa3e5f4d56), [`b4b7ea8`](https://github.com/mastra-ai/mastra/commit/b4b7ea8733f033fc441ea47ed03f6afb17ec2248), [`232fcbc`](https://github.com/mastra-ai/mastra/commit/232fcbc14fce625dd672ba043329c0b732c62be2), [`3491666`](https://github.com/mastra-ai/mastra/commit/34916663c4fdd43b48c21f4ab2d5fb6dcccc94f9)]:
+  - @mastra/core@1.52.0-alpha.10
+  - @mastra/deployer@1.52.0-alpha.10
+
 ## 1.20.0-alpha.9
 
 ### Patch Changes

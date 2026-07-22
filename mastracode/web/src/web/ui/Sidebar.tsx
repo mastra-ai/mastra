@@ -6,6 +6,9 @@ import { useApiConfig } from '../../shared/api/config';
 import { redirectToLogout, useWebAuth } from './domains/auth';
 import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
+import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
+import { useSetSettingsSection } from './domains/settings/context/SettingsNavigationProvider';
+import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
 import {
   isServerFactory,
   FactorySwitcher,
@@ -28,30 +31,36 @@ import { useOverlays } from './lib/overlays';
  */
 export function Sidebar() {
   const { activeFactory } = useActiveFactoryContext();
+  const overlays = useOverlays();
   const isServerBacked = activeFactory ? isServerFactory(activeFactory) : false;
+  const settingsOpen = overlays.isOpen('settings');
 
   return (
     <MainSidebar className="bg-transparent h-full">
-      <MainSidebar.Nav>
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
-          <section aria-label="Factory switcher">
-            <FactorySwitcher />
-          </section>
-          <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
-            {isServerBacked ? (
-              <>
-                <FactorySection>
-                  <WorkspacesSection />
-                </FactorySection>
-                <UserSessionsSection />
-              </>
-            ) : (
-              <ThreadList />
-            )}
-          </section>
-        </div>
+      <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
+        {settingsOpen ? (
+          <SettingsNavigation />
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
+            <section aria-label="Factory switcher">
+              <FactorySwitcher />
+            </section>
+            <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
+              {isServerBacked ? (
+                <>
+                  <FactorySection>
+                    <WorkspacesSection />
+                  </FactorySection>
+                  <UserSessionsSection />
+                </>
+              ) : (
+                <ThreadList />
+              )}
+            </section>
+          </div>
+        )}
       </MainSidebar.Nav>
-      <MainSidebar.Bottom role="region" aria-label="Account and settings" className="pb-3">
+      <MainSidebar.Bottom role="region" aria-label="Account and settings">
         <SidebarFooter />
       </MainSidebar.Bottom>
     </MainSidebar>
@@ -60,27 +69,43 @@ export function Sidebar() {
 
 function SidebarFooter() {
   const overlays = useOverlays();
+  const settingsOpen = overlays.isOpen('settings');
+  const setSettingsSection = useSetSettingsSection();
+  const closeSettings = useCloseSettings();
+
+  const toggleSettings = () => {
+    if (settingsOpen) {
+      closeSettings();
+      return;
+    }
+    setSettingsSection('general');
+    overlays.open('settings');
+  };
 
   return (
-    <>
-      <MainSidebar.NavSeparator />
-      <MainSidebar.NavList>
-        <SidebarAuth />
-        <MainSidebar.NavLink
-          asChild
-          link={{
-            name: 'Settings',
-            url: '#',
-            icon: <Settings />,
-          }}
+    <MainSidebar.NavList>
+      <SidebarAuth />
+      <MainSidebar.NavLink
+        asChild
+        link={{
+          name: 'Settings',
+          url: '#',
+          icon: <Settings />,
+        }}
+        isActive={settingsOpen}
+      >
+        <button
+          id="settings-trigger"
+          type="button"
+          onClick={toggleSettings}
+          aria-label="Settings"
+          aria-current={settingsOpen ? 'page' : undefined}
         >
-          <button type="button" onClick={() => overlays.open('settings')} aria-label="Open settings">
-            <Settings />
-            <MainSidebar.NavLabel>Settings</MainSidebar.NavLabel>
-          </button>
-        </MainSidebar.NavLink>
-      </MainSidebar.NavList>
-    </>
+          <Settings />
+          <MainSidebar.NavLabel>Settings</MainSidebar.NavLabel>
+        </button>
+      </MainSidebar.NavLink>
+    </MainSidebar.NavList>
   );
 }
 

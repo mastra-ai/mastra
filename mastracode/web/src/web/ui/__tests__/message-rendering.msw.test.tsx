@@ -441,6 +441,126 @@ describe('MastraCode message rendering', () => {
     await waitFor(() => expect(screen.getByText('Streaming now')).toBeInTheDocument());
   });
 
+  it('keeps the running conversation and stream subscription alive while Settings is open', async () => {
+    const user = userEvent.setup();
+    seedProject();
+    const stream = delayedSse({
+      type: 'message_update',
+      message: dbMessage('assistant-settings-stream', 'assistant', [
+        { type: 'text', text: 'Streaming while settings are open' },
+      ]),
+    });
+    const streamRequests = vi.fn();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(SESSION, () => HttpResponse.json({ ...sessionState(), running: true })),
+      http.get(`${SESSION}/stream`, () => {
+        streamRequests();
+        return stream.response();
+      }),
+    );
+
+    renderChat();
+
+    expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
+
+    const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
+    await user.click(settingsTrigger);
+    expect(screen.getByRole('region', { name: 'Settings' })).toBeInTheDocument();
+
+    await stream.emit();
+    await user.keyboard('{Escape}');
+
+    expect(await screen.findByText('Streaming while settings are open')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(settingsTrigger).toHaveFocus());
+    expect(streamRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the running conversation mounted while Create Factory is open in the layout', async () => {
+    const user = userEvent.setup();
+    seedProject();
+    const stream = delayedSse({
+      type: 'message_update',
+      message: dbMessage('assistant-factory-stream', 'assistant', [
+        { type: 'text', text: 'Streaming while factory creation is open' },
+      ]),
+    });
+    const streamRequests = vi.fn();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(SESSION, () => HttpResponse.json({ ...sessionState(), running: true })),
+      http.get(`${SESSION}/stream`, () => {
+        streamRequests();
+        return stream.response();
+      }),
+    );
+
+    renderChat();
+
+    expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
+
+    const factorySwitcher = screen.getByRole('button', { name: 'Select factory' });
+    await user.click(factorySwitcher);
+    await user.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
+
+    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
+    expect(factorySurface.closest('main')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
+
+    await stream.emit();
+    await user.click(screen.getByRole('button', { name: 'Close factory creation' }));
+
+    expect(await screen.findByText('Streaming while factory creation is open')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(factorySwitcher).toHaveFocus());
+    expect(streamRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the first-run welcome screen after empty backend hydration', async () => {
+    useAgentControllerHandlers();
+    server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
+
+    renderChat();
+
+    expect(await screen.findByRole('heading', { name: 'Welcome to MastraCode' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory from local folder' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('does not show first-run Factory creation after a remote Factory hydrates', async () => {
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              repositories: [
+                {
+                  id: 'github-project-1',
+                  branch: 'main',
+                  sandboxWorkdir: '/workspace/acme/mastra',
+                  repository: { slug: 'mastra', defaultBranch: 'main' },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderChat();
+
+    await waitFor(() => expect(localStorage.getItem('mastracode-factories')).toContain('github-project-1'));
+    expect(screen.queryByRole('region', { name: 'Create Factory' })).not.toBeInTheDocument();
+  });
+
   it('renders tool lifecycle events inline before a later message update re-emits the tool part', async () => {
     seedProject();
     useAgentControllerHandlers({
@@ -771,18 +891,15 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      const buildButton = await screen.findByRole('button', { name: 'Build' });
-      const planButton = screen.getByRole('button', { name: 'Plan' });
+      const modeSelector = await screen.findByRole('combobox', { name: 'Session mode' });
       const composer = screen.getByPlaceholderText(/Ask Mastra Code/);
 
       // Switcher lives after the composer in DOM order (below it), not in the header.
-      expect(composer.compareDocumentPosition(buildButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(composer.compareDocumentPosition(planButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(composer.compareDocumentPosition(modeSelector) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-      const header = document.querySelector('header');
-      expect(header).not.toBeNull();
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Plan' })).not.toBeInTheDocument();
+      const header = document.querySelector<HTMLElement>('header');
+      if (!header) throw new Error('Expected chat header');
+      expect(within(header).queryByRole('combobox', { name: 'Session mode' })).not.toBeInTheDocument();
     });
 
     // Detailed mode selection/switching behavior is specified in
@@ -793,7 +910,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       expect(screen.queryByLabelText('Toggle theme')).not.toBeInTheDocument();
     });
@@ -803,7 +920,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       const header = document.querySelector('header');
       expect(header).not.toBeNull();
@@ -822,12 +939,12 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
-      const header = document.querySelector('header');
-      expect(header).not.toBeNull();
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Open settings' })).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Open settings' })).toBeInTheDocument();
+      const header = document.querySelector<HTMLElement>('header');
+      if (!header) throw new Error('Expected the chat header to be rendered');
+      expect(within(header).queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
       expect(screen.queryByText('Ready')).not.toBeInTheDocument();
     });
 
@@ -836,7 +953,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       const statusLine = screen.getByLabelText('Session status line');
       expect(within(statusLine).queryByText('MastraCode Test')).not.toBeInTheDocument();

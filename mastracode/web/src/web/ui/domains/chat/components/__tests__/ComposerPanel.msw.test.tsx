@@ -117,6 +117,6 @@ describe('ComposerPanel', () => {
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled());
     expect(screen.getByText('build')).toBeInTheDocument();
-    expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument();
+    expect(await screen.findByText(/GPT-4o Mini/)).toBeInTheDocument();
   });
 });

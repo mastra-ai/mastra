@@ -1220,6 +1220,8 @@ export type ProviderModelsMap = {
     'gemini-3.1-flash-lite',
     'gemini-3.1-pro-preview',
     'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.6-flash',
     'gemini-pro-latest',
     'gemma-4-26b-a4b-it',
     'gemma-4-31b-it',
@@ -1643,6 +1645,7 @@ export type ProviderModelsMap = {
   readonly wandb: readonly [
     'JetBrains/Mellum2-12B-A2.5B-Instruct',
     'MiniMaxAI/MiniMax-M2.5',
+    'MiniMaxAI/MiniMax-M3',
     'OpenPipe/Qwen3-14B-Instruct',
     'Qwen/Qwen3-30B-A3B-Instruct-2507',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
@@ -1811,6 +1814,18 @@ export type ProviderModelsMap = {
     'nemotron-3-ultra-550b-a55b:free',
     'qwen3.5-397b-a17b:free',
     'step-3.7-flash:free',
+  ];
+  readonly 'cline-pass': readonly [
+    'cline-pass/deepseek-v4-flash',
+    'cline-pass/deepseek-v4-pro',
+    'cline-pass/glm-5.2',
+    'cline-pass/kimi-k2.6',
+    'cline-pass/kimi-k2.7-code',
+    'cline-pass/mimo-v2.5',
+    'cline-pass/mimo-v2.5-pro',
+    'cline-pass/minimax-m3',
+    'cline-pass/qwen3.7-max',
+    'cline-pass/qwen3.7-plus',
   ];
   readonly cerebras: readonly ['gemma-4-31b', 'gpt-oss-120b', 'zai-glm-4.7'];
   readonly kenari: readonly [
@@ -2033,6 +2048,8 @@ export type ProviderModelsMap = {
     'gemini-3-flash',
     'gemini-3.1-pro',
     'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.6-flash',
     'glm-5',
     'glm-5.1',
     'glm-5.2',
@@ -2061,6 +2078,7 @@ export type ProviderModelsMap = {
     'kimi-k2.5',
     'kimi-k2.6',
     'kimi-k2.7-code',
+    'laguna-s-2.1-free',
     'mimo-v2.5-free',
     'minimax-m2.5',
     'minimax-m2.7',
@@ -2778,6 +2796,14 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-6',
     'claude-sonnet-5',
   ];
+  readonly 'aki-io': readonly [
+    'gemma4-26b',
+    'gpt-oss-120b',
+    'kimi-k2.7-code-1100b',
+    'minimax-m2.5-230b',
+    'mistral4-119b',
+    'qwen3.6-35b',
+  ];
   readonly kilo: readonly [
     'ai21/jamba-large-1.7',
     'aion-labs/aion-1.0',
@@ -3268,6 +3294,8 @@ export type ProviderModelsMap = {
     'google/gemini-3.1-pro-preview',
     'google/gemini-3.1-pro-preview-customtools',
     'google/gemini-3.5-flash',
+    'google/gemini-3.5-flash-lite',
+    'google/gemini-3.6-flash',
     'google/gemma-2-27b-it',
     'google/gemma-3-12b-it',
     'google/gemma-3-27b-it',
@@ -3435,6 +3463,8 @@ export type ProviderModelsMap = {
     'perplexity/sonar-reasoning-pro',
     'poolside/laguna-m.1',
     'poolside/laguna-m.1:free',
+    'poolside/laguna-s-2.1',
+    'poolside/laguna-s-2.1:free',
     'poolside/laguna-xs-2.1',
     'poolside/laguna-xs-2.1:free',
     'qwen/qwen-2.5-72b-instruct',
@@ -3497,7 +3527,6 @@ export type ProviderModelsMap = {
     'tencent/hunyuan-a13b-instruct',
     'tencent/hy3',
     'tencent/hy3-preview',
-    'tencent/hy3:free',
     'thedrummer/cydonia-24b-v4.1',
     'thedrummer/rocinante-12b',
     'thedrummer/skyfall-36b-v2',
@@ -4102,6 +4131,8 @@ export type ProviderModelsMap = {
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
     'google/gemini-3.5-flash',
+    'google/gemini-3.5-flash-lite',
+    'google/gemini-3.6-flash',
     'google/gemini-embedding-001',
     'google/gemini-embedding-2',
     'google/gemini-omni-flash-preview',
@@ -4447,11 +4478,11 @@ export type ProviderModelsMap = {
   ];
   readonly inferx: readonly [
     'google/gemma-4-31b-it-fp8',
-    'qwen/qwen3-coder-next-fp8',
-    'qwen/qwen3-coder-next-fp8-1m',
     'qwen/qwen3.5-122b-a10b-nvfp4',
     'qwen/qwen3.6-27b-fp8',
     'qwen/qwen3.6-35b-a3b-fp8',
+    'qwen3-coder-next-fp8',
+    'qwen3-coder-next-fp8-1m',
   ];
   readonly poe: readonly [
     'anthropic/claude-haiku-3',
@@ -4610,6 +4641,8 @@ export type ProviderModelsMap = {
     'gemini-3.1-pro-preview',
     'gemini-3.1-pro-preview-customtools',
     'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.6-flash',
     'gemini-embedding-001',
     'gemini-flash-latest',
     'gemini-flash-lite-latest',
@@ -4961,6 +4994,8 @@ export type ProviderModelsMap = {
     'gemini/gemini-3.1-pro-preview',
     'gemini/gemini-3.1-pro-preview-customtools',
     'gemini/gemini-3.5-flash',
+    'gemini/gemini-3.5-flash-lite',
+    'gemini/gemini-3.6-flash',
     'gemini/gemini-flash-latest',
     'gemini/gemini-flash-lite-latest',
     'openai/chat-latest',

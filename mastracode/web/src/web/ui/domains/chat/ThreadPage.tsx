@@ -1,15 +1,14 @@
 import { useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 
-import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui/ChatLayout';
 import { renderedPaths } from '../workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
-import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
+import { FactorySessionHeader } from '../factory/components/RelatedFactorySessions';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TaskPanel } from './components/TaskPanel';
@@ -17,13 +16,13 @@ import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionP
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
 import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
-  const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending } = useActiveFactoryContext();
   const { threadId } = useParams();
   const location = useLocation();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
@@ -36,6 +35,14 @@ export function ThreadPage() {
   const workspacePath = workspaceFactory
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
+
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
 
   return (
     <ChatLayout
@@ -58,11 +65,7 @@ export function ThreadPage() {
       }
       main={
         <ChatSessionBoundary threadId={threadId}>
-          {activeFactory ? (
-            <ThreadPageMain />
-          ) : (
-            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-          )}
+          <ThreadPageMain />
         </ChatSessionBoundary>
       }
     />
@@ -97,5 +100,12 @@ function ThreadPageContent() {
   useRouteThreadSync();
   useThreadPageKickoffs();
 
-  return <ChatMessageList />;
+  return (
+    <div className="flex min-h-0 flex-col">
+      <FactorySessionHeader />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <ChatMessageList />
+      </div>
+    </div>
+  );
 }

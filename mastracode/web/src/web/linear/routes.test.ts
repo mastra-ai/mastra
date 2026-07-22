@@ -53,6 +53,31 @@ const linearStub = {
   refreshAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
   fetchWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
   listProjects: (...args: any[]) => listLinearProjects(...(args as [])),
+  intake: {
+    listIssues: async (input: import('../capabilities/intake').ListIntakeIssuesInput) => {
+      if (input.connection.type !== 'oauth') throw new Error('expected OAuth connection');
+      const result = await listActiveLinearIssues(input.connection.accessToken, input.cursor, input.sourceIds);
+      return {
+        issues: result.issues.map(issue => ({
+          id: issue.id,
+          identifier: issue.identifier,
+          title: issue.title,
+          url: issue.url,
+          author: null,
+          state: issue.state,
+          stateType: issue.stateType,
+          priority: issue.priorityLabel,
+          assignee: issue.assignee,
+          source: issue.team,
+          labels: issue.labels,
+          commentCount: null,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+        })),
+        nextCursor: result.nextCursor,
+      };
+    },
+  },
   listActiveIssues: (token: string, after?: string, sourceIds?: string[]) =>
     listActiveLinearIssues(token, after, sourceIds),
 } as unknown as import('./integration').LinearIntegration;
@@ -106,6 +131,7 @@ import { getLinearConnection, upsertLinearConnection } from './storage';
 function buildApp(
   user: { workosId: string; organizationId?: string | null } | null,
   signer: import('../state-signing').StateSigner | null = stateSigner,
+  hooks?: import('../factory-integration').IntegrationHooks,
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -117,7 +143,12 @@ function buildApp(
   });
   mountApiRoutes(
     app as any,
-    buildLinearRoutes({ baseUrl: 'http://localhost:4111', linear: linearStub, stateSigner: signer ?? undefined }),
+    buildLinearRoutes({
+      baseUrl: 'http://localhost:4111',
+      linear: linearStub,
+      stateSigner: signer ?? undefined,
+      hooks,
+    }),
   );
   return app;
 }
@@ -281,6 +312,35 @@ describe('issues route', () => {
     expect(json.issues[0]).toMatchObject({ identifier: 'ENG-42', title: 'Fix intake sync' });
     expect(json.nextCursor).toBe('cursor-2');
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
+  });
+
+  it('ingests fetched issues for the active Factory project', async () => {
+    await connect();
+    const ingestLinearIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
+    const factoryProjectId = '11111111-1111-4111-8111-111111111111';
+    const res = await buildApp({ workosId: 'u1' }, stateSigner, { ingestLinearIssues }).request(
+      `/web/linear/issues?factoryProjectId=${factoryProjectId}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(ingestLinearIssues).toHaveBeenCalledWith({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId,
+      issues: expect.arrayContaining([expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42' })]),
+    });
+  });
+
+  it('rejects malformed Factory project identifiers before fetching issues', async () => {
+    await connect();
+    const ingestLinearIssues = vi.fn();
+    const res = await buildApp({ workosId: 'u1' }, stateSigner, { ingestLinearIssues }).request(
+      '/web/linear/issues?factoryProjectId=not-a-uuid',
+    );
+
+    expect(res.status).toBe(400);
+    expect(listActiveLinearIssues).not.toHaveBeenCalled();
+    expect(ingestLinearIssues).not.toHaveBeenCalled();
   });
 
   it('forwards the pagination cursor', async () => {

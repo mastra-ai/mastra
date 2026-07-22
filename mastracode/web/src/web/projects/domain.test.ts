@@ -117,7 +117,7 @@ describe('ProjectDomain', () => {
     });
     mountApiRoutes(
       app as never,
-      new ProjectDomain({ storage: seed.storage, sourceControlIntegrationIds: ['github', 'gitlab'] }).routes(),
+      new ProjectDomain({ storage: seed.storage, versionControlIntegrationIds: ['github', 'gitlab'] }).routes(),
     );
 
     const connect = async (integrationId: string, installationId: string) => {
@@ -210,7 +210,7 @@ describe('ProjectDomain', () => {
     });
     mountApiRoutes(
       app as never,
-      new ProjectDomain({ storage: seed.storage, sourceControlIntegrationIds: ['github'] }).routes(),
+      new ProjectDomain({ storage: seed.storage, versionControlIntegrationIds: ['github'] }).routes(),
     );
 
     expect(

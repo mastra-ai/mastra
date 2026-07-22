@@ -24,20 +24,34 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { MastraAuthStudio } from '@mastra/auth-studio';
 import { hasAuthInit } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { observeAgentGitAction } from './audit/agent-audit.js';
 import { AuditDomain } from './audit/domain.js';
-import { buildAuthRoutes, createWebAuthGate } from './auth.js';
+import { buildAuthRoutes, createWebAuthGate, isWebAuthEnabled } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './factory-integration.js';
+import { builtInFactoryRules } from './factory/rules/defaults.js';
+import { FactoryDecisionDispatcher } from './factory/rules/dispatcher.js';
+import { FactoryPhaseStateProcessor } from './factory/rules/processor.js';
+import { createFactoryTransitionTools } from './factory/rules/tools.js';
+import { FactoryTransitionService } from './factory/rules/transition-service.js';
+import type { FactoryRules } from './factory/rules/types.js';
+import { assertFactoryRules } from './factory/rules/validation.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
+import type { GithubIntegration } from './github/integration.js';
+import { recordFactoryPullRequestProvenance } from './github/provenance.js';
 import { ProjectDomain } from './projects/domain.js';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { seedRuntimeConfig } from './runtime-config.js';
+import { getFactoryStorage, seedRuntimeConfig } from './runtime-config.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
-import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './tenant-credentials.js';
+import {
+  createTenantCredentialPrimer,
+  primeTenantCredentials,
+  registerTenantCredentialResolver,
+} from './tenant-credentials.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -57,13 +71,21 @@ export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
 export interface MastraFactoryConfig {
   /**
-   * Auth provider instance — `MastraAuthWorkos` (`@mastra/auth-workos`),
-   * `MastraAuthBetterAuth` (`@mastra/auth-better-auth`), or any custom
-   * `MastraAuthProvider`. Whatever instance is passed is the active provider;
-   * the factory never selects or constructs one itself.
-   * Omitted → auth disabled (open server, local-dev behavior).
+   * Auth provider instance — `MastraAuthStudio` (`@mastra/auth-studio`),
+   * `MastraAuthWorkos` (`@mastra/auth-workos`), `MastraAuthBetterAuth`
+   * (`@mastra/auth-better-auth`), or any custom `MastraAuthProvider`. Whatever
+   * instance is passed is the active provider; a passed instance is always
+   * honored as-is.
+   *
+   * Omitted → the factory defaults to `MastraAuthStudio`, proxying auth
+   * through the shared Mastra platform API. `MastraAuthStudio` resolves its
+   * own env (`MASTRA_SHARED_API_URL`, `MASTRA_ORGANIZATION_ID`,
+   * `MASTRA_COOKIE_DOMAIN`).
+   *
+   * Pass `null` to disable auth entirely (open server, local-dev behavior)
+   * without falling back to the default.
    */
-  auth?: IMastraAuthProvider;
+  auth?: IMastraAuthProvider | null;
   /**
    * REQUIRED. Factory storage backend powering BOTH agent storage (threads,
    * messages, memory, OM — via `getMastraStorage()`) and the app tables
@@ -115,6 +137,13 @@ export interface MastraFactoryConfig {
    * never mount, its tools never register, and the server boots fine.
    */
   integrations?: FactoryIntegration[];
+  /**
+   * Authoritative Factory board, tool-result, and GitHub-event rules. Construct
+   * with `defaultFactoryRules({ version, overrides })` so deployment policy has
+   * an explicit version and exact handler leaves replace rather than compose.
+   * Omitted → conservative built-in rules for the current deployment.
+   */
+  rules?: FactoryRules;
 }
 
 export interface MastraFactorySandboxConfig {
@@ -159,9 +188,73 @@ function resolveSandboxWorkdirBase(machine: WorkspaceSandbox, configuredWorkdir?
   return (workdir ?? '/workspace').replace(/\/+$/, '');
 }
 
+/**
+ * Default auth provider — `MastraAuthStudio`, which proxies identity to the
+ * shared Mastra platform API. `MastraAuthStudio` resolves `MASTRA_SHARED_API_URL`,
+ * `MASTRA_ORGANIZATION_ID`, and `MASTRA_COOKIE_DOMAIN` from env on its own —
+ * this helper only derives a cookie-domain fallback from the factory's
+ * `publicUrl`.
+ *
+ * Cookie-domain resolution (Studio picks the first that wins):
+ *   1. explicit `MASTRA_COOKIE_DOMAIN` env, if set;
+ *   2. `.mastra.ai` when `sharedApiUrl` is on `.mastra.ai`;
+ *   3. this parent-domain fallback derived from `publicUrl` — so a deploy on
+ *      `https://foo.mastra.cloud` mints cookies with `Domain=.mastra.cloud`
+ *      without the caller wiring the env var by hand.
+ *   4. otherwise host-only (no `Domain=`), which is correct for `localhost`.
+ */
+function buildDefaultStudioAuth(publicUrl: string): IMastraAuthProvider {
+  return new MastraAuthStudio({
+    cookieDomain: parentDomainFromPublicUrl(publicUrl),
+  });
+}
+
+/**
+ * Derive a parent cookie domain from `publicUrl` by stripping the leftmost
+ * label — the same shape platform-API's env injection uses (see
+ * `platform/servers/api/src/lib/studio-env-vars.ts`: `.${routingDomain.replace(/^[^.]+\./, '')}`).
+ *
+ * Rather than a generic `strip-left-label` heuristic — which either emits
+ * cookies scoped to a public suffix (`sub.example.co.uk` → `.example.co.uk`
+ * requires PSL data to be safe) or misclassifies numeric hostnames like
+ * `3scale.example.com` as IPv4 — we only derive a parent domain when the
+ * host sits under one of the platform's known registrable domains. Anything
+ * else (custom domains, arbitrary tenant hostnames, IPs, `localhost`)
+ * falls through to host-only cookies. Callers that need a different scope
+ * pass `MASTRA_COOKIE_DOMAIN` explicitly (Studio honors that first).
+ */
+const KNOWN_PLATFORM_COOKIE_PARENTS = ['mastra.cloud', 'mastra.ai'] as const;
+
+function isIpLiteral(hostname: string): boolean {
+  // IPv6 addresses in URLs are bracketed; `URL.hostname` strips the brackets
+  // but the address itself still contains `:`. IPv4 is four dot-separated
+  // numeric octets — trust the parser to have already validated shape.
+  if (hostname.includes(':')) return true;
+  return /^\d+(?:\.\d+){3}$/.test(hostname);
+}
+
+function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
+  let hostname: string;
+  try {
+    hostname = new URL(publicUrl).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+  if (hostname === 'localhost' || isIpLiteral(hostname)) return undefined;
+  for (const parent of KNOWN_PLATFORM_COOKIE_PARENTS) {
+    // Exact match → we're already on the parent, host-only is correct.
+    // Subdomain match → mint the parent-scoped cookie.
+    if (hostname === parent) return undefined;
+    if (hostname.endsWith(`.${parent}`)) return `.${parent}`;
+  }
+  return undefined;
+}
+
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
+  #dispatcher: FactoryDecisionDispatcher | undefined;
+  #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -192,7 +285,14 @@ export class MastraFactory {
     const storage = this.#config.storage;
     const vector = this.#config.vector;
     const pubsub = this.#config.pubsub;
-    const auth = this.#config.auth;
+    // Default auth: honor an explicitly-passed provider (including `null` to
+    // disable auth) as-is; otherwise fall back to `MastraAuthStudio`
+    // (platform-proxied identity). The default derives its cookie domain
+    // from `publicUrl` — deploys on `<sub>.mastra.cloud` mint parent-domain
+    // cookies without the caller wiring `MASTRA_COOKIE_DOMAIN` explicitly.
+    const configuredAuth = this.#config.auth;
+    const auth: IMastraAuthProvider | undefined =
+      configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth(publicOrigin));
 
     // Registered integrations: validate ids up front so a copy-paste duplicate
     // fails loud instead of one instance silently shadowing the other.
@@ -204,6 +304,9 @@ export class MastraFactory {
       }
       integrationIds.add(integration.id);
     }
+    const rules = this.#config.rules ?? builtInFactoryRules();
+    assertFactoryRules(rules);
+
     // FactoryStorage owns every app-table domain and initializes them through
     // the same lifecycle as the backend connection.
     storage.registerDomain(new IntakeStorage());
@@ -219,8 +322,8 @@ export class MastraFactory {
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
     const projectDomain = new ProjectDomain({
       storage,
-      sourceControlIntegrationIds: integrations
-        .filter(integration => integration.sourceControl)
+      versionControlIntegrationIds: integrations
+        .filter(integration => integration.versionControl)
         .map(integration => integration.id),
     });
     const auditDomain = new AuditDomain({ storage, integrations });
@@ -263,6 +366,7 @@ export class MastraFactory {
       storage,
       vector,
       integrations,
+      rules,
       publicUrl: publicOrigin,
       authProvider: auth,
       stateSigner,
@@ -291,21 +395,30 @@ export class MastraFactory {
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
     // mirroring stored API keys into process.env.
-    registerTenantCredentialResolver();
+    //
+    // Only register when a real auth adapter gates callers. In local /
+    // auth-disabled mode there is no authenticated tenant, so registering would
+    // force every model call through an empty tenant store (fail-closed, no env
+    // fallback) and break chat with "Not logged in". Leaving it unregistered
+    // lets the SDK fall back to the file-backed AuthStorage (auth.json) — the
+    // same store the local /login and Settings pages read and write.
+    if (isWebAuthEnabled()) {
+      registerTenantCredentialResolver();
+    }
 
     for (const integration of integrations) {
-      if (integration.sourceControl) {
-        integration.sourceControl.initialize({
+      if (integration.versionControl) {
+        integration.versionControl.initialize({
           storage: sourceControlStorage.forIntegration(integration.id),
         });
       }
     }
 
-    // Every integration uses generic integration storage. Source-control
-    // providers additionally require the source-control domain. Readiness is
-    // derived solely from capability presence, never from provider ids.
+    // Every integration uses generic integration storage. Version-control
+    // providers additionally require the source-control storage domain. Readiness
+    // is derived solely from capability presence, never from provider ids.
     const integrationRegistrations = integrations.map(integration => {
-      const requiredDomains = ['integrations', ...(integration.sourceControl ? ['source-control'] : [])];
+      const requiredDomains = ['integrations', ...(integration.versionControl ? ['source-control'] : [])];
       return {
         integration,
         ready: requiredDomains.every(domain => storage.isDomainReady(domain)),
@@ -317,6 +430,42 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
+    const githubIntegration = integrations.find(integration => integration.id === 'github') as
+      GithubIntegration | undefined;
+    const workItemsStorage = storage.isDomainReady('work-items')
+      ? storage.getDomain<WorkItemsStorage>('work-items')
+      : undefined;
+    const transitionService = workItemsStorage
+      ? new FactoryTransitionService({ rules, storage: workItemsStorage })
+      : undefined;
+    const factoryProcessor = workItemsStorage
+      ? new FactoryPhaseStateProcessor({
+          rules,
+          storage: workItemsStorage,
+          ...(transitionService ? { transitionService } : {}),
+          ...(githubIntegration
+            ? {
+                recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[3]) =>
+                  recordFactoryPullRequestProvenance(
+                    githubIntegration,
+                    sourceControlStorage.forIntegration('github'),
+                    integrationStorage.forIntegration('github'),
+                    input,
+                  ),
+              }
+            : {}),
+          ...(storage
+            ? {
+                messageReader: {
+                  listMessages: async input => {
+                    const memory = await storage.getMastraStorage().getStore('memory');
+                    return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
+                  },
+                },
+              }
+            : {}),
+        })
+      : undefined;
 
     // Boot assertion: an active integration that signs OAuth `state` needs a
     // replica-stable signer — a per-process random secret silently breaks the
@@ -346,24 +495,31 @@ export class MastraFactory {
       workspace: getFactoryWorkspace,
       disableGithubSignals: true,
       storage: storage.getMastraStorage(),
+      ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
       ...(vector ? { vector } : {}),
-      ...(toolIntegrations.length > 0
+      ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
         ? {
             extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
               const tools: IntegrationTools = {};
               const toolOwners = new Map<string, string>();
-              const mergeTools = (integration: FactoryIntegration, contributed: IntegrationTools) => {
+              const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
                 for (const [name, tool] of Object.entries(contributed)) {
                   const owner = toolOwners.get(name);
                   if (owner) {
                     throw new Error(
-                      `MastraFactory: integration tool '${name}' from '${integration.id}' conflicts with '${owner}'.`,
+                      `MastraFactory: integration tool '${name}' from '${ownerId}' conflicts with '${owner}'.`,
                     );
                   }
-                  toolOwners.set(name, integration.id);
+                  toolOwners.set(name, ownerId);
                   tools[name] = tool;
                 }
               };
+              if (workItemsStorage && transitionService) {
+                mergeTools(
+                  'factory',
+                  await createFactoryTransitionTools({ requestContext, storage: workItemsStorage, transitionService }),
+                );
+              }
               for (const { integration, ready, ensureReady } of toolIntegrations) {
                 if (!ready && ensureReady) {
                   try {
@@ -373,10 +529,10 @@ export class MastraFactory {
                   }
                 }
                 if (integration.agentTools) {
-                  mergeTools(integration, await integration.agentTools({ requestContext }));
+                  mergeTools(integration.id, await integration.agentTools({ requestContext }));
                 }
                 if (integration.sessionTools) {
-                  mergeTools(integration, integration.sessionTools({ requestContext }));
+                  mergeTools(integration.id, integration.sessionTools({ requestContext }));
                 }
               }
               return tools;
@@ -422,6 +578,17 @@ export class MastraFactory {
           integrations: integrationRegistrations,
           intakeReady,
           factoryReady,
+          factoryTransitionService: transitionService,
+          onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
+            this.#dispatcher ??= new FactoryDecisionDispatcher({
+              controller,
+              transitionService: runtimeTransitionService,
+              storage: getFactoryStorage().getDomain<WorkItemsStorage>('work-items'),
+              reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+              prepareBinding,
+              primeCredentials: primeTenantCredentials,
+            });
+          },
         }),
         ...projectDomain.routes(),
         ...auditDomain.routes(),
@@ -458,6 +625,8 @@ export class MastraFactory {
     });
 
     this.#prepared = prepared;
+
+    this.#factoryProcessor = factoryProcessor;
 
     // Integration lifecycle workers (e.g. polling an upstream without
     // webhooks): collected from READY integrations only, folded into the
@@ -498,5 +667,12 @@ export class MastraFactory {
       throw new Error('MastraFactory.finalize() called before prepare()');
     }
     await this.#prepared.finalize();
+    await this.#factoryProcessor?.reconcileAllBoundThreads();
+    this.#dispatcher?.start();
+  }
+
+  /** Stop Factory-owned background dispatch before the host process shuts down. */
+  async shutdown(): Promise<void> {
+    await this.#dispatcher?.stop();
   }
 }

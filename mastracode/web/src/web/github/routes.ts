@@ -38,7 +38,7 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config';
 import type { GithubIntegration } from './integration';
 import { withProjectLock } from './project-lock';
 import { handleGithubWebhook } from './webhook';
-import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './webhook';
+import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook';
 import {
   computeSandboxWorkdir,
   getSandboxProvider,
@@ -50,7 +50,6 @@ import type { MaterializationSandbox, PrepareProgress, ProgressFn } from '../san
 import {
   commitAll,
   computeWorktreePath,
-  createPullRequest,
   ensureProjectSandbox,
   ensureWorktree,
   isValidGitRef as isValidGitRefSandbox,
@@ -99,6 +98,14 @@ export interface MountGithubRoutesOptions {
   runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
   /** Best-effort audit emission supplied by the factory-owned audit domain. */
   emitAudit?: AuditEmitter['emit'];
+  /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
+  ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  /** Revoke Factory agent authority before deleting the worktree that scopes it. */
+  revokeFactoryBindingsForProjectPath?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    projectPath: string;
+  }) => Promise<void>;
 }
 
 /**
@@ -271,6 +278,80 @@ async function resolveProjectRepository(args: {
   };
 }
 
+function polledIssueEvent(
+  project: ResolvedProjectRepository,
+  issue: {
+    number: number;
+    title: string;
+    url: string;
+    author: string | null;
+    labels: string[];
+    createdAt: string;
+  },
+): ParsedGithubWebhook {
+  const repositoryId = Number(project.repository.externalId);
+  return {
+    event: 'issues',
+    deliveryId: `poll:${repositoryId}:issue:${issue.number}:${issue.createdAt}`,
+    payload: {
+      action: 'opened',
+      installation: { id: Number(project.installation.externalId) },
+      repository: { id: repositoryId, full_name: project.repository.slug },
+      sender: { login: issue.author ?? '__unknown__' },
+      issue: {
+        number: issue.number,
+        title: issue.title,
+        html_url: issue.url,
+        labels: issue.labels.map(name => ({ name })),
+      },
+    },
+  };
+}
+
+function polledPullRequestEvent(
+  project: ResolvedProjectRepository,
+  pullRequest: {
+    number: number;
+    title: string;
+    url: string;
+    author: string | null;
+    headBranch: string;
+    baseBranch: string;
+    createdAt: string;
+  },
+): ParsedGithubWebhook {
+  const repositoryId = Number(project.repository.externalId);
+  return {
+    event: 'pull_request',
+    deliveryId: `poll:${repositoryId}:pull-request:${pullRequest.number}:${pullRequest.createdAt}`,
+    payload: {
+      action: 'opened',
+      installation: { id: Number(project.installation.externalId) },
+      repository: { id: repositoryId, full_name: project.repository.slug },
+      sender: { login: pullRequest.author ?? '__unknown__' },
+      pull_request: {
+        number: pullRequest.number,
+        title: pullRequest.title,
+        html_url: pullRequest.url,
+        state: 'open',
+        merged: false,
+        head: { ref: pullRequest.headBranch },
+        base: { ref: pullRequest.baseBranch },
+      },
+    },
+  };
+}
+
+async function ingestPolledEvents(
+  events: ParsedGithubWebhook[],
+  ingestFactoryEvent: MountGithubRoutesOptions['ingestFactoryEvent'],
+): Promise<void> {
+  if (!ingestFactoryEvent) return;
+  const results = await Promise.allSettled(events.map(event => ingestFactoryEvent(event)));
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejected) throw rejected.reason;
+}
+
 /**
  * Build the GitHub routes as Mastra `apiRoutes`. When the feature is disabled,
  * returns only the `status` route so the SPA can detect the disabled state.
@@ -399,6 +480,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const result = await handleGithubWebhook(loose(c), {
           github,
           runIssueTriage: runBoardIssueTriage,
+          ingestFactoryEvent: options.ingestFactoryEvent,
           ...(options.controller
             ? {
                 controller: options.controller,
@@ -643,13 +725,33 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const label = parseIssueLabelFilter(c.req.query('label'));
         if (label === null) return c.json({ error: 'invalid_label' }, 400);
         try {
-          const { issues, nextPage } = await github.listRepoOpenIssues(
-            Number(loaded.project.installation.externalId),
-            loaded.project.repository.slug,
-            page,
-            { label },
+          const { issues, nextCursor } = await github.intake.listIssues({
+            connection: {
+              type: 'app-installation',
+              installationId: Number(loaded.project.installation.externalId),
+            },
+            sourceIds: [loaded.project.repository.slug],
+            labels: label ? [label] : undefined,
+            cursor: String(page),
+          });
+          const responseIssues = issues.map(issue => ({
+            number: Number(issue.id),
+            title: issue.title,
+            url: issue.url,
+            author: issue.author,
+            labels: issue.labels,
+            comments: issue.commentCount ?? 0,
+            createdAt: issue.createdAt,
+            updatedAt: issue.updatedAt,
+          }));
+          await ingestPolledEvents(
+            responseIssues.map(issue => polledIssueEvent(loaded.project, issue)),
+            options.ingestFactoryEvent,
           );
-          return c.json({ issues, nextPage });
+          return c.json({
+            issues: responseIssues,
+            nextPage: nextCursor === null ? null : Number(nextCursor),
+          });
         } catch (err) {
           return c.json(
             { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
@@ -742,12 +844,33 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const page = parseListPage(c.req.query('page'));
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
         try {
-          const { pullRequests, nextPage } = await github.listRepoOpenPullRequests(
-            Number(loaded.project.installation.externalId),
-            loaded.project.repository.slug,
-            page,
+          const { pullRequests, nextCursor } = await github.versionControl.listPullRequests({
+            connection: {
+              type: 'app-installation',
+              installationId: Number(loaded.project.installation.externalId),
+            },
+            sourceId: loaded.project.repository.slug,
+            includeDrafts: false,
+            cursor: String(page),
+          });
+          const responsePullRequests = pullRequests.map(pr => ({
+            number: Number(pr.id),
+            title: pr.title,
+            url: pr.url,
+            author: pr.author,
+            baseBranch: pr.baseBranch,
+            headBranch: pr.headBranch,
+            createdAt: pr.createdAt,
+            updatedAt: pr.updatedAt,
+          }));
+          await ingestPolledEvents(
+            responsePullRequests.map(pullRequest => polledPullRequestEvent(loaded.project, pullRequest)),
+            options.ingestFactoryEvent,
           );
-          return c.json({ pullRequests, nextPage });
+          return c.json({
+            pullRequests: responsePullRequests,
+            nextPage: nextCursor === null ? null : Number(nextCursor),
+          });
         } catch (err) {
           return c.json(
             { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
@@ -815,7 +938,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   );
 
   // ── Worktree / branch / commit / push / PR ──────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, emitAudit }));
+  routes.push(
+    ...buildProjectGitRoutes({
+      github,
+      emitAudit,
+      revokeFactoryBindingsForProjectPath: options.revokeFactoryBindingsForProjectPath,
+    }),
+  );
 
   return routes;
 }
@@ -829,10 +958,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 async function loadOrgProject(
   github: GithubIntegration,
   c: RouteContext,
-): Promise<{ project: ResolvedProjectRepository } | { response: Response }> {
+): Promise<{ project: ResolvedProjectRepository; userId: string } | { response: Response }> {
   const resolved = await resolveOrgTenant(c);
   if ('response' in resolved) return { response: resolved.response };
-  const { orgId } = resolved.tenant;
+  const { orgId, userId } = resolved.tenant;
 
   const projectRepositoryId = c.req.param('id');
   if (!projectRepositoryId) {
@@ -842,7 +971,7 @@ async function loadOrgProject(
   if (!project) {
     return { response: c.json({ error: 'Project repository not found' }, 404) };
   }
-  return { project };
+  return { project, userId };
 }
 
 /** Derive a commit/author identity from the authenticated WorkOS user. */
@@ -988,11 +1117,38 @@ async function loadOwnedProject(
 function buildProjectGitRoutes({
   github,
   emitAudit,
+  revokeFactoryBindingsForProjectPath,
 }: {
   github: GithubIntegration;
   emitAudit?: AuditEmitter['emit'];
+  revokeFactoryBindingsForProjectPath?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    projectPath: string;
+  }) => Promise<void>;
 }): ApiRoute[] {
   return [
+    // ── List the signed-in user's persisted worktrees ───────────────────────
+    registerApiRoute('/web/github/projects/:id/worktrees', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOrgProject(github, loose(c));
+        if ('response' in owned) return owned.response;
+        const rows = await github.sourceControlStorage.worktrees.list({
+          projectRepositoryId: owned.project.id,
+          userId: owned.userId,
+        });
+        return c.json({
+          worktrees: rows.map(row => ({
+            branch: row.branch,
+            baseBranch: row.baseBranch,
+            worktreePath: row.worktreePath,
+          })),
+        });
+      },
+    }),
+
     // ── Create / reuse a worktree + feature branch ──────────────────────────
     registerApiRoute('/web/github/projects/:id/worktree', {
       method: 'POST',
@@ -1082,7 +1238,7 @@ function buildProjectGitRoutes({
       handler: async c => {
         const owned = await loadOwnedProject(github, loose(c));
         if ('response' in owned) return owned.response;
-        const { userId, project, sandboxRow } = owned;
+        const { orgId, userId, project, sandboxRow } = owned;
 
         let body: { branch?: unknown };
         try {
@@ -1110,6 +1266,11 @@ function buildProjectGitRoutes({
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
             const sandbox = await resolveProjectSandbox(sandboxRow);
+            await revokeFactoryBindingsForProjectPath?.({
+              orgId,
+              factoryProjectId: project.factoryProjectId,
+              projectPath: worktreeRow.worktreePath,
+            });
             await removeWorktree(sandbox, sandboxRow.sandboxWorkdir, {
               branch,
               worktreePath: worktreeRow.worktreePath,
@@ -1244,7 +1405,7 @@ function buildProjectGitRoutes({
       },
     }),
 
-    // ── Open a pull request via the gh CLI ──────────────────────────────────
+    // ── Open a pull request through the version-control capability ─────────
     registerApiRoute('/web/github/projects/:id/pr', {
       method: 'POST',
       requiresAuth: false,
@@ -1296,9 +1457,17 @@ function buildProjectGitRoutes({
 
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
-            const sandbox = await resolveProjectSandbox(sandboxRow);
-            const token = await github.mintInstallationToken(Number(project.installation.externalId));
-            const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
+            const result = await github.versionControl.createPullRequest({
+              connection: {
+                type: 'app-installation',
+                installationId: Number(project.installation.externalId),
+              },
+              sourceId: project.repository.slug,
+              baseBranch: base,
+              headBranch: head,
+              title,
+              body: prBody,
+            });
             await emitAudit?.({
               context: loose(c),
               input: {
@@ -1345,7 +1514,10 @@ function buildProjectGitRoutes({
             return c.json({ url: result.url });
           });
         } catch (err) {
-          return gitErrorResponse(loose(c), err);
+          return c.json(
+            { error: 'github_pr_create_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
         }
       },
     }),

@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
 
-import { useToast } from '../../../ui';
 import {
   useRepositorySettingsQuery,
   useSaveRepositorySettingsMutation,
@@ -16,7 +16,6 @@ import { isServerFactory } from '../../workspaces/services/factories';
  * server. Saving a blank field clears the command.
  */
 function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryId: string; label: string }) {
-  const { toast } = useToast();
   const settingsQuery = useRepositorySettingsQuery(projectRepositoryId);
   const saveMutation = useSaveRepositorySettingsMutation();
 
@@ -30,8 +29,8 @@ function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryI
     saveMutation.mutate(
       { projectRepositoryId, settings: { setupCommand: draft.trim() || null } },
       {
-        onSuccess: () => toast('Setup command saved', 'success'),
-        onError: err => toast(err instanceof Error ? err.message : 'Failed to save setup command', 'error'),
+        onSuccess: () => toast.success('Setup command saved'),
+        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save setup command'),
       },
     );
   };

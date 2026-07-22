@@ -126,7 +126,7 @@ describe('useAgentControllerConnection', () => {
     const { result } = renderHookWithProviders(() =>
       useAgentControllerConnection({
         ...hookArgs,
-        projectPath: '/sandbox/repo',
+        scope: '/sandbox/repo',
         factorySessionState,
         onEvent,
       }),
