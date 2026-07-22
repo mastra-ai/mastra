@@ -1,22 +1,23 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Logo } from '@mastra/playground-ui/components/Logo';
 import { ChevronDown } from 'lucide-react';
-import { deriveProjectPath } from '../../../../../../shared/hooks/useWorkspaces';
-import { isLocalFactory, selectedRepository, useActiveFactoryContext } from '../../../workspaces';
+import { useParams } from 'react-router';
+import { useFactoryQuery } from '../../../../../../shared/hooks/useFactories';
 import { useChatCommands } from '../../context/ChatCommandsProvider';
+import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { FactoryMetadata } from './FactoryMetadata';
 
 const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
 
 export function EmptyThreadState() {
-  const { activeFactory } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const { data: activeFactory } = useFactoryQuery(factoryId);
+  const { projectPath, resourceId, factorySessionState } = useChatSessionContext();
   const { prefillComposer } = useChatCommands();
   if (!activeFactory) return null;
-  const workspace = deriveProjectPath(activeFactory);
-  const gitBranch = isLocalFactory(activeFactory)
-    ? activeFactory.binding.gitBranch
-    : selectedRepository(activeFactory)?.gitBranch;
+  const repository = activeFactory.repositories.find(repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId);
+  const gitBranch = repository?.gitBranch;
 
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
@@ -71,9 +72,9 @@ export function EmptyThreadState() {
         </summary>
         <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left font-mono leading-relaxed">
           <FactoryMetadata label="Factory" value={activeFactory.name} />
-          {activeFactory.resourceId && <FactoryMetadata label="Resource ID" value={activeFactory.resourceId} />}
+          {resourceId && <FactoryMetadata label="Resource ID" value={resourceId} />}
           {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} />}
-          {workspace && <FactoryMetadata label="Workspace" value={workspace} />}
+          {projectPath && <FactoryMetadata label="Workspace" value={projectPath} />}
         </dl>
       </details>
     </section>

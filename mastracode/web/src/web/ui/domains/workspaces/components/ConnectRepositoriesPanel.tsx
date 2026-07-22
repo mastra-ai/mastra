@@ -8,8 +8,7 @@ import { useGithubStatusQuery } from '../../../../../shared/hooks/useGithubStatu
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../../shared/hooks/useFactories';
 import { FolderIcon, GithubIcon, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import type { ServerFactory } from '../services/factories';
-import type { GithubStatus } from '../services/github';
+import type { FactoryProject, GithubStatus } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 
 /**
@@ -20,7 +19,7 @@ import { connectGithub, manageGithubConnection } from '../services/github';
  *
  * Embedded in the Board's no-repository empty state and in Factory settings.
  */
-export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }) {
+export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
   const { baseUrl } = useApiConfig();
   const statusQuery = useGithubStatusQuery();
   const status = statusQuery.data;
@@ -30,8 +29,8 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
   const linkRepository = useLinkRepositoryMutation();
   const unlinkRepository = useUnlinkRepositoryMutation();
 
-  const factoryProjectId = factory.binding.factoryProjectId;
-  const linked = factory.binding.repositories;
+  const factoryProjectId = factory.id;
+  const linked = factory.repositories;
   const linkedSlugs = new Set(linked.map(repo => repo.slug));
   const repos = reposQuery.data ?? [];
   const available = repos.filter(repo => !linkedSlugs.has(repo.fullName));

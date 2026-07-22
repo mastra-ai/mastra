@@ -2,7 +2,7 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
@@ -38,21 +38,27 @@ const linearProjects: LinearProject[] = [
 ];
 
 function seedGithubProject() {
-  localStorage.setItem(
-    'mastracode-factories',
-    JSON.stringify([
-      {
-        id: 'project-gh',
-        name: 'mastra',
-        resourceId: 'resource-gh',
-        createdAt: 1,
-        binding: {
-          kind: 'factory',
-          factoryProjectId: 'fp-1',
-          repositories: [{ projectRepositoryId: 'ghp-1', slug: 'mastra', worktrees: [] }],
-        },
-      },
-    ]),
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+      HttpResponse.json({
+        connections: [
+          {
+            id: 'conn-fp-1',
+            repositories: [
+              {
+                id: 'ghp-1',
+                branch: null,
+                sandboxWorkdir: null,
+                repository: { slug: 'mastra', defaultBranch: 'main' },
+              },
+            ],
+          },
+        ],
+      }),
+    ),
   );
 }
 
@@ -82,10 +88,6 @@ function renderIntakeSection() {
     </>,
   );
 }
-
-afterEach(() => {
-  localStorage.clear();
-});
 
 describe('IntakeSection', () => {
   describe('given a config with both sources enabled', () => {

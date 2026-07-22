@@ -11,7 +11,7 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
-import { createBrowserRouter, Navigate, useLocation } from 'react-router';
+import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
 import Chat from './domains/chat/Chat';
@@ -27,9 +27,12 @@ import { SettingsPage } from './pages/SettingsPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
 import { ThreadPage } from './pages/ThreadPage';
-import { useFactoriesQuery } from '../../shared/hooks/useFactories';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+
+import { useFactoriesQuery, useFactoryQuery } from '../../shared/hooks/useFactories';
+import { useWorkspacesQuery } from '../../shared/hooks/useWorkspaces';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
-import { factoryHomePath } from './domains/workspaces/services/factoryPaths';
+import { AuthPendingSkeleton } from './domains/auth/components/RootGuards';
 
 function RootLanding() {
   const { data: factories, isPending } = useFactoriesQuery();
@@ -43,7 +46,38 @@ function RootLanding() {
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
 
-  return <Navigate to={factoryHomePath(firstFactory)} replace state={state} />;
+  return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
+}
+
+function FactoryHomeRedirect() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factory = useFactoryQuery(factoryId);
+  const firstRepository = factory.data?.repositories[0];
+  const workspaces = useWorkspacesQuery(firstRepository?.projectRepositoryId);
+
+  if (factory.isPending || workspaces.isPending) return <AuthPendingSkeleton label="Loading workspaces" />;
+  if (factory.isError || workspaces.isError) {
+    return (
+      <div className="grid h-dvh w-full place-items-center bg-surface1 px-4">
+        <Notice variant="destructive">Could not load workspaces. Check the server connection and reload.</Notice>
+      </div>
+    );
+  }
+
+  const firstWorkspace = workspaces.data?.workspaces[0];
+  if (firstWorkspace) return <Navigate to={`workspaces/${firstWorkspace.sessionId}`} replace />;
+
+  return (
+    <div className="grid h-full min-h-96 place-items-center bg-surface1 px-6 text-center">
+      <div className="max-w-md space-y-3">
+        <h1 className="text-lg font-semibold text-icon6">Create a workspace</h1>
+        <p className="text-sm text-icon3">
+          This Factory does not have any workspaces yet. Create one from the sidebar to start chatting in a
+          repository session.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export function createAppRoutes(): RouteObject[] {
@@ -62,17 +96,24 @@ export function createAppRoutes(): RouteObject[] {
           path: 'factories/:factoryId',
           element: <FactoryLayout />,
           children: [
+            { index: true, element: <FactoryHomeRedirect /> },
             {
-              // Pathless layout: <Chat /> (providers, session, SSE stream) stays
-              // mounted while navigating between thread URLs, so thread navigation
-              // never tears down or reconnects the session.
+              path: 'workspaces/:sessionId',
+              element: <Chat />,
+              children: [
+                { index: true, element: <NewPage /> },
+                { path: 'threads/:threadId', element: <ThreadPage /> },
+              ],
+            },
+            {
+              path: 'user/threads/:threadId',
+              element: <Chat />,
+              children: [{ index: true, element: <ThreadPage /> }],
+            },
+            {
               element: <Chat />,
               children: [
                 { path: 'new', element: <NewPage /> },
-                { path: 'threads/:threadId', element: <ThreadPage /> },
-                // Personal (non-factory) sessions: same thread page, but the
-                // session provider binds to the user's own resourceId + worktree.
-                { path: 'user/threads/:threadId', element: <ThreadPage /> },
                 { path: 'overview', element: <OverviewPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
