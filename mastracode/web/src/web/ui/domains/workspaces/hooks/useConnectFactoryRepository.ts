@@ -2,20 +2,18 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../../shared/hooks/useFactories';
-import { saveFactories } from '../services/factories';
-import type { Factory } from '../services/factories';
-import type { GithubRepo } from '../services/github';
+import type { FactoryProject, FactoryProjectPayload, GithubRepo } from '../services/github';
 
 export interface ConnectFactoryRepositoryOptions {
   /**
    * Already-created factory to link the repository into. When absent, a
    * factory is created from the repository name (onboarding-style flow).
    */
-  pendingFactory?: Factory;
+  pendingFactory?: FactoryProject | FactoryProjectPayload;
   /** Called when a factory had to be created from the repo name (no `pendingFactory`). */
-  onFactoryCreated?: (factory: Factory) => Promise<unknown>;
+  onFactoryCreated?: (factory: FactoryProjectPayload) => Promise<unknown>;
   /** Called after the repository is linked and the factories cache refreshed. */
-  onLinked?: (factory: Factory) => Promise<unknown>;
+  onLinked?: (factory: FactoryProject) => Promise<unknown>;
 }
 
 /**
@@ -36,22 +34,14 @@ export function useConnectFactoryRepository({
     mutationFn: async (repo: GithubRepo) => {
       const factory = pendingFactory ?? (await createFactory.mutateAsync({ name: repo.name }));
       if (!pendingFactory) await onFactoryCreated?.(factory);
-      if (factory.binding.kind !== 'factory') return;
-
       const linkedRepository = await linkRepository.mutateAsync({
-        factoryProjectId: factory.binding.factoryProjectId,
+        factoryProjectId: factory.id,
         repo,
       });
-      const linkedFactory = {
+      const linkedFactory: FactoryProject = {
         ...factory,
-        binding: {
-          ...factory.binding,
-          selectedRepositoryId: linkedRepository.projectRepositoryId,
-          repositories: [{ ...linkedRepository, worktrees: [] }],
-        },
+        repositories: [linkedRepository],
       };
-      const factories = queryClient.getQueryData<Factory[]>(queryKeys.factories()) ?? [];
-      saveFactories([...factories.filter(item => item.id !== linkedFactory.id), linkedFactory]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       await onLinked?.(linkedFactory);
     },

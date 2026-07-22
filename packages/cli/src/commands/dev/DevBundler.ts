@@ -33,10 +33,12 @@ function collectInstructionPaths(agents: DiscoveredFsAgent[]): string[] {
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
+  private factory: boolean;
 
-  constructor(customEnvFile?: string) {
+  constructor(customEnvFile?: string, factory = false) {
     super('Dev');
     this.customEnvFile = customEnvFile;
+    this.factory = factory;
     // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
     this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
@@ -84,13 +86,15 @@ export class DevBundler extends Bundler {
       }
     }
 
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
+    if (!this.factory) {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
 
-    const studioServePath = join(outputDirectory, this.outputDir, 'studio');
-    await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
-      overwrite: true,
-    });
+      const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+      await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
+        overwrite: true,
+      });
+    }
   }
 
   async watch(
@@ -201,7 +205,7 @@ export class DevBundler extends Bundler {
           },
         ],
         input: {
-          index: join(__dirname, 'templates', 'dev.entry.js'),
+          index: join(__dirname, 'templates', this.factory ? 'factory-dev.entry.js' : 'dev.entry.js'),
           ...toolsInputOptions,
         },
       },

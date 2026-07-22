@@ -205,6 +205,8 @@ describe('MastraFactory.prepare', () => {
       'work-items',
       'model-credentials',
       'model-packs',
+      'memory-settings',
+      'custom-providers',
       'queue-health',
       'integrations',
       'projects',
@@ -388,8 +390,9 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('installs the auth gate and tenant credential primer when auth is configured', async () => {
-    // The SPA static middleware is environment-dependent (present when ui/dist
-    // exists), so assert the delta from the two auth-specific middleware.
+    // Both modes mount the custom-providers primer and the SPA static
+    // middleware is environment-dependent (present when ui/dist exists), so
+    // assert the delta from the two auth-specific middleware.
     const openConfig = await prepareFactory({ storage: fakeStorage(), auth: null });
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 

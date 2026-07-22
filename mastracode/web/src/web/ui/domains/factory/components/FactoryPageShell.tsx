@@ -1,25 +1,19 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useParams } from 'react-router';
 
-import { useQueryClient } from '@tanstack/react-query';
-
-import { queryKeys } from '../../../../../shared/api/keys';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { Sidebar } from '../../../Sidebar';
 import { PageLayout } from '../../../ui/PageLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
-import type { ServerFactory } from '../../workspaces/services/factories';
-import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces/services/factories';
+import type { FactoryProject } from '../../workspaces/services/github';
 
 interface FactoryPageShellProps {
   title: string;
   description: string;
   /** Renders the page body once a server-backed factory is active. */
-  children: (factory: ServerFactory) => ReactNode;
+  children: (factory: FactoryProject) => ReactNode;
 }
 
 /**
@@ -31,70 +25,28 @@ interface FactoryPageShellProps {
  * the header scopes repository-based intake.
  */
 export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
-  const { activeFactory, factoriesPending } = useActiveFactoryContext();
-  const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
 
-  if (factoriesPending) {
+  if (factoryQuery.isPending) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner />
       </div>
     );
   }
+
+  const factory = factoryQuery.data;
+
   return (
     <PageLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
-      title={activeFactory ? title : undefined}
-      description={activeFactory ? description : undefined}
-      actions={serverFactory ? <RepositoryPicker factory={serverFactory} /> : undefined}
+      title={factory ? title : undefined}
+      description={factory ? description : undefined}
     >
-      {serverFactory ? (
-        children(serverFactory)
-      ) : (
-        <Notice variant="info">
-          Board, metrics, rules, and audit are available for server-backed Factories. This factory is bound to a local
-          folder — create a Factory from the switcher to use the Board.
-        </Notice>
-      )}
+      {factory ? children(factory) : <Notice variant="destructive">Factory not found.</Notice>}
     </PageLayout>
   );
 }
 
-/**
- * Scopes repository-based feeds (issues, PRs) when the factory links more
- * than one repository. Selection persists on the factory so the Board, chat
- * session, and settings all agree on the active repository.
- */
-function RepositoryPicker({ factory }: { factory: ServerFactory }) {
-  const queryClient = useQueryClient();
-  const repositories = factory.binding.repositories;
-  const selected = selectedRepository(factory);
-  if (repositories.length < 2 || !selected) return null;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button variant="outline" size="sm" aria-label="Select repository">
-            <span className="max-w-48 truncate">{selected.slug}</span>
-            <ChevronDown size={13} />
-          </Button>
-        }
-      />
-      <DropdownMenu.Content align="end">
-        {repositories.map(repository => (
-          <DropdownMenu.Item
-            key={repository.projectRepositoryId}
-            onSelect={() => {
-              selectRepository(factory, repository.projectRepositoryId);
-              void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-            }}
-          >
-            <span className="truncate">{repository.slug}</span>
-          </DropdownMenu.Item>
-        ))}
-      </DropdownMenu.Content>
-    </DropdownMenu>
-  );
-}

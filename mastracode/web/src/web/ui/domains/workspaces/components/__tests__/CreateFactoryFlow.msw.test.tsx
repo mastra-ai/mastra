@@ -12,7 +12,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { CreateFactoryPage } from '../../../../pages/CreateFactoryPage';
-import { loadFactories, saveFactories } from '../../services/factories';
 import type { GithubStatus } from '../../services/github';
 
 const STEP_KEY = 'mastracode.factory-create.step';
@@ -108,7 +107,7 @@ describe('Create Factory wizard', () => {
     expect(received).toEqual({ name: 'Mastra' });
     // Persisted for the GitHub OAuth round-trip.
     expect(sessionStorage.getItem(STEP_KEY)).toBe('vcs');
-    expect(sessionStorage.getItem(FACTORY_KEY)).toBe(loadFactories()[0]?.id);
+    expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
   });
 
   it('links the selected repository to the pending Factory (no second create), then shows Linear', async () => {
@@ -151,9 +150,7 @@ describe('Create Factory wizard', () => {
     expect(await screen.findByRole('heading', { name: 'Connect the work behind the code.' })).toBeInTheDocument();
     expect(calls).toEqual(['connect', 'link']);
     expect(sessionStorage.getItem(STEP_KEY)).toBe('project-management');
-    expect(loadFactories()[0]).toMatchObject({
-      binding: { kind: 'factory', factoryProjectId: 'fp-1', selectedRepositoryId: 'ghp_1' },
-    });
+    expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
   });
 
   it('skips repository selection and lands on the Factory home with the flow cleared', async () => {
@@ -164,7 +161,7 @@ describe('Create Factory wizard', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
 
-    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/factory-1/work'));
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
     expect(sessionStorage.getItem(FACTORY_KEY)).toBeNull();
   });
@@ -242,18 +239,10 @@ describe('Create Factory wizard', () => {
   });
 });
 
-/** Seed a mid-flow state: factory-1 exists (fp-1 server-side) and the wizard is past the name step. */
+/** Seed a mid-flow state: factory fp-1 exists server-side and the wizard is past the name step. */
 function seedPendingVcsFlow(step: 'vcs' | 'project-management' = 'vcs') {
-  saveFactories([
-    {
-      id: 'factory-1',
-      name: 'Mastra',
-      createdAt: 1,
-      binding: { kind: 'factory', factoryProjectId: 'fp-1', repositories: [] },
-    },
-  ]);
   sessionStorage.setItem(STEP_KEY, step);
-  sessionStorage.setItem(FACTORY_KEY, 'factory-1');
+  sessionStorage.setItem(FACTORY_KEY, 'fp-1');
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),

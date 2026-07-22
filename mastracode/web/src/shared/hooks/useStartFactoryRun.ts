@@ -1,13 +1,11 @@
 import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
-// Deep imports (not the workspaces barrel) to avoid provider/component cycles.
-import { useActiveFactoryContext } from '../../web/ui/domains/workspaces/context/ActiveFactoryProvider';
-import { isServerFactory, selectedRepository } from '../../web/ui/domains/workspaces/services/factories';
 import { createUserSession } from '../../web/ui/domains/workspaces/services/github';
+import { useFactoryQuery } from './useFactories';
 import { startFactoryRun } from '../../web/ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../../web/ui/domains/factory/services/workItems';
 
@@ -64,26 +62,25 @@ export interface StartFactoryRunInput {
  * The coordinator commits exact authority before it dispatches any message.
  */
 export function useStartFactoryRun() {
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
   const { baseUrl } = useApiConfig();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const repository = factoryQuery.data?.repositories[0];
 
   const mutation = useMutation({
-    mutationKey: factoryRunMutationKey(resourceId, activeFactory?.id),
+    mutationKey: factoryRunMutationKey(repository?.projectRepositoryId ?? '', factoryId),
     mutationFn: async ({ branch, threadTitle, threadTags, invocation, workItem }: StartFactoryRunInput) => {
-      const repository = activeFactory ? selectedRepository(activeFactory) : undefined;
+      if (!factoryId || !workItem) throw new Error('Factory run requires a board work item');
       if (!repository) throw new Error('Select a repository before starting a Factory run');
-      const factoryProjectId =
-        activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
-      if (!factoryProjectId || !workItem) throw new Error('Factory run requires a board work item');
 
       const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, branch);
       const sessionId = userSession.sessionId;
       const desiredStage = workItem.stages.length === 1 ? workItem.stages[0] : undefined;
       if (!desiredStage) throw new Error('Factory runs require one exclusive destination stage');
 
-      const prepared = await startFactoryRun(baseUrl, factoryProjectId, {
+      const prepared = await startFactoryRun(baseUrl, factoryId, {
         sessionId,
         threadTitle,
         threadTags,
@@ -115,16 +112,16 @@ export function useStartFactoryRun() {
         queryClient.invalidateQueries({
           queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId, undefined),
         }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
       ]);
-      void navigate(`/factories/${activeFactory?.id}/threads/${prepared.threadId}`);
+      void navigate(`/factories/${factoryId}/workspaces/${sessionId}/threads/${prepared.threadId}`);
     },
   });
 
   const pendingRuns = useMutationState({
-    filters: { mutationKey: factoryRunMutationKey(resourceId, activeFactory?.id), status: 'pending' },
+    filters: { mutationKey: factoryRunMutationKey(repository?.projectRepositoryId ?? '', factoryId), status: 'pending' },
     select: pending => toPendingFactoryRun(pending.state.variables),
   }).filter(run => run !== undefined);
 
-  return { start: mutation, pendingRuns, enabled: sessionEnabled };
+  return { start: mutation, pendingRuns, enabled: Boolean(factoryId && repository) };
 }

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { loadFactories } from '../services/factories';
-import type { Factory } from '../services/factories';
+import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
+import type { FactoryProject, FactoryProjectPayload } from '../services/github';
 
 // Separate sessionStorage keys from onboarding so the two flows never collide.
 const STEP_KEY = 'mastracode.factory-create.step';
@@ -12,7 +12,7 @@ export type CreateFactoryFlowStep = 'name' | 'vcs' | 'project-management';
 
 interface CreateFactoryFlowState {
   step: CreateFactoryFlowStep;
-  pendingFactory?: Factory;
+  pendingFactory?: FactoryProject;
 }
 
 function readStep(): CreateFactoryFlowStep {
@@ -32,33 +32,39 @@ export function hasPendingCreateFlow(): boolean {
   return stored === 'vcs' || stored === 'project-management';
 }
 
-function persistState(state: CreateFactoryFlowState): CreateFactoryFlowState {
-  sessionStorage.setItem(STEP_KEY, state.step);
-  if (state.pendingFactory) sessionStorage.setItem(FACTORY_KEY, state.pendingFactory.id);
+function persistState(step: CreateFactoryFlowStep, factoryId?: string): void {
+  sessionStorage.setItem(STEP_KEY, step);
+  if (factoryId) sessionStorage.setItem(FACTORY_KEY, factoryId);
   else sessionStorage.removeItem(FACTORY_KEY);
-  return state;
 }
 
 /**
  * State machine for the `/factories/create` wizard (Name → VCS → Project
  * management). Mirrors `useFactoryOnboarding`: the step and pending factory id
  * live in sessionStorage so a full-page OAuth redirect (GitHub/Linear) can
- * resume the flow where it left off.
+ * resume the flow where it left off. The pending factory is resolved from the
+ * server-backed factories query — `useCreateFactoryMutation` refetches it
+ * before resolving, so the lookup is never stale when the flow advances.
  */
 export function useCreateFactoryFlow() {
   const queryClient = useQueryClient();
+  const factoriesQuery = useFactoriesQuery();
   const setState = useMutation({
-    mutationFn: (state: CreateFactoryFlowState) => Promise.resolve(persistState(state)),
+    mutationFn: async ({ step, factoryId }: { step: CreateFactoryFlowStep; factoryId: string }) =>
+      persistState(step, factoryId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.factoryCreateFlow() }),
   });
   const flowQuery = useQuery({
     queryKey: queryKeys.factoryCreateFlow(),
+    enabled: !factoriesQuery.isPending,
     queryFn: () => {
       const step = readStep();
       const factoryId = sessionStorage.getItem(FACTORY_KEY);
-      // Read persisted factories directly: the factory is created mid-flow, so
-      // any cached factories query would be stale at the moment we advance.
-      const pendingFactory = loadFactories().find(factory => factory.id === factoryId);
+      // Read the factories cache at execution time (not the render closure):
+      // `useCreateFactoryMutation` refetches the list before resolving, and an
+      // invalidation fired right after must see the newly created factory.
+      const factories = queryClient.getQueryData<FactoryProject[]>(queryKeys.factories());
+      const pendingFactory = factories?.find(factory => factory.id === factoryId);
 
       return { step, pendingFactory } satisfies CreateFactoryFlowState;
     },
@@ -74,13 +80,14 @@ export function useCreateFactoryFlow() {
 
   return {
     state: flowQuery.data,
-    advanceToVcs: (pendingFactory: Factory) => setState.mutateAsync({ step: 'vcs', pendingFactory }),
-    advanceToProjectManagement: (pendingFactory: Factory) =>
-      setState.mutateAsync({ step: 'project-management', pendingFactory }),
+    advanceToVcs: (pendingFactory: FactoryProject | FactoryProjectPayload) =>
+      setState.mutateAsync({ step: 'vcs', factoryId: pendingFactory.id }),
+    advanceToProjectManagement: (pendingFactory: FactoryProject | FactoryProjectPayload) =>
+      setState.mutateAsync({ step: 'project-management', factoryId: pendingFactory.id }),
     /** Re-persist the current state right before a full-page OAuth redirect. */
     persistBeforeRedirect: () => {
       const current = flowQuery.data;
-      if (current) persistState(current);
+      if (current) persistState(current.step, current.pendingFactory?.id);
     },
     /** Reset to the name step (unrestorable pending factory, or flow finished). */
     clear: clear.mutateAsync,

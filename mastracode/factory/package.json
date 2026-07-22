@@ -1,6 +1,6 @@
 {
   "name": "@mastra/factory",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
@@ -30,6 +30,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
+    "smoke:dist": "node --input-type=module -e \"import('./dist/index.js').then(() => console.log('dist import ok')).catch(e => { console.error(e.message); process.exit(1); })\"",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint ."

@@ -59,7 +59,7 @@ export function AuditPage() {
       title="Audit log"
       description="Who did what, when — every board change, run start, worktree change, and git action."
     >
-      {project => <AuditContent factoryProjectId={project.binding.factoryProjectId} />}
+      {project => <AuditContent factoryProjectId={project.id} />}
     </FactoryPageShell>
   );
 }

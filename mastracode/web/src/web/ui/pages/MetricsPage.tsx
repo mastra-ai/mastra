@@ -4,14 +4,16 @@ import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineCh
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../shared/api/config';
+import { useEnsureMaterializedSandbox } from '../../../shared/hooks/useEnsureMaterializedSandbox';
+import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useFactoryMetrics } from '../../../shared/hooks/useFactoryMetrics';
 import { useWorkspaceActivity } from '../../../shared/hooks/useWorkspaceActivity';
-import { deriveProjectPath, useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
+import { useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
 import { formatDuration, relativeTime } from '../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
-import { isServerFactory, useActiveFactoryContext } from '../domains/workspaces';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import type { FactoryMetrics } from '../domains/factory/services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
@@ -64,7 +66,7 @@ export function MetricsPage() {
       title="Metrics"
       description="Flow health for this project's factory: throughput, where work stalls, and what's aging."
     >
-      {project => <MetricsContent factoryProjectId={project.binding.factoryProjectId} />}
+      {project => <MetricsContent factoryProjectId={project.id} />}
     </FactoryPageShell>
   );
 }
@@ -159,17 +161,20 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
 /** Live count of worktrees with an agent run in flight (sidebar dot source). */
 function useAgentsRunningCount(): number {
   const { baseUrl } = useApiConfig();
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
-  const workspaces = useWorkspacesQuery(activeFactory);
-  const worktrees = workspaces.data?.worktrees ?? [];
-  const projectPath = deriveProjectPath(activeFactory) || undefined;
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
+  const repository = factoryQuery.data?.repositories[0];
+  const materializeQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
+  const workspaces = useWorkspacesQuery(repository?.projectRepositoryId);
+  const workspaceSessions = workspaces.data?.workspaces ?? [];
+  const resourceId = materializeQuery.data?.resourceId;
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
-    worktreePaths: worktrees.map(worktree => worktree.worktreePath),
+    resourceId: resourceId ?? '',
+    scope: repository?.projectRepositoryId,
+    worktreePaths: workspaceSessions.map(workspace => workspace.sessionId),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory) && projectPath),
+    enabled: materializeQuery.isSuccess && Boolean(resourceId && repository?.projectRepositoryId),
   });
   return Object.values(runningByPath).filter(Boolean).length;
 }

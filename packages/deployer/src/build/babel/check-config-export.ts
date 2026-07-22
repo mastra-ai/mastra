@@ -1,12 +1,33 @@
 import { types as t } from '@babel/core';
 import type { PluginObject } from '@babel/core';
 
-export function checkConfigExport(result: { hasValidConfig: boolean }): PluginObject {
+export function checkConfigExport(result: { hasValidConfig: boolean; projectType?: string }): PluginObject {
   // Track which local variable names are assigned to `new Mastra()`
   const mastraVars = new Set<string>();
+  // Track local bindings imported as the named `MastraFactory` export (including aliases).
+  // Detection is based on the imported name, not the module source, so it works with
+  // both relative imports and a future package export.
+  const factoryBindings = new Set<string>();
 
   return {
     visitor: {
+      ImportDeclaration(path) {
+        for (const spec of path.node.specifiers) {
+          if (
+            t.isImportSpecifier(spec) &&
+            t.isIdentifier(spec.imported, { name: 'MastraFactory' }) &&
+            t.isIdentifier(spec.local)
+          ) {
+            factoryBindings.add(spec.local.name);
+          }
+        }
+      },
+      NewExpression(path) {
+        // Detect `new MastraFactory(...)` using the tracked import binding.
+        if (t.isIdentifier(path.node.callee) && factoryBindings.has(path.node.callee.name)) {
+          result.projectType = 'factory';
+        }
+      },
       ExportNamedDeclaration(path) {
         const decl = path.node.declaration;
         // 1) export const mastra = new Mastra(...)

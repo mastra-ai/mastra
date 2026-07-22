@@ -1,6 +1,6 @@
 # Vite SPA build output — copied into .mastra/output/ by `mastra build`
 # because it lives under the Mastra entry's public/ dir.
-src/mastra/public/ui/
+src/mastra/public/factory/
 
 # Factory skill assets — copied from @mastra/factory by
 # scripts/copy-factory-skills.mjs during web:ui:build.

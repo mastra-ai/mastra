@@ -27,7 +27,7 @@ export function VcsFactoryStep({
   githubRedirecting,
   mutationPending,
   mutationError,
-  description = 'Connect GitHub, then select the repository that will become your first Factory.',
+  description = 'Connect GitHub, then select the repository that will become your first factory.',
   onConnect,
   onManageConnection,
   onSelectRepository,

@@ -13,7 +13,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { CreateFactoryPage } from '../../../../pages/CreateFactoryPage';
-import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
 import { FactorySwitcher } from '../FactorySwitcher';
 
 let projectCreated = false;
@@ -50,9 +49,7 @@ describe('factory creation refresh', () => {
     renderWithProviders(
       <MemoryRouter initialEntries={['/factories/create']}>
         <MainSidebarProvider storageKey="repro" mobileBreakpoint={768}>
-          <ActiveFactoryProvider factoryId="missing-factory">
-            <FactorySwitcher />
-          </ActiveFactoryProvider>
+          <FactorySwitcher />
           <CreateFactoryPage />
         </MainSidebarProvider>
       </MemoryRouter>,
