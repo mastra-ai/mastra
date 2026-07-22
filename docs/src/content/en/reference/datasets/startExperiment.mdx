@@ -79,7 +79,7 @@ console.log(`Status: ${summary2.status}`)
     type: '(MastraScorer | string)[] | AgentScorerConfig | WorkflowScorerConfig',
     isOptional: true,
     description:
-      'Scorers to evaluate each result. Accepts a flat array of `MastraScorer` instances or registered scorer IDs, or the same categorised config shape used by `runEvals` (`AgentScorerConfig` / `WorkflowScorerConfig`). Trajectory scorers (`type: "trajectory"`) automatically receive a pre-extracted `Trajectory` as their output regardless of which form is used. For workflow targets, per-step scorers can be passed via `scorers: { steps: { stepId: [...] } }` and run against each step\'s output; their results carry the originating `stepId` and keep `targetScope: "span"` (matching `runEvals`).',
+      'Scorers to evaluate each result. Accepts a flat array of `MastraScorer` instances or registered scorer IDs, or the same categorised config shape used by `runEvals` (`AgentScorerConfig` / `WorkflowScorerConfig`). When this option is provided, including as `[]` or an empty categorized config, it overrides item-level and dataset-level scorer IDs for every item. When omitted, each item uses its own `scorerIds` when present, then falls back to the dataset scorer IDs. Sources aren\'t merged. Trajectory scorers (`type: "trajectory"`) automatically receive a pre-extracted `Trajectory` as their output regardless of which form is used. Workflow step scorers are supported only through this run-level categorized configuration. Their results carry the originating `stepId` and keep `targetScope: "span"` (matching `runEvals`).',
   },
   {
     name: 'name',
