@@ -1,4 +1,4 @@
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
 import { Navigate, Outlet, useLocation } from 'react-router';
@@ -40,12 +40,8 @@ const OnboardingGuard = () => {
 
 export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
   return (
-    <div role="status" aria-label={label} className="flex h-dvh w-full items-center justify-center bg-surface1">
-      <div className="flex w-64 flex-col gap-3">
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-4 w-1/2" />
-      </div>
+    <div className="flex h-dvh w-full items-center justify-center bg-surface1">
+      <BrandLoader size="lg" aria-label={label} />
     </div>
   );
 }

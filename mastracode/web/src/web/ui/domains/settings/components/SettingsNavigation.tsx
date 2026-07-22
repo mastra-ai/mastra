@@ -84,7 +84,7 @@ export function SettingsNavigation() {
         </MainSidebar.NavLink>
       </MainSidebar.NavList>
       {state === 'default' && (
-        <div className="px-1 py-2">
+        <div className="py-2">
           <InputGroup variant="outline">
             <InputGroupAddon>
               <Search aria-hidden="true" />

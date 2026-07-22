@@ -25,7 +25,14 @@ export function DateRangeTimeline({ value, min, max, onCommit }: DateRangeTimeli
   const axisModel = createDateRangeAxisModel(timeline.state);
 
   return (
-    <div ref={rootRef} role="group" aria-label="Date range timeline" className="w-full overflow-x-clip select-none">
+    <div
+      ref={rootRef}
+      role="group"
+      aria-label="Date range timeline"
+      // Clip keeps stray axis labels from causing horizontal scroll; the margin lets the edge
+      // handles (and their focus ring) render fully instead of being sliced in half at min/max.
+      className="w-full overflow-x-clip select-none [overflow-clip-margin:0.75rem]"
+    >
       <DateRangeBoundaryPickers
         positions={boundaryModel.positions}
         value={boundaryModel.range}

@@ -3,9 +3,22 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
-import { ChevronDown } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ChevronDown, ClipboardCheck, Eye, Hammer, PencilLine, Play, Search } from 'lucide-react';
+import type { ComponentType, ReactNode } from 'react';
 import { useRef, useState } from 'react';
+
+/** Icon for each known run-action label; `Play` is the fallback for anything else. */
+const ACTION_ICONS: Record<string, ComponentType> = {
+  Investigate: Search,
+  Build: Hammer,
+  'Prepare approval': ClipboardCheck,
+  Review: Eye,
+};
+
+function actionIcon(label: string) {
+  const Icon = ACTION_ICONS[label] ?? Play;
+  return <Icon aria-hidden />;
+}
 
 export interface FactoryItemActionsProps {
   /** Default action label, e.g. `Investigate` or `Review`. */
@@ -87,15 +100,18 @@ export function FactoryItemActions({
           />
           <DropdownMenu.Content align="end" className="min-w-40">
             <DropdownMenu.Item disabled={starting} onClick={onAction}>
-              {starting ? 'Starting…' : actionLabel}
+              {actionIcon(actionLabel)}
+              <span>{starting ? 'Starting…' : actionLabel}</span>
             </DropdownMenu.Item>
             {extraActions?.map(action => (
               <DropdownMenu.Item key={action.label} disabled={action.starting} onClick={action.onAction}>
-                {action.starting ? 'Starting…' : action.label}
+                {actionIcon(action.label)}
+                <span>{action.starting ? 'Starting…' : action.label}</span>
               </DropdownMenu.Item>
             ))}
             <DropdownMenu.Item disabled={starting} onClick={() => setPromptOpen(true)}>
-              Custom prompt…
+              <PencilLine aria-hidden />
+              <span>Custom prompt…</span>
             </DropdownMenu.Item>
             {menuExtras}
           </DropdownMenu.Content>

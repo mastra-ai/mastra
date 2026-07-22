@@ -17,6 +17,7 @@ import {
   Link2,
   Plus,
   SquareKanban,
+  Stethoscope,
 } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -1647,10 +1648,14 @@ function CandidateCard({
           <>
             {showTriage && (
               <DropdownMenu.Item disabled={triageStarting} onClick={onTriage}>
-                {triageStarting ? 'Starting…' : 'Triage issue'}
+                <Stethoscope aria-hidden />
+                <span>{triageStarting ? 'Starting…' : 'Triage issue'}</span>
               </DropdownMenu.Item>
             )}
-            <DropdownMenu.Item onClick={onFile}>Add to board</DropdownMenu.Item>
+            <DropdownMenu.Item onClick={onFile}>
+              <Plus aria-hidden />
+              <span>Add to board</span>
+            </DropdownMenu.Item>
           </>
         }
       />
