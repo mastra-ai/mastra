@@ -11,6 +11,7 @@ function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): 
   const loggedIn = new Set(opts.loggedIn ?? []);
   const storedKeys = new Set(opts.storedKeys ?? []);
   return {
+    get: (provider: string) => (loggedIn.has(provider) ? { type: 'oauth', refresh: 'r', access: 'a' } : undefined),
     isLoggedIn: (provider: string) => loggedIn.has(provider),
     hasStoredApiKey: (provider: string) => storedKeys.has(provider),
   } as unknown as AuthStorage;
@@ -315,6 +316,37 @@ describe('GET /web/config/models', () => {
       models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
     });
   });
+
+  it('includes models reachable through tenant OAuth credentials', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
+        { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: false },
+      ],
+    };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({ auth: fakeRouteAuth(), controller, modelCredentials: seed.credentials }).routes(),
+    );
+
+    const res = await app.request('/web/config/models');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
+    });
+  });
 });
 
 describe('model pack routes with a tenant', () => {
@@ -361,6 +393,40 @@ describe('model pack routes with a tenant', () => {
   it('rejects unauthenticated pack access when web auth is enabled', async () => {
     const res = await buildApp(null).request('/web/config/model-packs');
     expect(res.status).toBe(401);
+  });
+
+  it('includes builtin packs reachable through tenant OAuth credentials', async () => {
+    const controllerWithoutEnv = makeAgentController([
+      { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
+    ]);
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, userA as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller: controllerWithoutEnv,
+        modelCredentials: seed.credentials,
+        modelPacks: seed.modelPacks,
+      }).routes(),
+    );
+
+    const listed = await app.request('/web/config/model-packs');
+    expect(listed.status).toBe(200);
+    const { packs } = await listed.json();
+    expect(packs.find((p: { id: string }) => p.id === 'anthropic')).toMatchObject({
+      name: 'Anthropic',
+      custom: false,
+    });
   });
 
   it('persists custom packs in the org-scoped storage domain', async () => {
