@@ -18,6 +18,7 @@ import Chat from './domains/chat/Chat';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { AuditPage } from './pages/AuditPage';
 import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
+import { CreateFactoryLayout } from './pages/CreateFactoryLayout';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { MetricsPage } from './pages/MetricsPage';
 import { NewPage } from './pages/NewPage';
@@ -57,7 +58,16 @@ export function createAppRoutes(): RouteObject[] {
       children: [
         { index: true, element: <RootLanding /> },
         { path: 'onboarding', element: <OnboardingPage /> },
-        { path: 'factories/create', element: <CreateFactoryPage /> },
+        {
+          path: 'factories/create',
+          element: <CreateFactoryLayout />,
+          children: [
+            {
+              element: <Chat />,
+              children: [{ index: true, element: <CreateFactoryPage /> }],
+            },
+          ],
+        },
         {
           path: 'factories/:factoryId',
           element: <FactoryLayout />,

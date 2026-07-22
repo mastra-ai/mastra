@@ -54,7 +54,7 @@ export function ThreadList() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      {!readOnly && <ThreadListHeader threadCount={threads.length} />}
+      {!readOnly && <ThreadListHeader factoryId={activeFactory.id} threadCount={threads.length} />}
       <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {sortedThreads.length === 0 && (
           <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
@@ -68,6 +68,7 @@ export function ThreadList() {
             <ThreadRow
               key={thread.id}
               thread={thread}
+              factoryId={activeFactory.id}
               active={thread.id === activeThreadId}
               readOnly={readOnly}
               onStartRename={() => setRenamingId(thread.id)}
@@ -90,10 +91,9 @@ function useThreadHookArgs() {
   };
 }
 
-function ThreadListHeader({ threadCount }: { threadCount: number }) {
+function ThreadListHeader({ factoryId, threadCount }: { factoryId: string; threadCount: number }) {
   const overlays = useOverlays();
   const navigate = useNavigate();
-  const { factoryId } = useParams<{ factoryId: string }>();
 
   return (
     <div className="flex items-center justify-between px-1">
@@ -154,11 +154,13 @@ function RenameThreadRow({ thread, onDone }: { thread: AgentControllerThreadInfo
 
 function ThreadRow({
   thread,
+  factoryId,
   active,
   readOnly,
   onStartRename,
 }: {
   thread: AgentControllerThreadInfo;
+  factoryId: string;
   active: boolean;
   readOnly: boolean;
   onStartRename: () => void;
@@ -166,7 +168,7 @@ function ThreadRow({
   const hookArgs = useThreadHookArgs();
   const overlays = useOverlays();
   const navigate = useNavigate();
-  const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
+  const { threadId: routeThreadId } = useParams<{ threadId: string }>();
 
   const deleteThreadMutation = useDeleteAgentControllerThreadMutation(hookArgs);
   const cloneThreadMutation = useCloneAgentControllerThreadMutation(hookArgs);

@@ -200,6 +200,8 @@ describe('MastraCode web routing', () => {
     expect(await screen.findByRole('region', { name: 'Create Factory' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/factories/create');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Select factory' })).toHaveTextContent('MastraCode Test');
   });
 
   it('given auth is disabled, when visiting /, then the user lands on the first factory draft composer', async () => {
