@@ -856,7 +856,8 @@ function MessageBubble({
 
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
-      <div className="my-3 flex w-full flex-col items-end">
+      <div className="my-3 flex w-full flex-col items-end gap-1">
+        {entry.authorName && <div className="text-ui-xs text-icon3">{entry.authorName}</div>}
         <div
           className={`text-text1 max-w-[70%] rounded-xl px-4 py-2 break-words ${
             entry.steer ? 'bg-warning1/10' : 'bg-surface3'

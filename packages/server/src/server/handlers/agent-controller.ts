@@ -7,6 +7,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 // value import.
 import { z } from 'zod/v4';
 
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -109,9 +110,14 @@ const MAX_TOTAL_FILE_DATA_LENGTH = 28 * 1024 * 1024;
  * spec documents it.
  */
 const bodyRequestContextSchema = z.record(z.string(), z.unknown()).optional();
+const messageAttributesSchema = z
+  .record(z.string().max(64), z.union([z.string().max(1024), z.number(), z.boolean(), z.null(), z.undefined()]))
+  .refine(attributes => Object.keys(attributes).length <= 20, 'Message attributes may contain at most 20 entries')
+  .optional();
 
 const sendMessageBodySchema = z.object({
   message: z.string(),
+  attributes: messageAttributesSchema,
   requestContext: bodyRequestContextSchema,
   // Optional attachments (e.g. pasted images). `data` is base64-encoded.
   files: z
@@ -128,7 +134,11 @@ const sendMessageBodySchema = z.object({
     })
     .optional(),
 });
-const steerBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
+const steerBodySchema = z.object({
+  message: z.string(),
+  attributes: messageAttributesSchema,
+  requestContext: bodyRequestContextSchema,
+});
 const toolApprovalBodySchema = z.object({
   toolCallId: z.string(),
   approved: z.boolean(),
@@ -177,7 +187,35 @@ const listThreadsQuerySchema = z.object({
     }, z.record(z.string(), z.string()).optional())
     .optional(),
 });
-const followUpBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
+const followUpBodySchema = z.object({
+  message: z.string(),
+  attributes: messageAttributesSchema,
+  requestContext: bodyRequestContextSchema,
+});
+
+type MessageAttributes = Record<string, string | number | boolean | null | undefined>;
+
+function trustedUserAttributes(
+  requestContext: RequestContext | undefined,
+  attributes: MessageAttributes | undefined,
+): MessageAttributes | undefined {
+  const trusted = { ...attributes };
+  delete trusted.userId;
+  delete trusted.name;
+
+  const user = requestContext?.get(MASTRA_USER_KEY) ?? requestContext?.get('user');
+  if (user && typeof user === 'object' && !Array.isArray(user)) {
+    const record = user as Record<string, unknown>;
+    const bounded = (value: unknown) =>
+      typeof value === 'string' && value.length > 0 && value.length <= 128 ? value : undefined;
+    const userId = bounded(record.id) ?? bounded(record.userId) ?? bounded(record.workosId);
+    const name = bounded(record.name);
+    if (userId) trusted.userId = userId;
+    if (name) trusted.name = name;
+  }
+
+  return Object.keys(trusted).length > 0 ? trusted : undefined;
+}
 
 const sendNotificationBodySchema = z.object({
   source: z.string(),
@@ -494,14 +532,21 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, attributes, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
-      // plain agent message route).
-      void session.sendMessage({ content: message, files, requestContext });
+      // plain agent message route). Authenticated identity always wins over
+      // caller-supplied display attributes.
+      const messageAttributes = trustedUserAttributes(requestContext, attributes);
+      void session.sendMessage({
+        content: message,
+        files,
+        ...(messageAttributes ? { attributes: messageAttributes } : {}),
+        requestContext,
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error sending controller message');
@@ -602,11 +647,16 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, attributes, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      void session.steer({ content: message, requestContext });
+      const messageAttributes = trustedUserAttributes(requestContext, attributes);
+      void session.steer({
+        content: message,
+        ...(messageAttributes ? { attributes: messageAttributes } : {}),
+        requestContext,
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error steering controller session');
@@ -1077,11 +1127,16 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, attributes, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      void session.followUp({ content: message, requestContext });
+      const messageAttributes = trustedUserAttributes(requestContext, attributes);
+      void session.followUp({
+        content: message,
+        ...(messageAttributes ? { attributes: messageAttributes } : {}),
+        requestContext,
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error queuing controller follow-up');

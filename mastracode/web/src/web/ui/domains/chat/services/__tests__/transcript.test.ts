@@ -147,6 +147,7 @@ describe('transcript reducer message entries', () => {
       type: 'user',
       tagName: 'user',
       text: 'sup',
+      attributes: { name: 'Ada Lovelace' },
     });
     const steered = signalMessage({
       id: 'user-signal-2',
@@ -171,6 +172,7 @@ describe('transcript reducer message entries', () => {
       id: persisted.id,
       message: { role: 'user', createdAt: persisted.createdAt, content: persisted.content },
       steer: false,
+      authorName: 'Ada Lovelace',
     });
     expect(reminderEntry).toMatchObject({
       kind: 'message',
@@ -192,6 +194,37 @@ describe('transcript reducer message entries', () => {
       steer: true,
     });
     expect(steered.role).toBe('signal');
+  });
+
+  it('keeps optimistic attribution aligned with hydration and ignores malformed names', () => {
+    const optimistic = transcriptReducer(initialTranscript, {
+      type: 'localUser',
+      text: 'Ship it',
+      authorName: 'Ada Lovelace',
+    });
+    expect(optimistic.entries[0]).toMatchObject({
+      kind: 'message',
+      message: { role: 'user' },
+      authorName: 'Ada Lovelace',
+    });
+
+    const malformed = signalMessage({
+      id: 'user-signal-malformed',
+      type: 'user',
+      tagName: 'user',
+      text: 'No trusted label',
+      attributes: { name: 42 },
+    });
+    const oversized = signalMessage({
+      id: 'user-signal-oversized',
+      type: 'user',
+      tagName: 'user',
+      text: 'No oversized label',
+      attributes: { name: 'a'.repeat(129) },
+    });
+    const hydrated = createInitialTranscript({ messages: [malformed, oversized] });
+    expect(hydrated.entries[0]).toMatchObject({ authorName: undefined });
+    expect(hydrated.entries[1]).toMatchObject({ authorName: undefined });
   });
 
   it('streams message updates without replacing non-message transcript state', () => {

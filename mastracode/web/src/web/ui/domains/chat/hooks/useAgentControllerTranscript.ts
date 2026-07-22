@@ -1,6 +1,8 @@
 import type { AgentControllerEvent, AgentControllerOMProgress, MastraDBMessage } from '@mastra/client-js';
 import { useReducer, useRef } from 'react';
 
+import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
+import { userMessageAttributes } from '../../auth/services/auth';
 import { createInitialTranscript, transcriptReducer } from '../services/transcript';
 import type { OutgoingFile, TranscriptState, UsageSnapshot } from '../services/transcript';
 
@@ -18,6 +20,7 @@ export function useAgentControllerTranscript({
   initialMessages?: MastraDBMessage[];
   initialState?: SessionStateSnapshot;
 } = {}) {
+  const auth = useFactoryAuth();
   const [transcript, dispatch] = useReducer(transcriptReducer, undefined, () =>
     createInitialTranscript({
       messages: initialMessages,
@@ -43,7 +46,7 @@ export function useAgentControllerTranscript({
   };
 
   const localUser = (text: string, steer?: boolean, files?: OutgoingFile[]) => {
-    dispatch({ type: 'localUser', text, steer, files });
+    dispatch({ type: 'localUser', text, steer, files, authorName: userMessageAttributes(auth.data)?.name });
   };
 
   const resolvePrompt = (id: string) => {
