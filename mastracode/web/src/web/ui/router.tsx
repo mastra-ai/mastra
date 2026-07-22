@@ -25,6 +25,7 @@ import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
 import { OverviewPage } from './domains/factory/OverviewPage';
 import { RootGuards } from './domains/auth/components/RootGuards';
+import { OnboardingPage } from './pages/OnboardingPage';
 
 /**
  * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
@@ -80,7 +81,7 @@ export function createAppRoutes(): RouteObject[] {
       element: <RootGuards />,
       children: [
         { index: true, element: <RootLanding /> },
-        { path: 'onboarding', element: <NewPage /> },
+        { path: 'onboarding', element: <OnboardingPage /> },
         {
           // Pathless layout: <Chat /> (providers, session, SSE stream) stays
           // mounted while navigating between thread URLs, so thread navigation

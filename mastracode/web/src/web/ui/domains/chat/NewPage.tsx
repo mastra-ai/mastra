@@ -11,6 +11,7 @@ import { TranscriptEntries } from './components/Transcript';
 import { useChatTranscript } from './context/useChatTranscript';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { ChatSessionBoundary } from './context/ChatSessionProvider';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
@@ -27,7 +28,11 @@ export function NewPage() {
 
   if (!activeFactory) return <div>No active factory</div>;
 
-  return <NewPageContent activeFactory={activeFactory} />;
+  return (
+    <ChatSessionBoundary>
+      <NewPageContent activeFactory={activeFactory} />
+    </ChatSessionBoundary>
+  );
 }
 
 function NewPageContent({ activeFactory }: { activeFactory: Factory }) {
