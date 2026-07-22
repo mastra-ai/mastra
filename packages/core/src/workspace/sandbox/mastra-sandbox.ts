@@ -136,9 +136,6 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
-  /** Update an environment variable used by future sandbox commands. */
-  setEnvironmentVariable?(name: string, value: string): void;
-
   /** Optional networking capability - implement to expose public port URLs */
   readonly networking?: SandboxNetworking;
 

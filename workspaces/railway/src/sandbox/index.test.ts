@@ -784,16 +784,6 @@ describe('exec cwd/env passthrough', () => {
     expect(sentOptions.env).toEqual({ FOO: 'bar' });
   });
 
-  it('uses environment variables updated after sandbox creation', async () => {
-    const sandbox = new RailwaySandbox({ token: 't', env: { GH_TOKEN: 'initial-token' } });
-    await sandbox._start();
-    sandbox.setEnvironmentVariable('GH_TOKEN', 'fresh-token');
-    await sandbox.executeCommand('gh auth status');
-
-    const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { env?: Record<string, string> };
-    expect(sentOptions.env).toEqual({ GH_TOKEN: 'fresh-token' });
-  });
-
   it('merges default env with per-spawn env', async () => {
     const sandbox = new RailwaySandbox({ token: 't', env: { A: '1' } });
     await sandbox._start();

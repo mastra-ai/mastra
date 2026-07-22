@@ -688,12 +688,6 @@ export class RailwaySandbox extends MastraSandbox {
     return parts.join(' ');
   }
 
-  /** Update an environment variable used by future sandbox commands. */
-  setEnvironmentVariable(name: string, value: string): void {
-    this._env[name] = value;
-    this.processes.setEnvironmentVariable(name, value);
-  }
-
   // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------
@@ -709,16 +703,16 @@ export class RailwaySandbox extends MastraSandbox {
     return this.withRestartRetry(async () => {
       const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
       const timeout = options.timeout ?? this._timeout;
-      const env = Object.fromEntries(
-        Object.entries({ ...this._env, ...options.env }).filter(
-          (entry): entry is [string, string] => entry[1] !== undefined,
-        ),
-      );
+      const env = options.env
+        ? Object.fromEntries(
+            Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+          )
+        : undefined;
       const startedAt = Date.now();
       const result = await this.railway.exec(fullCommand, {
         ...(timeout !== undefined && { timeoutSec: Math.ceil(timeout / 1000) }),
         ...(options.cwd !== undefined && { cwd: options.cwd }),
-        ...(Object.keys(env).length > 0 && { env }),
+        ...(env !== undefined && { env }),
       });
       const exitCode = result.exitCode ?? -1;
       return {

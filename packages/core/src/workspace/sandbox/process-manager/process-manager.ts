@@ -120,11 +120,6 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
     };
   }
 
-  /** Set a default environment variable for subsequently spawned processes. */
-  setEnvironmentVariable(name: string, value: string | undefined): void {
-    this.env[name] = value;
-  }
-
   /** Spawn a process. */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {

@@ -167,13 +167,6 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   clone?(options?: SandboxCloneOptions): WorkspaceSandbox;
 
   // ---------------------------------------------------------------------------
-  // Environment
-  // ---------------------------------------------------------------------------
-
-  /** Update an environment variable used by future sandbox commands. */
-  setEnvironmentVariable?(name: string, value: string): void;
-
-  // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------
 
