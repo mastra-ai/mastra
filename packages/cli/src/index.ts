@@ -22,6 +22,7 @@ import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
 import { whoamiAction } from './commands/auth/whoami';
+import { configureCreateCommand } from './commands/create/create';
 import { registerEnvDbCommands } from './commands/db/index.js';
 import { unifiedDeployAction } from './commands/deploy/index.js';
 import { registerEnvCommands } from './commands/env/index.js';
@@ -36,7 +37,7 @@ import { logsAction } from './commands/studio/deploy-logs';
 import { statusAction } from './commands/studio/deploy-status';
 import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
-import { parseComponents, parseLlmProvider, parseMcp, parseSkills, wrapAction } from './commands/utils';
+import { parseComponents, parseLlmProvider, parseMcp, wrapAction } from './commands/utils';
 import { buildWorker } from './commands/worker/build';
 import { devWorker } from './commands/worker/dev';
 import { startWorker } from './commands/worker/start';
@@ -69,42 +70,7 @@ ${pc.bold(pc.cyan('Mastra'))} is a typescript framework for building AI applicat
     program.help();
   });
 
-program
-  .command('create [project-name]')
-  .description('Create a new Mastra project')
-  .option('--default', 'Quick start with defaults (src, OpenAI, examples)')
-  .option(
-    '-c, --components <components>',
-    `Comma-separated list of components (${COMPONENTS.join(', ')})`,
-    parseComponents,
-  )
-  .option('-l, --llm <model-provider>', `Default model provider (${LLMProvider.join(', ')})`, parseLlmProvider)
-  .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
-  .option('-e, --example', 'Include example code')
-  .option('-n, --no-example', 'Do not include example code')
-  .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
-  .option('-d, --dir <directory>', 'Target directory for Mastra source code (default: src/)')
-  .option(
-    '-p, --project-name <string>',
-    'Project name that will be used in package.json and as the project directory name.',
-  )
-  .option(
-    '-m, --mcp <editor>',
-    'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
-    parseMcp,
-  )
-  .option('--skills <agents>', 'Install Mastra agent skills for specified agents (comma-separated)', parseSkills)
-  .option(
-    '--template [template-name]',
-    'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
-  )
-  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
-  .option('--no-observability', 'Do not enable Mastra Observability')
-  .option(
-    '--observability-project <name>',
-    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
-  )
-  .action(createProject);
+configureCreateCommand(program.command('create')).action(wrapAction(createProject));
 
 program
   .command('init')
