@@ -22,7 +22,7 @@ const cliAuth = vi.hoisted(() => ({
 
 vi.mock('mastra/internal/auth', () => cliAuth);
 
-import { attachNeonDatabase, PlatformApiError, waitForDatabaseReady } from './platform.js';
+import { attachNeonDatabase, createServerProject, PlatformApiError, waitForDatabaseReady } from './platform.js';
 
 /**
  * Build a fresh Response every time — a `Response` body is single-use, and
@@ -42,6 +42,27 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe('createServerProject', () => {
+  it('marks projects as factory-enabled', async () => {
+    cliAuth.platformFetch.mockImplementationOnce(
+      async () =>
+        new Response(JSON.stringify({ project: { id: 'proj_1', slug: 'my-factory', name: 'My Factory' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    );
+
+    await createServerProject({ token: 'wos-token', orgId: 'org_123', name: 'My Factory' });
+
+    expect(cliAuth.platformFetch).toHaveBeenCalledWith(
+      'https://platform.example.test/v1/server/projects',
+      expect.objectContaining({
+        body: JSON.stringify({ name: 'My Factory', factoryEnabled: true }),
+      }),
+    );
+  });
 });
 
 describe('attachNeonDatabase', () => {
