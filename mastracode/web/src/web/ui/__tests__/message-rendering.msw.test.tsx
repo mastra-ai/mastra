@@ -15,13 +15,15 @@ import Chat from '../domains/chat/Chat';
 import { NewPage } from '../domains/chat/NewPage';
 import { ThreadPage } from '../domains/chat/ThreadPage';
 import type { Factory } from '../domains/workspaces';
+import { ActiveFactoryProvider } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { CreateFactoryPage } from '../pages/CreateFactoryPage';
 
 /**
  * Renders <Chat /> inside a memory router mirroring the app's pathless chat
  * layout (Chat itself uses router hooks for /threads/:threadId navigation).
  * Auth guards are intentionally bypassed — these specs stub /auth/me directly.
  */
-function renderChat() {
+function renderChat(initialEntry = '/threads/thread-test') {
   const router = createMemoryRouter(
     [
       {
@@ -29,14 +31,19 @@ function renderChat() {
         children: [
           { path: '/chat', element: <NewPage /> },
           { path: '/threads/:threadId', element: <ThreadPage /> },
+          { path: '/factories/create', element: <CreateFactoryPage /> },
         ],
       },
     ],
     // The transcript only renders on the thread's own page now — /chat is the
     // draft composer and hides the bound thread's history.
-    { initialEntries: ['/threads/thread-test'] },
+    { initialEntries: [initialEntry] },
   );
-  return renderWithProviders(<RouterProvider router={router} />);
+  return renderWithProviders(
+    <ActiveFactoryProvider>
+      <RouterProvider router={router} />
+    </ActiveFactoryProvider>,
+  );
 }
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -478,7 +485,7 @@ describe('MastraCode message rendering', () => {
     expect(streamRequests).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the running conversation mounted while Create Factory is open in the layout', async () => {
+  it('recovers the running conversation after navigating to Create Factory and back', async () => {
     const user = userEvent.setup();
     seedProject();
     const stream = delayedSse({
@@ -502,33 +509,36 @@ describe('MastraCode message rendering', () => {
     expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
     await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
 
-    const factorySwitcher = screen.getByRole('button', { name: 'Select factory' });
-    await user.click(factorySwitcher);
+    await user.click(screen.getByRole('button', { name: 'Select factory' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
 
+    // Create Factory is now a dedicated page inside the chat layout.
     const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
     expect(factorySurface.closest('main')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
 
     await stream.emit();
+    // Close navigates back to the thread page the user came from.
     await user.click(screen.getByRole('button', { name: 'Close factory creation' }));
 
     expect(await screen.findByText('Streaming while factory creation is open')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
-    await waitFor(() => expect(factorySwitcher).toHaveFocus());
-    expect(streamRequests).toHaveBeenCalledTimes(1);
+    // Leaving the thread route drops the session's threadId, so returning
+    // re-subscribes (same as any thread → /new → thread navigation).
+    expect(streamRequests).toHaveBeenCalledTimes(2);
   });
 
-  it('shows required first-run Factory creation in the layout after empty backend hydration', async () => {
+  it('shows the first-run factory onboarding after empty backend hydration', async () => {
     useAgentControllerHandlers();
     server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
 
-    renderChat();
+    renderChat('/chat');
 
-    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
-    expect(factorySurface.closest('main')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Build software with a Factory that knows your work.' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create my first factory' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Close factory creation' })).not.toBeInTheDocument();
   });
 
   it('does not show first-run Factory creation after a remote Factory hydrates', async () => {
@@ -892,18 +902,15 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      const buildButton = await screen.findByRole('button', { name: 'Build' });
-      const planButton = screen.getByRole('button', { name: 'Plan' });
+      const modeSelector = await screen.findByRole('combobox', { name: 'Session mode' });
       const composer = screen.getByPlaceholderText(/Ask Mastra Code/);
 
       // Switcher lives after the composer in DOM order (below it), not in the header.
-      expect(composer.compareDocumentPosition(buildButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(composer.compareDocumentPosition(planButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(composer.compareDocumentPosition(modeSelector) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-      const header = document.querySelector('header');
-      expect(header).not.toBeNull();
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Plan' })).not.toBeInTheDocument();
+      const header = document.querySelector<HTMLElement>('header');
+      if (!header) throw new Error('Expected chat header');
+      expect(within(header).queryByRole('combobox', { name: 'Session mode' })).not.toBeInTheDocument();
     });
 
     // Detailed mode selection/switching behavior is specified in
@@ -914,7 +921,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       expect(screen.queryByLabelText('Toggle theme')).not.toBeInTheDocument();
     });
@@ -924,7 +931,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       const header = document.querySelector('header');
       expect(header).not.toBeNull();
@@ -943,7 +950,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       const header = document.querySelector<HTMLElement>('header');
       if (!header) throw new Error('Expected the chat header to be rendered');
@@ -957,7 +964,7 @@ describe('App mode + theme controls', () => {
 
       renderChat();
 
-      await screen.findByRole('button', { name: 'Build' });
+      await screen.findByRole('combobox', { name: 'Session mode' });
 
       const statusLine = screen.getByLabelText('Session status line');
       expect(within(statusLine).queryByText('MastraCode Test')).not.toBeInTheDocument();

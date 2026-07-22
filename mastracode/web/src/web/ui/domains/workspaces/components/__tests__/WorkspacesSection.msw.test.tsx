@@ -10,6 +10,7 @@
  * a legacy repo-root entry and a `user/` personal-session worktree, and the
  * specs assert both stay out of the list.
  */
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -19,7 +20,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { queryKeys } from '../../../../../../shared/api/keys';
-import { ToastProvider } from '../../../../ui';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
 import type { WorkItem } from '../../../factory/services/workItems';
 import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
@@ -108,13 +108,14 @@ const relatedWorkItems: WorkItem[] = [
     stageHistory: [],
     sessions: {
       work: {
-        projectPath: '/sandbox/mastra-worktrees/feat-ui',
+        sessionId: '/sandbox/mastra-worktrees/feat-ui',
         branch: 'feat-ui',
         threadId: 'thread-work',
         startedBy: 'user-1',
       },
     },
     metadata: { number: 24 },
+    revision: 1,
     createdAt: '2026-07-17T00:00:00Z',
     updatedAt: '2026-07-17T00:00:00Z',
   },
@@ -132,13 +133,14 @@ const relatedWorkItems: WorkItem[] = [
     stageHistory: [],
     sessions: {
       review: {
-        projectPath: '/sandbox/mastra-worktrees/feat-api',
+        sessionId: '/sandbox/mastra-worktrees/feat-api',
         branch: 'feat-api',
         threadId: 'thread-review',
         startedBy: 'user-1',
       },
     },
     metadata: { number: 25 },
+    revision: 1,
     createdAt: '2026-07-17T00:00:00Z',
     updatedAt: '2026-07-17T00:00:00Z',
   },
@@ -206,14 +208,13 @@ function LocationProbe() {
 function renderSection(initialPath = '/') {
   return renderWithProviders(
     <MemoryRouter initialEntries={[initialPath]}>
-      <ToastProvider>
-        <ActiveFactoryProvider>
-          <ChatSessionConfigProvider>
-            <WorkspacesSection />
-            <LocationProbe />
-          </ChatSessionConfigProvider>
-        </ActiveFactoryProvider>
-      </ToastProvider>
+      <ActiveFactoryProvider>
+        <ChatSessionConfigProvider>
+          <WorkspacesSection />
+          <LocationProbe />
+        </ChatSessionConfigProvider>
+      </ActiveFactoryProvider>
+      <Toaster position="bottom-right" />
     </MemoryRouter>,
   );
 }
@@ -265,7 +266,9 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     expect(await screen.findByText('Work Sessions')).toBeInTheDocument();
-    expect(screen.getByText('Review Sessions')).toBeInTheDocument();
+    // The active session row renders before the work-items query resolves, so
+    // the review grouping (which depends on work items) needs its own await.
+    expect(await screen.findByText('Review Sessions')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'feat-api' })).toHaveAttribute('aria-current', 'true');
     expect(await screen.findByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('button', { name: 'factory/issue-99' })).toBeInTheDocument();
@@ -281,7 +284,7 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     const workGroup = await screen.findByRole('region', { name: 'Work Sessions' });
-    const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
+    const reviewGroup = await screen.findByRole('region', { name: 'Review Sessions' });
     expect(screen.queryByRole('button', { name: 'Work Sessions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review Sessions' })).not.toBeInTheDocument();
     expect(await within(workGroup).findByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
@@ -314,13 +317,14 @@ describe('WorkspacesSection', () => {
         stageHistory: [],
         sessions: {
           [review ? 'review' : 'work']: {
-            projectPath: worktree.worktreePath,
+            sessionId: worktree.worktreePath,
             branch: worktree.branch,
             threadId: `thread-${index}`,
             startedBy: 'user-1',
           },
         },
         metadata: {},
+        revision: 1,
         createdAt: `2026-07-17T00:00:${String(index).padStart(2, '0')}Z`,
         updatedAt: `2026-07-17T00:00:${String(index).padStart(2, '0')}Z`,
       };
@@ -358,7 +362,7 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     const workGroup = await screen.findByRole('region', { name: 'Work Sessions' });
-    const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
+    const reviewGroup = await screen.findByRole('region', { name: 'Review Sessions' });
     await within(reviewGroup).findByRole('button', { name: 'review-5' });
     await waitFor(() => {
       expect(within(workGroup).getByRole('button', { name: 'work-0' })).toHaveAttribute('aria-current', 'true');
@@ -714,13 +718,9 @@ describe('WorkspacesSection', () => {
         deletedThreads.push(String(params.threadId));
         return HttpResponse.json({ ok: true });
       }),
-      http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree/delete`, async ({ request }) => {
-        deletedBranch = ((await request.json()) as { branch: string }).branch;
-        return HttpResponse.json({
-          removed: true,
-          branch: 'feat-ui',
-          worktreePath: '/sandbox/mastra-worktrees/feat-ui',
-        });
+      http.delete(`${ORIGIN}/web/user-sessions/${encodeURIComponent('/sandbox/mastra-worktrees/feat-ui')}`, () => {
+        deletedBranch = 'feat-ui';
+        return HttpResponse.json({ removed: true });
       }),
     );
     renderSection();
@@ -750,13 +750,9 @@ describe('WorkspacesSection', () => {
     useAgentControllerHandlers();
     let deleteCalled = false;
     server.use(
-      http.post(`${ORIGIN}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktree/delete`, () => {
+      http.delete(`${ORIGIN}/web/user-sessions/${encodeURIComponent('/sandbox/mastra-worktrees/feat-ui')}`, () => {
         deleteCalled = true;
-        return HttpResponse.json({
-          removed: true,
-          branch: 'feat-ui',
-          worktreePath: '/sandbox/mastra-worktrees/feat-ui',
-        });
+        return HttpResponse.json({ removed: true });
       }),
     );
     renderSection();

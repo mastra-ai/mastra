@@ -7,6 +7,7 @@ import { useState } from 'react';
 
 import { useSetSettingsSection, useSettingsSection, type SettingsSection } from '../context/SettingsNavigationProvider';
 import { useCloseSettings } from '../hooks/useCloseSettings';
+import { SETTINGS_SECTION_LABELS } from '../settingsSections';
 
 const SETTINGS_SECTIONS: {
   id: SettingsSection;
@@ -16,33 +17,43 @@ const SETTINGS_SECTIONS: {
 }[] = [
   {
     id: 'general',
-    label: 'General',
+    label: SETTINGS_SECTION_LABELS.general,
     icon: Palette,
     searchText: 'general theme appearance color scheme completion sound',
   },
   {
     id: 'source-control',
-    label: 'Source Control',
+    label: SETTINGS_SECTION_LABELS['source-control'],
     icon: GitBranch,
     searchText: 'source control git branches repositories remotes factories',
   },
   {
     id: 'model',
-    label: 'Model',
+    label: SETTINGS_SECTION_LABELS.model,
     icon: Search,
     searchText: 'model thinking level factory default model packs packs',
   },
-  { id: 'memory', label: 'Memory', icon: Brain, searchText: 'memory observational recall working memory' },
+  {
+    id: 'memory',
+    label: SETTINGS_SECTION_LABELS.memory,
+    icon: Brain,
+    searchText: 'memory observational recall working memory',
+  },
   {
     id: 'behavior',
-    label: 'Behavior',
+    label: SETTINGS_SECTION_LABELS.behavior,
     icon: SlidersHorizontal,
     searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
   },
-  { id: 'providers', label: 'API Keys', icon: Key, searchText: 'api keys providers credentials' },
+  {
+    id: 'providers',
+    label: SETTINGS_SECTION_LABELS.providers,
+    icon: Key,
+    searchText: 'api keys providers credentials',
+  },
   {
     id: 'custom-providers',
-    label: 'Custom',
+    label: SETTINGS_SECTION_LABELS['custom-providers'],
     icon: Server,
     searchText: 'custom providers endpoints base url',
   },
@@ -69,10 +80,9 @@ export function SettingsNavigation() {
           </button>
         </MainSidebar.NavLink>
       </MainSidebar.NavList>
-      <MainSidebar.NavSeparator />
       {state === 'default' && (
         <div className="px-1 py-2">
-          <InputGroup size="sm" variant="outline">
+          <InputGroup variant="outline">
             <InputGroupAddon>
               <Search aria-hidden="true" />
             </InputGroupAddon>

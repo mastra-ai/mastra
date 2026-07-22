@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { QueueHealthConfig } from '../../../storage/domains/queue-health/base';
+import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
 import type { QueueHealthWorkItem } from './queue-health';
 import { computeQueueHealth } from './queue-health';
 
@@ -26,6 +26,7 @@ function makeItem(overrides: Partial<QueueHealthWorkItem> = {}): QueueHealthWork
     stageHistory: [],
     sessions: {},
     metadata: {},
+    revision: 1,
     createdAt: new Date(NOW.getTime() - 1000),
     updatedAt: NOW,
     ...overrides,
@@ -96,10 +97,10 @@ describe('computeQueueHealth', () => {
 
   it('counts an entry active when the item has a session whose projectPath is active', () => {
     const active = inStage('execute', 100, {
-      sessions: { work: { projectPath: '/wt/a', branch: 'b', threadId: 't', startedBy: 'u1' } },
+      sessions: { work: { sessionId: '/wt/a', branch: 'b', threadId: 't', startedBy: 'u1' } },
     });
     const idle = inStage('execute', 100, {
-      sessions: { work: { projectPath: '/wt/b', branch: 'b', threadId: 't', startedBy: 'u1' } },
+      sessions: { work: { sessionId: '/wt/b', branch: 'b', threadId: 't', startedBy: 'u1' } },
     });
     const health = computeQueueHealth([active, idle], new Set(['/wt/a']), DEFAULT, NOW);
     const execute = health.stages.find(s => s.stage === 'execute')!;

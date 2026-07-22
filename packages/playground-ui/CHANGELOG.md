@@ -1,5 +1,28 @@
 # @mastra/playground-ui
 
+## 42.0.0-alpha.13
+
+### Minor Changes
+
+- Added a borderless surface appearance, compact content density, and a dedicated card link component with native link semantics, plus hover, focus, and active states for interactive cards. ([#19747](https://github.com/mastra-ai/mastra/pull/19747))
+
+## 42.0.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`c7d30cd`](https://github.com/mastra-ai/mastra/commit/c7d30cd86009c407df91105591f03cd6e3d2854d), [`ef03fbc`](https://github.com/mastra-ai/mastra/commit/ef03fbcc556bcbc04c9b3d06fab88771ecaa043c), [`6040ab9`](https://github.com/mastra-ai/mastra/commit/6040ab95bdfff38fceb1c0b9781a64a6d30f3cbd), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`4e68363`](https://github.com/mastra-ai/mastra/commit/4e683634f94ebd062d26a3bb6093a8dfc7263d37), [`9251370`](https://github.com/mastra-ai/mastra/commit/9251370ad413af464aa22d7566338bec5613e8de)]:
+  - @mastra/core@1.52.0-alpha.11
+  - @mastra/client-js@1.33.0-alpha.11
+  - @mastra/react@1.3.0-alpha.11
+
+## 42.0.0-alpha.11
+
+### Patch Changes
+
+- Fixed composer inputs to show one scrollbar for long messages. Added a `maxHeight` prop for configuring the scrolling viewport. ([#19876](https://github.com/mastra-ai/mastra/pull/19876))
+
+- Exported the shared toast API through the Toaster component entry point. ([#19876](https://github.com/mastra-ai/mastra/pull/19876))
+
 ## 42.0.0-alpha.10
 
 ### Patch Changes

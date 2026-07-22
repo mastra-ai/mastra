@@ -15,7 +15,7 @@
  * API client and `use-fs`.
  */
 
-export interface WebAuthState {
+export interface FactoryAuthState {
   /** Whether the server has web auth configured (any provider). */
   authEnabled: boolean;
   authenticated: boolean;
@@ -36,7 +36,7 @@ export const LOCAL_USER_RESOURCE_ID = 'local-user';
  * The resourceId under which a user's personal (non-factory) sessions live:
  * the stable WorkOS user id, or a fixed local id when auth is disabled.
  */
-export function userSessionResourceId(state: WebAuthState | undefined): string {
+export function userSessionResourceId(state: FactoryAuthState | undefined): string {
   return state?.user?.userId ?? LOCAL_USER_RESOURCE_ID;
 }
 
@@ -115,7 +115,7 @@ export function signUpWithPassword(
  * Fetch the current auth state from `/auth/me`. When the route is missing (auth
  * disabled), reports `authEnabled: false` so the UI hides all auth affordances.
  */
-export async function fetchAuthState(baseUrl: string): Promise<WebAuthState> {
+export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState> {
   try {
     const res = await fetch(`${baseUrl}/auth/me`, { headers: { Accept: 'application/json' }, credentials: 'include' });
     if (res.status === 404) {

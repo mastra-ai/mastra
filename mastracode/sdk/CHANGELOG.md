@@ -1,5 +1,66 @@
 # @mastra/code-sdk
 
+## 1.0.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`c9e3521`](https://github.com/mastra-ai/mastra/commit/c9e3521628422db84e00a5ff1dea7426c8cce537)]:
+  - @mastra/pg@1.17.0-alpha.3
+
+## 1.0.0-alpha.12
+
+### Minor Changes
+
+- Added an input processor extension for embedding surfaces while preserving Mastra Code's required processors. ([#19702](https://github.com/mastra-ai/mastra/pull/19702))
+
+### Patch Changes
+
+- Improved local database safety by using rollback journals and closing storage during shutdown. ([#19901](https://github.com/mastra-ai/mastra/pull/19901))
+
+- Updated dependencies [[`c7d30cd`](https://github.com/mastra-ai/mastra/commit/c7d30cd86009c407df91105591f03cd6e3d2854d), [`ef03fbc`](https://github.com/mastra-ai/mastra/commit/ef03fbcc556bcbc04c9b3d06fab88771ecaa043c), [`6193d6d`](https://github.com/mastra-ai/mastra/commit/6193d6d4ae62ad68daaaf450992198e9e49493f1), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`a7bbe77`](https://github.com/mastra-ai/mastra/commit/a7bbe773577f60bc4761b534ef7ec6b476332dad), [`4e68363`](https://github.com/mastra-ai/mastra/commit/4e683634f94ebd062d26a3bb6093a8dfc7263d37), [`9251370`](https://github.com/mastra-ai/mastra/commit/9251370ad413af464aa22d7566338bec5613e8de)]:
+  - @mastra/core@1.52.0-alpha.11
+  - @mastra/libsql@1.17.0-alpha.3
+
+## 1.0.0-alpha.11
+
+### Minor Changes
+
+- Add browser-based OAuth authentication for HTTP MCP servers to Mastra Code. ([#19467](https://github.com/mastra-ai/mastra/pull/19467))
+
+  When an HTTP MCP server rejects a connection with an authorization error, the
+  `/mcp` selector now shows a "needs auth" badge and an **Authenticate** action.
+  Choosing it opens the provider's consent page in the browser and completes the
+  OAuth 2.1 authorization-code flow (PKCE + Dynamic Client Registration) over a
+  loopback callback server, persists the tokens, and reconnects — no manual
+  configuration required for a bare `{ "url": ... }` server entry. A **Cancel
+  authentication** action aborts an in-flight flow and returns the server to the
+  needs-auth state.
+
+  The server manager gains `authenticateServer(name)` and
+  `cancelServerAuthentication(name)`, `McpServerStatus` gains an optional
+  `needsAuth` flag, and the OAuth `redirectUrl` in MCP server config is now
+  optional (it defaults to a stable loopback URL). The config also accepts
+  `callbackPort` as a shorthand that synthesizes
+  `http://localhost:<callbackPort>/callback`, the Claude Code / Codex
+  convention, so configs written for those clients (like Slack's official MCP
+  plugin config) work verbatim. `callbackPort` and `redirectUrl` are mutually
+  exclusive.
+
+  ```ts
+  const server = manager.getServerStatuses().find(s => s.name === 'supabase');
+  if (server?.needsAuth) {
+    // Opens the consent page in the browser, completes the OAuth flow, and
+    // resolves with the reconnected server status.
+    const status = await manager.authenticateServer('supabase', {
+      onAuthorizationUrl: url => openInBrowser(url),
+    });
+    console.log(status.connected);
+
+    // Abort an abandoned browser flow and return the server to needs-auth:
+    // await manager.cancelServerAuthentication('supabase')
+  }
+  ```
+
 ## 1.0.0-alpha.10
 
 ### Major Changes

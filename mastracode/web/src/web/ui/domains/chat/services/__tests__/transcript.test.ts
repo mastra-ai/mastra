@@ -375,6 +375,80 @@ describe('transcript reducer message entries', () => {
   });
 });
 
+describe('transcript reducer prependOlder', () => {
+  it('prepends only messages older than the oldest entry already on screen', () => {
+    // On screen: newest window (msg-3, msg-4). Grown fetch returns an older
+    // window that overlaps at msg-3 (the anchor).
+    const onScreen = createInitialTranscript({
+      messages: [
+        dbMessage('msg-3', 'user', [{ type: 'text', text: 'third' }]),
+        dbMessage('msg-4', 'assistant', [{ type: 'text', text: 'fourth' }]),
+      ],
+    });
+
+    const grown = [
+      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+      dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
+      dbMessage('msg-3', 'user', [{ type: 'text', text: 'third' }]),
+      dbMessage('msg-4', 'assistant', [{ type: 'text', text: 'fourth' }]),
+    ];
+
+    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: grown });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3', 'msg-4']);
+  });
+
+  it('does not duplicate the overlapping/anchor message', () => {
+    const onScreen = createInitialTranscript({
+      messages: [dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }])],
+    });
+
+    const grown = [
+      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+      dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
+    ];
+
+    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: grown });
+    const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
+
+    expect(ids).toEqual(['msg-1', 'msg-2']);
+    expect(ids.filter(id => id === 'msg-2')).toHaveLength(1);
+  });
+
+  it('preserves live-streamed messages at the tail when prepending older history', () => {
+    let state = createInitialTranscript({
+      messages: [dbMessage('history-2', 'assistant', [{ type: 'text', text: 'older reply' }])],
+    });
+    // A message streams in live after mount and persists at the tail.
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_end',
+        message: dbMessage('live-1', 'assistant', [{ type: 'text', text: 'live reply' }]),
+      },
+    });
+
+    const grown = [
+      dbMessage('history-1', 'user', [{ type: 'text', text: 'oldest' }]),
+      dbMessage('history-2', 'assistant', [{ type: 'text', text: 'older reply' }]),
+    ];
+
+    const next = transcriptReducer(state, { type: 'prependOlder', messages: grown });
+    const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
+
+    // Older history joins the front; the live message stays at the tail.
+    expect(ids).toEqual(['history-1', 'history-2', 'live-1']);
+  });
+
+  it('is a no-op for an empty older window', () => {
+    const onScreen = createInitialTranscript({
+      messages: [dbMessage('msg-1', 'user', [{ type: 'text', text: 'only' }])],
+    });
+    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: [] });
+    expect(next).toBe(onScreen);
+  });
+});
+
 describe('transcript reducer error notices', () => {
   function errorNoticeText(event: Record<string, unknown>): string {
     const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'error', ...event } });

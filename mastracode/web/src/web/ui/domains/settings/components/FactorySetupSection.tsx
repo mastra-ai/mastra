@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
 
-import { useToast } from '../../../ui';
 import {
   useRepositorySettingsQuery,
   useSaveRepositorySettingsMutation,
@@ -16,7 +16,6 @@ import { isServerFactory } from '../../workspaces/services/factories';
  * server. Saving a blank field clears the command.
  */
 function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryId: string; label: string }) {
-  const { toast } = useToast();
   const settingsQuery = useRepositorySettingsQuery(projectRepositoryId);
   const saveMutation = useSaveRepositorySettingsMutation();
 
@@ -30,8 +29,8 @@ function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryI
     saveMutation.mutate(
       { projectRepositoryId, settings: { setupCommand: draft.trim() || null } },
       {
-        onSuccess: () => toast('Setup command saved', 'success'),
-        onError: err => toast(err instanceof Error ? err.message : 'Failed to save setup command', 'error'),
+        onSuccess: () => toast.success('Setup command saved'),
+        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save setup command'),
       },
     );
   };
@@ -79,7 +78,7 @@ export function FactorySetupSection() {
   if (rows.length === 0) return null;
 
   return (
-    <div className="mt-6 pt-4 border-t border-border1/40 flex flex-col gap-4">
+    <div className="mt-6 pt-4 flex flex-col gap-4 not-last:border-b not-last:border-border1/40 not-last:pb-6">
       <div className="flex flex-col">
         <Txt variant="ui-lg" className="text-icon6 font-medium">
           Worktree setup

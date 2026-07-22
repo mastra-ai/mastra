@@ -88,6 +88,7 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
     stageHistory: [],
     sessions: {},
     metadata: {},
+    revision: 1,
     createdAt: ago(30 * HOUR_S),
     updatedAt: ago(30 * HOUR_S),
     ...overrides,
@@ -238,7 +239,7 @@ describe('Factory Overview page', () => {
     useOverviewHandlers({
       workItems: [
         inStage('wi-1', 'Active build', 'execute', 1 * HOUR_S, {
-          sessions: { work: { projectPath: WORKTREE, branch: 'main', threadId: 'thread-run', startedBy: 'user-1' } },
+          sessions: { work: { sessionId: WORKTREE, branch: 'main', threadId: 'thread-run', startedBy: 'user-1' } },
         }),
       ],
       activityThreads: [{ id: 'thread-run', tags: { projectPath: WORKTREE }, state: 'active' }],

@@ -1,148 +1,139 @@
 ---
 title: "Reference: create-mastra | CLI"
-description: Documentation for the create-mastra command, which creates a new Mastra project with interactive setup options.
+description: Create a Mastra project from a default starter, a template, or an empty scaffold.
 packages:
   - "create-mastra"
 ---
 
 # create-mastra
 
-The `create-mastra` command **creates** a new standalone Mastra project. Use this command to scaffold a complete Mastra setup in a dedicated directory. You can run it with additional flags to customize the setup process.
-
-## Usage
+Create a standalone Mastra project. By default, `create-mastra` installs a default starter and configures it for your selected model provider.
 
 ```bash npm2yarn
 npx create-mastra@latest
 ```
 
-`create-mastra` automatically runs in _interactive_ mode, but you can also specify your project name and template with command line arguments.
+## Creation modes
+
+### Default starter
+
+The default starter creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select OpenAI, Anthropic, Gemini, or xAI as your model provider.
+
+Provide both the project name and provider to create the project without prompts. This example uses Anthropic; you can also pass `openai`, `google`, or `xai`:
 
 ```bash npm2yarn
-npx create-mastra@latest my-mastra-project -- --template coding-agent
+npx create-mastra@latest my-mastra-project --llm anthropic
 ```
 
-Check out the [full list](https://mastra.ai/api/templates.json) of templates and use the `slug` as input to the `--template` CLI flag.
+Omit `--llm` to select the provider and optionally enter its API key interactively. The interactive setup also offers to connect your project to the Mastra platform. If enabled, the command opens the browser authentication flow, creates a platform project with the same name as the local project, and writes `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`.
 
-You can also use any GitHub repo as a template (it has to be a valid Mastra project):
+### Template
 
-```bash
-npx create-mastra@latest my-mastra-project -- --template mastra-ai/template-coding-agent
-```
-
-You can install Mastra skills for specific agents during project creation:
+Use a template slug or a public GitHub URL:
 
 ```bash npm2yarn
-npx create-mastra@latest my-project -- --default --skills claude-code,cursor
+npx create-mastra@latest my-mastra-project --template agent-harness
 ```
 
-## CLI flags
+```bash npm2yarn
+npx create-mastra@latest my-mastra-project --template https://github.com/mastra-ai/template-agent-harness
+```
 
-Instead of an interactive prompt you can also define these CLI flags.
+Leave the template value blank to select a template interactively:
+
+```bash npm2yarn
+npx create-mastra@latest my-mastra-project --template
+```
+
+Template authors own their dependencies, models, environment variables, and source code. `create-mastra` doesn't apply `--llm` or `--llm-api-key`.
+
+### Empty scaffold
+
+Use `--empty` to create a provider-free project without agents, examples, model SDKs, or environment files:
+
+```bash npm2yarn
+npx create-mastra@latest my-empty-project --empty
+```
+
+## Automatic setup
+
+After installing dependencies, the command:
+
+1. Detects supported coding assistants on `PATH` and installs Mastra skills. If none are detected, it installs universal skills.
+1. Creates an initial Git commit when the current directory and generated project aren't already inside Git repositories.
+
+Use `--no-skills` or `--no-git` to skip these steps. Skills and Git setup failures produce warnings but don't remove a successfully created project.
+
+## Conflicts and validation
+
+- `--empty` and `--template` can't be used together.
+- `--llm` and `--llm-api-key` are only valid for the default starter project.
+- The project name must be a safe, lowercase, single directory name and the target must not already exist.
+
+Invalid input is rejected before templates are fetched or files are created.
+
+## Arguments and flags
 
 <PropertiesTable
   content={[
   {
+    name: '[project-name]',
+    type: 'string',
+    description: 'Project directory and package name. When omitted, the command prompts for it.',
+    isOptional: true,
+  },
+  {
+    name: '--empty',
+    type: 'boolean',
+    description: 'Create a minimal, provider-free Mastra project.',
+    isOptional: true,
+  },
+  {
+    name: '-l, --llm <provider>',
+    type: 'string',
+    description: 'Managed agent-harness provider: openai, anthropic, google, or xai.',
+    isOptional: true,
+  },
+  {
+    name: '-k, --llm-api-key <key>',
+    type: 'string',
+    description: 'Write the selected provider API key to the generated .env file.',
+    isOptional: true,
+  },
+  {
+    name: '--no-skills',
+    type: 'boolean',
+    description: 'Skip automatic Mastra skills installation.',
+    isOptional: true,
+  },
+  {
+    name: '--no-git',
+    type: 'boolean',
+    description: 'Skip automatic Git initialization and the initial commit.',
+    isOptional: true,
+  },
+  {
+    name: '-t, --template [template]',
+    type: 'string',
+    description: 'Use a template slug or public GitHub URL. Omit the value to select interactively.',
+    isOptional: true,
+  },
+  {
+    name: '--timeout <milliseconds>',
+    type: 'number',
+    description: 'Positive integer timeout for dependency installation. Defaults to 60000.',
+    isOptional: true,
+  },
+  {
     name: '--version',
     type: 'boolean',
-    description: 'Output the version number',
-    isOptional: true,
-  },
-  {
-    name: '--project-name',
-    type: 'string',
-    description: 'Project name that will be used in package.json and as the project directory name',
-    isOptional: true,
-  },
-  {
-    name: '--default',
-    type: 'boolean',
-    description: 'Quickstart with defaults (src, OpenAI, no examples)',
-    isOptional: true,
-  },
-  {
-    name: '--components',
-    type: 'string',
-    description: 'Comma-separated list of components (agents, tools, workflows, scorers)',
-    isOptional: true,
-  },
-  {
-    name: '--llm',
-    type: 'string',
-    description: 'Default model provider (openai, anthropic, groq, google, or cerebras)',
-    isOptional: true,
-  },
-  {
-    name: '--llm-api-key',
-    type: 'string',
-    description: 'API key for the model provider',
-    isOptional: true,
-  },
-  {
-    name: '--example',
-    type: 'boolean',
-    description: 'Include example code',
-    isOptional: true,
-  },
-  {
-    name: '--no-example',
-    type: 'boolean',
-    description: 'Do not include example code',
-    isOptional: true,
-  },
-  {
-    name: '--template',
-    type: 'string',
-    description:
-      'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
-    isOptional: true,
-  },
-  {
-    name: '--timeout',
-    type: 'number',
-    description: 'Configurable timeout for package installation, defaults to 60000 ms',
-    isOptional: true,
-  },
-  {
-    name: '--dir',
-    type: 'string',
-    description: 'Target directory for Mastra source code (default: src/)',
-    isOptional: true,
-  },
-  {
-    name: '--mcp',
-    type: 'string',
-    description: 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)',
-    isOptional: true,
-  },
-  {
-    name: '--skills',
-    type: 'string',
-    description: 'Comma-separated list of agents to install Mastra skills for (e.g., claude-code,cursor,windsurf)',
-    isOptional: true,
-  },
-  {
-    name: '--observability',
-    type: 'boolean',
-    description:
-      'Enable Observability on the Mastra platform during project creation. This opens browser login when needed, prompts for an organization, provisions a platform project, and configures the observability exporters.',
-    isOptional: true,
-  },
-  {
-    name: '--no-observability',
-    type: 'boolean',
-    description: 'Skip the Observability prompt during project creation.',
-    isOptional: true,
-  },
-  {
-    name: '--observability-project',
-    type: 'string',
-    description: 'Set the platform project name to use when Mastra Observability is enabled.',
+    description: 'Print the create-mastra version.',
     isOptional: true,
   },
   {
     name: '--help',
     type: 'boolean',
-    description: 'Display help for command',
+    description: 'Display command help.',
     isOptional: true,
   },
 ]}
@@ -150,16 +141,10 @@ Instead of an interactive prompt you can also define these CLI flags.
 
 ## Telemetry
 
-By default, Mastra collects anonymous information about your project like your OS, Mastra version or Node.js version. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts) to check what's collected.
+Mastra collects anonymous CLI usage information, such as the operating system, Mastra version, and Node.js version. You can review the [analytics source](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts).
 
-You can opt out of the CLI analytics by setting an environment variable:
-
-```bash
-MASTRA_TELEMETRY_DISABLED=1
-```
-
-You can also set this while using other `mastra` commands:
+Set `MASTRA_TELEMETRY_DISABLED=1` to opt out:
 
 ```bash
-MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@latest
+MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@latest my-project --empty
 ```

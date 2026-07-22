@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useToast } from '../../../ui';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../../shared/hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../../shared/hooks/useLinearData';
@@ -91,7 +91,6 @@ function SourceCheckbox({
  */
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
-  const { toast } = useToast();
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
@@ -114,7 +113,7 @@ export function IntakeSection() {
 
   if (configQuery.isPending) {
     return (
-      <div className="mt-6 pt-4 border-t border-border1/40">
+      <div className="mt-6 pt-4">
         {heading}
         <SkeletonRows label="Loading intake sources" rows={4} />
       </div>
@@ -122,7 +121,7 @@ export function IntakeSection() {
   }
   if (configQuery.isError || !config) {
     return (
-      <div className="mt-6 pt-4 border-t border-border1/40">
+      <div className="mt-6 pt-4">
         {heading}
         <Txt as="p" variant="ui-sm" className="text-icon3 py-4">
           Intake configuration is unavailable. Connect GitHub or Linear first.
@@ -133,14 +132,14 @@ export function IntakeSection() {
 
   const update = (next: IntakeConfig) => {
     saveMutation.mutate(next, {
-      onSuccess: () => toast('Intake sources updated', 'success'),
-      onError: err => toast(err instanceof Error ? err.message : 'Failed to save intake sources', 'error'),
+      onSuccess: () => toast.success('Intake sources updated'),
+      onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save intake sources'),
     });
   };
   const busy = saveMutation.isPending;
 
   return (
-    <div className="mt-6 pt-4 border-t border-border1/40 flex flex-col gap-6">
+    <div className="mt-6 pt-4 flex flex-col gap-6">
       {heading}
       <section className="flex flex-col gap-2" aria-label="GitHub intake">
         <SourceHeader
