@@ -44,7 +44,13 @@ import {
   subscribeCurrentSessionToPullRequest,
 } from '../../github/session-subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
-import { logPlatformInfo, PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
+import {
+  logPlatformInfo,
+  logPlatformWarn,
+  PlatformApiClient,
+  PlatformApiError,
+  platformApiClientConfigFromEnv,
+} from '../api-client.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
 
@@ -56,6 +62,12 @@ type PlatformGithubInstallation = {
   accountType: string;
   suspendedAt: string | null;
   usable: boolean;
+};
+
+type PlatformGithubUserConnection = {
+  connected: boolean;
+  githubUsername: string | null;
+  reason?: 'token-invalid' | 'no-accessible-installation' | 'missing-permissions' | 'verification-unavailable' | null;
 };
 
 type GithubIssue = {
@@ -490,12 +502,19 @@ export class PlatformGithubIntegration implements FactoryIntegration {
    * Personal GitHub connection status for the acting user. Returns
    * not-connected when the platform predates the user-connection endpoint.
    */
-  async #fetchUserConnection(userId: string): Promise<{ connected: boolean; githubUsername: string | null }> {
+  async #fetchUserConnection(userId: string): Promise<PlatformGithubUserConnection> {
     try {
-      return await this.#client.request<{ connected: boolean; githubUsername: string | null }>(
+      const connection = await this.#client.request<PlatformGithubUserConnection>(
         'GET',
         `${API_PREFIX}/github-app/user-connection?${new URLSearchParams({ userId })}`,
       );
+      if (!connection.connected && connection.reason) {
+        logPlatformWarn('Platform GitHub user connection verification failed', {
+          userId,
+          reason: connection.reason,
+        });
+      }
+      return connection;
     } catch {
       return { connected: false, githubUsername: null };
     }

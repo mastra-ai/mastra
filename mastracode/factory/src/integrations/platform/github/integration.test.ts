@@ -641,6 +641,59 @@ describe('PlatformGithubIntegration', () => {
     );
   });
 
+  it('logs the user-connection verification failure reason', async () => {
+    const warningLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/github-app/installations')) {
+        return json({ installations: [], pendingRequests: [] });
+      }
+      if (url.includes('/github-app/user-connection')) {
+        return json({
+          connected: false,
+          githubUsername: 'ada',
+          reason: 'missing-permissions',
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      auth: fakeAuth(),
+      fleet: { enabled: true },
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+
+    await expect(status.json()).resolves.toMatchObject({
+      userConnected: false,
+      userGithubUsername: 'ada',
+    });
+    const logged = warningLog.mock.calls.map(call => String(call[0])).join('\n');
+    expect(logged).toContain('[MastraCode Web] WARN Platform GitHub user connection verification failed');
+    expect(logged).toContain('"userId":"user-1"');
+    expect(logged).toContain('"reason":"missing-permissions"');
+    warningLog.mockRestore();
+  });
+
   it('reports userConnected false when the platform lacks the user-connection endpoint', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
