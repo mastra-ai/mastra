@@ -37,7 +37,7 @@ import type {
 } from '@mastra/factory/capabilities/version-control';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
 
-import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
+import { logPlatformInfo, PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
 import type {
   GithubIntegration,
   GithubRepositoryPermission,
@@ -355,6 +355,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   initialize({ storage }: { storage: IntegrationStorageHandle }): void {
     this.#integrationStorage = storage as unknown as GithubSubscriptionStorage;
+    logPlatformInfo('Platform GitHub integration initialized', {
+      endpointHost: this.#endpointHost,
+      pollingEnabled: this.#pollingEnabled,
+      pollingIntervalMs: this.#pollingIntervalMs,
+    });
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
@@ -428,7 +433,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
         const redirectTo = c.req.query('redirectTo') || c.req.query('return_to') || '/';
         const originator = routeBaseUrl(ctx, c.req.url);
-        console.info('[MastraCode Web] Starting Platform GitHub connect flow', {
+        logPlatformInfo('Starting Platform GitHub connect flow', {
           orgId: tenant.orgId,
           redirectTo,
           originator,

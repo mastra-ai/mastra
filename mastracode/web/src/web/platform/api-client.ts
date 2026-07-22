@@ -148,8 +148,21 @@ function redact(message: string, accessToken: string): string {
   return message.split(accessToken).join('[REDACTED]');
 }
 
-function logPlatformError(message: string, fields: Record<string, unknown>): void {
-  console.error(`[MastraCode Web] ${message}`, fields);
+export function logPlatformInfo(message: string, fields?: Record<string, unknown>): void {
+  writePlatformLog('info', message, fields);
+}
+
+export function logPlatformError(message: string, fields?: Record<string, unknown>): void {
+  writePlatformLog('error', message, fields);
+}
+
+function writePlatformLog(level: 'info' | 'error', message: string, fields?: Record<string, unknown>): void {
+  const metadata = fields ? ` ${JSON.stringify(stripUndefined(fields))}` : '';
+  process.stderr.write(`[MastraCode Web] ${level.toUpperCase()} ${message}${metadata}\n`);
+}
+
+function stripUndefined(fields: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
 }
 
 function parseRetryAfter(value: string | null): number | null {

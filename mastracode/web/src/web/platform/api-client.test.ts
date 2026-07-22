@@ -74,7 +74,7 @@ describe('PlatformApiClient', () => {
   });
 
   it('propagates rate-limit status and retry timing with an error log', async () => {
-    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ detail: 'Rate limited' }), {
         status: 429,
@@ -87,20 +87,17 @@ describe('PlatformApiClient', () => {
       .catch(caught => caught);
     expect(error).toBeInstanceOf(PlatformApiError);
     expect(error).toMatchObject({ message: 'Rate limited', status: 429, retryAfterSeconds: 17 });
-    expect(errorLog).toHaveBeenCalledWith(
-      '[MastraCode Web] Platform API request failed',
-      expect.objectContaining({
-        method: 'GET',
-        path: '/v1/test',
-        status: 429,
-        retryAfterSeconds: 17,
-        message: 'Rate limited',
-      }),
-    );
+    const logged = String(errorLog.mock.calls[0]?.[0]);
+    expect(logged).toContain('[MastraCode Web] ERROR Platform API request failed');
+    expect(logged).toContain('"method":"GET"');
+    expect(logged).toContain('"path":"/v1/test"');
+    expect(logged).toContain('"status":429');
+    expect(logged).toContain('"retryAfterSeconds":17');
+    expect(logged).toContain('"message":"Rate limited"');
   });
 
   it('redacts the access token from HTTP, transport errors, and logs', async () => {
-    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const httpFetch = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ detail: `Rejected Bearer ${accessToken}` }), {
         status: 502,
