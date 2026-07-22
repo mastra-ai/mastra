@@ -293,6 +293,25 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     }
   });
 
+  it('resolves an agent by id when its Mastra registration key differs', async () => {
+    const agent = textAgent('registered-agent-id', 'from agent id');
+    const wf = createWorkflow({
+      id: 'rt-agent-id',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .agent('registered-agent-id')
+      .commit();
+    bind(wf, { agents: { registeredAgentKey: agent } });
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: { prompt: 'hi' } });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect((result.steps['registered-agent-id'] as any).output.text).toBe('from agent id');
+    }
+  });
+
   it('resolves a string-id tool from the Mastra registry at execution', async () => {
     const wf = createWorkflow({
       id: 'rt-strid-tool',

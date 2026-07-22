@@ -1170,12 +1170,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
   /**
    * Executes a declarative `agent` step: resolves the agent (live ref, else
-   * `mastra.getAgent(agentId)`), builds its runnable step, and runs it through
+   * `mastra.getAgentById(agentId)`), builds its runnable step, and runs it through
    * the shared step runner.
    */
   async executeAgent(params: ExecuteAgentParams): Promise<StepExecutionResult> {
     const { entry, ...rest } = params;
-    const agent = entry.agent ?? this.mastra?.getAgent(entry.agentId);
+    const agent = entry.agent ?? this.mastra?.getAgentById(entry.agentId);
     if (!agent) {
       throw new Error(
         `Agent '${entry.agentId}' not found for workflow step '${entry.id}'. Register the agent on the Mastra instance or pass the agent instance directly.`,

@@ -1253,7 +1253,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (entry?.type !== 'agent') {
       return this.runLeafStepFromMisroute(args, entry, 'agent');
     }
-    const agent = entry.agent ?? this.mastra?.getAgent(entry.agentId);
+    const agent = entry.agent ?? this.mastra?.getAgentById(entry.agentId);
     if (!agent) {
       throw new Error(
         `Agent '${entry.agentId}' not found for workflow step '${entry.id}'. Register the agent on the Mastra instance or pass the agent instance directly.`,
