@@ -1723,6 +1723,7 @@ describe('pr route', () => {
       headBranch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
+      actingUserId: 'u1',
     });
   });
 

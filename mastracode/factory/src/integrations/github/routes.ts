@@ -1419,6 +1419,7 @@ function buildProjectGitRoutes({
                 headBranch: head,
                 title,
                 body: prBody,
+                actingUserId: userId,
               });
               await emitAudit?.({
                 context: loose(c),
