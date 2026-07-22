@@ -779,6 +779,34 @@ describe('Factory Work and Review intake candidates', () => {
     expect(within(intake).getByLabelText('0 of 0 visible board tasks in Intake')).toBeInTheDocument();
   });
 
+  it('given one board column is still loading, when the Board renders, then each column shows its own state', async () => {
+    useBoardHandlers();
+    let resolveTriageIssues!: () => void;
+    const triageIssuesReady = new Promise<void>(resolve => {
+      resolveTriageIssues = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/issues`, async ({ request }) => {
+        const label = new URL(request.url).searchParams.get('label');
+        if (label === 'auto-triaged') await triageIssuesReady;
+        return HttpResponse.json({ issues: [], nextPage: null });
+      }),
+    );
+    renderAt('work');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    expect(await within(intake).findByText('Intake is clear')).toBeInTheDocument();
+    expect(within(column('triage')).getByRole('status', { name: 'Loading Triage column' })).toBeInTheDocument();
+    expect(within(column('planning')).getByText('Nothing in planning')).toBeInTheDocument();
+    expect(within(column('execute')).getByText('Nothing being built')).toBeInTheDocument();
+    expect(within(column('review')).getByText('Nothing awaiting review')).toBeInTheDocument();
+    expect(within(column('done')).getByText('Nothing completed yet')).toBeInTheDocument();
+    expect(within(column('canceled')).getByText('Nothing canceled')).toBeInTheDocument();
+
+    resolveTriageIssues();
+    expect(await within(column('triage')).findByText('Nothing to triage')).toBeInTheDocument();
+  });
+
   it('given GitHub Intake is unavailable, when the Board renders, then issue creation is hidden', async () => {
     useBoardHandlers();
     renderAt('work', githubProject, connectedStatus, {

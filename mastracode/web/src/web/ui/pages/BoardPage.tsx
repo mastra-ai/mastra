@@ -721,14 +721,19 @@ function BoardContent({
     return all.filter(candidate => !known.has(candidate.sourceKey));
   }, [allWorkItems, issues.data, triageIssues.data, pulls.data, linearIssues.data, activeIntakeSource, review]);
 
-  const boardDataPending =
-    items.isPending ||
-    configQuery.isPending ||
-    linearStatusQuery.isPending ||
-    (!review && triageIssues.isPending) ||
+  const intakeDataPending =
+    (!review && (configQuery.isPending || ((config?.linear.enabled ?? false) && linearStatusQuery.isPending))) ||
     (activeIntakeSource === 'github' && issues.isPending) ||
     (activeIntakeSource === 'github-prs' && pulls.isPending) ||
     (activeIntakeSource === 'linear' && linearIssues.isPending);
+  const triageDataPending = !review && triageIssues.isPending;
+  const loadingStages = new Set<BoardStageId>();
+  if (items.isPending) {
+    for (const stage of stages) loadingStages.add(stage.id);
+  }
+  if (intakeDataPending) loadingStages.add('intake');
+  if (triageDataPending) loadingStages.add('triage');
+  const boardDataPending = loadingStages.size > 0;
 
   useEffect(() => {
     if (boardDataPending || autoPositionedBoardRef.current === boardPositionKey) return;
@@ -983,7 +988,10 @@ function BoardContent({
                     onTriage={candidate.issue ? () => triage.mutate(candidate.issue!) : undefined}
                   />
                 ))}
-              {!boardDataPending && stageContentCount(stage.id, stages, workItems, candidates) === 0 && (
+              {loadingStages.has(stage.id) && (
+                <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
+              )}
+              {!loadingStages.has(stage.id) && stageContentCount(stage.id, stages, workItems, candidates) === 0 && (
                 <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={activeIntakeSource !== null} />
               )}
               {stage.id === 'intake' && (
@@ -1240,11 +1248,11 @@ const STAGE_ICON_SOURCES: Partial<Record<BoardStageId, string>> = {
   triage: '/factory-stage-icons/triage.svg',
   planning: '/factory-stage-icons/in-progress.svg',
   execute: '/factory-stage-icons/in-progress.svg',
-  review: '/factory-stage-icons/review.svg',
 };
 
 function BoardStageIcon({ stage }: { stage: BoardStageId }) {
   if (stage === 'intake') return <ArrowRightCircleIcon className="shrink-0 text-[#939393]" />;
+  if (stage === 'review') return <GitPullRequest size={16} className="shrink-0 text-icon3" aria-hidden />;
   const source = STAGE_ICON_SOURCES[stage];
   if (source) return <img src={source} alt="" aria-hidden className="size-4 shrink-0" />;
   const Icon = stage === 'done' ? CheckCircle2 : CircleX;
@@ -1687,9 +1695,6 @@ function IntakeColumnExtras({
 
   return (
     <>
-      {feed.isPending && feed.fetchStatus !== 'idle' && (
-        <SkeletonRows label="Loading intake candidates" rows={3} rowClassName="h-12 w-full" />
-      )}
       {source === 'linear' && linearIssues.isError && isLinearReauthError(linearIssues.error) && (
         <div className="flex flex-col gap-2 p-1">
           <Txt as="span" variant="ui-xs" className="text-icon3">
