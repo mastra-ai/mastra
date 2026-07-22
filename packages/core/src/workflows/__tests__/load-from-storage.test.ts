@@ -186,6 +186,66 @@ describe('storage round-trip', () => {
     expect((rehydratedResult as any).result.message).toBe('Doubled value is 10');
   });
 
+  it('rehydrates mappings by local tool step id when it differs from the registered tool id', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      storage: new InMemoryStore({ id: 'local-tool-step-mapping' }),
+    });
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'local-tool-step-mapping',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { result: { type: 'number' } }, required: ['result'] },
+        graph: [
+          { type: 'tool', id: 'calculate', toolId: 'double-tool' },
+          {
+            type: 'mapping',
+            id: 'output',
+            mapConfig: JSON.stringify({ result: { step: 'calculate', path: 'doubled' } }),
+          },
+        ],
+      },
+      mastra,
+    );
+    mastra.addWorkflow(workflow, 'local-tool-step-mapping');
+
+    const run = await mastra.getWorkflow('local-tool-step-mapping').createRun();
+    const result = await run.start({ inputData: { value: 5 } });
+
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ result: 10 });
+  });
+
+  it('rehydrates mappings by local agent step id when it differs from the registered agent id', async () => {
+    const supportAgent = fixedResponseAgent('support-agent', 'resolved');
+    const mastra = new Mastra({
+      logger: false,
+      agents: { supportAgent },
+      storage: new InMemoryStore({ id: 'local-agent-step-mapping' }),
+    });
+
+    await expect(
+      rehydrateWorkflow(
+        {
+          id: 'local-agent-step-mapping',
+          inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
+          outputSchema: { type: 'object', properties: { response: { type: 'string' } }, required: ['response'] },
+          graph: [
+            { type: 'agent', id: 'answer-request', agentId: 'support-agent' },
+            {
+              type: 'mapping',
+              id: 'output',
+              mapConfig: JSON.stringify({ response: { step: 'answer-request', path: 'text' } }),
+            },
+          ],
+        },
+        mastra,
+      ),
+    ).resolves.toBeDefined();
+  });
+
   it('addStoredWorkflow persists + live-registers; loadStoredWorkflows brings it back on a fresh boot', async () => {
     const storage = new InMemoryStore({ id: 'fresh-store' });
 
