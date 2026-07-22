@@ -7,13 +7,13 @@ import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useOverlays } from '../../../lib/overlays';
 import { Sidebar } from '../../../Sidebar';
 import { PageLayout } from '../../../ui';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { EmptyFactoryState, useActiveFactoryContext } from '../../workspaces';
+import { useActiveFactoryContext } from '../../workspaces';
 import type { ServerFactory } from '../../workspaces';
 import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 interface FactoryPageShellProps {
   title: string;
@@ -31,12 +31,15 @@ interface FactoryPageShellProps {
  * the header scopes repository-based intake.
  */
 export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
-  const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending } = useActiveFactoryContext();
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
 
-  if (!activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
   }
 
   return (

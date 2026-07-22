@@ -19,15 +19,13 @@ import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
 export default function Chat() {
   return (
     <MainSidebarProvider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
-        <ChatSessionRouteProvider>
-          <OverlaysProvider>
-            <SettingsNavigationProvider>
-              <ChatShell />
-            </SettingsNavigationProvider>
-          </OverlaysProvider>
-        </ChatSessionRouteProvider>
-      </ActiveFactoryProvider>
+      <ChatSessionRouteProvider>
+        <OverlaysProvider>
+          <SettingsNavigationProvider>
+            <ChatShell />
+          </SettingsNavigationProvider>
+        </OverlaysProvider>
+      </ChatSessionRouteProvider>
     </MainSidebarProvider>
   );
 }
