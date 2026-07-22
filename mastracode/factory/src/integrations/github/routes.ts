@@ -1313,7 +1313,7 @@ function buildProjectGitRoutes({
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
         if ('response' in owned) return owned.response;
-        const { userId, project } = owned;
+        const { orgId, userId, project } = owned;
 
         let body: { branch?: unknown; sessionId?: unknown };
         try {
@@ -1337,8 +1337,12 @@ function buildProjectGitRoutes({
             storage,
             fn: async () => {
               const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
-              const token = await github.mintInstallationToken(Number(project.installation.externalId));
-              await pushBranch(sandbox, workdir, branch, token, project.repository.slug);
+              const access = await github.versionControl.getRepositoryAccess({
+                orgId,
+                repositoryId: project.repository.id,
+              });
+              if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
+              await pushBranch(sandbox, workdir, branch, access.authorization.token, project.repository.slug);
               await emitAudit?.({
                 context: loose(c),
                 input: {

@@ -1662,7 +1662,7 @@ describe('push route', () => {
     expect(pushBranch).not.toHaveBeenCalled();
   });
 
-  it('mints a token and pushes the branch', async () => {
+  it('uses repository-scoped access to push the branch', async () => {
     seedMaterializedSession();
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
       branch: 'feat/x',
@@ -1670,11 +1670,16 @@ describe('push route', () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ pushed: true, branch: 'feat/x' });
+    expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
+      orgId: 'org1',
+      repositoryId: 'repository-99',
+    });
+    expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
     expect(pushBranch).toHaveBeenCalledOnce();
     // pushBranch(sandbox, workdir, branch, token, repoFullName)
     const call = pushBranch.mock.calls[0] as unknown as any[];
     expect(call[2]).toBe('feat/x');
-    expect(call[3]).toBe('install-token');
+    expect(call[3]).toBe('repo-token-repository-99');
     expect(call[4]).toBe('octo/hello');
   });
 });
