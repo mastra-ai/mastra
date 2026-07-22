@@ -15,10 +15,10 @@
  * registry lookup.
  */
 
-import type { RouteAuth } from '../../routes/route';
-import type { SandboxFleet } from '../../sandbox/fleet';
-import type { StateSigner } from '../../state-signing';
-import type { GithubIntegration } from './integration';
+import type { RouteAuth } from '../../routes/route.js';
+import type { SandboxFleet } from '../../sandbox/fleet.js';
+import type { StateSigner } from '../../state-signing.js';
+import type { GithubIntegration } from './integration.js';
 
 /**
  * Env vars the deploy entry reads to construct a `GithubIntegration`. Names

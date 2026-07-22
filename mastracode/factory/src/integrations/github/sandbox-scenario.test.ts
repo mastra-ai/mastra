@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/fleet';
-import { createPullRequest, MaterializeError, pushBranch } from './sandbox';
+import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/fleet.js';
+import { createPullRequest, MaterializeError, pushBranch } from './sandbox.js';
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };

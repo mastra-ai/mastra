@@ -22,10 +22,10 @@ import { getOAuthProvider } from '@mastra/code-sdk/auth/storage';
 import type { AuthCredential, CredentialStore } from '@mastra/code-sdk/auth/types';
 import type { MiddlewareHandler } from 'hono';
 
-import { isOAuthCredentialExpired } from '../storage/domains/credentials/base';
-import type { ModelCredentialsStorage } from '../storage/domains/credentials/base';
-import { getTenantCredentialsStorage, tenantOrgId } from './provider-credentials';
-import type { RouteAuth } from './route';
+import { isOAuthCredentialExpired } from '../storage/domains/credentials/base.js';
+import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import { getTenantCredentialsStorage, tenantOrgId } from './provider-credentials.js';
+import type { RouteAuth } from './route.js';
 
 /** How long a hydrated snapshot is considered fresh. */
 const SNAPSHOT_TTL_MS = 15_000;

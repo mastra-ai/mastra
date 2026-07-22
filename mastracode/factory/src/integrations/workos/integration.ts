@@ -3,8 +3,8 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { AuditEventRow } from '../../storage/domains/audit/base';
-import type { FactoryIntegration, IntegrationContext } from '../base';
+import type { AuditEventRow } from '../../storage/domains/audit/base.js';
+import type { FactoryIntegration, IntegrationContext } from '../base.js';
 
 type WorkOSClient = ConstructorParameters<typeof WorkOSAdminPortal>[0];
 

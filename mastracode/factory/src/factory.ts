@@ -28,49 +28,49 @@ import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import type { FactoryAuthUser } from './auth';
+import type { FactoryAuthUser } from './auth.js';
 import {
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
   getFactoryAuthOrgId,
   getFactoryAuthUserId,
-} from './auth';
-import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base';
-import type { GithubIntegration } from './integrations/github/integration';
-import { recordFactoryPullRequestProvenance } from './integrations/github/provenance';
-import { ProjectRoutes } from './routes/projects';
-import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface';
-import type { FactoryApiRoutesDeps } from './routes/surface';
+} from './auth.js';
+import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
+import type { GithubIntegration } from './integrations/github/integration.js';
+import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
+import { ProjectRoutes } from './routes/projects.js';
+import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
+import type { FactoryApiRoutesDeps } from './routes/surface.js';
 import {
   createTenantCredentialPrimer,
   primeTenantCredentials,
   registerTenantCredentialResolver,
-} from './routes/tenant-credentials';
-import { builtInFactoryRules } from './rules/defaults';
-import { FactoryDecisionDispatcher } from './rules/dispatcher';
-import { FactoryPhaseStateProcessor } from './rules/processor';
-import { createFactoryTransitionTools } from './rules/tools';
-import { FactoryTransitionService } from './rules/transition-service';
-import type { FactoryRules } from './rules/types';
-import { assertFactoryRules } from './rules/validation';
-import { SandboxFleet } from './sandbox/fleet';
-import { registerSandboxReattach } from './sandbox/reattach';
-import { handleServerError } from './server-error';
-import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static';
-import { createStateSigner } from './state-signing';
-import { observeAgentGitAction } from './storage/domains/audit/agent-audit';
-import { AuditStorage } from './storage/domains/audit/base';
-import { AuditDomain } from './storage/domains/audit/domain';
-import { ModelCredentialsStorage } from './storage/domains/credentials/base';
-import { IntakeStorage } from './storage/domains/intake/base';
-import { IntegrationStorage } from './storage/domains/integrations/base';
-import { ModelPacksStorage } from './storage/domains/model-packs/base';
-import { FactoryProjectsStorage } from './storage/domains/projects/base';
-import { QueueHealthStorage } from './storage/domains/queue-health/base';
-import { SourceControlStorage } from './storage/domains/source-control/base';
-import { WorkItemsStorage } from './storage/domains/work-items/base';
-import { createWorkspaceFactory } from './workspace';
+} from './routes/tenant-credentials.js';
+import { builtInFactoryRules } from './rules/defaults.js';
+import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
+import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { createFactoryTransitionTools } from './rules/tools.js';
+import { FactoryTransitionService } from './rules/transition-service.js';
+import type { FactoryRules } from './rules/types.js';
+import { assertFactoryRules } from './rules/validation.js';
+import { SandboxFleet } from './sandbox/fleet.js';
+import { registerSandboxReattach } from './sandbox/reattach.js';
+import { handleServerError } from './server-error.js';
+import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
+import { createStateSigner } from './state-signing.js';
+import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
+import { AuditStorage } from './storage/domains/audit/base.js';
+import { AuditDomain } from './storage/domains/audit/domain.js';
+import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
+import { IntakeStorage } from './storage/domains/intake/base.js';
+import { IntegrationStorage } from './storage/domains/integrations/base.js';
+import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
+import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
+import { SourceControlStorage } from './storage/domains/source-control/base.js';
+import { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { createWorkspaceFactory } from './workspace.js';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
 

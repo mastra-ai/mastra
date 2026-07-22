@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createFactoryStorageForTests } from '../storage/test-utils';
-import { defaultFactoryRules } from './defaults';
-import { FactoryStartCoordinator } from './start-coordinator';
-import { FactoryTransitionService } from './transition-service';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { defaultFactoryRules } from './defaults.js';
+import { FactoryStartCoordinator } from './start-coordinator.js';
+import { FactoryTransitionService } from './transition-service.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 

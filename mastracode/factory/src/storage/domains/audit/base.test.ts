@@ -1,7 +1,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
-import { AuditStorage, clampAuditLimit } from './base';
+import { AuditStorage, clampAuditLimit } from './base.js';
 
 describe('clampAuditLimit', () => {
   it('defaults non-finite values and truncates fractions', () => {

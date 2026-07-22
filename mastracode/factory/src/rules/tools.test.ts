@@ -1,11 +1,11 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { WorkItemsStorage } from '../storage/domains/work-items/base';
-import { createFactoryStorageForTests } from '../storage/test-utils';
-import { defaultFactoryRules } from './defaults';
-import { createFactoryTransitionTools } from './tools';
-import { FactoryTransitionService } from './transition-service';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { defaultFactoryRules } from './defaults.js';
+import { createFactoryTransitionTools } from './tools.js';
+import { FactoryTransitionService } from './transition-service.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 

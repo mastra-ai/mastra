@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Intake } from '../capabilities/intake';
-import type { AuditEmitter } from '../storage/domains/audit/domain';
-import { createFactoryStorageForTests } from '../storage/test-utils';
-import type { FactoryStorageTestSeed } from '../storage/test-utils';
-import { IntakeRoutes, parseIntakeConfig } from './intake';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils';
+import type { Intake } from '../capabilities/intake.js';
+import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { IntakeRoutes, parseIntakeConfig } from './intake.js';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 const auditEvents: Array<Record<string, unknown>> = [];
 const audit: AuditEmitter = {
