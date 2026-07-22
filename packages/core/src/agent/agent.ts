@@ -6519,6 +6519,18 @@ export class Agent<
     );
   }
 
+  /**
+   * Ensures `toolCallId` is suspended in a snapshot for this run, and returns the
+   * snapshot that contains that suspension.
+   *
+   * Immediate auto-approvals (AgentController `allow` policy) can resume the next
+   * sequential tool call before the new suspended snapshot replaces the previous
+   * one. Polling only for `status === "suspended"` can therefore hand back a stale
+   * prior snapshot. Returning the matching snapshot keeps resume hydration aligned
+   * with the tool call being approved.
+   *
+   * @internal
+   */
   async #validateSuspendedToolCallTarget({
     snapshot,
     toolCallId,
@@ -6529,13 +6541,14 @@ export class Agent<
     toolCallId: string | undefined;
     runId: string;
     method: string;
-  }) {
-    if (toolCallId === undefined) return;
+  }): Promise<WorkflowRunState> {
+    if (toolCallId === undefined) return snapshot;
 
     const isTargetSuspended = (currentSnapshot: WorkflowRunState) =>
       this.#getSuspendedToolCalls(currentSnapshot).some(toolCall => toolCall.toolCallId === toolCallId);
 
-    let isSuspended = isTargetSuspended(snapshot);
+    let resumeSnapshot = snapshot;
+    let isSuspended = isTargetSuspended(resumeSnapshot);
     if (!isSuspended) {
       // A resume stream can expose the next suspension just before its snapshot is
       // persisted. Briefly poll after authorization so an immediate response to
@@ -6546,7 +6559,10 @@ export class Agent<
       while (!isSuspended && workflowsStore && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 25));
         const latestSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
-        isSuspended = latestSnapshot ? isTargetSuspended(latestSnapshot) : false;
+        if (latestSnapshot && isTargetSuspended(latestSnapshot)) {
+          resumeSnapshot = latestSnapshot;
+          isSuspended = true;
+        }
       }
     }
 
@@ -6564,6 +6580,8 @@ export class Agent<
         },
       });
     }
+
+    return resumeSnapshot;
   }
 
   /**
@@ -8485,7 +8503,7 @@ export class Agent<
       snapshotMemoryInfo,
       actor,
     });
-    await this.#validateSuspendedToolCallTarget({
+    const resumeSnapshot = await this.#validateSuspendedToolCallTarget({
       snapshot: existingSnapshot,
       toolCallId: streamOptions?.toolCallId,
       runId,
@@ -8539,7 +8557,7 @@ export class Agent<
       messages: [],
       resumeContext: {
         resumeData,
-        snapshot: existingSnapshot,
+        snapshot: resumeSnapshot,
       },
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
@@ -8650,7 +8668,7 @@ export class Agent<
       snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
       actor,
     });
-    await this.#validateSuspendedToolCallTarget({
+    const resumeSnapshot = await this.#validateSuspendedToolCallTarget({
       snapshot: existingSnapshot,
       toolCallId: options?.toolCallId,
       runId,
@@ -8697,7 +8715,7 @@ export class Agent<
       messages: [],
       resumeContext: {
         resumeData,
-        snapshot: existingSnapshot,
+        snapshot: resumeSnapshot,
       },
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
