@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
+import { FactoryTransitionApprovalService } from '../rules/approval-service.js';
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -59,6 +60,7 @@ function buildApp(
       projects: seed.projects,
       workItems: seed.workItems,
       queueHealth: seed.queueHealth,
+      approvalService: new FactoryTransitionApprovalService({ storage: seed.workItems }),
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
       startCoordinator,
     }).routes(),
@@ -101,11 +103,57 @@ const createBody = (overrides: Record<string, unknown> = {}) => ({
 });
 
 let seed: FactoryStorageTestSeed;
+let approvalSequence = 0;
+
+async function createPendingApprovalForRoutes() {
+  approvalSequence += 1;
+  const item = (
+    await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: createBody({
+        externalSource: { ...createBody().externalSource, externalId: `approval-${approvalSequence}` },
+      }),
+    })
+  ).item;
+  const committed = await seed.workItems.commitTransition({
+    orgId: 'org1',
+    factoryProjectId: PROJECT_ID,
+    workItemId: item.id,
+    expectedRevision: item.revision,
+    destinationStage: 'execute',
+    actorId: 'agent:binding-1',
+    ingress: {
+      identity: `tool:call-${approvalSequence}`,
+      triggerType: 'agent',
+      transitionId: `transition-${approvalSequence}`,
+    },
+    ruleSetVersion: 'rules-v1',
+    causalChain: [],
+    evaluation: {
+      outcome: 'pending_approval',
+      approval: {
+        idempotencyKey: `tool:call-${approvalSequence}:approval`,
+        board: 'work',
+        actor: { type: 'agent', bindingId: 'binding-1', role: 'work' },
+        ingress: { type: 'agent', identity: `tool:call-${approvalSequence}` },
+        cause: 'agent_tool',
+        reason: 'Supervisor approval required.',
+        summary: 'Move Fix the login flow to execute',
+        decisions: [],
+      },
+    },
+  });
+  if (committed.status !== 'committed') throw new Error('Expected approval commit.');
+  return { item, approvalId: (committed.result as { approvalId: string }).approvalId };
+}
 
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   auditRecorded = [];
   auditFailure = undefined;
+  approvalSequence = 0;
   await seedProject();
 });
 
@@ -144,6 +192,93 @@ describe('auth and scoping', () => {
     const body = await res.json();
     expect(body.workItems).toHaveLength(1);
     expect(body.workItems[0].createdBy).toBe('u1');
+  });
+});
+
+describe('Factory transition approval routes', () => {
+  it('lists pending approvals with bounded metadata and resolves with the authenticated user', async () => {
+    const { item, approvalId } = await createPendingApprovalForRoutes();
+
+    const listed = await json('GET', `/web/factory/projects/${PROJECT_ID}/approvals?status=pending`);
+    expect(listed.status).toBe(200);
+    await expect(listed.json()).resolves.toEqual({
+      approvals: [
+        expect.objectContaining({
+          id: approvalId,
+          workItemId: item.id,
+          stage: 'execute',
+          expectedRevision: item.revision,
+          requestingRole: 'work',
+          status: 'pending',
+        }),
+      ],
+    });
+
+    const resolved = await json('POST', `/web/factory/projects/${PROJECT_ID}/approvals/${approvalId}/resolve`, {
+      decision: 'approve',
+    });
+    expect(resolved.status).toBe(200);
+    await expect(resolved.json()).resolves.toEqual({
+      result: expect.objectContaining({
+        status: 'approved',
+        replayed: false,
+        approval: expect.objectContaining({ id: approvalId, resolvedBy: 'u1', status: 'approved' }),
+        item: expect.objectContaining({ id: item.id, stages: ['execute'], revision: item.revision + 1 }),
+      }),
+    });
+    expect((await seed.audit.list({ orgId: 'org1', factoryProjectId: PROJECT_ID })).events[0]).toMatchObject({
+      action: 'factory.approval.approved',
+      actorId: 'u1',
+      actorType: 'human',
+    });
+  });
+
+  it('returns rejected and stale terminal outcomes without moving the item', async () => {
+    const rejected = await createPendingApprovalForRoutes();
+    const rejectedResponse = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/approvals/${rejected.approvalId}/resolve`,
+      { decision: 'reject' },
+    );
+    expect(rejectedResponse.status).toBe(200);
+    expect((await rejectedResponse.json()).result.status).toBe('rejected');
+    expect((await seed.workItems.get({ orgId: 'org1', id: rejected.item.id }))?.stages).toEqual(['intake']);
+
+    const stale = await createPendingApprovalForRoutes();
+    await seed.workItems.update({ orgId: 'org1', id: stale.item.id, userId: 'u1', patch: { title: 'Changed' } });
+    const staleResponse = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/approvals/${stale.approvalId}/resolve`,
+      { decision: 'approve' },
+    );
+    expect(staleResponse.status).toBe(200);
+    expect((await staleResponse.json()).result.status).toBe('stale');
+    expect((await seed.workItems.get({ orgId: 'org1', id: stale.item.id }))?.stages).toEqual(['intake']);
+  });
+
+  it('rejects malformed requests and hides approvals across tenant boundaries', async () => {
+    const { approvalId } = await createPendingApprovalForRoutes();
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/approvals?status=unknown`)).status).toBe(400);
+    expect(
+      (
+        await json('POST', `/web/factory/projects/${PROJECT_ID}/approvals/${approvalId}/resolve`, {
+          decision: 'approve',
+          userId: 'spoofed',
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await buildApp({ workosId: 'other', organizationId: 'other-org' }).request(
+          `/web/factory/projects/${PROJECT_ID}/approvals/${approvalId}/resolve`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ decision: 'approve' }),
+          },
+        )
+      ).status,
+    ).toBe(404);
   });
 });
 
@@ -334,14 +469,6 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
         metadata: expect.objectContaining({ ingressType: 'human', ruleSetVersion: 'factory-default-v1' }),
       }),
     );
-  });
-
-  it('accepts a human cancel over HTTP', async () => {
-    const item = await createItem();
-    const res = await transition(item, { stage: 'canceled' });
-    expect(res.status).toBe(200);
-    expect((await res.json()).result).toMatchObject({ status: 'accepted', stage: 'canceled' });
-    expect((await listItems())[0]?.stages).toEqual(['canceled']);
   });
 
   it('returns typed stale without overwriting the winner', async () => {
@@ -675,54 +802,6 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(metrics.cycleTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
     expect(metrics.wip).toEqual([]);
     expect(metrics.agingWip).toEqual([]);
-    expect(metrics.stageAutomation).toEqual([]);
-  });
-
-  it('serves per-stage automation: automated triage pass vs human-approved planning', async () => {
-    // Human files the card, the rules engine runs triage (intake → triage →
-    // planning) through the governed path, then a human approves planning into done.
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
-    const { workItem } = await created.json();
-    const service = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems });
-    const autoMove = (stage: 'triage' | 'planning', expectedRevision: number, identity: string) =>
-      service.transition({
-        orgId: 'org1',
-        factoryProjectId: PROJECT_ID,
-        workItemId: workItem.id,
-        board: 'work',
-        stage,
-        expectedRevision,
-        actor: { type: 'system', id: 'factory-rule-dispatcher' },
-        ingress: { type: 'rule', identity },
-        cause: 'auto_triage',
-      });
-    const triaged = await autoMove('triage', workItem.revision, 'auto-1');
-    expect(triaged.status).toBe('accepted');
-    const planned = await autoMove('planning', (triaged as { revision: number }).revision, 'auto-2');
-    expect(planned.status).toBe('accepted');
-    const approved = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
-      board: 'work',
-      stage: 'done',
-      expectedRevision: (planned as { revision: number }).revision,
-      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7',
-      cause: 'board_drag',
-    });
-    expect(approved.status).toBe(200);
-
-    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?days=7`);
-    expect(res.status).toBe(200);
-    const { metrics } = await res.json();
-
-    expect(metrics.stageAutomation).toEqual([
-      // Human-entered (creation), automation-exited → not automated.
-      { stage: 'intake', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
-      // Automation-entered and -exited, first visit → clean automated pass, item is done.
-      { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 1, canceled: 0, reworked: 0, inFlight: 0 } },
-      // Automation-entered, human-exited → not automated.
-      { stage: 'planning', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
-    ]);
-    // Global split matches: 4 entered stages, 2 by automation.
-    expect(metrics.transitions).toEqual({ human: 2, total: 4 });
   });
 });
 

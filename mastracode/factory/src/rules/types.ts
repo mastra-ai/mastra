@@ -188,6 +188,13 @@ export interface FactoryRuleRejectDecision {
   reason: string;
 }
 
+export interface FactoryRequestApprovalDecision {
+  type: 'requestApproval';
+  idempotencyKey: string;
+  reason: string;
+  summary?: string;
+}
+
 interface FactoryCommitDecisionBase {
   idempotencyKey: string;
 }
@@ -240,7 +247,7 @@ export type FactoryCommitDecision =
   | FactorySendMessageDecision
   | FactoryNotifyDecision;
 
-export type FactoryRuleDecision = FactoryRuleRejectDecision | FactoryCommitDecision;
+export type FactoryRuleDecision = FactoryRuleRejectDecision | FactoryRequestApprovalDecision | FactoryCommitDecision;
 
 export interface FactoryTransitionResultAccepted {
   status: 'accepted';
@@ -251,6 +258,16 @@ export interface FactoryTransitionResultAccepted {
   decisions: FactoryCommitDecision[];
 }
 
+export interface FactoryTransitionResultPendingApproval {
+  status: 'pending_approval';
+  transitionId: string;
+  approvalId: string;
+  itemId: string;
+  revision: number;
+  stage: FactoryRuleStage;
+  reason: string;
+}
+
 export interface FactoryTransitionResultRejected {
   status: 'rejected';
   transitionId: string;
@@ -259,7 +276,8 @@ export interface FactoryTransitionResultRejected {
   reason: string;
 }
 
-export type FactoryTransitionResult = FactoryTransitionResultAccepted | FactoryTransitionResultRejected;
+export type FactoryTransitionResult =
+  FactoryTransitionResultAccepted | FactoryTransitionResultPendingApproval | FactoryTransitionResultRejected;
 
 export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRuleSource {
   switch (source) {
