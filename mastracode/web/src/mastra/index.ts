@@ -91,9 +91,9 @@ const workosAudit = workosAuditApiKey
   : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
-// (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, APP_DATABASE_URL, …) never leak
-// into commands run against untrusted repo checkouts. PATH is always added by
-// the core LocalSandbox itself; the rest keeps git and TLS working normally.
+// (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
+// commands run against untrusted repo checkouts. PATH is always added by the
+// core LocalSandbox itself; the rest keeps git and TLS working normally.
 const LOCAL_SANDBOX_ENV_KEYS = [
   'HOME',
   'USER',
@@ -261,20 +261,31 @@ const linear = linearEnv
 const integrations: FactoryIntegration[] = [github, linear, workosAudit].filter(i => i !== undefined);
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
-// the distributed project lock, and better-auth. `APP_DATABASE_URL` set →
+// the distributed project lock, and better-auth. `DATABASE_URL` set →
 // Postgres (the paired PgVector rides the same database for recall search).
 // Unset (bare local dev) → libSQL on the same local file the SDK's default
 // storage resolution uses, running the FULL app surface (auth, intake,
 // audit, work-items, integrations) — no features silently off.
-const appDatabaseUrl = process.env.APP_DATABASE_URL;
-const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
-if (!appDatabaseUrl && !localDevelopmentMode) {
-  throw new Error('APP_DATABASE_URL is required outside local development and tests.');
+//
+// `APP_DATABASE_URL` is the deprecated legacy name — still honored as a
+// fallback so existing checkouts keep working, but new setups should use
+// `DATABASE_URL` (matches the platform's managed env-var sync for attached
+// databases, so `mastra deploy` populates it automatically).
+const databaseUrl = process.env.DATABASE_URL?.trim() || process.env.APP_DATABASE_URL?.trim() || undefined;
+if (process.env.APP_DATABASE_URL?.trim() && !process.env.DATABASE_URL?.trim()) {
+  console.warn(
+    '[mastracode-web] APP_DATABASE_URL is deprecated — rename it to DATABASE_URL. ' +
+      'The old name is honored as a fallback for now, but new deploys should use DATABASE_URL.',
+  );
 }
-const storage = appDatabaseUrl
+const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+if (!databaseUrl && !localDevelopmentMode) {
+  throw new Error('DATABASE_URL is required outside local development and tests.');
+}
+const storage = databaseUrl
   ? new PgFactoryStorage({
       id: 'mastra-code-storage',
-      connectionString: appDatabaseUrl,
+      connectionString: databaseUrl,
       retention: DEFAULT_RETENTION,
     })
   : new LibSQLFactoryStorage({
@@ -282,9 +293,7 @@ const storage = appDatabaseUrl
       url: `file:${getDatabasePath()}`,
       retention: DEFAULT_RETENTION,
     });
-const vector = appDatabaseUrl
-  ? new PgVector({ id: 'mastra-code-vectors', connectionString: appDatabaseUrl })
-  : undefined;
+const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
 export const factory = new MastraFactory({
   auth,

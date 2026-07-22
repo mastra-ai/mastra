@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": "./dist/index.js",
+    "./internal/auth": "./dist/internal/auth.js",
     "./package.json": "./package.json",
     "./dist/*": [
       "./dist/*",
