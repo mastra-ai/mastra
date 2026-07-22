@@ -1,5 +1,6 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -12,8 +13,10 @@ import {
   EllipsisVertical,
   ExternalLink,
   GitCompareArrows,
+  GitPullRequest,
   Link2,
   Plus,
+  SquareKanban,
 } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -491,12 +494,31 @@ function FactoryBoardPage({ kind }: { kind: BoardKind }) {
 
 function Board({ factory, kind }: { factory: ServerFactory; kind: BoardKind }) {
   const repository = selectedRepository(factory);
+  const review = kind === 'review';
 
   if (!repository) {
+    const EmptyIcon = review ? GitPullRequest : SquareKanban;
+
     return (
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
-        <Notice variant="info">Connect a repository to start intake. Issues and pull requests will appear here.</Notice>
-        <ConnectRepositoriesPanel factory={factory} />
+      <div className="flex min-h-0 flex-1 items-center justify-center-safe overflow-y-auto py-8">
+        <section
+          aria-label="Connect a repository"
+          className="w-full max-w-2xl rounded-xl border border-border1 bg-surface1"
+        >
+          <EmptyState
+            as="h2"
+            iconSlot={<EmptyIcon className="size-10 text-icon3" />}
+            titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
+            descriptionSlot={
+              review
+                ? 'Choose a GitHub repository below. Its pull requests will appear in Intake, ready to move through review.'
+                : 'Choose a GitHub repository below. Its issues will appear in Intake, ready to move through planning and build.'
+            }
+          />
+          <div className="border-t border-border1 px-6 pt-5 pb-6">
+            <ConnectRepositoriesPanel factory={factory} />
+          </div>
+        </section>
       </div>
     );
   }
