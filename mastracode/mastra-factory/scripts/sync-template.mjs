@@ -3,34 +3,29 @@
  * Produces the Mastra Factory template tree from `mastracode/web`.
  *
  * The template is the web project minus monorepo coupling:
- *   - `link:` deps           -> caret ranges on published versions (verified on npm)
+ *   - `link:` deps           -> `"latest"` (matches the templates/* pattern)
  *   - monorepo tsconfig      -> standalone tsconfig
- *   - contributor README     -> checked-in template/README.md (version tokens filled)
+ *   - contributor README     -> checked-in template/README.md
  *   - e2e/tests/test deps    -> stripped
  *   - monorepo-only scripts  -> user-facing scripts (dev/build/start/deploy)
  *   - .env.schema            -> also emitted as .env.example (decorators stripped)
  *
- * Versions: Mastra deps become caret ranges (`^1.51.0` style), matching the
- * monorepo's other templates (templates/* float via `latest`/caret). By
- * default the range is anchored on the LOCAL monorepo version of each
- * package (verified to exist on npm); `--tag latest` anchors on the `latest`
- * dist-tags instead. Automated sync uses the default mode so the generated
- * template matches the coherent local package set. Because those anchors
- * may be prereleases, the template ships an `.npmrc`
- * with `legacy-peer-deps=true` — npm's strict resolver rejects prereleases
- * like `1.51.1-alpha.1` against peer ranges like `>=1.50.0-0`.
+ * Versions: every `link:` dep becomes `"latest"`, matching the monorepo's
+ * other templates (templates/*). We do not pin the current monorepo version
+ * because pinning a mid-train alpha would make the template uninstallable
+ * whenever the alpha has not been published yet, and it forces peer-range
+ * relaxation for prereleases. `"latest"` floats to whatever is currently on
+ * the `latest` dist-tag, which is exactly what create-mastra scaffolds do.
  *
  * Usage:
- *   node scripts/sync-template.mjs [--out <dir>] [--tag latest]
+ *   node scripts/sync-template.mjs [--out <dir>]
  *
  * Output defaults to `template-out/` next to this package (gitignored).
  * Publish flow: automated — the sync-softwarefactory-template workflow runs
- * this against published local monorepo versions on pushes to main touching
- * `mastracode/web`, then force-syncs the softwarefactory-template repository,
- * mirroring the templates/* sync process (one-way overwrite; the monorepo is
- * truth).
+ * this on pushes to main touching `mastracode/web`, then force-syncs the
+ * softwarefactory-template repository, mirroring the templates/* sync process
+ * (one-way overwrite; the monorepo is truth).
  */
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,7 +42,6 @@ function argValue(flag) {
 }
 const defaultOutDir = path.join(pkgRoot, 'template-out');
 const outDir = path.resolve(argValue('--out') ?? defaultOutDir);
-const pinTag = argValue('--tag'); // undefined = local monorepo versions
 
 /** True when `candidate` is `parent` or nested inside it. */
 function containsPath(parent, candidate) {
@@ -142,39 +136,17 @@ function copyTree(srcDir, destDir, relBase = '') {
   }
 }
 
-function monorepoVersion(name, relPath) {
+/**
+ * Verify the linked package exists in the monorepo and its manifest name
+ * matches the dependency key. This is a source-of-truth check only — no
+ * version is read from it; the template pins `"latest"` from npm.
+ */
+function assertLinkedPackage(name, relPath) {
   const pkgJsonPath = path.join(monorepoRoot, relPath, 'package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
   if (pkg.name !== name) {
     throw new Error(`sync-template: ${pkgJsonPath} is named ${pkg.name}, expected ${name}`);
   }
-  return pkg.version;
-}
-
-/**
- * Resolve the version to pin: the local monorepo version (default, verified
- * published) or the requested dist-tag.
- */
-function resolvePinnedVersion(name, relPath) {
-  if (pinTag) {
-    try {
-      return execFileSync('npm', ['view', name, `dist-tags.${pinTag}`], { stdio: 'pipe' })
-        .toString()
-        .trim();
-    } catch {
-      throw new Error(`sync-template: could not resolve ${name}@${pinTag} on npm.`);
-    }
-  }
-  const version = monorepoVersion(name, relPath);
-  try {
-    execFileSync('npm', ['view', `${name}@${version}`, 'version'], { stdio: 'pipe' });
-  } catch {
-    throw new Error(
-      `sync-template: ${name}@${version} (local monorepo version) is not published on npm — ` +
-        `publish it (or wait for the release train), or sync with --tag latest.`,
-    );
-  }
-  return version;
 }
 
 function transformPackageJson() {
@@ -201,24 +173,18 @@ function transformPackageJson() {
     check: 'tsc --noEmit && tsc --noEmit -p src/web/ui/tsconfig.json',
   };
 
-  const pins = [];
-  console.log(
-    pinTag
-      ? `sync-template: pinning npm ${pinTag} dist-tags...`
-      : 'sync-template: pinning local monorepo versions (verified on npm)...',
-  );
+  // Every `link:` dep becomes `"latest"`, matching the monorepo's other
+  // templates (templates/*). We still resolve the link target so an invalid
+  // `link:` spec (typo, deleted package) fails the sync loudly.
+  console.log('sync-template: rewriting link: deps to "latest"...');
   for (const section of ['dependencies', 'devDependencies']) {
     const deps = manifest[section];
     if (!deps) continue;
     for (const [name, spec] of Object.entries(deps)) {
       if (!spec.startsWith('link:')) continue;
-      const version = resolvePinnedVersion(name, linkSpecToRelPath(spec));
-      // Caret ranges, matching the monorepo's other templates (templates/*):
-      // the scaffold floats to compatible releases instead of freezing the
-      // exact set that existed at sync time.
-      deps[name] = `^${version}`;
-      pins.push([name, version]);
-      console.log(`  ✓ ${name}@^${version}`);
+      assertLinkedPackage(name, linkSpecToRelPath(spec));
+      deps[name] = 'latest';
+      console.log(`  ✓ ${name}@latest`);
     }
   }
 
@@ -235,15 +201,13 @@ function transformPackageJson() {
     }
   }
 
-  // The template installs with `legacy-peer-deps=true` (see writeNpmrc), which
-  // skips automatic peer installation. Most peers are already direct deps;
-  // these transitive runtime peers are not, so declare them explicitly.
-  // (In the monorepo dev setup pnpm's auto-install-peers provides them.)
-  manifest.dependencies['@mastra/memory'] = manifest.dependencies['@mastra/core']; // peer of @mastra/playground-ui
+  // Transitive runtime peers that must be declared as direct deps so npm
+  // resolves them without needing pnpm's auto-install-peers behavior.
+  // (In the monorepo dev setup pnpm provides them automatically.)
+  manifest.dependencies['@mastra/memory'] = 'latest'; // peer of @mastra/playground-ui
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
 
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  return pins;
 }
 
 function writeTsconfig() {
@@ -323,13 +287,6 @@ function writeEnvExample() {
   fs.writeFileSync(path.join(outDir, '.env.example'), `${header}${body}`);
 }
 
-function writeNpmrc() {
-  // Pins may be prerelease versions (mid-train alphas); npm's strict resolver
-  // rejects prereleases against peer ranges like `>=1.50.0-0`, so relax peer
-  // resolution. pnpm/yarn ignore this setting and handle peers leniently.
-  fs.writeFileSync(path.join(outDir, '.npmrc'), 'legacy-peer-deps=true\n');
-}
-
 function writeGitignore() {
   fs.writeFileSync(
     path.join(outDir, '.gitignore'),
@@ -346,21 +303,13 @@ src/mastra/public/ui/
   );
 }
 
-/**
- * Copy the checked-in user-facing README and fill `{{package-name}}` tokens
- * with the versions this sync run pinned. Tokens keep the markdown editable
- * as a normal file (create-mastra style) while still reflecting live pins.
- */
-function writeReadme(pins) {
+/** Copy the checked-in user-facing README verbatim. */
+function writeReadme() {
   const source = path.join(pkgRoot, 'template', 'README.md');
   if (!fs.existsSync(source)) {
     throw new Error(`sync-template: missing checked-in template README at ${source}`);
   }
-  const versions = Object.fromEntries(pins);
-  const readme = fs.readFileSync(source, 'utf8').replace(/\{\{([^}]+)\}\}/g, (match, name) => {
-    return Object.hasOwn(versions, name) ? versions[name] : match;
-  });
-  fs.writeFileSync(path.join(outDir, 'README.md'), readme);
+  fs.copyFileSync(source, path.join(outDir, 'README.md'));
 }
 
 // ── main ────────────────────────────────────────────────────────────────────
@@ -381,13 +330,12 @@ if (fs.existsSync(outDir)) {
   }
 }
 copyTree(webRoot, outDir);
-const pins = transformPackageJson();
+transformPackageJson();
 writeTsconfig();
 stripTestingTypesFromUiTsconfig();
 writeEnvExample();
-writeNpmrc();
 writeGitignore();
-writeReadme(pins);
+writeReadme();
 
 console.log(`sync-template: done. Template written to ${outDir}`);
 console.log('The sync-softwarefactory-template workflow pushes this to the template repo on main.');
