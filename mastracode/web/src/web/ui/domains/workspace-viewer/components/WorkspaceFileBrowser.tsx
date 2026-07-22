@@ -184,7 +184,7 @@ export function WorkspaceFileBrowser({
 
   return (
     <aside
-      className="flex h-full w-full min-w-0 flex-col border-l border-border1 bg-surface1"
+      className="flex h-full w-full min-w-0 flex-col bg-surface1"
       aria-label="Workspace files"
     >
       <div className="flex items-center justify-between gap-2 px-3 py-2 pl-4 lg:pr-12">
