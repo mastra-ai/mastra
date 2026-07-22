@@ -55,7 +55,6 @@ export function ChatSessionConfigProvider({
   // (resourceId, no scope) session to read threads and share the live run.
   // On user routes the :threadId param IS the sessionId.
   const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId);
-  const projectPath = undefined;
   const sessionEnabled = userScoped
     ? Boolean(storedSession) && !resolvingSession
     : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
@@ -63,7 +62,7 @@ export function ChatSessionConfigProvider({
     resourceId: resourceId ?? '',
     sessionEnabled,
     resourceEnabled: userScoped ? Boolean(resourceId) : ensureQuery.isSuccess,
-    projectPath,
+    projectPath: undefined,
     factorySessionState:
       factory && repository
         ? {
