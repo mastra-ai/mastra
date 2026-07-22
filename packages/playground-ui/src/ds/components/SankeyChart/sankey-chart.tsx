@@ -68,6 +68,7 @@ export function SankeyChart({
                     columnLabel={node?.column.label}
                     label={node?.label}
                     nodeValue={node?.displayValue}
+                    layoutValue={node ? nodeWeights.get(node.id) : undefined}
                     total={total}
                     showColumnLabel={showColumnLabel}
                     isFirstColumn={node?.column.id === firstColumnId}
@@ -84,6 +85,8 @@ export function SankeyChart({
                     {...props}
                     hueMap={hueMap}
                     highlighted={String(props.payload.source.name ?? '') === activeSourceName}
+                    displayValue={link?.displayValue}
+                    layoutValue={link?.value}
                     onHoverChange={setHoveredSourceName}
                     clickable={onCurveClick !== undefined}
                     onSelect={() => {
@@ -126,6 +129,7 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
   columnLabel?: string;
   label?: string;
   nodeValue?: number;
+  layoutValue?: number;
   total: number;
   showColumnLabel: boolean;
   isFirstColumn: boolean;
@@ -144,6 +148,7 @@ function SankeyNode({
   columnLabel,
   label,
   nodeValue,
+  layoutValue,
   total,
   showColumnLabel,
   isFirstColumn,
@@ -169,6 +174,8 @@ function SankeyNode({
   const numericValue = nodeValue ?? (typeof payload.value === 'number' ? payload.value : Number(payload.value));
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
+  const visibleHeight = scaleSankeyDimension(height, numericValue, layoutValue);
+  const visibleY = y + (height - visibleHeight) / 2;
   const isTruncated = visibleLabel !== visibleDisplayLabel;
   const textAnchor = isTruncated && isFirstColumn ? 'start' : isTruncated && isLastColumn ? 'end' : 'middle';
   const labelX = isTruncated && isFirstColumn ? x : isTruncated && isLastColumn ? x + width : x + width / 2;
@@ -217,7 +224,7 @@ function SankeyNode({
             {columnLabel}
           </text>
         ) : null}
-        <rect x={x} y={y} width={width} height={height} rx={3} fill={nodeColor(hue)} />
+        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
         <text
           x={labelX}
           y={y - 24}
@@ -257,6 +264,11 @@ function SankeyNode({
   );
 }
 
+function scaleSankeyDimension(size: number, displayValue: number | undefined, layoutValue: number | undefined) {
+  if (displayValue === undefined || layoutValue === undefined || layoutValue <= 0) return size;
+  return size * Math.min(Math.max(displayValue / layoutValue, 0), 1);
+}
+
 function truncateNodeLabel(label: string) {
   const maximumLength = 23;
   if (label.length <= maximumLength) return label;
@@ -266,6 +278,8 @@ function truncateNodeLabel(label: string) {
 type SankeyLinkProps = SankeyLinkRendererProps & {
   hueMap: Record<string, number>;
   highlighted: boolean;
+  displayValue?: number;
+  layoutValue?: number;
   clickable: boolean;
   onHoverChange: (sourceName: string | undefined) => void;
   onSelect: () => void;
@@ -283,11 +297,14 @@ function SankeyLink({
   payload,
   hueMap,
   highlighted,
+  displayValue,
+  layoutValue,
   clickable,
   onHoverChange,
   onSelect,
 }: SankeyLinkProps) {
-  const halfWidth = Math.max(0, linkWidth) / 2;
+  const visibleWidth = scaleSankeyDimension(linkWidth, displayValue, layoutValue);
+  const halfWidth = Math.max(0, visibleWidth) / 2;
   const path = [
     `M${sourceX},${sourceY - halfWidth}`,
     `C${sourceControlX},${sourceY - halfWidth} ${targetControlX},${targetY - halfWidth} ${targetX},${targetY - halfWidth}`,

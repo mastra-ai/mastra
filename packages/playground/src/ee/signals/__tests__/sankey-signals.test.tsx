@@ -74,7 +74,7 @@ afterEach(() => {
 
 describe('stabilizeThemeFlow', () => {
   describe('when snapshot counts change within one timeline window', () => {
-    it('keeps link layout weights and node ordering fixed while retaining current node counts', () => {
+    it('keeps link layout weights and node ordering fixed while current link and node counts change', () => {
       const lowerVolumeFlow = {
         ...fourStageThemeFlowResponse,
         snapshot: earlierThemeFlowResponse.snapshot,
@@ -99,12 +99,13 @@ describe('stabilizeThemeFlow', () => {
       const higherFrame = stabilizeThemeFlow(fourStageThemeFlowResponse, windowFlows);
 
       const getLayoutLinks = (frame: typeof lowerFrame) =>
-        frame.links.map(link => [link.sourceNodeId, link.targetNodeId, link.traceCount]);
+        frame.links.map(link => [link.sourceNodeId, link.targetNodeId, link.layoutTraceCount]);
 
       expect(getLayoutLinks(lowerFrame)).toEqual(getLayoutLinks(higherFrame));
       expect(lowerFrame.stages.map(stage => stage.nodes.map(node => node.nodeId))).toEqual(
         higherFrame.stages.map(stage => stage.nodes.map(node => node.nodeId)),
       );
+      expect(lowerFrame.links.map(link => link.traceCount)).not.toEqual(higherFrame.links.map(link => link.traceCount));
       expect(lowerFrame.stages[0]?.nodes[0]?.traceCount).not.toBe(higherFrame.stages[0]?.nodes[0]?.traceCount);
     });
   });

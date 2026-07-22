@@ -126,6 +126,39 @@ describe('SankeyChart', () => {
     });
   });
 
+  describe('when current values change within stable layout weights', () => {
+    it('changes bar height without moving its center', async () => {
+      const renderFrame = (count: number) => (
+        <Sankey
+          data={[{ channel: 'Search', channelCount: count, region: 'EU', regionCount: count, count, layoutCount: 10 }]}
+          columns={columns.slice(0, 2)}
+          getRecordWeight={record => Number(record.count)}
+          getRecordLayoutWeight={record => Number(record.layoutCount)}
+          getRecordNodeValue={(record, column) => Number(record[`${column.id}Count`])}
+        >
+          <SankeyChart />
+        </Sankey>
+      );
+      const { rerender } = render(renderFrame(2));
+      const getSearchRect = async () => {
+        const node = await screen.findByLabelText(/Search: 2 traces/);
+        return node.querySelector('rect');
+      };
+      const initialRect = await getSearchRect();
+      const initialHeight = Number(initialRect?.getAttribute('height'));
+      const initialCenter = Number(initialRect?.getAttribute('y')) + initialHeight / 2;
+
+      rerender(renderFrame(8));
+
+      const updatedNode = await screen.findByLabelText(/Search: 8 traces/);
+      const updatedRect = updatedNode.querySelector('rect');
+      const updatedHeight = Number(updatedRect?.getAttribute('height'));
+      const updatedCenter = Number(updatedRect?.getAttribute('y')) + updatedHeight / 2;
+      expect(updatedHeight).toBeGreaterThan(initialHeight);
+      expect(updatedCenter).toBe(initialCenter);
+    });
+  });
+
   describe('when a node label includes a description', () => {
     const description =
       'Looks up relevant knowledge before responding, including all supporting context needed to explain a long theme description without clipping it.';

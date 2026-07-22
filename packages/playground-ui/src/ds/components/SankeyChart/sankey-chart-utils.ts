@@ -19,6 +19,7 @@ export type SankeyChartLink = {
   source: number;
   target: number;
   value: number;
+  displayValue: number;
   sourceNode: SankeyChartNode;
   targetNode: SankeyChartNode;
   records: Array<SankeyChartRecord>;
@@ -83,6 +84,7 @@ export function buildSankeyChartGraph(
   getRecordNodeId?: (record: SankeyChartRecord, column: SankeyChartColumn) => string,
   getRecordNodeLabel?: (record: SankeyChartRecord, column: SankeyChartColumn) => string,
   getRecordNodeValue?: (record: SankeyChartRecord, column: SankeyChartColumn) => number,
+  getRecordLayoutWeight?: (record: SankeyChartRecord) => number,
 ): SankeyChartGraph {
   if (columns.length < 2 || data.length === 0) return EMPTY_GRAPH;
 
@@ -114,8 +116,11 @@ export function buildSankeyChartGraph(
     if (!sourceColumn || !targetColumn) continue;
 
     for (const record of data) {
-      const weight = getRecordWeight(record);
-      if (!Number.isFinite(weight) || weight < 0) continue;
+      const displayWeight = getRecordWeight(record);
+      const layoutWeight = getRecordLayoutWeight?.(record) ?? displayWeight;
+      if (!Number.isFinite(displayWeight) || displayWeight < 0 || !Number.isFinite(layoutWeight) || layoutWeight < 0) {
+        continue;
+      }
 
       const sourceRecordValue = getSankeyChartValue(record[sourceColumn.id]);
       const targetRecordValue = getSankeyChartValue(record[targetColumn.id]);
@@ -153,14 +158,16 @@ export function buildSankeyChartGraph(
       const existingLink = linksById.get(id);
 
       if (existingLink) {
-        existingLink.value += weight;
+        existingLink.value += layoutWeight;
+        existingLink.displayValue += displayWeight;
         existingLink.records.push(record);
       } else {
         linksById.set(id, {
           id,
           source: source.index,
           target: target.index,
-          value: weight,
+          value: layoutWeight,
+          displayValue: displayWeight,
           sourceNode: source.node,
           targetNode: target.node,
           records: [record],

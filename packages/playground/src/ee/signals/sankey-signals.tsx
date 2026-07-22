@@ -218,6 +218,7 @@ function FlowCard({
           getRecordNodeLabel={getSignalRecordNodeLabel}
           getRecordNodeValue={getSignalRecordNodeValue}
           getRecordWeight={record => Number(record.traceCount)}
+          getRecordLayoutWeight={record => Number(record.layoutTraceCount)}
         >
           <SankeyChart
             height={height ?? 'clamp(340px, 42vw, 460px)'}

@@ -142,18 +142,19 @@ describe('SankeyChart utilities', () => {
     });
   });
 
-  describe('when node display values differ from layout weights', () => {
-    it('preserves the supplied node values independently of link weights', () => {
+  describe('when display values differ from layout weights', () => {
+    it('preserves current link and node values independently of stable layout weights', () => {
       const graph = buildSankeyChartGraph(
-        [{ source: 'source-1', sourceCount: 0, model: 'model-1', modelCount: 3, layoutWeight: 0.01 }],
+        [{ source: 'source-1', sourceCount: 0, model: 'model-1', modelCount: 3, count: 2, layoutWeight: 5 }],
         columns.slice(0, 2),
-        record => Number(record.layoutWeight),
+        record => Number(record.count),
         undefined,
         undefined,
         (record, column) => Number(record[`${column.id}Count`]),
+        record => Number(record.layoutWeight),
       );
 
-      expect(graph.links[0]?.value).toBe(0.01);
+      expect(graph.links[0]).toMatchObject({ value: 5, displayValue: 2 });
       expect(graph.nodes.map(node => node.displayValue)).toEqual([0, 3]);
     });
   });
