@@ -37,7 +37,12 @@ describe('softwarefactory template', () => {
     const templateDir = join(workDir, 'template');
     scaffoldDir = join(workDir, 'factory');
 
-    // The CLI bin runs from dist; build it (cheap, tsup).
+    // The create-factory bundle externalizes its `mastra/internal/auth`
+    // dependency, so both package dist directories must exist before it runs.
+    await execa('pnpm', ['--filter', './packages/cli', 'build:lib'], {
+      cwd: rootDir,
+      stdio: 'inherit',
+    });
     await execa('pnpm', ['--filter', './mastracode/mastra-factory', 'build'], {
       cwd: rootDir,
       stdio: 'inherit',
