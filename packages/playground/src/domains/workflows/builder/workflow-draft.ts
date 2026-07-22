@@ -12,7 +12,27 @@ export interface WorkflowDraftStepSchema {
 export interface WorkflowDraftValidationContext {
   agents?: Record<string, WorkflowDraftStepSchema>;
   tools?: Record<string, WorkflowDraftStepSchema>;
+  workflows?: Record<string, WorkflowDraftStepSchema>;
+  workflowCatalog?: 'available' | 'unavailable';
 }
+
+export type WorkflowDraftLifecycle = 'untouched' | 'constructing' | 'ready';
+
+export interface WorkflowDraftAuthoringState {
+  lifecycle: WorkflowDraftLifecycle;
+  revision: number;
+  finalizedRevision?: number;
+  savingRevision?: number;
+  draft: WorkflowDraft;
+  checkpointIssues: WorkflowDraftValidationIssue[];
+  finalIssues: WorkflowDraftValidationIssue[];
+}
+
+export const WORKFLOW_DRAFT_REVISION_CONFLICT = 'Draft changed before this operation completed.';
+
+export type WorkflowDraftAuthoringResult =
+  | { ok: true; state: WorkflowDraftAuthoringState }
+  | { ok: false; state: WorkflowDraftAuthoringState; error: string; issues?: WorkflowDraftValidationIssue[] };
 
 export type WorkflowDraftMutation =
   | { type: 'set-identity'; id: string; description?: string }
@@ -39,6 +59,9 @@ export type WorkflowDraftValidationIssueCode =
   | 'invalid-foreach'
   | 'invalid-duration'
   | 'invalid-date'
+  | 'invalid-conditional'
+  | 'invalid-loop'
+  | 'workflow-catalog-unavailable'
   | 'incompatible-schema'
   | 'invalid-mutation';
 
@@ -51,8 +74,7 @@ export interface WorkflowDraftValidationIssue {
 export type WorkflowDraftValidationResult = { ok: true } | { ok: false; issues: WorkflowDraftValidationIssue[] };
 
 export type WorkflowDraftMutationResult =
-  | { ok: true; draft: WorkflowDraft }
-  | { ok: false; draft: WorkflowDraft; issues: WorkflowDraftValidationIssue[] };
+  { ok: true; draft: WorkflowDraft } | { ok: false; draft: WorkflowDraft; issues: WorkflowDraftValidationIssue[] };
 
 const emptyObjectSchema = {
   type: 'object',
@@ -139,8 +161,12 @@ function getStepInputSchema(step: WorkflowDraftStep, context?: WorkflowDraftVali
       return context?.agents?.[step.agentId]?.inputSchema ?? agentInputSchema;
     case 'tool':
       return context?.tools?.[step.toolId]?.inputSchema;
+    case 'workflow':
+      return context?.workflows?.[step.workflowId]?.inputSchema;
     case 'foreach':
       return { type: 'array', items: getStepInputSchema(step.step, context) ?? {} };
+    case 'loop':
+      return getStepInputSchema(step.step, context);
     default:
       return undefined;
   }
@@ -155,12 +181,16 @@ function getStepOutputSchema(
       return step.outputSchema ?? context?.agents?.[step.agentId]?.outputSchema;
     case 'tool':
       return context?.tools?.[step.toolId]?.outputSchema;
+    case 'workflow':
+      return context?.workflows?.[step.workflowId]?.outputSchema;
     case 'mapping':
       return mappingOutputSchema(step);
     case 'foreach': {
       const itemSchema = getStepOutputSchema(step.step, context);
       return itemSchema ? { type: 'array', items: itemSchema } : undefined;
     }
+    case 'loop':
+      return getStepOutputSchema(step.step, context);
     default:
       return undefined;
   }
@@ -202,6 +232,21 @@ function validateStep(
         });
       }
       return;
+    case 'workflow':
+      if (context?.workflowCatalog === 'unavailable') {
+        issues.push({
+          code: 'workflow-catalog-unavailable',
+          path: `${path}.workflowId`,
+          message: 'Workflow catalog is unavailable, so nested workflow references cannot be finalized.',
+        });
+      } else if (step.workflowId.trim().length === 0 || (context?.workflows && !context.workflows[step.workflowId])) {
+        issues.push({
+          code: 'missing-reference',
+          path: `${path}.workflowId`,
+          message: `Workflow "${step.workflowId}" is unavailable.`,
+        });
+      }
+      return;
     case 'mapping':
       if (!mappingOutputSchema(step)) {
         issues.push({
@@ -224,6 +269,22 @@ function validateStep(
           path: `${path}.opts.concurrency`,
           message: 'Concurrency must be positive.',
         });
+      }
+      validateStep(step.step, `${path}.step`, seenIds, issues, context);
+      return;
+    case 'conditional':
+      if (step.steps.length === 0 || step.steps.length !== step.predicates.length) {
+        issues.push({
+          code: 'invalid-conditional',
+          path,
+          message: 'Conditional steps and predicates must be non-empty and aligned.',
+        });
+      }
+      step.steps.forEach((child, index) => validateStep(child, `${path}.steps.${index}`, seenIds, issues, context));
+      return;
+    case 'loop':
+      if (step.loopType !== 'dowhile' && step.loopType !== 'dountil') {
+        issues.push({ code: 'invalid-loop', path: `${path}.loopType`, message: 'Loop type is invalid.' });
       }
       validateStep(step.step, `${path}.step`, seenIds, issues, context);
       return;
@@ -344,4 +405,173 @@ export function applyWorkflowDraftMutation(
   const introducedIssues = nextValidation.issues.filter(issue => !previousIssueKeys.has(issueKey(issue)));
   if (introducedIssues.length > 0) return { ok: false, draft, issues: introducedIssues };
   return { ok: true, draft: nextDraft };
+}
+
+const checkpointBlockingCodes = new Set<WorkflowDraftValidationIssueCode>([
+  'invalid-schema',
+  'missing-step-id',
+  'duplicate-step-id',
+  'invalid-map-config',
+  'invalid-parallel',
+  'invalid-foreach',
+  'invalid-duration',
+  'invalid-date',
+  'invalid-conditional',
+  'invalid-loop',
+]);
+
+export function validateWorkflowCheckpoint(
+  draft: WorkflowDraft,
+  context?: WorkflowDraftValidationContext,
+): WorkflowDraftValidationResult {
+  const validation = validateWorkflowDraft(draft, context);
+  if (validation.ok) return validation;
+  const issues = validation.issues.filter(issue => checkpointBlockingCodes.has(issue.code));
+  return issues.length === 0 ? { ok: true } : { ok: false, issues };
+}
+
+function validationIssues(result: WorkflowDraftValidationResult): WorkflowDraftValidationIssue[] {
+  return result.ok ? [] : result.issues;
+}
+
+export function createWorkflowDraftAuthoringState(id: string): WorkflowDraftAuthoringState {
+  return {
+    lifecycle: 'untouched',
+    revision: 0,
+    draft: createWorkflowDraft(id),
+    checkpointIssues: [],
+    finalIssues: [],
+  };
+}
+
+export function createLoadedWorkflowDraftAuthoringState(
+  draft: WorkflowDraft,
+  context?: WorkflowDraftValidationContext,
+): WorkflowDraftAuthoringState {
+  const validation = validateWorkflowDraft(draft, context);
+  return {
+    lifecycle: validation.ok ? 'ready' : 'constructing',
+    revision: 0,
+    finalizedRevision: validation.ok ? 0 : undefined,
+    draft,
+    checkpointIssues: validationIssues(validateWorkflowCheckpoint(draft, context)),
+    finalIssues: validationIssues(validation),
+  };
+}
+
+function rejectAuthoringOperation(state: WorkflowDraftAuthoringState, error: string): WorkflowDraftAuthoringResult {
+  return { ok: false, state, error };
+}
+
+function assertMutableRevision(state: WorkflowDraftAuthoringState, expectedRevision: number): string | undefined {
+  if (state.savingRevision !== undefined) return 'Workflow save is in progress.';
+  if (state.revision !== expectedRevision) return WORKFLOW_DRAFT_REVISION_CONFLICT;
+  return undefined;
+}
+
+export function checkpointWorkflowDraft(
+  state: WorkflowDraftAuthoringState,
+  expectedRevision: number,
+  draft: WorkflowDraft,
+  context?: WorkflowDraftValidationContext,
+): WorkflowDraftAuthoringResult {
+  const conflict = assertMutableRevision(state, expectedRevision);
+  if (conflict) return rejectAuthoringOperation(state, conflict);
+  const validation = validateWorkflowCheckpoint(draft, context);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      state,
+      error: validation.issues.map(issue => issue.message).join(' '),
+      issues: validation.issues,
+    };
+  }
+  return {
+    ok: true,
+    state: {
+      lifecycle: 'constructing',
+      revision: state.revision + 1,
+      draft,
+      checkpointIssues: [],
+      finalIssues: validationIssues(validateWorkflowDraft(draft, context)),
+    },
+  };
+}
+
+export function mutateWorkflowDraftAuthoringState(
+  state: WorkflowDraftAuthoringState,
+  expectedRevision: number,
+  mutation: WorkflowDraftMutation,
+  context?: WorkflowDraftValidationContext,
+): WorkflowDraftAuthoringResult {
+  const conflict = assertMutableRevision(state, expectedRevision);
+  if (conflict) return rejectAuthoringOperation(state, conflict);
+  const result = applyWorkflowDraftMutation(state.draft, mutation, context);
+  if (!result.ok) {
+    return { ok: false, state, error: result.issues.map(issue => issue.message).join(' '), issues: result.issues };
+  }
+  return {
+    ok: true,
+    state: {
+      lifecycle: 'constructing',
+      revision: state.revision + 1,
+      draft: result.draft,
+      checkpointIssues: validationIssues(validateWorkflowCheckpoint(result.draft, context)),
+      finalIssues: validationIssues(validateWorkflowDraft(result.draft, context)),
+    },
+  };
+}
+
+export function finalizeWorkflowDraft(
+  state: WorkflowDraftAuthoringState,
+  expectedRevision: number,
+  context?: WorkflowDraftValidationContext,
+): WorkflowDraftAuthoringResult {
+  const conflict = assertMutableRevision(state, expectedRevision);
+  if (conflict) return rejectAuthoringOperation(state, conflict);
+  const validation = validateWorkflowDraft(state.draft, context);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      state: { ...state, lifecycle: 'constructing', finalizedRevision: undefined, finalIssues: validation.issues },
+      error: validation.issues.map(issue => issue.message).join(' '),
+      issues: validation.issues,
+    };
+  }
+  return {
+    ok: true,
+    state: { ...state, lifecycle: 'ready', finalizedRevision: state.revision, checkpointIssues: [], finalIssues: [] },
+  };
+}
+
+export function reserveWorkflowDraftSave(
+  state: WorkflowDraftAuthoringState,
+  expectedRevision: number,
+  context?: WorkflowDraftValidationContext,
+): WorkflowDraftAuthoringResult {
+  if (
+    state.lifecycle !== 'ready' ||
+    state.finalizedRevision !== expectedRevision ||
+    state.revision !== expectedRevision
+  ) {
+    return rejectAuthoringOperation(state, 'Workflow draft must be finalized before saving.');
+  }
+  const validation = validateWorkflowDraft(state.draft, context);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      state: { ...state, lifecycle: 'constructing', finalizedRevision: undefined, finalIssues: validation.issues },
+      error: validation.issues.map(issue => issue.message).join(' '),
+      issues: validation.issues,
+    };
+  }
+  if (state.savingRevision !== undefined) return rejectAuthoringOperation(state, 'Workflow save is in progress.');
+  return { ok: true, state: { ...state, savingRevision: expectedRevision } };
+}
+
+export function releaseWorkflowDraftSave(
+  state: WorkflowDraftAuthoringState,
+  savingRevision: number,
+): WorkflowDraftAuthoringState {
+  return state.savingRevision === savingRevision ? { ...state, savingRevision: undefined } : state;
 }

@@ -8,10 +8,12 @@ import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { ArrowLeftIcon, PlayIcon, SaveIcon, Trash2Icon } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import {
   getWorkflowBuilderThreadId,
   useWorkflowBuilderAccess,
@@ -20,10 +22,22 @@ import {
   WorkflowConversationPanel,
   WorkflowDefinitionGraphView,
 } from '@/domains/workflows/builder';
+import type { WorkflowDraftStepSchema, WorkflowDraftValidationContext } from '@/domains/workflows/builder';
 import { useDeleteStoredWorkflow, useStoredWorkflow } from '@/domains/workflows/hooks/use-stored-workflows';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 const EMPTY_MESSAGES: MastraDBMessage[] = [];
 const WORKFLOW_BUILDER_ROUTE = '/workflow-builder';
+
+function parseSchema(schema: string | undefined): WorkflowDraftStepSchema['inputSchema'] | undefined {
+  if (!schema) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(schema);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export default function WorkflowBuilderEditorPage({ create = false }: { create?: boolean }) {
   const params = useParams();
@@ -36,16 +50,47 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   const navigate = useNavigate();
   const access = useWorkflowBuilderAccess();
   const workflowQuery = useStoredWorkflow(create ? undefined : routeWorkflowId);
-  const workflowDraft = useWorkflowDraft(workflowQuery.data, initialWorkflowId);
-  const { reset } = workflowDraft;
+  const agentsQuery = useAgents();
+  const toolsQuery = useTools();
+  const workflowsQuery = useWorkflows();
+  const workflowCatalogUnavailable =
+    workflowsQuery.error instanceof Error && /403|forbidden|permission/i.test(workflowsQuery.error.message);
+  const validationContext = useMemo<WorkflowDraftValidationContext>(
+    () => ({
+      agents: Object.fromEntries(Object.keys(agentsQuery.data ?? {}).map(id => [id, {}])),
+      tools: Object.fromEntries(
+        Object.entries(toolsQuery.data ?? {}).map(([id, tool]) => [
+          id,
+          { inputSchema: parseSchema(tool.inputSchema), outputSchema: parseSchema(tool.outputSchema) },
+        ]),
+      ),
+      workflows: Object.fromEntries(
+        Object.entries(workflowsQuery.data ?? {}).map(([id, workflow]) => [
+          id,
+          { inputSchema: parseSchema(workflow.inputSchema), outputSchema: parseSchema(workflow.outputSchema) },
+        ]),
+      ),
+      workflowCatalog: workflowCatalogUnavailable ? 'unavailable' : 'available',
+    }),
+    [agentsQuery.data, toolsQuery.data, workflowCatalogUnavailable, workflowsQuery.data],
+  );
+  const workflowDraft = useWorkflowDraft(workflowQuery.data, initialWorkflowId, validationContext);
   const deleteWorkflow = useDeleteStoredWorkflow();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  useEffect(() => {
-    if (workflowQuery.data) reset(workflowQuery.data);
-  }, [reset, workflowQuery.data]);
-
   if (create && !access.canWrite) return <Navigate to={WORKFLOW_BUILDER_ROUTE} replace />;
+  if (agentsQuery.isPending || toolsQuery.isPending || workflowsQuery.isPending) {
+    return <div className="grid h-full place-items-center text-ui-sm text-neutral3">Loading workflow catalogs…</div>;
+  }
+  const catalogError =
+    agentsQuery.error ?? toolsQuery.error ?? (!workflowCatalogUnavailable ? workflowsQuery.error : null);
+  if (catalogError) {
+    return (
+      <div className="p-10">
+        <ErrorState title="Workflow catalogs unavailable" message={catalogError.message} />
+      </div>
+    );
+  }
   if (!create && workflowQuery.isLoading) {
     return <div className="grid h-full place-items-center text-ui-sm text-neutral3">Loading workflow…</div>;
   }
@@ -132,7 +177,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               {access.canWrite ? (
                 <Button
                   variant="primary"
-                  disabled={workflowDraft.isSaving || !workflowDraft.validation.ok}
+                  disabled={workflowDraft.isSaving || !workflowDraft.isReady}
                   onClick={handleSave}
                 >
                   <SaveIcon /> {workflowDraft.isSaving ? 'Saving…' : 'Save'}
@@ -177,12 +222,26 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               </label>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={workflowDraft.validation.ok ? 'success' : 'warning'}>
-                {workflowDraft.validation.ok ? 'Valid definition' : `${workflowDraft.validation.issues.length} issues`}
+              <Badge
+                variant={
+                  workflowDraft.lifecycle === 'ready'
+                    ? 'success'
+                    : workflowDraft.lifecycle === 'constructing'
+                      ? 'warning'
+                      : 'default'
+                }
+              >
+                {workflowDraft.lifecycle === 'untouched'
+                  ? 'Not started'
+                  : workflowDraft.lifecycle === 'ready'
+                    ? 'Ready to save'
+                    : workflowDraft.validation.ok
+                      ? 'Draft not finalized'
+                      : `${workflowDraft.validation.issues.length} issues`}
               </Badge>
               <span className="text-ui-xs text-neutral3">{workflowDraft.draft.graph.length} top-level entries</span>
             </div>
-            {!workflowDraft.validation.ok ? (
+            {workflowDraft.lifecycle !== 'untouched' && !workflowDraft.validation.ok ? (
               <ul className="list-disc space-y-1 pl-5 text-ui-xs text-red-400">
                 {workflowDraft.validation.issues.map(issue => (
                   <li key={`${issue.path}-${issue.message}`}>{issue.message}</li>

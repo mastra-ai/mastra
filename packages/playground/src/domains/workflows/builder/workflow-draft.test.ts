@@ -1,7 +1,17 @@
 import type { UpsertStoredWorkflowParams } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 
-import { applyWorkflowDraftMutation, createWorkflowDraft, validateWorkflowDraft } from './workflow-draft';
+import {
+  applyWorkflowDraftMutation,
+  checkpointWorkflowDraft,
+  createLoadedWorkflowDraftAuthoringState,
+  createWorkflowDraft,
+  createWorkflowDraftAuthoringState,
+  finalizeWorkflowDraft,
+  mutateWorkflowDraftAuthoringState,
+  reserveWorkflowDraftSave,
+  validateWorkflowDraft,
+} from './workflow-draft';
 import type { WorkflowDraftMutation } from './workflow-draft';
 
 const objectSchema = {
@@ -140,6 +150,111 @@ describe('workflow draft', () => {
         ok: false,
         draft: initial,
         issues: [{ code: 'invalid-mutation', path: 'stepId', message: 'Step "missing" does not exist.' }],
+      });
+    });
+  });
+
+  describe('when a new authoring draft is initialized', () => {
+    it('starts untouched without presenting strict validation issues', () => {
+      expect(createWorkflowDraftAuthoringState('new-workflow')).toMatchObject({
+        lifecycle: 'untouched',
+        revision: 0,
+        checkpointIssues: [],
+        finalIssues: [],
+      });
+    });
+  });
+
+  describe('when a structurally safe incomplete checkpoint is accepted', () => {
+    it('increments the revision and keeps the draft constructing', () => {
+      const initial = createWorkflowDraftAuthoringState('new-workflow');
+      const result = checkpointWorkflowDraft(initial, 0, createWorkflowDraft('new-workflow'));
+
+      expect(result).toMatchObject({ ok: true, state: { lifecycle: 'constructing', revision: 1 } });
+    });
+  });
+
+  describe('when a malformed checkpoint is submitted', () => {
+    it('preserves the previously accepted snapshot', () => {
+      const initial = createWorkflowDraftAuthoringState('new-workflow');
+      const malformed = createWorkflowDraft('new-workflow');
+      malformed.graph = [{ type: 'mapping', id: 'bad-map', mapConfig: 'not-json' }];
+
+      const result = checkpointWorkflowDraft(initial, 0, malformed);
+
+      expect(result).toMatchObject({ ok: false, state: initial });
+    });
+  });
+
+  describe('when the current revision is finalized', () => {
+    it('marks that exact revision ready without persisting', () => {
+      const initial = createWorkflowDraftAuthoringState('new-workflow');
+      const checkpoint = checkpointWorkflowDraft(initial, 0, createValidDraft());
+      if (!checkpoint.ok) throw new Error(checkpoint.error);
+
+      const result = finalizeWorkflowDraft(checkpoint.state, 1);
+
+      expect(result).toMatchObject({
+        ok: true,
+        state: { lifecycle: 'ready', revision: 1, finalizedRevision: 1 },
+      });
+    });
+  });
+
+  describe('when a ready draft is edited', () => {
+    it('demotes the new revision to constructing', () => {
+      const ready = createLoadedWorkflowDraftAuthoringState(createValidDraft());
+
+      const result = mutateWorkflowDraftAuthoringState(ready, 0, {
+        type: 'set-identity',
+        id: 'support-triage-v2',
+        description: 'Updated',
+      });
+
+      expect(result).toMatchObject({ ok: true, state: { lifecycle: 'constructing', revision: 1 } });
+      expect(result.state.finalizedRevision).toBeUndefined();
+    });
+  });
+
+  describe('when an operation targets a stale revision', () => {
+    it('rejects without mutating the current state', () => {
+      const ready = createLoadedWorkflowDraftAuthoringState(createValidDraft());
+
+      expect(finalizeWorkflowDraft(ready, 1)).toEqual({
+        ok: false,
+        state: ready,
+        error: 'Draft changed before this operation completed.',
+      });
+    });
+  });
+
+  describe('when a ready revision is reserved for saving', () => {
+    it('blocks later mutations until the reservation is released', () => {
+      const ready = createLoadedWorkflowDraftAuthoringState(createValidDraft());
+      const reserved = reserveWorkflowDraftSave(ready, 0);
+      if (!reserved.ok) throw new Error(reserved.error);
+
+      expect(
+        mutateWorkflowDraftAuthoringState(reserved.state, 0, {
+          type: 'set-identity',
+          id: 'changed',
+        }),
+      ).toMatchObject({ ok: false, error: 'Workflow save is in progress.' });
+    });
+  });
+
+  describe('when the workflow catalog is unavailable', () => {
+    it('accepts a nested workflow checkpoint but blocks finalization', () => {
+      const initial = createWorkflowDraftAuthoringState('nested-flow');
+      const nested = createWorkflowDraft('nested-flow');
+      nested.graph = [{ type: 'workflow', id: 'child', workflowId: 'child-flow' }];
+      const checkpoint = checkpointWorkflowDraft(initial, 0, nested, { workflowCatalog: 'unavailable' });
+      if (!checkpoint.ok) throw new Error(checkpoint.error);
+
+      expect(finalizeWorkflowDraft(checkpoint.state, 1, { workflowCatalog: 'unavailable' })).toMatchObject({
+        ok: false,
+        state: { lifecycle: 'constructing' },
+        issues: [expect.objectContaining({ code: 'workflow-catalog-unavailable' })],
       });
     });
   });

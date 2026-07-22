@@ -70,4 +70,62 @@ describe('workflow draft save orchestration', () => {
       expect(requests).not.toHaveBeenCalled();
     });
   });
+
+  describe('when a draft is checkpointed and finalized', () => {
+    it('does not persist before explicit save', () => {
+      const requests = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/stored/workflows`, () => {
+          requests();
+          return HttpResponse.json({ ok: true as const, id: definition.id });
+        }),
+      );
+      const draft = renderHook(() => useWorkflowDraft(undefined, definition.id), { wrapper: createWrapper() });
+
+      act(() => {
+        const checkpoint = draft.result.current.checkpoint(0, definition);
+        expect(checkpoint.ok).toBe(true);
+        const finalized = draft.result.current.finalize(1);
+        expect(finalized.ok).toBe(true);
+      });
+
+      expect(requests).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when save has reserved a ready revision', () => {
+    it('persists the immutable reserved snapshot while rejecting an edit', async () => {
+      let resolveRequest: (() => void) | undefined;
+      const requests = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/stored/workflows`, async ({ request }) => {
+          requests(await request.json());
+          await new Promise<void>(resolve => {
+            resolveRequest = resolve;
+          });
+          return HttpResponse.json({ ok: true as const, id: definition.id });
+        }),
+      );
+      const draft = renderHook(() => useWorkflowDraft(definition, definition.id), { wrapper: createWrapper() });
+
+      let savePromise: ReturnType<typeof draft.result.current.save> | undefined;
+      act(() => {
+        savePromise = draft.result.current.save();
+      });
+      await vi.waitFor(() => expect(requests).toHaveBeenCalledOnce());
+
+      act(() => {
+        expect(draft.result.current.mutate(0, { type: 'set-identity', id: 'changed-after-save' })).toMatchObject({
+          ok: false,
+          error: 'Workflow save is in progress.',
+        });
+        resolveRequest?.();
+      });
+      await act(async () => {
+        await savePromise;
+      });
+
+      expect(requests).toHaveBeenCalledWith(expect.objectContaining({ id: definition.id }));
+    });
+  });
 });
