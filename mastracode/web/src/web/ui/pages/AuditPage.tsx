@@ -8,13 +8,13 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleCheck, CircleDashed, CircleX, ListFilter, ScrollText, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { useAuditEvents, useAuditPortalLink } from '../../../../shared/hooks/useAuditEvents';
-import { useFactoryDecisionHistory, useRetryFactoryDecision } from '../../../../shared/hooks/useFactoryDecisions';
-import { relativeTime } from '../../../../shared/lib/date/relativeTime';
-import { SkeletonRows } from '../../ui/SkeletonRows';
-import { FactoryPageShell } from './components/FactoryPageShell';
-import type { AuditEvent } from './services/audit';
-import type { FactoryDecisionStatus, FactoryDecisionSummary } from './services/decisions';
+import { useAuditEvents, useAuditPortalLink } from '../../../shared/hooks/useAuditEvents';
+import { useFactoryDecisionHistory, useRetryFactoryDecision } from '../../../shared/hooks/useFactoryDecisions';
+import { relativeTime } from '../../../shared/lib/date/relativeTime';
+import { SkeletonRows } from '../ui/SkeletonRows';
+import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import type { AuditEvent } from '../domains/factory/services/audit';
+import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 
 /** Action-group filters mapped to the concrete v1 action taxonomy. */
 const ACTION_GROUPS = [

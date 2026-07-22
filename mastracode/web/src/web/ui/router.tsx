@@ -11,18 +11,17 @@
 import { createBrowserRouter, Navigate } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import { SignInPage } from './domains/auth';
 import Chat from './domains/chat/Chat';
-import { NewPage } from './domains/chat/NewPage';
-import { ThreadPage } from './domains/chat/ThreadPage';
-
-import { AuditPage } from './domains/factory/AuditPage';
-import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
-import { MetricsPage } from './domains/factory/MetricsPage';
-import { OverviewPage } from './domains/factory/OverviewPage';
 import { RootGuards } from './domains/auth/components/RootGuards';
+import { AuditPage } from './pages/AuditPage';
+import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
+import { MetricsPage } from './pages/MetricsPage';
+import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
+import { OverviewPage } from './pages/OverviewPage';
+import { SignInPage } from './pages/SignInPage';
+import { ThreadPage } from './pages/ThreadPage';
 import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
 import { isServerFactory } from './domains/workspaces/services/factories';
 

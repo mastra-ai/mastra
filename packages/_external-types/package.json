@@ -38,7 +38,7 @@
     "@standard-schema/spec": "^1.1.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@microsoft/api-extractor": "^7.58.9",
+    "@microsoft/api-extractor": "^7.58.11",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
