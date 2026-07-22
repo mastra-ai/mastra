@@ -4,9 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntegrationContext } from '@mastra/factory/integrations/base';
 
-import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../../runtime-config.js';
-import { seedFactoryStorageForTests } from '../../storage/test-utils.js';
-import { mountApiRoutes } from '../../test-utils.js';
+import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
 import { PlatformGithubIntegration } from './integration.js';
 
 const config = {
@@ -66,7 +64,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  __resetRuntimeConfigForTests();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -116,7 +113,7 @@ describe('PlatformGithubIntegration', () => {
           ],
         }),
       );
-    const { sourceControl } = await seedFactoryStorageForTests();
+    const { sourceControl } = await createPlatformStorageForTests();
     const integration = createIntegration(fetchImpl);
     const storage = sourceControl.forIntegration('github');
     integration.versionControl.initialize({ storage });
@@ -434,7 +431,7 @@ describe('PlatformGithubIntegration', () => {
   });
 
   it('mints a repository-scoped platform token for git access', async () => {
-    const { sourceControl } = await seedFactoryStorageForTests();
+    const { sourceControl } = await createPlatformStorageForTests();
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValue(json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }));
@@ -467,14 +464,8 @@ describe('PlatformGithubIntegration', () => {
   });
 
   it('exposes platform-backed routes and session tools without local callback or webhook routes', async () => {
-    const seed = await seedFactoryStorageForTests();
+    const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
-    seedRuntimeConfig({
-      storage: seed.storage,
-      authProvider: {} as never,
-      integrations: [integration],
-      stateSigner: { stable: true } as never,
-    });
     const context = {
       auth: fakeAuth(),
       fleet: { enabled: true },
@@ -528,7 +519,7 @@ describe('PlatformGithubIntegration', () => {
   });
 
   it('uses platform installations for status and platform install URL for connect redirects', async () => {
-    const seed = await seedFactoryStorageForTests();
+    const seed = await createPlatformStorageForTests();
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(

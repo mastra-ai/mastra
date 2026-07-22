@@ -1,11 +1,10 @@
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
+import { MastraFactory } from '@mastra/factory';
+import { subscribeToPullRequest } from '@mastra/factory/integrations/github/subscriptions';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MastraFactory } from '../../factory-entry.js';
-import { subscribeToPullRequest } from '@mastra/factory/integrations/github/subscriptions';
-import { __resetRuntimeConfigForTests } from '../../runtime-config.js';
 import { PlatformGithubIntegration } from './integration.js';
 
 const harness = vi.hoisted(() => {
@@ -71,7 +70,6 @@ beforeEach(() => {
   vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'platform-token');
   vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '60000');
   harness.reset();
-  __resetRuntimeConfigForTests();
 });
 
 afterEach(() => {
@@ -79,7 +77,6 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
-  __resetRuntimeConfigForTests();
 });
 
 describe('Platform GitHub event worker factory lifecycle', () => {

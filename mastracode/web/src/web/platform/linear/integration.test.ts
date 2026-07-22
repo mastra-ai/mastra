@@ -4,8 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntegrationContext } from '@mastra/factory/integrations/base';
 
-import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../../runtime-config.js';
-import { seedFactoryStorageForTests } from '../../storage/test-utils.js';
+import { createPlatformStorageForTests } from '../test-utils.js';
 import { PlatformLinearIntegration } from './integration.js';
 
 const config = {
@@ -74,7 +73,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  __resetRuntimeConfigForTests();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -269,7 +267,7 @@ describe('PlatformLinearIntegration', () => {
   });
 
   it('exposes platform-backed route and agent-tool surfaces with platform connect routing', async () => {
-    const seed = await seedFactoryStorageForTests();
+    const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
       const url = String(input);
       if (url.includes('/v1/server/linear/authorize')) {
@@ -285,12 +283,6 @@ describe('PlatformLinearIntegration', () => {
       orgId: 'org-1',
       userId: 'user-1',
       input: { name: 'Acme app' },
-    });
-    seedRuntimeConfig({
-      storage: seed.storage,
-      authProvider: {} as never,
-      integrations: [integration],
-      stateSigner: { stable: true } as never,
     });
     const context = {
       auth: fakeAuth(),
