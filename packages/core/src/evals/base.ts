@@ -36,6 +36,7 @@ import type {
 import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
+import type { JSONValue } from '../stream';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
 import type {
@@ -255,25 +256,64 @@ type GenerateReasonContext<TAccumulated extends Record<string, any>, TInput, TRu
   score: TAccumulated extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
 };
 
-type ScorerRunResult<TAccumulatedResults extends Record<string, any>, TInput, TRunOutput> = Promise<
-  ScorerRun<TInput, TRunOutput> & {
-    scoreTraceId?: string;
-    score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
-    reason?: TAccumulatedResults extends Record<'generateReasonStepResult', infer TReason> ? TReason : undefined;
+export type ScorerJudgeStepName = 'preprocess' | 'analyze' | 'generateScore' | 'generateReason';
 
-    // Prompts
-    preprocessPrompt?: string;
-    analyzePrompt?: string;
-    generateScorePrompt?: string;
-    generateReasonPrompt?: string;
+export interface ScorerJudgeUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+}
 
-    // Results
-    preprocessStepResult?: TAccumulatedResults extends Record<'preprocessStepResult', infer TPreprocess>
-      ? TPreprocess
-      : undefined;
-    analyzeStepResult?: TAccumulatedResults extends Record<'analyzeStepResult', infer TAnalyze> ? TAnalyze : undefined;
-  } & { runId: string }
->;
+export interface ScorerJudgeCost {
+  amount: number;
+  unit: string;
+  source: string;
+}
+
+export interface ScorerJudgeExecution {
+  prompt: string;
+  output: JSONValue;
+  judgeModelId: string;
+  judgeProvider?: string;
+  usage: ScorerJudgeUsage;
+  attemptCount: number;
+  modelCallCount: number;
+  durationMs: number;
+  cost?: ScorerJudgeCost;
+}
+
+export interface ScorerJudgeStepResult {
+  executions: ScorerJudgeExecution[];
+}
+
+export type ScorerJudgeResults = Partial<Record<ScorerJudgeStepName, ScorerJudgeStepResult>>;
+
+export type ScorerRunResult<
+  TAccumulatedResults extends Record<string, any> = Record<string, any>,
+  TInput = any,
+  TRunOutput = any,
+> = ScorerRun<TInput, TRunOutput> & {
+  scoreTraceId?: string;
+  score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
+  reason?: TAccumulatedResults extends Record<'generateReasonStepResult', infer TReason> ? TReason : undefined;
+
+  // Prompts
+  preprocessPrompt?: string;
+  analyzePrompt?: string;
+  generateScorePrompt?: string;
+  generateReasonPrompt?: string;
+
+  // Results
+  preprocessStepResult?: TAccumulatedResults extends Record<'preprocessStepResult', infer TPreprocess>
+    ? TPreprocess
+    : undefined;
+  analyzeStepResult?: TAccumulatedResults extends Record<'analyzeStepResult', infer TAnalyze> ? TAnalyze : undefined;
+
+  judge?: ScorerJudgeResults;
+} & { runId: string };
 
 // Conditional type for PromptObject context
 type PromptObjectContext<
@@ -563,7 +603,7 @@ class MastraScorer<
     return new RequestContext(Object.entries(requestContext));
   }
 
-  async run(input: ScorerRun<TInput, TRunOutput>): ScorerRunResult<TAccumulatedResults, TInput, TRunOutput> {
+  async run(input: ScorerRun<TInput, TRunOutput>): Promise<ScorerRunResult<TAccumulatedResults, TInput, TRunOutput>> {
     // Runtime check: execute only allowed after generateScore
     if (!this.hasGenerateScore) {
       throw new MastraError({
