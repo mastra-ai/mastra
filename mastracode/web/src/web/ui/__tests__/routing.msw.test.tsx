@@ -344,4 +344,52 @@ describe('MastraCode web routing', () => {
 
     await expectPathname(router, '/new');
   });
+
+  describe('settings routes', () => {
+    function useSettingsHandlers() {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json({ packs: [], activePackId: null })),
+        http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+          HttpResponse.json({
+            config: { github: { enabled: true, repositoryIds: [] }, linear: { enabled: false, projectIds: [] } },
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+          HttpResponse.json({ enabled: false, connected: false, workspace: null }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),
+      );
+    }
+
+    // The page remounts once factory hydration lands (full-bleed → framed
+    // layout), so headings are re-queried inside waitFor instead of captured
+    // once with findByRole.
+    async function expectSectionHeading(name: string) {
+      await waitFor(() => expect(screen.getByRole('heading', { name })).toBeInTheDocument());
+    }
+
+    it('given the app, when visiting /settings, then the user is redirected to /settings/general', async () => {
+      useSettingsHandlers();
+      const { router } = renderRoutes('/settings', AUTH_DISABLED);
+
+      await expectPathname(router, '/settings/general');
+      await expectSectionHeading('General');
+    });
+
+    it('given a deep link to /settings/providers, then the API Keys section renders', async () => {
+      useSettingsHandlers();
+      const { router } = renderRoutes('/settings/providers', AUTH_DISABLED);
+
+      await expectPathname(router, '/settings/providers');
+      await expectSectionHeading('API Keys');
+    });
+
+    it('given an unknown settings section, then the user is redirected to /settings/general', async () => {
+      useSettingsHandlers();
+      const { router } = renderRoutes('/settings/nope', AUTH_DISABLED);
+
+      await expectPathname(router, '/settings/general');
+      await expectSectionHeading('General');
+    });
+  });
 });

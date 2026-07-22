@@ -30,7 +30,7 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 
-const OVERLAYS: OverlayName[] = ['sidebar', 'settings', 'shortcuts'];
+const OVERLAYS: OverlayName[] = ['sidebar', 'shortcuts'];
 
 afterEach(() => {
   localStorage.clear();
@@ -163,28 +163,24 @@ describe('useGlobalShortcuts', () => {
     renderProbe(THREAD_ID);
     await ready();
 
-    await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open shortcuts' }));
     await userEvent.keyboard('{Control>}k{/Control}');
 
-    expectOverlay('settings', 'open');
+    expectOverlay('shortcuts', 'open');
   });
 
-  it('given several overlays are open, when Escape is pressed repeatedly, then they close in priority order shortcuts → settings → sidebar', async () => {
+  it('given several overlays are open, when Escape is pressed repeatedly, then they close in priority order shortcuts → sidebar', async () => {
     seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
 
-    for (const name of ['sidebar', 'settings', 'shortcuts'] as const) {
+    for (const name of ['sidebar', 'shortcuts'] as const) {
       await userEvent.click(screen.getByRole('button', { name: `open ${name}` }));
     }
 
     await userEvent.keyboard('{Escape}');
     expectOverlay('shortcuts', 'closed');
-    expectOverlay('settings', 'open');
-
-    await userEvent.keyboard('{Escape}');
-    expectOverlay('settings', 'closed');
     expectOverlay('sidebar', 'open');
 
     await userEvent.keyboard('{Escape}');
@@ -196,9 +192,9 @@ describe('useGlobalShortcuts', () => {
     useAgentControllerHandlers();
     renderProbe(undefined);
 
-    await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open shortcuts' }));
     await userEvent.keyboard('{Escape}');
-    expectOverlay('settings', 'open');
+    expectOverlay('shortcuts', 'open');
   });
 
   it('given a running turn and no open overlays, when Escape is pressed, then the run is aborted', async () => {
