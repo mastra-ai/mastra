@@ -18,6 +18,10 @@ function createMockClient() {
       const sql = typeof statement === 'string' ? statement : statement.sql;
       statements.push({ sql, kind: 'execute' });
 
+      const journalMode = sql.match(/PRAGMA\s+journal_mode\s*=\s*(\w+)/i)?.[1];
+      if (journalMode) {
+        return { rows: [{ journal_mode: journalMode.toLowerCase() }], rowsAffected: 0 };
+      }
       if (/PRAGMA\s+table_info/i.test(sql)) {
         return { rows: [], rowsAffected: 0 };
       }
@@ -58,6 +62,12 @@ beforeEach(() => {
 });
 
 describe('LibSQLStore local performance initialization', () => {
+  it('rejects invalid journal modes at runtime', () => {
+    expect(
+      () => new LibSQLStore({ id: 'invalid-mode', url: 'file:invalid.db', journalMode: 'truncate' as 'wal' }),
+    ).toThrow("journalMode must be either 'wal' or 'delete'");
+  });
+
   it('applies safe local PRAGMAs before local file DB schema initialization', async () => {
     const { client, statements } = createMockClient();
     mockCreateClient.mockReturnValueOnce(client as any);
@@ -84,6 +94,57 @@ describe('LibSQLStore local performance initialization', () => {
       expect(index, `${pragma} should execute before DDL`).toBeLessThan(firstCreateTable);
     }
     expect(executedSql).not.toContain('PRAGMA synchronous=OFF;');
+  });
+
+  it('applies and validates explicit DELETE mode before local file DB schema initialization', async () => {
+    const { client, statements } = createMockClient();
+    mockCreateClient.mockReturnValueOnce(client as any);
+
+    const store = new LibSQLStore({
+      id: 'local-file-delete',
+      url: 'file:local-performance-delete.db',
+      journalMode: 'delete',
+    });
+    await store.init();
+
+    const executedSql = sqls(statements);
+    const journalMode = executedSql.indexOf('PRAGMA journal_mode=DELETE;');
+    const firstCreateTable = executedSql.findIndex(sql => /^CREATE TABLE/i.test(sql));
+    expect(journalMode).toBeGreaterThan(-1);
+    expect(journalMode).toBeLessThan(firstCreateTable);
+    expect(executedSql).not.toContain('PRAGMA journal_mode=WAL;');
+  });
+
+  it('fails before DDL when SQLite does not confirm explicit DELETE mode', async () => {
+    const { client, statements } = createMockClient();
+    client.execute.mockImplementationOnce(async () => ({
+      rows: [{ journal_mode: 'wal' }],
+      rowsAffected: 0,
+    }));
+    mockCreateClient.mockReturnValueOnce(client as any);
+
+    const store = new LibSQLStore({
+      id: 'local-file-delete-rejected',
+      url: 'file:local-performance-delete-rejected.db',
+      journalMode: 'delete',
+    });
+
+    await expect(store.init()).rejects.toThrow('SQLite reported wal');
+    expect(sqls(statements).some(sql => /^CREATE TABLE/i.test(sql))).toBe(false);
+  });
+
+  it('does not apply explicit local journal mode for remote URLs', () => {
+    const { client, statements } = createMockClient();
+    mockCreateClient.mockReturnValueOnce(client as any);
+
+    new LibSQLStore({
+      id: 'remote-delete',
+      url: 'libsql://example.turso.io',
+      authToken: 'test-token',
+      journalMode: 'delete',
+    });
+
+    expect(sqls(statements)).not.toContain('PRAGMA journal_mode=DELETE;');
   });
 
   it('does not apply store-level local PRAGMAs for remote URLs', () => {

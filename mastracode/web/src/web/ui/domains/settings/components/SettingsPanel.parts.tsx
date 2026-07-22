@@ -76,17 +76,18 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
 
 interface ModelSettingsProps {
   settings: AgentControllerSessionSettings | null;
+  updating: boolean;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
 }
 
-export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps) {
+export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
   return (
     <>
       <FieldRow label="Thinking level" hint="Extended-reasoning budget for the agent">
         <Segmented
           ariaLabel="Thinking level"
           value={settings?.thinkingLevel ?? 'off'}
-          disabled={!settings}
+          disabled={!settings || updating}
           options={THINKING_LEVELS}
           onChange={v => onBehaviorChange({ thinkingLevel: v })}
         />
@@ -97,6 +98,7 @@ export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps
 
 interface BehaviorSettingsProps {
   settings: AgentControllerSessionSettings | null;
+  updating: boolean;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
   permissions: PermissionRules | null;
   pendingPermissionCategory: ToolCategory | null;
@@ -105,6 +107,7 @@ interface BehaviorSettingsProps {
 
 export function BehaviorSettings({
   settings,
+  updating,
   onBehaviorChange,
   permissions,
   pendingPermissionCategory,
@@ -116,7 +119,7 @@ export function BehaviorSettings({
         <Toggle
           ariaLabel="Auto-approve tools"
           checked={!!settings?.yolo}
-          disabled={!settings}
+          disabled={!settings || updating}
           onChange={v => onBehaviorChange({ yolo: v })}
         />
       </FieldRow>
@@ -124,7 +127,7 @@ export function BehaviorSettings({
         <Toggle
           ariaLabel="Smart editing"
           checked={!!settings?.smartEditing}
-          disabled={!settings}
+          disabled={!settings || updating}
           onChange={v => onBehaviorChange({ smartEditing: v })}
         />
       </FieldRow>
@@ -132,7 +135,7 @@ export function BehaviorSettings({
         <Segmented
           ariaLabel="Notifications"
           value={settings?.notifications ?? 'off'}
-          disabled={!settings}
+          disabled={!settings || updating}
           options={NOTIFICATION_MODES}
           onChange={v => onBehaviorChange({ notifications: v })}
         />

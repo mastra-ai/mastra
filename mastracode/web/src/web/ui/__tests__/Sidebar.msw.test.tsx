@@ -2,13 +2,14 @@
  * BDD coverage for the propless `Sidebar`.
  *
  * The sidebar consumes the domain contexts directly (`useActiveFactoryContext`,
- * focused chat hooks, `useOverlays`, `useToast`, `useWebAuth`) instead of a
+ * focused chat hooks, `useOverlays`, toast feedback, and `useWebAuth`) instead of a
  * drilled prop bag, so the spec drives it end-to-end: real fetch transport,
  * MSW at the network boundary, assertions on the requests the thread actions
  * produce.
  */
 import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
@@ -25,7 +26,6 @@ import { ActiveFactoryProvider } from '../domains/workspaces';
 import { SettingsNavigationProvider } from '../domains/settings/context/SettingsNavigationProvider';
 import { OverlaysProvider } from '../lib/overlays';
 import { Sidebar } from '../Sidebar';
-import { ToastProvider } from '../ui';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
 // service-level navigation helper is stubbed; `fetchAuthState` stays real.
@@ -214,18 +214,17 @@ function renderSidebar() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/chat']}>
       <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
-        <ToastProvider>
-          <ActiveFactoryProvider>
-            <ChatSessionProvider>
-              <OverlaysProvider>
-                <SettingsNavigationProvider>
-                  <Sidebar />
-                  <LocationProbe />
-                </SettingsNavigationProvider>
-              </OverlaysProvider>
-            </ChatSessionProvider>
-          </ActiveFactoryProvider>
-        </ToastProvider>
+        <ActiveFactoryProvider>
+          <ChatSessionProvider>
+            <OverlaysProvider>
+              <SettingsNavigationProvider>
+                <Sidebar />
+                <LocationProbe />
+              </SettingsNavigationProvider>
+            </OverlaysProvider>
+          </ChatSessionProvider>
+        </ActiveFactoryProvider>
+        <Toaster position="bottom-right" />
       </MainSidebarProvider>
     </MemoryRouter>,
   );
@@ -382,7 +381,7 @@ describe('Sidebar', () => {
   });
 
   describe('when a GitHub factory is active', () => {
-    it('expands factory Sessions as a navigation item without showing the repo root', async () => {
+    it('lists Factory sessions directly without showing the repository root', async () => {
       seedFactory(githubProject);
       useAuthHandler();
       useGithubStatusHandler();
@@ -390,19 +389,12 @@ describe('Sidebar', () => {
       renderSidebar();
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
-      const sessions = within(factory).getByRole('button', { name: 'Sessions' });
-      expect(sessions).toHaveAttribute('aria-expanded', 'false');
-      expect(within(factory).queryByRole('button', { name: 'feat-ui' })).not.toBeInTheDocument();
-
-      await userEvent.click(sessions);
-
-      expect(sessions).toHaveAttribute('aria-expanded', 'true');
-      // Only feature worktrees are sessions: the repo-root checkout is not one.
-      expect(within(factory).getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
+      const workSessions = within(factory).getByRole('region', { name: 'Work Sessions' });
+      expect(within(workSessions).getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
       expect(within(factory).queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
     });
 
-    it('explains how factory Sessions are created when none exist', async () => {
+    it('hides role-based Factory session sections when none exist', async () => {
       seedFactory({
         ...githubProject,
         binding: {
@@ -417,9 +409,8 @@ describe('Sidebar', () => {
       renderSidebar();
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
-      await userEvent.click(within(factory).getByRole('button', { name: 'Sessions' }));
-
-      expect(within(factory).getByText('Sessions appear when work starts from the Factory board.')).toBeInTheDocument();
+      expect(within(factory).queryByRole('region', { name: 'Work Sessions' })).not.toBeInTheDocument();
+      expect(within(factory).queryByRole('region', { name: 'Review Sessions' })).not.toBeInTheDocument();
     });
 
     it('renders the User Sessions section and no thread list', async () => {
@@ -432,7 +423,6 @@ describe('Sidebar', () => {
       expect(await screen.findByRole('region', { name: 'User sessions' })).toBeInTheDocument();
       // Each worktree holds a single conversation, so GitHub projects have no
       // thread list — neither nested nor flat.
-      await userEvent.click(screen.getByRole('button', { name: 'Sessions' }));
       await screen.findByRole('button', { name: 'feat-ui' });
       expect(screen.queryByText('First thread')).not.toBeInTheDocument();
     });

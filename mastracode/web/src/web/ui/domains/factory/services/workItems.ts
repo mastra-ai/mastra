@@ -30,12 +30,14 @@ export interface WorkItem {
   githubProjectId: string;
   source: WorkItemSource;
   sourceKey: string | null;
+  parentWorkItemId: string | null;
   title: string;
   url: string | null;
   stages: string[];
   stageHistory: WorkItemStageEntry[];
   sessions: Record<string, WorkItemSessionRef>;
   metadata: Record<string, unknown>;
+  revision: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +52,7 @@ export interface WorkItemSessionInput {
 export interface CreateWorkItemInput {
   source: WorkItemSource;
   sourceKey: string | null;
+  parentWorkItemId?: string | null;
   title: string;
   url?: string | null;
   stages: string[];
@@ -57,10 +60,24 @@ export interface CreateWorkItemInput {
   metadata?: Record<string, unknown>;
 }
 
+export type FactoryBoard = 'work' | 'review';
+export type FactoryStage = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done';
+
+export type FactoryTransitionResult =
+  | {
+      status: 'accepted';
+      transitionId: string;
+      itemId: string;
+      revision: number;
+      stage: FactoryStage;
+      decisions: unknown[];
+    }
+  | { status: 'rejected'; transitionId: string; itemId: string; code: string; reason: string };
+
 export interface UpdateWorkItemInput {
+  parentWorkItemId?: string | null;
   title?: string;
   url?: string | null;
-  stages?: string[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
 }
@@ -106,13 +123,73 @@ export async function createWorkItem(
   return data.workItem;
 }
 
-/** Patch a work item (stage moves, session/metadata merges, title). */
+export async function transitionWorkItem(
+  baseUrl: string,
+  factoryProjectId: string,
+  id: string,
+  input: { board: FactoryBoard; stage: FactoryStage; expectedRevision: number; requestId: string; cause: string },
+): Promise<FactoryTransitionResult> {
+  const res = await fetch(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
+    {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(input),
+    },
+  );
+  const body = (await res.json()) as { result?: FactoryTransitionResult; error?: string };
+  if (body.result) return body.result;
+  throw new Error(body.error ?? `Request failed (${res.status})`);
+}
+
+/** Patch a work item's non-stage metadata, session refs, or title. */
 export async function updateWorkItem(baseUrl: string, id: string, patch: UpdateWorkItemInput): Promise<WorkItem> {
   const data = await requestJson<{ workItem: WorkItem }>(
     `${baseUrl}/web/factory/work-items/${encodeURIComponent(id)}`,
     { method: 'PATCH', body: JSON.stringify(patch) },
   );
   return data.workItem;
+}
+
+export interface StartFactoryRunRequest {
+  resourceId: string;
+  projectPath: string;
+  branch: string;
+  threadTitle: string;
+  threadTags?: Record<string, string>;
+  kickoffKey: string;
+  kickoffMessage: string | null;
+  destinationStage: FactoryStage;
+  workItem: {
+    id?: string;
+    role: string;
+    input: CreateWorkItemInput;
+  };
+}
+
+export interface StartFactoryRunPrepared {
+  workItemId: string;
+  bindingId: string;
+  threadId: string;
+  resourceId: string;
+  projectPath: string;
+  branch: string;
+  revision: number;
+  kickoffStatus: 'pending' | 'sent' | 'failed';
+  replayed: boolean;
+}
+
+export async function startFactoryRun(
+  baseUrl: string,
+  factoryProjectId: string,
+  input: StartFactoryRunRequest,
+): Promise<StartFactoryRunPrepared> {
+  const data = await requestJson<{ prepared: StartFactoryRunPrepared }>(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/runs/start`,
+    { method: 'POST', body: JSON.stringify(input) },
+  );
+  return data.prepared;
 }
 
 /** Remove a work item from the board. */

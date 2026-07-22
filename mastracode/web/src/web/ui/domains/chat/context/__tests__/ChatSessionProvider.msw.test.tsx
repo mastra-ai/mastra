@@ -380,7 +380,8 @@ describe('ChatSessionProvider', () => {
       );
 
       await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Build'));
-      expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'true');
+      const modeSelector = screen.getByRole('combobox', { name: 'Session mode' });
+      expect(modeSelector).toHaveTextContent('Build');
       expect(screen.getByTestId('active-mode-id')).toHaveTextContent('build');
       expect(screen.getByTestId('modes-count')).toHaveTextContent('2');
       const readsBeforeSwitch = {
@@ -393,21 +394,21 @@ describe('ChatSessionProvider', () => {
         messages: requestCount(requests, 'messages'),
       };
 
-      await userEvent.click(screen.getByRole('button', { name: 'Plan' }));
+      await userEvent.click(modeSelector);
+      await userEvent.click(await screen.findByRole('option', { name: 'Plan' }));
 
       await waitFor(() => expect(requests).toContain('mode:{"modeId":"plan"}'));
-      const pendingModeButton = screen.getByRole('button', { name: 'Plan' });
-      expect(pendingModeButton).toHaveAttribute('aria-pressed', 'true');
-      expect(pendingModeButton).toHaveAttribute('aria-busy', 'true');
-      expect(pendingModeButton).toBeEnabled();
-      expect(screen.getByRole('button', { name: 'Build' })).toBeEnabled();
+      expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan');
+      expect(screen.getByTestId('active-mode-id')).toHaveTextContent('plan');
+      expect(modeSelector).toHaveTextContent('Plan');
+      expect(modeSelector).toHaveAttribute('aria-busy', 'true');
+      expect(modeSelector).toBeDisabled();
       expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state);
 
       completeModeSwitch?.();
 
-      await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan'));
-      await waitFor(() => expect(pendingModeButton).toHaveAttribute('aria-busy', 'false'));
-      expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state);
+      await waitFor(() => expect(modeSelector).toHaveAttribute('aria-busy', 'false'));
+      expect(modeSelector).toBeEnabled();
       for (const request of ['create', 'modes', 'models', 'permissions', 'threads', 'messages'] as const) {
         expect(requestCount(requests, request)).toBe(readsBeforeSwitch[request]);
       }

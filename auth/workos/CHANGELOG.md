@@ -1,5 +1,11 @@
 # @mastra/auth-workos
 
+## 1.6.4-alpha.0
+
+### Patch Changes
+
+- Added organization management and host integration to MastraAuthWorkos so it can be passed directly to a server host without a wrapper adapter. The provider now bootstraps a personal organization for new users (ensureOrganization), checks organization admin roles (isOrganizationAdmin), and resolves its redirect URI from the host public URL during init when not configured explicitly. ([#19765](https://github.com/mastra-ai/mastra/pull/19765))
+
 ## 1.6.3
 
 ### Patch Changes

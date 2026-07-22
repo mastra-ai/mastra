@@ -1,12 +1,16 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { GitBranch } from 'lucide-react';
 import { useLocation } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
-import { ChatLayout, FolderIcon } from '../../ui';
-import type { Factory } from '../workspaces';
-import { EmptyFactoryState, isLocalFactory, selectedRepository, useActiveFactoryContext } from '../workspaces';
+import { ChatLayout } from '../../ui/ChatLayout';
+import { FolderIcon } from '../../ui/icons';
+import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { isLocalFactory, selectedRepository } from '../workspaces/services/factories';
+import type { Factory } from '../workspaces/services/factories';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ComposerPanel } from './components/ComposerPanel';
@@ -21,17 +25,17 @@ export function NewPage() {
   const overlays = useOverlays();
   const { activeFactory } = useActiveFactoryContext();
 
+  if (!activeFactory) {
+    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+  }
+
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       main={
         <ChatSessionBoundary>
-          {activeFactory ? (
-            <NewPageContent activeFactory={activeFactory} />
-          ) : (
-            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-          )}
+          <NewPageContent activeFactory={activeFactory} />
         </ChatSessionBoundary>
       }
     />
@@ -94,23 +98,27 @@ function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
     ? activeFactory.binding.gitBranch
     : selectedRepository(activeFactory)?.gitBranch;
   return (
-    <p className="m-0 flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
-      <FolderIcon size={13} className="shrink-0 text-icon2" />
-      <span className="shrink-0 font-medium">{activeFactory.name}</span>
+    <div className="flex max-w-full flex-col items-center gap-1 text-ui-sm text-icon3">
+      <div className="flex max-w-full items-center justify-center gap-1.5">
+        <FolderIcon size={13} className="shrink-0 text-icon2" />
+        <span className="shrink-0 font-medium">{activeFactory.name}</span>
+        {projectPath && (
+          <>
+            <span className="shrink-0 text-icon2">·</span>
+            <span className="min-w-0 truncate text-icon2" title={projectPath}>
+              {projectPath}
+            </span>
+          </>
+        )}
+      </div>
       {gitBranch && (
-        <>
-          <span className="shrink-0 text-icon2">·</span>
-          <span className="shrink-0">{gitBranch}</span>
-        </>
-      )}
-      {projectPath && (
-        <>
-          <span className="shrink-0 text-icon2">·</span>
-          <span className="min-w-0 truncate text-icon2" title={projectPath}>
-            {projectPath}
+        <div className="flex max-w-full items-center justify-center gap-1.5">
+          <GitBranch size={13} aria-hidden className="shrink-0 text-icon2" />
+          <span className="min-w-0 truncate" title={gitBranch}>
+            {gitBranch}
           </span>
-        </>
+        </div>
       )}
-    </p>
+    </div>
   );
 }
