@@ -2,14 +2,16 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ScrollText } from 'lucide-react';
+import { CircleCheck, CircleDashed, CircleX, ListFilter, ScrollText, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { useAuditEvents, useAuditPortalLink } from '../../../../shared/hooks/useAuditEvents';
 import { useFactoryDecisionHistory, useRetryFactoryDecision } from '../../../../shared/hooks/useFactoryDecisions';
 import { relativeTime } from '../../../../shared/lib/date/relativeTime';
+import { SkeletonRows } from '../../ui/SkeletonRows';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import type { AuditEvent } from './services/audit';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from './services/decisions';
@@ -25,6 +27,7 @@ const ACTION_GROUPS = [
       'factory.work_item.updated',
       'factory.work_item.stage_moved',
       'factory.work_item.deleted',
+      'factory.work_item.transition_rejected',
     ],
   },
   { key: 'runs', label: 'Runs', actions: ['factory.run.started', 'factory.triage.started'] },
@@ -41,12 +44,13 @@ const ACTION_GROUPS = [
 const DECISION_GROUPS: ReadonlyArray<{
   key: string;
   label: string;
+  icon: LucideIcon;
   statuses: FactoryDecisionStatus[] | undefined;
 }> = [
-  { key: 'all', label: 'All effects', statuses: undefined },
-  { key: 'active', label: 'Active', statuses: ['pending', 'leased', 'retry'] },
-  { key: 'failed', label: 'Failed', statuses: ['failed'] },
-  { key: 'succeeded', label: 'Succeeded', statuses: ['succeeded'] },
+  { key: 'all', label: 'All effects', icon: ListFilter, statuses: undefined },
+  { key: 'active', label: 'Active', icon: CircleDashed, statuses: ['pending', 'leased', 'retry'] },
+  { key: 'failed', label: 'Failed', icon: CircleX, statuses: ['failed'] },
+  { key: 'succeeded', label: 'Succeeded', icon: CircleCheck, statuses: ['succeeded'] },
 ];
 
 type GroupKey = (typeof ACTION_GROUPS)[number]['key'];
@@ -78,8 +82,10 @@ export function AuditPage() {
 function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [group, setGroup] = useState<GroupKey>('all');
   const [decisionGroup, setDecisionGroup] = useState('all');
-  const actions = ACTION_GROUPS.find(entry => entry.key === group)?.actions;
-  const decisionStatuses = DECISION_GROUPS.find(entry => entry.key === decisionGroup)?.statuses;
+  const actionFilter = ACTION_GROUPS.find(entry => entry.key === group);
+  const decisionFilter = DECISION_GROUPS.find(entry => entry.key === decisionGroup);
+  const actions = actionFilter?.actions;
+  const decisionStatuses = decisionFilter?.statuses;
   const eventsQuery = useAuditEvents(factoryProjectId, group, actions ? [...actions] : undefined);
   const decisionsQuery = useFactoryDecisionHistory(factoryProjectId, decisionGroup, decisionStatuses);
   const retryDecision = useRetryFactoryDecision(factoryProjectId);
@@ -89,115 +95,164 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
     const error = eventsQuery.error ?? decisionsQuery.error;
     return <Notice variant="destructive">{(error as Error).message}</Notice>;
   }
+
   const events = eventsQuery.data?.pages.flatMap(page => page.events) ?? [];
   const decisions = decisionsQuery.data?.pages.flatMap(page => page.decisions) ?? [];
+  const hasActionFilter = group !== 'all';
+  const hasDecisionFilter = decisionGroup !== 'all';
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-      <section className="flex flex-col gap-2" aria-labelledby="rule-decisions-heading">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <section className="flex min-h-0 flex-col gap-2" aria-labelledby="rule-decisions-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Txt as="h2" variant="ui-sm" className="m-0 text-icon6" id="rule-decisions-heading">
             Rule decisions
           </Txt>
           <ButtonsGroup spacing="close" role="group" aria-label="Rule decision filter">
-            {DECISION_GROUPS.map(entry => (
+            {DECISION_GROUPS.map(entry => {
+              const Icon = entry.icon;
+              return (
+                <Button
+                  key={entry.key}
+                  variant={decisionGroup === entry.key ? 'primary' : 'outline'}
+                  size="sm"
+                  aria-pressed={decisionGroup === entry.key}
+                  onClick={() => setDecisionGroup(entry.key)}
+                >
+                  <Icon aria-hidden />
+                  {entry.label}
+                </Button>
+              );
+            })}
+          </ButtonsGroup>
+        </div>
+
+        {decisionsQuery.isPending ? (
+          <SkeletonRows label="Loading rule decisions" rows={2} rowClassName="h-16 w-full" />
+        ) : decisions.length === 0 ? (
+          <EmptyState
+            className="py-5"
+            as="h3"
+            iconSlot={<ListFilter className="size-5 text-icon3" aria-hidden />}
+            titleSlot={hasDecisionFilter ? 'No matching rule effects' : 'No rule effects yet'}
+            descriptionSlot={
+              hasDecisionFilter
+                ? `No rule effects match the “${decisionFilter?.label ?? 'selected'}” filter.`
+                : 'Durable rule effects will appear here when a rule queues work.'
+            }
+            actionSlot={
+              hasDecisionFilter ? (
+                <Button variant="outline" size="sm" onClick={() => setDecisionGroup('all')}>
+                  Show all effects
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ScrollArea maxHeight="min(14rem, 35vh)" className="min-h-0">
+            <div className="flex flex-col gap-2 pr-1">
+              <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Rule decisions">
+                {decisions.map(decision => (
+                  <DecisionRow
+                    key={decision.id}
+                    decision={decision}
+                    retrying={retryDecision.isPending && retryDecision.variables === decision.id}
+                    onRetry={() => retryDecision.mutate(decision.id)}
+                  />
+                ))}
+              </ul>
+              {decisionsQuery.hasNextPage ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="self-center"
+                  disabled={decisionsQuery.isFetchingNextPage}
+                  onClick={() => void decisionsQuery.fetchNextPage()}
+                >
+                  {decisionsQuery.isFetchingNextPage ? 'Loading…' : 'Load more effects'}
+                </Button>
+              ) : null}
+            </div>
+          </ScrollArea>
+        )}
+      </section>
+
+      <section className="flex min-h-0 flex-1 flex-col gap-2" aria-label="Audit history">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <ButtonsGroup spacing="close" role="group" aria-label="Audit filter">
+            {ACTION_GROUPS.map(entry => (
               <Button
                 key={entry.key}
-                variant={decisionGroup === entry.key ? 'primary' : 'outline'}
+                variant={group === entry.key ? 'primary' : 'outline'}
                 size="sm"
-                aria-pressed={decisionGroup === entry.key}
-                onClick={() => setDecisionGroup(entry.key)}
+                aria-pressed={group === entry.key}
+                onClick={() => setGroup(entry.key)}
               >
                 {entry.label}
               </Button>
             ))}
           </ButtonsGroup>
-        </div>
-        {!decisionsQuery.data ? null : decisions.length === 0 ? (
-          <Notice variant="info">No durable rule effects match this filter.</Notice>
-        ) : (
-          <>
-            <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Rule decisions">
-              {decisions.map(decision => (
-                <DecisionRow
-                  key={decision.id}
-                  decision={decision}
-                  retrying={retryDecision.isPending && retryDecision.variables === decision.id}
-                  onRetry={() => retryDecision.mutate(decision.id)}
-                />
-              ))}
-            </ul>
-            {decisionsQuery.hasNextPage ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="self-center"
-                disabled={decisionsQuery.isFetchingNextPage}
-                onClick={() => void decisionsQuery.fetchNextPage()}
-              >
-                {decisionsQuery.isFetchingNextPage ? 'Loading…' : 'Load more effects'}
-              </Button>
-            ) : null}
-          </>
-        )}
-      </section>
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <ButtonsGroup spacing="close" role="group" aria-label="Audit filter">
-          {ACTION_GROUPS.map(entry => (
-            <Button
-              key={entry.key}
-              variant={group === entry.key ? 'primary' : 'outline'}
-              size="sm"
-              aria-pressed={group === entry.key}
-              onClick={() => setGroup(entry.key)}
-            >
-              {entry.label}
-            </Button>
-          ))}
-        </ButtonsGroup>
-        {portalQuery.data ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              // Portal links are one-time use: open, then fetch a fresh one.
-              window.open(portalQuery.data!, '_blank', 'noopener,noreferrer');
-              void portalQuery.refetch();
-            }}
-          >
-            Open in WorkOS
-          </Button>
-        ) : null}
-      </div>
-
-      {!eventsQuery.data ? null : events.length === 0 ? (
-        <EmptyState
-          className="flex-1"
-          iconSlot={<ScrollText className="size-5 text-icon3" aria-hidden />}
-          titleSlot="No audit events yet"
-          descriptionSlot="Board changes, runs, and git actions will appear here."
-        />
-      ) : (
-        <>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Audit events">
-            {events.map(event => (
-              <AuditEventRow key={event.id} event={event} />
-            ))}
-          </ul>
-          {eventsQuery.hasNextPage ? (
+          {portalQuery.data ? (
             <Button
               variant="outline"
               size="sm"
-              className="self-center"
-              disabled={eventsQuery.isFetchingNextPage}
-              onClick={() => void eventsQuery.fetchNextPage()}
+              onClick={() => {
+                // Portal links are one-time use: open, then fetch a fresh one.
+                window.open(portalQuery.data!, '_blank', 'noopener,noreferrer');
+                void portalQuery.refetch();
+              }}
             >
-              {eventsQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}
+              Open in WorkOS
             </Button>
           ) : null}
-        </>
-      )}
+        </div>
+
+        {eventsQuery.isPending ? (
+          <div className="min-h-0 flex-1">
+            <SkeletonRows label="Loading audit events" rows={4} rowClassName="h-16 w-full" />
+          </div>
+        ) : events.length === 0 ? (
+          <EmptyState
+            className="min-h-0 flex-1"
+            as="h2"
+            iconSlot={<ScrollText className="size-5 text-icon3" aria-hidden />}
+            titleSlot={hasActionFilter ? 'No matching audit events' : 'No audit events yet'}
+            descriptionSlot={
+              hasActionFilter
+                ? `No audit events match the “${actionFilter?.label ?? 'selected'}” filter.`
+                : 'Board changes, runs, and git actions will appear here.'
+            }
+            actionSlot={
+              hasActionFilter ? (
+                <Button variant="outline" size="sm" onClick={() => setGroup('all')}>
+                  Show all events
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="flex flex-col gap-2 pr-1">
+              <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Audit events">
+                {events.map(event => (
+                  <AuditEventRow key={event.id} event={event} />
+                ))}
+              </ul>
+              {eventsQuery.hasNextPage ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="self-center"
+                  disabled={eventsQuery.isFetchingNextPage}
+                  onClick={() => void eventsQuery.fetchNextPage()}
+                >
+                  {eventsQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}
+                </Button>
+              ) : null}
+            </div>
+          </ScrollArea>
+        )}
+      </section>
     </div>
   );
 }

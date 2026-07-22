@@ -37,7 +37,7 @@ export function FactorySwitcher() {
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => {
-          const nextSpot = isServerFactory(factory) ? '/factory/board' : '/new';
+          const nextSpot = isServerFactory(factory) ? '/factory/work' : '/new';
           const projectPath = deriveProjectPath(factory);
 
           return (
@@ -52,8 +52,14 @@ export function FactorySwitcher() {
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">{factory.name}</span>
                 {projectPath && (
-                  <Txt as="span" variant="ui-xs" className="truncate text-icon3">
-                    {projectPath}
+                  <Txt
+                    as="span"
+                    variant="ui-xs"
+                    className="truncate text-left text-icon3"
+                    dir="rtl"
+                    title={projectPath}
+                  >
+                    <span dir="ltr">{projectPath}</span>
                   </Txt>
                 )}
               </span>

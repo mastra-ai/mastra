@@ -88,6 +88,27 @@ describe('FactorySwitcher', () => {
     expect(screen.getByTestId('pathname')).toHaveTextContent('/new');
   });
 
+  it('when a server-backed Factory is selected from /new, then the user is taken to Work', async () => {
+    const serverFactory: Factory = {
+      id: 'server-factory',
+      name: 'Server Factory',
+      createdAt: 2,
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'server-project',
+        repositories: [],
+      },
+    };
+    localStorage.setItem('mastracode-factories', JSON.stringify([PROJECT, serverFactory]));
+    localStorage.setItem('mastracode-active-factory', PROJECT.id);
+    renderSwitcher();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Server Factory/ }));
+
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factory/work'));
+  });
+
   it('when Create Factory is selected on mobile, then it navigates to /factories/create and the sidebar closes', async () => {
     vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
       matches: true,
