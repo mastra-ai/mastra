@@ -41,6 +41,8 @@ export type TestCapabilities = {
    * to false so the round-trip suite asserts rejection instead of persistence.
    */
   toolMocks?: boolean;
+  /** Whether the adapter persists dataset item timeout overrides (defaults to true). */
+  datasetItemTimeout?: boolean;
   /** Whether identity-aware dataset item insertion is supported (defaults to true). */
   datasetItemIdentity?: boolean;
 };
