@@ -14,7 +14,7 @@ describe('useSnapshotPlayback', () => {
       useSnapshotPlayback({
         isPlaying: true,
         isPlaybackBlocked: false,
-        nextSnapshotId: 'snapshot-2',
+        nextSnapshot: 'snapshot-2',
         onAdvance,
         snapshotCount: 2,
       }),
@@ -32,7 +32,7 @@ describe('useSnapshotPlayback', () => {
       useSnapshotPlayback({
         isPlaying: true,
         isPlaybackBlocked: true,
-        nextSnapshotId: 'snapshot-2',
+        nextSnapshot: 'snapshot-2',
         onAdvance,
         snapshotCount: 2,
       }),
@@ -50,7 +50,7 @@ describe('useSnapshotPlayback', () => {
       useSnapshotPlayback({
         isPlaying: true,
         isPlaybackBlocked: false,
-        nextSnapshotId: 'snapshot-1',
+        nextSnapshot: 'snapshot-1',
         onAdvance,
         snapshotCount: 1,
       }),

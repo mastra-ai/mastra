@@ -347,7 +347,7 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   useSnapshotPlayback({
     isPlaying,
     isPlaybackBlocked: isFlowPending || hasFlowError || isPlaybackBlockedByDrillIn,
-    nextSnapshotId,
+    nextSnapshot: nextSnapshotId,
     onAdvance: setSelectedSnapshotId,
     snapshotCount: snapshots.length,
   });

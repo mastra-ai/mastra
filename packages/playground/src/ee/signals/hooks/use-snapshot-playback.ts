@@ -1,24 +1,24 @@
 import { useEffect } from 'react';
 
-type SnapshotPlaybackOptions = {
+type SnapshotPlaybackOptions<SnapshotCursor> = {
   isPlaying: boolean;
   isPlaybackBlocked: boolean;
-  nextSnapshotId: string | undefined;
-  onAdvance: (snapshotId: string | undefined) => void;
+  nextSnapshot: SnapshotCursor | undefined;
+  onAdvance: (snapshot: SnapshotCursor | undefined) => void;
   snapshotCount: number;
 };
 
-export function useSnapshotPlayback({
+export function useSnapshotPlayback<SnapshotCursor>({
   isPlaying,
   isPlaybackBlocked,
-  nextSnapshotId,
+  nextSnapshot,
   onAdvance,
   snapshotCount,
-}: SnapshotPlaybackOptions) {
+}: SnapshotPlaybackOptions<SnapshotCursor>) {
   useEffect(() => {
     if (!isPlaying || snapshotCount < 2 || isPlaybackBlocked) return;
 
-    const timer = window.setTimeout(() => onAdvance(nextSnapshotId), 900);
+    const timer = window.setTimeout(() => onAdvance(nextSnapshot), 900);
     return () => window.clearTimeout(timer);
-  }, [isPlaybackBlocked, isPlaying, nextSnapshotId, onAdvance, snapshotCount]);
+  }, [isPlaybackBlocked, isPlaying, nextSnapshot, onAdvance, snapshotCount]);
 }
