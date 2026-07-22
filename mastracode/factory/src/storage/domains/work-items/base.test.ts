@@ -283,12 +283,17 @@ describe('WorkItemsStorage', () => {
     });
 
     await expect(storage.findRunBinding(address)).resolves.toMatchObject({
-      id: prepared.binding.id,
-      workItemId: prepared.item.id,
-      status: 'active',
+      status: 'match',
+      binding: {
+        id: prepared.binding.id,
+        workItemId: prepared.item.id,
+        status: 'active',
+      },
     });
-    await expect(storage.findRunBinding({ ...address, orgId: 'org2' })).resolves.toBeNull();
-    await expect(storage.findRunBinding({ ...address, sessionId: 'other-session' })).resolves.toBeNull();
+    await expect(storage.findRunBinding({ ...address, orgId: 'org2' })).resolves.toEqual({ status: 'none' });
+    await expect(storage.findRunBinding({ ...address, sessionId: 'other-session' })).resolves.toEqual({
+      status: 'none',
+    });
 
     await storage.revokeRunBinding({
       orgId: address.orgId,
@@ -299,8 +304,61 @@ describe('WorkItemsStorage', () => {
 
     await expect(storage.findActiveRunBinding(address)).resolves.toBeNull();
     await expect(storage.findRunBinding(address)).resolves.toMatchObject({
-      id: prepared.binding.id,
-      status: 'revoked',
+      status: 'match',
+      binding: {
+        id: prepared.binding.id,
+        status: 'revoked',
+      },
     });
+  });
+
+  it('fails closed when multiple active runs share one exact session address', async () => {
+    const storage = await makeStorage();
+    const address = {
+      orgId: 'org1',
+      factoryProjectId: 'p1',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      sessionId: 'session-1',
+    };
+    await storage.prepareRunStart({
+      orgId: address.orgId,
+      userId: 'u',
+      factoryProjectId: address.factoryProjectId,
+      workItem: { input },
+      role: 'work',
+      session: { sessionId: address.sessionId, branch: 'feature/one', threadId: address.threadId },
+      resourceId: address.resourceId,
+      kickoffKey: 'kickoff-1',
+      kickoffMessage: null,
+    });
+    await storage.prepareRunStart({
+      orgId: address.orgId,
+      userId: 'u',
+      factoryProjectId: address.factoryProjectId,
+      workItem: {
+        input: {
+          ...input,
+          externalSource: { integrationId: 'github', type: 'issue', externalId: '43' },
+        },
+      },
+      role: 'work',
+      session: { sessionId: address.sessionId, branch: 'feature/two', threadId: address.threadId },
+      resourceId: address.resourceId,
+      kickoffKey: 'kickoff-2',
+      kickoffMessage: null,
+    });
+
+    await expect(storage.findRunBinding(address)).resolves.toEqual({ status: 'ambiguous-active' });
+    await expect(storage.findActiveRunBinding(address)).resolves.toBeNull();
+    await expect(storage.listActiveRunBindings()).resolves.toEqual([]);
+    await expect(
+      storage.findRunBindingBySession({
+        factoryProjectId: address.factoryProjectId,
+        threadId: address.threadId,
+        resourceId: address.resourceId,
+        sessionId: address.sessionId,
+      }),
+    ).resolves.toBeNull();
   });
 });

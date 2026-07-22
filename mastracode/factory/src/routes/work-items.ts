@@ -210,6 +210,20 @@ function boundedText(value: unknown, max: number): string | undefined {
   return normalized.length > 0 && normalized.length <= max ? normalized : undefined;
 }
 
+function taskContextLoadError(cause: unknown): Error {
+  let causeType: string = typeof cause;
+  try {
+    if (cause instanceof TypeError) causeType = 'TypeError';
+    else if (cause instanceof RangeError) causeType = 'RangeError';
+    else if (cause instanceof Error) causeType = 'Error';
+  } catch {
+    causeType = 'unknown';
+  }
+  const error = new Error('Factory task context could not be loaded.');
+  error.stack = `${error.stack ?? error.message}\nCause type: ${causeType}`;
+  return error;
+}
+
 function parseTransitionBody(
   body: unknown,
 ): Omit<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' | 'workItemId' | 'actor'> | null {
@@ -481,36 +495,53 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const context = loose(c);
-          const resolved = await this.#resolveProject(context);
-          if ('response' in resolved) return resolved.response;
-          const threadId = boundedText(context.req.param('threadId'), 512);
-          const resourceId = boundedText(context.req.query('resourceId'), 256);
-          const sessionId = boundedText(context.req.query('sessionId'), 256);
-          if (!threadId || !resourceId || !sessionId) {
-            return c.json(
-              { error: 'invalid_session_address', message: 'The Factory session address is incomplete.' },
-              400,
+          try {
+            const context = loose(c);
+            const resolved = await this.#resolveProject(context);
+            if ('response' in resolved) return resolved.response;
+            const threadId = boundedText(context.req.param('threadId'), 512);
+            const resourceId = boundedText(context.req.query('resourceId'), 256);
+            const sessionId = boundedText(context.req.query('sessionId'), 256);
+            if (!threadId || !resourceId || !sessionId) {
+              return c.json(
+                { error: 'invalid_session_address', message: 'The Factory session address is incomplete.' },
+                400,
+              );
+            }
+            await workItems.ensureReady();
+            const bindingResult = await workItems.findRunBinding({
+              orgId: resolved.orgId,
+              factoryProjectId: resolved.factoryProjectId,
+              threadId,
+              resourceId,
+              sessionId,
+            });
+            if (bindingResult.status === 'none') return c.json({ context: null });
+            if (bindingResult.status === 'ambiguous-active') {
+              return c.json(
+                {
+                  error: 'ambiguous_factory_binding',
+                  message: 'Multiple active Factory runs share this session address.',
+                },
+                409,
+              );
+            }
+            const workItem = await workItems.getForProject(
+              resolved.orgId,
+              resolved.factoryProjectId,
+              bindingResult.binding.workItemId,
             );
+            if (!workItem) throw new Error('Factory run binding references a missing work item.');
+            const loaded = await loadFactoryThreadTaskContext({
+              orgId: resolved.orgId,
+              factoryProjectId: resolved.factoryProjectId,
+              workItem,
+              ...taskContext,
+            });
+            return c.json({ context: loaded });
+          } catch (error) {
+            throw taskContextLoadError(error);
           }
-          await workItems.ensureReady();
-          const binding = await workItems.findRunBinding({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            threadId,
-            resourceId,
-            sessionId,
-          });
-          if (!binding) return c.json({ context: null });
-          const workItem = await workItems.getForProject(resolved.orgId, resolved.factoryProjectId, binding.workItemId);
-          if (!workItem) throw new Error('Factory run binding references a missing work item.');
-          const loaded = await loadFactoryThreadTaskContext({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            workItem,
-            ...taskContext,
-          });
-          return c.json({ context: loaded });
         },
       }),
 

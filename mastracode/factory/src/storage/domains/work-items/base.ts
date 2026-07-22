@@ -174,6 +174,9 @@ export interface FactoryRunBindingRecord {
   revokedAt: Date | null;
 }
 
+export type FindFactoryRunBindingResult =
+  { status: 'none' } | { status: 'match'; binding: FactoryRunBindingRecord } | { status: 'ambiguous-active' };
+
 export interface FactoryPendingStartRecord {
   id: string;
   orgId: string;
@@ -1265,9 +1268,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return retried && row ? toDeferredDecision(row) : null;
   }
 
-  /** Resolve exact active agent authority; partial session matches never authorize. */
+  /** Resolve exact active agent authority; ambiguous or partial session matches never authorize. */
   async findActiveRunBinding(address: FactoryRunBindingAddress): Promise<FactoryRunBindingRecord | null> {
-    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
       org_id: address.orgId,
       factory_project_id: address.factoryProjectId,
       thread_id: address.threadId,
@@ -1275,11 +1278,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       session_id: address.sessionId,
       status: 'active',
     });
-    return row ? toBinding(row) : null;
+    return rows.length === 1 ? toBinding(rows[0]!) : null;
   }
 
-  /** Resolve exact tenant-scoped binding history, preferring active and then newest. */
-  async findRunBinding(address: FactoryRunBindingAddress): Promise<FactoryRunBindingRecord | null> {
+  /** Resolve exact tenant-scoped binding history without guessing across conflicting active rows. */
+  async findRunBinding(address: FactoryRunBindingAddress): Promise<FindFactoryRunBindingResult> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
       org_id: address.orgId,
       factory_project_id: address.factoryProjectId,
@@ -1287,15 +1290,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       resource_id: address.resourceId,
       session_id: address.sessionId,
     });
-    const row = rows.sort((left, right) => {
-      if (left.status === 'active' && right.status !== 'active') return -1;
-      if (right.status === 'active' && left.status !== 'active') return 1;
-      return right.created_at.getTime() - left.created_at.getTime();
-    })[0];
-    return row ? toBinding(row) : null;
+    const activeRows = rows.filter(row => row.status === 'active');
+    if (activeRows.length > 1) return { status: 'ambiguous-active' };
+    const row =
+      activeRows[0] ??
+      rows.sort((left, right) => {
+        const createdAtOrder = right.created_at.getTime() - left.created_at.getTime();
+        return createdAtOrder || right.id.localeCompare(left.id);
+      })[0];
+    return row ? { status: 'match', binding: toBinding(row) } : { status: 'none' };
   }
 
-  /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
+  /** Resolve exact bound-session state for processor awareness; ambiguous matches return null. */
   async findRunBindingBySession(address: FactoryRunBindingSessionAddress): Promise<FactoryRunBindingRecord | null> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
       factory_project_id: address.factoryProjectId,
@@ -1304,11 +1310,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       session_id: address.sessionId,
     });
     if (new Set(rows.map(row => row.org_id)).size !== 1) return null;
-    const row = rows.sort((left, right) => {
-      if (left.status === 'active' && right.status !== 'active') return -1;
-      if (right.status === 'active' && left.status !== 'active') return 1;
-      return right.created_at.getTime() - left.created_at.getTime();
-    })[0];
+    const activeRows = rows.filter(row => row.status === 'active');
+    if (activeRows.length > 1) return null;
+    const row =
+      activeRows[0] ??
+      rows.sort((left, right) => {
+        const createdAtOrder = right.created_at.getTime() - left.created_at.getTime();
+        return createdAtOrder || right.id.localeCompare(left.id);
+      })[0];
     return row ? toBinding(row) : null;
   }
 
@@ -1327,9 +1336,26 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return revoked && row ? toBinding(row) : null;
   }
 
-  /** Enumerate active bindings for the server-owned restart reconciler. */
+  /** Enumerate unambiguous active bindings for the server-owned restart reconciler. */
   async listActiveRunBindings(): Promise<FactoryRunBindingRecord[]> {
-    return (await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', { status: 'active' })).map(toBinding);
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', { status: 'active' });
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      const key = JSON.stringify([row.org_id, row.factory_project_id, row.thread_id, row.resource_id, row.session_id]);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return rows
+      .filter(row => {
+        const key = JSON.stringify([
+          row.org_id,
+          row.factory_project_id,
+          row.thread_id,
+          row.resource_id,
+          row.session_id,
+        ]);
+        return counts.get(key) === 1;
+      })
+      .map(toBinding);
   }
 
   /** List binding history, optionally narrowed to one work item. */
