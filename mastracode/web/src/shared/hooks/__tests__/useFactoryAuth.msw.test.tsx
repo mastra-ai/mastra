@@ -64,6 +64,17 @@ describe('useFactoryAuth', () => {
       await waitFor(() => expect(result.current.data).toBeDefined());
       expect(result.current.data).toEqual({ authEnabled: true, authenticated: false });
     });
+
+    it('surfaces a server outage instead of reporting the session as unauthenticated', async () => {
+      window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+      server.use(http.get(AUTH_ME_URL, () => new Response(null, { status: 500 })));
+
+      const { result } = renderHookWithProviders(() => useFactoryAuth());
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(result.current.data).toBeUndefined();
+      expect(result.current.error).toEqual(new Error('Auth check failed (500)'));
+    });
   });
 
   describe('given no injected runtime config (stale HTML, tests)', () => {

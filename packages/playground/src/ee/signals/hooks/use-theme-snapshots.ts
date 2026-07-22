@@ -8,5 +8,6 @@ export function useThemeSnapshots(entityId: string, entityType: string, signalNa
     queryKey: ['entity-learning', entityType, entityId, 'theme-snapshots', signalNames],
     queryFn: () => fetchThemeSnapshots(entityId, entityType, signalNames),
     enabled: signalNames.length >= 2,
+    staleTime: 30_000,
   });
 }

@@ -49,6 +49,11 @@ export type FixedSankeyGeometry = {
   links: Map<string, FixedSankeyLinkGeometry>;
 };
 
+export type SankeyChartNodeSelection = {
+  column: SankeyChartColumn;
+  value: string | number;
+};
+
 export type SankeyChartCurveSelection = {
   source: {
     column: SankeyChartColumn;
@@ -307,6 +312,10 @@ export function getSankeyChartCurveSelection(link: SankeyChartLink): SankeyChart
     target: { column: link.targetNode.column, value: link.targetNode.value },
     records: link.records,
   };
+}
+
+export function getSankeyChartNodeSelection(node: SankeyChartNode): SankeyChartNodeSelection {
+  return { column: node.column, value: node.value };
 }
 
 function createNodeId(columnId: string, value: string | number) {

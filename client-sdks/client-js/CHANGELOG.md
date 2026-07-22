@@ -1,5 +1,15 @@
 # @mastra/client-js
 
+## 1.33.0-alpha.13
+
+### Minor Changes
+
+- Added Agent Learning response types for entity discovery, snapshots, flows, theme details, examples, history, and noise. ([#19871](https://github.com/mastra-ai/mastra/pull/19871))
+
+  ```ts
+  import type { ThemeDetailResponse, ThemeFlowResponse } from '@mastra/client-js';
+  ```
+
 ## 1.33.0-alpha.12
 
 ### Patch Changes

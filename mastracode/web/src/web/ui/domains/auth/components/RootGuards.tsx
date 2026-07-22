@@ -12,6 +12,7 @@ const AuthGuard = () => {
   const location = useLocation();
 
   if (auth.isPending) return <AuthPendingSkeleton />;
+  if (auth.isError) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
 
   // Local factory situation
   const state = auth.data;

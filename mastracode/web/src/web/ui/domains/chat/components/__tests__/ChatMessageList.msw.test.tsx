@@ -108,8 +108,7 @@ function renderMessageList() {
 }
 
 describe('ChatMessageList', () => {
-  it('given an empty thread, then it shows conversation starters with optional project context', async () => {
-    const user = userEvent.setup();
+  it('given an empty thread, then it shows conversation starters with current project context', async () => {
     seedProject();
     useAgentControllerHandlers();
     renderMessageList();
@@ -123,15 +122,13 @@ describe('ChatMessageList', () => {
     expect(screen.getByRole('button', { name: 'Review recent changes' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Debug an issue' })).toBeInTheDocument();
 
-    await user.click(screen.getByText(/Working in/));
-    expect(screen.getByText('Factory')).toBeVisible();
-    expect(screen.getAllByText('MastraCode Test')).toHaveLength(2);
-    expect(screen.getByText('Resource ID')).toBeVisible();
-    expect(screen.getByText(RESOURCE_ID)).toBeVisible();
-    expect(screen.getByText('Branch')).toBeVisible();
+    expect(screen.getByText(/Working in/)).toBeVisible();
+    expect(screen.getByText('MastraCode Test')).toBeVisible();
     expect(screen.getByText('main')).toBeVisible();
-    expect(screen.getByText('Workspace')).toBeVisible();
-    expect(screen.getByText('/tmp/mastracode-test')).toBeVisible();
+    expect(screen.queryByText('Resource ID')).not.toBeInTheDocument();
+    expect(screen.queryByText(RESOURCE_ID)).not.toBeInTheDocument();
+    expect(screen.queryByText('Workspace')).not.toBeInTheDocument();
+    expect(screen.queryByText('/tmp/mastracode-test')).not.toBeInTheDocument();
   });
 
   it('given streamed assistant text, then it renders the transcript entry', async () => {

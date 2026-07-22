@@ -43,11 +43,11 @@ export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
 
     records.push({
       [source.signalName]: source.node.nodeId,
-      [`${source.signalName}Label`]: source.node.label,
+      [`${source.signalName}Label`]: displayNodeLabel(source.node),
       [`${source.signalName}Description`]: source.node.description,
       [`${source.signalName}TraceCount`]: source.node.traceCount,
       [target.signalName]: target.node.nodeId,
-      [`${target.signalName}Label`]: target.node.label,
+      [`${target.signalName}Label`]: displayNodeLabel(target.node),
       [`${target.signalName}Description`]: target.node.description,
       [`${target.signalName}TraceCount`]: target.node.traceCount,
       traceCount: link.traceCount,
@@ -101,6 +101,10 @@ export function stabilizeThemeFlow(flow: ThemeFlowResponse, windowFlows: ThemeFl
   });
 
   return { ...flow, stages, links: stableLinks };
+}
+
+function displayNodeLabel(node: ThemeNode) {
+  return node.kind === 'noise' ? 'Noise' : node.label;
 }
 
 function formatSignalName(signalName: TraceSignalName) {

@@ -207,12 +207,16 @@ export interface FactoryInvokeSkillDecision extends FactoryCommitDecisionBase {
   role: string;
   skillName: string;
   arguments?: string;
+  precedingMessage?: string;
 }
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   type: 'sendMessage';
   role: string;
   message: string;
+  priority?: 'medium' | 'high' | 'urgent';
+  idleBehavior?: 'persist' | 'wake';
+  prepareBinding?: boolean;
 }
 
 export interface FactoryNotifyDecision extends FactoryCommitDecisionBase {

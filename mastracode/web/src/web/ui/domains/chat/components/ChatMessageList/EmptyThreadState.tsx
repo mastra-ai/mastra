@@ -1,10 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Logo } from '@mastra/playground-ui/components/Logo';
-import { ChevronDown } from 'lucide-react';
-import { deriveProjectPath } from '../../../../../../shared/hooks/useWorkspaces';
 import { isLocalFactory, selectedRepository, useActiveFactoryContext } from '../../../workspaces';
 import { useChatCommands } from '../../context/ChatCommandsProvider';
-import { FactoryMetadata } from './FactoryMetadata';
 
 const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
@@ -13,7 +10,6 @@ export function EmptyThreadState() {
   const { activeFactory } = useActiveFactoryContext();
   const { prefillComposer } = useChatCommands();
   if (!activeFactory) return null;
-  const workspace = deriveProjectPath(activeFactory);
   const gitBranch = isLocalFactory(activeFactory)
     ? activeFactory.binding.gitBranch
     : selectedRepository(activeFactory)?.gitBranch;
@@ -58,24 +54,15 @@ export function EmptyThreadState() {
         </Button>
       </div>
 
-      <details className="group mt-8 w-full min-w-0 max-w-lg text-ui-sm text-icon3">
-        <summary className="flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors hover:text-icon5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent1 [&::-webkit-details-marker]:hidden">
-          <span>
-            Working in <span className="font-medium text-icon5">{activeFactory.name}</span>
-          </span>
-          <ChevronDown
-            aria-hidden="true"
-            size={14}
-            className="transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
-          />
-        </summary>
-        <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left font-mono leading-relaxed">
-          <FactoryMetadata label="Factory" value={activeFactory.name} />
-          {activeFactory.resourceId && <FactoryMetadata label="Resource ID" value={activeFactory.resourceId} />}
-          {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} />}
-          {workspace && <FactoryMetadata label="Workspace" value={workspace} />}
-        </dl>
-      </details>
+      <p className="mt-8 text-ui-sm text-icon3">
+        Working in <span className="font-medium text-icon5">{activeFactory.name}</span>
+        {gitBranch && (
+          <>
+            <span aria-hidden="true"> · </span>
+            <span className="font-mono text-icon5">{gitBranch}</span>
+          </>
+        )}
+      </p>
     </section>
   );
 }

@@ -151,6 +151,14 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument();
   });
 
+  it('given the auth server is unavailable, when visiting /new, then the app does not redirect to sign in', async () => {
+    const { router } = renderRoutes('/new', () => new Response(null, { status: 500 }));
+
+    expect(await screen.findByRole('status', { name: 'Unable to reach MastraCode server' })).toBeInTheDocument();
+    await expectPathname(router, '/new');
+    expect(screen.queryByRole('button', { name: 'Continue with GitHub' })).not.toBeInTheDocument();
+  });
+
   it('given auth is disabled, when visiting the draft composer, then the chat UI renders without auth affordances', async () => {
     const { router } = renderRoutes('/factories/project-test/new', AUTH_DISABLED);
 
