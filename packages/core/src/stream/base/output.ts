@@ -143,6 +143,26 @@ export type FullOutput<OUTPUT = undefined> = {
   rememberedMessages: MastraDBMessage[];
 };
 
+/**
+ * Resolve the output text from the latest response message, skipping internal
+ * completion-check feedback so it can't become the final text (#19875).
+ * The completionResult metadata only exists on DB-format messages, and the
+ * message is converted alone so adjacent assistant messages aren't merged.
+ */
+function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string {
+  const responseDbMessages = messageList.get.response.db();
+  const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
+  if (hasCompletionCheckMessages) {
+    const lastRealMessage = responseDbMessages.findLast(m => !m.content?.metadata?.completionResult);
+    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
+    const lastConverted = converted[converted.length - 1];
+    return lastConverted ? coreContentToString(lastConverted.content) : '';
+  }
+  const responseMessages = messageList.get.response.aiV4.core();
+  const lastResponseMessage = responseMessages[responseMessages.length - 1];
+  return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
+}
+
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
   #error: Error | undefined;
@@ -945,25 +965,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     outputResult,
                   );
 
-                  // Get text from the latest response message, skipping internal
-                  // completion-check feedback so it can't become the final text (#19875).
-                  // The metadata only exists on DB-format messages, and the message is
-                  // converted alone so adjacent assistant messages aren't merged.
-                  const responseDbMessages = self.messageList.get.response.db();
-                  const hasCompletionCheckMessages = responseDbMessages.some(
-                    m => m.content?.metadata?.completionResult,
-                  );
-                  let outputText = '';
-                  if (hasCompletionCheckMessages) {
-                    const lastRealMessage = responseDbMessages.findLast(m => !m.content?.metadata?.completionResult);
-                    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
-                    const lastConverted = converted[converted.length - 1];
-                    outputText = lastConverted ? coreContentToString(lastConverted.content) : '';
-                  } else {
-                    const responseMessages = self.messageList.get.response.aiV4.core();
-                    const lastResponseMessage = responseMessages[responseMessages.length - 1];
-                    outputText = lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
-                  }
+                  // Get text from the latest response message (the last assistant message)
+                  const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
 
                   // Only update the last step's text if output processors actually modified it
                   // This preserves text from retry scenarios where step.text is already correct
