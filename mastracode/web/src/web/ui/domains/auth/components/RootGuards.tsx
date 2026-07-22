@@ -14,6 +14,7 @@ export const RootGuards = () => {
 
 const AuthGuard = () => {
   const auth = useFactoryAuth();
+  const location = useLocation();
 
   if (auth.isPending) return <AuthPendingSkeleton />;
 
@@ -22,6 +23,8 @@ const AuthGuard = () => {
   if (!state?.authEnabled) return <Outlet />;
 
   if (!state.authenticated) {
+    // Router location (not window.location) so memory routers and in-app
+    // navigations produce the correct returnTo.
     const returnTo = `${location.pathname}${location.search}${location.hash}`;
     return <Navigate to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }

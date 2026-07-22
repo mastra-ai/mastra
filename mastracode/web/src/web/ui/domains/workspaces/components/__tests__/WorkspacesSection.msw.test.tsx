@@ -266,7 +266,9 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     expect(await screen.findByText('Work Sessions')).toBeInTheDocument();
-    expect(screen.getByText('Review Sessions')).toBeInTheDocument();
+    // The active session row renders before the work-items query resolves, so
+    // the review grouping (which depends on work items) needs its own await.
+    expect(await screen.findByText('Review Sessions')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'feat-api' })).toHaveAttribute('aria-current', 'true');
     expect(await screen.findByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('button', { name: 'factory/issue-99' })).toBeInTheDocument();
@@ -282,7 +284,7 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     const workGroup = await screen.findByRole('region', { name: 'Work Sessions' });
-    const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
+    const reviewGroup = await screen.findByRole('region', { name: 'Review Sessions' });
     expect(screen.queryByRole('button', { name: 'Work Sessions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review Sessions' })).not.toBeInTheDocument();
     expect(await within(workGroup).findByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
@@ -360,7 +362,7 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     const workGroup = await screen.findByRole('region', { name: 'Work Sessions' });
-    const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
+    const reviewGroup = await screen.findByRole('region', { name: 'Review Sessions' });
     await within(reviewGroup).findByRole('button', { name: 'review-5' });
     await waitFor(() => {
       expect(within(workGroup).getByRole('button', { name: 'work-0' })).toHaveAttribute('aria-current', 'true');

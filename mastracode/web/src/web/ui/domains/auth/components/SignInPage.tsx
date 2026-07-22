@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useSearchParams } from 'react-router';
+import { Navigate, useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
@@ -142,6 +142,13 @@ export function SignInPage() {
   const [redirecting, setRedirecting] = useState(false);
   const returnTo = safeReturnTo(searchParams.get('returnTo')?.toString());
   const credentialForm = auth.data?.provider === 'better-auth';
+
+  // Mirror of the root auth guard: signed-in (or auth-disabled) visitors have
+  // nothing to do here, so send them to their destination (or the root landing
+  // when returnTo is absent/unsafe).
+  if (auth.data && (!auth.data.authEnabled || auth.data.authenticated)) {
+    return <Navigate to={returnTo} replace />;
+  }
 
   return (
     <main className="relative min-h-dvh overflow-hidden bg-surface1 text-neutral6">

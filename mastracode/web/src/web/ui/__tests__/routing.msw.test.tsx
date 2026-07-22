@@ -216,7 +216,7 @@ describe('MastraCode web routing', () => {
     expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
   });
 
-  it('given a GitHub project has persisted Factory work, when visiting /, then the user lands on the board', async () => {
+  it('given a server factory is active, when visiting /, then the user lands on the work board', async () => {
     const project: Factory = {
       id: 'github-project',
       name: 'mastra-ai/mastra',
@@ -230,7 +230,7 @@ describe('MastraCode web routing', () => {
     };
     const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
 
-    await expectPathname(router, '/factory/board');
+    await expectPathname(router, '/factory/work');
     expect(await screen.findByText(/Connect a repository to start intake/)).toBeInTheDocument();
   });
 
@@ -261,70 +261,10 @@ describe('MastraCode web routing', () => {
     );
     const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
 
-    await screen.findByRole('status', { name: 'Loading Factory board' });
+    await screen.findByRole('status', { name: 'Checking sign-in' });
     expect(router.state.location.pathname).toBe('/');
     resolveProjects();
-    await expectPathname(router, '/factory/board');
-  });
-
-  it('given Factory work is still loading, when visiting /, then the app waits before choosing a destination', async () => {
-    const project: Factory = {
-      id: 'github-project',
-      name: 'mastra-ai/mastra',
-      resourceId: RESOURCE_ID,
-      createdAt: 1,
-      binding: {
-        kind: 'factory',
-        factoryProjectId: 'github-project-id',
-        repositories: [],
-      },
-    };
-    let resolveWorkItems!: () => void;
-    const workItemsReady = new Promise<void>(resolve => {
-      resolveWorkItems = resolve;
-    });
-    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1, workItemsReady });
-
-    await screen.findByRole('status', { name: 'Loading Factory board' });
-    expect(router.state.location.pathname).toBe('/');
-    resolveWorkItems();
-    await expectPathname(router, '/factory/board');
-  });
-
-  it('given persisted Factory work cannot be loaded, when visiting /, then the app does not redirect', async () => {
-    const project: Factory = {
-      id: 'github-project',
-      name: 'mastra-ai/mastra',
-      resourceId: RESOURCE_ID,
-      createdAt: 1,
-      binding: {
-        kind: 'factory',
-        factoryProjectId: 'github-project-id',
-        repositories: [],
-      },
-    };
-    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemsError: true });
-
-    expect(await screen.findByText('Factory unavailable')).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/');
-  });
-
-  it('given a GitHub project has no persisted Factory work, when visiting /, then the user lands on /new', async () => {
-    const project: Factory = {
-      id: 'github-project',
-      name: 'mastra-ai/mastra',
-      resourceId: RESOURCE_ID,
-      createdAt: 1,
-      binding: {
-        kind: 'factory',
-        factoryProjectId: 'github-project-id',
-        repositories: [],
-      },
-    };
-    const { router } = renderRoutes('/', AUTHENTICATED, { project });
-
-    await expectPathname(router, '/new');
-    expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
+    await expectPathname(router, '/factory/work');
   });
 
   it('given auth is disabled, when visiting an unknown path, then the user is redirected to /new', async () => {
