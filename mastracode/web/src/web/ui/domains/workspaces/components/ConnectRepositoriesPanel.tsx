@@ -191,7 +191,10 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
           </p>
         )}
         <p className="m-0">
-          Edit <code className="text-icon4">src/web/.env</code> and restart <code className="text-icon4">web:dev</code>.
+          Set them in <code className="text-icon4">mastracode/web/.env</code>, register{' '}
+          <code className="text-icon4">http://localhost:5173/auth/github/callback</code> as the GitHub App callback URL,
+          then restart <code className="text-icon4">pnpm web:dev</code> from{' '}
+          <code className="text-icon4">mastracode/web</code>.
         </p>
       </div>
     );

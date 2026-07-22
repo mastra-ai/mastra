@@ -44,7 +44,7 @@ function FactoryLink({ to, icon: Icon, label }: { to: string; icon: ComponentTyp
   const isActive = pathname === to || pathname.startsWith(`${to}/`);
 
   return (
-    <MainSidebar.NavLink asChild link={{ name: label, url: to }} isActive={isActive}>
+    <MainSidebar.NavLink asChild size="default" link={{ name: label, url: to }} isActive={isActive}>
       <NavLink to={to} onClick={() => overlays.close('sidebar')}>
         <Icon />
         <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
