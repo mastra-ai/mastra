@@ -331,8 +331,7 @@ export class FactoryDecisionDispatcher {
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<DispatcherSession> {
     const session = (await this.#controller.getSessionByResource(binding.resourceId, binding.projectPath)) as
-      | DispatcherSession
-      | undefined;
+      DispatcherSession | undefined;
     if (!session) throw new Error('Bound Factory session not found.');
     await this.#switchThread(session, binding);
     return session;
