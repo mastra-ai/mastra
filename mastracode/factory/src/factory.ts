@@ -39,6 +39,7 @@ import {
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
+import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
@@ -63,6 +64,7 @@ import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
+import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
@@ -327,6 +329,7 @@ export class MastraFactory {
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage());
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
+    const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage());
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
@@ -340,6 +343,7 @@ export class MastraFactory {
       modelCredentials: modelCredentialsStorage,
       modelPacks: modelPacksStorage,
       memorySettings: memorySettingsStorage,
+      customProviders: customProvidersStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
@@ -435,6 +439,11 @@ export class MastraFactory {
     if (auth) {
       registerTenantCredentialResolver(modelCredentialsStorage);
     }
+
+    // Custom providers: DB-backed in both modes (org rows in tenant mode, the
+    // sentinel `local` org in no-auth mode). Once registered, model resolution
+    // and the gateway catalog never read settings.json custom providers.
+    registerCustomProvidersSource({ storage: customProvidersStorage, authEnabled: Boolean(auth) });
 
     for (const integration of integrations) {
       integration.initialize?.({
@@ -646,21 +655,35 @@ export class MastraFactory {
         const uiDist = resolveUiDistDir();
         const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
         if (!auth) {
-          // Auth disabled: no gate. SPA + CORS only.
-          return { ...(spa.length ? { middleware: spa } : {}), ...cors, ...onError };
+          // Auth disabled: no gate. Still prime the sentinel-local custom
+          // provider snapshot so model calls see DB rows, then SPA + CORS.
+          return {
+            middleware: [
+              createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
+              ...spa,
+            ],
+            ...cors,
+            ...onError,
+          };
         }
 
         // Ordered middleware. The deployer applies these AFTER its context
         // middleware sets `c.set('mastra', mastra)` and BEFORE routes, so:
         //   1. gate   — validates the auth session, stashes the user, and 401s /
         //               redirects unauthenticated requests. Skips public `/auth/*`.
-        //   2. primer — hydrates the caller's model-credential snapshot so the
-        //               request's first model call resolves tenant credentials.
+        //   2. primers — hydrate the caller's model-credential and custom
+        //               provider snapshots so the request's first model call
+        //               resolves tenant credentials and custom providers.
         //   3. spa    — serves the built UI for everything the server doesn't own.
         return {
           middleware: [
             createFactoryAuthGate(auth),
             createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
+            createCustomProvidersPrimer({
+              auth: routeAuth,
+              storage: customProvidersStorage,
+              authEnabled: Boolean(auth),
+            }),
             ...spa,
           ],
           ...cors,

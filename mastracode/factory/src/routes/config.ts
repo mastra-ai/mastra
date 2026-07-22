@@ -1,18 +1,8 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
-import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
-import {
-  removeCustomProviderFromSettings,
-  upsertCustomProviderInSettings,
-} from '@mastra/code-sdk/onboarding/custom-providers';
 import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
-import {
-  getCustomProviderId,
-  loadSettings,
-  saveSettings,
-  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-} from '@mastra/code-sdk/onboarding/settings';
+import { getCustomProviderId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -23,6 +13,7 @@ import type {
   LoginSessionKind,
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
+import type { CustomProviderRecord, CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type {
   MemorySettingsPatch,
   MemorySettingsRecord,
@@ -191,16 +182,60 @@ export interface CustomProviderInfo {
   models: string[];
 }
 
-/** Read the saved custom providers from global settings (keys redacted). */
-export function listCustomProviders(): CustomProviderInfo[] {
-  const settings = loadSettings();
-  return settings.customProviders.map(p => ({
-    id: getCustomProviderId(p.name),
-    name: p.name,
-    url: p.url,
-    hasApiKey: Boolean(p.apiKey),
-    models: p.models,
-  }));
+/** Redact a stored custom-provider row for the client (key presence only). */
+function toCustomProviderInfo(record: CustomProviderRecord): CustomProviderInfo {
+  return {
+    id: record.providerId,
+    name: record.name,
+    url: record.url,
+    hasApiKey: Boolean(record.apiKey),
+    models: record.models,
+  };
+}
+
+/** The resolved custom-providers storage scope for a request. */
+interface CustomProvidersContext {
+  storage: CustomProvidersStorage;
+  orgId: string;
+  userId: string;
+}
+
+/**
+ * Resolve the custom-providers context for a request, or a ready-to-return
+ * error response. Same posture as memory settings: tenant rows in deployed
+ * mode, a sentinel `local` org in no-auth mode — never settings.json.
+ */
+async function resolveCustomProvidersContext({
+  c,
+  auth,
+  customProviders,
+}: {
+  c: Context;
+  auth: RouteAuth;
+  customProviders?: CustomProvidersStorage;
+}): Promise<CustomProvidersContext | { response: Response }> {
+  await auth.ensureUser(c);
+  const tenant = auth.tenant(c);
+  if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
+  if (customProviders) {
+    try {
+      await customProviders.ensureReady();
+      return tenant
+        ? { storage: customProviders, orgId: tenantOrgId(tenant), userId: tenant.userId }
+        : { storage: customProviders, orgId: 'local', userId: 'local' };
+    } catch {
+      // fall through to the unavailable response
+    }
+  }
+  return {
+    response: c.json(
+      {
+        error: 'custom_providers_unavailable',
+        message: 'Custom provider storage is unavailable — the app database is not configured or failed to start.',
+      },
+      503,
+    ),
+  };
 }
 
 /** Validate + coerce a request body into a CustomProviderSetting. */
@@ -291,25 +326,15 @@ function canUseModelProvider(access: ProviderAccess, provider: string): boolean 
 }
 
 /**
- * Where a request's custom model packs live. Local mode (no auth adapter)
- * keeps the file-backed `settings.json` store — unchanged TUI behavior. Tenant
- * mode (auth adapter active) uses the `model-packs` factory storage domain,
- * scoped per org. Mirrors `resolveCredentialContext`.
+ * Where a request's custom model packs live. Same posture as memory settings
+ * and custom providers: the `model-packs` factory storage domain, scoped per
+ * org in deployed mode and to a sentinel `local` org in no-auth mode — never
+ * settings.json.
  */
-export type PackContext =
-  { mode: 'local' } | { mode: 'tenant'; storage: ModelPacksStorage; orgId: string; userId: string };
-
-/** The tenant model-packs domain, when registered and ready (fail-soft). */
-async function getTenantModelPacksStorage(
-  modelPacks: ModelPacksStorage | undefined,
-): Promise<ModelPacksStorage | undefined> {
-  if (!modelPacks) return undefined;
-  try {
-    await modelPacks.ensureReady();
-  } catch {
-    return undefined;
-  }
-  return modelPacks;
+export interface PackContext {
+  storage: ModelPacksStorage;
+  orgId: string;
+  userId: string;
 }
 
 /** Resolve the pack context for a request, or a ready-to-return error response. */
@@ -324,23 +349,26 @@ async function resolvePackContext({
 }): Promise<PackContext | { response: Response }> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
-  if (!tenant) {
-    if (auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
-    return { mode: 'local' };
+  if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
+  if (modelPacks) {
+    try {
+      await modelPacks.ensureReady();
+      return tenant
+        ? { storage: modelPacks, orgId: tenantOrgId(tenant), userId: tenant.userId }
+        : { storage: modelPacks, orgId: 'local', userId: 'local' };
+    } catch {
+      // fall through to the unavailable response
+    }
   }
-  const storage = await getTenantModelPacksStorage(modelPacks);
-  if (!storage) {
-    return {
-      response: c.json(
-        {
-          error: 'model_packs_unavailable',
-          message: 'Model pack storage is unavailable — the app database is not configured or failed to start.',
-        },
-        503,
-      ),
-    };
-  }
-  return { mode: 'tenant', storage, orgId: tenantOrgId(tenant), userId: tenant.userId };
+  return {
+    response: c.json(
+      {
+        error: 'model_packs_unavailable',
+        message: 'Model pack storage is unavailable — the app database is not configured or failed to start.',
+      },
+      503,
+    ),
+  };
 }
 
 /** DB row → the `ModePack` shape the packs list and activation flow consume. */
@@ -368,13 +396,10 @@ export async function listModelPacks({
   activePackId?: string | null;
 }): Promise<ModelPackInfo[]> {
   const access = await buildProviderAccess({ controller, authStorage, tenantCredentials });
-  const packs =
-    packContext.mode === 'local'
-      ? getAvailableModePacks(access, loadSettings().customModelPacks)
-      : [
-          ...getAvailableModePacks(access),
-          ...(await packContext.storage.list({ orgId: packContext.orgId })).map(recordToModePack),
-        ];
+  const packs = [
+    ...getAvailableModePacks(access),
+    ...(await packContext.storage.list({ orgId: packContext.orgId })).map(recordToModePack),
+  ];
   return packs
     .filter(p => p.id !== 'custom') // synthetic "choose each model" placeholder
     .map(p => ({
@@ -560,8 +585,12 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   modelPacks?: ModelPacksStorage;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
   memorySettings?: MemorySettingsStorage;
+  /** Custom-providers domain handle; absent when the app database is missing. */
+  customProviders?: CustomProvidersStorage;
   /** Notifies the host after tenant credentials change so caches can be dropped. */
   onCredentialsChanged?: (tenant: { orgId: string; userId?: string }) => void;
+  /** Notifies the host after custom providers change so model-router caches can be dropped. */
+  onCustomProvidersChanged?: (tenant: { orgId: string }) => void;
 }
 
 /**
@@ -583,6 +612,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const options = this.deps;
     const { controller, authStorage, auth } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
+    const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
 
     return [
       registerApiRoute('/web/config/providers', {
@@ -685,15 +715,23 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       }),
 
       // ── Custom providers (OpenAI-compatible endpoints) ──────────────────────
-      // Mirrors the TUI's /custom-providers command. Backed by GlobalSettings
-      // (settings.json), not session state — these are user-global definitions.
+      // Mirrors the TUI's /custom-providers command, but backed by the
+      // `custom-providers` domain (org rows in tenant mode, a sentinel `local`
+      // org in no-auth mode) — the server never reads settings.json for these.
 
       registerApiRoute('/web/config/custom-providers', {
         method: 'GET',
         requiresAuth: false,
-        handler: c => {
+        handler: async c => {
+          const ctx = await resolveCustomProvidersContext({
+            c: loose(c),
+            auth,
+            customProviders: options.customProviders,
+          });
+          if ('response' in ctx) return ctx.response;
           try {
-            return c.json({ providers: listCustomProviders() });
+            const records = await ctx.storage.list({ orgId: ctx.orgId });
+            return c.json({ providers: records.map(toCustomProviderInfo) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -704,6 +742,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         method: 'POST',
         requiresAuth: false,
         handler: async c => {
+          const ctx = await resolveCustomProvidersContext({
+            c: loose(c),
+            auth,
+            customProviders: options.customProviders,
+          });
+          if ('response' in ctx) return ctx.response;
           let body: unknown;
           try {
             body = await c.req.json();
@@ -718,11 +762,20 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               ? ((body as Record<string, unknown>).previousId as string)
               : undefined;
           try {
-            const settings = loadSettings();
-            upsertCustomProviderInSettings(settings, parsed, previousId);
-            saveSettings(settings);
-            const id = getCustomProviderId(parsed.name);
-            return c.json({ ok: true, provider: listCustomProviders().find(p => p.id === id) });
+            const record = await ctx.storage.upsert({
+              orgId: ctx.orgId,
+              userId: ctx.userId,
+              input: {
+                providerId: getCustomProviderId(parsed.name),
+                name: parsed.name,
+                url: parsed.url,
+                apiKey: parsed.apiKey,
+                models: parsed.models,
+              },
+              previousProviderId: previousId,
+            });
+            onCustomProvidersChanged({ orgId: ctx.orgId });
+            return c.json({ ok: true, provider: toCustomProviderInfo(record) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -732,12 +785,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       registerApiRoute('/web/config/custom-providers/:id', {
         method: 'DELETE',
         requiresAuth: false,
-        handler: c => {
+        handler: async c => {
+          const ctx = await resolveCustomProvidersContext({
+            c: loose(c),
+            auth,
+            customProviders: options.customProviders,
+          });
+          if ('response' in ctx) return ctx.response;
           const id = c.req.param('id');
           try {
-            const settings = loadSettings();
-            removeCustomProviderFromSettings(settings, id);
-            saveSettings(settings);
+            await ctx.storage.delete({ orgId: ctx.orgId, providerId: id });
+            onCustomProvidersChanged({ orgId: ctx.orgId });
             return c.json({ ok: true });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -768,13 +826,39 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 tenantCredentials,
               }),
             ]);
+            const catalog = models
+              .filter(m => canUseModelProvider(access, m.provider) && typeof m.id === 'string')
+              .map(m => ({ id: m.id!, provider: m.provider, modelName: m.modelName, hasApiKey: true }));
+            // Append the caller's custom provider models (DB-backed, org rows in
+            // tenant mode / sentinel `local` org in no-auth mode). The boot-time
+            // gateway catalog only carries the local list, so tenant callers get
+            // theirs here. Dedupe against ids already present.
+            if (options.customProviders) {
+              try {
+                const ctx = await resolveCustomProvidersContext({
+                  c: loose(c),
+                  auth,
+                  customProviders: options.customProviders,
+                });
+                if (!('response' in ctx)) {
+                  const known = new Set(catalog.map(m => m.id));
+                  for (const record of await ctx.storage.list({ orgId: ctx.orgId })) {
+                    for (const model of record.models) {
+                      const id = `${record.providerId}/${model}`;
+                      if (known.has(id)) continue;
+                      known.add(id);
+                      catalog.push({ id, provider: record.providerId, modelName: model, hasApiKey: true });
+                    }
+                  }
+                }
+              } catch {
+                // Fail soft: the catalog still serves the built-in models.
+              }
+            }
             return c.json({
-              models: models
-                .filter(m => canUseModelProvider(access, m.provider) && typeof m.id === 'string')
-                .map(m => ({ id: m.id, provider: m.provider, modelName: m.modelName, hasApiKey: true }))
-                .sort((a, b) =>
-                  a.provider === b.provider ? a.id!.localeCompare(b.id!) : a.provider.localeCompare(b.provider),
-                ),
+              models: catalog.sort((a, b) =>
+                a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider),
+              ),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -783,10 +867,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       }),
 
       // ── Model packs ─────────────────────────────────────────────────────────
-      // Mirrors the TUI's /models-pack command. Custom-pack CRUD is DB-backed in
-      // tenant mode (model-packs storage domain, org-scoped) and settings.json in
-      // local mode; activation is session-scoped and resolves the session from
-      // the controller registry by resourceId.
+      // Mirrors the TUI's /models-pack command. Custom-pack CRUD lives in the
+      // model-packs storage domain (org-scoped, sentinel `local` org in no-auth
+      // mode — never settings.json); activation is session-scoped and resolves
+      // the session from the controller registry by resourceId.
 
       registerApiRoute('/web/config/model-packs', {
         method: 'GET',
@@ -842,21 +926,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             return c.json({ error: 'models.build, models.plan and models.fast are required' }, 400);
           }
           try {
-            if (packContext.mode === 'tenant') {
-              const record = await packContext.storage.upsert({
-                orgId: packContext.orgId,
-                userId: packContext.userId,
-                input: { name, models: { build, plan, fast } },
-              });
-              return c.json({ ok: true, pack: recordToModePack(record) });
-            }
-            const settings = loadSettings();
-            const entry = { name, models: { build, plan, fast }, createdAt: new Date().toISOString() };
-            const idx = settings.customModelPacks.findIndex(p => p.name === name);
-            if (idx >= 0) settings.customModelPacks[idx] = entry;
-            else settings.customModelPacks.push(entry);
-            saveSettings(settings);
-            return c.json({ ok: true, pack: { id: `custom:${name}`, name, models: { build, plan, fast } } });
+            const record = await packContext.storage.upsert({
+              orgId: packContext.orgId,
+              userId: packContext.userId,
+              input: { name, models: { build, plan, fast } },
+            });
+            return c.json({ ok: true, pack: recordToModePack(record) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -871,15 +946,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if ('response' in packContext) return packContext.response;
           const id = decodeURIComponent(c.req.param('id'));
           try {
-            if (packContext.mode === 'tenant') {
-              const recordId = id.startsWith('custom:') ? id.slice('custom:'.length) : id;
-              const deleted = await packContext.storage.delete({ orgId: packContext.orgId, id: recordId });
-              return deleted ? c.json({ ok: true }) : c.json({ error: `Unknown pack "${id}"` }, 404);
-            }
-            const settings = loadSettings();
-            removeCustomPackFromSettings(settings, id);
-            saveSettings(settings);
-            return c.json({ ok: true });
+            const recordId = id.startsWith('custom:') ? id.slice('custom:'.length) : id;
+            const deleted = await packContext.storage.delete({ orgId: packContext.orgId, id: recordId });
+            return deleted ? c.json({ ok: true }) : c.json({ error: `Unknown pack "${id}"` }, 404);
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
