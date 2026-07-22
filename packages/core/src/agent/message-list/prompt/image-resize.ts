@@ -172,9 +172,11 @@ function resizeJpeg(
   const decoded = decodeJpeg(data, {
     useTArray: true,
     formatAsRGBA: true,
-    // Raise limits so large screenshots (which are exactly the oversized images
-    // we need to resize) aren't rejected by jpeg-js's conservative defaults.
-    maxResolutionInMP: 500,
+    // jpeg-js defaults (100MP/512MB) are too low: the decoder's internal
+    // buffers use ~13× the raw pixel count in bytes, so even a 32MP JPEG
+    // exceeds 512MB. We keep maxResolutionInMP at the default 100MP (sufficient
+    // for the ≤8000px target) but raise the memory cap so the decoder can
+    // actually process images up to that resolution.
     maxMemoryUsageInMB: 2048,
   });
   const resizedPixels = bilinearResize(
