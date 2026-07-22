@@ -8,7 +8,7 @@
   --neutral1: #424242;
   --neutral2: #686868;
   --neutral3: #939393;
-  --neutral4: #cccccc;
+  --neutral4: #ccc;
   --neutral5: #e0e0e0;
   --neutral6: #f0f0f0;
   --border1: #1c1c1c;
@@ -35,6 +35,7 @@
   --color-accent3: var(--accent3);
   --font-display: 'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif;
   --font-body: 'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif;
+
   color-scheme: dark;
   font-family: 'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif;
 }
@@ -46,7 +47,7 @@
   --factory-orange: #fdac53;
   --factory-dot: #9f9f9f;
   --factory-lane-line: #1c1c1c;
-  --factory-rail-line: #333333;
+  --factory-rail-line: #333;
 }
 
 .factory-stage-label {
