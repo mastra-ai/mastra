@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 42.0.0-alpha.18
+
+### Patch Changes
+
+- Improved sidebar density and prevented date range timelines from clipping edge labels. ([#19972](https://github.com/mastra-ai/mastra/pull/19972))
+
 ## 42.0.0-alpha.17
 
 ### Patch Changes
