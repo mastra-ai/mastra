@@ -74,7 +74,7 @@ export async function createServerProject({
   const res = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/server/projects`, {
     method: 'POST',
     headers: { ...authHeaders(token, orgId), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, factoryEnabled: true }),
   });
   if (!res.ok) {
     throw new PlatformApiError(res.status, `Failed to create project — ${await extractError(res)}`);
