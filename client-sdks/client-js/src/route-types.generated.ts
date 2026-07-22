@@ -19390,6 +19390,7 @@ export type PostAgentControllerControllerIdSessions_Body = {
         [key: string]: string;
       }
     | undefined;
+  threadId?: string | undefined;
   sessionScope?: string | undefined;
 };
 

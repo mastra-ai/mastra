@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useToast } from '../../../ui';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../../shared/hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../../shared/hooks/useLinearData';
@@ -91,7 +91,6 @@ function SourceCheckbox({
  */
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
-  const { toast } = useToast();
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
@@ -133,8 +132,8 @@ export function IntakeSection() {
 
   const update = (next: IntakeConfig) => {
     saveMutation.mutate(next, {
-      onSuccess: () => toast('Intake sources updated', 'success'),
-      onError: err => toast(err instanceof Error ? err.message : 'Failed to save intake sources', 'error'),
+      onSuccess: () => toast.success('Intake sources updated'),
+      onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save intake sources'),
     });
   };
   const busy = saveMutation.isPending;

@@ -4,7 +4,13 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { classifyServerEntry, expandEnvVars, loadMcpConfig, validateConfig } from '../config.js';
+import {
+  DEFAULT_OAUTH_REDIRECT_URL,
+  classifyServerEntry,
+  expandEnvVars,
+  loadMcpConfig,
+  validateConfig,
+} from '../config.js';
 
 describe('classifyServerEntry', () => {
   it('classifies stdio entry', () => {
@@ -188,6 +194,104 @@ describe('validateConfig', () => {
     });
   });
 
+  it('applies the default loopback redirect URL when oauth.redirectUrl is omitted', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/mcp',
+          oauth: {},
+        },
+      },
+    });
+
+    expect(result.skippedServers).toBeUndefined();
+    expect((result.mcpServers!['remote'] as { oauth?: { redirectUrl: string } }).oauth?.redirectUrl).toBe(
+      DEFAULT_OAUTH_REDIRECT_URL,
+    );
+  });
+
+  it('rejects a non-string oauth.redirectUrl', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/mcp',
+          oauth: { redirectUrl: 42 },
+        },
+      },
+    });
+
+    expect(result.mcpServers).toBeUndefined();
+    expect(result.skippedServers).toEqual([
+      { name: 'remote', reason: 'Invalid OAuth config: "redirectUrl" must be a string' },
+    ]);
+  });
+
+  it('synthesizes a localhost redirect URL from oauth.callbackPort', () => {
+    // Slack's official MCP plugin config uses `clientId` + `callbackPort`
+    // (the Claude Code / Codex convention) — it must paste verbatim.
+    const result = validateConfig({
+      mcpServers: {
+        slack: {
+          url: 'https://mcp.slack.com/mcp',
+          oauth: { clientId: 'slack-client-id', callbackPort: 3118 },
+        },
+      },
+    });
+
+    expect(result.skippedServers).toBeUndefined();
+    expect((result.mcpServers!['slack'] as { oauth?: { redirectUrl: string } }).oauth?.redirectUrl).toBe(
+      'http://localhost:3118/callback',
+    );
+  });
+
+  it('rejects oauth config that sets both redirectUrl and callbackPort', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/mcp',
+          oauth: { redirectUrl: 'http://localhost:3000/oauth/callback', callbackPort: 3118 },
+        },
+      },
+    });
+
+    expect(result.mcpServers).toBeUndefined();
+    expect(result.skippedServers).toEqual([
+      { name: 'remote', reason: 'Invalid OAuth config: set either "redirectUrl" or "callbackPort", not both' },
+    ]);
+  });
+
+  it.each([0, 65536, -1])('rejects an out-of-range oauth.callbackPort: %p', callbackPort => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/mcp',
+          oauth: { callbackPort },
+        },
+      },
+    });
+
+    expect(result.mcpServers).toBeUndefined();
+    expect(result.skippedServers).toEqual([
+      { name: 'remote', reason: 'Invalid OAuth config: "callbackPort" must be an integer between 1 and 65535' },
+    ]);
+  });
+
+  it.each([3118.5, '3118', true])('rejects a non-integer oauth.callbackPort: %p', callbackPort => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/mcp',
+          oauth: { callbackPort },
+        },
+      },
+    });
+
+    expect(result.mcpServers).toBeUndefined();
+    expect(result.skippedServers).toEqual([
+      { name: 'remote', reason: 'Invalid OAuth config: "callbackPort" must be an integer between 1 and 65535' },
+    ]);
+  });
+
   it('accepts loopback IPv6 HTTP OAuth redirect URLs', () => {
     const result = validateConfig({
       mcpServers: {
@@ -255,6 +359,21 @@ describe('validateConfig', () => {
         remote: {
           url: 'https://mcp.example.com/sse',
           oauth: { redirectUrl: 'http://oauth.example.com/callback' },
+        },
+      },
+    });
+
+    expect(result.mcpServers).toBeUndefined();
+    expect(result.skippedServers).toHaveLength(1);
+    expect(result.skippedServers![0]!.reason).toContain('must use HTTPS');
+  });
+
+  it('rejects an HTTP OAuth redirect URL whose host only looks like a loopback address', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/sse',
+          oauth: { redirectUrl: 'http://127.evil.com/callback' },
         },
       },
     });

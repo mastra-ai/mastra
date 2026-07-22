@@ -1,3 +1,4 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -5,7 +6,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { ToastProvider } from '../../../../ui';
 import type { IntakeConfig } from '../../../factory/services/intake';
 import type { LinearProject, LinearStatus } from '../../../factory/services/linear';
 import { IntakeSection } from '../IntakeSection';
@@ -76,9 +76,10 @@ function useIntakeHandlers({
 
 function renderIntakeSection() {
   return renderWithProviders(
-    <ToastProvider>
+    <>
       <IntakeSection />
-    </ToastProvider>,
+      <Toaster position="bottom-right" />
+    </>,
   );
 }
 

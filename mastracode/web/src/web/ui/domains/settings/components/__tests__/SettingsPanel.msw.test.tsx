@@ -1,6 +1,7 @@
-import type { AgentControllerSessionState, PermissionRules } from '@mastra/client-js';
+import type { AgentControllerSessionSettings, AgentControllerSessionState, PermissionRules } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -68,7 +69,16 @@ function sse(): Response {
   });
 }
 
+function isThinkingLevel(value: unknown): value is AgentControllerSessionSettings['thinkingLevel'] {
+  return value === 'off' || value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh';
+}
+
+function isNotificationMode(value: unknown): value is AgentControllerSessionSettings['notifications'] {
+  return value === 'off' || value === 'bell' || value === 'system' || value === 'both';
+}
+
 function useAgentControllerHandlers(): CapturedRequests {
+  let state = sessionState();
   const captured: CapturedRequests = { modelIds: [], stateUpdates: [], permissions: [] };
 
   server.use(
@@ -96,13 +106,37 @@ function useAgentControllerHandlers(): CapturedRequests {
         ],
       }),
     ),
-    http.get(SESSION, () => HttpResponse.json(sessionState())),
+    http.get(SESSION, () => HttpResponse.json(state)),
     http.put(`${SESSION}/state`, async ({ request }) => {
       const body = await request.json();
       if (body && typeof body === 'object' && 'state' in body && body.state && typeof body.state === 'object') {
         captured.stateUpdates.push(body.state);
+        const currentSettings: AgentControllerSessionSettings = state.settings ?? {
+          yolo: false,
+          thinkingLevel: 'medium',
+          notifications: 'bell',
+          smartEditing: true,
+        };
+        state = {
+          ...state,
+          settings: {
+            yolo: 'yolo' in body.state && typeof body.state.yolo === 'boolean' ? body.state.yolo : currentSettings.yolo,
+            thinkingLevel:
+              'thinkingLevel' in body.state && isThinkingLevel(body.state.thinkingLevel)
+                ? body.state.thinkingLevel
+                : currentSettings.thinkingLevel,
+            notifications:
+              'notifications' in body.state && isNotificationMode(body.state.notifications)
+                ? body.state.notifications
+                : currentSettings.notifications,
+            smartEditing:
+              'smartEditing' in body.state && typeof body.state.smartEditing === 'boolean'
+                ? body.state.smartEditing
+                : currentSettings.smartEditing,
+          },
+        };
       }
-      return HttpResponse.json(sessionState());
+      return HttpResponse.json({ ok: true });
     }),
     http.post(`${SESSION}/model`, async ({ request }) => {
       const body = await request.json();
@@ -172,6 +206,7 @@ function Harness({ children }: { children: ReactNode }) {
               <ThemeProbe />
               <SettingsSectionControls />
               {children}
+              <Toaster position="bottom-right" />
             </SettingsNavigationProvider>
           </OverlaysProvider>
         </ChatSessionProvider>
@@ -271,14 +306,34 @@ describe('SettingsPanel', () => {
   });
 
   describe('when changing model preferences', () => {
-    it('updates the thinking level through the chat settings provider', async () => {
+    it('persists the thinking level and updates the selected button', async () => {
       const user = userEvent.setup();
       const captured = renderSettingsPanel();
 
       await user.click(screen.getByRole('button', { name: 'Show model settings' }));
-      await user.click(await screen.findByRole('button', { name: 'High' }));
+      const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
+      await waitFor(() => expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).toBePressed());
+      await user.click(within(thinkingLevel).getByRole('button', { name: 'High' }));
 
       await waitFor(() => expect(captured.stateUpdates).toContainEqual({ thinkingLevel: 'high' }));
+      await waitFor(() => expect(within(thinkingLevel).getByRole('button', { name: 'High' })).toBePressed());
+      expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).not.toBePressed();
+      expect(await screen.findByText('Settings updated')).toBeInTheDocument();
+    });
+
+    it('reports an acknowledged but unpersisted update and restores the selected button', async () => {
+      const user = userEvent.setup();
+      renderSettingsPanel();
+
+      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
+      const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
+      await waitFor(() => expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).toBePressed());
+      server.use(http.put(`${SESSION}/state`, () => HttpResponse.json({ ok: true })));
+      await user.click(within(thinkingLevel).getByRole('button', { name: 'High' }));
+
+      expect(await screen.findByText(/Failed to update settings/)).toBeInTheDocument();
+      expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).toBePressed();
+      expect(within(thinkingLevel).getByRole('button', { name: 'High' })).not.toBePressed();
     });
 
     it('hosts model packs inside the Model settings section', async () => {

@@ -29,6 +29,10 @@ export interface McpSelectorOptions {
   onReloadAll: () => Promise<{ statuses: McpServerStatus[]; skipped: McpSkippedServer[] }>;
   /** Callback to reconnect a single server by name — returns updated status */
   onReconnectServer: (name: string) => Promise<McpServerStatus>;
+  /** Callback to run the OAuth flow for a single server by name — returns updated status */
+  onAuthenticateServer: (name: string) => Promise<McpServerStatus>;
+  /** Callback to cancel a pending OAuth flow for a server by name — resolves true if one was cancelled */
+  onCancelAuthenticateServer: (name: string) => Promise<boolean>;
   /** Get captured stderr logs for a server */
   getServerLogs: (name: string) => string[];
   /** Show an info message in the chat area */
@@ -58,7 +62,16 @@ const FAILED_ACTIONS: ServerAction[] = [
   { label: 'Reconnect', key: 'reconnect' },
 ];
 
+const NEEDS_AUTH_ACTIONS: ServerAction[] = [
+  { label: 'Authenticate', key: 'authenticate' },
+  { label: 'View error', key: 'error' },
+  { label: 'View logs', key: 'logs' },
+  { label: 'Reconnect', key: 'reconnect' },
+];
+
 const CONNECTING_ACTIONS: ServerAction[] = [{ label: 'Waiting for connection...', key: 'none' }];
+
+const AUTHENTICATING_ACTIONS: ServerAction[] = [{ label: 'Cancel authentication', key: 'cancel-authenticate' }];
 
 // =============================================================================
 // McpSelectorComponent
@@ -72,6 +85,8 @@ export class McpSelectorComponent extends Box implements Focusable {
   private getStatusesCallback: McpSelectorOptions['getStatuses'];
   private onReloadAllCallback: McpSelectorOptions['onReloadAll'];
   private onReconnectServerCallback: McpSelectorOptions['onReconnectServer'];
+  private onAuthenticateServerCallback: McpSelectorOptions['onAuthenticateServer'];
+  private onCancelAuthenticateServerCallback: McpSelectorOptions['onCancelAuthenticateServer'];
   private getServerLogsCallback: McpSelectorOptions['getServerLogs'];
   private showInfoCallback: McpSelectorOptions['showInfo'];
   private onCloseCallback: () => void;
@@ -88,6 +103,15 @@ export class McpSelectorComponent extends Box implements Focusable {
 
   // Loading state during reload
   private _reloading = false;
+
+  // Names of servers with an in-flight OAuth flow (so their sub-menu offers a
+  // cancel path while they show as connecting).
+  private _authenticating = new Set<string>();
+
+  // Names of servers the user is actively cancelling. The authenticate flow
+  // resolves with a failed status when cancelled, so we track this to suppress
+  // the misleading "Failed to authenticate" toast on a deliberate cancel.
+  private _cancelling = new Set<string>();
 
   // Focusable implementation
   private _focused = false;
@@ -107,6 +131,8 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.getStatusesCallback = options.getStatuses;
     this.onReloadAllCallback = options.onReloadAll;
     this.onReconnectServerCallback = options.onReconnectServer;
+    this.onAuthenticateServerCallback = options.onAuthenticateServer;
+    this.onCancelAuthenticateServerCallback = options.onCancelAuthenticateServer;
     this.getServerLogsCallback = options.getServerLogs;
     this.showInfoCallback = options.showInfo;
     this.onCloseCallback = options.onClose;
@@ -159,12 +185,23 @@ export class McpSelectorComponent extends Box implements Focusable {
       if (this._reloading) {
         icon = theme.fg('warning', '⟳');
         stateText = theme.fg('warning', 'reconnecting...');
+      } else if (this.isAuthenticating(status)) {
+        // A flow is in flight for this server. This is authoritative even if a
+        // polled status refresh from the manager no longer reports `connecting`,
+        // so the "Enter to cancel" affordance never disappears mid-flow. The
+        // manager-owned `authenticating` flag also survives close/reopen of the
+        // selector, when the local set has been discarded with the old instance.
+        icon = theme.fg('warning', '⟳');
+        stateText = theme.fg('warning', 'authenticating — Enter to cancel');
       } else if (status.connecting) {
         icon = theme.fg('warning', '⟳');
         stateText = theme.fg('warning', 'connecting...');
       } else if (status.connected) {
         icon = theme.fg('success', '✔');
         stateText = theme.fg('success', 'connected');
+      } else if (status.needsAuth) {
+        icon = theme.fg('warning', '⚠');
+        stateText = theme.fg('warning', 'needs auth');
       } else {
         icon = theme.fg('error', '✗');
         stateText = theme.fg('error', 'failed');
@@ -216,10 +253,22 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.tui.requestRender();
   }
 
+  /**
+   * Whether an OAuth flow is in flight for this server. True if either the local
+   * set (this selector instance started the flow) or the manager-owned status
+   * flag (survives close/reopen) says so.
+   */
+  private isAuthenticating(status: McpServerStatus): boolean {
+    return status.authenticating === true || this._authenticating.has(status.name);
+  }
+
+  private isBusy(): boolean {
+    return this.statuses.some(s => s.connecting || this.isAuthenticating(s)) || this._authenticating.size > 0;
+  }
+
   private startPollingIfNeeded(): void {
     if (this.pollTimer) return;
-    const hasConnecting = this.statuses.some(s => s.connecting);
-    if (!hasConnecting) return;
+    if (!this.isBusy()) return;
 
     this.pollTimer = setInterval(() => {
       // Don't refresh while in a detail view or mid-reload
@@ -237,8 +286,8 @@ export class McpSelectorComponent extends Box implements Focusable {
 
       this.updateList();
 
-      // Stop polling when nothing is connecting anymore
-      if (!this.statuses.some(s => s.connecting)) {
+      // Stop polling only when nothing is connecting and no auth flow is pending
+      if (!this.isBusy()) {
         this.stopPolling();
       }
     }, 500);
@@ -316,10 +365,17 @@ export class McpSelectorComponent extends Box implements Focusable {
     const status = this.statuses[this.selectedIndex];
     if (!status) return;
 
-    if (status.connecting) {
+    if (this.isAuthenticating(status)) {
+      // A server mid-OAuth shows a cancel path (the user may have closed the
+      // browser). Authoritative even if a polled refresh cleared `connecting`,
+      // and after a close/reopen via the manager-owned status flag.
+      this.subMenuActions = AUTHENTICATING_ACTIONS;
+    } else if (status.connecting) {
       this.subMenuActions = CONNECTING_ACTIONS;
     } else if (status.connected) {
       this.subMenuActions = CONNECTED_ACTIONS;
+    } else if (status.needsAuth) {
+      this.subMenuActions = NEEDS_AUTH_ACTIONS;
     } else {
       this.subMenuActions = FAILED_ACTIONS;
     }
@@ -378,6 +434,16 @@ export class McpSelectorComponent extends Box implements Focusable {
         this.doReconnectServer(status);
         break;
       }
+      case 'authenticate': {
+        this.subMenuOpen = false;
+        this.doAuthenticateServer(status);
+        break;
+      }
+      case 'cancel-authenticate': {
+        this.subMenuOpen = false;
+        this.doCancelAuthentication(status);
+        break;
+      }
     }
   }
 
@@ -389,6 +455,15 @@ export class McpSelectorComponent extends Box implements Focusable {
       .then((result: { statuses: McpServerStatus[]; skipped: McpSkippedServer[] }) => {
         this.statuses = result.statuses;
         this.skipped = result.skipped;
+        // Reload disconnects the client, which cancels any pending auth flow
+        // server-side. Drop authenticating markers for servers that no longer
+        // exist so isBusy() can settle and polling can stop.
+        const liveNames = new Set(result.statuses.map(s => s.name));
+        for (const name of this._authenticating) {
+          if (!liveNames.has(name)) this._authenticating.delete(name);
+        }
+        // Reload aborts every pending flow, so no cancel is still resolving.
+        this._cancelling.clear();
         // Clamp selected index in case server count changed
         const total = this.getTotalItems();
         if (this.selectedIndex >= total) {
@@ -398,7 +473,11 @@ export class McpSelectorComponent extends Box implements Focusable {
         const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
         this.showInfoCallback(`MCP: Reloaded. ${connected.length} server(s) connected, ${totalTools} tool(s).`);
         for (const s of result.statuses.filter(s => !s.connected)) {
-          this.showInfoCallback(`MCP: Failed to connect to "${s.name}": ${s.error ?? 'Unknown error'}`);
+          if (s.needsAuth) {
+            this.showInfoCallback(`MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
+          } else {
+            this.showInfoCallback(`MCP: Failed to connect to "${s.name}": ${s.error ?? 'Unknown error'}`);
+          }
         }
       })
       .catch(() => {
@@ -463,6 +542,114 @@ export class McpSelectorComponent extends Box implements Focusable {
         if (!this._reloading) {
           this.updateList();
         }
+      });
+  }
+
+  private doAuthenticateServer(status: McpServerStatus): void {
+    if (status.connecting) return;
+    const name = status.name;
+
+    // Mark this server as connecting while the OAuth flow runs
+    const idx = this.statuses.findIndex(s => s.name === name);
+    if (idx >= 0) {
+      this.statuses[idx] = {
+        name,
+        connected: false,
+        connecting: true,
+        toolCount: 0,
+        toolNames: [],
+        transport: status.transport,
+      };
+    }
+    this._authenticating.add(name);
+    // Surface the cancel path immediately: keep this server selected and open
+    // its sub-menu with "Cancel authentication" pre-selected, so a user who
+    // abandons the browser sign-in can just press Enter to back out.
+    if (idx >= 0) {
+      this.selectedIndex = idx;
+    }
+    this.openSubMenu();
+    this.startPollingIfNeeded();
+    this.showInfoCallback(`MCP: Authenticating "${name}" — complete the sign-in in your browser.`);
+
+    this.onAuthenticateServerCallback(name)
+      .then((updated: McpServerStatus) => {
+        // If a reload-all started, ignore stale authenticate results
+        if (this._reloading) return;
+        const i = this.statuses.findIndex(s => s.name === name);
+        if (i >= 0) {
+          this.statuses[i] = updated;
+        }
+        if (updated.connected) {
+          this.showInfoCallback(`MCP: Authenticated "${name}" — ${updated.toolCount} tool(s)`);
+        } else if (!updated.cancelled && !this._cancelling.has(name)) {
+          // A deliberate cancel also resolves with a failed status; the manager
+          // marks it `cancelled` (which survives a reopened selector) and the
+          // cancel path already messaged the user, so don't stack a "Failed" toast.
+          this.showInfoCallback(`MCP: Failed to authenticate "${name}": ${updated.error ?? 'Unknown error'}`);
+        }
+      })
+      .catch((err: unknown) => {
+        if (this._reloading) return;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const i = this.statuses.findIndex(s => s.name === name);
+        if (i >= 0) {
+          this.statuses[i] = {
+            name,
+            connected: false,
+            connecting: false,
+            toolCount: 0,
+            toolNames: [],
+            transport: status.transport,
+            error: errMsg,
+            needsAuth: true,
+          };
+        }
+        // A rejection carries no status object, so we can't read the durable
+        // `cancelled` flag here; fall back to the local set, which is populated
+        // for the same-instance cancel that produced this rejection.
+        if (!this._cancelling.has(name)) {
+          this.showInfoCallback(`MCP: Failed to authenticate "${name}": ${errMsg}`);
+        }
+      })
+      .finally(() => {
+        this._authenticating.delete(name);
+        this._cancelling.delete(name);
+        // The auth flow has ended (connected, failed, or cancelled). Close the
+        // auto-opened cancel sub-menu so the row shows its resolved state — but
+        // only if the user is still looking at *this* server's sub-menu, so we
+        // don't yank shut a different server's menu they navigated to meanwhile.
+        if (this.subMenuOpen && this.statuses[this.selectedIndex]?.name === name) {
+          this.subMenuOpen = false;
+        }
+        if (!this._reloading) {
+          this.updateList();
+        }
+      });
+  }
+
+  private doCancelAuthentication(status: McpServerStatus): void {
+    const name = status.name;
+    // Nothing to cancel unless a flow is actually in flight for this server.
+    // Accept the manager-owned flag too, so a reopened selector (whose local
+    // set was discarded with the previous instance) can still cancel.
+    if (!this.isAuthenticating(status)) return;
+
+    // Mark the cancel so the pending authenticate flow suppresses its "Failed"
+    // toast, then repaint immediately so the row reflects the cancelling state
+    // instead of waiting for the authenticate promise to settle.
+    this._cancelling.add(name);
+    this.showInfoCallback(`MCP: Cancelling authentication for "${name}"...`);
+    this.updateList();
+    this.onCancelAuthenticateServerCallback(name)
+      .then((cancelled: boolean) => {
+        if (cancelled) {
+          this.showInfoCallback(`MCP: Cancelled authentication for "${name}".`);
+        }
+      })
+      .catch(() => {
+        // The pending authenticate flow's own rejection handler restores the
+        // server's needs-auth status; a failed cancel needs no extra message.
       });
   }
 
