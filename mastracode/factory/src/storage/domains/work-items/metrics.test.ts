@@ -5,7 +5,7 @@ import { computeFactoryMetrics, parseMetricsRange } from './metrics.js';
 
 /** Fixed "now" so every duration in the specs is deterministic. */
 const NOW = new Date('2026-07-15T12:00:00.000Z');
-/** Exclusive end of NOW's UTC day — the upper bound for open/future windows. */
+/** Exclusive end of NOW's UTC day. */
 const END_OF_TODAY = Date.parse('2026-07-16T00:00:00.000Z');
 
 const HOUR = 3_600_000;

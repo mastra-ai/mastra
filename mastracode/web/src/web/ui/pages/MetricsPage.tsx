@@ -82,8 +82,7 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
   const metrics = metricsQuery.data;
   const windowDays = inclusiveRangeDays(range);
 
-  // Keep the current request inside the rendered domain. Once the user moves
-  // the range, the real creation date becomes the natural lower bound.
+  // Keep the selected range inside the domain until the board's earliest item is known.
   const earliestDay = metrics?.earliestItemAt
     ? metrics.earliestItemAt.slice(0, 10)
     : shiftUtcDay(today, -(EMPTY_BOARD_LOOKBACK_DAYS - 1));
