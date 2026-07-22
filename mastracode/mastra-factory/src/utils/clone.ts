@@ -19,6 +19,18 @@ export function toPackageName(name: string): string {
   return cleaned || 'software-factory';
 }
 
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function directoryExists(dirPath: string): Promise<boolean> {
   try {
     const stat = await fs.stat(dirPath);
@@ -28,10 +40,11 @@ async function directoryExists(dirPath: string): Promise<boolean> {
   }
 }
 
-export async function cloneTemplate(
-  repoUrl: string,
-  targetPath: string,
-): Promise<void> {
+export async function cloneTemplate(repoUrl: string, targetPath: string): Promise<void> {
+  if (await pathExists(targetPath)) {
+    throw new Error(`Directory ${path.basename(targetPath)} already exists`);
+  }
+
   try {
     // First try using degit if available
     const degitRepo = repoUrl.replace('https://github.com/', '');
@@ -39,7 +52,7 @@ export async function cloneTemplate(
     await x('npx', ['degit', degitRepo, targetPath], {
       nodeOptions: {
         cwd: process.cwd(),
-      }
+      },
     });
 
     if ((await fs.readdir(targetPath)).length === 0) {
@@ -57,7 +70,7 @@ export async function cloneTemplate(
       await x('git', gitArgs, {
         nodeOptions: {
           cwd: process.cwd(),
-        }
+        },
       });
 
       // Remove .git directory

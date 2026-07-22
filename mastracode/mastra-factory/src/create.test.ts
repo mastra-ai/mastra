@@ -114,6 +114,22 @@ describe('create', () => {
     expect(clack.note).not.toHaveBeenCalled();
   });
 
+  it('preserves an existing project directory passed as an argument', async () => {
+    const projectPath = path.join(workDir, 'existing-factory');
+    const markerPath = path.join(projectPath, 'keep.txt');
+    fs.mkdirSync(projectPath);
+    fs.writeFileSync(markerPath, 'keep me');
+    tinyexec.x.mockRejectedValue(new Error('remote unreachable'));
+
+    await expect(create({ projectName: 'existing-factory', template: TEMPLATE_REPO, analytics })).rejects.toThrow(
+      /Directory existing-factory already exists/,
+    );
+
+    expect(fs.readFileSync(markerPath, 'utf8')).toBe('keep me');
+    expect(tinyexec.x).not.toHaveBeenCalled();
+    expect(clack.note).not.toHaveBeenCalled();
+  });
+
   it('fails the run when dependency install fails, without showing next steps', async () => {
     tinyexec.x.mockImplementation(async (command: string, args: string[]) => {
       if (command === 'npx' && args[0] === 'degit') {
