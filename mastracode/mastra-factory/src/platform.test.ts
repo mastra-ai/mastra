@@ -114,6 +114,52 @@ describe('waitForDatabaseReady', () => {
     expect(cliAuth.platformFetch.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('aborts a hung in-flight poll once the overall timeout is reached', async () => {
+    // Fetch never resolves on its own — it only settles when its signal
+    // aborts. This models a stalled platform request that would otherwise
+    // exceed timeoutMs indefinitely without the per-request AbortSignal.
+    cliAuth.platformFetch.mockImplementation(async (_input: unknown, init?: RequestInit) => {
+      return await new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (!signal) {
+          reject(new Error('test expected a signal on the first hung fetch'));
+          return;
+        }
+        signal.addEventListener('abort', () => {
+          const reason = signal.reason;
+          // AbortSignal.timeout() rejects with a TimeoutError DOMException.
+          reject(reason instanceof Error ? reason : new Error('aborted'));
+        });
+      });
+    });
+
+    vi.useFakeTimers();
+    const promise = waitForDatabaseReady({
+      token: 'wos-token',
+      orgId: 'org_123',
+      projectId: 'proj_1',
+      databaseId: 'db_1',
+      intervalMs: 100,
+      timeoutMs: 500,
+    });
+    const caught: Promise<unknown> = promise.catch((err: unknown) => err);
+
+    // The first poll starts at t=0 with a 500ms AbortSignal.timeout — no
+    // subsequent poll ever runs because the fetch hangs. Advance past the
+    // deadline to trip the per-request abort.
+    await vi.advanceTimersByTimeAsync(600);
+
+    const err = await caught;
+    expect(err).toBeInstanceOf(PlatformApiError);
+    expect((err as PlatformApiError).status).toBe(504);
+    // Uses the same "still <status>" wording as the natural-deadline path;
+    // status defaults to `provisioning` because the first poll never returned.
+    expect((err as PlatformApiError).message).toMatch(/still provisioning after \d+s/);
+    // Only one fetch was ever issued — proves we bounded the hung request
+    // rather than waiting on the next sleep tick.
+    expect(cliAuth.platformFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('fails fast when the platform reports status=failed', async () => {
     cliAuth.platformFetch.mockImplementationOnce(
       async () =>

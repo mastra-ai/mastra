@@ -155,15 +155,17 @@ export async function getDatabaseStatus({
   orgId,
   projectId,
   databaseId,
+  signal,
 }: {
   token: string;
   orgId: string;
   projectId: string;
   databaseId: string;
+  signal?: AbortSignal;
 }): Promise<AttachedDatabase> {
   const res = await platformFetch(
     `${MASTRA_PLATFORM_API_URL}/v1/server/projects/${encodeURIComponent(projectId)}/databases/${encodeURIComponent(databaseId)}`,
-    { headers: authHeaders(token, orgId) },
+    { headers: authHeaders(token, orgId), signal },
   );
   if (!res.ok) {
     throw new PlatformApiError(res.status, `Failed to read database status — ${await extractError(res)}`);
@@ -197,6 +199,11 @@ export async function getDatabaseConnection({
 /**
  * Poll `getDatabaseStatus` until the database is `ready`.
  *
+ * Each poll is bounded by the *remaining* overall budget via a per-request
+ * `AbortSignal`, so a hung `platformFetch` can't blow past `timeoutMs`. When
+ * an outer `signal` is supplied it composes with the per-request timeout —
+ * whichever fires first aborts the in-flight request.
+ *
  * @param intervalMs how often to poll (default 2s)
  * @param timeoutMs total budget (default 60s)
  */
@@ -218,21 +225,55 @@ export async function waitForDatabaseReady({
   signal?: AbortSignal;
 }): Promise<AttachedDatabase> {
   const deadline = Date.now() + timeoutMs;
+  let lastStatus = 'provisioning';
+  const timeoutError = () =>
+    new PlatformApiError(
+      504,
+      `Neon database is still ${lastStatus} after ${Math.round(timeoutMs / 1000)}s. Check the dashboard or retry \`mastra login\` + re-run.`,
+    );
   while (true) {
     signal?.throwIfAborted();
-    const row = await getDatabaseStatus({ token, orgId, projectId, databaseId });
+    // Bound each poll by whatever remains of the overall budget so a stuck
+    // fetch can't exceed `timeoutMs`.
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw timeoutError();
+    const perRequestSignal = composeSignals(signal, AbortSignal.timeout(remaining));
+    let row: AttachedDatabase;
+    try {
+      row = await getDatabaseStatus({ token, orgId, projectId, databaseId, signal: perRequestSignal });
+    } catch (err) {
+      // Reshape the per-request timeout as the same 504 the deadline branch
+      // raises; other errors (network, 5xx) bubble up unchanged.
+      if (err instanceof DOMException && err.name === 'TimeoutError') throw timeoutError();
+      throw err;
+    }
+    lastStatus = row.status;
     if (row.status === 'ready') return row;
     if (row.status === 'failed') {
       throw new PlatformApiError(500, `Neon provisioning failed${row.error ? ` — ${row.error}` : ''}`);
     }
-    if (Date.now() >= deadline) {
-      throw new PlatformApiError(
-        504,
-        `Neon database is still ${row.status} after ${Math.round(timeoutMs / 1000)}s. Check the dashboard or retry \`mastra login\` + re-run.`,
-      );
-    }
+    if (Date.now() >= deadline) throw timeoutError();
     await new Promise(resolve => setTimeout(resolve, intervalMs));
   }
+}
+
+/**
+ * Compose an outer AbortSignal with a per-request timeout signal. Uses
+ * `AbortSignal.any` where available (Node ≥20.3); falls back to a manual
+ * proxy for older runtimes.
+ */
+function composeSignals(outer: AbortSignal | undefined, inner: AbortSignal): AbortSignal {
+  if (!outer) return inner;
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([outer, inner]);
+  }
+  const controller = new AbortController();
+  const abort = (reason: unknown) => controller.abort(reason);
+  if (outer.aborted) abort(outer.reason);
+  else outer.addEventListener('abort', () => abort(outer.reason), { once: true });
+  if (inner.aborted) abort(inner.reason);
+  else inner.addEventListener('abort', () => abort(inner.reason), { once: true });
+  return controller.signal;
 }
 
 export { PlatformApiError };

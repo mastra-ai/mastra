@@ -304,3 +304,49 @@ describe('create --default (platform provisioning)', () => {
     expect(platform.createServerProject).not.toHaveBeenCalled();
   });
 });
+
+describe('create — .env safety before git commit', () => {
+  it('adds .env to .gitignore before the initial commit so platform secrets are never staged', async () => {
+    // Template ships no .gitignore of its own.
+    await create({ projectName: 'my-factory', useDefaults: true, templateDir, analytics });
+
+    const projectPath = path.join(workDir, 'my-factory');
+    const gitignore = fs.readFileSync(path.join(projectPath, '.gitignore'), 'utf8');
+    expect(gitignore).toMatch(/^\.env$/m);
+
+    // Ordering matters: `git add -A` runs AFTER we mutate .gitignore. Otherwise
+    // the freshly-provisioned MASTRA_PLATFORM_SECRET_KEY / DATABASE_URL would
+    // land in the initial commit.
+    const runCalls = exec.runInherit.mock.calls as Array<[string, string[]]>;
+    const gitAddIndex = runCalls.findIndex(call => call[0] === 'git' && call[1][0] === 'add');
+    expect(gitAddIndex).toBeGreaterThanOrEqual(0);
+    // Sanity: gitignore has the .env line at commit time (we already asserted
+    // the file contents above, and no subsequent write happens between the
+    // .gitignore edit and `git add -A`).
+    expect(fs.readFileSync(path.join(projectPath, '.gitignore'), 'utf8')).toMatch(/^\.env$/m);
+  });
+
+  it('leaves an existing .gitignore alone when .env is already covered', async () => {
+    // Fixture template with a .gitignore that already ignores .env via glob.
+    const existing = 'node_modules\n.env*\ndist\n';
+    fs.writeFileSync(path.join(templateDir, '.gitignore'), existing);
+
+    await create({ projectName: 'my-factory', useDefaults: true, templateDir, analytics });
+
+    const gitignore = fs.readFileSync(path.join(workDir, 'my-factory', '.gitignore'), 'utf8');
+    // Content unchanged — no duplicate `.env` appended.
+    expect(gitignore).toBe(existing);
+  });
+
+  it('preserves existing .gitignore entries and appends .env when missing', async () => {
+    const existing = 'node_modules\ndist\n';
+    fs.writeFileSync(path.join(templateDir, '.gitignore'), existing);
+
+    await create({ projectName: 'my-factory', useDefaults: true, templateDir, analytics });
+
+    const gitignore = fs.readFileSync(path.join(workDir, 'my-factory', '.gitignore'), 'utf8');
+    expect(gitignore).toContain('node_modules');
+    expect(gitignore).toContain('dist');
+    expect(gitignore).toMatch(/^\.env$/m);
+  });
+});

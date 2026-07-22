@@ -139,6 +139,10 @@ export async function create(args: CreateArgs): Promise<void> {
   }
 
   // ── Git init ─────────────────────────────────────────────────────────────
+  // Ensure `.env` is ignored before staging so the platform secrets we just
+  // wrote (MASTRA_PLATFORM_SECRET_KEY, DATABASE_URL) never enter git history.
+  // Idempotent: only appends if the pattern isn't already covered.
+  ensureEnvGitignored(projectPath);
   try {
     await runInherit('git', ['init', '-q'], { cwd: projectPath });
     await runInherit('git', ['add', '-A'], { cwd: projectPath });
@@ -337,4 +341,36 @@ function sanitizeDatabaseName(projectName: string): string {
 function cancel(): void {
   p.cancel('Cancelled.');
   process.exitCode = 1;
+}
+
+/**
+ * Append `.env` to the scaffolded project's `.gitignore` if it isn't already
+ * ignored. Runs before the initial `git add -A` so freshly-provisioned platform
+ * credentials (MASTRA_PLATFORM_SECRET_KEY, DATABASE_URL) never reach the
+ * initial commit. Best-effort: filesystem errors are swallowed rather than
+ * blocking scaffold, but the pre-commit safeguard is the primary reason we do
+ * this rather than relying on the template's `.gitignore`.
+ */
+function ensureEnvGitignored(projectPath: string): void {
+  const gitignorePath = path.join(projectPath, '.gitignore');
+  try {
+    const existing = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : '';
+    const lines = existing.split(/\r?\n/).map(line => line.trim());
+    // Consider `.env` covered if any bare-.env or `.env*` glob line is present
+    // (ignoring commented-out lines).
+    const covered = lines.some(line => {
+      if (!line || line.startsWith('#')) return false;
+      return line === '.env' || line === '.env*' || line === '/.env' || line === '/.env*';
+    });
+    if (covered) return;
+    const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+    fs.writeFileSync(
+      gitignorePath,
+      `${existing}${prefix}\n# Added by create-factory to protect platform credentials\n.env\n`,
+    );
+  } catch {
+    // Non-fatal — worst case the user needs to add `.env` to `.gitignore`
+    // themselves. The bigger risk (committing secrets) is bounded by the fact
+    // that this only runs after platform provisioning succeeds.
+  }
 }
