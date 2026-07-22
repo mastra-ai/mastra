@@ -17,54 +17,22 @@ import { SignInPage } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
-import { useActiveFactory } from '../../shared/hooks/useActiveFactory';
-import { useWorkItemsQuery } from '../../shared/hooks/useWorkItems';
-import { isServerFactory } from './domains/workspaces/services/factories';
+
 import { AuditPage } from './domains/factory/AuditPage';
 import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
 import { OverviewPage } from './domains/factory/OverviewPage';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { OnboardingPage } from './pages/OnboardingPage';
-
-/**
- * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
- * of a blank screen on deep links / refreshes.
- */
-function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
-  return (
-    <div role="status" aria-label={label} className="flex h-dvh w-full items-center justify-center bg-surface1">
-      <div className="flex w-64 flex-col gap-3">
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-4 w-1/2" />
-      </div>
-    </div>
-  );
-}
+import { useActiveFactoryContext } from './domains/workspaces';
 
 function RootLanding() {
-  const { activeFactory, factoriesPending } = useActiveFactory();
+  const { activeFactory } = useActiveFactoryContext();
 
-  const factoryProjectId =
-    activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
+  // RootGuards is fetching and guarding stuff
+  if (!activeFactory) return null;
 
-  const workItems = useWorkItemsQuery(factoryProjectId);
-
-  if (factoriesPending || (factoryProjectId && workItems.isPending)) {
-    return <AuthPendingSkeleton label="Loading Factory board" />;
-  }
-
-  if (factoryProjectId && workItems.isError) {
-    return (
-      <div className="flex h-dvh w-full items-center justify-center bg-surface1 p-4">
-        <Notice variant="destructive">
-          {workItems.error instanceof Error ? workItems.error.message : 'Failed to load Factory work'}
-        </Notice>
-      </div>
-    );
-  }
-  return <Navigate to={factoryProjectId && (workItems.data?.length ?? 0) > 0 ? '/factory/board' : '/new'} replace />;
+  return <Navigate to={'/factory/board'} replace />;
 }
 
 function RedirectToDraftThread() {

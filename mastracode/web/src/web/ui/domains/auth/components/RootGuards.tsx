@@ -11,7 +11,6 @@ export const RootGuards = () => {
 const AuthGuard = () => {
   const auth = useWebAuth();
 
-  console.log('auth', auth.isPending);
   if (auth.isPending) return <AuthPendingSkeleton />;
 
   // Local factory situation
@@ -30,8 +29,6 @@ const OnboardingGuard = () => {
   const { activeFactory, factoriesPending, factories } = useActiveFactoryContext();
   const { isActivatingInitialFactory } = useSetInitialFactoryWhenNoActive();
 
-  console.log('onboarding', { isActivatingInitialFactory, factoriesPending });
-
   if (isActivatingInitialFactory) return <AuthPendingSkeleton />;
   if (factoriesPending) return <AuthPendingSkeleton />;
   if (factories.length === 0) return <Navigate to="/onboarding" replace />;
@@ -40,7 +37,7 @@ const OnboardingGuard = () => {
   return <Outlet />;
 };
 
-function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
+export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
   return (
     <div role="status" aria-label={label} className="flex h-dvh w-full items-center justify-center bg-surface1">
       <div className="flex w-64 flex-col gap-3">

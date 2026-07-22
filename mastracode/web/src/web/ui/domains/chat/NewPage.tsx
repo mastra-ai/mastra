@@ -10,27 +10,17 @@ import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
 import { useChatTranscript } from './context/useChatTranscript';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ChatSessionBoundary } from './context/ChatSessionProvider';
+import { FactoryPageShell } from '../factory/components/FactoryPageShell';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
-  const { factoriesPending, activeFactory } = useActiveFactoryContext();
-
-  if (factoriesPending) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
-  }
-
-  if (!activeFactory) return <div>No active factory</div>;
-
   return (
     <ChatSessionBoundary>
-      <NewPageContent activeFactory={activeFactory} />
+      <FactoryPageShell title="New thread" description="Create a new factory">
+        {factory => <NewPageContent activeFactory={factory} />}
+      </FactoryPageShell>
     </ChatSessionBoundary>
   );
 }
