@@ -65,12 +65,18 @@ describe('createBackgroundWorkSignalProcessor', () => {
       [BACKGROUND_WORK_CONTEXT]: {
         originRunId: 'run-1',
         originToolCallId: 'call-1',
+        taskId: 'task-1',
         invocationKind: 'tool',
         disposition: 'deferred',
       },
     } as any);
 
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tagName: 'work-deferred',
+        metadata: expect.objectContaining({ taskId: 'task-1', status: 'running' }),
+      }),
+    );
 
     const payload = {
       originRunId: 'run-1',
@@ -83,12 +89,43 @@ describe('createBackgroundWorkSignalProcessor', () => {
     await notifyBackgroundWorkTerminal(mastra, payload);
     await notifyBackgroundWorkTerminal(mastra, payload);
 
-    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledTimes(2);
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'notification',
         tagName: 'work-completed',
         metadata: payload,
+      }),
+    );
+    mastra.__releaseRunScope('run-1');
+  });
+
+  it('emits work-awaited when an eligible call selects awaited execution', async () => {
+    const sendSignal = vi.fn(async signal => ({ ...signal, __isCreatedSignal: true }));
+    const tool = createTool({ id: 'lookup', description: 'lookup', execute: async () => 'result' });
+    const processor = createBackgroundWorkSignalProcessor();
+    const mastra = new Mastra();
+    mastra.__createRunScope('run-1');
+
+    const processed = (await processor.processInputStep!(
+      createProcessorArgs({ mastra, sendSignal, tools: { lookup: tool } }),
+    )) as any;
+    await (processed.tools!.lookup as typeof tool).execute!({}, {
+      mastra,
+      toolCallId: 'call-1',
+      [BACKGROUND_WORK_CONTEXT]: {
+        originRunId: 'run-1',
+        originToolCallId: 'call-1',
+        taskId: 'task-1',
+        invocationKind: 'tool',
+        disposition: 'awaited',
+      },
+    } as any);
+
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tagName: 'work-awaited',
+        metadata: expect.objectContaining({ disposition: 'awaited', status: 'running' }),
       }),
     );
     mastra.__releaseRunScope('run-1');
@@ -110,6 +147,7 @@ describe('createBackgroundWorkSignalProcessor', () => {
       [BACKGROUND_WORK_CONTEXT]: {
         originRunId: 'run-1',
         originToolCallId: 'call-1',
+        taskId: 'task-1',
         invocationKind: 'tool',
         disposition: 'deferred',
       },
@@ -125,7 +163,8 @@ describe('createBackgroundWorkSignalProcessor', () => {
       status: 'completed',
     });
 
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal).not.toHaveBeenCalledWith(expect.objectContaining({ tagName: 'work-completed' }));
     expect(mastra.__getRunScope('run-1')).toBeUndefined();
   });
 
@@ -145,6 +184,7 @@ describe('createBackgroundWorkSignalProcessor', () => {
       [BACKGROUND_WORK_CONTEXT]: {
         originRunId: 'run-1',
         originToolCallId: 'call-1',
+        taskId: 'task-1',
         invocationKind: 'tool',
         disposition: 'deferred',
       },
@@ -161,7 +201,8 @@ describe('createBackgroundWorkSignalProcessor', () => {
     await notifyBackgroundWorkTerminal(mastra, payload);
     await notifyBackgroundWorkTerminal(mastra, payload);
 
-    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect(sendSignal.mock.calls.filter(([signal]) => signal.tagName === 'work-failed')).toHaveLength(1);
     mastra.__releaseRunScope('run-1');
   });
 });

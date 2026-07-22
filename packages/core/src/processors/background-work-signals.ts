@@ -7,7 +7,8 @@ import type { Processor } from './index';
 
 export type BackgroundWorkDisposition = 'deferred' | 'awaited';
 export type BackgroundWorkInvocationKind = 'tool' | 'agent';
-export type BackgroundWorkTerminalStatus = 'completed' | 'failed' | 'cancelled';
+export type BackgroundWorkLifecycleStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+export type BackgroundWorkTerminalStatus = Exclude<BackgroundWorkLifecycleStatus, 'running'>;
 
 export interface BackgroundWorkLifecyclePayload {
   originRunId: string;
@@ -16,7 +17,7 @@ export interface BackgroundWorkLifecyclePayload {
   taskId: string;
   invocationKind: BackgroundWorkInvocationKind;
   disposition: BackgroundWorkDisposition;
-  status: BackgroundWorkTerminalStatus;
+  status: BackgroundWorkLifecycleStatus;
 }
 
 type SendSignal = (signal: AgentSignalInput) => Promise<CreatedAgentSignal>;
@@ -41,6 +42,7 @@ export const BACKGROUND_WORK_CONTEXT = Symbol('mastra.backgroundWorkContext');
 export interface BackgroundWorkContext {
   originRunId: string;
   originToolCallId: string;
+  taskId: string;
   invocationKind: BackgroundWorkInvocationKind;
   disposition: BackgroundWorkDisposition;
 }
@@ -51,7 +53,10 @@ type BackgroundWorkExecutionContext = {
   [BACKGROUND_WORK_CONTEXT]?: BackgroundWorkContext;
 };
 
-function registerBackgroundWorkNotifier(context: BackgroundWorkExecutionContext, sendSignal: SendSignal): void {
+async function registerBackgroundWorkNotifier(
+  context: BackgroundWorkExecutionContext,
+  sendSignal: SendSignal,
+): Promise<void> {
   const work = context[BACKGROUND_WORK_CONTEXT];
   if (!work || context.toolCallId !== work.originToolCallId) {
     return;
@@ -68,14 +73,31 @@ function registerBackgroundWorkNotifier(context: BackgroundWorkExecutionContext,
     scope.set(BACKGROUND_WORK_NOTIFIERS, notifiers);
   }
 
-  if (!notifiers.has(work.originToolCallId)) {
-    notifiers.set(work.originToolCallId, {
-      originRunId: work.originRunId,
-      originToolCallId: work.originToolCallId,
-      sendSignal,
-      invocationKind: work.invocationKind,
-      disposition: work.disposition,
+  if (notifiers.has(work.originToolCallId)) {
+    return;
+  }
+
+  notifiers.set(work.originToolCallId, {
+    originRunId: work.originRunId,
+    originToolCallId: work.originToolCallId,
+    sendSignal,
+    invocationKind: work.invocationKind,
+    disposition: work.disposition,
+  });
+
+  const event = work.disposition === 'awaited' ? 'work-awaited' : 'work-deferred';
+  try {
+    await sendSignal({
+      type: 'notification',
+      tagName: event,
+      contents: `${event}: ${work.originToolCallId}`,
+      metadata: {
+        ...work,
+        status: 'running',
+      } satisfies BackgroundWorkLifecyclePayload,
     });
+  } catch {
+    // Dispatch already succeeded. Initial caller notification is best-effort.
   }
 }
 
@@ -131,7 +153,7 @@ function wrapTool(tool: Tool<any, any, any, any, any, any, any>, binding: ToolBi
     value: tool.execute
       ? async (inputData: unknown, context?: BackgroundWorkExecutionContext) => {
           if (context) {
-            registerBackgroundWorkNotifier(context, binding.sendSignal);
+            await registerBackgroundWorkNotifier(context, binding.sendSignal);
           }
           return tool.execute!(inputData as never, context as never);
         }

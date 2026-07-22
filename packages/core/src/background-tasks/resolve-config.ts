@@ -1,6 +1,7 @@
 import type {
   AgentBackgroundConfig,
   AgentBackgroundToolConfig,
+  BackgroundExecutionDisposition,
   BackgroundTaskManagerConfig,
   LLMBackgroundOverride,
   ToolBackgroundConfig,
@@ -8,6 +9,7 @@ import type {
 
 export interface ResolvedBackgroundConfig {
   runInBackground: boolean;
+  disposition: BackgroundExecutionDisposition;
   timeoutMs: number;
   maxRetries: number;
 }
@@ -45,6 +47,7 @@ export function resolveBackgroundConfig({
   if (agentConfig?.disabled) {
     return {
       runInBackground: false,
+      disposition: 'foreground',
       timeoutMs: managerConfig?.defaultTimeoutMs ?? 300_000,
       maxRetries: managerConfig?.defaultRetries?.maxRetries ?? 0,
     };
@@ -60,7 +63,10 @@ export function resolveBackgroundConfig({
   // the model emits, so `agent.generate()` / `agent.stream()` keep returning
   // real tool results for deterministic tools. See issue #16783.
   const baseEnabled = agentToolConfig?.enabled ?? toolConfig?.enabled ?? false;
-  const enabled = baseEnabled ? (llmOverride?.enabled ?? true) : false;
+  const requestedDisposition =
+    llmOverride?.disposition ??
+    (llmOverride?.enabled === false ? 'foreground' : llmOverride?.enabled === true ? 'deferred' : undefined);
+  const disposition: BackgroundExecutionDisposition = baseEnabled ? (requestedDisposition ?? 'deferred') : 'foreground';
 
   // --- timeoutMs ---
   const timeoutMs =
@@ -74,7 +80,7 @@ export function resolveBackgroundConfig({
   const maxRetries =
     llmOverride?.maxRetries ?? toolConfig?.maxRetries ?? managerConfig?.defaultRetries?.maxRetries ?? 0;
 
-  return { runInBackground: enabled, timeoutMs, maxRetries };
+  return { runInBackground: disposition !== 'foreground', disposition, timeoutMs, maxRetries };
 }
 
 function resolveAgentToolConfig(

@@ -180,6 +180,8 @@ export interface BackgroundTaskManagerConfig {
 
 // --- Tool-level and agent-level config ---
 
+export type BackgroundExecutionDisposition = 'foreground' | 'deferred' | 'awaited';
+
 export interface ToolBackgroundConfig {
   /** Whether this tool is eligible for background execution. Default: false */
   enabled?: boolean;
@@ -231,6 +233,8 @@ export interface AgentBackgroundConfig {
 export interface LLMBackgroundOverride {
   /** Force background (true) or foreground (false). Undefined = use default config. */
   enabled?: boolean;
+  /** Choose foreground, deferred, or awaited execution for this call. */
+  disposition?: BackgroundExecutionDisposition;
   /** Override timeout for this specific call */
   timeoutMs?: number;
   /** Override max retries for this specific call */
