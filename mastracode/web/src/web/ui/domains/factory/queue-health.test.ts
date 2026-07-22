@@ -120,6 +120,17 @@ describe('computeQueueHealth', () => {
     expect(health.entries).toEqual([]);
   });
 
+  it('excludes canceled-only items entirely (terminal, like done)', () => {
+    const canceled = makeItem({
+      stages: ['canceled'],
+      stageHistory: [{ stage: 'canceled', enteredAt: secondsAgo(10), by: 'u1' }],
+    });
+    const health = computeQueueHealth([canceled], new Set(), DEFAULT, NOW);
+    expect(health.stages.find(s => s.stage === 'canceled')).toBeUndefined();
+    expect(health.stages.every(s => s.total === 0)).toBe(true);
+    expect(health.entries).toEqual([]);
+  });
+
   it('falls back to createdAt when a held stage has no open history entry', () => {
     const item = makeItem({
       stages: ['execute'],

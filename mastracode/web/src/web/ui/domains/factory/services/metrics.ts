@@ -16,7 +16,7 @@ export interface FactoryMetrics {
   stageDurations: { stage: string; medianMs: number; samples: number }[];
   /** Current cards per stage (window-independent). */
   wip: { stage: string; count: number }[];
-  /** Distinct in-flight cards (at least one non-done stage). */
+  /** Distinct in-flight cards (at least one non-terminal stage). */
   wipTotal: number;
   /** Oldest in-flight cards by time in their current stage. */
   agingWip: { id: string; title: string; stage: string; enteredAt: string; url: string | null }[];
@@ -24,6 +24,20 @@ export interface FactoryMetrics {
   sourceMix: { source: string; count: number }[];
   /** Stage moves in the window: human-performed vs total. */
   transitions: { human: number; total: number };
+  /** Per-stage automation over completed visits that exited in the window. */
+  stageAutomation: {
+    stage: string;
+    /** Completed visits (entered+exited) to this stage that exited in the window. */
+    exits: number;
+    /** Of those: clean automated passes (first visit, automation-entered and -exited). */
+    automated: number;
+    /**
+     * Outcomes of the automated passes' items, mutually exclusive. Reflects
+     * each item's state *now*, so a fixed window's split shifts as in-flight
+     * items land (e.g. an `inFlight` pass becomes `done` on a later query).
+     */
+    outcomes: { done: number; canceled: number; reworked: number; inFlight: number };
+  }[];
 }
 
 /** Fetch the org's aggregated flow metrics for a Factory project. */

@@ -7,6 +7,7 @@
  * testable and lets the route stay a thin shell.
  */
 
+import { isAutomationActor } from './base.js';
 import type { WorkItemRow, WorkItemStageEntry } from './base.js';
 
 /** Windows the metrics endpoint accepts; anything else clamps to the default. */
@@ -16,13 +17,15 @@ export const DEFAULT_METRICS_WINDOW = 30;
 /** Terminal stage — items here count as completed, not in-flight. */
 const DONE_STAGE = 'done';
 
+/** Terminal stage for tracked non-completions — never a completion. */
+const CANCELED_STAGE = 'canceled';
+
 /**
- * Sentinel actor ids for server/automation-driven transitions. Today every
- * stage move is stamped with the acting user's WorkOS id, so `human === total`;
- * if server-side automation ever moves cards under one of these actors the
- * split starts diverging without a schema change.
+ * Terminal stages — items holding only these are not in-flight. `done` is a
+ * completion (feeds throughput/cycle time); `canceled` is a tracked
+ * non-completion outcome and feeds neither.
  */
-const FACTORY_ACTORS = new Set(['factory', 'system', 'automation']);
+const TERMINAL_STAGES = new Set([DONE_STAGE, CANCELED_STAGE]);
 
 const AGING_WIP_LIMIT = 10;
 
@@ -36,7 +39,7 @@ export interface FactoryMetrics {
   stageDurations: { stage: string; medianMs: number; samples: number }[];
   /** Current cards per stage (window-independent). */
   wip: { stage: string; count: number }[];
-  /** Distinct in-flight cards (at least one non-done stage). */
+  /** Distinct in-flight cards (at least one non-terminal stage). */
   wipTotal: number;
   /** Oldest in-flight cards by time in their current stage. */
   agingWip: { id: string; title: string; stage: string; enteredAt: string; url: string | null }[];
@@ -44,6 +47,26 @@ export interface FactoryMetrics {
   sourceMix: { source: string; count: number }[];
   /** Stage moves in the window: human-performed vs total. */
   transitions: { human: number; total: number };
+  /** Per-stage automation over completed visits that exited in the window. */
+  stageAutomation: {
+    stage: string;
+    /** Completed visits (entered+exited) to this stage that exited in the window. */
+    exits: number;
+    /**
+     * Of those: clean automated passes — the item's first visit to the stage,
+     * entered *and* exited by an automation actor. Missing `exitedBy` (entries
+     * written before exit stamping) counts as human.
+     */
+    automated: number;
+    /**
+     * Outcomes of the automated passes' items, mutually exclusive, first match
+     * wins: `reworked` (a later visit to the same stage exists — deliberately
+     * outranks `done`: an automated pass that needed a redo is an automation
+     * failure even if the item eventually merged), then `done`, then
+     * `canceled`, then `inFlight`.
+     */
+    outcomes: { done: number; canceled: number; reworked: number; inFlight: number };
+  }[];
 }
 
 /** Clamp an untrusted `days` param to a supported window. */
@@ -84,10 +107,10 @@ function completedAt(item: WorkItemRow): number | undefined {
   return undefined;
 }
 
-/** Open (no `exitedAt`) history entry for a currently-held non-done stage. */
+/** Open (no `exitedAt`) history entry for a currently-held non-terminal stage. */
 function openEntries(item: WorkItemRow): WorkItemStageEntry[] {
   return item.stageHistory.filter(
-    entry => entry.exitedAt === undefined && entry.stage !== DONE_STAGE && item.stages.includes(entry.stage),
+    entry => entry.exitedAt === undefined && !TERMINAL_STAGES.has(entry.stage) && item.stages.includes(entry.stage),
   );
 }
 
@@ -121,7 +144,7 @@ export function computeFactoryMetrics({
   const durationsByStage = new Map<string, number[]>();
   for (const item of items) {
     for (const entry of item.stageHistory) {
-      if (entry.exitedAt === undefined || entry.stage === DONE_STAGE) continue;
+      if (entry.exitedAt === undefined || TERMINAL_STAGES.has(entry.stage)) continue;
       const exited = parseTime(entry.exitedAt);
       if (exited < windowStart || exited > nowMs) continue;
       const duration = Math.max(0, exited - parseTime(entry.enteredAt));
@@ -139,7 +162,7 @@ export function computeFactoryMetrics({
     for (const stage of item.stages) {
       wipByStage.set(stage, (wipByStage.get(stage) ?? 0) + 1);
     }
-    const inFlightStages = item.stages.filter(stage => stage !== DONE_STAGE);
+    const inFlightStages = item.stages.filter(stage => !TERMINAL_STAGES.has(stage));
     if (inFlightStages.length === 0) continue;
     wipTotal += 1;
     // Age the card by its longest-held current stage; fall back to creation
@@ -175,7 +198,44 @@ export function computeFactoryMetrics({
       const entered = parseTime(entry.enteredAt);
       if (entered < windowStart || entered > nowMs) continue;
       transitionsTotal += 1;
-      if (!FACTORY_ACTORS.has(entry.by)) transitionsHuman += 1;
+      if (!isAutomationActor(entry.by)) transitionsHuman += 1;
+    }
+  }
+
+  // ── Per-stage automation (completed visits that exited in window) ─────────
+  // Rows appear in insertion order of each stage's first counted exit;
+  // terminal stages never get rows (they have no meaningful "pass through").
+  const automationByStage = new Map<string, FactoryMetrics['stageAutomation'][number]>();
+  for (const item of items) {
+    const itemDone = completedAt(item) !== undefined;
+    const itemCanceled = item.stages.includes(CANCELED_STAGE);
+    for (let i = 0; i < item.stageHistory.length; i++) {
+      const entry = item.stageHistory[i]!;
+      if (entry.exitedAt === undefined || TERMINAL_STAGES.has(entry.stage)) continue;
+      const exited = parseTime(entry.exitedAt);
+      if (exited < windowStart || exited > nowMs) continue;
+      let row = automationByStage.get(entry.stage);
+      if (!row) {
+        row = {
+          stage: entry.stage,
+          exits: 0,
+          automated: 0,
+          outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 },
+        };
+        automationByStage.set(entry.stage, row);
+      }
+      row.exits += 1;
+      // A clean automated pass: automation entered AND exited it, and this is
+      // the item's first visit to the stage (a re-run is rework, not clean
+      // automation). Missing `exitedBy` → human-exited → not automated.
+      const firstVisitIndex = item.stageHistory.findIndex(e => e.stage === entry.stage);
+      if (firstVisitIndex !== i || !isAutomationActor(entry.by) || !isAutomationActor(entry.exitedBy)) continue;
+      row.automated += 1;
+      const reworked = item.stageHistory.some((e, j) => j > i && e.stage === entry.stage);
+      if (reworked) row.outcomes.reworked += 1;
+      else if (itemDone) row.outcomes.done += 1;
+      else if (itemCanceled) row.outcomes.canceled += 1;
+      else row.outcomes.inFlight += 1;
     }
   }
 
@@ -199,5 +259,6 @@ export function computeFactoryMetrics({
       .map(([source, count]) => ({ source, count }))
       .sort((a, b) => b.count - a.count),
     transitions: { human: transitionsHuman, total: transitionsTotal },
+    stageAutomation: [...automationByStage.values()],
   };
 }
