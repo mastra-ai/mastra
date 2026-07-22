@@ -15,6 +15,7 @@ import type {
 } from '../storage/domains/credentials/base.js';
 import type { CustomProviderRecord, CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type {
+  MemorySettingsFillIfUnset,
   MemorySettingsPatch,
   MemorySettingsRecord,
   MemorySettingsStorage,
@@ -539,8 +540,12 @@ async function resolveMemorySettingsContext({
 }
 
 /** Persist an OM knob change to the caller's memory-settings row. */
-async function persistMemorySettings(context: MemorySettingsContext, patch: MemorySettingsPatch): Promise<void> {
-  await context.storage.patch({ orgId: context.orgId, userId: context.userId, patch });
+async function persistMemorySettings(
+  context: MemorySettingsContext,
+  patch: MemorySettingsPatch,
+  fillIfUnset?: MemorySettingsFillIfUnset,
+): Promise<void> {
+  await context.storage.patch({ orgId: context.orgId, userId: context.userId, patch, fillIfUnset });
 }
 
 /**
@@ -1059,13 +1064,16 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const otherRoleCurrentModelId = otherRole.modelId() ?? null;
             await session.om[role].switchModel({ modelId });
             // Pin the other role's current model too, so a later restart
-            // doesn't drift it once this role is explicitly overridden.
-            const existing = await context.storage.get({ orgId: context.orgId, userId: context.userId });
+            // doesn't drift it once this role is explicitly overridden. The
+            // "only if still unset" check runs inside the storage layer's
+            // atomic update, so a concurrent explicit switch of the other
+            // role is never clobbered by this fill.
             const otherKey = role === 'observer' ? 'reflectorModelId' : 'observerModelId';
-            await persistMemorySettings(context, {
-              [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: modelId,
-              ...(otherRoleCurrentModelId && !existing?.[otherKey] ? { [otherKey]: otherRoleCurrentModelId } : {}),
-            });
+            await persistMemorySettings(
+              context,
+              { [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: modelId },
+              otherRoleCurrentModelId ? { [otherKey]: otherRoleCurrentModelId } : undefined,
+            );
             return c.json({ ok: true, config: readOMConfig(session) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

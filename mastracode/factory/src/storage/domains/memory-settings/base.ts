@@ -1,4 +1,4 @@
-import { FactoryStorageDomain } from '@mastra/core/storage';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 /**
@@ -27,6 +27,16 @@ export interface MemorySettingsPatch {
   observationThreshold?: number;
   reflectionThreshold?: number;
   observeAttachments?: 'auto' | boolean;
+}
+
+/**
+ * Knobs written only when the stored value is still unset (`NULL`). The check
+ * happens inside the backend's atomic-update primitive, so a concurrent
+ * explicit write to the same knob is never clobbered by a fill.
+ */
+export interface MemorySettingsFillIfUnset {
+  observerModelId?: string;
+  reflectorModelId?: string;
 }
 
 export const MEMORY_SETTINGS_SCHEMA: CollectionSchema = {
@@ -106,41 +116,60 @@ export class MemorySettingsStorage extends FactoryStorageDomain {
     return row ? toRecord(row) : null;
   }
 
-  /** Upsert the user's row, writing only the knobs present in `patch`. */
+  /**
+   * Upsert the user's row, writing only the knobs present in `patch`.
+   * `fillIfUnset` knobs are written only where the stored value is still
+   * `NULL`, decided inside the atomic update so concurrent explicit writes
+   * win over fills. Concurrent first writes are resolved via the shared
+   * insert-then-catch-unique-violation pattern (see `queue_health`).
+   */
   async patch({
     orgId,
     userId,
     patch,
+    fillIfUnset,
   }: {
     orgId: string;
     userId: string;
     patch: MemorySettingsPatch;
+    fillIfUnset?: MemorySettingsFillIfUnset;
   }): Promise<MemorySettingsRecord> {
     const now = new Date();
-    const existing = await this.#db.findOne<MemorySettingsDbRow>('memory_settings', {
-      org_id: orgId,
-      user_id: userId,
-    });
-    if (existing) {
-      const row = await this.#db.updateAtomic<MemorySettingsDbRow>(
-        'memory_settings',
-        { org_id: orgId, user_id: userId },
-        () => ({ ...patchToColumns(patch), updated_at: now }),
-      );
-      return toRecord(row ?? existing);
+    const updateExisting = () =>
+      this.#db.updateAtomic<MemorySettingsDbRow>('memory_settings', { org_id: orgId, user_id: userId }, row => {
+        const columns: Partial<MemorySettingsDbRow> = { ...patchToColumns(patch), updated_at: now };
+        if (fillIfUnset?.observerModelId !== undefined && row.observer_model_id == null) {
+          columns.observer_model_id = patch.observerModelId ?? fillIfUnset.observerModelId;
+        }
+        if (fillIfUnset?.reflectorModelId !== undefined && row.reflector_model_id == null) {
+          columns.reflector_model_id = patch.reflectorModelId ?? fillIfUnset.reflectorModelId;
+        }
+        return columns;
+      });
+
+    const updated = await updateExisting();
+    if (updated) return toRecord(updated);
+
+    try {
+      const row = await this.#db.insertOne<MemorySettingsDbRow>('memory_settings', {
+        org_id: orgId,
+        user_id: userId,
+        observer_model_id: fillIfUnset?.observerModelId ?? null,
+        reflector_model_id: fillIfUnset?.reflectorModelId ?? null,
+        observation_threshold: null,
+        reflection_threshold: null,
+        observe_attachments: null,
+        ...patchToColumns(patch),
+        created_at: now,
+        updated_at: now,
+      });
+      return toRecord(row);
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      // Lost the first-write race — apply the patch to the winning row.
+      const row = await updateExisting();
+      if (!row) throw error;
+      return toRecord(row);
     }
-    const row = await this.#db.insertOne<MemorySettingsDbRow>('memory_settings', {
-      org_id: orgId,
-      user_id: userId,
-      observer_model_id: null,
-      reflector_model_id: null,
-      observation_threshold: null,
-      reflection_threshold: null,
-      observe_attachments: null,
-      ...patchToColumns(patch),
-      created_at: now,
-      updated_at: now,
-    });
-    return toRecord(row);
   }
 }
