@@ -157,14 +157,14 @@ export function IntakeSection() {
                 <SourceCheckbox
                   key={repository.projectRepositoryId}
                   label={repository.slug}
-                  checked={config.github.sourceIds?.includes(repository.projectRepositoryId) ?? false}
+                  checked={config.github.sourceIds?.includes(repository.slug) ?? false}
                   disabled={busy}
                   onChange={() =>
                     update({
                       ...config,
                       github: {
                         ...config.github,
-                        sourceIds: toggleId(config.github.sourceIds, repository.projectRepositoryId),
+                        sourceIds: toggleId(config.github.sourceIds, repository.slug),
                       },
                     })
                   }

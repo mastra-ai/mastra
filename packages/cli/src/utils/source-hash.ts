@@ -93,7 +93,7 @@ async function hashFile(filePath: string): Promise<string> {
  *
  * Also includes workspace root lockfiles if the project is in a monorepo.
  */
-export async function computeSourceHash(rootDir: string, mastraDir: string): Promise<string> {
+export async function computeSourceHash(rootDir: string, mastraDir: string, projectType?: string): Promise<string> {
   const relMastraDir = relative(rootDir, mastraDir);
   const normalizedMastraDir = relMastraDir.split('\\').join('/'); // Normalize for Windows
 
@@ -112,6 +112,23 @@ export async function computeSourceHash(rootDir: string, mastraDir: string): Pro
     // TypeScript config
     'tsconfig.json',
   ];
+
+  // Software Factory projects have a project-owned SPA whose source and
+  // config live outside src/mastra. Include those UI inputs so a UI-only
+  // edit triggers a staleness mismatch. Do NOT hash the generated output
+  // at src/mastra/public/factory — it is a build artifact, not a source.
+  if (projectType === 'factory') {
+    patterns.push(
+      // SPA source (React/TS components, styles, hooks, etc.)
+      'src/web/ui/**/*.{ts,tsx,js,jsx,css,scss,json}',
+      // Vite config
+      'src/web/vite.config.{ts,js,mts,mjs}',
+      // Static public assets consumed by Vite
+      'src/web/public/**/*',
+      // Exclude generated Factory UI output so it doesn't self-invalidate
+      `!${posix.join(normalizedMastraDir, 'public/factory/**')}`,
+    );
+  }
 
   const files = await collectFiles(rootDir, patterns);
 
@@ -197,6 +214,7 @@ export async function checkBuildStaleness(
   rootDir: string,
   mastraDir: string,
   outputDirectory: string,
+  projectType?: string,
 ): Promise<StalenessCheckResult> {
   // Check if build output exists
   const outputPath = join(outputDirectory, 'output', 'index.mjs');
@@ -213,7 +231,7 @@ export async function checkBuildStaleness(
   }
 
   // Compute current source hash
-  const currentHash = await computeSourceHash(rootDir, mastraDir);
+  const currentHash = await computeSourceHash(rootDir, mastraDir, projectType);
 
   if (currentHash !== manifest.sourceHash) {
     return {

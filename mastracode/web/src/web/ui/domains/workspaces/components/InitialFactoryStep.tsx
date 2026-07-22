@@ -12,8 +12,8 @@ export function InitialFactoryStep({ onContinue }: InitialFactoryStepProps) {
         Build software with a Factory that knows your work.
       </h1>
       <Txt as="p" variant="ui-lg" className="mx-auto mt-6 max-w-2xl leading-7 text-neutral3 sm:text-lg">
-        Mastra Factory connects your code, project context, and coding sessions in one shared workspace. It keeps
-        every agent grounded in the repository and work that matters to your team.
+        Mastra Factory connects your code, project context, and coding sessions in one shared workspace. It keeps every
+        agent grounded in the repository and work that matters to your team.
       </Txt>
 
       <div className="mx-auto mt-8 w-full max-w-2xl text-left" aria-hidden="true">
