@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
@@ -101,8 +100,8 @@ describe('PrefillErrorHandler Recovery', () => {
   describe('generate()', () => {
     it('should recover from prefill error by appending a system reminder continue message and retrying', async () => {
       const mockMemory = new MockMemory();
-      const threadId = randomUUID();
-      const resourceId = randomUUID();
+      const threadId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
       const now = new Date();
 
       // Create a thread and pre-populate it with a conversation ending in an assistant message
@@ -110,7 +109,7 @@ describe('PrefillErrorHandler Recovery', () => {
       await mockMemory.saveMessages({
         messages: [
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             role: 'user' as const,
             content: {
               format: 2 as const,
@@ -122,7 +121,7 @@ describe('PrefillErrorHandler Recovery', () => {
             type: 'text' as const,
           },
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             role: 'assistant' as const,
             content: {
               format: 2 as const,
@@ -343,8 +342,8 @@ describe('PrefillErrorHandler Recovery', () => {
 
     it('should NOT retry for non-prefill API errors', async () => {
       const mockMemory = new MockMemory();
-      const threadId = randomUUID();
-      const resourceId = randomUUID();
+      const threadId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
 
       await mockMemory.createThread({ threadId, resourceId });
 
@@ -393,15 +392,15 @@ describe('PrefillErrorHandler Recovery', () => {
   describe('stream()', () => {
     it('should recover from prefill error by appending a system reminder continue message and retrying', async () => {
       const mockMemory = new MockMemory();
-      const threadId = randomUUID();
-      const resourceId = randomUUID();
+      const threadId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
       const now = new Date();
 
       await mockMemory.createThread({ threadId, resourceId });
       await mockMemory.saveMessages({
         messages: [
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             role: 'user' as const,
             content: {
               format: 2 as const,
@@ -413,7 +412,7 @@ describe('PrefillErrorHandler Recovery', () => {
             type: 'text' as const,
           },
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             role: 'assistant' as const,
             content: {
               format: 2 as const,
@@ -463,15 +462,15 @@ describe('PrefillErrorHandler Recovery', () => {
 
     it('should only retry once even if the error persists', async () => {
       const mockMemory = new MockMemory();
-      const threadId = randomUUID();
-      const resourceId = randomUUID();
+      const threadId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
       const now = new Date();
 
       await mockMemory.createThread({ threadId, resourceId });
       await mockMemory.saveMessages({
         messages: [
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             role: 'user' as const,
             content: {
               format: 2 as const,
@@ -483,7 +482,7 @@ describe('PrefillErrorHandler Recovery', () => {
             type: 'text' as const,
           },
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             role: 'assistant' as const,
             content: {
               format: 2 as const,

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from './index';
 
 const CLAUDE_46_PATTERN = /[^0-9]4[.-]6/;
@@ -67,7 +65,7 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
       messages: [
         ...messages,
         {
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           role: 'user' as const,
           content: {
             format: 2 as const,

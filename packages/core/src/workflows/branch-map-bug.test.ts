@@ -1,25 +1,20 @@
-import { randomUUID } from 'node:crypto';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
 import { createStep } from './workflow';
 
-vi.mock('crypto', () => {
-  return {
-    randomUUID: vi.fn(() => 'mock-uuid-1'),
-  };
-});
-
 describe('Branch with Map Bug - Issue #10407', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
+  let randomUUIDSpy: ReturnType<typeof vi.spyOn>;
 
+  beforeEach(() => {
     let counter = 0;
-    (randomUUID as vi.Mock).mockImplementation(() => {
-      return `mock-uuid-${++counter}`;
-    });
+    randomUUIDSpy = vi.spyOn(crypto, 'randomUUID').mockImplementation(() => `mock-uuid-${++counter}` as any);
+  });
+
+  afterEach(() => {
+    randomUUIDSpy.mockRestore();
   });
 
   it('should pass inputData to nested workflow with map inside branch', async () => {

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Mastra } from '..';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
@@ -224,7 +223,7 @@ export class BackgroundTaskManager {
     if (this.initPromise) await this.initPromise;
 
     const task: BackgroundTask = {
-      id: this.#mastra?.generateId() ?? randomUUID(),
+      id: this.#mastra?.generateId() ?? crypto.randomUUID(),
       status: 'pending',
       toolName: payload.toolName,
       toolCallId: payload.toolCallId,

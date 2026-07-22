@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
@@ -51,7 +50,7 @@ describe('RequestContext memory isolation - Issue #11651', () => {
    * Expected: Child agent should be able to save messages (its readOnly: false should win)
    */
   it('should respect child agent readOnly:false when RequestContext has parent readOnly:true', async () => {
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-user';
     const mockMemory = new MockMemory();
 
@@ -97,7 +96,7 @@ describe('RequestContext memory isolation - Issue #11651', () => {
    * Control test: Verify readOnly: true still works correctly
    */
   it('should NOT save messages when agent has readOnly:true regardless of parent context', async () => {
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-user';
     const mockMemory = new MockMemory();
 
@@ -142,8 +141,8 @@ describe('RequestContext memory isolation - Issue #11651', () => {
    * Test that two agents can have different readOnly settings with the same RequestContext
    */
   it('should allow different readOnly settings for sequential agent calls with shared RequestContext', async () => {
-    const thread1Id = randomUUID();
-    const thread2Id = randomUUID();
+    const thread1Id = crypto.randomUUID();
+    const thread2Id = crypto.randomUUID();
     const resourceId = 'test-user';
     const mockMemory = new MockMemory();
 

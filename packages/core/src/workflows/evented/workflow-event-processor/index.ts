@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import EventEmitter from 'node:events';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
@@ -1340,7 +1339,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.step.id) {
-        const nestedRunId = stepResults[step.step.id]?.metadata?.nestedRunId ?? randomUUID();
+        const nestedRunId = stepResults[step.step.id]?.metadata?.nestedRunId ?? crypto.randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: step.step.id,
@@ -1394,7 +1393,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (restart && !!restart.activeStepsPath?.[step.step.id]) {
-        const nestedRunId = stepResults[step.step.id]?.metadata?.nestedRunId ?? randomUUID();
+        const nestedRunId = stepResults[step.step.id]?.metadata?.nestedRunId ?? crypto.randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: step.step.id,
@@ -1439,7 +1438,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else {
-        const nestedRunId = randomUUID();
+        const nestedRunId = crypto.randomUUID();
         const shouldPersist =
           nestedWorkflow?.options?.shouldPersistSnapshot?.({
             stepResults: {},

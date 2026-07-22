@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type {
   Agent,
@@ -965,7 +964,7 @@ async function runAgentTurns(
 ): Promise<{ allOutputMessages: any[]; perTurn: PerTurnRecord[]; lastResult: any }> {
   const observabilityContext = resolveObservabilityContext(item);
   const model = await agent.getModel();
-  const threadId = randomUUID();
+  const threadId = crypto.randomUUID();
   const supported = isSupportedLanguageModel(model);
 
   // Multi-turn recall requires a configured memory store: the shared threadId is

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { UIMessage } from '@internal/ai-sdk-v4';
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
@@ -983,7 +982,7 @@ export class Agent<
         ? suppliedActiveDurationMs
         : 0;
     const record: GoalObjectiveRecord = {
-      id: options.id ?? randomUUID(),
+      id: options.id ?? crypto.randomUUID(),
       objective,
       status: 'active',
       runsUsed: 0,
@@ -2926,7 +2925,7 @@ export class Agent<
    */
   private static toFallbackEntry(mdl: ModelWithRetries, defaultMaxRetries: number): ModelFallbacks[number] {
     return {
-      id: mdl.id ?? randomUUID(),
+      id: mdl.id ?? crypto.randomUUID(),
       model: mdl.model as DynamicArgument<MastraModelConfig>,
       maxRetries: mdl.maxRetries ?? defaultMaxRetries,
       enabled: mdl.enabled ?? true,
@@ -4672,7 +4671,7 @@ export class Agent<
           execute: async (inputData: SubAgentToolInput, context) => {
             const invocationActor = getInvocationActor(context);
             const startTime = Date.now();
-            const toolCallId = context?.agent?.toolCallId || randomUUID();
+            const toolCallId = context?.agent?.toolCallId || crypto.randomUUID();
 
             // Get messages from context - available at tool execution time
             const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
@@ -4698,7 +4697,7 @@ export class Agent<
                 maxSteps: inputData.maxSteps || undefined,
               },
               iteration: derivedIteration,
-              runId: runId || randomUUID(),
+              runId: runId || crypto.randomUUID(),
               threadId,
               resourceId,
               parentAgentId: this.id,
@@ -4711,13 +4710,13 @@ export class Agent<
             // These are needed for both successful execution and rejection cases
             const slugify = await import(`@sindresorhus/slugify`);
             const subAgentThreadId = inputData.threadId
-              ? `${inputData.threadId}-${randomUUID()}`
+              ? `${inputData.threadId}-${crypto.randomUUID()}`
               : context?.mastra?.generateId({
                   idType: 'thread',
                   source: 'agent',
                   entityId: agentName,
                   resourceId,
-                }) || randomUUID();
+                }) || crypto.randomUUID();
 
             const subAgentResourceId = inputData.resourceId
               ? `${inputData.resourceId}-${agentName}`
@@ -4836,7 +4835,7 @@ export class Agent<
                       await context.writer?.write({
                         type: 'text-delta',
                         payload: {
-                          id: randomUUID(),
+                          id: crypto.randomUUID(),
                           text: `[Delegation Rejected] ${rejectionMessage}`,
                         },
                         runId,
@@ -4850,7 +4849,7 @@ export class Agent<
                       try {
                         // Create user message with the original prompt
                         const userMessage: MastraDBMessage = {
-                          id: this.#mastra?.generateId() || randomUUID(),
+                          id: this.#mastra?.generateId() || crypto.randomUUID(),
                           role: 'user',
                           type: 'text',
                           createdAt: new Date(),
@@ -4869,7 +4868,7 @@ export class Agent<
 
                         // Create assistant message with the rejection
                         const assistantMessage: MastraDBMessage = {
-                          id: this.#mastra?.generateId() || randomUUID(),
+                          id: this.#mastra?.generateId() || crypto.randomUUID(),
                           role: 'assistant',
                           type: 'text',
                           createdAt: new Date(new Date().getTime() + 1),
@@ -4977,7 +4976,7 @@ export class Agent<
                     primitiveType: 'agent',
                     prompt: effectivePrompt,
                     iteration: derivedIteration,
-                    runId: runId || randomUUID(),
+                    runId: runId || crypto.randomUUID(),
                     threadId,
                     resourceId,
                     parentAgentId: this.id,
@@ -5062,7 +5061,7 @@ export class Agent<
                 }));
                 // Create user message with the original prompt
                 const userMessage: MastraDBMessage = {
-                  id: this.#mastra?.generateId() || randomUUID(),
+                  id: this.#mastra?.generateId() || crypto.randomUUID(),
                   role: 'user',
                   type: 'text',
                   createdAt: subAgentPromptCreatedAt,
@@ -5240,7 +5239,7 @@ export class Agent<
                 const agentResponseMessages = streamResult.messageList.get.response.db();
                 // Create user message with the original prompt
                 const userMessage: MastraDBMessage = {
-                  id: this.#mastra?.generateId() || randomUUID(),
+                  id: this.#mastra?.generateId() || crypto.randomUUID(),
                   role: 'user',
                   type: 'text',
                   createdAt: subAgentPromptCreatedAt,
@@ -5352,7 +5351,7 @@ export class Agent<
                     duration: Date.now() - startTime,
                     success: true,
                     iteration: derivedIteration,
-                    runId: runId || randomUUID(),
+                    runId: runId || crypto.randomUUID(),
                     toolCallId,
                     parentAgentId: this.id,
                     parentAgentName: this.name,
@@ -5372,7 +5371,7 @@ export class Agent<
                   // Handle feedback if provided
                   if (completeResult?.feedback) {
                     const feedbackMessage: MastraDBMessage = {
-                      id: this.#mastra?.generateId() || randomUUID(),
+                      id: this.#mastra?.generateId() || crypto.randomUUID(),
                       role: 'assistant',
                       type: 'text',
                       createdAt: new Date(),
@@ -5433,7 +5432,7 @@ export class Agent<
                     success: false,
                     error: err instanceof Error ? err : new Error(String(err)),
                     iteration: derivedIteration,
-                    runId: runId || randomUUID(),
+                    runId: runId || crypto.randomUUID(),
                     toolCallId,
                     parentAgentId: this.id,
                     parentAgentName: this.name,
@@ -5451,7 +5450,7 @@ export class Agent<
 
                   if (completeResult?.feedback) {
                     const feedbackMessage: MastraDBMessage = {
-                      id: this.#mastra?.generateId() || randomUUID(),
+                      id: this.#mastra?.generateId() || crypto.randomUUID(),
                       role: 'assistant',
                       type: 'text',
                       createdAt: new Date(),
@@ -5651,7 +5650,7 @@ export class Agent<
               // For resume cases, suspendedToolRunId is injected into inputData by
               // tool-call-step (from metadata stored during suspension).
               // For fresh calls: generate a new unique runId.
-              const runIdToUse = suspendedToolRunId || randomUUID();
+              const runIdToUse = suspendedToolRunId || crypto.randomUUID();
               this.logger.debug('Executing workflow as tool', {
                 agent: this.name,
                 workflow: workflowName,
@@ -6881,7 +6880,7 @@ export class Agent<
         threadId: threadFromArgs?.id,
         resourceId,
       }) ||
-      randomUUID();
+      crypto.randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
     const mcpServerGuidance = await this.getMcpServerGuidance({
       requestContext,
@@ -6973,7 +6972,7 @@ export class Agent<
       logger: this.logger,
       getMemory: this.getMemory.bind(this),
       getModel: this.getModel.bind(this),
-      generateMessageId: this.#mastra?.generateId?.bind(this.#mastra) || (() => randomUUID()),
+      generateMessageId: this.#mastra?.generateId?.bind(this.#mastra) || (() => crypto.randomUUID()),
       mastra: this.#mastra,
       _agentNetworkAppend:
         '_agentNetworkAppend' in this
@@ -7317,7 +7316,7 @@ export class Agent<
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
 
-    const runId = mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
+    const runId = mergedOptions?.runId || this.#mastra?.generateId() || crypto.randomUUID();
 
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
@@ -7341,8 +7340,8 @@ export class Agent<
         model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
-      },
-      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
+      } as unknown as AgentExecutionOptions<OUTPUT>,
+      generateId: context => this.#mastra?.generateId(context) || crypto.randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages,
       threadId,
@@ -7418,7 +7417,7 @@ export class Agent<
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
-      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
+      generateId: context => this.#mastra?.generateId(context) || crypto.randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages: [],
       threadId,
@@ -8173,7 +8172,7 @@ export class Agent<
         idType: 'run',
         source: 'agent',
         entityId: this.id,
-      }) ?? randomUUID();
+      }) ?? crypto.randomUUID();
     const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
       { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,

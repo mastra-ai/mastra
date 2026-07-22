@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { InMemoryDB } from '../inmemory-db';
 import type { Schedule, ScheduleFilter, ScheduleTrigger, ScheduleTriggerListOptions, ScheduleUpdate } from './base';
 import { normalizeScheduleTarget, SchedulesStorage } from './base';
@@ -122,7 +121,7 @@ export class InMemorySchedulesStorage extends SchedulesStorage {
   async recordTrigger(trigger: ScheduleTrigger): Promise<void> {
     const stored: ScheduleTrigger = {
       ...trigger,
-      id: trigger.id ?? randomUUID(),
+      id: trigger.id ?? crypto.randomUUID(),
       triggerKind: trigger.triggerKind ?? 'schedule-fire',
     };
     this.db.scheduleTriggers.push(clone(stored));

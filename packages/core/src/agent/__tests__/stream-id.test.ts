@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -54,7 +53,7 @@ describe('Stream ID Consistency', () => {
 
     agent.__registerMastra(mastra);
 
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-resource';
 
     const streamResult = await agent.streamLegacy('Hello!', {
@@ -126,7 +125,7 @@ describe('Stream ID Consistency', () => {
 
     agent.__registerMastra(mastraWithCustomId);
 
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-resource';
 
     const stream = await agent.streamLegacy('Hello!', { threadId, resourceId });
@@ -183,7 +182,7 @@ describe('Stream ID Consistency', () => {
 
     agent.__registerMastra(mastra);
 
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-resource';
 
     const streamResult = await agent.stream('Hello!', {
@@ -265,7 +264,7 @@ describe('Stream ID Consistency', () => {
 
     agent.__registerMastra(mastraWithCustomId);
 
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-resource';
 
     const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: resourceId } });
@@ -324,7 +323,7 @@ describe('Stream ID Consistency', () => {
 
     agent.__registerMastra(mastra);
 
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-resource';
     const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: resourceId } });
 
@@ -396,7 +395,7 @@ describe('Stream ID Consistency', () => {
 
     agent.__registerMastra(mastra);
 
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-resource';
 
     const result = await agent.generate('Hello!', {
@@ -499,7 +498,7 @@ describe('Stream ID Consistency', () => {
 
     agent.__registerMastra(mastra);
 
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-resource';
 
     const streamResult = await agent.stream('Use the test tool', {
@@ -566,7 +565,7 @@ describe('Stream ID Consistency', () => {
         memory,
       });
 
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'structured-output-persisted-text';
       await memory.createThread({ threadId, resourceId });
 

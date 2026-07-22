@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { AgentCard, Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import { MessageList } from '../agent/message-list';
@@ -500,7 +499,7 @@ export class A2AAgent implements SubAgent {
     this.#abortSignal = options.abortSignal;
     this.#timeoutMs = options.timeoutMs;
     this.#verifyAgentCard = options.verifyAgentCard;
-    this.id = options.id ?? `a2a-${randomUUID()}`;
+    this.id = options.id ?? `a2a-${crypto.randomUUID()}`;
     this.name = options.name ?? options.description ?? 'A2A Agent';
   }
 
@@ -549,7 +548,7 @@ export class A2AAgent implements SubAgent {
     options?: AgentExecutionOptionsBase<unknown>,
   ): Promise<A2AAgentGenerateResult> {
     const bootstrap = await this.#getBootstrap();
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? crypto.randomUUID();
     const prompt = messagesToPrompt(messages, options);
     const memoryInfo = resolveMemoryInfo(options);
 
@@ -616,7 +615,7 @@ export class A2AAgent implements SubAgent {
     options?: AgentExecutionOptionsBase<unknown>,
   ): Promise<A2AAgentStreamResult> {
     const bootstrap = await this.#getBootstrap();
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? crypto.randomUUID();
     const prompt = messagesToPrompt(messages, options);
     const memoryInfo = resolveMemoryInfo(options);
 
@@ -741,13 +740,13 @@ export class A2AAgent implements SubAgent {
       signal,
       body: {
         jsonrpc: '2.0',
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         method: 'message/send',
         params: {
           message: {
             role: 'user',
             kind: 'message',
-            messageId: randomUUID(),
+            messageId: crypto.randomUUID(),
             parts: [{ kind: 'text', text: prompt }],
             ...(contextId ? { contextId } : {}),
             ...(referenceTaskIds?.length ? { referenceTaskIds } : {}),
@@ -822,7 +821,7 @@ export class A2AAgent implements SubAgent {
       signal,
       body: {
         jsonrpc: '2.0',
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         method: 'tasks/get',
         params: { id: taskId },
       } satisfies JSONRPCRequestBody,
@@ -977,13 +976,13 @@ export class A2AAgent implements SubAgent {
       stream: true,
       body: {
         jsonrpc: '2.0',
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         method: 'message/stream',
         params: {
           message: {
             role: 'user',
             kind: 'message',
-            messageId: randomUUID(),
+            messageId: crypto.randomUUID(),
             parts: [{ kind: 'text', text: prompt }],
             ...(contextId ? { contextId } : {}),
             ...(referenceTaskIds?.length ? { referenceTaskIds } : {}),
@@ -1025,7 +1024,7 @@ export class A2AAgent implements SubAgent {
       stream: true,
       body: {
         jsonrpc: '2.0',
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         method: 'tasks/resubscribe',
         params: { id: taskId },
       } satisfies JSONRPCRequestBody,

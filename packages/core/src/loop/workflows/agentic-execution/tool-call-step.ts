@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { stopGoalActivity } from '../../../agent/goal';
@@ -1140,7 +1139,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                           {
                             role: 'tool' as const,
                             type: 'tool-call',
-                            id: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID(),
+                            id: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? crypto.randomUUID(),
                             createdAt: new Date(),
                             content: [
                               {
