@@ -494,7 +494,9 @@ describe('WorkspacesSection', () => {
       expect(screen.queryByRole('status', { name: 'Agent finished in Feature work' })).not.toBeInTheDocument(),
     );
     // Let the open-thread flow settle so its requests can't leak into later tests.
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-feat`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-feat`),
+    );
   });
 
   it('given workspaces that are idle from the start, then no done indicator or chime fires', async () => {
@@ -532,7 +534,9 @@ describe('WorkspacesSection', () => {
 
     await waitFor(() => expect(storedRepository().selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
     // Let the open-thread flow settle so its requests can't leak into later tests.
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-generic`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-generic`),
+    );
   });
 
   it('opens the most recent thread of the new worktree when switching workspaces', async () => {
@@ -552,7 +556,9 @@ describe('WorkspacesSection', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-latest`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-latest`),
+    );
   });
 
   it('opens the most recent thread of the new worktree when switching from /new', async () => {
@@ -571,7 +577,9 @@ describe('WorkspacesSection', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-latest`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-latest`),
+    );
   });
 
   it('creates and opens a thread when the new worktree has none', async () => {
@@ -588,7 +596,9 @@ describe('WorkspacesSection', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-fresh`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-fresh`),
+    );
     expect(created).toBe(1);
   });
 
@@ -618,7 +628,9 @@ describe('WorkspacesSection', () => {
 
     // A session row IS its conversation — clicking it opens the thread even
     // from worktree-independent pages like the board.
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-latest`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-latest`),
+    );
   });
 
   it('opens the titled conversation thread, not a newer empty untitled one', async () => {
@@ -654,7 +666,9 @@ describe('WorkspacesSection', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Real work' }));
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-convo`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-convo`),
+    );
   });
 
   it('opens the already-selected workspace’s thread when its row is clicked from another page', async () => {
@@ -683,7 +697,9 @@ describe('WorkspacesSection', () => {
     expect(row).toHaveAttribute('aria-current', 'true');
     await userEvent.click(row);
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-generic`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${githubProject.id}/threads/thread-generic`),
+    );
     // No re-select happened — the workspace selection is unchanged.
     expect(storedRepository().selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
   });

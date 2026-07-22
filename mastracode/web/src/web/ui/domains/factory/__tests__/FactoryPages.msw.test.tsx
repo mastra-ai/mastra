@@ -517,10 +517,22 @@ describe('Factory sidebar section', () => {
 
     const nav = await screen.findByRole('navigation', { name: 'Factory' });
     expect(within(nav).getByText('Factory')).toBeInTheDocument();
-    expect(await within(nav).findByRole('link', { name: 'Work' })).toHaveAttribute('href', `/factories/${githubProject.id}/work`);
-    expect(within(nav).getByRole('link', { name: 'Review' })).toHaveAttribute('href', `/factories/${githubProject.id}/review`);
-    expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute('href', `/factories/${githubProject.id}/metrics`);
-    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute('href', `/factories/${githubProject.id}/audit`);
+    expect(await within(nav).findByRole('link', { name: 'Work' })).toHaveAttribute(
+      'href',
+      `/factories/${githubProject.id}/work`,
+    );
+    expect(within(nav).getByRole('link', { name: 'Review' })).toHaveAttribute(
+      'href',
+      `/factories/${githubProject.id}/review`,
+    );
+    expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute(
+      'href',
+      `/factories/${githubProject.id}/metrics`,
+    );
+    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute(
+      'href',
+      `/factories/${githubProject.id}/audit`,
+    );
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
   });
 
@@ -536,10 +548,22 @@ describe('Factory sidebar section', () => {
 
     const nav = await screen.findByRole('navigation', { name: 'Factory' });
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
-    expect(within(nav).getByRole('link', { name: 'Work' })).toHaveAttribute('href', `/factories/${githubProject.id}/work`);
-    expect(within(nav).getByRole('link', { name: 'Review' })).toHaveAttribute('href', `/factories/${githubProject.id}/review`);
-    expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute('href', `/factories/${githubProject.id}/metrics`);
-    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute('href', `/factories/${githubProject.id}/audit`);
+    expect(within(nav).getByRole('link', { name: 'Work' })).toHaveAttribute(
+      'href',
+      `/factories/${githubProject.id}/work`,
+    );
+    expect(within(nav).getByRole('link', { name: 'Review' })).toHaveAttribute(
+      'href',
+      `/factories/${githubProject.id}/review`,
+    );
+    expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute(
+      'href',
+      `/factories/${githubProject.id}/metrics`,
+    );
+    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute(
+      'href',
+      `/factories/${githubProject.id}/audit`,
+    );
   });
 });
 
@@ -1187,7 +1211,9 @@ describe('Factory Board — persisted cards', () => {
 
       await userEvent.click(within(header).getByRole('button', { name: buttonName }));
 
-      await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${relatedProject.id}/threads/${destinationThreadId}`));
+      await waitFor(() =>
+        expect(router.state.location.pathname).toBe(`/factories/${relatedProject.id}/threads/${destinationThreadId}`),
+      );
       const stored = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];
       expect(
         stored[0]?.binding.kind === 'factory' ? stored[0].binding.repositories[0]?.selectedWorktreePath : undefined,
@@ -1390,7 +1416,9 @@ describe('Factory Board — persisted cards', () => {
     const card = within(column('execute')).getByTestId('work-item-card');
     await userEvent.click(within(card).getByRole('link', { name: 'Issue: Fix flaky test' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/thread-work`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/thread-work`),
+    );
     const stored = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];
     expect(
       stored[0]?.binding.kind === 'factory' ? stored[0].binding.repositories[0]?.selectedWorktreePath : undefined,
@@ -1435,7 +1463,9 @@ describe('Factory Board — persisted cards', () => {
     await userEvent.click(within(column('triage')).getByRole('button', { name: 'Actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.starts).toMatchObject([{ destinationStage: 'planning', workItem: { id: 'wi-1' } }]);
   });
@@ -1461,7 +1491,9 @@ describe('Factory Board — persisted cards', () => {
     await userEvent.click(within(column('triage')).getByRole('button', { name: 'Actions for Add OAuth support' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Prepare approval' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-21' });
     await waitFor(() =>
       expect(captured.messages[0]?.message).toContain(
@@ -1709,7 +1741,9 @@ describe('Factory Board — persisted cards', () => {
     await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     await waitFor(() => expect(captured.messages[0]?.message).toContain('Implement a fix for GitHub issue #12'));
     expect(captured.starts).toMatchObject([{ destinationStage: 'execute', workItem: { id: 'wi-1' } }]);
@@ -2006,7 +2040,9 @@ describe('Factory Board — investigate flow', () => {
     await within(intake).findByText('Fix flaky test');
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
     await waitFor(() => expect(captured.messages).toHaveLength(1));
@@ -2072,7 +2108,9 @@ describe('Factory Board — investigate flow', () => {
     });
     expect(state.posts).toHaveLength(0);
     releaseStart();
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(startBodies).toHaveLength(1);
   });
 
@@ -2125,7 +2163,9 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(intake).getByRole('button', { name: 'More actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.skillInvocations).toHaveLength(0);
     expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12');
@@ -2162,7 +2202,9 @@ describe('Factory Board — investigate flow', () => {
     await within(intake).findByText('Add factory pages');
     await userEvent.click(within(intake).getByRole('button', { name: 'Review Add factory pages' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/pr-34' });
     expect(captured.threadTitles).toEqual(['PR #34: Add factory pages']);
     await waitFor(() => expect(captured.messages).toHaveLength(1));
@@ -2189,7 +2231,9 @@ describe('Factory Board — investigate flow', () => {
     await within(intake).findByText('Fix intake sync');
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix intake sync' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/linear-eng-42' });
     await waitFor(() => expect(captured.messages).toHaveLength(1));
     expect(captured.messages[0]?.message).toContain('Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)');
@@ -2215,7 +2259,9 @@ describe('Factory Board — investigate flow', () => {
     );
     await userEvent.click(within(form).getByRole('button', { name: 'Run' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     await waitFor(() => expect(captured.messages).toHaveLength(1));
     // The base issue context survives; the typed text guides the run instead
     // of the explicit skill directive.
@@ -2248,7 +2294,9 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     await waitFor(() => expect(captured.messages).toHaveLength(1));
     expect(captured.messages[0]?.message).toContain('GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)');
@@ -2288,7 +2336,9 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.starts).toMatchObject([{ destinationStage: 'execute', workItem: { id: 'wi-1' } }]);
     expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-1', role: 'work' } }]);
@@ -2314,7 +2364,9 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(column('review')).getByRole('button', { name: 'Actions for Add factory pages' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Review' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.threadTitles).toEqual(['PR #34: Add factory pages']);
     await waitFor(() => expect(captured.messages).toHaveLength(1));
     expect(captured.messages[0]?.message).toContain(
@@ -2385,7 +2437,9 @@ describe('Factory Board — open session from the card title', () => {
     const card = within(column('intake')).getByTestId('work-item-card');
     await userEvent.click(within(card).getByRole('button', { name: 'Issue: Fix flaky test' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
     // No agent run: nothing was sent to the session.
@@ -2425,7 +2479,9 @@ describe('Factory Board — open session from the card title', () => {
     const card = within(column('execute')).getByTestId('work-item-card');
     await userEvent.click(within(card).getByRole('button', { name: 'Issue: Fix flaky test' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.messages).toEqual([]);
     // The browser delegates only the fresh chat role; the stale work role is not inferred as authority.
     expect(state.patches).toEqual([]);
@@ -2441,7 +2497,9 @@ describe('Factory Board — open session from the card title', () => {
     await within(intake).findByText('Fix flaky test');
     await userEvent.click(within(intake).getByRole('button', { name: 'Issue: Fix flaky test' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.messages).toEqual([]);
     expect(state.posts).toEqual([]);
@@ -2461,7 +2519,9 @@ describe('Factory Board — open session from the card title', () => {
     const card = within(column('intake')).getByTestId('work-item-card');
     await userEvent.click(within(card).getByRole('button', { name: 'Manual: Manual card' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${githubProject.id}/threads/${captured.sessionId}`),
+    );
     expect(captured.worktree).toMatchObject({ branch: 'factory/item-wi-manual' });
     expect(captured.threadTitles).toEqual(['Manual card']);
     expect(captured.messages).toEqual([]);

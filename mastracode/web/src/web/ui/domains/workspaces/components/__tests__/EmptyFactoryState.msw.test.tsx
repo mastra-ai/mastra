@@ -286,9 +286,7 @@ describe('EmptyFactoryState onboarding', () => {
     expect(await screen.findByText('Connected to Acme.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Finish setup' }));
 
-    await waitFor(() =>
-      expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/factory-1/work'),
-    );
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/factory-1/work'));
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
     expect(sessionStorage.getItem(FACTORY_KEY)).toBeNull();
   });

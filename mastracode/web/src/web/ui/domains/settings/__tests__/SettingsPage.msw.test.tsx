@@ -269,7 +269,10 @@ describe('SettingsPage', () => {
     it('returns to the origin page carried in navigation state via Back to app', async () => {
       const user = userEvent.setup();
       const { router } = await renderSettingsPage({
-        initialEntry: { pathname: `/factories/${project.id}/settings/general`, state: { from: { pathname: '/threads/t1' } } },
+        initialEntry: {
+          pathname: `/factories/${project.id}/settings/general`,
+          state: { from: { pathname: '/threads/t1' } },
+        },
       });
       await screen.findByRole('region', { name: 'Settings' });
 
@@ -291,7 +294,10 @@ describe('SettingsPage', () => {
     it('does not navigate away when pressing Escape', async () => {
       const user = userEvent.setup();
       const { router } = await renderSettingsPage({
-        initialEntry: { pathname: `/factories/${project.id}/settings/general`, state: { from: { pathname: '/threads/t1' } } },
+        initialEntry: {
+          pathname: `/factories/${project.id}/settings/general`,
+          state: { from: { pathname: '/threads/t1' } },
+        },
       });
       await screen.findByRole('region', { name: 'Settings' });
 

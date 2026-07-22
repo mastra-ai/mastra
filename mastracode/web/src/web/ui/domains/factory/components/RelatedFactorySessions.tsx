@@ -61,9 +61,7 @@ export function FactorySessionHeader() {
   const destinations = relatedItems.map(item => ({ item, session: latestLiveSession(item, livePaths) }));
   const isReview = currentItem.source === 'github-pr';
   const section = isReview ? 'Review' : 'Work';
-  const sectionPath = isReview
-    ? `/factories/${activeFactory?.id}/review`
-    : `/factories/${activeFactory?.id}/work`;
+  const sectionPath = isReview ? `/factories/${activeFactory?.id}/review` : `/factories/${activeFactory?.id}/work`;
 
   const openSession = async (session: WorkItemSessionRef) => {
     await selectWorkspace.mutateAsync(session.sessionId);

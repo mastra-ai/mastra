@@ -104,9 +104,7 @@ describe('FactorySwitcher', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: /Server Factory/ }));
 
-    await waitFor(() =>
-      expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/server-factory/work'),
-    );
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/server-factory/work'));
   });
 
   it('when Create Factory is selected on mobile, then it navigates to /factories/create and the sidebar closes', async () => {
