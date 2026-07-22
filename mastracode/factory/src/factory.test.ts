@@ -317,6 +317,17 @@ describe('MastraFactory.prepare', () => {
     } satisfies AuthInitContext);
   });
 
+  it('defaults publicUrl to the local Factory UI origin', async () => {
+    const auth = fakeProvider();
+    const storage = fakeStorage();
+    await prepareFactory({ auth, storage });
+    expect(auth.init).toHaveBeenCalledExactlyOnceWith({
+      database: storage.authDatabase(),
+      publicUrl: 'http://localhost:5173',
+      allowedOrigins: [],
+    } satisfies AuthInitContext);
+  });
+
   it('surfaces provider init failures at prepare()', async () => {
     const auth = fakeProvider({ init: vi.fn(async () => Promise.reject(new Error('provider misconfigured'))) });
     const factory = new MastraFactory({ storage: fakeStorage(), auth });
