@@ -5,7 +5,7 @@ import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import { Workflow } from '@mastra/core/workflows';
+import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
   Step,
   StepResult,
@@ -27,6 +27,22 @@ import type {
   InngestFlowCronConfig,
   InngestWorkflowConfig,
 } from './types';
+
+/**
+ * Resolves the nested `InngestWorkflow` wrapped by a graph entry, if any.
+ * Handles both plain single-step entries and `loop` / `foreach` entries whose
+ * body is a `SingleStepEntry` wrapper (so `{ type: 'step', step: workflow }`
+ * bodies are unwrapped correctly).
+ */
+function getNestedInngestWorkflow(entry: StepFlowEntry): InngestWorkflow | null {
+  let nested: unknown = null;
+  if (entry.type === 'loop' || entry.type === 'foreach') {
+    nested = getEntryWorkflow(entry.step);
+  } else if (isSingleStepEntry(entry)) {
+    nested = getEntryWorkflow(entry);
+  }
+  return nested instanceof InngestWorkflow ? nested : null;
+}
 
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
@@ -136,11 +152,9 @@ export class InngestWorkflow<
   __setPubsubFactory(factory: (defaultPubsub: PubSub) => PubSub) {
     this.#pubsubFactory = factory;
     const updateNested = (step: StepFlowEntry) => {
-      if (
-        (step.type === 'step' || step.type === 'loop' || step.type === 'foreach') &&
-        step.step instanceof InngestWorkflow
-      ) {
-        step.step.__setPubsubFactory(factory);
+      const nested = getNestedInngestWorkflow(step);
+      if (nested) {
+        nested.__setPubsubFactory(factory);
       } else if (step.type === 'parallel' || step.type === 'conditional') {
         for (const subStep of step.steps) {
           updateNested(subStep);
@@ -166,11 +180,9 @@ export class InngestWorkflow<
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
     const updateNested = (step: StepFlowEntry) => {
-      if (
-        (step.type === 'step' || step.type === 'loop' || step.type === 'foreach') &&
-        step.step instanceof InngestWorkflow
-      ) {
-        step.step.__registerMastra(mastra);
+      const nested = getNestedInngestWorkflow(step);
+      if (nested) {
+        nested.__registerMastra(mastra);
       } else if (step.type === 'parallel' || step.type === 'conditional') {
         for (const subStep of step.steps) {
           updateNested(subStep);
@@ -572,12 +584,11 @@ export class InngestWorkflow<
 
   getNestedFunctions(steps: StepFlowEntry[]): ReturnType<Inngest['createFunction']>[] {
     return steps.flatMap(step => {
-      if (step.type === 'step' || step.type === 'loop' || step.type === 'foreach') {
-        if (step.step instanceof InngestWorkflow) {
-          return [step.step.getFunction(), ...step.step.getNestedFunctions(step.step.executionGraph.steps)];
-        }
-        return [];
-      } else if (step.type === 'parallel' || step.type === 'conditional') {
+      const nested = getNestedInngestWorkflow(step);
+      if (nested) {
+        return [nested.getFunction(), ...nested.getNestedFunctions(nested.executionGraph.steps)];
+      }
+      if (step.type === 'parallel' || step.type === 'conditional') {
         return this.getNestedFunctions(step.steps);
       }
 

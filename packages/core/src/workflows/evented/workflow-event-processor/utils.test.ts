@@ -1,241 +1,172 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { EventedWorkflow } from '../workflow';
-import { getStep } from './utils';
+import { getNestedWorkflow, getStepId } from './utils';
 
-describe('getStep', () => {
-  function createNestedWorkflow(stepType: 'parallel' | 'conditional') {
-    // Create target step that will be nested
-    const targetStep = {
-      type: 'step' as const,
-      step: {
-        id: 'nestedStep',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async () => ({}),
-      },
-    };
-
-    // Create inner workflow containing target step
-    const innerWorkflow = new EventedWorkflow({
-      id: 'innerWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-    innerWorkflow.stepGraph[0] = targetStep;
-
-    // Create outer workflow
-    const outerWorkflow = new EventedWorkflow({
-      id: 'outerWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-
-    // Create container step (parallel or conditional) with inner workflow
-    const containerStep = {
-      type: stepType,
-      steps: [
-        { type: 'step', step: { id: 'otherStep' } },
-        { type: 'step', step: innerWorkflow },
-      ],
-    };
-    outerWorkflow.stepGraph[0] = containerStep as any;
-
-    return { outerWorkflow, targetStep };
-  }
-
-  it('should resolve step from EventedWorkflow', () => {
-    // Arrange: Create target step and evented workflow containing it
-    const targetStep = {
-      type: 'step' as const,
-      step: {
-        id: 'innerStep',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async () => ({}),
-      },
-    };
-
-    const eventedWorkflow = new EventedWorkflow({
-      id: 'eventedWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-
-    eventedWorkflow.stepGraph[0] = targetStep;
-
-    // Act: Call getStep with path to the step
-    const result = getStep(eventedWorkflow as any, [0]);
-
-    // Assert: Verify returned step matches target
-    expect(result).toBe(targetStep.step);
-  });
-
-  it('should return correct step from nested EventedWorkflow', () => {
-    // Arrange: Create nested EventedWorkflow structure
-    const targetStep = {
-      type: 'step' as const,
-      step: {
-        id: 'deeplyNestedStep',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async () => ({}),
-      },
-    };
-
-    const innerWorkflow = new EventedWorkflow({
-      id: 'innerWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-    innerWorkflow.stepGraph[0] = targetStep;
-
-    const outerWorkflow = new EventedWorkflow({
-      id: 'outerWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-    // Wrap the inner workflow as a step entry, since getStep expects 'step' entries
-    outerWorkflow.stepGraph[1] = { type: 'step', step: innerWorkflow as any } as any;
-
-    // Act: Resolve the outer step first, then the inner step
-    const nestedWorkflow = getStep(outerWorkflow as any, [1]);
-    const result = getStep(nestedWorkflow as any, [0]);
-
-    // Assert: Verify we get the deeply nested step
-    expect(result).toBe(targetStep.step);
-  });
-
-  it('should handle nested EventedWorkflow path slicing correctly', () => {
-    // Arrange: Create nested EventedWorkflow structure
-    const innerWorkflow = new EventedWorkflow({
-      id: 'innerWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-
-    const outerWorkflow = new EventedWorkflow({
-      id: 'outerWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-    // Wrap the inner workflow in a 'step' so getStep returns .step per current implementation
-    outerWorkflow.stepGraph[1] = { type: 'step', step: innerWorkflow } as any;
-
-    // Act: Call getStep with path to traverse nested structure
-    const result = getStep(outerWorkflow as any, [1, 0]);
-
-    // Assert: Verify returned step is the inner workflow object (since it's wrapped in a step)
-    expect(result).toBe(innerWorkflow);
-  });
-
-  it('should handle direct EventedWorkflow instances in step graph', () => {
-    // Arrange: Create nested workflow structure with inner step
-    const targetStep = {
-      type: 'step' as const,
-      step: {
-        id: 'nestedStep',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async () => ({}),
-      },
-    };
-
-    const innerWorkflow = new EventedWorkflow({
-      id: 'innerWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-    innerWorkflow.stepGraph[0] = targetStep;
-
-    const outerWorkflow = new EventedWorkflow({
-      id: 'outerWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-
-    // Add inner workflow directly to step graph (not wrapped in a step object)
-    outerWorkflow.stepGraph[0] = innerWorkflow as any;
-    // Ensure getStep treats this as a step-like node so it can recurse into the nested workflow
-    (outerWorkflow.stepGraph[0] as any).type = 'step';
-
-    // Act: Call getStep with path that requires slicing
-    const result = getStep(outerWorkflow as any, [0, 0]);
-
-    // Assert: Verify we get the correct nested step through recursive resolution
-    expect(result).toBe(targetStep.step);
-  });
-
-  it('should return null for invalid path in EventedWorkflow', () => {
-    // Arrange: Create nested EventedWorkflow structure
-    const innerWorkflow = new EventedWorkflow({
-      id: 'innerWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-
-    const outerWorkflow = new EventedWorkflow({
-      id: 'outerWorkflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-    outerWorkflow.stepGraph[1] = innerWorkflow as any;
-
-    // Act & Assert: Try invalid paths
-    expect(getStep(outerWorkflow as any, [1, 999])).toBeNull();
-    expect(getStep(outerWorkflow as any, [])).toBeNull();
-  });
-
-  it('should return step property for loop type', () => {
-    // Arrange: Create workflow with loop step. `loop.step` is a SingleStepEntry —
-    // the classic `{ type: 'step', step: <live Step> }` variant is what `getStep`
-    // unwraps to the underlying Step for this legacy contract.
-    const innerStep = {
-      id: 'loopStep',
+function createStepEntry(id: string) {
+  return {
+    type: 'step' as const,
+    step: {
+      id,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
       execute: async () => ({}),
-    };
-    const loopStep = {
-      type: 'loop' as const,
-      step: { type: 'step' as const, step: innerStep },
-    };
+    },
+  };
+}
 
-    const workflow = new EventedWorkflow({
-      id: 'workflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-    workflow.stepGraph[0] = loopStep as any;
+function createWorkflow(id: string) {
+  return new EventedWorkflow({
+    id,
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+  });
+}
 
-    // Act: Call getStep with path to loop step
-    const result = getStep(workflow as any, [0]);
+describe('getStepId', () => {
+  it('resolves the id of a plain step entry', () => {
+    const workflow = createWorkflow('workflow');
+    workflow.stepGraph[0] = createStepEntry('innerStep');
 
-    // Assert: Verify returned step matches inner live Step
-    expect(result).toBe(innerStep);
+    expect(getStepId(workflow as any, [0])).toBe('innerStep');
   });
 
-  it('should correctly resolve step from EventedWorkflow nested in parallel step', () => {
-    // Arrange: Create nested workflow structure with parallel container
-    const { outerWorkflow, targetStep } = createNestedWorkflow('parallel');
+  it('resolves ids of declarative agent / tool / mapping entries', () => {
+    const workflow = createWorkflow('workflow');
+    workflow.stepGraph[0] = { type: 'agent', id: 'agent-step', agentId: 'my-agent' } as any;
+    workflow.stepGraph[1] = { type: 'tool', id: 'tool-step', toolId: 'my-tool' } as any;
+    workflow.stepGraph[2] = { type: 'mapping', id: 'mapping-step', mapConfig: {} } as any;
 
-    // Act: First resolve the inner EventedWorkflow, then resolve the nested step within it
-    const intermediate = getStep(outerWorkflow as any, [0, 1]);
-    const result = getStep(intermediate as any, [0]);
-
-    // Assert: Verify we get the correct nested step
-    expect(result).toBe(targetStep.step);
+    expect(getStepId(workflow as any, [0])).toBe('agent-step');
+    expect(getStepId(workflow as any, [1])).toBe('tool-step');
+    expect(getStepId(workflow as any, [2])).toBe('mapping-step');
   });
 
-  it('should correctly resolve step from EventedWorkflow nested in conditional step', () => {
-    // Arrange: Create nested workflow structure with conditional container
-    const { outerWorkflow, targetStep } = createNestedWorkflow('conditional');
+  it('resolves ids inside parallel and conditional containers', () => {
+    for (const type of ['parallel', 'conditional'] as const) {
+      const workflow = createWorkflow('workflow');
+      workflow.stepGraph[0] = {
+        type,
+        steps: [createStepEntry('first'), createStepEntry('second')],
+      } as any;
 
-    // Act: First resolve the inner EventedWorkflow, then resolve the nested step within it
-    const intermediate = getStep(outerWorkflow as any, [0, 1]);
-    const result = getStep(intermediate as any, [0]);
+      expect(getStepId(workflow as any, [0, 0])).toBe('first');
+      expect(getStepId(workflow as any, [0, 1])).toBe('second');
+    }
+  });
 
-    // Assert: Verify we get the correct nested step
-    expect(result).toBe(targetStep.step);
+  it('resolves the body entry id for loop and foreach', () => {
+    const workflow = createWorkflow('workflow');
+    workflow.stepGraph[0] = {
+      type: 'loop',
+      step: createStepEntry('loopBody'),
+      loopType: 'dowhile',
+    } as any;
+    workflow.stepGraph[1] = {
+      type: 'foreach',
+      step: { type: 'agent', id: 'foreachAgent', agentId: 'my-agent' },
+      opts: { concurrency: 1 },
+    } as any;
+
+    expect(getStepId(workflow as any, [0])).toBe('loopBody');
+    expect(getStepId(workflow as any, [1])).toBe('foreachAgent');
+  });
+
+  it('resolves the id of a nested workflow wrapped as a step entry', () => {
+    const innerWorkflow = createWorkflow('innerWorkflow');
+    const outerWorkflow = createWorkflow('outerWorkflow');
+    outerWorkflow.stepGraph[0] = { type: 'step', step: innerWorkflow } as any;
+
+    expect(getStepId(outerWorkflow as any, [0])).toBe('innerWorkflow');
+  });
+
+  it('returns null for invalid or empty paths', () => {
+    const workflow = createWorkflow('workflow');
+    workflow.stepGraph[0] = createStepEntry('innerStep');
+
+    expect(getStepId(workflow as any, [999])).toBeNull();
+    expect(getStepId(workflow as any, [])).toBeNull();
+  });
+
+  it('returns null for non-step-like entries', () => {
+    const workflow = createWorkflow('workflow');
+    workflow.stepGraph[0] = { type: 'sleep', id: 'sleep-step', duration: 10 } as any;
+
+    expect(getStepId(workflow as any, [0])).toBeNull();
+  });
+});
+
+describe('getNestedWorkflow', () => {
+  function createMastraStub(workflow: ReturnType<typeof createWorkflow>) {
+    return {
+      __hasInternalWorkflow: () => false,
+      getWorkflow: () => workflow,
+    } as any;
+  }
+
+  it('resolves a nested workflow wrapped as a step entry', () => {
+    const innerWorkflow = createWorkflow('innerWorkflow');
+    const outerWorkflow = createWorkflow('outerWorkflow');
+    outerWorkflow.stepGraph[0] = { type: 'step', step: innerWorkflow } as any;
+
+    const result = getNestedWorkflow(createMastraStub(outerWorkflow), {
+      workflowId: 'outerWorkflow',
+      executionPath: [0],
+      resumeSteps: [],
+    } as any);
+
+    expect(result).toBe(innerWorkflow);
+  });
+
+  it('resolves a nested workflow inside parallel and conditional containers', () => {
+    for (const type of ['parallel', 'conditional'] as const) {
+      const innerWorkflow = createWorkflow('innerWorkflow');
+      const outerWorkflow = createWorkflow('outerWorkflow');
+      outerWorkflow.stepGraph[0] = {
+        type,
+        steps: [createStepEntry('otherStep'), { type: 'step', step: innerWorkflow }],
+      } as any;
+
+      const result = getNestedWorkflow(createMastraStub(outerWorkflow), {
+        workflowId: 'outerWorkflow',
+        executionPath: [0, 1],
+        resumeSteps: [],
+      } as any);
+
+      expect(result).toBe(innerWorkflow);
+    }
+  });
+
+  it('resolves a nested workflow used as a loop / foreach body', () => {
+    for (const type of ['loop', 'foreach'] as const) {
+      const innerWorkflow = createWorkflow('innerWorkflow');
+      const outerWorkflow = createWorkflow('outerWorkflow');
+      outerWorkflow.stepGraph[0] = {
+        type,
+        step: { type: 'step', step: innerWorkflow },
+      } as any;
+
+      const result = getNestedWorkflow(createMastraStub(outerWorkflow), {
+        workflowId: 'outerWorkflow',
+        executionPath: [0],
+        resumeSteps: [],
+      } as any);
+
+      expect(result).toBe(innerWorkflow);
+    }
+  });
+
+  it('returns null when the entry is not a workflow', () => {
+    const outerWorkflow = createWorkflow('outerWorkflow');
+    outerWorkflow.stepGraph[0] = createStepEntry('plainStep');
+    outerWorkflow.stepGraph[1] = { type: 'agent', id: 'agent-step', agentId: 'my-agent' } as any;
+
+    const mastra = createMastraStub(outerWorkflow);
+    expect(
+      getNestedWorkflow(mastra, { workflowId: 'outerWorkflow', executionPath: [0], resumeSteps: [] } as any),
+    ).toBeNull();
+    expect(
+      getNestedWorkflow(mastra, { workflowId: 'outerWorkflow', executionPath: [1], resumeSteps: [] } as any),
+    ).toBeNull();
   });
 });

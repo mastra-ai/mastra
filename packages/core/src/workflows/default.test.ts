@@ -5,7 +5,9 @@ import { RequestContext } from '../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../error';
 import type { PubSub } from '../events';
 import { EventEmitterPubSub } from '../events/event-emitter';
+import { createObservabilityContext } from '../observability';
 import { DefaultExecutionEngine } from './default';
+import type { Step } from './step';
 import type { FormattedWorkflowResult, StepResult } from './types';
 
 class TestableExecutionEngine extends DefaultExecutionEngine {
@@ -26,7 +28,10 @@ class TestableExecutionEngine extends DefaultExecutionEngine {
 
 describe('DefaultExecutionEngine.serializeRequestContext', () => {
   it('should correctly serialize serializable values', () => {
-    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     const ctx = new RequestContext();
     ctx.set('userId', 'user-123');
     ctx.set('feature', 'dark-mode');
@@ -42,7 +47,10 @@ describe('DefaultExecutionEngine.serializeRequestContext', () => {
   });
 
   it('should skip non-serializable values (functions)', () => {
-    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     const ctx = new RequestContext();
     ctx.set('userId', 'user-123');
     ctx.set('callback', () => {});
@@ -56,7 +64,10 @@ describe('DefaultExecutionEngine.serializeRequestContext', () => {
   });
 
   it('should skip objects with circular references', () => {
-    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     const ctx = new RequestContext();
     ctx.set('userId', 'user-123');
 
@@ -73,7 +84,10 @@ describe('DefaultExecutionEngine.serializeRequestContext', () => {
   });
 
   it('should skip non-serializable objects like RPC proxies', () => {
-    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     const ctx = new RequestContext();
     ctx.set('userId', 'user-123');
 
@@ -106,7 +120,10 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
   let abortController: AbortController;
 
   beforeEach(() => {
-    engine = new DefaultExecutionEngine({ mastra: undefined });
+    engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     pubsub = new EventEmitterPubSub();
     requestContext = new RequestContext();
     abortController = new AbortController();
@@ -181,7 +198,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       pubsub,
       abortController,
       requestContext,
-      tracingContext: {},
+      ...createObservabilityContext(),
     });
 
     return { result, stepResults };
@@ -353,7 +370,10 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
   let abortController: AbortController;
 
   beforeEach(() => {
-    engine = new DefaultExecutionEngine({ mastra: undefined });
+    engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     pubsub = new EventEmitterPubSub();
     requestContext = new RequestContext();
     abortController = new AbortController();
@@ -382,11 +402,14 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
         status: 'success',
         output: { stale: true },
         payload: {},
+        startedAt: 0,
+        endedAt: 0,
       },
       'needs-approval': {
         status: 'suspended',
         payload: { id: 'from-suspended-snapshot' },
         suspendPayload: { reason: 'manual-review' },
+        startedAt: 0,
         suspendedAt: Date.now(),
       },
     } as Record<string, StepResult<any, any, any, any>>;
@@ -394,7 +417,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
     const result = await engine.executeEntry({
       workflowId,
       runId,
-      entry: { type: 'step', step: resumedStep },
+      entry: { type: 'step', step: resumedStep as unknown as Step },
       prevStep: { type: 'step', step: producerStep },
       serializedStepGraph: [],
       stepResults,
@@ -418,7 +441,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
       pubsub,
       abortController,
       requestContext,
-      tracingContext: {},
+      ...createObservabilityContext(),
     });
 
     expect(result.result).toMatchObject({
@@ -450,11 +473,14 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
         status: 'success',
         output: { stale: true },
         payload: {},
+        startedAt: 0,
+        endedAt: 0,
       },
       'needs-approval': {
         status: 'suspended',
         payload: null,
         suspendPayload: { reason: 'manual-review' },
+        startedAt: 0,
         suspendedAt: Date.now(),
       },
     } as Record<string, StepResult<any, any, any, any>>;
@@ -462,7 +488,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
     const result = await engine.executeEntry({
       workflowId,
       runId,
-      entry: { type: 'step', step: resumedStep },
+      entry: { type: 'step', step: resumedStep as unknown as Step },
       prevStep: { type: 'step', step: producerStep },
       serializedStepGraph: [],
       stepResults,
@@ -486,7 +512,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
       pubsub,
       abortController,
       requestContext,
-      tracingContext: {},
+      ...createObservabilityContext(),
     });
 
     expect(result.result).toMatchObject({
@@ -516,6 +542,8 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
         status: 'success',
         output: { stale: true },
         payload: {},
+        startedAt: 0,
+        endedAt: 0,
       },
       'process-item': {
         status: 'suspended',
@@ -523,10 +551,11 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
         suspendPayload: {
           __workflow_meta: {
             foreachIndex: 0,
-            foreachOutput: [{ status: 'suspended', suspendPayload: {}, suspendedAt: Date.now() }],
+            foreachOutput: [{ status: 'suspended', suspendPayload: {}, startedAt: 0, suspendedAt: Date.now() }],
             resumeLabels: {},
           },
         },
+        startedAt: 0,
         suspendedAt: Date.now(),
       },
     } as Record<string, StepResult<any, any, any, any>>;
@@ -534,7 +563,11 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
     const result = await engine.executeEntry({
       workflowId,
       runId,
-      entry: { type: 'foreach', step: foreachStep, opts: { concurrency: 1 } },
+      entry: {
+        type: 'foreach',
+        step: { type: 'step', step: foreachStep as unknown as Step },
+        opts: { concurrency: 1 },
+      },
       prevStep: { type: 'step', step: producerStep },
       serializedStepGraph: [],
       stepResults,
@@ -559,7 +592,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
       pubsub,
       abortController,
       requestContext,
-      tracingContext: {},
+      ...createObservabilityContext(),
     });
 
     expect(result.result).toMatchObject({
@@ -576,7 +609,10 @@ describe('DefaultExecutionEngine.executeLoop resume payload handling', () => {
   let abortController: AbortController;
 
   beforeEach(() => {
-    engine = new DefaultExecutionEngine({ mastra: undefined });
+    engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     pubsub = new EventEmitterPubSub();
     requestContext = new RequestContext();
     abortController = new AbortController();
@@ -597,6 +633,7 @@ describe('DefaultExecutionEngine.executeLoop resume payload handling', () => {
         status: 'suspended',
         payload: null,
         suspendPayload: { reason: 'manual-review' },
+        startedAt: 0,
         suspendedAt: Date.now(),
       },
     } as Record<string, StepResult<any, any, any, any>>;
@@ -606,7 +643,7 @@ describe('DefaultExecutionEngine.executeLoop resume payload handling', () => {
       runId,
       entry: {
         type: 'loop',
-        step,
+        step: { type: 'step', step: step as unknown as Step },
         condition: async () => true,
         loopType: 'dountil',
       },
@@ -634,7 +671,7 @@ describe('DefaultExecutionEngine.executeLoop resume payload handling', () => {
       pubsub,
       abortController,
       requestContext,
-      tracingContext: {},
+      ...createObservabilityContext(),
     });
 
     expect(result).toMatchObject({
@@ -651,7 +688,10 @@ describe('DefaultExecutionEngine.executeLoop cancellation', () => {
   let abortController: AbortController;
 
   beforeEach(() => {
-    engine = new DefaultExecutionEngine({ mastra: undefined });
+    engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     pubsub = new EventEmitterPubSub();
     requestContext = new RequestContext();
     abortController = new AbortController();
@@ -683,7 +723,7 @@ describe('DefaultExecutionEngine.executeLoop cancellation', () => {
 
     const entry = {
       type: 'loop' as const,
-      step,
+      step: { type: 'step' as const, step: step as unknown as Step },
       // dountil: stop when iteration >= 1000
       condition: async ({ inputData }: { inputData: { iteration: number } }) => inputData.iteration >= 1000,
       loopType: 'dountil' as const,
@@ -711,7 +751,7 @@ describe('DefaultExecutionEngine.executeLoop cancellation', () => {
       pubsub,
       abortController,
       requestContext,
-      tracingContext: {},
+      ...createObservabilityContext(),
     });
 
     // The loop must terminate quickly with 'canceled' rather than running 1000 times.
@@ -742,7 +782,7 @@ describe('DefaultExecutionEngine.executeLoop cancellation', () => {
 
     const entry = {
       type: 'loop' as const,
-      step,
+      step: { type: 'step' as const, step: step as unknown as Step },
       // Condition aborts the run mid-evaluation, then returns true (dountil
       // terminal value). Pre-fix, the loop exits as 'success'.
       condition: async ({ abort }: { abort: () => void }) => {
@@ -774,7 +814,7 @@ describe('DefaultExecutionEngine.executeLoop cancellation', () => {
       pubsub,
       abortController,
       requestContext,
-      tracingContext: {},
+      ...createObservabilityContext(),
     });
 
     expect(result.status).toBe('canceled');
@@ -789,7 +829,10 @@ describe('DefaultExecutionEngine.executeForeach cancellation', () => {
   let abortController: AbortController;
 
   beforeEach(() => {
-    engine = new DefaultExecutionEngine({ mastra: undefined });
+    engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     pubsub = new EventEmitterPubSub();
     requestContext = new RequestContext();
     abortController = new AbortController();
@@ -820,7 +863,7 @@ describe('DefaultExecutionEngine.executeForeach cancellation', () => {
 
     const entry = {
       type: 'foreach' as const,
-      step,
+      step: { type: 'step' as const, step: step as unknown as Step },
       opts: { concurrency: 2 },
     };
 
@@ -846,7 +889,7 @@ describe('DefaultExecutionEngine.executeForeach cancellation', () => {
       pubsub,
       abortController,
       requestContext,
-      tracingContext: {},
+      ...createObservabilityContext(),
     });
 
     expect(result.status).toBe('canceled');
@@ -877,7 +920,7 @@ describe('DefaultExecutionEngine.executeForeach cancellation', () => {
 
     const entry = {
       type: 'foreach' as const,
-      step,
+      step: { type: 'step' as const, step: step as unknown as Step },
       opts: { concurrency: 4 },
     };
 
@@ -903,7 +946,7 @@ describe('DefaultExecutionEngine.executeForeach cancellation', () => {
       pubsub,
       abortController,
       requestContext,
-      tracingContext: {},
+      ...createObservabilityContext(),
     });
 
     expect(result.status).toBe('canceled');
@@ -952,7 +995,7 @@ describe('DefaultExecutionEngine.executeForeach concurrency', () => {
       runId,
       entry: {
         type: 'foreach' as const,
-        step,
+        step: { type: 'step' as const, step: step as unknown as Step },
         opts: { concurrency },
       },
       prevStep: { type: 'step', step } as any,
@@ -973,11 +1016,14 @@ describe('DefaultExecutionEngine.executeForeach concurrency', () => {
       pubsub,
       abortController,
       requestContext,
-      tracingContext: {},
+      ...createObservabilityContext(),
     });
 
   beforeEach(() => {
-    engine = new DefaultExecutionEngine({ mastra: undefined });
+    engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     pubsub = new EventEmitterPubSub();
     requestContext = new RequestContext();
     abortController = new AbortController();
@@ -1212,7 +1258,10 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
   let pubsub: PubSub;
 
   beforeEach(() => {
-    engine = new TestableExecutionEngine({ mastra: undefined });
+    engine = new TestableExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     pubsub = new EventEmitterPubSub();
   });
 
@@ -1335,7 +1384,7 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
         payload: { value: 1 },
         startedAt: 1,
         endedAt: 2,
-      },
+      } as unknown as StepResult<any, any, any, any>,
       step2: { status: 'success', output: { value: 3 }, payload: { value: 1 }, startedAt: 3, endedAt: 4 },
     };
     const lastOutput: StepResult<any, any, any, any> = stepResults.step2!;
@@ -1366,7 +1415,10 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
 
 describe('DefaultExecutionEngine.deserializeRequestContext', () => {
   it('should produce JSON-safe serialized request context values', () => {
-    const engine = new TestableExecutionEngine({ mastra: undefined });
+    const engine = new TestableExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     const requestContext = new RequestContext();
     const circular: any = { name: 'service' };
     circular.self = circular;
@@ -1383,7 +1435,10 @@ describe('DefaultExecutionEngine.deserializeRequestContext', () => {
   });
 
   it('should return a RequestContext instance with all entries from the plain object', () => {
-    const engine = new TestableExecutionEngine({ mastra: undefined });
+    const engine = new TestableExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     const plainObj = { userId: 'user-123', tenantId: 'tenant-456', nested: { flag: true } };
 
     const result = engine.deserializeRequestContextPublic(plainObj);
@@ -1396,7 +1451,10 @@ describe('DefaultExecutionEngine.deserializeRequestContext', () => {
   });
 
   it('should return an empty RequestContext for an empty object', () => {
-    const engine = new TestableExecutionEngine({ mastra: undefined });
+    const engine = new TestableExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
 
     const result = engine.deserializeRequestContextPublic({});
 
@@ -1506,7 +1564,10 @@ describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => 
 
 describe('DefaultExecutionEngine.executeStepWithRetry', () => {
   it('does not retry when the step throws MastraNonRetryableError', async () => {
-    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     let calls = 0;
 
     const result = await engine.executeStepWithRetry(
@@ -1527,7 +1588,10 @@ describe('DefaultExecutionEngine.executeStepWithRetry', () => {
   });
 
   it('retries transient errors until retry attempts are exhausted', async () => {
-    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
     let calls = 0;
 
     const result = await engine.executeStepWithRetry(

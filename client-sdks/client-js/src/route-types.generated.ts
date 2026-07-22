@@ -69,12 +69,12 @@ type Shared_Auxiliary_1067 =
       arg: Shared_Auxiliary_1067;
     };
 
-type Shared_Auxiliary_1206 = {
+type Shared_Auxiliary_1205 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1206[] | undefined;
+  children?: Shared_Auxiliary_1205[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2292,7 +2292,12 @@ type Shared_Type_101 = {
   type: 'agent';
   id: string;
   agentId: string;
-  outputSchema?: unknown | undefined;
+  description?: string | undefined;
+  outputSchema?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   options?:
     | {
         retries?: number | undefined;
@@ -2309,6 +2314,7 @@ type Shared_Type_102 = {
   type: 'tool';
   id: string;
   toolId: string;
+  description?: string | undefined;
   options?:
     | {
         retries?: number | undefined;
@@ -2321,21 +2327,20 @@ type Shared_Type_102 = {
     | undefined;
 };
 
-type Shared_Type_103 = {
-  type: 'workflow';
-  id: string;
-  workflowId: string;
-  options?:
-    | {
-        retries?: number | undefined;
-        metadata?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-      }
-    | undefined;
-};
+type Shared_Type_103 =
+  | Shared_Type_101
+  | Shared_Type_102
+  | {
+      type: 'mapping';
+      id: string;
+      mapConfig: string;
+    }
+  | {
+      type: 'workflow';
+      id: string;
+      workflowId: string;
+      description?: string | undefined;
+    };
 
 type Shared_Type_104 = {
   /** Transport type: stdio for local processes, http for remote servers */
@@ -2671,7 +2676,7 @@ type Shared_Type_116 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1206[] | undefined;
+  files?: Shared_Auxiliary_1205[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -14001,11 +14006,23 @@ export type PostStoredWorkflows_Body = {
       }
     | undefined;
   /** JSON Schema (Draft 2020-12) for the workflow input */
-  inputSchema: unknown;
+  inputSchema: {
+    [key: string]: unknown;
+  };
   /** JSON Schema (Draft 2020-12) for the workflow output */
-  outputSchema: unknown;
-  stateSchema?: unknown | undefined;
-  requestContextSchema?: unknown | undefined;
+  outputSchema: {
+    [key: string]: unknown;
+  };
+  stateSchema?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  requestContextSchema?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   /** Static workflow graph — ordered array of serialized step entries with all refs as ids. */
   graph: (
     | Shared_Type_101
@@ -14015,23 +14032,27 @@ export type PostStoredWorkflows_Body = {
         id: string;
         mapConfig: string;
       }
-    | Shared_Type_103
+    | {
+        type: 'workflow';
+        id: string;
+        workflowId: string;
+        description?: string | undefined;
+      }
     | {
         type: 'parallel';
-        steps: (
-          | Shared_Type_101
-          | Shared_Type_102
-          | {
-              type: 'mapping';
-              id: string;
-              mapConfig: string;
-            }
-          | Shared_Type_103
-        )[];
+        steps: Shared_Type_103[];
       }
     | {
         type: 'foreach';
-        step: Shared_Type_101 | Shared_Type_102 | Shared_Type_103;
+        step:
+          | Shared_Type_101
+          | Shared_Type_102
+          | {
+              type: 'workflow';
+              id: string;
+              workflowId: string;
+              description?: string | undefined;
+            };
         opts?:
           | {
               concurrency: number;
@@ -14050,29 +14071,12 @@ export type PostStoredWorkflows_Body = {
       }
     | {
         type: 'conditional';
-        steps: (
-          | Shared_Type_101
-          | Shared_Type_102
-          | {
-              type: 'mapping';
-              id: string;
-              mapConfig: string;
-            }
-          | Shared_Type_103
-        )[];
+        steps: Shared_Type_103[];
         predicates: Shared_Auxiliary_1067[];
       }
     | {
         type: 'loop';
-        step:
-          | Shared_Type_101
-          | Shared_Type_102
-          | {
-              type: 'mapping';
-              id: string;
-              mapConfig: string;
-            }
-          | Shared_Type_103;
+        step: Shared_Type_103;
         loopType: 'dowhile' | 'dountil';
         predicate: Shared_Auxiliary_1067;
       }
@@ -16153,7 +16157,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1206[] | undefined;
+  files?: Shared_Auxiliary_1205[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16211,7 +16215,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1206[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1205[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
