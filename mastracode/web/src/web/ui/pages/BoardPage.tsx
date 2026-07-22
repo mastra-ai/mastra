@@ -1207,7 +1207,7 @@ function WorkItemCard({
         if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
       }}
       className={cn(
-        'group flex flex-col gap-3.5 rounded-xl border border-border1 bg-surface2 p-4 transition-colors hover:bg-surface3',
+        'group flex flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 transition-colors hover:bg-surface3',
         evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
       )}
     >
@@ -1404,7 +1404,7 @@ function CandidateCard({
           },
         })
       }
-      className="group flex cursor-grab flex-col gap-3.5 rounded-xl border border-border1 bg-surface2 p-4 transition-colors hover:bg-surface3 active:cursor-grabbing"
+      className="group flex cursor-grab flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 transition-colors hover:bg-surface3 active:cursor-grabbing"
     >
       <div className="flex min-w-0 flex-col gap-1.5">
         <span className="block truncate text-ui-xs text-icon2">{candidate.meta}</span>
