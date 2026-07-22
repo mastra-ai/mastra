@@ -161,7 +161,7 @@ const notConnectedStatus: GithubStatus = {
 
 /** Both sources selected so GitHub/Linear specs see data by default. */
 const defaultIntakeConfig: IntakeConfig = {
-  github: { enabled: true, sourceIds: [PROJECT_REPOSITORY_ID] },
+  github: { enabled: true, sourceIds: [githubRepository.slug] },
   linear: { enabled: true, sourceIds: ['lin-proj-1'] },
 };
 
