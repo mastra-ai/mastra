@@ -50,30 +50,11 @@ export type CardProps = React.HTMLAttributes<HTMLDivElement> &
   };
 
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, appearance, elevation, interactive, as, onKeyDown, ...props }, ref) => {
+  ({ className, appearance, elevation, interactive, as, ...props }, ref) => {
     const Component = as || 'div';
-    const hasNativeInteractiveSemantics = Component === 'a' || Component === 'button';
-    const shouldEmulateButton = Boolean(interactive && !hasNativeInteractiveSemantics);
-
-    const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-      onKeyDown?.(event);
-      if (!shouldEmulateButton || event.defaultPrevented) return;
-
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        event.currentTarget.click();
-      }
-    };
 
     return (
-      <Component
-        ref={ref}
-        className={cn(cardVariants({ appearance, elevation, interactive }), className)}
-        role={shouldEmulateButton ? 'button' : undefined}
-        tabIndex={shouldEmulateButton ? 0 : undefined}
-        onKeyDown={handleKeyDown}
-        {...props}
-      />
+      <Component ref={ref} className={cn(cardVariants({ appearance, elevation, interactive }), className)} {...props} />
     );
   },
 );

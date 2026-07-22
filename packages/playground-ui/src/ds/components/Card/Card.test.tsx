@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { Card, CardLink } from './Card';
 
 const StubLink = forwardRef<HTMLAnchorElement, React.AnchorHTMLAttributes<HTMLAnchorElement>>(
@@ -40,20 +40,19 @@ describe('Card', () => {
     });
   });
 
-  describe('when an interactive card renders as a non-semantic element', () => {
-    it('activates from the keyboard', () => {
-      const onClick = vi.fn();
+  describe('when an interactive card renders as a button', () => {
+    it('preserves native button semantics', () => {
       render(
-        <Card interactive onClick={onClick}>
+        <Card as="button" interactive>
           Run agent
         </Card>,
       );
 
       const button = screen.getByRole('button', { name: 'Run agent' });
-      fireEvent.keyDown(button, { key: 'Enter' });
-      fireEvent.keyDown(button, { key: ' ' });
 
-      expect(onClick).toHaveBeenCalledTimes(2);
+      expect(button.tagName).toBe('BUTTON');
+      expect(button.getAttribute('role')).toBeNull();
+      expect(button.getAttribute('tabindex')).toBeNull();
     });
   });
 });
