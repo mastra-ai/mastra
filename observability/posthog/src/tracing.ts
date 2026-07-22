@@ -1,4 +1,11 @@
-import type { AnyExportedSpan, ModelGenerationAttributes, SpanErrorInfo, UsageStats } from '@mastra/core/observability';
+import type {
+  AnyExportedSpan,
+  ExportedFeedback,
+  FeedbackEvent,
+  ModelGenerationAttributes,
+  SpanErrorInfo,
+  UsageStats,
+} from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import { TrackingExporter } from '@mastra/observability';
@@ -233,6 +240,65 @@ export class PosthogExporter extends TrackingExporter<
   }
 
   /**
+   * Forward feedback recorded via `addFeedback()` to PostHog as a native
+   * `$ai_feedback` event, shown as "User feedback" on the linked trace in
+   * PostHog's AI observability UI.
+   */
+  async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
+    if (!this.#client) return;
+
+    const { feedback } = event;
+    if (!feedback.traceId) {
+      this.logger.debug('PostHog exporter: dropping feedback with no traceId; PostHog requires $ai_trace_id', {
+        feedbackId: feedback.feedbackId,
+      });
+      return;
+    }
+
+    const properties: Record<string, any> = {
+      $ai_trace_id: feedback.traceId,
+      // PostHog's trace UI only displays feedback events that carry $ai_feedback_text
+      $ai_feedback_text: feedback.comment ?? String(feedback.value),
+      feedback_id: feedback.feedbackId,
+      feedback_type: feedback.feedbackType,
+      feedback_value: feedback.value,
+    };
+
+    const feedbackSource = feedback.feedbackSource ?? feedback.source;
+    if (feedbackSource) properties.feedback_source = feedbackSource;
+    if (feedback.spanId) properties.span_id = feedback.spanId;
+    if (feedback.sourceId) properties.source_id = feedback.sourceId;
+    if (feedback.metadata?.sessionId) properties.$ai_session_id = feedback.metadata.sessionId;
+
+    Object.assign(properties, this.extractCustomMetadata(feedback.metadata));
+
+    try {
+      this.#client.capture(
+        this.withGroups({
+          distinctId: this.getFeedbackDistinctId(feedback),
+          event: '$ai_feedback',
+          properties,
+          timestamp: new Date(feedback.timestamp),
+        }),
+      );
+    } catch (err) {
+      this.logger.error('PostHog exporter: failed to submit feedback', {
+        error: err,
+        traceId: feedback.traceId,
+        feedbackId: feedback.feedbackId,
+      });
+    }
+  }
+
+  private getFeedbackDistinctId(feedback: ExportedFeedback): string {
+    const userId = feedback.feedbackUserId ?? feedback.userId ?? feedback.metadata?.userId;
+    if (userId) {
+      return String(userId);
+    }
+    return this.config.defaultDistinctId ?? 'anonymous';
+  }
+
+  /**
    * PostHog group analytics are keyed off the top-level `groups` field on the
    * capture call. The Node SDK derives the event's `$groups` from that field and
    * overwrites any property-level `$groups`, so group metadata carried in
@@ -447,8 +513,8 @@ export class PosthogExporter extends TrackingExporter<
     return props;
   }
 
-  private extractCustomMetadata(span: AnyExportedSpan): Record<string, any> {
-    const { userId, sessionId, ...customMetadata } = span.metadata ?? {};
+  private extractCustomMetadata(metadata?: Record<string, unknown>): Record<string, any> {
+    const { userId, sessionId, ...customMetadata } = metadata ?? {};
     return customMetadata;
   }
 
@@ -471,7 +537,7 @@ export class PosthogExporter extends TrackingExporter<
     }
     if (attrs.streaming !== undefined) props.$ai_stream = attrs.streaming;
 
-    return { ...props, ...this.extractErrorProperties(span.errorInfo), ...this.extractCustomMetadata(span) };
+    return { ...props, ...this.extractErrorProperties(span.errorInfo), ...this.extractCustomMetadata(span.metadata) };
   }
 
   private buildSpanProperties(span: AnyExportedSpan): Record<string, any> {
@@ -490,7 +556,7 @@ export class PosthogExporter extends TrackingExporter<
       Object.assign(props, span.attributes);
     }
 
-    return { ...props, ...this.extractErrorProperties(span.errorInfo), ...this.extractCustomMetadata(span) };
+    return { ...props, ...this.extractErrorProperties(span.errorInfo), ...this.extractCustomMetadata(span.metadata) };
   }
 
   private formatMessages(data: SpanData, defaultRole: 'user' | 'assistant' = 'user'): PostHogMessage[] {

@@ -1,4 +1,4 @@
-import type { AnyExportedSpan } from '@mastra/core/observability';
+import type { AnyExportedSpan, ExportedFeedback, FeedbackEvent } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -1144,6 +1144,121 @@ describe('PosthogExporter', () => {
       expect(mockCapture.mock.calls[0][0]).not.toHaveProperty('groups');
     });
   });
+
+  describe('Feedback Events', () => {
+    beforeEach(() => {
+      exporter = new TestPosthogExporter(validConfig);
+    });
+
+    it('should emit $ai_feedback with full property mapping', async () => {
+      await exporter.onFeedbackEvent(
+        createFeedbackEvent({
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          comment: 'wrong answer',
+          feedbackSource: 'user',
+          feedbackUserId: 'user-1',
+          sourceId: 'message-1',
+          metadata: { userId: 'meta-user', sessionId: 'session-1', environment: 'prod' },
+        }),
+      );
+
+      expect(mockCapture).toHaveBeenCalledWith({
+        distinctId: 'user-1',
+        event: '$ai_feedback',
+        properties: {
+          $ai_trace_id: 'trace-1',
+          $ai_feedback_text: 'wrong answer',
+          feedback_id: 'feedback-1',
+          feedback_type: 'thumbs',
+          feedback_value: 'down',
+          feedback_source: 'user',
+          span_id: 'span-1',
+          source_id: 'message-1',
+          $ai_session_id: 'session-1',
+          environment: 'prod',
+        },
+        timestamp: expect.any(Date),
+      });
+    });
+
+    it('should fall back to the stringified value when comment is absent', async () => {
+      await exporter.onFeedbackEvent(createFeedbackEvent({ feedbackType: 'rating', value: 4 }));
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({ $ai_feedback_text: '4', feedback_value: 4 }),
+        }),
+      );
+    });
+
+    it('should drop feedback with no traceId', async () => {
+      await exporter.onFeedbackEvent(createFeedbackEvent({ traceId: undefined }));
+
+      expect(mockCapture).not.toHaveBeenCalled();
+    });
+
+    it('should resolve distinctId with feedbackUserId > userId > metadata.userId > defaultDistinctId > anonymous', async () => {
+      await exporter.onFeedbackEvent(
+        createFeedbackEvent({ feedbackUserId: 'primary', userId: 'legacy', metadata: { userId: 'meta' } }),
+      );
+      expect(mockCapture).toHaveBeenLastCalledWith(expect.objectContaining({ distinctId: 'primary' }));
+
+      await exporter.onFeedbackEvent(createFeedbackEvent({ userId: 'legacy', metadata: { userId: 'meta' } }));
+      expect(mockCapture).toHaveBeenLastCalledWith(expect.objectContaining({ distinctId: 'legacy' }));
+
+      await exporter.onFeedbackEvent(createFeedbackEvent({ metadata: { userId: 'meta' } }));
+      expect(mockCapture).toHaveBeenLastCalledWith(expect.objectContaining({ distinctId: 'meta' }));
+
+      await exporter.onFeedbackEvent(createFeedbackEvent());
+      expect(mockCapture).toHaveBeenLastCalledWith(expect.objectContaining({ distinctId: 'anonymous' }));
+    });
+
+    it('should use defaultDistinctId when feedback has no user', async () => {
+      exporter = new TestPosthogExporter({ ...validConfig, defaultDistinctId: 'default-user' });
+
+      await exporter.onFeedbackEvent(createFeedbackEvent());
+
+      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ distinctId: 'default-user' }));
+    });
+
+    it('should not capture when the exporter is disabled', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      exporter = new TestPosthogExporter({ apiKey: '' });
+      consoleSpy.mockRestore();
+
+      await exporter.onFeedbackEvent(createFeedbackEvent());
+
+      expect(mockCapture).not.toHaveBeenCalled();
+    });
+
+    it('should convert a serialized string timestamp to a Date', async () => {
+      await exporter.onFeedbackEvent(createFeedbackEvent({ timestamp: '2026-07-22T10:00:00.000Z' as unknown as Date }));
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({ timestamp: new Date('2026-07-22T10:00:00.000Z') }),
+      );
+    });
+
+    it('should mirror metadata.$groups to top-level groups', async () => {
+      await exporter.onFeedbackEvent(createFeedbackEvent({ metadata: { $groups: { publication: 'publication-1' } } }));
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          groups: { publication: 'publication-1' },
+          properties: expect.objectContaining({ $groups: { publication: 'publication-1' } }),
+        }),
+      );
+    });
+
+    it('should log instead of throwing when capture fails', async () => {
+      mockCapture.mockImplementationOnce(() => {
+        throw new Error('capture failed');
+      });
+
+      await expect(exporter.onFeedbackEvent(createFeedbackEvent())).resolves.toBeUndefined();
+    });
+  });
 });
 
 // --- Test Helper Functions ---
@@ -1168,6 +1283,23 @@ function createSpan(overrides: Partial<AnyExportedSpan> = {}): AnyExportedSpan {
     attributes: {},
     metadata: {},
     ...overrides,
+  };
+}
+
+/**
+ * Helper to create feedback events with defaults
+ */
+function createFeedbackEvent(overrides: Partial<ExportedFeedback> = {}): FeedbackEvent {
+  return {
+    type: 'feedback',
+    feedback: {
+      feedbackId: 'feedback-1',
+      timestamp: new Date(),
+      traceId: 'trace-1',
+      feedbackType: 'thumbs',
+      value: 'down',
+      ...overrides,
+    },
   };
 }
 
