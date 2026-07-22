@@ -1,10 +1,10 @@
 /**
  * `MastraFactory` — the single entry point to the whole Mastra Software Factory.
  *
- * The consumer's deploy entry is the ONE place deployment env is read: it
- * constructs config instances (auth adapter, pubsub) and passes them here
- * explicitly. The factory itself never reads deployment env vars and never
- * constructs providers on the caller's behalf.
+ * The consumer's deploy entry constructs deployment-specific config instances
+ * (auth adapter, pubsub) and passes them here explicitly. The only provider
+ * defaults constructed here are Platform GitHub and Linear integrations when
+ * Platform credentials exist and the caller did not provide those integrations.
  *
  * `prepare()` resolves feature readiness, threads every dependency explicitly,
  * assembles the web routes/middleware, and returns the constructor args for
@@ -39,6 +39,8 @@ import {
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
+import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
+import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -144,8 +146,8 @@ export interface MastraFactoryConfig {
    * Registered capability providers. The factory registers the pieces each
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
    * agent/session tools, intake, source control, and diagnostics — into the
-   * diagnostics — into the system. An absent integration means its routes
-   * never mount, its tools never register, and the server boots fine.
+   * system. When Platform credentials are configured, missing `github` and
+   * `linear` integrations default to their Platform-backed implementations.
    */
   integrations?: FactoryIntegration[];
   /**
@@ -180,6 +182,10 @@ export interface MastraFactorySandboxConfig {
 }
 
 const CONTROLLER_ID = 'code';
+
+function hasPlatformSecretKey(): boolean {
+  return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
+}
 
 /**
  * The template sandbox's own working directory, when it exposes one as a
@@ -308,9 +314,20 @@ export class MastraFactory {
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
 
-    // Registered integrations: validate ids up front so a copy-paste duplicate
-    // fails loud instead of one instance silently shadowing the other.
-    const integrations = this.#config.integrations ?? [];
+    // Explicit integrations win. Platform credentials fill only missing GitHub
+    // and Linear slots so callers can override either provider independently.
+    const integrations = [...(this.#config.integrations ?? [])];
+    if (hasPlatformSecretKey()) {
+      if (!integrations.some(integration => integration.id === 'github')) {
+        integrations.push(new PlatformGithubIntegration());
+      }
+      if (!integrations.some(integration => integration.id === 'linear')) {
+        integrations.push(new PlatformLinearIntegration());
+      }
+    }
+
+    // Validate ids up front so a copy-paste duplicate fails loud instead of one
+    // instance silently shadowing the other.
     const integrationIds = new Set<string>();
     for (const integration of integrations) {
       if (integrationIds.has(integration.id)) {

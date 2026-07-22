@@ -391,7 +391,7 @@ export class SpannerStore extends MastraCompositeStore {
       if (this.spanner) {
         // Spanner node lib wraps most functions (including this one with PromisifyAll), but currently there's a bug that causes awaiting on it to hand indefinitely.
         // Current workaround is to just call it without await https://github.com/googleapis/google-cloud-node/issues/8106
-        this.spanner.close();
+        void this.spanner.close();
       }
     } catch (error) {
       throw error;

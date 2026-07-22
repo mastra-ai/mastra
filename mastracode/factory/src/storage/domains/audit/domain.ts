@@ -240,10 +240,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
     if (!tenant.orgId) {
       return {
-        response: c.json(
-          { error: 'organization_required', message: 'The audit trail requires a WorkOS organization.' },
-          403,
-        ),
+        response: c.json({ error: 'organization_required', message: 'The audit trail requires an organization.' }, 403),
       };
     }
     return { orgId: tenant.orgId, userId: tenant.userId };
