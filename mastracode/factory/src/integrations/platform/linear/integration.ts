@@ -1,22 +1,17 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
 import type { Context } from 'hono';
 
-import type { IntegrationConnection } from '@mastra/factory/capabilities/connection';
-import type { Intake, IntakeIssue, IntakeIssueDetail } from '@mastra/factory/capabilities/intake';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
-import type { RouteAuth } from '@mastra/factory/routes/route';
-
-import { buildLinearAgentTools } from '@mastra/factory/integrations/linear/agent-tools';
-import type { LinearConnectionCheck, LinearIntegration } from '@mastra/factory/integrations/linear/integration';
-import { buildLinearRoutes } from '@mastra/factory/integrations/linear/routes';
-import type {
-  LinearConnectionData,
-  LinearConnectionRow,
-  LinearStorageHandle,
-} from '@mastra/factory/integrations/linear/storage';
+import type { IntegrationConnection } from '../../../capabilities/connection.js';
+import type { Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
+import type { RouteAuth } from '../../../routes/route.js';
+import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import { buildLinearAgentTools } from '../../linear/agent-tools.js';
+import type { LinearConnectionCheck, LinearIntegration } from '../../linear/integration.js';
+import { buildLinearRoutes } from '../../linear/routes.js';
+import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
 import { logPlatformInfo, PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };

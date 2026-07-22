@@ -1,22 +1,19 @@
 import { randomUUID } from 'node:crypto';
 
 import type { MountedMastraCode } from '@mastra/code-sdk';
-import { isLeaseProvider, NoopLeaseProvider, type LeaseProvider, type PubSub } from '@mastra/core/events';
-import { MastraWorker, type WorkerDeps } from '@mastra/core/worker';
-import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
+import { isLeaseProvider, NoopLeaseProvider } from '@mastra/core/events';
+import type { LeaseProvider, PubSub } from '@mastra/core/events';
+import { MastraWorker } from '@mastra/core/worker';
+import type { WorkerDeps } from '@mastra/core/worker';
 
-import {
-  dispatchGithubWebhook,
-  type GithubWebhookNotification,
-  type ParsedGithubWebhook,
-} from '@mastra/factory/integrations/github/webhook';
-import type { GithubRepositoryPermission } from '@mastra/factory/integrations/github/integration';
-import {
-  listPullRequestSubscriptionsForWebhook,
-  retirePullRequestSubscription,
-  type GithubSubscriptionStorage,
-} from '@mastra/factory/integrations/github/subscriptions';
-import { PlatformApiClient, PlatformApiError } from '../api-client.js';
+import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
+import type { GithubRepositoryPermission } from '../../github/integration.js';
+import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
+import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
+import { dispatchGithubWebhook } from '../../github/webhook.js';
+import type { GithubWebhookNotification, ParsedGithubWebhook } from '../../github/webhook.js';
+import type { PlatformApiClient } from '../api-client.js';
+import { PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/github-app';
 const DEFAULT_POLL_INTERVAL_MS = 5_000;

@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { IntegrationContext } from '@mastra/factory/integrations/base';
+import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
 import { PlatformGithubIntegration } from './integration.js';

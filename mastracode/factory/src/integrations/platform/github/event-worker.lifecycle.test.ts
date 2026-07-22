@@ -1,9 +1,9 @@
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
-import { MastraFactory } from '@mastra/factory';
-import { subscribeToPullRequest } from '@mastra/factory/integrations/github/subscriptions';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MastraFactory } from '../../../factory.js';
+import { subscribeToPullRequest } from '../../github/subscriptions.js';
 
 import { PlatformGithubIntegration } from './integration.js';
 

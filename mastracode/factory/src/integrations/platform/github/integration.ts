@@ -1,15 +1,10 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
-import type {
-  SourceControlInstallation,
-  SourceControlStorageHandle,
-} from '@mastra/factory/storage/domains/source-control/base';
 import type { Context } from 'hono';
 
-import type { IntegrationConnection } from '@mastra/factory/capabilities/connection';
-import type { Intake, IntakeIssue, IntakeIssueDetail } from '@mastra/factory/capabilities/intake';
+import type { IntegrationConnection } from '../../../capabilities/connection.js';
+import type { Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
 import type {
   CreatePullRequestCommentInput,
   CreatePullRequestInput,
@@ -34,23 +29,24 @@ import type {
   UpdateReviewInput,
   UpdateReviewersInput,
   VersionControl,
-} from '@mastra/factory/capabilities/version-control';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
-
-import { logPlatformInfo, PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
+} from '../../../capabilities/version-control.js';
+import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type {
-  GithubIntegration,
-  GithubRepositoryPermission,
-  RepoSummary,
-} from '@mastra/factory/integrations/github/integration';
-import { buildGithubRoutes } from '@mastra/factory/integrations/github/routes';
+  SourceControlInstallation,
+  SourceControlStorageHandle,
+} from '../../../storage/domains/source-control/base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
+import { buildGithubRoutes } from '../../github/routes.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
-} from '@mastra/factory/integrations/github/session-subscriptions';
-import type { GithubSubscriptionStorage } from '@mastra/factory/integrations/github/subscriptions';
-import { PlatformGithubEventWorker, type PlatformGithubEventStorage } from './event-worker.js';
+} from '../../github/session-subscriptions.js';
+import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
+import { logPlatformInfo, PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
+import { PlatformGithubEventWorker } from './event-worker.js';
+import type { PlatformGithubEventStorage } from './event-worker.js';
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
 

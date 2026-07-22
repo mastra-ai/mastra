@@ -1,11 +1,12 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { IntakeStorage } from '@mastra/factory/storage/domains/intake/base';
-import { IntegrationStorage } from '@mastra/factory/storage/domains/integrations/base';
-import { FactoryProjectsStorage } from '@mastra/factory/storage/domains/projects/base';
-import { SourceControlStorage } from '@mastra/factory/storage/domains/source-control/base';
 import type { Hono } from 'hono';
+
 import { onTestFinished } from 'vitest';
+import { IntakeStorage } from '../../storage/domains/intake/base.js';
+import { IntegrationStorage } from '../../storage/domains/integrations/base.js';
+import { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
+import { SourceControlStorage } from '../../storage/domains/source-control/base.js';
 
 export async function createPlatformStorageForTests() {
   const storage = new LibSQLFactoryStorage({ id: 'platform-integration-test', url: ':memory:' });

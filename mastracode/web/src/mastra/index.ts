@@ -35,11 +35,11 @@ import { MastraFactory } from '@mastra/factory';
 import type { FactoryIntegration } from '@mastra/factory/integrations/base';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
+import { PlatformGithubIntegration } from '@mastra/factory/integrations/platform/github/integration';
+import { PlatformLinearIntegration } from '@mastra/factory/integrations/platform/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
-import { PlatformGithubIntegration } from '../web/platform/github/integration.js';
-import { PlatformLinearIntegration } from '../web/platform/linear/integration.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
