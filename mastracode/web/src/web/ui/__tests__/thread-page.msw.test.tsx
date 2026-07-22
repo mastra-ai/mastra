@@ -319,6 +319,25 @@ function useAgentControllerHandlers({
       HttpResponse.json({ enabled: true, connected: false, installations: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
+    http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
+      const sessionId = String(params.sessionId);
+      return HttpResponse.json({
+        session: {
+          id: `session-${sessionId}`,
+          sessionId,
+          projectRepositoryId: 'pr-github-thread',
+          orgId: 'org-test',
+          userId: 'user-test',
+          branch: 'user/thread-session',
+          baseBranch: 'main',
+          sandboxId: null,
+          sandboxWorkdir: null,
+          materializedAt: null,
+          createdAt: '2026-06-01T00:00:00.000Z',
+          updatedAt: '2026-06-01T00:00:00.000Z',
+        },
+      });
+    }),
     http.post(`${API}/sessions`, () => {
       captured.sessionsCreated += 1;
       return HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: bound });

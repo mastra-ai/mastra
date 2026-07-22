@@ -8,6 +8,7 @@ const CONNECTIONS = 'factory_project_source_control_connections';
 const PROJECT_REPOSITORIES = 'factory_project_repositories';
 const SANDBOXES = 'source_control_project_repository_sandboxes';
 const WORKTREES = 'source_control_worktrees';
+const SESSIONS = 'source_control_sessions';
 
 export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
   {
@@ -141,6 +142,30 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       },
     ],
   },
+  {
+    name: SESSIONS,
+    columns: {
+      id: { type: 'uuid-pk' },
+      session_id: { type: 'text' },
+      project_repository_id: { type: 'text' },
+      org_id: { type: 'text' },
+      user_id: { type: 'text' },
+      branch: { type: 'text' },
+      base_branch: { type: 'text' },
+      sandbox_id: { type: 'text', nullable: true },
+      sandbox_workdir: { type: 'text', nullable: true },
+      materialized_at: { type: 'timestamp', nullable: true },
+      created_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
+    },
+    uniqueIndexes: [
+      { name: 'source_control_sessions_session_id_unique', columns: ['session_id'] },
+      {
+        name: 'source_control_sessions_repository_user_branch_unique',
+        columns: ['project_repository_id', 'user_id', 'branch'],
+      },
+    ],
+  },
 ];
 
 export type SourceControlProviderMetadata = Record<string, unknown>;
@@ -266,6 +291,30 @@ export interface UpsertSourceControlWorktreeInput {
   worktreePath: string;
 }
 
+export interface SourceControlSession {
+  id: string;
+  sessionId: string;
+  projectRepositoryId: string;
+  orgId: string;
+  userId: string;
+  branch: string;
+  baseBranch: string;
+  sandboxId: string | null;
+  sandboxWorkdir: string | null;
+  materializedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateSourceControlSessionInput {
+  sessionId: string;
+  projectRepositoryId: string;
+  orgId: string;
+  userId: string;
+  branch: string;
+  baseBranch: string;
+}
+
 export interface SourceControlStorageHandle {
   readonly integrationId: string;
   readonly installations: {
@@ -320,6 +369,19 @@ export interface SourceControlStorageHandle {
       worktreePath: string;
     }): Promise<SourceControlWorktree | null>;
     delete(args: { projectRepositoryId: string; userId: string; branch: string }): Promise<void>;
+  };
+  readonly sessions: {
+    list(args: { projectRepositoryId: string; userId: string }): Promise<SourceControlSession[]>;
+    getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
+    getForBranch(args: {
+      projectRepositoryId: string;
+      userId: string;
+      branch: string;
+    }): Promise<SourceControlSession | null>;
+    create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
+    setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
+    markMaterialized(args: { id: string }): Promise<void>;
+    delete(id: string): Promise<void>;
   };
 }
 
@@ -386,6 +448,21 @@ interface WorktreeDbRow extends Record<string, unknown> {
   base_branch: string;
   worktree_path: string;
   created_at: Date;
+}
+
+interface SessionDbRow extends Record<string, unknown> {
+  id: string;
+  session_id: string;
+  project_repository_id: string;
+  org_id: string;
+  user_id: string;
+  branch: string;
+  base_branch: string;
+  sandbox_id: string | null;
+  sandbox_workdir: string | null;
+  materialized_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
 function toInstallation(row: InstallationDbRow): SourceControlInstallation {
@@ -465,6 +542,23 @@ function toWorktree(row: WorktreeDbRow): SourceControlWorktree {
   };
 }
 
+function toSession(row: SessionDbRow): SourceControlSession {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    projectRepositoryId: row.project_repository_id,
+    orgId: row.org_id,
+    userId: row.user_id,
+    branch: row.branch,
+    baseBranch: row.base_branch,
+    sandboxId: row.sandbox_id,
+    sandboxWorkdir: row.sandbox_workdir,
+    materializedAt: row.materialized_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export class SourceControlStorage extends FactoryStorageDomain {
   constructor() {
     super('source-control');
@@ -475,6 +569,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany(SESSIONS, {});
     await this.ops.deleteMany(WORKTREES, {});
     await this.ops.deleteMany(SANDBOXES, {});
     await this.ops.deleteMany(PROJECT_REPOSITORIES, {});
@@ -698,6 +793,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             connection_id: id,
           });
           for (const projectRepository of projectRepositories) {
+            await db().deleteMany(SESSIONS, { project_repository_id: projectRepository.id });
             await db().deleteMany(WORKTREES, { project_repository_id: projectRepository.id });
             await db().deleteMany(SANDBOXES, { project_repository_id: projectRepository.id });
           }
@@ -788,6 +884,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
         unlink: async ({ orgId, id }) => {
           const existing = await getProjectRepository({ orgId, id });
           if (!existing) return false;
+          await db().deleteMany(SESSIONS, { project_repository_id: id });
           await db().deleteMany(WORKTREES, { project_repository_id: id });
           await db().deleteMany(SANDBOXES, { project_repository_id: id });
           await db().deleteMany(PROJECT_REPOSITORIES, { id });
@@ -875,6 +972,78 @@ export class SourceControlStorage extends FactoryStorageDomain {
             user_id: userId,
             branch,
           });
+        },
+      },
+      sessions: {
+        list: async ({ projectRepositoryId, userId }) => {
+          if (!(await getProjectRepositoryById(projectRepositoryId))) return [];
+          return (
+            await db().findMany<SessionDbRow>(SESSIONS, {
+              project_repository_id: projectRepositoryId,
+              user_id: userId,
+            })
+          ).map(toSession);
+        },
+        getBySessionId: async sessionId => {
+          const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
+          return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;
+        },
+        getForBranch: async ({ projectRepositoryId, userId, branch }) => {
+          if (!(await getProjectRepositoryById(projectRepositoryId))) return null;
+          const row = await db().findOne<SessionDbRow>(SESSIONS, {
+            project_repository_id: projectRepositoryId,
+            user_id: userId,
+            branch,
+          });
+          return row ? toSession(row) : null;
+        },
+        create: async input => {
+          await requireProjectRepositoryById(input.projectRepositoryId);
+          const existing = await db().findOne<SessionDbRow>(SESSIONS, {
+            project_repository_id: input.projectRepositoryId,
+            user_id: input.userId,
+            branch: input.branch,
+          });
+          if (existing) return toSession(existing);
+          const now = new Date();
+          try {
+            const row = await db().insertOne<SessionDbRow>(SESSIONS, {
+              session_id: input.sessionId,
+              project_repository_id: input.projectRepositoryId,
+              org_id: input.orgId,
+              user_id: input.userId,
+              branch: input.branch,
+              base_branch: input.baseBranch,
+              sandbox_id: null,
+              sandbox_workdir: null,
+              materialized_at: null,
+              created_at: now,
+              updated_at: now,
+            });
+            return toSession(row);
+          } catch (error) {
+            if (!(error instanceof UniqueViolationError)) throw error;
+            const row = await db().findOne<SessionDbRow>(SESSIONS, {
+              project_repository_id: input.projectRepositoryId,
+              user_id: input.userId,
+              branch: input.branch,
+            });
+            if (!row) throw error;
+            return toSession(row);
+          }
+        },
+        setSandbox: async ({ id, sandboxId, sandboxWorkdir }) => {
+          await db().updateMany(
+            SESSIONS,
+            { id },
+            { sandbox_id: sandboxId, sandbox_workdir: sandboxWorkdir, updated_at: new Date() },
+          );
+        },
+        markMaterialized: async ({ id }) => {
+          await db().updateMany(SESSIONS, { id }, { materialized_at: new Date(), updated_at: new Date() });
+        },
+        delete: async id => {
+          await db().deleteMany(SESSIONS, { id });
         },
       },
     };

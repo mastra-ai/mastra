@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 
-import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui/ChatLayout';
 import {
@@ -23,6 +22,7 @@ import { useChatSessionContext } from './context/useChatSessionContext';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
 import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
@@ -42,9 +42,9 @@ function useDesktopRightPanelAvailable() {
 }
 
 export function ThreadPage() {
-  const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
-  const { kind, threadBasePath, resourceId, projectPath, factorySessionState } = useChatSessionContext();
+  const { activeFactory, factoriesPending } = useActiveFactoryContext();
+  const { kind, threadBasePath, resourceId, projectPath, factorySessionState, sessionEnabled } =
+    useChatSessionContext();
   const { threadId } = useParams();
   const location = useLocation();
   const desktopRightPanelAvailable = useDesktopRightPanelAvailable();
@@ -59,20 +59,21 @@ export function ThreadPage() {
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
   const factoryProjectId = factorySessionState?.factoryProjectId;
+  const bindingSessionId = sessionEnabled && projectPath === undefined ? resourceId : undefined;
   const factoryEligible =
     kind === 'factory' &&
     threadBasePath === '/threads' &&
     Boolean(
       threadId &&
       resourceId &&
-      projectPath &&
+      bindingSessionId &&
       factoryProjectId &&
       factorySessionState?.projectRepositoryId &&
       workspacePath,
     );
   const currentLifecycleKey =
-    factoryEligible && desktopRightPanelAvailable && threadId && factoryProjectId && projectPath
-      ? `${factoryProjectId}:${threadId}:${resourceId}:${projectPath}`
+    factoryEligible && desktopRightPanelAvailable && threadId && factoryProjectId && bindingSessionId
+      ? `${factoryProjectId}:${threadId}:${resourceId}:${bindingSessionId}`
       : undefined;
   const [factoryPanelState, setFactoryPanelState] = useState<{
     lifecycleKey: string | undefined;
@@ -87,8 +88,16 @@ export function ThreadPage() {
     setWorkspaceViewerExpanded(false);
   }, [currentLifecycleKey, factoryPanelState.lifecycleKey]);
 
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
+
   if (!activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+    return <EmptyFactoryState />;
   }
 
   const collapseRightPanel = () => {
@@ -115,12 +124,13 @@ export function ThreadPage() {
       : workspaceViewerExpanded;
 
   const rightPanel = factoryEligible ? (
-    currentLifecycleKey && workspacePath && projectPath && factoryProjectId && threadId && workspaceViewerVisible ? (
+    currentLifecycleKey && workspacePath && bindingSessionId && factoryProjectId && threadId && workspaceViewerVisible ? (
       <FactorySessionContextPanel
         factoryProjectId={factoryProjectId}
         threadId={threadId}
         resourceId={resourceId}
-        workspacePath={projectPath}
+        sessionId={bindingSessionId}
+        workspacePath={workspacePath}
         activeTab={activeFactoryTab}
         onTabChange={changeFactoryTab}
         expanded={rightPanelExpanded}

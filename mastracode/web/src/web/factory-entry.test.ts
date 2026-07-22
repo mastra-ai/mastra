@@ -236,9 +236,10 @@ describe('MastraFactory.prepare', () => {
     expect(config.vector).toBe(vector);
   });
 
-  it('installs the Web Factory workspace resolver instead of changing the SDK default', async () => {
+  it('installs a Web Factory session workspace resolver instead of changing the SDK default', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
-    expect(config.workspace).toBe(getFactoryWorkspace);
+    expect(config.workspace).toEqual(expect.any(Function));
+    expect(config.workspace).not.toBe(getFactoryWorkspace);
   });
 
   it('omits vector when no instance is configured', async () => {

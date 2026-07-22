@@ -21,6 +21,7 @@ interface Tables {
   projectRepositories: Array<Record<string, any>>;
   sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
+  sessions: Array<Record<string, any>>;
 }
 const tables: Tables = {
   installations: [],
@@ -29,6 +30,7 @@ const tables: Tables = {
   projectRepositories: [],
   sandboxes: [],
   worktrees: [],
+  sessions: [],
 };
 const sourceControlStorage = new SourceControlStorageInMemory();
 
@@ -384,12 +386,14 @@ beforeEach(() => {
   tables.projectRepositories = [];
   tables.sandboxes = [];
   tables.worktrees = [];
+  tables.sessions = [];
   sourceControlStorage.installationsRows = tables.installations as any;
   sourceControlStorage.repositoriesRows = tables.repositories as any;
   sourceControlStorage.connectionsRows = tables.connections as any;
   sourceControlStorage.projectRepositoriesRows = tables.projectRepositories as any;
   sourceControlStorage.sandboxesRows = tables.sandboxes as any;
   sourceControlStorage.worktreesRows = tables.worktrees as any;
+  sourceControlStorage.sessionsRows = tables.sessions as any;
   featureEnabled = true;
   sandboxEnabled = true;
   // No Postgres in these scenario tests: keep the project lock in-process.
@@ -448,44 +452,42 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
     expect(materializeRepo).toHaveBeenCalledOnce();
 
-    // 3. Worktree → persists a source_control_worktrees row for feat/x.
-    const wtRes = await postJson(app, `/web/github/projects/${projectId}/worktree`, { branch: 'feat/x' });
-    expect(wtRes.status).toBe(200);
-    const wtJson = await wtRes.json();
-    expect(wtJson.branch).toBe('feat/x');
-    expect(wtJson.baseBranch).toBe('main');
-    expect(tables.worktrees).toHaveLength(1);
-    expect(tables.worktrees[0]).toMatchObject({
-      projectRepositoryId: projectId,
-      branch: 'feat/x',
-      baseBranch: 'main',
+    // 3. Session creation persists identity only; AgentController's workspace
+    // factory materializes the isolated checkout when that session starts.
+    const sessionRes = await postJson(app, `/web/github/projects/${projectId}/sessions`, { branch: 'feat/x' });
+    expect(sessionRes.status).toBe(200);
+    const session = (await sessionRes.json()).session;
+    expect(session).toMatchObject({ projectRepositoryId: projectId, branch: 'feat/x', baseBranch: 'main' });
+    expect(tables.sessions).toHaveLength(1);
+    expect(tables.worktrees).toHaveLength(0);
+    const persistedSessionWorkdir = '/workspace/session-feat-x';
+    await sourceControlStorage.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'sb-session',
+      sandboxWorkdir: persistedSessionWorkdir,
     });
-    const persistedWorktreePath = wtJson.worktreePath as string;
-    expect(tables.worktrees[0].worktreePath).toBe(persistedWorktreePath);
 
-    // 4. Commit in that exact worktree path → the round-trip is honoured:
-    // a path that only exists because step 3 persisted it now passes
-    // resolveWorktreePath (no client-path injection possible).
+    // 4. Git operations address the materialized workspace by session id.
     const commitRes = await postJson(app, `/web/github/projects/${projectId}/commit`, {
       message: 'wip',
-      worktreePath: persistedWorktreePath,
+      sessionId: session.sessionId,
     });
     expect(commitRes.status).toBe(200);
     expect(await commitRes.json()).toMatchObject({ committed: true });
-    expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe(persistedWorktreePath);
+    expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe(persistedSessionWorkdir);
 
-    // 5. Push that worktree → a fresh token is minted for *this* op.
+    // 5. Push that session branch → a fresh token is minted for *this* op.
     const mintBeforePush = mint.mock.calls.length;
     const pushRes = await postJson(app, `/web/github/projects/${projectId}/push`, {
       branch: 'feat/x',
-      worktreePath: persistedWorktreePath,
+      sessionId: session.sessionId,
     });
     expect(pushRes.status).toBe(200);
     expect(await pushRes.json()).toMatchObject({ pushed: true, branch: 'feat/x' });
     expect(mint.mock.calls.length).toBe(mintBeforePush + 1);
     const pushCall = pushBranch.mock.calls[0] as unknown as any[];
     // pushBranch(sandbox, workdir, branch, token, repoFullName)
-    expect(pushCall[1]).toBe(persistedWorktreePath);
+    expect(pushCall[1]).toBe(persistedSessionWorkdir);
     expect(pushCall[2]).toBe('feat/x');
     const pushToken = pushCall[3] as string;
     expect(pushToken).toMatch(/^install-token-/);
@@ -496,9 +498,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
       branch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
-      worktreePath: persistedWorktreePath,
-      sessionId: 'session-1',
-      threadId: 'thread-1',
+      sessionId: session.sessionId,
     });
     expect(prRes.status).toBe(200);
     expect(await prRes.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
@@ -518,17 +518,16 @@ describe('S1: full write-back journey through the real route handlers', () => {
         installationExternalId: '7',
         repositoryExternalId: '99',
         repositorySlug: 'octo/hello',
-        sessionId: 'session-1',
+        sessionId: session.sessionId,
         ownerId: 'u1',
-        resourceId: `factory-${projectId}`,
-        threadId: 'thread-1',
-        sessionScope: persistedWorktreePath,
+        resourceId: session.sessionId,
+        threadId: session.sessionId,
         source: 'factory-pr-create',
       }),
     );
   });
 
-  it('keeps PR creation compatible when no originating session is supplied', async () => {
+  it('rejects PR creation when no originating session is supplied', async () => {
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
     const projectId = 'project-compat';
     tables.projectRepositories.push(
@@ -557,7 +556,8 @@ describe('S1: full write-back journey through the real route handlers', () => {
       title: 'My PR',
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'Invalid sessionId' });
     expect(subscribeToPullRequest).not.toHaveBeenCalled();
   });
 });
@@ -585,6 +585,21 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       sandboxWorkdir: '/workspace/hello',
       materializedAt: new Date(),
     });
+    const now = new Date();
+    tables.sessions.push({
+      id: `stored-session-${id}`,
+      sessionId: `session-${id}`,
+      projectRepositoryId: id,
+      orgId,
+      userId,
+      branch: 'feat/x',
+      baseBranch: 'main',
+      sandboxId: `sb-${id}`,
+      sandboxWorkdir: `/workspace/${id}`,
+      materializedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
   }
 
   it('does not start the second push for the same project until the first resolves', async () => {
@@ -606,8 +621,8 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       order.push('end');
     };
 
-    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a' });
-    const second = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/b' });
+    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a', sessionId: 'session-p1' });
+    const second = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/b', sessionId: 'session-p1' });
 
     // Let microtasks flush; only the first push body should have begun.
     await new Promise(r => setTimeout(r, 10));
@@ -640,8 +655,8 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       active--;
     };
 
-    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a' });
-    const second = postJson(app, '/web/github/projects/p2/push', { branch: 'feat/b' });
+    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a', sessionId: 'session-p1' });
+    const second = postJson(app, '/web/github/projects/p2/push', { branch: 'feat/b', sessionId: 'session-p2' });
 
     await new Promise(r => setTimeout(r, 10));
     // Distinct project ids → distinct locks → both bodies run concurrently.

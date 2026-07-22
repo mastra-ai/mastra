@@ -18,6 +18,8 @@ export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 export const queryKeys = {
   webAuth: () => ['web-auth'] as const,
   factories: () => ['factories'] as const,
+  persistedFactories: () => ['factories', 'persisted'] as const,
+  factoryOnboarding: () => ['factories', 'onboarding'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
@@ -33,8 +35,8 @@ export const queryKeys = {
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  factoryThreadTaskContext: (factoryProjectId: string, threadId: string, resourceId: string, projectPath: string) =>
-    ['factory', 'thread-task-context', factoryProjectId, threadId, resourceId, projectPath] as const,
+  factoryThreadTaskContext: (factoryProjectId: string, threadId: string, resourceId: string, sessionId: string) =>
+    ['factory', 'thread-task-context', factoryProjectId, threadId, resourceId, sessionId] as const,
   factoryMetrics: (githubProjectId: string | undefined, days: number) =>
     ['factory', 'metrics', githubProjectId ?? null, days] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>

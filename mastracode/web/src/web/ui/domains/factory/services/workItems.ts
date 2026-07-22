@@ -11,7 +11,7 @@ import type { FactoryThreadTaskContext } from '../../../../../shared/api/types';
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
 
 export interface WorkItemSessionRef {
-  projectPath: string;
+  sessionId: string;
   branch: string;
   threadId: string;
   /** WorkOS user id whose sandbox the session runs in (stamped server-side). */
@@ -46,7 +46,7 @@ export interface WorkItem {
 
 /** Session ref as sent by the client — `startedBy` is stamped server-side. */
 export interface WorkItemSessionInput {
-  projectPath: string;
+  sessionId: string;
   branch: string;
   threadId: string;
 }
@@ -110,10 +110,10 @@ export async function fetchFactoryThreadTaskContext(
   factoryProjectId: string,
   threadId: string,
   resourceId: string,
-  projectPath: string,
+  sessionId: string,
   signal?: AbortSignal,
 ): Promise<FactoryThreadTaskContext | null> {
-  const query = new URLSearchParams({ resourceId, projectPath });
+  const query = new URLSearchParams({ resourceId, sessionId });
   const data = await requestJson<{ context: FactoryThreadTaskContext | null }>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/threads/${encodeURIComponent(threadId)}/context?${query}`,
     { signal },
@@ -144,12 +144,12 @@ export async function createWorkItem(
 
 export async function transitionWorkItem(
   baseUrl: string,
-  factoryProjectId: string,
+  githubProjectId: string,
   id: string,
   input: { board: FactoryBoard; stage: FactoryStage; expectedRevision: number; requestId: string; cause: string },
 ): Promise<FactoryTransitionResult> {
   const res = await fetch(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
     {
       method: 'POST',
       headers: { Accept: 'application/json', 'content-type': 'application/json' },
@@ -172,13 +172,11 @@ export async function updateWorkItem(baseUrl: string, id: string, patch: UpdateW
 }
 
 export interface StartFactoryRunRequest {
-  resourceId: string;
-  projectPath: string;
-  branch: string;
+  sessionId: string;
   threadTitle: string;
   threadTags?: Record<string, string>;
   kickoffKey: string;
-  kickoffMessage: string | null;
+  invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
   destinationStage: FactoryStage;
   workItem: {
     id?: string;
@@ -192,20 +190,20 @@ export interface StartFactoryRunPrepared {
   bindingId: string;
   threadId: string;
   resourceId: string;
-  projectPath: string;
+  sessionId: string;
   branch: string;
   revision: number;
-  kickoffStatus: 'pending' | 'sent' | 'failed';
+  kickoffStatus: 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
   replayed: boolean;
 }
 
 export async function startFactoryRun(
   baseUrl: string,
-  factoryProjectId: string,
+  githubProjectId: string,
   input: StartFactoryRunRequest,
 ): Promise<StartFactoryRunPrepared> {
   const data = await requestJson<{ prepared: StartFactoryRunPrepared }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/runs/start`,
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/runs/start`,
     { method: 'POST', body: JSON.stringify(input) },
   );
   return data.prepared;

@@ -15,6 +15,7 @@ interface FactorySessionContextPanelProps {
   factoryProjectId: string;
   threadId: string;
   resourceId: string;
+  sessionId: string;
   workspacePath: string;
   activeTab: FactorySessionContextTab;
   onTabChange: (tab: FactorySessionContextTab) => void;
@@ -53,6 +54,7 @@ export function FactorySessionContextPanel({
   factoryProjectId,
   threadId,
   resourceId,
+  sessionId,
   workspacePath,
   activeTab,
   onTabChange,
@@ -96,7 +98,7 @@ export function FactorySessionContextPanel({
               factoryProjectId={factoryProjectId}
               threadId={threadId}
               resourceId={resourceId}
-              projectPath={workspacePath}
+              sessionId={sessionId}
             />
           </TabContent>
         ) : null}
@@ -120,14 +122,14 @@ function FactoryTaskContext({
   factoryProjectId,
   threadId,
   resourceId,
-  projectPath,
+  sessionId,
 }: {
   factoryProjectId: string;
   threadId: string;
   resourceId: string;
-  projectPath: string;
+  sessionId: string;
 }) {
-  const query = useFactoryThreadTaskContextQuery(factoryProjectId, threadId, resourceId, projectPath, true);
+  const query = useFactoryThreadTaskContextQuery(factoryProjectId, threadId, resourceId, sessionId, true);
 
   if (query.isPending) {
     return <SkeletonRows label="Loading task context" rows={5} />;

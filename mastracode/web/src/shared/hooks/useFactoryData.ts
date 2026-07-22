@@ -33,15 +33,15 @@ export function useFactoryThreadTaskContextQuery(
   factoryProjectId: string,
   threadId: string,
   resourceId: string,
-  projectPath: string,
+  sessionId: string,
   enabled: boolean,
 ) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.factoryThreadTaskContext(factoryProjectId, threadId, resourceId, projectPath),
+    queryKey: queryKeys.factoryThreadTaskContext(factoryProjectId, threadId, resourceId, sessionId),
     queryFn: async ({ signal }) => {
       await waitForCommittedQueryMount(signal);
-      return fetchFactoryThreadTaskContext(baseUrl, factoryProjectId, threadId, resourceId, projectPath, signal);
+      return fetchFactoryThreadTaskContext(baseUrl, factoryProjectId, threadId, resourceId, sessionId, signal);
     },
     enabled,
     staleTime: 0,

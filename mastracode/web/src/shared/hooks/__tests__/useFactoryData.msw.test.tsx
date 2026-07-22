@@ -149,7 +149,7 @@ describe('useProjectPullRequestsQuery', () => {
 
 const THREAD_ID = 'factory-thread-1';
 const RESOURCE_ID = 'resource-1';
-const PROJECT_PATH = '/home/user/project';
+const SESSION_ID = 'session-1';
 const THREAD_CONTEXT_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/threads/${THREAD_ID}/context`;
 
 function deferred() {
@@ -177,7 +177,7 @@ function taskContext(title: string): FactoryThreadTaskContext {
 }
 
 function StrictModeTaskContextProbe() {
-  useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, PROJECT_PATH, true);
+  useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, true);
   return null;
 }
 
@@ -192,7 +192,7 @@ describe('useFactoryThreadTaskContextQuery', () => {
     );
 
     const { result, client } = renderHookWithProviders(() =>
-      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, PROJECT_PATH, false),
+      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, false),
     );
 
     await waitFor(() => expect(client.isFetching()).toBe(0));
@@ -212,13 +212,13 @@ describe('useFactoryThreadTaskContextQuery', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, PROJECT_PATH, true),
+      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, true),
     );
 
     await waitFor(() => expect(result.current.data?.task.title).toBe('Live task'));
     expect(credentials).toEqual(['include']);
     expect(requests[0]?.searchParams.get('resourceId')).toBe(RESOURCE_ID);
-    expect(requests[0]?.searchParams.get('projectPath')).toBe(PROJECT_PATH);
+    expect(requests[0]?.searchParams.get('sessionId')).toBe(SESSION_ID);
   });
 
   it('given the app mounts in StrictMode, when Task loads, then the discarded mount makes no network request', async () => {
@@ -252,7 +252,7 @@ describe('useFactoryThreadTaskContextQuery', () => {
     );
 
     const { unmount } = renderHookWithProviders(() =>
-      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, PROJECT_PATH, true),
+      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, true),
     );
     await started.promise;
 
@@ -270,7 +270,7 @@ describe('useFactoryThreadTaskContextQuery', () => {
       }),
     );
     const { result } = renderHookWithProviders(() =>
-      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, PROJECT_PATH, true),
+      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, true),
     );
     await waitFor(() => expect(result.current.data?.task.title).toBe('Task version 1'));
 
@@ -291,7 +291,7 @@ describe('useFactoryThreadTaskContextQuery', () => {
       }),
     );
     const { result } = renderHookWithProviders(() =>
-      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, PROJECT_PATH, true),
+      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, true),
     );
     await waitFor(() => expect(result.current.data?.task.title).toBe('Stable task'));
     expect(hit).toHaveBeenCalledTimes(1);

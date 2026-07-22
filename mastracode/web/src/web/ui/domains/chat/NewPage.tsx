@@ -3,7 +3,6 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { GitBranch } from 'lucide-react';
 import { useLocation } from 'react-router';
 
-import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui/ChatLayout';
 import { FolderIcon } from '../../ui/icons';
@@ -22,13 +21,11 @@ import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
-  const overlays = useOverlays();
   const { activeFactory } = useActiveFactoryContext();
 
   if (!activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+    return <EmptyFactoryState />;
   }
-
   return (
     <ChatLayout
       sidebar={<Sidebar />}

@@ -15,6 +15,7 @@
  * swap the low-level construction via {@link setSandboxFactory}.
  */
 
+import path from 'node:path';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { getSeededSandbox } from '../runtime-config';
 
@@ -44,8 +45,12 @@ export interface SandboxCreateOptions {
   providerSandboxId?: string;
   /** Environment variables baked into the sandbox. */
   env?: Record<string, string>;
+  /** Provider working directory for this sandbox. */
+  workingDirectory?: string;
   /** Idle teardown window (minutes). The provider stops the VM after this idle period. */
   idleTimeoutMinutes?: number;
+  /** Provider checkpoint used to seed and preserve this sandbox's filesystem. */
+  checkpointName?: string;
 }
 
 /**
@@ -111,6 +116,38 @@ export function computeSandboxWorkdir(repoFullName: string): string {
   if (!seeded) throw new Error('No sandbox configured');
   const [owner, name] = repoFullName.split('/', 2);
   return `${seeded.workdirBase}/${sanitizeSegment(owner || 'unknown')}/${sanitizeSegment(name || 'repo')}`;
+}
+
+/**
+ * Compute the host working directory for a local GitHub session checkout.
+ * This is server-derived only: repo pieces are sanitized and the trusted
+ * session id is kept as a single path segment under the configured local root.
+ */
+export function computeLocalSessionSandboxWorkdir(repoFullName: string, sessionId: string): string {
+  const seeded = getSeededSandbox();
+  if (!seeded) throw new Error('No sandbox configured');
+  if (seeded.machine.provider !== 'local') throw new Error('Local session workdirs require the local sandbox provider');
+
+  const localRoot = (seeded.machine as { workingDirectory?: unknown }).workingDirectory;
+  if (typeof localRoot !== 'string' || localRoot.length === 0) {
+    throw new Error('Local sandbox working directory is not configured');
+  }
+
+  const [owner, name] = repoFullName.split('/', 2);
+  return resolveContainedLocalWorkdir(
+    localRoot,
+    'github-sessions',
+    sanitizeSegment(owner || 'unknown'),
+    sanitizeSegment(name || 'repo'),
+    sanitizeSegment(sessionId),
+  );
+}
+
+export function resolveContainedLocalWorkdir(root: string, ...segments: string[]): string {
+  const resolvedRoot = path.resolve(root);
+  const resolved = path.resolve(resolvedRoot, ...segments);
+  if (resolved !== resolvedRoot && resolved.startsWith(`${resolvedRoot}${path.sep}`)) return resolved;
+  throw new Error(`Refusing to use local sandbox path outside configured root: ${resolved}`);
 }
 
 /** Keep each path piece a single safe segment (no separators or traversal). */
@@ -212,7 +249,9 @@ const defaultFactory: SandboxFactory = opts => {
   const clone = seeded.machine.clone!({
     ...(opts.providerSandboxId ? { id: opts.providerSandboxId, sandboxId: opts.providerSandboxId } : {}),
     ...(opts.env ? { env: opts.env } : {}),
+    ...(opts.workingDirectory ? { workingDirectory: opts.workingDirectory } : {}),
     ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
+    ...(opts.checkpointName ? { checkpointName: opts.checkpointName } : {}),
   });
   return toMaterializationSandbox(clone);
 };
@@ -249,6 +288,8 @@ async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<s
 export interface SandboxBindingStore {
   /** Stored provider reattach id from a previous provisioning, if any. */
   readonly sandboxId: string | null;
+  /** Provider checkpoint used to seed and preserve this sandbox's filesystem. */
+  readonly checkpointName?: string;
   /** Persist a freshly provisioned provider id, or clear a stale one with `null`. */
   setSandboxId(id: string | null): Promise<void>;
   /** Clear all stored sandbox state (reattach id + materialization mark) on teardown. */
@@ -259,11 +300,33 @@ export interface SandboxBindingStore {
  * Provision a new sandbox (persisting its provider id on first open) or
  * reattach to the stored one. Returns a started, live sandbox.
  */
+export interface EnsureSandboxOptions {
+  /** Provider working directory for this sandbox. */
+  workingDirectory?: string;
+}
+
+export function ensureSandbox(store: SandboxBindingStore, onProgress?: ProgressFn): Promise<MaterializationSandbox>;
+export function ensureSandbox(
+  store: SandboxBindingStore,
+  env?: Record<string, string>,
+  onProgress?: ProgressFn,
+  options?: EnsureSandboxOptions,
+): Promise<MaterializationSandbox>;
 export async function ensureSandbox(
   store: SandboxBindingStore,
-  onProgress?: ProgressFn,
+  envOrProgress?: Record<string, string> | ProgressFn,
+  progressOrOptions?: ProgressFn | EnsureSandboxOptions,
+  maybeOptions: EnsureSandboxOptions = {},
 ): Promise<MaterializationSandbox> {
+  const env = typeof envOrProgress === 'function' ? undefined : envOrProgress;
+  const onProgress =
+    typeof envOrProgress === 'function' ? envOrProgress : (progressOrOptions as ProgressFn | undefined);
+  const options =
+    typeof envOrProgress === 'function'
+      ? ((progressOrOptions as EnsureSandboxOptions | undefined) ?? {})
+      : maybeOptions;
   const idleTimeoutMinutes = getSandboxIdleMinutes();
+  const checkpointName = store.checkpointName;
 
   // Reattach path: if we have a stored sandbox id, try to reattach. The VM may
   // have been torn down by the provider's idle GC (or otherwise died), in which
@@ -271,7 +334,13 @@ export async function ensureSandbox(
   // fresh sandbox so the next open succeeds instead of being permanently wedged.
   if (store.sandboxId) {
     reportProgress(onProgress, { phase: 'reattaching', message: 'Reconnecting to your sandbox…' });
-    const reattached = sandboxFactory({ providerSandboxId: store.sandboxId, idleTimeoutMinutes });
+    const reattached = sandboxFactory({
+      providerSandboxId: store.sandboxId,
+      idleTimeoutMinutes,
+      ...(checkpointName ? { checkpointName } : {}),
+      ...(env ? { env } : {}),
+      ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+    });
     try {
       await reattached.start();
       return reattached;
@@ -288,7 +357,12 @@ export async function ensureSandbox(
   }
 
   reportProgress(onProgress, { phase: 'provisioning', message: 'Provisioning a new sandbox…' });
-  const sandbox = sandboxFactory({ idleTimeoutMinutes });
+  const sandbox = sandboxFactory({
+    idleTimeoutMinutes,
+    ...(checkpointName ? { checkpointName } : {}),
+    ...(env ? { env } : {}),
+    ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+  });
   await sandbox.start();
   liveSandboxCount += 1;
 
@@ -328,8 +402,15 @@ export async function teardownSandbox(store: SandboxBindingStore, sandbox?: Mate
  * materialized (sandbox id + workdir carried on controller state), so no DB
  * round-trip is needed.
  */
-export async function reattachSandbox(providerSandboxId: string): Promise<MaterializationSandbox> {
-  const sandbox = sandboxFactory({ providerSandboxId, idleTimeoutMinutes: getSandboxIdleMinutes() });
+export async function reattachSandbox(
+  providerSandboxId: string,
+  options: EnsureSandboxOptions = {},
+): Promise<MaterializationSandbox> {
+  const sandbox = sandboxFactory({
+    providerSandboxId,
+    idleTimeoutMinutes: getSandboxIdleMinutes(),
+    ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+  });
   await sandbox.start();
   return sandbox;
 }

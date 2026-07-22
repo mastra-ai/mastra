@@ -8,85 +8,30 @@
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
  * `/` so the app can choose the active factory's board or draft composer.
  */
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { createBrowserRouter, Navigate, Outlet, useLocation, useSearchParams } from 'react-router';
+import { createBrowserRouter, Navigate } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import { safeReturnTo, SignInPage, useWebAuth } from './domains/auth';
+import { SignInPage } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
-import { useActiveFactory } from '../../shared/hooks/useActiveFactory';
-import { useWorkItemsQuery } from '../../shared/hooks/useWorkItems';
-import { isServerFactory } from './domains/workspaces/services/factories';
+
 import { AuditPage } from './domains/factory/AuditPage';
 import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
 import { OverviewPage } from './domains/factory/OverviewPage';
-
-/**
- * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
- * of a blank screen on deep links / refreshes.
- */
-function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
-  return (
-    <div role="status" aria-label={label} className="flex h-dvh w-full items-center justify-center bg-surface1">
-      <div className="flex w-64 flex-col gap-3">
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-4 w-1/2" />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Root layout guard. Shows a skeleton while the auth state resolves (one
- * cached query, shared with the sidebar identity UI) so the app neither
- * flashes protected content nor bounces through /signin on refresh.
- */
-function RequireAuth() {
-  const auth = useWebAuth();
-  const location = useLocation();
-  if (auth.isPending) return <AuthPendingSkeleton />;
-  const state = auth.data;
-  if (state?.authEnabled && !state.authenticated) {
-    const returnTo = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
-  }
-  return <Outlet />;
-}
-
-/** Inverse guard for /signin: only unauthenticated (auth-enabled) users stay. */
-function SignInGate() {
-  const auth = useWebAuth();
-  const [searchParams] = useSearchParams();
-  if (auth.isPending) return <AuthPendingSkeleton />;
-  const state = auth.data;
-  if (!state?.authEnabled || state.authenticated) {
-    return <Navigate to={safeReturnTo(searchParams.get('returnTo') ?? undefined)} replace />;
-  }
-  return <SignInPage />;
-}
+import { RootGuards } from './domains/auth/components/RootGuards';
+import { CreateFactoryPage } from './pages/CreateFactoryPage';
+import { OnboardingPage } from './pages/OnboardingPage';
+import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
+import { isServerFactory } from './domains/workspaces/services/factories';
 
 function RootLanding() {
-  const { activeFactory } = useActiveFactory();
-  const factoryProjectId =
-    activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
-  const workItems = useWorkItemsQuery(factoryProjectId);
+  const { activeFactory } = useActiveFactoryContext();
 
-  if (factoryProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;
-  if (factoryProjectId && workItems.isError) {
-    return (
-      <div className="flex h-dvh w-full items-center justify-center bg-surface1 p-4">
-        <Notice variant="destructive">
-          {workItems.error instanceof Error ? workItems.error.message : 'Failed to load Factory work'}
-        </Notice>
-      </div>
-    );
-  }
-  return <Navigate to={factoryProjectId && (workItems.data?.length ?? 0) > 0 ? '/factory/board' : '/new'} replace />;
+  if (!activeFactory) return null;
+
+  return <Navigate to={isServerFactory(activeFactory) ? '/factory/work' : '/new'} replace />;
 }
 
 function RedirectToDraftThread() {
@@ -100,9 +45,10 @@ export function createAppRoutes(): RouteObject[] {
   return [
     {
       path: '/',
-      element: <RequireAuth />,
+      element: <RootGuards />,
       children: [
         { index: true, element: <RootLanding /> },
+        { path: 'onboarding', element: <OnboardingPage /> },
         {
           // Pathless layout: <Chat /> (providers, session, SSE stream) stays
           // mounted while navigating between thread URLs, so thread navigation
@@ -119,6 +65,7 @@ export function createAppRoutes(): RouteObject[] {
             { path: 'factory/review', element: <ReviewBoardPage /> },
             { path: 'factory/metrics', element: <MetricsPage /> },
             { path: 'factory/audit', element: <AuditPage /> },
+            { path: 'factories/create', element: <CreateFactoryPage /> },
             // Compatibility routes from the former combined Board.
             { path: 'factory/board', element: <Navigate to="/factory/work" replace /> },
             { path: 'factory/intake', element: <Navigate to="/factory/work" replace /> },
@@ -128,7 +75,7 @@ export function createAppRoutes(): RouteObject[] {
         { path: '*', element: <RedirectToDraftThread /> },
       ],
     },
-    { path: '/signin', element: <SignInGate /> },
+    { path: '/signin', element: <SignInPage /> },
   ];
 }
 

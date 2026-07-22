@@ -14,12 +14,22 @@ type PageLayoutProps = {
 type PageLayoutMainViewProviderProps = {
   children: ReactNode;
   view?: ReactNode;
+  mobileHeader?: ReactNode;
 };
 
 const PageLayoutMainViewContext = createContext<ReactNode | undefined>(undefined);
+const PageLayoutMobileHeaderContext = createContext<ReactNode | undefined>(undefined);
 
-export function PageLayoutMainViewProvider({ children, view }: PageLayoutMainViewProviderProps) {
-  return <PageLayoutMainViewContext.Provider value={view}>{children}</PageLayoutMainViewContext.Provider>;
+export function PageLayoutMainViewProvider({ children, view, mobileHeader }: PageLayoutMainViewProviderProps) {
+  return (
+    <PageLayoutMainViewContext.Provider value={view}>
+      <PageLayoutMobileHeaderContext.Provider value={mobileHeader}>{children}</PageLayoutMobileHeaderContext.Provider>
+    </PageLayoutMainViewContext.Provider>
+  );
+}
+
+export function PageLayoutMobileHeader() {
+  return useContext(PageLayoutMobileHeaderContext);
 }
 
 export function PageLayout({ sidebar, header, title, description, actions, children }: PageLayoutProps) {

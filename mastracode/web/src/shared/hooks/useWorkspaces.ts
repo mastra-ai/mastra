@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { createWorktree, deleteWorktree, listWorktrees } from '../../web/ui/domains/workspaces/services/github';
+import { createUserSession, deleteUserSession } from '../../web/ui/domains/workspaces/services/github';
 import type { Factory, Worktree } from '../../web/ui/domains/workspaces/services/factories';
 import {
   boardSessionWorktrees,
@@ -13,7 +13,6 @@ import {
   selectedRepository,
   selectedWorktree,
   selectWorktree,
-  updateFactory,
   upsertWorktree,
 } from '../../web/ui/domains/workspaces/services/factories';
 
@@ -50,25 +49,17 @@ export function deriveProjectPath(factory: Factory | null | undefined): string {
   return factory.binding.path;
 }
 
-async function invalidateWorkspaceQueries(
+function invalidateWorkspaceQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   factory: Factory,
   scope?: AgentControllerThreadsScope,
 ) {
-  const current = latestFactory(factory);
-  const cached = queryClient.getQueryData<Factory[]>(queryKeys.factories());
-  queryClient.setQueryData<Factory[]>(
-    queryKeys.factories(),
-    cached?.map(candidate => (candidate.id === current.id ? current : candidate)) ?? loadFactories(),
-  );
-  const projectPath = deriveProjectPath(current);
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.workspaces(factory.id) }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, projectPath),
-    }),
-  ]);
+  const projectPath = deriveProjectPath(latestFactory(factory));
+  void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces(factory.id) });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+  void queryClient.invalidateQueries({
+    queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, projectPath),
+  });
 }
 
 function workspacesData(factory: Factory): WorkspacesData {
@@ -82,51 +73,15 @@ function workspacesData(factory: Factory): WorkspacesData {
 }
 
 export function useWorkspacesQuery(factory: Factory | null | undefined) {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
   const serverFactory = factory && isServerFactory(factory) ? factory : undefined;
   return useQuery({
     queryKey: queryKeys.workspaces(factory?.id),
     queryFn: async (): Promise<WorkspacesData> => {
       if (!serverFactory) throw new Error('Workspaces query requires a server-backed factory');
-      const current = latestFactory(serverFactory);
-      if (!isServerFactory(current)) throw new Error('Workspaces query requires a server-backed factory');
-      const repository = selectedRepository(current);
-      if (!repository) return workspacesData(current);
-
-      const persisted = await listWorktrees(baseUrl, repository.projectRepositoryId);
-      const localByPath = new Map(repository.worktrees.map(worktree => [worktree.worktreePath, worktree]));
-      const worktrees = persisted.map(worktree => {
-        const threadId = localByPath.get(worktree.worktreePath)?.threadId;
-        return threadId ? { ...worktree, threadId } : worktree;
-      });
-      const selectedWorktreePath = worktrees.some(worktree => worktree.worktreePath === repository.selectedWorktreePath)
-        ? repository.selectedWorktreePath
-        : worktrees.find(worktree => worktree.branch.startsWith('factory/'))?.worktreePath;
-      const updated: Factory = {
-        ...current,
-        binding: {
-          ...current.binding,
-          repositories: current.binding.repositories.map(candidate =>
-            candidate.projectRepositoryId === repository.projectRepositoryId
-              ? { ...candidate, worktrees, selectedWorktreePath }
-              : candidate,
-          ),
-        },
-      };
-      if (
-        repository.selectedWorktreePath !== selectedWorktreePath ||
-        JSON.stringify(repository.worktrees) !== JSON.stringify(worktrees)
-      ) {
-        updateFactory(updated);
-        void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.userSessions(current.id) });
-      }
-      return workspacesData(updated);
+      return workspacesData(serverFactory);
     },
     enabled: !!serverFactory,
     initialData: serverFactory ? () => workspacesData(serverFactory) : undefined,
-    refetchInterval: 3_000,
   });
 }
 
@@ -154,11 +109,12 @@ export function useCreateWorkspaceMutation(factory: Factory | null | undefined, 
       if (!factory || !isServerFactory(factory)) throw new Error('No server-backed factory selected');
       const repository = selectedRepository(factory);
       if (!repository) throw new Error('Connect a repository before creating a workspace');
-      const result = await createWorktree(baseUrl, repository.projectRepositoryId, trimmedBranch);
+      const result = await createUserSession(baseUrl, repository.projectRepositoryId, trimmedBranch);
       const worktree: Worktree = {
         branch: result.branch,
-        worktreePath: result.worktreePath,
+        worktreePath: result.sessionId,
         baseBranch: result.baseBranch,
+        threadId: result.sessionId,
       };
       return selectWorktree(upsertWorktree(latestFactory(factory), worktree), worktree.worktreePath);
     },
@@ -188,7 +144,7 @@ export function useDeleteWorkspaceMutation(
       if (!factory || !isServerFactory(factory)) throw new Error('No server-backed factory selected');
       const repository = selectedRepository(factory);
       if (!repository) throw new Error('Connect a repository before deleting a workspace');
-      await deleteWorktree(baseUrl, repository.projectRepositoryId, worktree.branch);
+      await deleteUserSession(baseUrl, worktree.worktreePath);
 
       // Cascade: delete the threads scoped to this worktree. Re-list between
       // rounds since the page size caps each fetch; bail after a sane number

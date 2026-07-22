@@ -78,7 +78,7 @@ export function FactorySetupSection() {
   if (rows.length === 0) return null;
 
   return (
-    <div className="mt-6 pt-4 border-t border-border1/40 flex flex-col gap-4">
+    <div className="mt-6 pt-4 flex flex-col gap-4 not-last:border-b not-last:border-border1/40 not-last:pb-6">
       <div className="flex flex-col">
         <Txt variant="ui-lg" className="text-icon6 font-medium">
           Worktree setup

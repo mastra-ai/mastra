@@ -163,7 +163,7 @@ async function auditWorkItemPatch({
           role,
           branch: session?.branch,
           threadId: session?.threadId,
-          projectPath: session?.projectPath,
+          sessionId: session?.sessionId,
         },
       },
     });
@@ -283,6 +283,21 @@ function parseTransitionBody(
   };
 }
 
+function parseInvocation(value: unknown): FactoryStartRequest['invocation'] | undefined | null {
+  if (value === undefined) return undefined;
+  if (!plainObject(value)) return null;
+  if (value.type === 'prompt') {
+    const prompt = boundedText(value.prompt, 16_384);
+    return prompt ? { type: 'prompt', prompt } : null;
+  }
+  if (value.type === 'skill') {
+    const skillName = boundedText(value.skillName, 64);
+    const args = typeof value.arguments === 'string' && value.arguments.length <= 16_384 ? value.arguments : undefined;
+    return skillName && args !== undefined ? { type: 'skill', skillName, arguments: args } : null;
+  }
+  return null;
+}
+
 function parseStartBody(
   body: unknown,
   tenant: { orgId: string; userId: string },
@@ -290,29 +305,26 @@ function parseStartBody(
 ): FactoryStartRequest | null {
   if (!plainObject(body) || !plainObject(body.workItem)) return null;
   const input = parseCreateWorkItem(body.workItem.input);
-  const resourceId = boundedText(body.resourceId, 256);
-  const projectPath = boundedText(body.projectPath, 2_048);
-  const branch = boundedText(body.branch, 256);
+  const sessionId = boundedText(body.sessionId, 256);
   const threadTitle = boundedText(body.threadTitle, 512);
   const kickoffKey = boundedText(body.kickoffKey, 256);
+  const invocation = parseInvocation(body.invocation);
   const destinationStage = FACTORY_RULE_STAGES.includes(body.destinationStage as FactoryRuleStage)
     ? (body.destinationStage as FactoryRuleStage)
     : undefined;
   const role = boundedText(body.workItem.role, 32);
   const id = body.workItem.id === undefined ? undefined : boundedText(body.workItem.id, 64);
-  const kickoffMessage = body.kickoffMessage === null ? null : boundedText(body.kickoffMessage, 16_384);
   if (body.workItem.id !== undefined && (!id || !UUID_RE.test(id))) return null;
   if (
     !input ||
-    !resourceId ||
-    !projectPath ||
-    !branch ||
+    !sessionId ||
+    !UUID_RE.test(sessionId) ||
     !threadTitle ||
     !kickoffKey ||
     !UUID_RE.test(kickoffKey) ||
+    invocation === null ||
     !destinationStage ||
-    !role ||
-    kickoffMessage === undefined
+    !role
   ) {
     return null;
   }
@@ -329,13 +341,11 @@ function parseStartBody(
   return {
     ...tenant,
     factoryProjectId,
-    resourceId,
-    projectPath,
-    branch,
+    sessionId,
     threadTitle,
     threadTags,
     kickoffKey,
-    kickoffMessage,
+    invocation,
     destinationStage,
     workItem: { id, role, input },
   };
@@ -360,8 +370,8 @@ export function buildFactoryRoutes({
         if ('response' in resolved) return resolved.response;
         const threadId = boundedText(context.req.param('threadId'), 512);
         const resourceId = boundedText(context.req.query('resourceId'), 256);
-        const projectPath = boundedText(context.req.query('projectPath'), 2_048);
-        if (!threadId || !resourceId || !projectPath) {
+        const sessionId = boundedText(context.req.query('sessionId'), 256);
+        if (!threadId || !resourceId || !sessionId) {
           return c.json(
             { error: 'invalid_session_address', message: 'The Factory session address is incomplete.' },
             400,
@@ -375,7 +385,7 @@ export function buildFactoryRoutes({
           factoryProjectId: resolved.factoryProjectId,
           threadId,
           resourceId,
-          projectPath,
+          sessionId,
         });
         if (!binding) return c.json({ context: null });
         const workItem = await workItems.getForProject(resolved.orgId, resolved.factoryProjectId, binding.workItemId);
@@ -649,7 +659,7 @@ export function buildFactoryRoutes({
               role: input.workItem.role,
               branch: prepared.branch,
               threadId: prepared.threadId,
-              projectPath: prepared.projectPath,
+              sessionId: prepared.sessionId,
               bindingId: prepared.bindingId,
             },
           },

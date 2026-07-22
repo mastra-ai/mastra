@@ -133,6 +133,10 @@ const ratingsOverTime = await observability!.getFeedbackTimeSeries({
 
 See the [feedback reference](/reference/observability/feedback) for all fields, filters, return types, and percentile query parameters.
 
+## Export feedback to external platforms
+
+Feedback flows through the observability event bus, so exporters that support feedback forward it automatically. The [PostHog exporter](/reference/observability/tracing/exporters/posthog#feedback-export) sends feedback as native `$ai_feedback` events that appear on the linked trace in PostHog.
+
 ## Related
 
 - [Observability overview](/docs/observability/overview)

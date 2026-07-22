@@ -18,7 +18,8 @@ import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
 import { useWorkspaceActivity } from '../../../../shared/hooks/useWorkspaceActivity';
 import { deriveProjectPath, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import { isServerFactory, useActiveFactoryContext } from '../workspaces';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { isServerFactory } from '../workspaces/services/factories';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import type { QueueHealthSelection } from './components/QueueHealthChart';
 import { QueueHealthChart, formatAgeSeconds } from './components/QueueHealthChart';
@@ -70,7 +71,7 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-      <section className="flex flex-col gap-3 rounded-lg border border-border1 bg-surface2 p-3">
+      <section className="flex flex-col gap-3 rounded-lg bg-surface2 p-3">
         <h2 className="m-0 text-ui-md font-medium text-icon5">Queue health</h2>
         {!workItemsQuery.data ? (
           <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
@@ -81,7 +82,7 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
         )}
       </section>
 
-      <section className="flex flex-col gap-2 rounded-lg border border-border1 bg-surface2 p-3">
+      <section className="flex flex-col gap-2 rounded-lg bg-surface2 p-3">
         <h2 className="m-0 text-ui-md font-medium text-icon5">Tasks</h2>
         <DrillDownList selected={selected} entries={drillDown} />
       </section>

@@ -154,12 +154,12 @@ describe('auth and scoping', () => {
 describe('GET /web/factory/projects/:id/threads/:threadId/context', () => {
   const threadId = 'thread:/opaque?value=1';
   const resourceId = 'resource-1';
-  const projectPath = '/repo/worktree';
+  const sessionId = 'session-1';
 
-  function contextPath(overrides: { resourceId?: string; projectPath?: string } = {}) {
+  function contextPath(overrides: { resourceId?: string; sessionId?: string } = {}) {
     const query = new URLSearchParams({
       resourceId: overrides.resourceId ?? resourceId,
-      projectPath: overrides.projectPath ?? projectPath,
+      sessionId: overrides.sessionId ?? sessionId,
     });
     return `/web/factory/projects/${PROJECT_ID}/threads/${encodeURIComponent(threadId)}/context?${query}`;
   }
@@ -187,7 +187,7 @@ describe('GET /web/factory/projects/:id/threads/:threadId/context', () => {
       factoryProjectId: PROJECT_ID,
       workItem: { input: { title: 'Manual task title', stages: ['intake'] } },
       role: 'work',
-      session: { threadId, projectPath, branch: 'feature/context' },
+      session: { threadId, sessionId, branch: 'feature/context' },
       resourceId,
       kickoffKey: 'context-kickoff',
       kickoffMessage: null,
@@ -208,8 +208,10 @@ describe('GET /web/factory/projects/:id/threads/:threadId/context', () => {
         resolution: { mode: 'stored', reason: 'manual' },
       },
     });
-    const mismatched = await buildApp(orgUser).request(contextPath({ resourceId: 'other-resource' }));
-    await expect(mismatched.json()).resolves.toEqual({ context: null });
+    const mismatchedResource = await buildApp(orgUser).request(contextPath({ resourceId: 'other-resource' }));
+    await expect(mismatchedResource.json()).resolves.toEqual({ context: null });
+    const mismatchedSession = await buildApp(orgUser).request(contextPath({ sessionId: 'other-session' }));
+    await expect(mismatchedSession.json()).resolves.toEqual({ context: null });
   });
 
   it('hydrates a bound Linear issue through the bounded task-context capability', async () => {
@@ -231,7 +233,7 @@ describe('GET /web/factory/projects/:id/threads/:threadId/context', () => {
         },
       },
       role: 'work',
-      session: { threadId, projectPath, branch: 'feature/context' },
+      session: { threadId, sessionId, branch: 'feature/context' },
       resourceId,
       kickoffKey: 'linear-context-kickoff',
       kickoffMessage: null,
@@ -313,57 +315,6 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     expect(workItem.stageHistory[0].exitedAt).toBeUndefined();
   });
 
-  it('evaluates Intake onEnter when a work item is created manually', async () => {
-    const transition = vi.fn(async (request: any) => ({
-      status: 'accepted' as const,
-      transitionId: 'transition-1',
-      itemId: request.workItemId,
-      board: request.board,
-      stage: request.stage,
-      revision: 2,
-    }));
-
-    const res = await buildApp(orgUser, undefined, { transition } as never).request(
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(createBody()),
-      },
-    );
-
-    expect(res.status).toBe(200);
-    expect(transition).toHaveBeenCalledWith(
-      expect.objectContaining({
-        board: 'work',
-        stage: 'intake',
-        actor: { type: 'human', id: 'u1' },
-        initialEntry: true,
-      }),
-    );
-  });
-
-  it('removes a newly created work item when its initial Intake entry is rejected', async () => {
-    const transition = vi.fn(async () => ({
-      status: 'rejected' as const,
-      code: 'forbidden',
-      reason: 'Intake is closed.',
-    }));
-
-    const res = await buildApp(orgUser, undefined, { transition } as never).request(
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(createBody({ externalSource: null })),
-      },
-    );
-
-    expect(res.status).toBe(422);
-    expect(await res.json()).toEqual({ status: 'rejected', code: 'forbidden', reason: 'Intake is closed.' });
-    expect(await listItems()).toEqual([]);
-  });
-
   it('rejects an external-source upsert that tries to bypass governed stage transition', async () => {
     await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const res = await json(
@@ -371,7 +322,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
       `/web/factory/projects/${PROJECT_ID}/work-items`,
       createBody({
         stages: ['execute'],
-        sessions: { work: { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' } },
+        sessions: { work: { sessionId: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' } },
       }),
     );
     expect(res.status).toBe(409);
@@ -436,11 +387,11 @@ describe('PATCH /web/factory/work-items/:id', () => {
 
   it('merges sessions and metadata instead of replacing', async () => {
     const item = await createItem({
-      sessions: { work: { projectPath: '/sb/wt/a', branch: 'b-a', threadId: 't-a' } },
+      sessions: { work: { sessionId: '/sb/wt/a', branch: 'b-a', threadId: 't-a' } },
       metadata: { number: 42, labels: ['bug'] },
     });
     const res = await json('PATCH', `/web/factory/work-items/${item.id}`, {
-      sessions: { review: { projectPath: '/sb/wt/r', branch: 'b-r', threadId: 't-r' } },
+      sessions: { review: { sessionId: '/sb/wt/r', branch: 'b-r', threadId: 't-r' } },
       metadata: { prNumber: 7 },
     });
     const { workItem } = await res.json();
@@ -456,10 +407,10 @@ describe('PATCH /web/factory/work-items/:id', () => {
     // write would silently drop the other role.
     const [workRes, reviewRes] = await Promise.all([
       json('PATCH', `/web/factory/work-items/${item.id}`, {
-        sessions: { work: { projectPath: '/sb/wt/a', branch: 'b-a', threadId: 't-a' } },
+        sessions: { work: { sessionId: '/sb/wt/a', branch: 'b-a', threadId: 't-a' } },
       }),
       json('PATCH', `/web/factory/work-items/${item.id}`, {
-        sessions: { review: { projectPath: '/sb/wt/r', branch: 'b-r', threadId: 't-r' } },
+        sessions: { review: { sessionId: '/sb/wt/r', branch: 'b-r', threadId: 't-r' } },
       }),
     ]);
     expect(workRes.status).toBe(200);
@@ -560,13 +511,11 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
 
 describe('POST /web/factory/projects/:id/runs/start', () => {
   const startBody = (workItemId?: string) => ({
-    resourceId: 'resource-1',
-    projectPath: '/worktrees/issue-42',
-    branch: 'factory/issue-42',
+    sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
     threadTitle: 'Investigate issue 42',
     threadTags: { role: 'plan' },
     kickoffKey: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
-    kickoffMessage: 'Start',
+    invocation: { type: 'prompt' as const, prompt: 'Start' },
     destinationStage: 'planning',
     workItem: {
       id: workItemId,
@@ -582,10 +531,10 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     const prepare = vi.fn(async (input: any) => ({
       workItemId: input.workItem.id,
       bindingId: 'binding-1',
-      threadId: 'thread-1',
-      resourceId: input.resourceId,
-      projectPath: input.projectPath,
-      branch: input.branch,
+      threadId: input.sessionId,
+      resourceId: input.sessionId,
+      sessionId: input.sessionId,
+      branch: 'factory/issue-42',
       revision: 2,
       kickoffStatus: 'pending',
       replayed: false,
@@ -917,14 +866,14 @@ describe('audit events', () => {
     const item = await createItem();
     auditRecorded = [];
 
-    const session = { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
+    const session = { sessionId: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
     await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
     expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated', 'factory.run.started']);
     expect(auditRecorded[1].metadata).toEqual({
       role: 'work',
       branch: 'factory/issue-42',
       threadId: 't-1',
-      projectPath: '/sb/wt/issue-42',
+      sessionId: '/sb/wt/issue-42',
     });
 
     // Re-filing the same role is not a new run.
@@ -984,86 +933,6 @@ describe('audit events', () => {
   });
 });
 
-// ── Durable decision status ──────────────────────────────────────────────
-describe('decision status', () => {
-  async function queueDecision(identity: string, now: string, orgId = 'org1') {
-    await seed.workItems.commitRuleEvaluation({
-      orgId,
-      factoryProjectId: PROJECT_ID,
-      workItemId: null,
-      ingress: { identity, triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
-      expectedRevision: null,
-      actor: { type: 'human', id: 'u1' },
-      outcome: { status: 'accepted' },
-      decisions: [{ type: 'notify', idempotencyKey: identity, title: 'Rule update', body: 'Bounded body' }],
-      causalChain: [],
-      now: new Date(now),
-    });
-  }
-
-  it('returns a bounded tenant-scoped newest-first page with an opaque cursor', async () => {
-    await queueDecision('effect-1', '2030-01-01T00:00:00.000Z');
-    await queueDecision('effect-2', '2030-01-01T00:01:00.000Z');
-    await queueDecision('other-org', '2030-01-01T00:02:00.000Z', 'org2');
-
-    const first = await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions?statuses=pending&limit=1`);
-    expect(first.status).toBe(200);
-    const firstPage = await first.json();
-    expect(firstPage.decisions).toEqual([
-      expect.objectContaining({ type: 'notify', status: 'pending', attempts: 0, lastError: null }),
-    ]);
-    expect(firstPage.decisions[0]).not.toHaveProperty('orgId');
-    expect(firstPage.decisions[0]).not.toHaveProperty('decision');
-    expect(firstPage.nextCursor).toEqual(expect.any(String));
-
-    const second = await json(
-      'GET',
-      `/web/factory/projects/${PROJECT_ID}/decisions?statuses=pending&limit=1&before=${encodeURIComponent(firstPage.nextCursor)}`,
-    );
-    expect(second.status).toBe(200);
-    const secondPage = await second.json();
-    expect(secondPage.decisions).toHaveLength(1);
-    expect(secondPage.decisions[0].createdAt).toBe('2030-01-01T00:00:00.000Z');
-    expect(secondPage.nextCursor).toBeUndefined();
-  });
-
-  it('requeues only a tenant-scoped failed effect while preserving its identity', async () => {
-    await queueDecision('effect-retry', '2030-01-01T00:00:00.000Z');
-    const now = new Date('2030-01-01T00:01:00.000Z');
-    const [leased] = await seed.workItems.claimDeferredDecisions({
-      ownerId: 'worker-1',
-      now,
-      leaseExpiresAt: new Date('2030-01-01T00:02:00.000Z'),
-      limit: 1,
-    });
-    await seed.workItems.failDeferredDecision({
-      id: leased!.id,
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      ownerId: 'worker-1',
-      now,
-      availableAt: now,
-      lastError: 'terminal failure',
-      terminal: true,
-    });
-
-    const response = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${leased!.id}/retry`);
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      decision: expect.objectContaining({ id: leased!.id, evaluationId: leased!.evaluationId, status: 'retry' }),
-    });
-    const denied = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${leased!.id}/retry`);
-    expect(denied.status).toBe(409);
-  });
-
-  it('rejects malformed cursors instead of silently restarting pagination', async () => {
-    const response = await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions?before=not-a-cursor`);
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: 'invalid_cursor' });
-  });
-});
-
 // ── Validation units ─────────────────────────────────────────────────────
 describe('parseCreateWorkItem', () => {
   it('accepts a minimal manual work item', () => {
@@ -1085,9 +954,9 @@ describe('parseCreateWorkItem', () => {
   });
 
   it('rejects malformed sessions', () => {
-    expect(parseCreateWorkItem(createBody({ sessions: { work: { projectPath: '/p' } } }))).toBeNull();
+    expect(parseCreateWorkItem(createBody({ sessions: { work: { sessionId: '/p' } } }))).toBeNull();
     expect(
-      parseCreateWorkItem(createBody({ sessions: { '': { projectPath: '/p', branch: 'b', threadId: 't' } } })),
+      parseCreateWorkItem(createBody({ sessions: { '': { sessionId: '/p', branch: 'b', threadId: 't' } } })),
     ).toBeNull();
   });
 });

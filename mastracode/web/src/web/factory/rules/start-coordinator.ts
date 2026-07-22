@@ -1,7 +1,10 @@
 import type { AgentController } from '@mastra/core/agent-controller';
+import type { RequestContext } from '@mastra/core/request-context';
+import { formatSkillActivation } from '@mastra/core/workspace';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import type { CreateWorkItemInput, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { SourceControlSession, SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { getFactoryStorage } from '../../runtime-config.js';
 import type { FactoryRuleStage, FactoryTransitionResult } from './types.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -10,19 +13,18 @@ export interface FactoryStartRequest {
   orgId: string;
   userId: string;
   factoryProjectId: string;
-  resourceId: string;
-  projectPath: string;
-  branch: string;
+  sessionId: string;
   threadTitle: string;
   threadTags?: Record<string, string>;
   kickoffKey: string;
-  kickoffMessage: string | null;
+  invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
   destinationStage: FactoryRuleStage;
   workItem: {
     id?: string;
     role: string;
     input: CreateWorkItemInput;
   };
+  requestContext?: RequestContext;
 }
 
 export class FactoryStartTransitionError extends Error {
@@ -40,7 +42,7 @@ export interface FactoryStartPreparedResult {
   bindingId: string;
   threadId: string;
   resourceId: string;
-  projectPath: string;
+  sessionId: string;
   branch: string;
   revision: number;
   kickoffStatus: 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
@@ -48,84 +50,99 @@ export interface FactoryStartPreparedResult {
 }
 
 type FactoryController = AgentController<MastraCodeState>;
-type ScopedSession = Awaited<ReturnType<FactoryController['createSession']>>;
+type FactorySession = Awaited<ReturnType<FactoryController['createSession']>>;
 
-type CreateSessionWithScope = (input: {
-  id: string;
-  ownerId: string;
-  resourceId: string;
-  scope: string;
-  tags: Record<string, string>;
-}) => ReturnType<FactoryController['createSession']>;
-
-function createScopedSession(
-  controller: FactoryController,
-  request: FactoryStartRequest,
-): ReturnType<CreateSessionWithScope> {
-  return (controller.createSession as CreateSessionWithScope)({
-    id: request.projectPath,
-    ownerId: request.userId,
-    resourceId: request.resourceId,
-    scope: request.projectPath,
-    tags: { projectPath: request.projectPath },
-  });
+function escapeSkillBoundary(value: string): string {
+  return value.replaceAll('</skill>', '&lt;/skill&gt;');
 }
 
-async function resolveThread(
-  session: ScopedSession,
-  request: FactoryStartRequest,
-  existingThreadId?: string,
-): Promise<string> {
-  const identityTags = {
-    projectPath: request.projectPath,
-    ...(request.workItem.id ? { factoryWorkItemId: request.workItem.id } : {}),
-  };
-  if (existingThreadId) {
-    await session.thread.switch({ threadId: existingThreadId });
-  } else {
-    const matching = await session.thread.list({ metadata: identityTags });
-    const thread = [...matching].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
-    if (thread) await session.thread.switch({ threadId: thread.id });
-    else await session.thread.create({ title: request.threadTitle });
+async function resolveKickoffMessage(
+  session: FactorySession,
+  invocation: FactoryStartRequest['invocation'],
+): Promise<string | null> {
+  if (!invocation) return null;
+  if (invocation.type === 'prompt') return invocation.prompt;
+
+  const skills = session.getWorkspace().skills;
+  await skills?.maybeRefresh();
+  const skill = await skills?.get(invocation.skillName);
+  if (!skill || skill['user-invocable'] === false) {
+    throw new Error(`Skill not found: ${invocation.skillName}.`);
   }
-  const settings = { ...(request.threadTags ?? {}), ...identityTags };
+  const args = invocation.arguments.trim();
+  const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
+  return `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
+}
+
+async function resolveSourceSession(
+  storage: SourceControlStorageHandle,
+  request: FactoryStartRequest,
+): Promise<SourceControlSession> {
+  const session = await storage.sessions.getBySessionId(request.sessionId);
+  if (!session || session.orgId !== request.orgId || session.userId !== request.userId) {
+    throw new Error('Factory session not found');
+  }
+  const projectRepository = await storage.projectRepositories.get({
+    orgId: request.orgId,
+    id: session.projectRepositoryId,
+  });
+  if (!projectRepository) throw new Error('Factory session repository not found');
+  const connection = await storage.connections.get({ orgId: request.orgId, id: projectRepository.connectionId });
+  if (!connection || connection.factoryProjectId !== request.factoryProjectId) {
+    throw new Error('Factory session does not belong to this project');
+  }
+  return session;
+}
+
+async function configureThread(session: FactorySession, request: FactoryStartRequest): Promise<string> {
+  const threadId = session.thread.requireId();
+  await session.thread.rename({ title: request.threadTitle });
+  const settings = { ...(request.threadTags ?? {}), factorySessionId: request.sessionId };
   await Promise.all(Object.entries(settings).map(([key, value]) => session.thread.setSetting({ key, value })));
-  return session.thread.requireId();
+  return threadId;
 }
 
 export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage?: WorkItemsStorage;
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
+  readonly #sourceControl?: SourceControlStorageHandle;
 
   constructor(
     controller: FactoryController,
     storage?: WorkItemsStorage,
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
+    sourceControl?: SourceControlStorageHandle,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
+    this.#sourceControl = sourceControl;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
     const storage = this.#storage ?? getFactoryStorage().getDomain<WorkItemsStorage>('work-items');
-    const existingItem = request.workItem.id
-      ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
-      : null;
-    const existingThreadId = existingItem ? Object.values(existingItem.sessions).at(-1)?.threadId : undefined;
-    const session = await createScopedSession(this.#controller, request);
-    const threadId = await resolveThread(session, request, existingThreadId);
+    if (!this.#sourceControl) throw new Error('Factory source control storage is unavailable');
+    const sourceSession = await resolveSourceSession(this.#sourceControl, request);
+    const session = await this.#controller.createSession({
+      id: sourceSession.sessionId,
+      ownerId: request.userId,
+      resourceId: sourceSession.sessionId,
+      threadId: sourceSession.sessionId,
+      requestContext: request.requestContext,
+    });
+    const threadId = await configureThread(session, request);
+    const kickoffMessage = await resolveKickoffMessage(session, request.invocation);
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,
       userId: request.userId,
       factoryProjectId: request.factoryProjectId,
       workItem: { id: request.workItem.id, input: request.workItem.input },
       role: request.workItem.role,
-      session: { projectPath: request.projectPath, branch: request.branch, threadId },
-      resourceId: request.resourceId,
+      session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId },
+      resourceId: sourceSession.sessionId,
       kickoffKey: request.kickoffKey,
-      kickoffMessage: request.kickoffMessage,
+      kickoffMessage,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 
@@ -150,7 +167,7 @@ export class FactoryStartCoordinator {
       revision = transition.revision;
     }
 
-    if (request.kickoffMessage === null) {
+    if (kickoffMessage === null) {
       await storage.markPendingStart(prepared.binding.id, 'sent');
       prepared.pendingStart.status = 'sent';
     }
@@ -159,9 +176,9 @@ export class FactoryStartCoordinator {
       workItemId: prepared.item.id,
       bindingId: prepared.binding.id,
       threadId,
-      resourceId: request.resourceId,
-      projectPath: request.projectPath,
-      branch: request.branch,
+      resourceId: sourceSession.sessionId,
+      sessionId: sourceSession.sessionId,
+      branch: sourceSession.branch,
       revision,
       kickoffStatus: prepared.pendingStart.status,
       replayed: prepared.replayed,

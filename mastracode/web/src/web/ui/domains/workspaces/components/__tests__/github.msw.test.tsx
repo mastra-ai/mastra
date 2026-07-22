@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { useFactoriesQuery } from '../../../../../../shared/hooks/useFactories';
-import { commitChanges, createWorktree, openPullRequest, pushBranch } from '../../services/github';
+import { commitChanges, createUserSession, openPullRequest, pushBranch } from '../../services/github';
 import type { GithubStatus, GitOpError } from '../../services/github';
 import { isServerFactory, loadFactories } from '../../services/factories';
 import type { ServerFactory } from '../../services/factories';
@@ -22,31 +22,41 @@ function gitOpUrl(action: string): string {
 }
 
 describe('github git-op helpers', () => {
-  it('createWorktree posts branch/baseBranch and returns the worktree result', async () => {
+  it('createUserSession posts branch/baseBranch and returns session metadata', async () => {
     let received: unknown;
     server.use(
-      http.post(gitOpUrl('worktree'), async ({ request }) => {
+      http.post(gitOpUrl('sessions'), async ({ request }) => {
         received = await request.json();
         return HttpResponse.json({
-          worktreePath: '/workspace/worktrees/feat-x',
-          branch: 'feat-x',
-          baseBranch: 'main',
-          resourceId: 'res-1',
+          session: {
+            id: 'stored-session',
+            sessionId: 'session-feat-x',
+            projectRepositoryId: PROJECT,
+            orgId: 'org-1',
+            userId: 'user-1',
+            branch: 'feat-x',
+            baseBranch: 'main',
+            sandboxId: null,
+            sandboxWorkdir: null,
+            materializedAt: null,
+            createdAt: '2026-07-22T00:00:00.000Z',
+            updatedAt: '2026-07-22T00:00:00.000Z',
+          },
         });
       }),
     );
 
-    const result = await createWorktree(TEST_BASE_URL, PROJECT, 'feat-x', 'main');
+    const result = await createUserSession(TEST_BASE_URL, PROJECT, 'feat-x', 'main');
 
     expect(received).toEqual({ branch: 'feat-x', baseBranch: 'main' });
-    expect(result.worktreePath).toBe('/workspace/worktrees/feat-x');
+    expect(result.sessionId).toBe('session-feat-x');
     expect(result.branch).toBe('feat-x');
     expect(result.baseBranch).toBe('main');
   });
 
   it('commitChanges reports committed=false when nothing changed', async () => {
     server.use(http.post(gitOpUrl('commit'), () => HttpResponse.json({ committed: false })));
-    const result = await commitChanges(TEST_BASE_URL, PROJECT, 'msg', '/workspace/worktrees/feat-x');
+    const result = await commitChanges(TEST_BASE_URL, PROJECT, 'msg', 'session-feat-x');
     expect(result.committed).toBe(false);
   });
 
@@ -58,8 +68,8 @@ describe('github git-op helpers', () => {
         return HttpResponse.json({ pushed: true, branch: 'feat-x' });
       }),
     );
-    const result = await pushBranch(TEST_BASE_URL, PROJECT, 'feat-x', '/workspace/worktrees/feat-x');
-    expect(received).toEqual({ branch: 'feat-x', worktreePath: '/workspace/worktrees/feat-x' });
+    const result = await pushBranch(TEST_BASE_URL, PROJECT, 'feat-x', 'session-feat-x');
+    expect(received).toEqual({ branch: 'feat-x', sessionId: 'session-feat-x' });
     expect(result.pushed).toBe(true);
   });
 
@@ -74,27 +84,23 @@ describe('github git-op helpers', () => {
     const result = await openPullRequest(TEST_BASE_URL, PROJECT, {
       branch: 'feat-x',
       title: 'My PR',
-      worktreePath: '/workspace/worktrees/feat-x',
       sessionId: 'session-1',
-      threadId: 'thread-1',
     });
     expect(received).toEqual({
       branch: 'feat-x',
       title: 'My PR',
-      worktreePath: '/workspace/worktrees/feat-x',
       sessionId: 'session-1',
-      threadId: 'thread-1',
     });
     expect(result.url).toBe('https://github.com/o/r/pull/7');
   });
 
   it('surfaces the server error code/message on failure', async () => {
     server.use(
-      http.post(gitOpUrl('worktree'), () =>
+      http.post(gitOpUrl('sessions'), () =>
         HttpResponse.json({ error: 'Invalid branch', message: 'branch name is invalid' }, { status: 400 }),
       ),
     );
-    await expect(createWorktree(TEST_BASE_URL, PROJECT, 'bad ref')).rejects.toMatchObject({
+    await expect(createUserSession(TEST_BASE_URL, PROJECT, 'bad ref')).rejects.toMatchObject({
       code: 'Invalid branch',
       message: 'branch name is invalid',
       status: 400,
@@ -105,7 +111,7 @@ describe('github git-op helpers', () => {
     server.use(http.post(gitOpUrl('push'), () => new HttpResponse(null, { status: 401 })));
     let caught: GitOpError | undefined;
     try {
-      await pushBranch(TEST_BASE_URL, PROJECT, 'feat-x');
+      await pushBranch(TEST_BASE_URL, PROJECT, 'feat-x', 'session-feat-x');
     } catch (e) {
       caught = e as GitOpError;
     }

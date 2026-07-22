@@ -18,12 +18,12 @@ export function getFactorySessionCoordinates(
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as AgentControllerRequestContext<FactorySessionState> | undefined;
   const factoryProjectId = context?.getState().factoryProjectId;
-  if (!context?.threadId || !context.resourceId || !context.scope || !factoryProjectId) return null;
+  if (!context?.threadId || !context.resourceId || !factoryProjectId) return null;
   return {
     factoryProjectId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    projectPath: context.scope,
+    sessionId: context.resourceId,
   };
 }
 

@@ -34,6 +34,9 @@ import { MastraFactory } from '../web/factory-entry.js';
 import type { FactoryIntegration } from '../web/factory-integration.js';
 import { GithubIntegration } from '../web/github/integration.js';
 import { LinearIntegration } from '../web/linear/integration.js';
+import type { IMastraAuthProvider } from '@mastra/core/server';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -73,7 +76,20 @@ if (redisUrl) {
 // `MASTRA_ORGANIZATION_ID`, and `MASTRA_COOKIE_DOMAIN` from env). Set
 // `MASTRACODE_AUTH_DISABLED=1` to boot with no auth provider (open server,
 // bare local dev).
-const auth = process.env.MASTRACODE_AUTH_DISABLED === '1' ? null : undefined;
+const workosConfigured = Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
+const betterAuthSecret = process.env.BETTER_AUTH_SECRET;
+const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
+let auth: IMastraAuthProvider | null | undefined;
+if (workosConfigured) {
+  auth = new MastraAuthWorkos({ redirectUri: process.env.WORKOS_REDIRECT_URI, fetchMemberships: true });
+} else if (betterAuthSecret) {
+  auth = new MastraAuthBetterAuth({
+    secret: betterAuthSecret,
+    signUpEnabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED !== '1',
+  });
+} else if (authDisabled) {
+  auth = null;
+}
 
 // WorkOS audit export is an independent capability. Supplying its dedicated
 // API key enables mirroring + the Admin Portal route regardless of whether web
@@ -133,7 +149,7 @@ function localSandboxEnv(): Record<string, string> {
 // MASTRACODE_LOCAL_SANDBOX_ROOT (local checkout root, default
 // ~/.mastracode/web/sandboxes).
 const sandboxKind = process.env.MASTRACODE_SANDBOX_PROVIDER ?? (process.env.RAILWAY_API_TOKEN ? 'railway' : 'local');
-const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES);
+const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES) ?? 5;
 let sandbox: WorkspaceSandbox;
 if (sandboxKind === 'railway') {
   const railwayToken = process.env.RAILWAY_API_TOKEN;

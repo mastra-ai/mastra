@@ -268,7 +268,7 @@ describe('WorkItemsStorage', () => {
       factoryProjectId: 'p1',
       threadId: 'thread:/opaque?value=1',
       resourceId: 'resource-1',
-      projectPath: '/repo',
+      sessionId: 'session-1',
     };
     const prepared = await storage.prepareRunStart({
       orgId: address.orgId,
@@ -276,7 +276,7 @@ describe('WorkItemsStorage', () => {
       factoryProjectId: address.factoryProjectId,
       workItem: { input },
       role: 'work',
-      session: { projectPath: address.projectPath, branch: 'feature/one', threadId: address.threadId },
+      session: { sessionId: address.sessionId, branch: 'feature/one', threadId: address.threadId },
       resourceId: address.resourceId,
       kickoffKey: 'kickoff-1',
       kickoffMessage: null,
@@ -288,7 +288,7 @@ describe('WorkItemsStorage', () => {
       status: 'active',
     });
     await expect(storage.findRunBinding({ ...address, orgId: 'org2' })).resolves.toBeNull();
-    await expect(storage.findRunBinding({ ...address, projectPath: '/other' })).resolves.toBeNull();
+    await expect(storage.findRunBinding({ ...address, sessionId: 'other-session' })).resolves.toBeNull();
 
     await storage.revokeRunBinding({
       orgId: address.orgId,
