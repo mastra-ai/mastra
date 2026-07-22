@@ -3,6 +3,7 @@ import { defaultFactoryRules, mergeFactoryRuleOverrides } from './defaults.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryGithubRuleContext,
+  FactoryLinearRuleContext,
   FactoryRulesOverrides,
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
@@ -45,7 +46,10 @@ function stageContext(actor: FactoryStageRuleContext['actor'], board: 'work' | '
   };
 }
 
-function toolContext(value: unknown, overrides: Partial<FactoryToolResultRuleContext> = {}): FactoryToolResultRuleContext {
+function toolContext(
+  value: unknown,
+  overrides: Partial<FactoryToolResultRuleContext> = {},
+): FactoryToolResultRuleContext {
   return {
     ...base,
     actor: { type: 'agent', bindingId: 'binding-1', role: 'plan' },
@@ -82,6 +86,29 @@ function githubContext(event: FactoryGithubRuleContext['event']): FactoryGithubR
   };
 }
 
+function linearContext(): FactoryLinearRuleContext {
+  return {
+    ...base,
+    actor: { type: 'human', id: 'user-1' },
+    ingress: { type: 'linear', id: 'linear:issue-1:2026-07-02T00:00:00Z' },
+    event: 'issueObserved',
+    issue: {
+      id: 'issue-1',
+      identifier: 'ENG-42',
+      title: 'Fix intake sync',
+      url: 'https://linear.app/acme/issue/ENG-42',
+      state: 'Todo',
+      stateType: 'unstarted',
+      priorityLabel: 'High',
+      assignee: 'ada',
+      team: 'ENG',
+      labels: ['bug'],
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    },
+  };
+}
+
 describe('defaultFactoryRules', () => {
   it('requires an explicit deployment version', () => {
     expect(() => defaultFactoryRules({ version: '' })).toThrow(/version is required/i);
@@ -90,41 +117,104 @@ describe('defaultFactoryRules', () => {
   it('ships ordinary visible default leaves', () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(rules.version).toBe('deployment-7');
-    expect(rules.work.intake?.issue?.onEnter).toBeTypeOf('function');
-    expect(rules.review.intake?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(rules.work.intake?.issue?.onEnter).toBeUndefined();
+    expect(rules.work.triage?.issue?.onEnter).toBeTypeOf('function');
+    expect(rules.review.intake?.pullRequest?.onEnter).toBeUndefined();
+    expect(rules.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
+    expect(rules.linear.issueObserved?.onEvent).toBeTypeOf('function');
+    expect(rules.work.triage?.linearIssue?.onEnter).toBeTypeOf('function');
   });
 
-  it.each([
-    ['write', { type: 'github', login: 'writer', trusted: true, factoryAuthored: false } as const, true],
-    ['admin', { type: 'github', login: 'admin', trusted: true, factoryAuthored: false } as const, true],
-    ['read', { type: 'github', login: 'reader', trusted: false, factoryAuthored: false } as const, false],
-    ['none', { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false } as const, false],
-    ['error', { type: 'github', login: 'unknown', trusted: false, factoryAuthored: false } as const, false],
-  ])('investigates issue authors normalized from %s permission only when trusted', async (_permission, actor, expected) => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.intake?.issue?.onEnter;
-    const decision = await rule?.(stageContext(actor, 'work'));
-    expect(decision?.type === 'invokeSkill').toBe(expected);
-    if (decision?.type === 'invokeSkill') expect(decision.skillName).toBe('understand-issue');
+  it('materializes observed Linear issues directly in Triage', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).linear.issueObserved?.onEvent;
+
+    expect(await rule?.(linearContext())).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      source: 'linear-issue',
+      sourceKey: 'linear:ENG-42',
+      title: 'ENG-42: Fix intake sync',
+      stage: 'triage',
+      metadata: { linearIssueId: 'issue-1', linearIssueIdentifier: 'ENG-42' },
+    });
   });
 
-  it('reviews trusted or explicitly Factory-authored pull requests without heuristics', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).review.intake?.pullRequest?.onEnter;
-    const trusted = await rule?.(
-      stageContext({ type: 'github', login: 'writer', trusted: true, factoryAuthored: false }, 'review'),
-    );
-    const factoryAuthored = await rule?.(
-      stageContext({ type: 'github', login: 'bot', trusted: false, factoryAuthored: true }, 'review'),
-    );
-    const untrusted = await rule?.(
-      stageContext({ type: 'github', login: 'reader', trusted: false, factoryAuthored: false }, 'review'),
-    );
-    expect(trusted?.type).toBe('invokeSkill');
-    expect(factoryAuthored?.type).toBe('invokeSkill');
-    expect(untrusted).toBeUndefined();
+  it('does not move an existing Linear issue backward when polling observes an update', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).linear.issueObserved?.onEvent;
+
+    expect(
+      await rule?.({
+        ...linearContext(),
+        item: {
+          ...item,
+          source: 'linear-issue',
+          sourceKey: 'linear:ENG-42',
+          stages: ['execute'],
+        },
+        board: 'work',
+        itemRevision: 4,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('starts Linear investigation when a human moves an issue into Triage', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.linearIssue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: {
+        ...item,
+        source: 'linear-issue',
+        sourceKey: 'linear:ENG-42',
+        title: 'ENG-42: Fix intake sync',
+        url: 'https://linear.app/acme/issue/ENG-42',
+      },
+      source: 'linearIssue',
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'understand-issue',
+      arguments: 'Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)',
+    });
+  });
+
+  it('starts the same investigation when a human moves an issue into Triage', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+    expect(await rule?.(context)).toMatchObject({
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'understand-issue',
+      arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
+    });
+  });
+
+  it('starts PR understanding when a human moves a pull request into Review', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).review.review?.pullRequest?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
+      stage: 'review',
+      fromStage: 'intake',
+      toStage: 'review',
+    } as FactoryStageRuleContext;
+    expect(await rule?.(context)).toMatchObject({
+      type: 'invokeSkill',
+      role: 'review',
+      skillName: 'understand-pr',
+      arguments: 'GitHub pull request (https://github.test/acme/repo/issues/42)',
+    });
   });
 
   it('advances only an approved plan from a bound planning role', async () => {
@@ -138,7 +228,10 @@ describe('defaultFactoryRules', () => {
       toolContext({ content: 'Plan submitted for review.' }),
       toolContext({ content: 'Plan was not approved. Revise it.' }),
       toolContext({ status: 'approved' }),
-      toolContext({ content: 'Plan approved. Proceed.' }, { actor: { type: 'agent', bindingId: 'binding-1', role: 'chat' } }),
+      toolContext(
+        { content: 'Plan approved. Proceed.' },
+        { actor: { type: 'agent', bindingId: 'binding-1', role: 'chat' } },
+      ),
       toolContext({ content: 'Plan approved. Proceed.' }, { item: { ...item, stages: ['intake'] } }),
       toolContext({ content: 'Plan approved. Proceed.' }, { result: { status: 'error', value: 'failed' } }),
     ]) {
@@ -146,19 +239,45 @@ describe('defaultFactoryRules', () => {
     }
   });
 
-  it('materializes stable issue and pull-request source keys', async () => {
+  it.each(['issueOpened', 'pullRequestOpened'] as const)(
+    'advances trusted %s authors and leaves untrusted authors in Intake',
+    async event => {
+      const rules = defaultFactoryRules({ version: 'deployment-7' });
+      const trustedStage = event === 'issueOpened' ? 'triage' : 'review';
+      const trusted = githubContext(event);
+      const untrusted = {
+        ...githubContext(event),
+        actor: { type: 'github', login: 'reader', trusted: false, factoryAuthored: false } as const,
+      };
+      const factoryAuthored = {
+        ...githubContext(event),
+        actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
+      };
+
+      expect(await rules.github[event]?.onEvent?.(trusted)).toMatchObject({
+        type: 'upsertLinkedWorkItem',
+        stage: trustedStage,
+      });
+      expect(await rules.github[event]?.onEvent?.(untrusted)).toMatchObject({
+        type: 'upsertLinkedWorkItem',
+        stage: 'intake',
+      });
+      expect(await rules.github[event]?.onEvent?.(factoryAuthored)).toMatchObject({
+        type: 'upsertLinkedWorkItem',
+        stage: 'intake',
+      });
+    },
+  );
+
+  it('uses the same issue and pull-request identities as board Intake', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(await rules.github.issueOpened?.onEvent?.(githubContext('issueOpened'))).toMatchObject({
-      type: 'upsertLinkedWorkItem',
       source: 'github-issue',
-      sourceKey: 'github:10:issue:42',
-      stage: 'intake',
+      sourceKey: 'github-issue:42',
     });
     expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
-      type: 'upsertLinkedWorkItem',
       source: 'github-pr',
-      sourceKey: 'github:10:pull-request:17',
-      stage: 'intake',
+      sourceKey: 'github-pr:17',
     });
   });
 
@@ -178,6 +297,7 @@ describe('defaultFactoryRules', () => {
     const reviewEnter = vi.fn(() => undefined);
     const toolResult = vi.fn(() => undefined);
     const githubEvent = vi.fn(() => undefined);
+    const linearEvent = vi.fn(() => undefined);
     const rules = defaultFactoryRules({
       version: 'deployment-8',
       overrides: {
@@ -185,6 +305,7 @@ describe('defaultFactoryRules', () => {
         review: { intake: { pullRequest: { onEnter: reviewEnter } } },
         tools: { submit_plan: { onResult: toolResult } },
         github: { pullRequestMerged: { onEvent: githubEvent } },
+        linear: { issueObserved: { onEvent: linearEvent } },
       },
     });
 
@@ -194,6 +315,7 @@ describe('defaultFactoryRules', () => {
     expect(rules.tools.submit_plan?.onResult).toBe(toolResult);
     expect(rules.github.pullRequestMerged?.onEvent).toBe(githubEvent);
     expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
+    expect(rules.linear.issueObserved?.onEvent).toBe(linearEvent);
   });
 
   it('merges defaults and overrides at each exact handler leaf', () => {

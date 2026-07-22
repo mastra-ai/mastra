@@ -136,5 +136,11 @@ describe('Factory rule validation', () => {
         github: { madeUpEvent: { onEvent: () => undefined } },
       }),
     ).toThrow(/GitHub event is invalid/i);
+    expect(() =>
+      assertFactoryRules({
+        ...rules,
+        linear: { madeUpEvent: { onEvent: () => undefined } },
+      }),
+    ).toThrow(/Linear event is invalid/i);
   });
 });

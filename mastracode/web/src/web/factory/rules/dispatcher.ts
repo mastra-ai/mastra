@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { AgentController } from '@mastra/core/agent-controller';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { resolveSkillInvocation, type SkillSession } from '../../skills/service.js';
@@ -8,10 +9,11 @@ import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,
   FactoryRunBindingRecord,
+  WorkItemRow,
   WorkItemsStorage,
 } from '../../storage/domains/work-items/base.js';
 import { getWorkItemsStorage } from '../../storage/domains.js';
-import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleBoard, FactoryRuleCausalEntry } from './types.js';
+import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { FACTORY_RULE_STAGES } from './types.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateFactoryRuleDecision } from './validation.js';
@@ -24,10 +26,23 @@ const MAX_ERROR_LENGTH = 512;
 const MAX_BACKOFF_MS = 60_000;
 
 interface DispatcherSession extends SkillSession {
-  thread: { switch(input: { threadId: string }): Promise<unknown> };
+  thread: {
+    switch(input: { threadId: string }): Promise<unknown>;
+    listActiveMessages(): Promise<Array<{ id: string }>>;
+  };
+  sendSignal(
+    input: { id: string; type: 'user'; tagName: 'user'; contents: string },
+    options: { requestContext: RequestContext },
+  ): { accepted: Promise<unknown> };
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
+
+export interface FactoryBindingPreparationInput {
+  record: FactoryDeferredDecisionRecord;
+  item: WorkItemRow;
+  role: string;
+}
 
 export interface FactoryDecisionDispatcherOptions {
   controller: FactoryController;
@@ -35,6 +50,8 @@ export interface FactoryDecisionDispatcherOptions {
   storage?: WorkItemsStorage;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
+  prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
+  primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
 }
 
 function sanitizeDispatchError(error: unknown): string {
@@ -101,6 +118,8 @@ export class FactoryDecisionDispatcher {
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #reconcileToolResults?: () => Promise<void>;
+  readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
+  readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
   #activeRun?: Promise<void>;
 
@@ -110,6 +129,8 @@ export class FactoryDecisionDispatcher {
     this.#storage = options.storage ?? getWorkItemsStorage();
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
+    this.#prepareBinding = options.prepareBinding;
+    this.#primeCredentials = options.primeCredentials;
   }
 
   start(): void {
@@ -213,29 +234,33 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'invokeSkill': {
-        const binding = await this.#requireBinding(record, decision.role);
+        const binding = await this.#requireOrPrepareBinding(record, decision.role);
+        const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
+        const startedBy = item?.sessions[binding.role]?.startedBy;
+        if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const resolved = await resolveSkillInvocation(this.#controller, {
           resourceId: binding.resourceId,
           scope: binding.projectPath,
           name: decision.skillName,
           arguments: decision.arguments,
         });
-        await this.#switchThread(resolved.session, binding);
-        await awaitNotification(
-          await resolved.session.sendNotificationSignal(
-            {
-              source: 'factory',
-              kind: 'rule-skill-invocation',
-              summary: resolved.message,
-              priority: 'high',
-              payload: { message: resolved.message, skillName: resolved.skillName },
-              sourceId: record.id,
-              dedupeKey: record.idempotencyKey,
-            },
-            { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
-          ),
-          true,
+        const session = resolved.session as DispatcherSession;
+        await this.#switchThread(session, binding);
+        const delivered = await session.thread.listActiveMessages();
+        if (delivered.some(message => message.id === record.id)) return;
+        const result = session.sendSignal(
+          {
+            id: record.id,
+            type: 'user',
+            tagName: 'user',
+            contents: resolved.message,
+          },
+          { requestContext },
         );
+        await result.accepted;
         return;
       }
       case 'sendMessage': {
@@ -294,23 +319,31 @@ export class FactoryDecisionDispatcher {
       },
       reuseMode: 'preserve',
     });
-    if (result.item.metadata?.factoryRuleMaterializationKey !== record.idempotencyKey) return;
+    const materializedByDecision = result.item.metadata?.factoryRuleMaterializationKey === record.idempotencyKey;
+    if (!materializedByDecision && (decision.stage === 'intake' || !result.item.stages.includes('intake'))) return;
 
     const board = decision.board;
-    const initial = await this.#transitionService.transition({
-      orgId: record.orgId,
-      factoryProjectId: record.factoryProjectId,
-      workItemId: result.item.id,
-      board,
-      stage: 'intake',
-      expectedRevision: result.item.revision,
-      actor: deferredActor(record),
-      ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:initial-entry` },
-      cause: 'linked_item_materialized',
-      causalChain,
-      initialEntry: true,
-    });
-    if (initial.status === 'rejected') throw new Error(`${initial.code}: ${initial.reason}`);
+    let expectedRevision = result.item.revision;
+    if (materializedByDecision) {
+      const initial = await this.#transitionService.transition({
+        orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
+        workItemId: result.item.id,
+        board,
+        stage: 'intake',
+        expectedRevision,
+        actor: deferredActor(record),
+        ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:${result.item.id}:initial-entry` },
+        cause: 'linked_item_materialized',
+        causalChain,
+        initialEntry: true,
+      });
+      if (initial.status === 'rejected') {
+        if (result.created) await this.#storage.delete({ orgId: record.orgId, id: result.item.id });
+        throw new Error(`${initial.code}: ${initial.reason}`);
+      }
+      expectedRevision = initial.revision;
+    }
     if (decision.stage === 'intake') return;
 
     const moved = await this.#transitionService.transition({
@@ -319,10 +352,10 @@ export class FactoryDecisionDispatcher {
       workItemId: result.item.id,
       board,
       stage: decision.stage,
-      expectedRevision: initial.revision,
+      expectedRevision,
       actor: { type: 'system', id: 'factory-rule-dispatcher' },
-      ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:destination` },
-      cause: 'linked_item_materialized',
+      ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:${result.item.id}:destination` },
+      cause: materializedByDecision ? 'linked_item_materialized' : 'linked_item_reconciled',
       causalChain,
     });
     if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
@@ -335,18 +368,42 @@ export class FactoryDecisionDispatcher {
     return item;
   }
 
-  async #requireBinding(record: FactoryDeferredDecisionRecord, role?: string): Promise<FactoryRunBindingRecord> {
+  async #findBinding(
+    record: FactoryDeferredDecisionRecord,
+    role?: string,
+  ): Promise<FactoryRunBindingRecord | undefined> {
     if (!record.workItemId) throw new Error('Factory decision is not linked to a work item.');
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
-    const binding = bindings
+    return bindings
       .filter(candidate => candidate.status === 'active' && (role === undefined || candidate.role === role))
       .sort((left, right) => {
         if (role === undefined && left.role === 'work' && right.role !== 'work') return -1;
         if (role === undefined && right.role === 'work' && left.role !== 'work') return 1;
         return right.createdAt.getTime() - left.createdAt.getTime() || left.id.localeCompare(right.id);
       })[0];
+  }
+
+  async #requireBinding(record: FactoryDeferredDecisionRecord, role?: string): Promise<FactoryRunBindingRecord> {
+    const binding = await this.#findBinding(record, role);
     if (!binding) throw new Error(role ? `No active Factory binding for role ${role}.` : 'No active Factory binding.');
     return binding;
+  }
+
+  async #requireOrPrepareBinding(
+    record: FactoryDeferredDecisionRecord,
+    role: string,
+  ): Promise<FactoryRunBindingRecord> {
+    const binding = await this.#findBinding(record, role);
+    if (binding) {
+      const session = await this.#controller.getSessionByResource(binding.resourceId, binding.projectPath);
+      if (session) return binding;
+    }
+    if (!this.#prepareBinding) {
+      throw new Error(binding ? 'Bound Factory session not found.' : `No active Factory binding for role ${role}.`);
+    }
+    const item = await this.#requireItem(record);
+    await this.#prepareBinding({ record, item, role });
+    return this.#requireBinding(record, role);
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<DispatcherSession> {

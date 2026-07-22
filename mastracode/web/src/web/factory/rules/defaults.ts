@@ -5,6 +5,9 @@ import type {
   FactoryGithubRuleLeaf,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
+  FactoryLinearEventName,
+  FactoryLinearRuleContext,
+  FactoryLinearRuleLeaf,
   FactoryRules,
   FactoryRulesOverrides,
   FactoryRuleSource,
@@ -17,26 +20,43 @@ import type {
 export const DEFAULT_FACTORY_RULE_VERSION = 'factory-default-v1';
 
 function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): boolean {
-  return context.actor.type === 'github' && (context.actor.trusted || context.actor.factoryAuthored);
+  return context.actor.type === 'github' && context.actor.trusted;
 }
 
-function investigateTrustedIssue(context: FactoryStageRuleContext) {
-  if (!trustedGithubActor(context)) return;
+function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:understand-issue`,
     role: 'triage',
     skillName: 'understand-issue',
+    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
   } as const;
 }
 
-function reviewTrustedPullRequest(context: FactoryStageRuleContext) {
-  if (!trustedGithubActor(context)) return;
+function investigateTriagedIssue(context: FactoryStageRuleContext) {
+  return invokeIssueInvestigation(context);
+}
+
+function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
+  const identifier = context.item.sourceKey?.startsWith('linear:')
+    ? context.item.sourceKey.slice('linear:'.length)
+    : context.item.title;
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:understand-linear-issue`,
+    role: 'triage',
+    skillName: 'understand-issue',
+    arguments: `Linear issue ${identifier}${context.item.url ? ` (${context.item.url})` : ''}`,
+  } as const;
+}
+
+function reviewPullRequest(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:understand-pr`,
     role: 'review',
     skillName: 'understand-pr',
+    arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
   } as const;
 }
 
@@ -74,10 +94,10 @@ function issueOpened(context: FactoryGithubRuleContext) {
     idempotencyKey: `${context.ingress.id}:issue-intake`,
     board: 'work',
     source: 'github-issue',
-    sourceKey: `github:${context.repository.id}:issue:${context.issue.number}`,
+    sourceKey: `github-issue:${context.issue.number}`,
     title: context.issue.title,
     url: context.issue.url,
-    stage: 'intake',
+    stage: trustedGithubActor(context) ? 'triage' : 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
@@ -92,10 +112,10 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     idempotencyKey: `${context.ingress.id}:pull-request-intake`,
     board: 'review',
     source: 'github-pr',
-    sourceKey: `github:${context.repository.id}:pull-request:${context.pullRequest.number}`,
+    sourceKey: `github-pr:${context.pullRequest.number}`,
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage: 'intake',
+    stage: trustedGithubActor(context) ? 'review' : 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
@@ -116,15 +136,44 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+function linearIssueObserved(context: FactoryLinearRuleContext) {
+  if (context.item) return;
+  return {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: `${context.ingress.id}:issue-triage`,
+    board: 'work',
+    source: 'linear-issue',
+    sourceKey: `linear:${context.issue.identifier}`,
+    title: `${context.issue.identifier}: ${context.issue.title}`,
+    url: context.issue.url,
+    stage: 'triage',
+    metadata: {
+      linearIssueId: context.issue.id,
+      linearIssueIdentifier: context.issue.identifier,
+      linearState: context.issue.state,
+      linearStateType: context.issue.stateType,
+      linearPriority: context.issue.priorityLabel,
+      linearAssignee: context.issue.assignee,
+      linearTeam: context.issue.team,
+    },
+  } as const;
+}
+
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
-  work: { intake: { issue: { onEnter: investigateTrustedIssue } } },
-  review: { intake: { pullRequest: { onEnter: reviewTrustedPullRequest } } },
+  work: {
+    triage: {
+      issue: { onEnter: investigateTriagedIssue },
+      linearIssue: { onEnter: investigateTriagedLinearIssue },
+    },
+  },
+  review: { review: { pullRequest: { onEnter: reviewPullRequest } } },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },
     pullRequestOpened: { onEvent: pullRequestOpened },
     pullRequestMerged: { onEvent: pullRequestMerged },
   },
+  linear: { issueObserved: { onEvent: linearIssueObserved } },
 };
 
 function mergeBoardRules(
@@ -189,6 +238,23 @@ function mergeGithubRules(
   return result;
 }
 
+function mergeLinearRules(
+  base: FactoryRulesOverrides['linear'],
+  overrides: FactoryRulesOverrides['linear'],
+): NonNullable<FactoryRulesOverrides['linear']> {
+  const result: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>> = {};
+  const events = new Set([...Object.keys(base ?? {}), ...Object.keys(overrides ?? {})]) as Set<FactoryLinearEventName>;
+  for (const event of events) {
+    const baseLeaf = base?.[event];
+    const overrideLeaf = overrides?.[event];
+    result[event] = {
+      ...(baseLeaf?.onEvent ? { onEvent: baseLeaf.onEvent } : {}),
+      ...(overrideLeaf && 'onEvent' in overrideLeaf ? { onEvent: overrideLeaf.onEvent } : {}),
+    };
+  }
+  return result;
+}
+
 export function mergeFactoryRuleOverrides(
   base: FactoryRulesOverrides,
   overrides: FactoryRulesOverrides = {},
@@ -198,6 +264,7 @@ export function mergeFactoryRuleOverrides(
     review: mergeBoardRules(base.review, overrides.review),
     tools: mergeToolRules(base.tools, overrides.tools),
     github: mergeGithubRules(base.github, overrides.github),
+    linear: mergeLinearRules(base.linear, overrides.linear),
   };
 }
 

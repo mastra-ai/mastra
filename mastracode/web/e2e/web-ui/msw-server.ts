@@ -18,6 +18,7 @@ interface StoredRepository {
   slug?: string;
   gitBranch?: string;
   sandboxWorkdir?: string;
+  worktrees?: Array<{ branch: string; baseBranch: string; worktreePath: string }>;
 }
 
 interface StoredFactory {
@@ -83,5 +84,11 @@ export const server = setupServer(
         },
       ],
     });
+  }),
+  http.get('*/web/github/projects/:projectRepositoryId/worktrees', ({ params }) => {
+    const repository = storedServerFactories()
+      .flatMap(factory => factory.repositories)
+      .find(candidate => candidate.projectRepositoryId === params.projectRepositoryId);
+    return HttpResponse.json({ worktrees: repository?.worktrees ?? [] });
   }),
 );

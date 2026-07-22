@@ -549,6 +549,41 @@ describe('StatusLine', () => {
     });
   });
 
+  describe('when the active thread belongs to a Factory pull request', () => {
+    it('shows the pull request link from canonical rule metadata', async () => {
+      seedFactory('github');
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-test/work-items`, () =>
+          HttpResponse.json({
+            workItems: [
+              {
+                id: 'work-item-pr-34',
+                source: 'github-pr',
+                sessions: {
+                  review: {
+                    projectPath: '/tmp/mastracode-test-worktree',
+                    branch: 'factory/pr-34',
+                    threadId: THREAD_ID,
+                    startedBy: 'user-1',
+                  },
+                },
+                metadata: { githubPullRequestNumber: 34 },
+              },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
+      );
+      renderStatusLine();
+
+      expect(await screen.findByRole('link', { name: 'Open open octo/hello pull request 34' })).toHaveAttribute(
+        'href',
+        'https://github.com/octo/hello/pull/34',
+      );
+    });
+  });
+
   describe('when the session is idle with no activity data', () => {
     it('omits budgets, activity, queue, and goal indicators', async () => {
       seedFactory();

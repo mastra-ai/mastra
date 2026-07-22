@@ -47,7 +47,11 @@ import { getFactoryStorage, seedRuntimeConfig } from './runtime-config.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
-import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './tenant-credentials.js';
+import {
+  createTenantCredentialPrimer,
+  primeTenantCredentials,
+  registerTenantCredentialResolver,
+} from './tenant-credentials.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -575,12 +579,14 @@ export class MastraFactory {
           intakeReady,
           factoryReady,
           factoryTransitionService: transitionService,
-          onFactoryRuntime: ({ transitionService: runtimeTransitionService }) => {
+          onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
             this.#dispatcher ??= new FactoryDecisionDispatcher({
               controller,
               transitionService: runtimeTransitionService,
               storage: getFactoryStorage().getDomain<WorkItemsStorage>('work-items'),
               reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+              prepareBinding,
+              primeCredentials: primeTenantCredentials,
             });
           },
         }),

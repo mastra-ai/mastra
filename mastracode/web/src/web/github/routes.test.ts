@@ -223,7 +223,7 @@ const listRepoOpenIssues = vi.fn(
         number: 12,
         title: 'Fix flaky test',
         url: 'https://github.com/octo/hello/issues/12',
-        author: 'ada',
+        author: 'ada' as string | null,
         labels: ['bug'],
         comments: 3,
         createdAt: '2026-07-01T00:00:00Z',
@@ -390,7 +390,7 @@ const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch:
 const runWorktreeSetup = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
-const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
+const createPullRequest = vi.fn(async (_input?: unknown) => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
 vi.mock('../sandbox/fleet', () => {
   class SandboxBudgetError extends Error {
@@ -573,6 +573,9 @@ function buildApp(
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
     ingestFactoryEvent?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['ingestFactoryEvent'];
+    revokeFactoryBindingsForProjectPath?: NonNullable<
+      Parameters<typeof buildGithubRoutes>[0]
+    >['revokeFactoryBindingsForProjectPath'];
     stateSigner?: typeof stateSigner | null;
   } = {},
 ) {
@@ -1295,6 +1298,58 @@ describe('issues route', () => {
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: undefined });
   });
 
+  it('reconciles polled issues through Factory ingress without a webhook', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/issues');
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalledWith({
+      event: 'issues',
+      deliveryId: 'poll:99:issue:12:2026-07-01T00:00:00Z',
+      payload: {
+        action: 'opened',
+        installation: { id: 7 },
+        repository: { id: 99, full_name: 'octo/hello' },
+        sender: { login: 'ada' },
+        issue: {
+          number: 12,
+          title: 'Fix flaky test',
+          html_url: 'https://github.com/octo/hello/issues/12',
+          labels: [{ name: 'bug' }],
+        },
+      },
+    });
+  });
+
+  it('governs polled issues whose GitHub author was deleted as untrusted', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockResolvedValueOnce({
+      issues: [
+        {
+          number: 12,
+          title: 'Fix flaky test',
+          url: 'https://github.com/octo/hello/issues/12',
+          author: null,
+          labels: ['bug'],
+          comments: 3,
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+        },
+      ],
+      nextPage: null,
+    });
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/issues');
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({ sender: { login: '__unknown__' } }) }),
+    );
+  });
+
   it('forwards the requested page and echoes the next page', async () => {
     seedMaterializedProject();
     listRepoOpenIssues.mockResolvedValueOnce({ issues: [], nextPage: 3 });
@@ -1453,6 +1508,34 @@ describe('prs route', () => {
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
   });
 
+  it('reconciles polled pull requests through Factory ingress without a webhook', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalledWith({
+      event: 'pull_request',
+      deliveryId: 'poll:99:pull-request:34:2026-07-03T00:00:00Z',
+      payload: {
+        action: 'opened',
+        installation: { id: 7 },
+        repository: { id: 99, full_name: 'octo/hello' },
+        sender: { login: 'grace' },
+        pull_request: {
+          number: 34,
+          title: 'Add factory pages',
+          html_url: 'https://github.com/octo/hello/pull/34',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feat/factory' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+  });
+
   it('forwards the requested page and echoes the next page', async () => {
     seedMaterializedProject();
     listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [], nextPage: 4 });
@@ -1550,8 +1633,35 @@ describe('project settings routes', () => {
 describe('worktree route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp(null), '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    expect(res.status).toBe(401);
+    const app = buildApp(null);
+    const create = await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    const list = await app.request('/web/github/projects/p1/worktrees');
+    expect(create.status).toBe(401);
+    expect(list.status).toBe(401);
+  });
+
+  it("lists only the signed-in user's persisted worktrees", async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/mine' });
+    await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/worktree', { branch: 'feat/theirs' });
+    reattachSandbox.mockClear();
+    ensureWorktree.mockClear();
+
+    const res = await app.request('/web/github/projects/p1/worktrees');
+
+    expect(res.status).toBe(200);
+    expect(reattachSandbox).not.toHaveBeenCalled();
+    expect(ensureWorktree).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({
+      worktrees: [
+        {
+          branch: 'feat/mine',
+          baseBranch: 'main',
+          worktreePath: '/workspace/hello/../worktrees/feat/mine',
+        },
+      ],
+    });
   });
 
   it('503s when the sandbox is not configured', async () => {
@@ -1721,9 +1831,10 @@ describe('worktree delete route', () => {
     expect(removeWorktree).not.toHaveBeenCalled();
   });
 
-  it('removes the checkout, deletes the row, and returns the path', async () => {
+  it('revokes scoped Factory bindings before removing the checkout', async () => {
     seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
+    const revokeFactoryBindingsForProjectPath = vi.fn().mockResolvedValue(undefined);
+    const app = buildApp({ workosId: 'u1' }, { revokeFactoryBindingsForProjectPath });
     await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
     expect(tables.worktrees).toHaveLength(1);
 
@@ -1735,6 +1846,14 @@ describe('worktree delete route', () => {
       branch: 'feat/x',
       worktreePath: '/workspace/hello/../worktrees/feat/x',
     });
+    expect(revokeFactoryBindingsForProjectPath).toHaveBeenCalledWith({
+      orgId: 'org1',
+      factoryProjectId: 'factory-p1',
+      projectPath: '/workspace/hello/../worktrees/feat/x',
+    });
+    expect(revokeFactoryBindingsForProjectPath.mock.invocationCallOrder[0]).toBeLessThan(
+      removeWorktree.mock.invocationCallOrder[0]!,
+    );
     expect(removeWorktree).toHaveBeenCalledOnce();
     expect(removeWorktree).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', {
       branch: 'feat/x',

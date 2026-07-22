@@ -328,6 +328,14 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       }
       this.worktreesRows.push({ id: randomUUID(), createdAt: new Date(), ...input });
     },
+    list: async ({
+      projectRepositoryId,
+      userId,
+    }: {
+      projectRepositoryId: string;
+      userId: string;
+    }): Promise<SourceControlWorktree[]> =>
+      this.worktreesRows.filter(row => row.projectRepositoryId === projectRepositoryId && row.userId === userId),
     get: async ({
       projectRepositoryId,
       userId,

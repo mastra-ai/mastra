@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defaultFactoryRules } from './defaults.js';
-import { resolveFactoryGithubRule, resolveFactoryStageRules, resolveFactoryToolRule } from './resolve.js';
+import {
+  resolveFactoryGithubRule,
+  resolveFactoryLinearRule,
+  resolveFactoryStageRules,
+  resolveFactoryToolRule,
+} from './resolve.js';
 
 describe('Factory rule resolution', () => {
   it('resolves a board stage transition in exit-before-enter order', () => {
@@ -62,14 +67,16 @@ describe('Factory rule resolution', () => {
     ).toEqual([]);
   });
 
-  it('resolves open tool names and closed GitHub event leaves', () => {
+  it('resolves open tool names and closed integration event leaves', () => {
     const onResult = vi.fn(() => undefined);
     const onEvent = vi.fn(() => undefined);
+    const onLinearEvent = vi.fn(() => undefined);
     const rules = defaultFactoryRules({
       version: 'resolve-v3',
       overrides: {
         tools: { submit_plan: { onResult } },
         github: { pullRequestMerged: { onEvent } },
+        linear: { issueObserved: { onEvent: onLinearEvent } },
       },
     });
 
@@ -78,5 +85,6 @@ describe('Factory rule resolution', () => {
     expect(resolveFactoryGithubRule(rules, 'pullRequestMerged')).toBe(onEvent);
     expect(resolveFactoryGithubRule(rules, 'issueOpened')).toEqual(expect.any(Function));
     expect(resolveFactoryGithubRule(rules, 'pullRequestUpdated')).toBeUndefined();
+    expect(resolveFactoryLinearRule(rules, 'issueObserved')).toBe(onLinearEvent);
   });
 });

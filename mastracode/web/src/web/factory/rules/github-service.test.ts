@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { GithubIntegration } from '../../github/integration.js';
 import { seedFactoryStorageForTests } from '../../storage/test-utils.js';
 import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
+import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryGithubEventService } from './github-service.js';
+import { FactoryStartCoordinator } from './start-coordinator.js';
+import { FactoryTransitionService } from './transition-service.js';
 
 async function setup(permission: string | undefined) {
   const seeded = await seedFactoryStorageForTests();
@@ -100,6 +103,232 @@ describe('FactoryGithubEventService', () => {
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.actor).toMatchObject({ type: 'github', login: 'maintainer', trusted: true });
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
+  });
+
+  it('moves a trusted issue to Triage and rematerializes it after deletion', async () => {
+    const { github, sourceControl, integrationStorage, workItems, project } = await setup('write');
+    const rules = builtInFactoryRules();
+    const transitionService = new FactoryTransitionService({ storage: workItems, rules });
+    const service = new FactoryGithubEventService({
+      github,
+      sourceControl,
+      integrationStorage,
+      storage: workItems,
+      rules,
+    });
+    const deliveredSignals: Array<{ id: string; contents: string; threadId: string; user: unknown }> = [];
+    const sessions = new Map<string, ReturnType<typeof makeSession>>();
+
+    function makeSession(scope: string) {
+      let threadId: string | undefined;
+      const session = {
+        thread: {
+          list: vi.fn(async () => []),
+          create: vi.fn(async () => {
+            threadId = 'thread-issue-42';
+            return { id: threadId };
+          }),
+          switch: vi.fn(async ({ threadId: next }: { threadId: string }) => {
+            threadId = next;
+          }),
+          setSetting: vi.fn(async () => {}),
+          requireId: vi.fn(() => {
+            if (!threadId) throw new Error('Thread was not persisted before binding creation.');
+            return threadId;
+          }),
+          listActiveMessages: vi.fn(async () => deliveredSignals.map(({ id }) => ({ id }))),
+        },
+        getWorkspace: () => ({
+          skills: {
+            maybeRefresh: vi.fn(async () => {}),
+            get: vi.fn(async (name: string) => ({ name, instructions: 'Investigate the issue.' })),
+          },
+        }),
+        sendSignal: vi.fn(
+          (input: { id: string; contents: string }, options: { requestContext: { get(key: string): unknown } }) => {
+            if (!threadId) throw new Error('Signal delivered before thread persistence.');
+            deliveredSignals.push({ ...input, threadId, user: options.requestContext.get('user') });
+            return { accepted: Promise.resolve({ accepted: true }) };
+          },
+        ),
+        sendMessage: vi.fn(async () => {}),
+        sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
+      };
+      sessions.set(scope, session);
+      return session;
+    }
+
+    const controller = {
+      createSession: vi.fn(async ({ scope }: { scope: string }) => makeSession(scope)),
+      getSessionByResource: vi.fn(async (_resourceId: string, scope: string) => sessions.get(scope)),
+    };
+    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService);
+    const primeCredentials = vi.fn(async () => {});
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage: workItems,
+      ownerId: 'worker-1',
+      primeCredentials,
+      prepareBinding: async ({ record, item, role }) => {
+        await coordinator.prepare({
+          orgId: record.orgId,
+          userId: 'user-1',
+          factoryProjectId: record.factoryProjectId,
+          resourceId: project.id,
+          projectPath: '/workspace/factory-issue-42',
+          branch: 'factory/issue-42',
+          threadTitle: `Issue: ${item.title}`,
+          kickoffKey: record.idempotencyKey,
+          kickoffMessage: null,
+          destinationStage: 'triage',
+          workItem: { id: item.id, role, input: item },
+        });
+      },
+    });
+
+    await service.ingest(issueOpened('delivery-full-flow'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(item).toMatchObject({
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      stages: ['triage'],
+      sessions: {
+        triage: {
+          projectPath: '/workspace/factory-issue-42',
+          branch: 'factory/issue-42',
+          threadId: 'thread-issue-42',
+        },
+      },
+    });
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(deliveredSignals).toEqual([
+      expect.objectContaining({
+        threadId: 'thread-issue-42',
+        contents: expect.stringContaining('<skill name="understand-issue">'),
+        user: { workosId: 'user-1', organizationId: 'org-1' },
+      }),
+    ]);
+    expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
+      'succeeded',
+      'succeeded',
+    ]);
+
+    await workItems.delete({ orgId: 'org-1', id: item!.id });
+    await expect(service.ingest(issueOpened('delivery-full-flow'))).resolves.toEqual({ status: 'replayed' });
+    expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
+      'retry',
+      'succeeded',
+    ]);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:03Z'));
+
+    const [rematerialized] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(rematerialized).toMatchObject({
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      stages: ['triage'],
+    });
+    expect(rematerialized?.id).not.toBe(item?.id);
+    expect(deliveredSignals).toHaveLength(2);
+  });
+
+  it('prefers canonical board identities over legacy GitHub rows during ingress', async () => {
+    const { github, sourceControl, integrationStorage, workItems, project } = await setup('write');
+    const issue = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { number: 42 },
+      },
+    });
+    const review = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { number: 17 },
+      },
+    });
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Legacy issue 42',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:10:pull-request:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'Legacy PR 17',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new FactoryGithubEventService({
+      github,
+      sourceControl,
+      integrationStorage,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(issueOpened('delivery-canonical-issue'));
+    await service.ingest(pullRequest('opened', 'delivery-canonical-pr'));
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: issue.item.id,
+          decision: expect.objectContaining({ source: 'github-issue' }),
+        }),
+        expect.objectContaining({
+          workItemId: review.item.id,
+          decision: expect.objectContaining({ source: 'github-pr' }),
+        }),
+      ]),
+    );
   });
 
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {

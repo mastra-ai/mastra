@@ -61,7 +61,11 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   return undefined;
 }
 
-function sourceKey(repositoryId: number, kind: 'issue' | 'pull-request', itemNumber: number): string {
+function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number): string {
+  return kind === 'issue' ? `github-issue:${itemNumber}` : `github-pr:${itemNumber}`;
+}
+
+function legacySourceKey(repositoryId: number, kind: 'issue' | 'pull-request', itemNumber: number): string {
   return `github:${repositoryId}:${kind}:${itemNumber}`;
 }
 
@@ -167,6 +171,7 @@ export class FactoryGithubEventService {
       project.factoryProjectId,
       repositoryId,
       issueNumber,
+      pullRequestNumber,
       provenance,
     );
     const actor = await githubActor(this.options.github, {
@@ -272,12 +277,24 @@ export class FactoryGithubEventService {
     projectId: string,
     repositoryId: number,
     issueNumber: number | undefined,
+    pullRequestNumber: number | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
   ): Promise<WorkItemRow | undefined> {
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
     if (provenance) return items.find(item => item.id === provenance.workItemId);
     if (issueNumber) {
-      return items.find(item => item.externalSource?.externalId === sourceKey(repositoryId, 'issue', issueNumber));
+      return (
+        items.find(item => item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber)) ??
+        items.find(item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'issue', issueNumber))
+      );
+    }
+    if (pullRequestNumber) {
+      return (
+        items.find(item => item.externalSource?.externalId === canonicalSourceKey('pull-request', pullRequestNumber)) ??
+        items.find(
+          item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'pull-request', pullRequestNumber),
+        )
+      );
     }
     return undefined;
   }

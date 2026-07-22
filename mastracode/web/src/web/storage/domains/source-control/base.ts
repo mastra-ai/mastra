@@ -312,6 +312,7 @@ export interface SourceControlStorageHandle {
   };
   readonly worktrees: {
     upsert(args: UpsertSourceControlWorktreeInput): Promise<void>;
+    list(args: { projectRepositoryId: string; userId: string }): Promise<SourceControlWorktree[]>;
     get(args: { projectRepositoryId: string; userId: string; branch: string }): Promise<SourceControlWorktree | null>;
     findByPath(args: {
       projectRepositoryId: string;
@@ -840,6 +841,14 @@ export class SourceControlStorage extends FactoryStorageDomain {
             worktree_path: input.worktreePath,
             created_at: new Date(),
           });
+        },
+        list: async ({ projectRepositoryId, userId }) => {
+          if (!(await getProjectRepositoryById(projectRepositoryId))) return [];
+          const rows = await db().findMany<WorktreeDbRow>(WORKTREES, {
+            project_repository_id: projectRepositoryId,
+            user_id: userId,
+          });
+          return rows.map(toWorktree);
         },
         get: async ({ projectRepositoryId, userId, branch }) => {
           if (!(await getProjectRepositoryById(projectRepositoryId))) return null;
