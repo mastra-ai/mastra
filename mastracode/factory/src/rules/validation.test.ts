@@ -149,6 +149,20 @@ describe('Factory rule validation', () => {
     ).toThrow(/unique idempotency keys/i);
   });
 
+  it('defaults idle-without-transition observation on and preserves an explicit opt-out', () => {
+    expect(defaultFactoryRules({ version: 'validation-v1' }).supervisor?.observeIdleWithoutTransition).toBe(true);
+    expect(
+      defaultFactoryRules({
+        version: 'validation-v1',
+        overrides: { supervisor: { observeIdleWithoutTransition: false } },
+      }).supervisor?.observeIdleWithoutTransition,
+    ).toBe(false);
+
+    const legacyRules = defaultFactoryRules({ version: 'validation-v1' });
+    delete legacyRules.supervisor;
+    expect(() => assertFactoryRules(legacyRules)).not.toThrow();
+  });
+
   it('rejects unknown rule keys and non-handler leaves at boot', () => {
     const rules = defaultFactoryRules({ version: 'validation-v1' });
     expect(() => assertFactoryRules({ ...rules, actions: {} })).toThrow(/unsupported field/i);
@@ -170,5 +184,11 @@ describe('Factory rule validation', () => {
         linear: { madeUpEvent: { onEvent: () => undefined } },
       }),
     ).toThrow(/Linear event is invalid/i);
+    expect(() =>
+      assertFactoryRules({
+        ...rules,
+        supervisor: { observeIdleWithoutTransition: 'yes' },
+      }),
+    ).toThrow(/must be a boolean/i);
   });
 });

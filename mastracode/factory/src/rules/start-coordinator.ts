@@ -6,6 +6,7 @@ import { formatSkillActivation } from '@mastra/core/workspace';
 import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { FactoryRunLifecycleObserver } from './run-lifecycle-observer.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryRuleStage, FactoryTransitionResult } from './types.js';
 
@@ -121,6 +122,7 @@ export class FactoryStartCoordinator {
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?: SourceControlStorageHandle;
   readonly #memorySettings?: MemorySettingsStorage;
+  readonly #runLifecycleObserver?: Pick<FactoryRunLifecycleObserver, 'observe'>;
 
   constructor(
     controller: FactoryController,
@@ -128,12 +130,14 @@ export class FactoryStartCoordinator {
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?: SourceControlStorageHandle,
     memorySettings?: MemorySettingsStorage,
+    runLifecycleObserver?: Pick<FactoryRunLifecycleObserver, 'observe'>,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#memorySettings = memorySettings;
+    this.#runLifecycleObserver = runLifecycleObserver;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -223,6 +227,14 @@ export class FactoryStartCoordinator {
       await storage.markPendingStart(prepared.binding.id, 'sent');
       prepared.pendingStart.status = 'sent';
     }
+
+    this.#runLifecycleObserver?.observe(session, {
+      orgId: prepared.binding.orgId,
+      factoryProjectId: prepared.binding.factoryProjectId,
+      threadId: prepared.binding.threadId,
+      resourceId: prepared.binding.resourceId,
+      sessionId: prepared.binding.sessionId,
+    });
 
     return {
       workItemId: prepared.item.id,

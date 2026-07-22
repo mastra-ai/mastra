@@ -56,6 +56,7 @@ export type {
   FactoryRuleStage,
   FactorySendMessageDecision,
   FactoryStageRuleContext,
+  FactorySupervisorRules,
   FactoryToolResultRuleContext,
   FactoryToolRuleLeaf,
   FactoryTransitionDecision,

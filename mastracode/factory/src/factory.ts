@@ -53,6 +53,7 @@ import {
 import { builtInFactoryRules } from './rules/defaults.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { FactoryRunLifecycleObserver } from './rules/run-lifecycle-observer.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import type { FactoryRules } from './rules/types.js';
@@ -522,6 +523,15 @@ export class MastraFactory {
           },
         })
       : undefined;
+    const runLifecycleObserver = factoryProcessor
+      ? new FactoryRunLifecycleObserver({
+          storage: workItemsStorage,
+          audit: auditStorage,
+          rules,
+          reconcileBinding: binding => factoryProcessor.reconcileBinding(binding),
+          onError: error => console.warn('[factory] Run lifecycle observer failed:', error),
+        })
+      : undefined;
 
     // Boot assertion: an active integration that signs OAuth `state` needs a
     // replica-stable signer — a per-process random secret silently breaks the
@@ -662,6 +672,7 @@ export class MastraFactory {
           factoryReady,
           rules,
           factoryTransitionService: transitionService,
+          runLifecycleObserver,
           onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
             this.#dispatcher ??= new FactoryDecisionDispatcher({
               controller,
