@@ -8,8 +8,7 @@ import { useGithubStatusQuery } from '../../../../../shared/hooks/useGithubStatu
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../../shared/hooks/useFactories';
 import { FolderIcon, GithubIcon, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import type { ServerFactory } from '../services/factories';
-import type { GithubStatus } from '../services/github';
+import type { FactoryProject, GithubStatus } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 
 /**
@@ -20,7 +19,7 @@ import { connectGithub, manageGithubConnection } from '../services/github';
  *
  * Embedded in the Board's no-repository empty state and in Factory settings.
  */
-export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }) {
+export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
   const { baseUrl } = useApiConfig();
   const statusQuery = useGithubStatusQuery();
   const status = statusQuery.data;
@@ -30,8 +29,8 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
   const linkRepository = useLinkRepositoryMutation();
   const unlinkRepository = useUnlinkRepositoryMutation();
 
-  const factoryProjectId = factory.binding.factoryProjectId;
-  const linked = factory.binding.repositories;
+  const factoryProjectId = factory.id;
+  const linked = factory.repositories;
   const linkedSlugs = new Set(linked.map(repo => repo.slug));
   const repos = reposQuery.data ?? [];
   const available = repos.filter(repo => !linkedSlugs.has(repo.fullName));
@@ -135,10 +134,13 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
               </Txt>
             ) : (
               available.map(repo => (
-                <div
+                <button
+                  type="button"
                   key={repo.id}
-                  className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-surface4"
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-50"
                   title={repo.fullName}
+                  disabled={busyRepoId !== null}
+                  onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
                 >
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5 text-ui-sm font-medium text-icon6">
@@ -149,15 +151,8 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
                       {repo.private ? 'private' : 'public'} · {repo.defaultBranch}
                     </span>
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busyRepoId !== null}
-                    onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
-                  >
-                    {busyRepoId === repo.id ? 'Linking…' : 'Link'}
-                  </Button>
-                </div>
+                  {busyRepoId === repo.id && <span className="text-ui-sm text-icon3">Linking…</span>}
+                </button>
               ))
             )}
           </div>

@@ -15,12 +15,14 @@ import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
+import { analyzeEntryProjectType } from '@mastra/deployer/build';
 import { ZipArchive } from 'archiver';
 import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { writeBarLine } from '../../utils/clack-bar.js';
+import { findMastraEntryFile } from '../../utils/find-mastra-entry.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
@@ -702,7 +704,13 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   // Check build staleness
   const mastraDir = join(targetDir, 'src', 'mastra');
   const outputDirectory = join(targetDir, '.mastra');
-  const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory);
+  // Detect project type so staleness hashing includes Factory UI inputs
+  const mastraEntryFile = findMastraEntryFile(mastraDir);
+  let projectType: string | undefined;
+  if (mastraEntryFile) {
+    projectType = await analyzeEntryProjectType(mastraEntryFile);
+  }
+  const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory, projectType);
 
   if (opts.skipBuild) {
     if (staleness.isStale && staleness.reason !== 'no-build') {

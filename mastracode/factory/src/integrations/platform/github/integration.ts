@@ -385,6 +385,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         controller: ctx.controller,
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
+        ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
@@ -554,6 +555,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         controller: ctx.controller,
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
+        ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
         intervalMs: this.#pollingIntervalMs,
       }),
     ];

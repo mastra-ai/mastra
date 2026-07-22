@@ -228,6 +228,14 @@ export interface MastraCodeConfig {
   disablePlugins?: boolean;
   /** Disable the polling-based GitHub signal provider even when enabled in global settings. Default: false */
   disableGithubSignals?: boolean;
+  /**
+   * Skip seeding observational-memory knobs (observer/reflector models,
+   * thresholds, caveman mode, attachment observation) from settings.json.
+   * Server deployments that persist memory settings in their own database
+   * (the factory's `memory-settings` domain) set this so the host machine's
+   * TUI settings file never leaks into server sessions. Default: false.
+   */
+  disableSettingsOmSeed?: boolean;
   /** Override the plugin manager. Primarily useful for tests or embedding. */
   pluginManager?: PluginManager;
   /**
@@ -671,6 +679,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       new ProviderHistoryCompat(),
     ],
     errorProcessors: [
+      // ProviderHistoryCompat must run before StreamErrorRetryProcessor: both react to
+      // HTTP 400s, but ProviderHistoryCompat repairs the incompatible history (e.g.
+      // sanitizing tool-call IDs) before retrying, while StreamErrorRetryProcessor's
+      // isBadRequestError matcher retries the identical request. Error processors
+      // short-circuit on the first `retry: true`, so a blind retry first would resend
+      // the broken history and fail again.
+      new ProviderHistoryCompat(),
       new StreamErrorRetryProcessor({
         matchers: [
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
@@ -686,7 +701,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         ],
       }),
       new PrefillErrorHandler(),
-      new ProviderHistoryCompat(),
     ],
   });
 
@@ -799,25 +813,29 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Apply disabledTools filter to both default and custom subagents.
   // const subagents = [];
 
-  // Build initial state with global preferences
+  // Build initial state with global preferences. OM knobs are skipped when the
+  // host persists memory settings elsewhere (`disableSettingsOmSeed`) so the
+  // machine-local settings.json never leaks into server sessions.
   const globalInitialState: Partial<MastraCodeState> = {};
-  if (effectiveObserverModel) {
-    globalInitialState.observerModelId = effectiveObserverModel;
-  }
-  if (effectiveReflectorModel) {
-    globalInitialState.reflectorModelId = effectiveReflectorModel;
-  }
-  if (effectiveObservationThreshold !== undefined) {
-    globalInitialState.observationThreshold = effectiveObservationThreshold;
-  }
-  if (effectiveReflectionThreshold !== undefined) {
-    globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
-  }
-  if (effectiveCavemanObservations !== undefined) {
-    globalInitialState.cavemanObservations = effectiveCavemanObservations;
-  }
-  if (effectiveObserveAttachments !== undefined) {
-    globalInitialState.observeAttachments = effectiveObserveAttachments;
+  if (!config?.disableSettingsOmSeed) {
+    if (effectiveObserverModel) {
+      globalInitialState.observerModelId = effectiveObserverModel;
+    }
+    if (effectiveReflectorModel) {
+      globalInitialState.reflectorModelId = effectiveReflectorModel;
+    }
+    if (effectiveObservationThreshold !== undefined) {
+      globalInitialState.observationThreshold = effectiveObservationThreshold;
+    }
+    if (effectiveReflectionThreshold !== undefined) {
+      globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
+    }
+    if (effectiveCavemanObservations !== undefined) {
+      globalInitialState.cavemanObservations = effectiveCavemanObservations;
+    }
+    if (effectiveObserveAttachments !== undefined) {
+      globalInitialState.observeAttachments = effectiveObserveAttachments;
+    }
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;

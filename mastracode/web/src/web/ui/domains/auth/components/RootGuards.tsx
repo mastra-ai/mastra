@@ -1,26 +1,21 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
+import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
 import { Navigate, Outlet, useLocation } from 'react-router';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
-import { useEffect, useEffectEvent, useState } from 'react';
 
 export const RootGuards = () => {
-  return (
-    <ActiveFactoryProvider>
-      <AuthGuard />
-    </ActiveFactoryProvider>
-  );
+  return <AuthGuard />;
 };
 
 const AuthGuard = () => {
-  const auth = useFactoryAuth();
+  const { isPending, isError, data } = useFactoryAuth();
   const location = useLocation();
 
-  if (auth.isPending) return <AuthPendingSkeleton />;
+  if (isPending) return <AuthPendingSkeleton />;
+  if (isError) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
 
-  // Local factory situation
-  const state = auth.data;
-  if (!state?.authEnabled) return <Outlet />;
+  const state = data;
+  if (!state?.authEnabled) return <AuthNotConfiguredScreen />;
 
   if (!state.authenticated) {
     // Router location (not window.location) so memory routers and in-app
@@ -34,15 +29,29 @@ const AuthGuard = () => {
 
 const OnboardingGuard = () => {
   const pathname = useLocation().pathname;
-  const { factoriesPending, factories } = useActiveFactoryContext();
-  const { isActivatingInitialFactory } = useSetInitialFactoryWhenNoActive();
+  const { data: factories, isPending: factoriesPending } = useFactoriesQuery();
 
-  if (isActivatingInitialFactory) return <AuthPendingSkeleton label="Loading factories" />;
   if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
-  if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
+  if ((factories?.length ?? 0) === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
 
   return <Outlet />;
 };
+
+function AuthNotConfiguredScreen() {
+  return (
+    <div className="grid h-dvh w-full place-items-center bg-surface1 px-6 text-center">
+      <div className="max-w-md space-y-3">
+        <h1 className="text-xl font-semibold text-icon6">
+          This MastraCode server has no authentication provider configured
+        </h1>
+        <p className="text-sm leading-6 text-icon3">
+          MastraCode web requires authenticated remote Factories. Configure a supported auth provider on the server,
+          then reload this page.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
   return (
@@ -55,30 +64,3 @@ export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: st
     </div>
   );
 }
-
-const useSetInitialFactoryWhenNoActive = () => {
-  const { activeFactory, factoriesPending, factories, selectFactory } = useActiveFactoryContext();
-  const [isPending, setPending] = useState(true);
-  const firstFactory = factories[0];
-
-  const setInitialFactoryWhenNoActiveEffect = useEffectEvent(() => {
-    if (!firstFactory) return;
-
-    selectFactory(firstFactory);
-    setPending(false);
-  });
-
-  // Will be removed in favor of params, but for now, we'll set the initial factory selected for the first
-  // factories when no active is set.
-  // useEffect but well..
-  const factoryCount = factories.length;
-  const hasActiveFactory = Boolean(activeFactory);
-  useEffect(() => {
-    if (factoriesPending) return;
-    if (factoryCount === 0 || hasActiveFactory) return setPending(false);
-
-    setInitialFactoryWhenNoActiveEffect();
-  }, [factoriesPending, factoryCount, hasActiveFactory]);
-
-  return { isActivatingInitialFactory: isPending };
-};

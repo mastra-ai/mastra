@@ -11,15 +11,16 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMemo, useState } from 'react';
+import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../shared/api/config';
+import { useEnsureMaterializedSandbox } from '../../../shared/hooks/useEnsureMaterializedSandbox';
+import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useQueueHealthThresholds } from '../../../shared/hooks/useQueueHealthThresholds';
 import { useWorkItemsQuery } from '../../../shared/hooks/useWorkItems';
 import { useWorkspaceActivity } from '../../../shared/hooks/useWorkspaceActivity';
-import { deriveProjectPath, useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
+import { useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
-import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
-import { isServerFactory } from '../domains/workspaces/services/factories';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import type { QueueHealthSelection } from '../domains/factory/components/QueueHealthChart';
 import { QueueHealthChart, formatAgeSeconds } from '../domains/factory/components/QueueHealthChart';
@@ -40,7 +41,7 @@ export function OverviewPage() {
       title="Overview"
       description="The factory at a glance: how much work is in each stage, how old it is, and what's actively running."
     >
-      {project => <OverviewContent factoryProjectId={project.binding.factoryProjectId} />}
+      {project => <OverviewContent factoryProjectId={project.id} />}
     </FactoryPageShell>
   );
 }
@@ -93,17 +94,20 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
 /** Set of worktree paths with an agent run in flight (the sidebar dot source). */
 function useActivePaths(): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
-  const workspaces = useWorkspacesQuery(activeFactory);
-  const worktrees = workspaces.data?.worktrees ?? [];
-  const projectPath = deriveProjectPath(activeFactory) || undefined;
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
+  const repository = factoryQuery.data?.repositories[0];
+  const materializeQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
+  const workspaces = useWorkspacesQuery(repository?.projectRepositoryId);
+  const workspaceSessions = workspaces.data?.workspaces ?? [];
+  const resourceId = materializeQuery.data?.resourceId;
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
-    worktreePaths: worktrees.map(worktree => worktree.worktreePath),
+    resourceId: resourceId ?? '',
+    scope: repository?.projectRepositoryId,
+    worktreePaths: workspaceSessions.map(workspace => workspace.sessionId),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory) && projectPath),
+    enabled: materializeQuery.isSuccess && Boolean(resourceId && repository?.projectRepositoryId),
   });
   return useMemo(() => new Set(Object.keys(runningByPath).filter(path => runningByPath[path])), [runningByPath]);
 }

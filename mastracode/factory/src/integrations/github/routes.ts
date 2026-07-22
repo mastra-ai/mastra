@@ -303,6 +303,7 @@ function polledIssueEvent(
         number: issue.number,
         title: issue.title,
         html_url: issue.url,
+        created_at: issue.createdAt,
         labels: issue.labels.map(name => ({ name })),
       },
     },
@@ -334,6 +335,7 @@ function polledPullRequestEvent(
         number: pullRequest.number,
         title: pullRequest.title,
         html_url: pullRequest.url,
+        created_at: pullRequest.createdAt,
         state: 'open',
         merged: false,
         head: { ref: pullRequest.headBranch },
@@ -623,6 +625,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
 
         const query = (c.req.query('q') ?? '').toLowerCase();
         const repos = [];
+        const seenRepositoryIds = new Set<number>();
         for (const inst of installs) {
           let list;
           try {
@@ -640,6 +643,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           }
           for (const repo of list) {
             if (query && !repo.fullName.toLowerCase().includes(query)) continue;
+            if (seenRepositoryIds.has(repo.id)) continue;
+            seenRepositoryIds.add(repo.id);
             const repository = await github.sourceControlStorage.repositories.upsert({
               orgId: resolved.tenant.orgId,
               input: {
@@ -1033,14 +1038,6 @@ async function prepareProject(options: {
 }): Promise<EnsureResult> {
   const { github, fleet, project, userId, onProgress } = options;
   const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
-  const sandbox = await ensureProjectSandbox({
-    fleet,
-    row: sandboxRow,
-    storage: github.sourceControlStorage.sandboxes,
-    onProgress,
-  });
-  // Re-read the sandbox binding so we have the freshly persisted sandboxId.
-  const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
   const access = await github.versionControl.getRepositoryAccess({
     orgId: project.installation.orgId,
     repositoryId: project.repository.id,
@@ -1048,6 +1045,15 @@ async function prepareProject(options: {
   if (!access.authorization) {
     throw new MaterializeError('Repository access did not include a bearer token.', 'clone-failed');
   }
+  const sandbox = await ensureProjectSandbox({
+    fleet,
+    row: sandboxRow,
+    storage: github.sourceControlStorage.sandboxes,
+    token: access.authorization.token,
+    onProgress,
+  });
+  // Re-read the sandbox binding so we have the freshly persisted sandboxId.
+  const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
   const finalRow = fresh ?? sandboxRow;
   await materializeRepo({
     row: finalRow,

@@ -2,14 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
-import {
-  deriveProjectPath,
-  useSelectWorkspaceMutation,
-  useWorkspacesQuery,
-} from '../../../../../shared/hooks/useWorkspaces';
+import { useUserSessionQuery, useWorkspacesQuery } from '../../../../../shared/hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../../shared/hooks/useWorkItems';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
 import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
@@ -33,22 +27,17 @@ function sessionTitle(item: WorkItem): string {
 }
 
 export function FactorySessionHeader() {
-  const { activeFactory } = useActiveFactoryContext();
-  const { threadId } = useParams();
+  const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
   const navigate = useNavigate();
-  const factoryProjectId =
-    activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
-  const items = useWorkItemsQuery(factoryProjectId);
-  const workspaces = useWorkspacesQuery(activeFactory);
-  const selectWorkspace = useSelectWorkspaceMutation(activeFactory, {
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId: activeFactory?.resourceId,
-  });
+  const sessionQuery = useUserSessionQuery(sessionId);
+  const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
+  const items = useWorkItemsQuery(factoryId);
+  const workspaces = useWorkspacesQuery(projectRepositoryId);
 
-  if (!threadId || !factoryProjectId) return null;
+  if (!threadId || !factoryId || !sessionId) return null;
 
   const allItems = items.data ?? [];
-  const activeProjectPath = deriveProjectPath(activeFactory);
+  const activeProjectPath = sessionId;
   const currentItem = allItems.find(item =>
     Object.values(item.sessions).some(
       session => session.threadId === threadId && (!activeProjectPath || session.sessionId === activeProjectPath),
@@ -57,15 +46,14 @@ export function FactorySessionHeader() {
   if (!currentItem) return null;
 
   const relatedItems = relatedWorkItems(currentItem, allItems);
-  const livePaths = new Set((workspaces.data?.worktrees ?? []).map(worktree => worktree.worktreePath));
+  const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
   const destinations = relatedItems.map(item => ({ item, session: latestLiveSession(item, livePaths) }));
   const isReview = currentItem.source === 'github-pr';
   const section = isReview ? 'Review' : 'Work';
-  const sectionPath = isReview ? '/factory/review' : '/factory/work';
+  const sectionPath = isReview ? `/factories/${factoryId}/review` : `/factories/${factoryId}/work`;
 
-  const openSession = async (session: WorkItemSessionRef) => {
-    await selectWorkspace.mutateAsync(session.sessionId);
-    void navigate(`/threads/${session.threadId}`);
+  const openSession = (session: WorkItemSessionRef) => {
+    void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
   return (
@@ -88,7 +76,7 @@ export function FactorySessionHeader() {
                 return (
                   <Link
                     key={item.id}
-                    to={relationshipPath(item)}
+                    to={relationshipPath(item, factoryId)}
                     className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6"
                     aria-label={`Open ${label}: ${item.title}`}
                   >
@@ -104,8 +92,7 @@ export function FactorySessionHeader() {
                   variant="ghost"
                   size="sm"
                   aria-label={`Open ${label}: ${item.title}`}
-                  disabled={selectWorkspace.isPending}
-                  onClick={() => void openSession(session)}
+                  onClick={() => openSession(session)}
                 >
                   <Link2 size={13} aria-hidden />
                   {label}

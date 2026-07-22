@@ -28,8 +28,8 @@ export function UserGithubConnectionRow() {
       <div className="flex items-center gap-2 border-t border-border1 pt-4">
         <GithubIcon size={16} className="shrink-0 text-icon3" />
         <Txt variant="ui-sm">
-          Connected as <span className="font-medium text-icon6">@{status.userGithubUsername ?? 'unknown'}</span> — issues
-          and PRs you create are authored as you.
+          Connected as <span className="font-medium text-icon6">@{status.userGithubUsername ?? 'unknown'}</span> —
+          issues and PRs you create are authored as you.
         </Txt>
       </div>
     );

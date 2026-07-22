@@ -7,36 +7,48 @@
  * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
  * `/` so the app can choose the active factory's board or draft composer.
+ *
+ * The URL is the single source of truth for the active factory: everything
+ * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
-import { createBrowserRouter, Navigate } from 'react-router';
+import { createBrowserRouter, Navigate, useLocation } from 'react-router';
 import type { RouteObject } from 'react-router';
 
 import Chat from './domains/chat/Chat';
 import { RootGuards } from './domains/auth/components/RootGuards';
-import { DEFAULT_SETTINGS_PATH } from './domains/settings/settingsSections';
 import { AuditPage } from './pages/AuditPage';
 import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
+import { CreateFactoryLayout } from './pages/CreateFactoryLayout';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { MetricsPage } from './pages/MetricsPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
 import { ThreadPage } from './pages/ThreadPage';
-import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
-import { isServerFactory } from './domains/workspaces/services/factories';
+
+import { useFactoriesQuery } from '../../shared/hooks/useFactories';
+import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 
 function RootLanding() {
-  const { activeFactory } = useActiveFactoryContext();
+  const { data: factories, isPending } = useFactoriesQuery();
+  // Preserve `routeErrorNotice`-style state through the redirect chain (e.g.
+  // FactoryLayout bouncing an unknown factoryId here).
+  const { state } = useLocation();
 
-  if (!activeFactory) return null;
+  if (isPending) return null;
 
-  return <Navigate to={isServerFactory(activeFactory) ? '/factory/work' : '/new'} replace />;
+  const firstFactory = factories?.[0];
+  // Empty list is bounced to /onboarding by OnboardingGuard before we render.
+  if (!firstFactory) return null;
+
+  return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
 }
 
-function RedirectToDraftThread() {
-  return <Navigate to="/new" replace />;
+function FactoryHomeRedirect() {
+  return <Navigate to="work" replace />;
 }
 
 export function createAppRoutes(): RouteObject[] {
@@ -51,36 +63,59 @@ export function createAppRoutes(): RouteObject[] {
         { index: true, element: <RootLanding /> },
         { path: 'onboarding', element: <OnboardingPage /> },
         {
-          // Pathless layout: <Chat /> (providers, session, SSE stream) stays
-          // mounted while navigating between thread URLs, so thread navigation
-          // never tears down or reconnects the session.
-          element: <Chat />,
+          path: 'factories/create',
+          element: <CreateFactoryLayout />,
           children: [
-            { path: 'new', element: <NewPage /> },
-            { path: 'threads/:threadId', element: <ThreadPage /> },
-            // Personal (non-factory) sessions: same thread page, but the
-            // session provider binds to the user's own resourceId + worktree.
-            { path: 'user/threads/:threadId', element: <ThreadPage /> },
-            { path: 'factory/overview', element: <OverviewPage /> },
-            { path: 'factory/work', element: <WorkBoardPage /> },
-            { path: 'factory/review', element: <ReviewBoardPage /> },
-            { path: 'factory/metrics', element: <MetricsPage /> },
-            { path: 'factory/audit', element: <AuditPage /> },
-            { path: 'factories/create', element: <CreateFactoryPage /> },
             {
-              path: 'settings',
+              element: <Chat />,
+              children: [{ index: true, element: <CreateFactoryPage /> }],
+            },
+          ],
+        },
+        {
+          path: 'factories/:factoryId',
+          element: <FactoryLayout />,
+          children: [
+            {
+              element: <Chat />,
+              children: [{ index: true, element: <FactoryHomeRedirect /> }],
+            },
+            {
+              path: 'workspaces/:sessionId',
+              element: <Chat />,
               children: [
-                { index: true, element: <Navigate to={DEFAULT_SETTINGS_PATH} replace /> },
-                { path: ':section', element: <SettingsPage /> },
+                { index: true, element: <NewPage /> },
+                { path: 'threads/:threadId', element: <ThreadPage /> },
               ],
             },
-            // Compatibility routes from the former combined Board.
-            { path: 'factory/board', element: <Navigate to="/factory/work" replace /> },
-            { path: 'factory/intake', element: <Navigate to="/factory/work" replace /> },
+            {
+              path: 'user/threads/:threadId',
+              element: <Chat />,
+              children: [{ index: true, element: <ThreadPage /> }],
+            },
+            {
+              element: <Chat />,
+              children: [
+                { path: 'new', element: <NewPage /> },
+                { path: 'overview', element: <OverviewPage /> },
+                { path: 'work', element: <WorkBoardPage /> },
+                { path: 'review', element: <ReviewBoardPage /> },
+                { path: 'metrics', element: <MetricsPage /> },
+                { path: 'rules', element: <RulesPage /> },
+                { path: 'audit', element: <AuditPage /> },
+                {
+                  path: 'settings',
+                  children: [
+                    { index: true, element: <Navigate to="general" replace /> },
+                    { path: ':section', element: <SettingsPage /> },
+                  ],
+                },
+              ],
+            },
           ],
         },
         // Legacy deep links (the app used to serve everything at any path).
-        { path: '*', element: <RedirectToDraftThread /> },
+        { path: '*', element: <Navigate to="/" replace /> },
       ],
     },
     { path: '/signin', element: <SignInPage /> },

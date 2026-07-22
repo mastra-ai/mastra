@@ -1,43 +1,51 @@
-import {
-  DateRangeTimeline,
-  clampDateRangeToBounds,
-  getDateRangeBounds,
-} from '@mastra/playground-ui/components/DateRangeTimeline';
+import { DateRangeTimeline, getDateRangeBounds } from '@mastra/playground-ui/components/DateRangeTimeline';
 import type { DateRangeValue } from '@mastra/playground-ui/components/DateRangeTimeline';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { format, subDays } from 'date-fns';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../shared/api/config';
+import { useEnsureMaterializedSandbox } from '../../../shared/hooks/useEnsureMaterializedSandbox';
+import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useFactoryMetrics } from '../../../shared/hooks/useFactoryMetrics';
 import { useWorkspaceActivity } from '../../../shared/hooks/useWorkspaceActivity';
-import { deriveProjectPath, useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
+import { useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
 import { formatDuration, relativeTime } from '../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
-import { isServerFactory, useActiveFactoryContext } from '../domains/workspaces';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
-import type { FactoryMetrics, FactoryMetricsRange } from '../domains/factory/services/metrics';
+import type { FactoryMetrics } from '../domains/factory/services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
 
-const API_DATE_FORMAT = 'yyyy-MM-dd';
-/** Domain lower bound when the board has no items yet — there's no real
- * creation date to anchor to, so offer a modest explorable window. */
+const DAY_MS = 86_400_000;
 const EMPTY_BOARD_LOOKBACK_DAYS = 90;
+/** Mirrors the server's bounded aggregation window. */
+const MAX_METRICS_WINDOW_DAYS = 366;
 
-/** Default window: the last 30 days, as `yyyy-MM-dd` bounds. */
-function defaultRange(): DateRangeValue {
-  const today = new Date();
-  return { from: format(subDays(today, 30), API_DATE_FORMAT), to: format(today, API_DATE_FORMAT) };
+function shiftUtcDay(day: string, offset: number): string {
+  return new Date(Date.parse(`${day}T00:00:00.000Z`) + offset * DAY_MS).toISOString().slice(0, 10);
+}
+
+function inclusiveRangeDays(range: DateRangeValue): number {
+  return Math.floor((Date.parse(`${range.to}T00:00:00.000Z`) - Date.parse(`${range.from}T00:00:00.000Z`)) / DAY_MS) + 1;
+}
+
+function clampRangeSpan(range: DateRangeValue, maximumDays: number): DateRangeValue {
+  if (inclusiveRangeDays(range) <= maximumDays) return range;
+  return { from: shiftUtcDay(range.to, -(maximumDays - 1)), to: range.to };
+}
+
+function defaultRange(today: string): DateRangeValue {
+  return { from: shiftUtcDay(today, -29), to: today };
 }
 
 const THROUGHPUT_SERIES = [{ dataKey: 'done', label: 'Done per day', color: '#34d399' }];
 
 const SOURCE_LABELS: Record<string, string> = {
-  'github-issue': 'GitHub issues',
-  'github-pr': 'GitHub PRs',
-  'linear-issue': 'Linear issues',
+  'github:issue': 'GitHub issues',
+  'github:pull-request': 'GitHub PRs',
+  'linear:issue': 'Linear issues',
   manual: 'Manual',
 };
 
@@ -58,54 +66,40 @@ export function MetricsPage() {
       title="Metrics"
       description="Flow health for this project's factory: throughput, where work stalls, and what's aging."
     >
-      {project => <MetricsContent factoryProjectId={project.binding.factoryProjectId} />}
+      {project => <MetricsContent factoryProjectId={project.id} />}
     </FactoryPageShell>
   );
 }
 
 function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const [today] = useState(() => format(new Date(), API_DATE_FORMAT));
-  const [range, setRange] = useState<DateRangeValue>(defaultRange);
-
-  // Expand the day-granular range to a precise instant window: full first day
-  // through end of the last day (the server clamps the end to `now`). Keyed on
-  // the day strings so the query key stays stable across renders.
-  const fetchRange = useMemo<FactoryMetricsRange>(
-    () => ({
-      from: new Date(`${range.from}T00:00:00.000Z`).toISOString(),
-      to: new Date(`${range.to}T23:59:59.999Z`).toISOString(),
-    }),
-    [range.from, range.to],
-  );
-  // Whole-day span of the selected window, for labels like "Automated moves (30d)".
-  const windowDays = Math.max(
-    1,
-    Math.round((Date.parse(`${range.to}T00:00:00.000Z`) - Date.parse(`${range.from}T00:00:00.000Z`)) / 86_400_000),
-  );
-  const metricsQuery = useFactoryMetrics(factoryProjectId, fetchRange);
+  const [today] = useState(() => new Date().toISOString().slice(0, 10));
+  const [range, setRange] = useState<DateRangeValue>(() => defaultRange(today));
+  const metricsQuery = useFactoryMetrics(factoryProjectId, range);
   const agentsRunning = useAgentsRunningCount();
 
   if (metricsQuery.isError) {
-    return <Notice variant="destructive">{(metricsQuery.error as Error).message}</Notice>;
+    const message = metricsQuery.error instanceof Error ? metricsQuery.error.message : 'Failed to load metrics';
+    return <Notice variant="destructive">{message}</Notice>;
   }
   const metrics = metricsQuery.data;
+  // Prefer the server's count so the label stays paired with the rendered data
+  // (placeholderData keeps the old range's metrics during a refetch).
+  const windowDays = metrics?.windowDays ?? inclusiveRangeDays(range);
 
-  // Bounds: project's first work item (once metrics load) → today. Fall back to
-  // the max lookback until the earliest date is known.
+  // Keep the selected range inside the domain until the board's earliest item is known.
   const earliestDay = metrics?.earliestItemAt
     ? metrics.earliestItemAt.slice(0, 10)
-    : format(subDays(new Date(`${today}T00:00:00.000Z`), EMPTY_BOARD_LOOKBACK_DAYS), API_DATE_FORMAT);
-  const bounds = getDateRangeBounds(earliestDay, today);
-  const selectedRange = clampDateRangeToBounds(range, bounds);
+    : shiftUtcDay(today, -(EMPTY_BOARD_LOOKBACK_DAYS - 1));
+  const bounds = getDateRangeBounds(earliestDay < range.from ? earliestDay : range.from, today);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
       <DateRangeTimeline
         key={`${bounds.min}:${bounds.max}`}
-        value={selectedRange}
+        value={range}
         min={bounds.min}
         max={bounds.max}
-        onCommit={setRange}
+        onCommit={value => setRange(clampRangeSpan(value, MAX_METRICS_WINDOW_DAYS))}
       />
 
       {!metrics ? null : (
@@ -167,17 +161,20 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
 /** Live count of worktrees with an agent run in flight (sidebar dot source). */
 function useAgentsRunningCount(): number {
   const { baseUrl } = useApiConfig();
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
-  const workspaces = useWorkspacesQuery(activeFactory);
-  const worktrees = workspaces.data?.worktrees ?? [];
-  const projectPath = deriveProjectPath(activeFactory) || undefined;
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
+  const repository = factoryQuery.data?.repositories[0];
+  const materializeQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
+  const workspaces = useWorkspacesQuery(repository?.projectRepositoryId);
+  const workspaceSessions = workspaces.data?.workspaces ?? [];
+  const resourceId = materializeQuery.data?.resourceId;
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
-    worktreePaths: worktrees.map(worktree => worktree.worktreePath),
+    resourceId: resourceId ?? '',
+    scope: repository?.projectRepositoryId,
+    worktreePaths: workspaceSessions.map(workspace => workspace.sessionId),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory) && projectPath),
+    enabled: materializeQuery.isSuccess && Boolean(resourceId && repository?.projectRepositoryId),
   });
   return Object.values(runningByPath).filter(Boolean).length;
 }

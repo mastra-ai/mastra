@@ -539,6 +539,7 @@ describe('PlatformGithubIntegration', () => {
       getState: () => ({ factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' }),
     });
     expect(Object.keys(integration.sessionTools({ requestContext }))).toEqual([
+      'github_refresh_token',
       'github_subscribe_pr',
       'github_unsubscribe_pr',
     ]);
@@ -549,6 +550,78 @@ describe('PlatformGithubIntegration', () => {
       polling: { enabled: true },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
+  });
+
+  it('forwards polled issues to the Factory ingestion hook', async () => {
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/issues?')) return json({ issues: [issue] });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const sourceControl = seed.sourceControl.forIntegration('github');
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'App' },
+    });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '7',
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '101', slug: 'acme/app', defaultBranch: 'main' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const projectRepository = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/tmp/app',
+    });
+    const ingestGithubEvent = vi.fn(async () => ({ status: 'committed' as const }));
+    const context = {
+      auth: fakeAuth(),
+      fleet: { enabled: false },
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl,
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      hooks: { ingestGithubEvent },
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic });
+    integration.versionControl.initialize({ storage: sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const response = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
+
+    expect(response.status).toBe(200);
+    expect(ingestGithubEvent).toHaveBeenCalledOnce();
+    expect(ingestGithubEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryId: 'poll:101:issue:12:2026-07-01T00:00:00Z',
+        event: 'issues',
+      }),
+    );
   });
 
   it('uses platform installations for status and platform install URL for connect redirects', async () => {

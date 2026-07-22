@@ -4,10 +4,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import { useAddFactoryMutation, useCreateFactoryMutation } from '../../../../../shared/hooks/useFactories';
+import { useCreateFactoryMutation } from '../../../../../shared/hooks/useFactories';
 import { useKeyDown } from '../../../lib/hooks';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
-import { DirectoryBrowser } from './DirectoryPicker';
 
 function mutationError(error: unknown): string | null {
   if (!error) return null;
@@ -16,20 +14,15 @@ function mutationError(error: unknown): string | null {
 
 /**
  * Factory creation surface (rendered on the `/factories/create` page). The
- * primary path is name-first: create a server-backed Factory project, then
- * connect repositories from the Board or Factory settings. Binding a local
- * folder remains a secondary path for terminal-shared, org-less workflows.
+ * flow is name-first: create a server-backed Factory project, then connect
+ * repositories from the Board or Factory settings.
  */
 export function FactoriesPanel({ onClose }: { onClose: () => void }) {
-  const { selectFactory } = useActiveFactoryContext();
   const navigate = useNavigate();
   const createFactory = useCreateFactoryMutation();
-  const addLocalFactory = useAddFactoryMutation();
   const [name, setName] = useState('');
-  const [showFolderBrowser, setShowFolderBrowser] = useState(false);
 
   const createError = mutationError(createFactory.error);
-  const localError = mutationError(addLocalFactory.error);
 
   useKeyDown({ escape: onClose });
 
@@ -38,18 +31,7 @@ export function FactoriesPanel({ onClose }: { onClose: () => void }) {
     if (!trimmed) return;
     try {
       const factory = await createFactory.mutateAsync({ name: trimmed });
-      await selectFactory(factory);
-      void navigate('/factory/board');
-    } catch {
-      // Mutation state owns the rendered error.
-    }
-  };
-
-  const handlePickFolder = async (path: string, folderName: string) => {
-    try {
-      const factory = await addLocalFactory.mutateAsync({ name: folderName || path, path });
-      await selectFactory(factory);
-      void navigate('/new');
+      void navigate(`/factories/${factory.id}`);
     } catch {
       // Mutation state owns the rendered error.
     }
@@ -101,31 +83,6 @@ export function FactoriesPanel({ onClose }: { onClose: () => void }) {
               </Button>
             </div>
           </form>
-
-          <div className="mt-5 flex min-h-0 flex-1 flex-col border-t border-border1 pt-4">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="w-fit"
-              onClick={() => setShowFolderBrowser(open => !open)}
-            >
-              {showFolderBrowser ? 'Hide local folder options' : 'Bind a local folder instead'}
-            </Button>
-            {showFolderBrowser && (
-              <div className="mt-4 flex min-h-80 flex-1 flex-col gap-3">
-                <Txt as="p" variant="ui-sm" className="max-w-2xl text-icon3">
-                  A local Factory binds to a directory on this machine so its threads, memory, and workspace stay scoped
-                  there — and are shared with the terminal.
-                </Txt>
-                <DirectoryBrowser
-                  onPick={(path, folderName) => void handlePickFolder(path, folderName)}
-                  busy={addLocalFactory.isPending}
-                  error={localError}
-                />
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </section>

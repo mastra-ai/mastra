@@ -1,6 +1,6 @@
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
-import { useActiveFactoryContext } from '../../workspaces';
+import { useParams } from 'react-router';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -8,7 +8,7 @@ import { useAbortAgentControllerMutation } from '../../../../../shared/hooks/use
 
 export function useGlobalShortcuts() {
   const overlays = useOverlays();
-  const { factories } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { busy } = useChatTranscript();
   const abortMutation = useAbortAgentControllerMutation({
@@ -28,7 +28,7 @@ export function useGlobalShortcuts() {
       overlays.toggle('shortcuts');
     },
     escape: () => {
-      if (factories.length === 0) return;
+      if (!factoryId) return;
       if (overlays.isOpen('shortcuts')) {
         overlays.close('shortcuts');
         return;

@@ -4,8 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeft, Brain, GitBranch, Key, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router';
-
+import { Link, useLocation, useParams } from 'react-router';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
@@ -62,6 +61,7 @@ const SETTINGS_SECTIONS: {
 
 export function SettingsNavigation() {
   const section = useSettingsSection();
+  const { factoryId } = useParams<{ factoryId: string }>();
   const location = useLocation();
   const closeSettings = useCloseSettings();
   const { state } = useMainSidebar();
@@ -109,7 +109,7 @@ export function SettingsNavigation() {
                 link={{ name: label, url: '#', icon: <Icon /> }}
               >
                 <Link
-                  to={settingsSectionPath(id)}
+                  to={settingsSectionPath(factoryId!, id)}
                   state={location.state}
                   aria-label={label}
                   aria-current={isActive ? 'page' : undefined}

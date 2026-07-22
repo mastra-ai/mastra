@@ -13,13 +13,11 @@ import {
 } from '../../../../../shared/hooks/use-om';
 import type { AvailableModelOption } from '../../../../../shared/hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { ModelCombobox } from './ModelCombobox';
 
 type OMConfig = OMConfigInfo;
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
-
-const SELECT_CLASS =
-  'h-form-default w-full rounded-full border border-border1 bg-surface-overlay-soft px-3 text-ui-md text-neutral6 outline-hidden focus-visible:border-neutral5/50 disabled:opacity-50 disabled:cursor-not-allowed';
 
 function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   if (value === true) return 'on';
@@ -121,23 +119,8 @@ export function OMSection({
     thresholdsMutation.mutate({ [`${role}Threshold`]: Math.round(parsed) });
   };
 
-  const modelOptions = models.map(m => m.id);
-
   const modelSelect = (value: string, onChange: (v: string) => void) => (
-    <select
-      className={SELECT_CLASS}
-      value={value}
-      disabled={busy || !resourceId}
-      onChange={e => onChange(e.target.value)}
-    >
-      <option value="">Select model…</option>
-      {value && !modelOptions.includes(value) && <option value={value}>{value}</option>}
-      {modelOptions.map(id => (
-        <option key={id} value={id}>
-          {id}
-        </option>
-      ))}
-    </select>
+    <ModelCombobox models={models} value={value} disabled={busy || !resourceId} onValueChange={onChange} />
   );
 
   if (!resourceId) {

@@ -13,6 +13,8 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
+export const USER_SESSION_BRANCH_PREFIX = 'user/';
+
 export interface GithubInstallation {
   installationId: number;
   accountLogin: string | null;
@@ -175,6 +177,8 @@ export interface LinkedRepositoryPayload {
 export interface FactoryProjectSnapshot extends FactoryProjectPayload {
   repositories: LinkedRepositoryPayload[];
 }
+
+export type FactoryProject = FactoryProjectSnapshot;
 
 async function readJsonOrThrow<T>(res: Response, failure: string): Promise<T> {
   if (!res.ok) throw new Error(`${failure} (${res.status})`);

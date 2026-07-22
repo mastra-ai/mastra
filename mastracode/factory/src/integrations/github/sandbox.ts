@@ -58,10 +58,11 @@ export async function ensureProjectSandbox(options: {
   fleet: SandboxFleet;
   row: ProjectRepositorySandbox;
   storage: SourceControlSandboxStorage;
+  token: string;
   onProgress?: ProgressFn;
 }): Promise<MaterializationSandbox> {
-  const { fleet, row, storage, onProgress } = options;
-  return fleet.ensureSandbox(bindingStore(row, storage), onProgress);
+  const { fleet, row, storage, token, onProgress } = options;
+  return fleet.ensureSandbox(bindingStore(row, storage), { GH_TOKEN: token }, onProgress);
 }
 
 /**
