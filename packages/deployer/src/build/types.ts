@@ -1,3 +1,5 @@
+import type { Config } from '@mastra/core/mastra';
+
 /**
  * Collected metadata about a dependency
  */
@@ -28,7 +30,7 @@ export interface DependencyMetadata {
 export interface BundlerOptions {
   enableSourcemap: boolean;
   enableEsmShim: boolean;
-  externals: boolean | string[];
+  externals: NonNullable<Config['bundler']>['externals'];
   dynamicPackages?: string[];
 }
 

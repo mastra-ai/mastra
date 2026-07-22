@@ -14,6 +14,7 @@ import { bundleExternals } from './analyze/bundleExternals';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
+import { isForceBundled, normalizeExternals } from './externals';
 import { getPackageMetadata } from './package-info';
 import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
 import {
@@ -408,13 +409,11 @@ export async function analyzeBundle(
 
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
 
-  let externalsPreset = false;
+  const normalizedExternals = normalizeExternals(bundlerOptions?.externals);
+  const externalsPreset = normalizedExternals.preset === 'all';
 
-  const userExternals = Array.isArray(bundlerOptions?.externals) ? bundlerOptions?.externals : [];
+  const userExternals = normalizedExternals.include;
   const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
-  if (bundlerOptions?.externals === true) {
-    externalsPreset = true;
-  }
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -455,7 +454,11 @@ export async function analyzeBundle(
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
       const isPartOfExternals = allExternals.some(external => isDependencyPartOfPackage(dep, external));
-      if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace)) {
+      // `exclude` only overrides preset-driven externalization; it can never pull a
+      // package out of `allExternals` (which holds GLOBAL_EXTERNALS + user `include`).
+      const externalizedByPreset =
+        externalsPreset && !metadata.isWorkspace && !isForceBundled(dep, normalizedExternals);
+      if (isPartOfExternals || externalizedByPreset) {
         // Add all packages coming from src/mastra with their version info
         const pkgName = getPackageName(dep);
         if (pkgName) {
@@ -499,9 +502,15 @@ export async function analyzeBundle(
    */
   if (isDev || externalsPreset) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
-      if (!metadata.isWorkspace) {
-        depsToOptimize.delete(dep);
+      if (metadata.isWorkspace) {
+        continue;
       }
+      // Force-bundled deps must survive preset pruning so they still get optimized.
+      // `mastra dev` prunes unconditionally — it never bundles non-workspace deps.
+      if (!isDev && isForceBundled(dep, normalizedExternals)) {
+        continue;
+      }
+      depsToOptimize.delete(dep);
     }
   }
 

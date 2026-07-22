@@ -13,6 +13,7 @@ import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
+import { normalizeExternals } from '../build/externals';
 import type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
 import { isBareModuleSpecifier, slash } from '../build/utils';
@@ -216,7 +217,13 @@ export abstract class Bundler extends MastraBundler {
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset: externals === true },
+      {
+        sourcemap: enableSourcemap,
+        workspaceRoot,
+        projectRoot,
+        enableEsmShim,
+        externalsPreset: normalizeExternals(externals).preset === 'all',
+      },
     );
     const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);

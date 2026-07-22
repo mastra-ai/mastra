@@ -13,6 +13,7 @@ import * as resolve from 'resolve.exports';
 import { rollup } from 'rollup';
 import type { OutputChunk, OutputAsset, Plugin } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import { isForceBundled, normalizeExternals } from '../externals';
 import { getPackageRootPath } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
 import { esmShim } from '../plugins/esm-shim';
@@ -484,17 +485,15 @@ export async function bundleExternals(
   } = options;
   const { externals: customExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
   /**
-   * A user can set `externals: true` to indicate they want to externalize all dependencies. In this case, we set `externalsPreset` to true to skip bundling any externals.
+   * `externals: true` (or `{ preset: 'all' }`) means externalize everything non-workspace,
+   * so we skip bundling any externals.
    */
-  let externalsPreset = false;
+  const normalizedExternals = normalizeExternals(customExternals);
+  const externalsPreset = normalizedExternals.preset === 'all';
 
-  if (customExternals === true) {
-    externalsPreset = true;
-  }
-
-  // If `externals` is an array (and not `true`), we proceed as normal
-  const externalsList = Array.isArray(customExternals) ? customExternals : [];
-  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...externalsList];
+  // `exclude` is deliberately not subtracted here: the protected runtime externals stay
+  // additive, matching the semantics established for user-provided externals.
+  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...normalizedExternals.include];
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
@@ -506,7 +505,7 @@ export async function bundleExternals(
   const extractedExternals = new Map<string, string>();
   if (externalsPreset) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
-      if (!metadata.isWorkspace) {
+      if (!metadata.isWorkspace && !isForceBundled(dep, normalizedExternals)) {
         // Add to extracted externals - use rootPath or fallback to package name
         extractedExternals.set(dep, metadata.rootPath ?? dep);
         // Remove from depsToOptimize so it won't be bundled
