@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import type {
   BackgroundTask,
   BackgroundTaskStatus,
@@ -10,6 +9,7 @@ import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@
 import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
 import { runPrune, resolveTargets } from '../../retention';
 

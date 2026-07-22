@@ -1,5 +1,4 @@
 import { createClient } from '@libsql/client';
-import type { Client, InValue } from '@libsql/client';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -11,6 +10,7 @@ import {
 } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
 import {
   buildSelectColumns,
   createExecuteWriteOperationWithRetry,

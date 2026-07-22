@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
@@ -32,6 +31,7 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
 import { cutoffFor, runBatchedDelete } from '../../retention';
 import { buildScopedWhere, tenancyWhere } from '../utils';
