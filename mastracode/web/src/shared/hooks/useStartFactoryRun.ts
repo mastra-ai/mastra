@@ -119,7 +119,10 @@ export function useStartFactoryRun() {
   });
 
   const pendingRuns = useMutationState({
-    filters: { mutationKey: factoryRunMutationKey(repository?.projectRepositoryId ?? '', factoryId), status: 'pending' },
+    filters: {
+      mutationKey: factoryRunMutationKey(repository?.projectRepositoryId ?? '', factoryId),
+      status: 'pending',
+    },
     select: pending => toPendingFactoryRun(pending.state.variables),
   }).filter(run => run !== undefined);
 

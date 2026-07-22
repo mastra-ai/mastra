@@ -21,7 +21,9 @@ export function StatusLine() {
   const { baseUrl, resourceId, projectPath, factorySessionState } = useChatSessionContext();
   const { data: factory } = useFactoryQuery(factoryId);
   const { transcript, busy } = useChatTranscript();
-  const repository = factory?.repositories.find(repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId);
+  const repository = factory?.repositories.find(
+    repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId,
+  );
   const projectRepositoryId = repository?.projectRepositoryId;
   const factoryProjectId = factorySessionState?.factoryProjectId;
 

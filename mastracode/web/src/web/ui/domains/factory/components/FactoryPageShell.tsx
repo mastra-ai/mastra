@@ -49,4 +49,3 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
     </PageLayout>
   );
 }
-

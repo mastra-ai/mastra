@@ -73,7 +73,11 @@ export function useOverlayControllerHandlers() {
       }),
     ),
     http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, () =>
-      HttpResponse.json({ resourceId: 'test-resource', sandboxId: 'sandbox-overlay', sandboxWorkdir: '/workspace/overlay' }),
+      HttpResponse.json({
+        resourceId: 'test-resource',
+        sandboxId: 'sandbox-overlay',
+        sandboxWorkdir: '/workspace/overlay',
+      }),
     ),
     http.post(`${API}/sessions`, async ({ request }) => {
       const { resourceId } = (await request.json()) as { resourceId: string };
@@ -118,7 +122,9 @@ export function useOverlayControllerHandlers() {
 
 export function OverlayTestProviders({ children }: { children: ReactNode }) {
   return (
-    <MemoryRouter initialEntries={[`/factories/${OVERLAY_FACTORY_ID}/workspaces/${OVERLAY_SESSION_ID}/threads/thread-test`]}>
+    <MemoryRouter
+      initialEntries={[`/factories/${OVERLAY_FACTORY_ID}/workspaces/${OVERLAY_SESSION_ID}/threads/thread-test`]}
+    >
       <Routes>
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
