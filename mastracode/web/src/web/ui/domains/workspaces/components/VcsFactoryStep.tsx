@@ -42,7 +42,10 @@ export function VcsFactoryStep({
       <Txt as="p" variant="ui-lg" className="mx-auto mt-6 max-w-2xl leading-7 text-neutral3 sm:text-lg">
         Connect GitHub, then select the repository that will become your first Factory.
       </Txt>
-      <section aria-label="GitHub repository" className="mx-auto mt-8 max-w-2xl rounded-2xl border border-border1 bg-surface2/80 p-5 text-left">
+      <section
+        aria-label="GitHub repository"
+        className="mx-auto mt-8 max-w-2xl rounded-2xl border border-border1 bg-surface2/80 p-5 text-left"
+      >
         {githubStatus.isPending ? (
           <SkeletonRows label="Loading GitHub status" rows={3} rowClassName="h-12 w-full rounded-xl" />
         ) : !connected ? (
@@ -59,8 +62,16 @@ export function VcsFactoryStep({
                 onChange={event => setQuery(event.target.value)}
               />
             </div>
-            {mutationError && <p role="alert" className="m-0 text-ui-sm text-notice-destructive-fg">{mutationError}</p>}
-            {repos.isError && <p role="alert" className="m-0 text-ui-sm text-notice-destructive-fg">{repos.error.message}</p>}
+            {mutationError && (
+              <p role="alert" className="m-0 text-ui-sm text-notice-destructive-fg">
+                {mutationError}
+              </p>
+            )}
+            {repos.isError && (
+              <p role="alert" className="m-0 text-ui-sm text-notice-destructive-fg">
+                {repos.error.message}
+              </p>
+            )}
             {repos.isPending ? (
               <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-12 w-full rounded-xl" />
             ) : repos.data?.length ? (
@@ -77,10 +88,16 @@ export function VcsFactoryStep({
                       <GithubIcon className="shrink-0 text-icon3" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-ui-sm font-medium text-icon6">{repo.fullName}</span>
-                        <span className="block text-ui-xs text-icon3">{repo.private ? 'Private' : 'Public'} · {repo.defaultBranch}</span>
+                        <span className="block text-ui-xs text-icon3">
+                          {repo.private ? 'Private' : 'Public'} · {repo.defaultBranch}
+                        </span>
                       </span>
                       {isConnecting ? (
-                        <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="shrink-0 text-accent1" />
+                        <Spinner
+                          size="sm"
+                          aria-label={`Connecting ${repo.fullName}`}
+                          className="shrink-0 text-accent1"
+                        />
                       ) : (
                         <span className="text-ui-xs text-accent1">Select</span>
                       )}
@@ -89,9 +106,13 @@ export function VcsFactoryStep({
                 })}
               </div>
             ) : (
-              <Txt as="p" variant="ui-sm" className="m-0 text-icon3">No repositories found.</Txt>
+              <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+                No repositories found.
+              </Txt>
             )}
-            <Button variant="outline" size="sm" className="self-start" onClick={onManageConnection}>Manage GitHub connection</Button>
+            <Button variant="outline" size="sm" className="self-start" onClick={onManageConnection}>
+              Manage GitHub connection
+            </Button>
           </div>
         )}
       </section>
@@ -99,19 +120,24 @@ export function VcsFactoryStep({
   );
 }
 
-function GithubConnection({ status, isConnecting, onConnect }: {
+function GithubConnection({
+  status,
+  isConnecting,
+  onConnect,
+}: {
   status: GithubStatus | undefined;
   isConnecting: boolean;
   onConnect: () => void;
 }) {
   const unavailable = status?.reason === 'missing_config' || status?.reason === 'organization_required';
-  const message = status?.reason === 'missing_config'
-    ? 'GitHub is not configured for this deployment.'
-    : status?.reason === 'organization_required'
-      ? 'Join an organization to connect GitHub repositories.'
-      : status?.reason === 'auth_required'
-        ? 'Sign in again to connect GitHub.'
-        : 'Connect GitHub to choose a repository.';
+  const message =
+    status?.reason === 'missing_config'
+      ? 'GitHub is not configured for this deployment.'
+      : status?.reason === 'organization_required'
+        ? 'Join an organization to connect GitHub repositories.'
+        : status?.reason === 'auth_required'
+          ? 'Sign in again to connect GitHub.'
+          : 'Connect GitHub to choose a repository.';
 
   return (
     <EmptyState
@@ -119,12 +145,14 @@ function GithubConnection({ status, isConnecting, onConnect }: {
       iconSlot={<GithubIcon className="size-10 text-icon3" />}
       titleSlot="Connect GitHub"
       descriptionSlot={message}
-      actionSlot={!unavailable ? (
-        <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
-          {isConnecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon />}
-          Connect GitHub
-        </Button>
-      ) : undefined}
+      actionSlot={
+        !unavailable ? (
+          <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
+            {isConnecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon />}
+            Connect GitHub
+          </Button>
+        ) : undefined
+      }
     />
   );
 }

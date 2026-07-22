@@ -59,7 +59,9 @@ describe('EmptyFactoryState onboarding', () => {
 
     renderOnboarding();
 
-    expect(screen.getByRole('heading', { name: 'Build software with a Factory that knows your work.' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Build software with a Factory that knows your work.' }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create my first factory' }));
 
     expect(await screen.findByRole('heading', { name: 'Choose your codebase.' })).toBeInTheDocument();
@@ -85,7 +87,13 @@ describe('EmptyFactoryState onboarding', () => {
 
   it('searches GitHub repositories with the entered query and renders the filtered result', async () => {
     const queries: Array<string | null> = [];
-    const filteredRepo = { ...repo, id: 100, fullName: 'octo/filtered', name: 'filtered', repositoryStorageId: 'repo-100' };
+    const filteredRepo = {
+      ...repo,
+      id: 100,
+      fullName: 'octo/filtered',
+      name: 'filtered',
+      repositoryStorageId: 'repo-100',
+    };
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
       http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
@@ -157,18 +165,21 @@ describe('EmptyFactoryState onboarding', () => {
         calls.push('connect');
         return HttpResponse.json({ connection: { id: 'conn-1' } });
       }),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`, async ({ request }) => {
-        calls.push('link');
-        expect(await request.json()).toMatchObject({ repositoryId: 'repo-99', branch: 'main' });
-        const projectRepository = {
-          id: 'ghp_1',
-          branch: 'main',
-          sandboxWorkdir: '/workspace/hello',
-          repository: { slug: 'octo/hello', defaultBranch: 'main' },
-        };
-        linked.push(projectRepository);
-        return HttpResponse.json({ projectRepository });
-      }),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
+        async ({ request }) => {
+          calls.push('link');
+          expect(await request.json()).toMatchObject({ repositoryId: 'repo-99', branch: 'main' });
+          const projectRepository = {
+            id: 'ghp_1',
+            branch: 'main',
+            sandboxWorkdir: '/workspace/hello',
+            repository: { slug: 'octo/hello', defaultBranch: 'main' },
+          };
+          linked.push(projectRepository);
+          return HttpResponse.json({ projectRepository });
+        },
+      ),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
       ),
@@ -238,7 +249,12 @@ describe('EmptyFactoryState onboarding', () => {
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: true, reason: 'ready', workspace: { name: 'Acme', urlKey: 'acme' } }),
+        HttpResponse.json({
+          enabled: true,
+          connected: true,
+          reason: 'ready',
+          workspace: { name: 'Acme', urlKey: 'acme' },
+        }),
       ),
       http.post(`${TEST_BASE_URL}/web/github/projects/ghp_1/ensure`, () =>
         HttpResponse.json({
