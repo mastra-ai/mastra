@@ -573,6 +573,80 @@ export function createDatasetsTests({
         ).rejects.toThrow();
       });
 
+      it('scorerIds round-trip through item reads and SCD-2 updates', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-scorer-ids' });
+        const item = await datasetsStorage.addItem({
+          datasetId: ds.id,
+          input: { q: 'hi' },
+          scorerIds: ['quality', 'safety'],
+        });
+        expect(item.scorerIds).toEqual(['quality', 'safety']);
+
+        const fetched = await datasetsStorage.getItemById({ id: item.id });
+        expect(fetched?.scorerIds).toEqual(['quality', 'safety']);
+        const listed = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(listed.items[0]?.scorerIds).toEqual(['quality', 'safety']);
+
+        const preserved = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          input: { q: 'updated' },
+        });
+        expect(preserved.scorerIds).toEqual(['quality', 'safety']);
+
+        const replaced = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          scorerIds: ['relevance'],
+        });
+        expect(replaced.scorerIds).toEqual(['relevance']);
+
+        const disabled = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          scorerIds: [],
+        });
+        expect(disabled.scorerIds).toEqual([]);
+
+        const cleared = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          scorerIds: null,
+        });
+        expect(cleared.scorerIds).toBeUndefined();
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        expect(history.find(row => row.datasetVersion === 1)?.scorerIds).toEqual(['quality', 'safety']);
+        expect(history.find(row => row.datasetVersion === 2)?.scorerIds).toEqual(['quality', 'safety']);
+        expect(history.find(row => row.datasetVersion === 3)?.scorerIds).toEqual(['relevance']);
+        expect(history.find(row => row.datasetVersion === 4)?.scorerIds).toEqual([]);
+        expect(history.find(row => row.datasetVersion === 5)?.scorerIds).toBeUndefined();
+
+        await expect(datasetsStorage.getItemsByVersion({ datasetId: ds.id, version: 1 })).resolves.toEqual([
+          expect.objectContaining({ id: item.id, scorerIds: ['quality', 'safety'] }),
+        ]);
+        await expect(datasetsStorage.getItemsByVersion({ datasetId: ds.id, version: 4 })).resolves.toEqual([
+          expect.objectContaining({ id: item.id, scorerIds: [] }),
+        ]);
+        await expect(datasetsStorage.getItemsByVersion({ datasetId: ds.id, version: 5 })).resolves.toEqual([
+          expect.objectContaining({ id: item.id, scorerIds: undefined }),
+        ]);
+      });
+
+      it('rejects non-serializable scorerIds', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-scorer-ids-serialization' });
+        await expect(
+          datasetsStorage.addItem({
+            datasetId: ds.id,
+            input: { q: 'hi' },
+            scorerIds: ['quality', undefined] as unknown as string[],
+          }),
+        ).rejects.toThrow();
+      });
+
       it('updateItem creates new version row', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'item-update' });
         const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'v1' } });
@@ -946,6 +1020,48 @@ export function createDatasetsTests({
           pagination: { page: 0, perPage: 10 },
         });
         expect(dv.versions).toHaveLength(1);
+      });
+
+      it('batchInsertItems preserves scorerIds inheritance and empty overrides', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'bulk-scorer-ids' });
+        const items = await datasetsStorage.batchInsertItems({
+          datasetId: ds.id,
+          items: [
+            { input: { q: 'selected' }, scorerIds: ['quality'] },
+            { input: { q: 'disabled' }, scorerIds: [] },
+            { input: { q: 'inherited' } },
+          ],
+        });
+
+        const byInput = new Map(items.map(item => [(item.input as { q: string }).q, item]));
+        expect(byInput.get('selected')?.scorerIds).toEqual(['quality']);
+        expect(byInput.get('disabled')?.scorerIds).toEqual([]);
+        expect(byInput.get('inherited')?.scorerIds).toBeUndefined();
+
+        const listed = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        const listedByInput = new Map(listed.items.map(item => [(item.input as { q: string }).q, item]));
+        expect(listedByInput.get('selected')?.scorerIds).toEqual(['quality']);
+        expect(listedByInput.get('disabled')?.scorerIds).toEqual([]);
+        expect(listedByInput.get('inherited')?.scorerIds).toBeUndefined();
+      });
+
+      itItemIdentity('batchInsertItems treats scorerIds as part of the externalId payload', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-scorer-ids' });
+        const payload = { externalId: 'item-1', input: { q: 'same' }, scorerIds: ['quality'] };
+
+        const [first] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] });
+        const [retry] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] });
+        expect(retry).toEqual(expect.objectContaining({ id: first!.id, scorerIds: ['quality'] }));
+
+        await expect(
+          datasetsStorage.batchInsertItems({
+            datasetId: ds.id,
+            items: [{ ...payload, scorerIds: ['safety'] }],
+          }),
+        ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_CONFLICT' });
       });
 
       itItemIdentity('batchInsertItems treats exact externalId retries as no-ops', async () => {
