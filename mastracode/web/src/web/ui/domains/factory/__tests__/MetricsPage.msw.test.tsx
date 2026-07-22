@@ -98,6 +98,10 @@ function makeMetrics(overrides: Partial<FactoryMetrics> = {}): FactoryMetrics {
       { source: 'manual', count: 1 },
     ],
     transitions: { human: 2, total: 6 },
+    stageAutomation: [
+      { stage: 'triage', exits: 4, automated: 2, outcomes: { done: 1, canceled: 0, reworked: 1, inFlight: 0 } },
+      { stage: 'planning', exits: 3, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+    ],
     ...overrides,
   };
 }
@@ -228,6 +232,28 @@ describe('Factory Metrics page', () => {
     expect(within(sources).getByText('Manual')).toBeInTheDocument();
   });
 
+  it('given mixed automation, when the page renders, then the automated-moves stat and per-stage rows appear', async () => {
+    useMetricsHandlers();
+    renderAt('/factory/metrics');
+
+    // Global stat: total - human automated moves, with the window total as hint.
+    const automatedMoves = (await screen.findByText('Automated moves (30d)')).parentElement!;
+    expect(within(automatedMoves).getByText('4')).toBeInTheDocument();
+    expect(within(automatedMoves).getByText('of 6 stage moves')).toBeInTheDocument();
+
+    // Per-stage rows: automated % over exits, plus the outcome split of
+    // automated passes (zero buckets omitted).
+    const section = screen.getByRole('heading', { name: 'Automation by stage' }).parentElement!;
+    expect(within(section).getByText(/50% automated \(2\/4\) · 1 done, 1 reworked/)).toBeInTheDocument();
+    expect(within(section).getByText(/0% automated \(0\/3\)/)).toBeInTheDocument();
+    // Board stages with no exits in the window render an em dash.
+    const building = within(section).getByText('Building').closest('li')!;
+    expect(within(building as HTMLElement).getByText('—')).toBeInTheDocument();
+    // Terminal stages never get automation rows.
+    expect(within(section).queryByText('Done')).not.toBeInTheDocument();
+    expect(within(section).queryByText('Canceled')).not.toBeInTheDocument();
+  });
+
   it('given the default window, when the user switches to 7d, then metrics are refetched with days=7', async () => {
     const state = useMetricsHandlers();
     renderAt('/factory/metrics');
@@ -252,6 +278,7 @@ describe('Factory Metrics page', () => {
         agingWip: [],
         sourceMix: [],
         transitions: { human: 0, total: 0 },
+        stageAutomation: [],
       }),
     );
     renderAt('/factory/metrics');
@@ -261,6 +288,11 @@ describe('Factory Metrics page', () => {
     // Null cycle time renders as an em dash instead of a bogus number.
     const cycle = screen.getByText('Median cycle time').parentElement!;
     expect(within(cycle).getByText('—')).toBeInTheDocument();
+    // Zero stage moves: the automated-moves stat renders an em dash too.
+    const automatedMoves = screen.getByText('Automated moves (30d)').parentElement!;
+    expect(within(automatedMoves).getByText('—')).toBeInTheDocument();
+    // No completed passes anywhere: the automation section shows its empty state.
+    expect(screen.getByText('No completed stage passes in this window yet.')).toBeInTheDocument();
   });
 
   it('given a local project, when visiting Metrics, then the server-factory notice renders instead of the dashboard', async () => {

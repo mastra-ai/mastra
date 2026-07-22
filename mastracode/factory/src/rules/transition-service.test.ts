@@ -265,6 +265,24 @@ describe('FactoryTransitionService', () => {
     });
   });
 
+  it('accepts a human cancel and can revive the item out of canceled', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['review'] });
+    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+
+    const discard = await service.transition(request(item, { stage: 'canceled', identity: 'discard-1' }));
+    expect(discard).toMatchObject({ status: 'accepted', stage: 'canceled' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['canceled']);
+
+    // An item sitting in canceled still has a canonical stage, so it can be
+    // pulled back onto the board.
+    const revive = await service.transition(
+      request({ id: item.id, revision: 2 }, { stage: 'triage', identity: 'revive-1' }),
+    );
+    expect(revive).toMatchObject({ status: 'accepted', stage: 'triage' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['triage']);
+  });
+
   it('scopes ingress replay and deferred idempotency to the tenant', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const first = await createItem(storage, { orgId: 'org-1', sourceKey: 'github-issue:one' });

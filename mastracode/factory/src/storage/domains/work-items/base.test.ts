@@ -6,7 +6,8 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
-import { WorkItemRelationError, WorkItemsStorage } from './base';
+import { applyStageTransition, isAutomationActor, WorkItemRelationError, WorkItemsStorage } from './base';
+import type { WorkItemStageEntry } from './base';
 
 const input = {
   externalSource: {
@@ -259,5 +260,74 @@ describe('WorkItemsStorage', () => {
     await storage.delete({ orgId: 'org1', id: parent.item.id });
 
     expect(locks).toEqual(['work-items:org1:p1', 'work-items:org1:p1', 'work-items:org1:p1']);
+  });
+
+  it('stamps the actor in both `by` and `exitedBy` when a stage move closes an entry', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({ orgId: 'org1', userId: 'creator', factoryProjectId: 'p1', input });
+
+    const updated = await storage.update({
+      orgId: 'org1',
+      id: created.item.id,
+      userId: 'mover',
+      patch: { stages: ['triage'] },
+    });
+
+    const history = updated!.item.stageHistory;
+    const closed = history.find(entry => entry.stage === 'intake')!;
+    const opened = history.find(entry => entry.stage === 'triage')!;
+    expect(closed.exitedAt).toBeDefined();
+    expect(closed.exitedBy).toBe('mover');
+    expect(closed.by).toBe('creator');
+    expect(opened.by).toBe('mover');
+    expect(opened.exitedAt).toBeUndefined();
+    expect(opened.exitedBy).toBeUndefined();
+  });
+});
+
+describe('applyStageTransition', () => {
+  it('stamps exitedBy alongside exitedAt when closing an exited stage', () => {
+    const history: WorkItemStageEntry[] = [{ stage: 'intake', enteredAt: '2026-07-01T00:00:00.000Z', by: 'user_1' }];
+
+    const next = applyStageTransition(history, ['intake'], ['triage'], 'user_2', new Date('2026-07-02T00:00:00.000Z'));
+
+    expect(next[0]).toEqual({
+      stage: 'intake',
+      enteredAt: '2026-07-01T00:00:00.000Z',
+      by: 'user_1',
+      exitedAt: '2026-07-02T00:00:00.000Z',
+      exitedBy: 'user_2',
+    });
+    expect(next[1]).toEqual({ stage: 'triage', enteredAt: '2026-07-02T00:00:00.000Z', by: 'user_2' });
+  });
+
+  it('leaves entries closed before exit stamping existed (no exitedBy) untouched', () => {
+    const legacy: WorkItemStageEntry[] = [
+      { stage: 'intake', enteredAt: '2026-06-01T00:00:00.000Z', exitedAt: '2026-06-02T00:00:00.000Z', by: 'user_1' },
+      { stage: 'triage', enteredAt: '2026-06-02T00:00:00.000Z', by: 'user_1' },
+    ];
+
+    const next = applyStageTransition(legacy, ['triage'], ['planning'], 'user_2', new Date('2026-07-01T00:00:00.000Z'));
+
+    expect(next[0]).toEqual(legacy[0]); // no retroactive exitedBy
+    expect(next[0]!.exitedBy).toBeUndefined();
+    expect(next[1]!.exitedBy).toBe('user_2');
+  });
+});
+
+describe('isAutomationActor', () => {
+  it.each([
+    ['factory', true],
+    ['system', true],
+    ['automation', true],
+    ['factory-rule-dispatcher', true],
+    ['factory-tool-result-rule', true],
+    ['agent:binding-1', true],
+    ['github:someone', true],
+    ['user_wos_123', false],
+    ['', false],
+    [undefined, false],
+  ] as const)('isAutomationActor(%j) → %s', (actor, expected) => {
+    expect(isAutomationActor(actor)).toBe(expected);
   });
 });

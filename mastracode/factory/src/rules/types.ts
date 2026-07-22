@@ -1,6 +1,6 @@
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
 
-export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done'] as const;
+export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
 export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
 
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;

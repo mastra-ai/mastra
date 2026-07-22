@@ -333,6 +333,14 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     );
   });
 
+  it('accepts a human cancel over HTTP', async () => {
+    const item = await createItem();
+    const res = await transition(item, { stage: 'canceled' });
+    expect(res.status).toBe(200);
+    expect((await res.json()).result).toMatchObject({ status: 'accepted', stage: 'canceled' });
+    expect((await listItems())[0]?.stages).toEqual(['canceled']);
+  });
+
   it('returns typed stale without overwriting the winner', async () => {
     const item = await createItem();
     expect((await transition(item)).status).toBe(200);
@@ -644,6 +652,54 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(metrics.cycleTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
     expect(metrics.wip).toEqual([]);
     expect(metrics.agingWip).toEqual([]);
+    expect(metrics.stageAutomation).toEqual([]);
+  });
+
+  it('serves per-stage automation: automated triage pass vs human-approved planning', async () => {
+    // Human files the card, the rules engine runs triage (intake → triage →
+    // planning) through the governed path, then a human approves planning into done.
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    const service = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems });
+    const autoMove = (stage: 'triage' | 'planning', expectedRevision: number, identity: string) =>
+      service.transition({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: workItem.id,
+        board: 'work',
+        stage,
+        expectedRevision,
+        actor: { type: 'system', id: 'factory-rule-dispatcher' },
+        ingress: { type: 'rule', identity },
+        cause: 'auto_triage',
+      });
+    const triaged = await autoMove('triage', workItem.revision, 'auto-1');
+    expect(triaged.status).toBe('accepted');
+    const planned = await autoMove('planning', (triaged as { revision: number }).revision, 'auto-2');
+    expect(planned.status).toBe('accepted');
+    const approved = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
+      board: 'work',
+      stage: 'done',
+      expectedRevision: (planned as { revision: number }).revision,
+      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7',
+      cause: 'board_drag',
+    });
+    expect(approved.status).toBe(200);
+
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?days=7`);
+    expect(res.status).toBe(200);
+    const { metrics } = await res.json();
+
+    expect(metrics.stageAutomation).toEqual([
+      // Human-entered (creation), automation-exited → not automated.
+      { stage: 'intake', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+      // Automation-entered and -exited, first visit → clean automated pass, item is done.
+      { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 1, canceled: 0, reworked: 0, inFlight: 0 } },
+      // Automation-entered, human-exited → not automated.
+      { stage: 'planning', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+    ]);
+    // Global split matches: 4 entered stages, 2 by automation.
+    expect(metrics.transitions).toEqual({ human: 2, total: 4 });
   });
 });
 

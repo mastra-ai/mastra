@@ -87,7 +87,7 @@ async function resolveOrgTenant(
       response: c.json(
         {
           error: 'organization_required',
-          message: 'Linear intake requires a WorkOS organization. Personal accounts cannot connect Linear.',
+          message: 'Linear intake requires an organization. Personal accounts cannot connect Linear.',
         },
         403,
       ),
