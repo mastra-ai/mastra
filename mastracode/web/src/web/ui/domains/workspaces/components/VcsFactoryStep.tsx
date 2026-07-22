@@ -15,6 +15,8 @@ export interface VcsFactoryStepProps {
   githubRedirecting: boolean;
   mutationPending: boolean;
   mutationError: string | null;
+  /** Step subcopy; defaults to the onboarding ("first Factory") wording. */
+  description?: string;
   onConnect: () => void;
   onManageConnection: () => void;
   onSelectRepository: (repository: GithubRepo) => void;
@@ -25,6 +27,7 @@ export function VcsFactoryStep({
   githubRedirecting,
   mutationPending,
   mutationError,
+  description = 'Connect GitHub, then select the repository that will become your first Factory.',
   onConnect,
   onManageConnection,
   onSelectRepository,
@@ -40,7 +43,7 @@ export function VcsFactoryStep({
         Choose your codebase.
       </h1>
       <Txt as="p" variant="ui-lg" className="mx-auto mt-6 max-w-2xl leading-7 text-neutral3 sm:text-lg">
-        Connect GitHub, then select the repository that will become your first Factory.
+        {description}
       </Txt>
       <section
         aria-label="GitHub repository"

@@ -1,7 +1,6 @@
 export { DirectoryBrowser } from './components/DirectoryPicker';
 export { EmptyFactoryState } from './components/EmptyFactoryState';
 export { ConnectRepositoriesPanel } from './components/ConnectRepositoriesPanel';
-export { FactoriesPanel } from './components/FactoriesPanel';
 export { FactorySwitcher } from './components/FactorySwitcher';
 export { UserSessionsSection } from './components/UserSessionsSection';
 export { WorkspacesSection } from './components/WorkspacesSection';

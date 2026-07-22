@@ -14,6 +14,7 @@ import type { Factory, ServerFactory } from '../services/factories';
 import { factoryHomePath } from '../services/factoryPaths';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import type { GithubRepo } from '../services/github';
+import { FactorySetupShell } from './FactorySetupShell';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
@@ -124,57 +125,40 @@ export function EmptyFactoryState() {
   };
 
   return (
-    <main className="relative min-h-dvh overflow-hidden bg-surface1 text-neutral6">
-      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,color-mix(in_oklab,var(--accent1)_15%,transparent),transparent_34%)]" />
-      </div>
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-7xl items-center px-6 py-10 sm:px-10 lg:px-16">
-        <section className="mx-auto w-full max-w-3xl text-center">
-          <ol className="mb-8 flex justify-center gap-2" aria-label="Factory setup progress">
-            {(['initial', 'vcs', 'project-management'] as const).map((item, index) => (
-              <li
-                key={item}
-                aria-current={step === item ? 'step' : undefined}
-                className={`h-1.5 w-14 rounded-full ${index <= ['initial', 'vcs', 'project-management'].indexOf(step) ? 'bg-accent1' : 'bg-surface4'}`}
-              >
-                <span className="sr-only">Step {index + 1}</span>
-              </li>
-            ))}
-          </ol>
-          <div key={step} className="animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none">
-            {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
-            {step === 'vcs' && (
-              <VcsFactoryStep
-                connectingRepositoryId={connectingRepositoryId}
-                githubRedirecting={githubRedirecting}
-                mutationPending={createFactory.isPending || linkRepository.isPending}
-                mutationError={mutationError}
-                onConnect={() => {
-                  setGithubRedirecting(true);
-                  persistBeforeRedirect('vcs');
-                  connectGithub(baseUrl);
-                }}
-                onManageConnection={() => {
-                  persistBeforeRedirect('vcs');
-                  manageGithubConnection(baseUrl);
-                }}
-                onSelectRepository={repo => void chooseRepository(repo)}
-              />
-            )}
-            {step === 'project-management' && (
-              <ProjectManagementFactoryStep
-                completionError={completionError}
-                finishing={finishing}
-                onConnect={() => {
-                  persistBeforeRedirect('project-management');
-                  connectLinear(baseUrl);
-                }}
-                onFinish={() => void finish()}
-              />
-            )}
-          </div>
-        </section>
-      </div>
-    </main>
+    <FactorySetupShell>
+      <FactorySetupShell.Progress steps={['initial', 'vcs', 'project-management']} current={step} />
+      <FactorySetupShell.Step stepKey={step}>
+        {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
+        {step === 'vcs' && (
+          <VcsFactoryStep
+            connectingRepositoryId={connectingRepositoryId}
+            githubRedirecting={githubRedirecting}
+            mutationPending={createFactory.isPending || linkRepository.isPending}
+            mutationError={mutationError}
+            onConnect={() => {
+              setGithubRedirecting(true);
+              persistBeforeRedirect('vcs');
+              connectGithub(baseUrl);
+            }}
+            onManageConnection={() => {
+              persistBeforeRedirect('vcs');
+              manageGithubConnection(baseUrl);
+            }}
+            onSelectRepository={repo => void chooseRepository(repo)}
+          />
+        )}
+        {step === 'project-management' && (
+          <ProjectManagementFactoryStep
+            completionError={completionError}
+            finishing={finishing}
+            onConnect={() => {
+              persistBeforeRedirect('project-management');
+              connectLinear(baseUrl);
+            }}
+            onFinish={() => void finish()}
+          />
+        )}
+      </FactorySetupShell.Step>
+    </FactorySetupShell>
   );
 }

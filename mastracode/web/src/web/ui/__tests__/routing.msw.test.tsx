@@ -36,6 +36,7 @@ const THREAD_ID = 'thread-test';
 
 afterEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   vi.mocked(redirectToLogin).mockClear();
 });
 
@@ -194,14 +195,23 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByText('Build software with a Factory that knows your work.')).not.toBeInTheDocument();
   });
 
-  it('given auth is disabled and a factory exists, when visiting /factories/create, then the Create Factory page renders', async () => {
+  it('given auth is disabled and a factory exists, when visiting /factories/create, then the full-screen wizard renders without the app shell', async () => {
     const { router } = renderRoutes('/factories/create', AUTH_DISABLED);
 
-    expect(await screen.findByRole('region', { name: 'Create Factory' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Name your new Factory.' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/factories/create');
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Select factory' })).toHaveTextContent('MastraCode Test');
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Select factory' })).not.toBeInTheDocument();
+  });
+
+  it('given a create flow is mid-way, when an OAuth callback lands on /, then the wizard resumes with the search intact', async () => {
+    sessionStorage.setItem('mastracode.factory-create.step', 'vcs');
+    sessionStorage.setItem('mastracode.factory-create.factory-id', 'project-test');
+    const { router } = renderRoutes('/?github=connected', AUTH_DISABLED);
+
+    await expectPathname(router, '/factories/create');
+    await waitFor(() => expect(router.state.location.search).toBe('?github=connected'));
   });
 
   it('given auth is disabled, when visiting /, then the user lands on the first factory draft composer', async () => {

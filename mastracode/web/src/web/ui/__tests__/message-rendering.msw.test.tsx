@@ -17,7 +17,6 @@ import { SettingsPage } from '../pages/SettingsPage';
 import { ThreadPage } from '../pages/ThreadPage';
 import type { Factory } from '../domains/workspaces';
 import { ActiveFactoryProvider } from '../domains/workspaces/context/ActiveFactoryProvider';
-import { CreateFactoryLayout } from '../pages/CreateFactoryLayout';
 import { CreateFactoryPage } from '../pages/CreateFactoryPage';
 
 /**
@@ -54,11 +53,8 @@ function renderChat(initialEntry = '/factories/project-test/threads/thread-test'
           },
         ],
       },
-      {
-        path: '/factories/create',
-        element: <CreateFactoryLayout />,
-        children: [{ element: <Chat />, children: [{ index: true, element: <CreateFactoryPage /> }] }],
-      },
+      // Full-screen wizard outside the app shell (no Chat mount).
+      { path: '/factories/create', element: <CreateFactoryPage /> },
     ],
     { initialEntries: [initialEntry] },
   );
@@ -547,19 +543,15 @@ describe('MastraCode message rendering', () => {
     expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
     await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
 
-    await act(() =>
-      router.navigate('/factories/create', { state: { from: '/factories/project-test/threads/thread-test' } }),
-    );
+    await act(() => router.navigate('/factories/create'));
 
-    // Create Factory is a dedicated page inside the persistent app shell.
-    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
-    expect(factorySurface.closest('main')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+    // Create Factory is a full-screen wizard outside the app shell.
+    expect(await screen.findByRole('heading', { name: 'Name your new Factory.' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
 
     await stream.emit();
-    // Close navigates back to the thread page the user came from.
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    // Back navigates to the thread page the user came from (history -1).
+    await user.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(await screen.findByText('Streaming while factory creation is open')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
