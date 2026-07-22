@@ -451,7 +451,34 @@ describe('PlatformGithubIntegration', () => {
     });
     expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
       repositories: ['app'],
-      permissions: { contents: 'write' },
+      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+    });
+  });
+
+  it('requests all write permissions when minting an installation token', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        json({
+          repositories: [
+            {
+              id: 101,
+              owner: 'acme',
+              name: 'app',
+              fullName: 'acme/app',
+              private: true,
+              defaultBranch: 'main',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(json({ token: 'ghs_installation', expiresAt: '2026-07-21T18:00:00Z' }));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(integration.mintInstallationToken(7)).resolves.toBe('ghs_installation');
+    expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body))).toEqual({
+      repositories: ['app'],
+      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
     });
   });
 
