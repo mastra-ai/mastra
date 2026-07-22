@@ -145,6 +145,18 @@ function useOverviewHandlers({ workItems, activityThreads = [], thresholds }: Ov
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
+    http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/ensure`, () => {
+      const done = {
+        resourceId: RESOURCE_ID,
+        factoryProjectId: FACTORY_PROJECT_ID,
+        projectRepositoryId: PROJECT_REPOSITORY_ID,
+        sandboxId: 'sbx-test',
+        sandboxWorkdir: '/sandbox/mastra',
+      };
+      return new HttpResponse(`event: done\ndata: ${JSON.stringify(done)}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
         config: { github: { enabled: true, sourceIds: [] }, linear: { enabled: false, sourceIds: [] } },
@@ -173,11 +185,10 @@ function useOverviewHandlers({ workItems, activityThreads = [], thresholds }: Ov
   );
 }
 
-function renderAt(initialEntry: string, project: Factory = githubProject) {
+function renderAt(project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${project.id}/overview`] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -197,7 +208,7 @@ describe('Factory Overview page', () => {
         inStage('wi-5', 'Intake card', 'intake', 5 * HOUR_S), // hidden: intake not charted
       ],
     });
-    renderAt('/factory/overview');
+    renderAt();
 
     expect(await screen.findByRole('heading', { name: 'Queue health' })).toBeInTheDocument();
 
@@ -222,7 +233,7 @@ describe('Factory Overview page', () => {
         inStage('wi-3', 'Another aging', 'triage', 12 * HOUR_S),
       ],
     });
-    renderAt('/factory/overview');
+    renderAt();
 
     const aging = await screen.findByRole('button', { name: 'Triage Aging: 2' });
     await user.click(aging);
@@ -244,7 +255,7 @@ describe('Factory Overview page', () => {
       ],
       activityThreads: [{ id: 'thread-run', tags: { projectPath: WORKTREE }, state: 'active' }],
     });
-    renderAt('/factory/overview');
+    renderAt();
 
     // The execute bar carries the stripe overlay for its one active item.
     await waitFor(() => expect(screen.getByRole('img', { name: 'Building: 1 active' })).toBeInTheDocument());
@@ -253,7 +264,7 @@ describe('Factory Overview page', () => {
 
   it('given a local project, when visiting Overview, then the local-folder notice renders instead of the chart', async () => {
     useOverviewHandlers({ workItems: [] });
-    renderAt('/factory/overview', localProject);
+    renderAt(localProject);
 
     expect(await screen.findByText(/available for server-backed Factories/)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Queue health' })).not.toBeInTheDocument();

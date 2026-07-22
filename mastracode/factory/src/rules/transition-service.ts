@@ -77,6 +77,17 @@ function workItemSource(source: ExternalWorkItemSource | null) {
   return source.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
 }
 
+function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string {
+  if (board === 'review') return 'review';
+  if (stage === 'triage') return 'triage';
+  if (stage === 'planning') return 'plan';
+  return 'work';
+}
+
+function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRuleStage): string {
+  return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
+}
+
 function ruleFailure(error: unknown): { code: FactoryRuleRejectionCode; reason: string } {
   return {
     code: 'rule_error',
@@ -204,9 +215,27 @@ export class FactoryTransitionService {
             }
             decisions.push(decision);
           }
+          const validated = validateFactoryRuleDecisions(decisions);
+          if (request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage) {
+            const message = stageTransitionMessage(fromStage, request.stage);
+            const skill = validated.find(decision => decision.type === 'invokeSkill');
+            if (skill) {
+              skill.precedingMessage = message;
+            } else {
+              validated.unshift({
+                type: 'sendMessage',
+                idempotencyKey: `factory-stage:${transitionId}`,
+                role: roleForStage(request.board, request.stage),
+                message,
+                priority: 'urgent',
+                idleBehavior: 'wake',
+                prepareBinding: true,
+              });
+            }
+          }
           return {
             outcome: 'accepted' as const,
-            decisions: validateFactoryRuleDecisions(decisions) as unknown as Record<string, unknown>[],
+            decisions: validateFactoryRuleDecisions(validated) as unknown as Record<string, unknown>[],
           };
         })(),
         this.#timeoutMs,

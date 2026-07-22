@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { MainSidebarProvider } from './main-sidebar-context';
@@ -170,6 +170,38 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     const popup = await waitFor(getTooltipPopup);
 
     expect(popup.getAttribute('role')).toBe('tooltip');
+  });
+});
+
+describe('MainSidebarNavLink custom rows', () => {
+  it('keeps the rendered item and trailing action independently interactive', () => {
+    const onOpen = vi.fn();
+    const onDelete = vi.fn();
+
+    render(
+      <ul>
+        <MainSidebarNavLink
+          link={{ name: 'Feature work', url: '/sessions/feature-work' }}
+          size="sm"
+          render={
+            <button type="button" onClick={onOpen}>
+              Feature work
+            </button>
+          }
+          action={
+            <button type="button" onClick={onDelete}>
+              Delete session
+            </button>
+          }
+        />
+      </ul>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Feature work' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete session' }));
+
+    expect(onOpen).toHaveBeenCalledOnce();
+    expect(onDelete).toHaveBeenCalledOnce();
   });
 });
 

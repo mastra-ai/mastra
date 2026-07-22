@@ -6,7 +6,6 @@ import { Navigate, useLocation } from 'react-router';
 import { Sidebar } from '../Sidebar';
 import { ChatLayout } from '../ui/ChatLayout';
 import { FolderIcon } from '../ui/icons';
-import { EmptyFactoryState } from '../domains/workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
 import { isLocalFactory, isServerFactory, selectedRepository } from '../domains/workspaces/services/factories';
 import type { Factory } from '../domains/workspaces/services/factories';
@@ -23,12 +22,11 @@ const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 export function NewPage() {
   const { activeFactory } = useActiveFactoryContext();
 
-  if (!activeFactory) {
-    return <EmptyFactoryState />;
-  }
+  // The factory layout guarantees a resolved factory before rendering children.
+  if (!activeFactory) return null;
 
   if (isServerFactory(activeFactory)) {
-    return <Navigate to="/factory/work" replace />;
+    return <Navigate to={`/factories/${activeFactory.id}/work`} replace />;
   }
   return (
     <ChatLayout

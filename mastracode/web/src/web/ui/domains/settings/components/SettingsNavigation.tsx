@@ -6,6 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
 
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
@@ -62,6 +63,7 @@ const SETTINGS_SECTIONS: {
 
 export function SettingsNavigation() {
   const section = useSettingsSection();
+  const { activeFactory } = useActiveFactoryContext();
   const location = useLocation();
   const closeSettings = useCloseSettings();
   const { state } = useMainSidebar();
@@ -109,7 +111,7 @@ export function SettingsNavigation() {
                 link={{ name: label, url: '#', icon: <Icon /> }}
               >
                 <Link
-                  to={settingsSectionPath(id)}
+                  to={settingsSectionPath(activeFactory!.id, id)}
                   state={location.state}
                   aria-label={label}
                   aria-current={isActive ? 'page' : undefined}

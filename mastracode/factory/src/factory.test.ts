@@ -319,6 +319,17 @@ describe('MastraFactory.prepare', () => {
     } satisfies AuthInitContext);
   });
 
+  it('defaults publicUrl to the local Factory UI origin', async () => {
+    const auth = fakeProvider();
+    const storage = fakeStorage();
+    await prepareFactory({ auth, storage });
+    expect(auth.init).toHaveBeenCalledExactlyOnceWith({
+      database: storage.authDatabase(),
+      publicUrl: 'http://localhost:5173',
+      allowedOrigins: [],
+    } satisfies AuthInitContext);
+  });
+
   it('surfaces provider init failures at prepare()', async () => {
     const auth = fakeProvider({ init: vi.fn(async () => Promise.reject(new Error('provider misconfigured'))) });
     const factory = new MastraFactory({ storage: fakeStorage(), auth });
@@ -390,6 +401,29 @@ describe('MastraFactory.prepare', () => {
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
     expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
+  });
+
+  it('passes the resolved auth provider to both server.auth and studio.auth', async () => {
+    // Deploys must authenticate BOTH plain API callers (server.auth) and
+    // Studio requests routed via `x-mastra-client-type: studio` (studio.auth).
+    const provider = fakeProvider();
+    const factory = new MastraFactory({ storage: fakeStorage(), auth: provider });
+    const args = (await factory.prepare()) as { studio?: { auth?: unknown } };
+    expect(args.studio?.auth).toBe(provider);
+
+    const config = prepareMock.mock.calls[0]![0];
+    const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
+    expect(serverConfig.auth).toBe(provider);
+  });
+
+  it('omits server.auth and studio.auth when auth is explicitly disabled (auth: null)', async () => {
+    const factory = new MastraFactory({ storage: fakeStorage(), auth: null });
+    const args = (await factory.prepare()) as { studio?: unknown };
+    expect(args.studio).toBeUndefined();
+
+    const config = prepareMock.mock.calls[0]![0];
+    const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
+    expect(serverConfig.auth).toBeUndefined();
   });
 
   it('registers the per-tenant credential resolver when auth is configured', async () => {

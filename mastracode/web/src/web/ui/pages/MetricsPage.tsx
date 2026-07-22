@@ -1,5 +1,5 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { DateRangeTimeline, getDateRangeBounds } from '@mastra/playground-ui/components/DateRangeTimeline';
+import type { DateRangeValue } from '@mastra/playground-ui/components/DateRangeTimeline';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -16,20 +16,34 @@ import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell
 import type { FactoryMetrics } from '../domains/factory/services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
 
-const WINDOW_OPTIONS = [
-  { value: 7, label: '7d' },
-  { value: 30, label: '30d' },
-  { value: 90, label: '90d' },
-] as const;
+const DAY_MS = 86_400_000;
+const EMPTY_BOARD_LOOKBACK_DAYS = 90;
+/** Mirrors the server's bounded aggregation window. */
+const MAX_METRICS_WINDOW_DAYS = 366;
 
-type WindowDays = (typeof WINDOW_OPTIONS)[number]['value'];
+function shiftUtcDay(day: string, offset: number): string {
+  return new Date(Date.parse(`${day}T00:00:00.000Z`) + offset * DAY_MS).toISOString().slice(0, 10);
+}
+
+function inclusiveRangeDays(range: DateRangeValue): number {
+  return Math.floor((Date.parse(`${range.to}T00:00:00.000Z`) - Date.parse(`${range.from}T00:00:00.000Z`)) / DAY_MS) + 1;
+}
+
+function clampRangeSpan(range: DateRangeValue, maximumDays: number): DateRangeValue {
+  if (inclusiveRangeDays(range) <= maximumDays) return range;
+  return { from: shiftUtcDay(range.to, -(maximumDays - 1)), to: range.to };
+}
+
+function defaultRange(today: string): DateRangeValue {
+  return { from: shiftUtcDay(today, -29), to: today };
+}
 
 const THROUGHPUT_SERIES = [{ dataKey: 'done', label: 'Done per day', color: '#34d399' }];
 
 const SOURCE_LABELS: Record<string, string> = {
-  'github-issue': 'GitHub issues',
-  'github-pr': 'GitHub PRs',
-  'linear-issue': 'Linear issues',
+  'github:issue': 'GitHub issues',
+  'github:pull-request': 'GitHub PRs',
+  'linear:issue': 'Linear issues',
   manual: 'Manual',
 };
 
@@ -56,38 +70,41 @@ export function MetricsPage() {
 }
 
 function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const [days, setDays] = useState<WindowDays>(30);
-  const metricsQuery = useFactoryMetrics(factoryProjectId, days);
+  const [today] = useState(() => new Date().toISOString().slice(0, 10));
+  const [range, setRange] = useState<DateRangeValue>(() => defaultRange(today));
+  const metricsQuery = useFactoryMetrics(factoryProjectId, range);
   const agentsRunning = useAgentsRunningCount();
 
   if (metricsQuery.isError) {
-    return <Notice variant="destructive">{(metricsQuery.error as Error).message}</Notice>;
+    const message = metricsQuery.error instanceof Error ? metricsQuery.error.message : 'Failed to load metrics';
+    return <Notice variant="destructive">{message}</Notice>;
   }
   const metrics = metricsQuery.data;
+  // Prefer the server's count so the label stays paired with the rendered data
+  // (placeholderData keeps the old range's metrics during a refetch).
+  const windowDays = metrics?.windowDays ?? inclusiveRangeDays(range);
+
+  // Keep the selected range inside the domain until the board's earliest item is known.
+  const earliestDay = metrics?.earliestItemAt
+    ? metrics.earliestItemAt.slice(0, 10)
+    : shiftUtcDay(today, -(EMPTY_BOARD_LOOKBACK_DAYS - 1));
+  const bounds = getDateRangeBounds(earliestDay < range.from ? earliestDay : range.from, today);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-      <div className="flex items-center justify-between">
-        <ButtonsGroup spacing="close" role="group" aria-label="Metrics window">
-          {WINDOW_OPTIONS.map(option => (
-            <Button
-              key={option.value}
-              variant={days === option.value ? 'primary' : 'outline'}
-              size="sm"
-              aria-pressed={days === option.value}
-              onClick={() => setDays(option.value)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </ButtonsGroup>
-      </div>
+      <DateRangeTimeline
+        key={`${bounds.min}:${bounds.max}`}
+        value={range}
+        min={bounds.min}
+        max={bounds.max}
+        onCommit={value => setRange(clampRangeSpan(value, MAX_METRICS_WINDOW_DAYS))}
+      />
 
       {!metrics ? null : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <StatCard
-              label={`Completed (${days}d)`}
+              label="Completed"
               value={String(metrics.throughput.reduce((sum, point) => sum + point.count, 0))}
             />
             <StatCard
@@ -98,7 +115,7 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
             <StatCard label="In flight" value={String(metrics.wipTotal)} />
             <StatCard label="Agents running" value={String(agentsRunning)} />
             <StatCard
-              label={`Automated moves (${days}d)`}
+              label={`Automated moves (${windowDays}d)`}
               value={
                 metrics.transitions.total === 0
                   ? EM_DASH
@@ -113,6 +130,8 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
               data={metrics.throughput.map(point => ({ time: point.date, done: point.count }))}
               series={THROUGHPUT_SERIES}
               height={180}
+              xAxisInterval="preserveStartEnd"
+              xAxisMinTickGap={40}
             />
           </Section>
 

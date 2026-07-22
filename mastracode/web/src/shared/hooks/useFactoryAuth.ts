@@ -22,5 +22,6 @@ export function useFactoryAuth() {
   return useQuery({
     queryKey: queryKeys.factoryAuth(),
     queryFn: authDisabled ? () => Promise.resolve(AUTH_DISABLED_STATE) : () => fetchAuthState(baseUrl),
+    refetchInterval: query => (query.state.status === 'error' ? 2_000 : false),
   });
 }

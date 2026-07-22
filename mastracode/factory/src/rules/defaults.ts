@@ -87,6 +87,13 @@ function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
   } as const;
 }
 
+function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: string): boolean {
+  if (!createdAt) return false;
+  const sourceCreatedAt = Date.parse(createdAt);
+  const projectCreatedAt = Date.parse(factoryCreatedAt);
+  return Number.isFinite(sourceCreatedAt) && Number.isFinite(projectCreatedAt) && sourceCreatedAt > projectCreatedAt;
+}
+
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
   return {
@@ -97,7 +104,10 @@ function issueOpened(context: FactoryGithubRuleContext) {
     sourceKey: `github-issue:${context.issue.number}`,
     title: context.issue.title,
     url: context.issue.url,
-    stage: trustedGithubActor(context) ? 'triage' : 'intake',
+    stage:
+      trustedGithubActor(context) && createdAfterFactory(context.issue.createdAt, context.factory.createdAt)
+        ? 'triage'
+        : 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
@@ -115,7 +125,10 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     sourceKey: `github-pr:${context.pullRequest.number}`,
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage: trustedGithubActor(context) ? 'review' : 'intake',
+    stage:
+      trustedGithubActor(context) && createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt)
+        ? 'review'
+        : 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,

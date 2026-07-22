@@ -1,5 +1,20 @@
 # @mastra/core
 
+## 1.52.0-alpha.12
+
+### Patch Changes
+
+- dependencies updates: ([#19776](https://github.com/mastra-ai/mastra/pull/19776))
+  - Updated dependency [`chat@^4.34.0` ↗︎](https://www.npmjs.com/package/chat/v/4.34.0) (from `^4.29.0`, in `dependencies`)
+
+- Added a public ensureReady() method to FactoryStorageDomain so consumers can initialize a storage domain without going through a global registry. ([#19866](https://github.com/mastra-ai/mastra/pull/19866))
+
+- Fixed durable agent runs continuing after a tool call was denied by authorization. The run now fails immediately instead of letting the model retry the denied tool. ([#19886](https://github.com/mastra-ai/mastra/pull/19886))
+
+- Fixed Code Mode executions failing when programs return large results or error messages. ([#19878](https://github.com/mastra-ai/mastra/pull/19878))
+
+- Moved the server config routes and provider credential helpers into @mastra/factory as a reusable ConfigRoutes class. Route handlers now receive their auth checks through an injected RouteAuth seam and storage domains through constructor options, so hosts other than the Mastra Code web app can mount the same routes. ([#19866](https://github.com/mastra-ai/mastra/pull/19866))
+
 ## 1.52.0-alpha.11
 
 ### Minor Changes

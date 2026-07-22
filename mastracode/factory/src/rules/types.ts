@@ -89,12 +89,14 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   itemRevision?: number;
   event: FactoryGithubEventName;
   deliveryId: string;
+  factory: { createdAt: string };
   repository: { id: number; fullName: string };
-  issue?: { number: number; title: string; url: string };
+  issue?: { number: number; title: string; url: string; createdAt?: string };
   pullRequest?: {
     number: number;
     title: string;
     url: string;
+    createdAt?: string;
     state: 'open' | 'closed';
     merged: boolean;
     headBranch: string;
@@ -207,12 +209,16 @@ export interface FactoryInvokeSkillDecision extends FactoryCommitDecisionBase {
   role: string;
   skillName: string;
   arguments?: string;
+  precedingMessage?: string;
 }
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   type: 'sendMessage';
   role: string;
   message: string;
+  priority?: 'medium' | 'high' | 'urgent';
+  idleBehavior?: 'persist' | 'wake';
+  prepareBinding?: boolean;
 }
 
 export interface FactoryNotifyDecision extends FactoryCommitDecisionBase {

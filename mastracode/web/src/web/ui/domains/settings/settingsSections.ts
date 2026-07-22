@@ -15,8 +15,6 @@ export function isSettingsSection(value: unknown): value is SettingsSection {
   return typeof value === 'string' && value in SETTINGS_SECTION_LABELS;
 }
 
-export function settingsSectionPath(section: SettingsSection): string {
-  return `/settings/${section}`;
+export function settingsSectionPath(factoryId: string, section: SettingsSection): string {
+  return `/factories/${factoryId}/settings/${section}`;
 }
-
-export const DEFAULT_SETTINGS_PATH = settingsSectionPath('general');

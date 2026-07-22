@@ -299,6 +299,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           github: githubIntegration,
           sourceControl: githubStorage,
           integrationStorage: deps.integrationStorage.forIntegration('github'),
+          projects: deps.domains.projects,
           storage: workItems,
           rules: deps.rules,
         })
