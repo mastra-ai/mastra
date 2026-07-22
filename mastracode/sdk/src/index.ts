@@ -671,6 +671,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       new ProviderHistoryCompat(),
     ],
     errorProcessors: [
+      // ProviderHistoryCompat must run before StreamErrorRetryProcessor: both react to
+      // HTTP 400s, but ProviderHistoryCompat repairs the incompatible history (e.g.
+      // sanitizing tool-call IDs) before retrying, while StreamErrorRetryProcessor's
+      // isBadRequestError matcher retries the identical request. Error processors
+      // short-circuit on the first `retry: true`, so a blind retry first would resend
+      // the broken history and fail again.
+      new ProviderHistoryCompat(),
       new StreamErrorRetryProcessor({
         matchers: [
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
@@ -686,7 +693,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         ],
       }),
       new PrefillErrorHandler(),
-      new ProviderHistoryCompat(),
     ],
   });
 

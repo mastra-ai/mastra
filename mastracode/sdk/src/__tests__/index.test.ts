@@ -753,7 +753,7 @@ describe('createMastraCode', () => {
     expect(controllerSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
-  it('runs stream error retries before provider-specific error recovery processors', async () => {
+  it('runs provider history compat before stream error retries so bad requests are repaired, not blindly retried', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -762,9 +762,9 @@ describe('createMastraCode', () => {
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
       { errorProcessors?: Array<{ id?: string }> } | undefined;
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
       'stream-error-retry-processor',
       'prefill-error-handler',
-      'provider-history-compat',
     ]);
   });
 
