@@ -9,8 +9,7 @@
  *   2. `.mastra/output/package.json` — the deploy manifest exists and
  *      has no `link:` / `workspace:` / `@internal/` specs (would break
  *      `npm install` at deploy time)
- *   3. SPA `index.html` — present in `ui/` or `public/ui/` under the
- *      output dir
+ *   3. SPA `index.html` — present in `factory/` under the output dir
  *   4. Factory `SKILL.md` files — packaged alongside the Web server bundle
  */
 import fs from 'node:fs';
@@ -59,10 +58,9 @@ if (!fs.existsSync(outputPkgPath)) {
 }
 
 // 3. SPA
-const spaCandidates = [path.join(outputDir, 'ui', 'index.html'), path.join(outputDir, 'public', 'ui', 'index.html')];
-const spaPath = spaCandidates.find(p => fs.existsSync(p));
-if (!spaPath) {
-  fail('SPA index.html not found in .mastra/output/{ui,public/ui}/ — run `pnpm web:build` (includes vite build)');
+const spaPath = path.join(outputDir, 'factory', 'index.html');
+if (!fs.existsSync(spaPath)) {
+  fail('SPA index.html not found in .mastra/output/factory/ — run `pnpm web:build` (includes vite build)');
 } else {
   ok(`SPA (${path.relative(outputDir, spaPath)})`);
 }

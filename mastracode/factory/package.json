@@ -30,6 +30,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
+    "smoke:dist": "node --input-type=module -e \"import('./dist/index.js').then(() => console.log('dist import ok')).catch(e => { console.error(e.message); process.exit(1); })\"",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint ."
