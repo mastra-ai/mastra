@@ -214,8 +214,12 @@ function normalizeWorkflowStep(step: unknown): unknown {
     };
   }
 
-  if (step.type === 'parallel' && 'steps' in step && Array.isArray(step.steps)) {
+  if ((step.type === 'parallel' || step.type === 'conditional') && 'steps' in step && Array.isArray(step.steps)) {
     return { ...step, steps: step.steps.map(normalizeWorkflowStep) };
+  }
+
+  if ((step.type === 'foreach' || step.type === 'loop') && 'step' in step) {
+    return { ...step, step: normalizeWorkflowStep(step.step) };
   }
 
   return step;

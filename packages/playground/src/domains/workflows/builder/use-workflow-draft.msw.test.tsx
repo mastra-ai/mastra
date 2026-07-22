@@ -93,6 +93,42 @@ describe('workflow draft save orchestration', () => {
     });
   });
 
+  describe('when a loaded workflow arrives before its catalogs', () => {
+    it('revalidates the untouched loaded state after catalogs settle', () => {
+      const { result, rerender } = renderHook(({ tools }) => useWorkflowDraft(definition, definition.id, { tools }), {
+        initialProps: { tools: {} },
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.lifecycle).toBe('constructing');
+
+      rerender({ tools: { 'report-data': {} } });
+
+      expect(result.current.lifecycle).toBe('ready');
+      expect(result.current.isReady).toBe(true);
+    });
+
+    it('revalidates when a catalog schema changes under the same ID', () => {
+      const { result, rerender } = renderHook(
+        ({ inputSchema }) =>
+          useWorkflowDraft(definition, definition.id, {
+            tools: { 'report-data': { inputSchema } },
+          }),
+        {
+          initialProps: { inputSchema: { type: 'string' } },
+          wrapper: createWrapper(),
+        },
+      );
+
+      const initialState = result.current.authoringState;
+
+      rerender({ inputSchema: { type: 'object' } });
+
+      expect(result.current.authoringState).not.toBe(initialState);
+      expect(result.current.lifecycle).toBe('ready');
+    });
+  });
+
   describe('when save has reserved a ready revision', () => {
     it('persists the immutable reserved snapshot while rejecting an edit', async () => {
       let resolveRequest: (() => void) | undefined;

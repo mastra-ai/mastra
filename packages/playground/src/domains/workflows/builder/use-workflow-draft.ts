@@ -51,13 +51,33 @@ function initializeAuthoringState(
     : createWorkflowDraftAuthoringState(initialId);
 }
 
+function createValidationContextKey(validationContext?: WorkflowDraftValidationContext) {
+  if (!validationContext) return 'pending';
+  const catalogEntries = (
+    catalog?: Record<
+      string,
+      { inputSchema?: WorkflowDraft['inputSchema']; outputSchema?: WorkflowDraft['outputSchema'] }
+    >,
+  ) =>
+    Object.entries(catalog ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([id, schemas]) => [id, schemas]);
+  return JSON.stringify({
+    agents: catalogEntries(validationContext.agents),
+    tools: catalogEntries(validationContext.tools),
+    workflowCatalog: validationContext.workflowCatalog,
+    workflows: catalogEntries(validationContext.workflows),
+  });
+}
+
 export function useWorkflowDraft(
   initialDefinition: StoredWorkflowDefinition | undefined,
   initialId: string,
   validationContext?: WorkflowDraftValidationContext,
 ) {
   const identity = initialDefinition?.id ?? initialId;
-  const initializationKey = `${identity}:${initialDefinition ? 'loaded' : 'new'}`;
+  const validationContextKey = createValidationContextKey(validationContext);
+  const initializationKey = `${identity}:${initialDefinition ? `loaded:${validationContextKey}` : 'new'}`;
   const [authoringState, setAuthoringState] = useState(() =>
     initializeAuthoringState(initialDefinition, initialId, validationContext),
   );
@@ -83,6 +103,7 @@ export function useWorkflowDraft(
   useLayoutEffect(() => {
     if (initializationKeyRef.current === initializationKey) return;
     initializationKeyRef.current = initializationKey;
+    if (identityRef.current === identity && stateRef.current.revision > 0) return;
     identityRef.current = identity;
     replaceState(initializeAuthoringState(initialDefinition, initialId, validationContext));
   }, [identity, initialDefinition, initialId, initializationKey, replaceState, validationContext]);

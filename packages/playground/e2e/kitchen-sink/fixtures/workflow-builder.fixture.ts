@@ -45,16 +45,24 @@ export const workflowBuilderLifecycleFixture = [
       'workflow-checkpoint',
       'checkpoint-workflow-draft',
       {
-        definition: {
-          id: 'support-intake-workflow',
-          description: 'Processes a support request with the weather agent.',
-          inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
-          outputSchema: { type: 'string' },
-          graph: [{ type: 'agent', id: 'answer-request', agentId: 'weatherAgent' }],
+        id: 'support-intake-workflow',
+        description: 'Processes a support request into a deterministic response.',
+        inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
+        outputSchema: {
+          type: 'object',
+          properties: { response: { type: 'string' } },
+          required: ['response'],
         },
+        graph: [
+          {
+            type: 'mapping',
+            id: 'answer-request',
+            mapConfig: { response: { template: '${inputData.prompt}' } },
+          },
+        ],
       },
     ],
+    ['workflow-finalize', 'finalize-workflow-draft', { expectedRevision: 1 }],
   ]),
-  toolCallTurn([['workflow-finalize', 'finalize-workflow-draft', { expectedRevision: 1 }]]),
-  stopTurn('Done — I created support-intake-workflow with one agent step.'),
+  stopTurn('Done — I created support-intake-workflow with one mapping step.'),
 ];

@@ -25,12 +25,15 @@ test.describe('Persisted Workflow Builder', () => {
       await page.getByTestId('workflow-builder-conversation-input').fill('Create a support intake workflow.');
       await page.getByTestId('workflow-builder-conversation-submit').click();
 
-      await expect(page.getByText(`Done — I created ${workflowId} with one agent step.`)).toBeVisible({
+      await expect(page.getByText(`Done — I created ${workflowId} with one mapping step.`)).toBeVisible({
         timeout: 30_000,
       });
       await expect(page.getByText('Ready to save')).toBeVisible();
       await expect(page.getByTestId('workflow-definition-graph')).toContainText('answer-request');
-      await expect(page.getByTestId('agent-builder-chat-generic-tool')).toContainText('Completed');
+      await expect(page.getByTestId('agent-builder-chat-generic-tool')).toContainText([
+        'Completed checkpoint-workflow-draft',
+        'Completed finalize-workflow-draft',
+      ]);
 
       await page.getByRole('button', { name: 'Save', exact: true }).click();
       await page.waitForURL(`/workflow-builder/${workflowId}`);
@@ -38,12 +41,10 @@ test.describe('Persisted Workflow Builder', () => {
 
       await page.reload();
       await expect(page.getByRole('heading', { name: workflowId })).toBeVisible();
-      await expect(page.getByTestId('workflow-definition-graph')).toContainText('weatherAgent');
+      await expect(page.getByTestId('workflow-definition-graph')).toContainText('mapping');
 
       await page.getByRole('button', { name: 'Run', exact: true }).click();
       await page.waitForURL(`/workflows/${workflowId}/graph`);
-      await selectFixture(page, 'text-stream');
-      await page.reload();
 
       await page.getByRole('textbox', { name: 'Prompt' }).fill('Describe the weather in New York');
       await page.getByRole('button', { name: 'Run', exact: true }).click();
@@ -57,7 +58,7 @@ test.describe('Persisted Workflow Builder', () => {
 
       await page.goto(`/workflow-builder/${workflowId}`);
       await page.getByRole('button', { name: 'Delete', exact: true }).click();
-      await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
       await page.waitForURL('/workflow-builder');
       await expect(page.getByText('No persisted workflows yet')).toBeVisible();
     });

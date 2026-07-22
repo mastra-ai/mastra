@@ -131,6 +131,29 @@ describe('workflow draft client tools', () => {
     });
   });
 
+  describe('when a targeted edit contains nested provider aliases', () => {
+    it.each([
+      { type: 'foreach', step: { type: 'agent', id: 'foreach-agent', agent: 'summary-agent' } },
+      {
+        type: 'conditional',
+        steps: [{ type: 'agent', id: 'conditional-agent', agent: 'summary-agent' }],
+        predicates: [{ op: 'exists', path: 'inputData.value' }],
+      },
+      {
+        type: 'loop',
+        step: { type: 'mapping', id: 'loop-map', output: { value: 'ok' } },
+        loopType: 'dowhile',
+        predicate: { op: 'truthy', value: { path: 'inputData.continue' } },
+      },
+    ])('normalizes aliases recursively for $type entries', async step => {
+      const store = createStore();
+
+      const result = await executeTool(store.tools['add-workflow-step'], { step });
+
+      expect(result).toMatchObject({ success: true, revision: 1 });
+    });
+  });
+
   describe('when a previous submission is superseded', () => {
     it('rejects its tool result without mutating the current draft', async () => {
       let isCurrent = false;

@@ -126,7 +126,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
 
   const handleRun = async () => {
     try {
-      if (access.canWrite) {
+      if (access.canWrite && workflowDraft.isReady) {
         const saved = await workflowDraft.save();
         rememberWorkflowConversationThread(saved.id, threadId);
       }
