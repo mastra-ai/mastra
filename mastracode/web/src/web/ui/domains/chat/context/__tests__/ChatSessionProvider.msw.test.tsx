@@ -9,10 +9,10 @@
 import type {
   AgentControllerEvent,
   AgentControllerSessionState,
+  MastraDBMessage,
   PermissionPolicy,
   PermissionRules,
 } from '@mastra/client-js';
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { Profiler } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -66,22 +66,22 @@ const project: Factory = {
   id: 'project-test',
   name: 'MastraCode Test',
   resourceId: RESOURCE_ID,
+  binding: { kind: 'local', path: '/tmp/mastracode-test' },
   createdAt: 1,
-  binding: {
-    kind: 'local',
-    path: '/tmp/mastracode-test',
-  },
 };
 
 const nextProject: Factory = {
   id: 'project-next',
   name: 'MastraCode Next',
   resourceId: NEXT_RESOURCE_ID,
+  binding: { kind: 'local', path: '/tmp/mastracode-next' },
   createdAt: 2,
-  binding: {
-    kind: 'local',
-    path: '/tmp/mastracode-next',
-  },
+};
+
+const githubRepository = {
+  projectRepositoryId: 'project-repository-id',
+  slug: 'mastra-ai/mastracode-github-test',
+  worktrees: [],
 };
 
 const githubProject: Factory = {
@@ -90,24 +90,30 @@ const githubProject: Factory = {
   resourceId: RESOURCE_ID,
   createdAt: 3,
   binding: {
-    kind: 'github',
-    githubProjectId: 'github-project-id',
-    worktrees: [],
+    kind: 'factory',
+    factoryProjectId: 'factory-project-id',
+    repositories: [githubRepository],
   },
 };
 
 const githubProjectWithWorktree: Factory = {
   ...githubProject,
   binding: {
-    ...githubProject.binding,
-    worktrees: [{ branch: 'feature/test', baseBranch: 'main', worktreePath: '/tmp/mastracode-github-test' }],
-    selectedWorktreePath: '/tmp/mastracode-github-test',
+    kind: 'factory',
+    factoryProjectId: 'factory-project-id',
+    repositories: [
+      {
+        ...githubRepository,
+        worktrees: [{ branch: 'feature/test', baseBranch: 'main', worktreePath: '/tmp/mastracode-github-test' }],
+        selectedWorktreePath: '/tmp/mastracode-github-test',
+      },
+    ],
   },
 };
 
-function seedFactory(projects: Factory[] = [project], activeFactory: Factory = project) {
+function seedFactory(projects: Factory[] = [project], activeProject: Factory = project) {
   localStorage.setItem('mastracode-factories', JSON.stringify(projects));
-  localStorage.setItem('mastracode-active-factory', activeFactory.id);
+  localStorage.setItem('mastracode-active-factory', activeProject.id);
 }
 
 function sessionState(resourceId = RESOURCE_ID): AgentControllerSessionState {
@@ -205,7 +211,7 @@ function Probe() {
       <span data-testid="om-phase">{omPhase}</span>
       <span data-testid="goal-objective">{goal?.objective ?? '(none)'}</span>
       <button onClick={() => localUser('Hello')}>send local message</button>
-      <button onClick={() => void selectFactory(nextProject)}>switch factory</button>
+      <button onClick={() => void selectFactory(nextProject)}>switch project</button>
     </div>
   );
 }
@@ -374,7 +380,8 @@ describe('ChatSessionProvider', () => {
       );
 
       await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Build'));
-      expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'true');
+      const modeSelector = screen.getByRole('combobox', { name: 'Session mode' });
+      expect(modeSelector).toHaveTextContent('Build');
       expect(screen.getByTestId('active-mode-id')).toHaveTextContent('build');
       expect(screen.getByTestId('modes-count')).toHaveTextContent('2');
       const readsBeforeSwitch = {
@@ -387,21 +394,21 @@ describe('ChatSessionProvider', () => {
         messages: requestCount(requests, 'messages'),
       };
 
-      await userEvent.click(screen.getByRole('button', { name: 'Plan' }));
+      await userEvent.click(modeSelector);
+      await userEvent.click(await screen.findByRole('option', { name: 'Plan' }));
 
       await waitFor(() => expect(requests).toContain('mode:{"modeId":"plan"}'));
-      const pendingModeButton = screen.getByRole('button', { name: 'Plan' });
-      expect(pendingModeButton).toHaveAttribute('aria-pressed', 'true');
-      expect(pendingModeButton).toHaveAttribute('aria-busy', 'true');
-      expect(pendingModeButton).toBeEnabled();
-      expect(screen.getByRole('button', { name: 'Build' })).toBeEnabled();
+      expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan');
+      expect(screen.getByTestId('active-mode-id')).toHaveTextContent('plan');
+      expect(modeSelector).toHaveTextContent('Plan');
+      expect(modeSelector).toHaveAttribute('aria-busy', 'true');
+      expect(modeSelector).toBeDisabled();
       expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state);
 
       completeModeSwitch?.();
 
-      await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan'));
-      await waitFor(() => expect(pendingModeButton).toHaveAttribute('aria-busy', 'false'));
-      expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state);
+      await waitFor(() => expect(modeSelector).toHaveAttribute('aria-busy', 'false'));
+      expect(modeSelector).toBeEnabled();
       for (const request of ['create', 'modes', 'models', 'permissions', 'threads', 'messages'] as const) {
         expect(requestCount(requests, request)).toBe(readsBeforeSwitch[request]);
       }
@@ -652,7 +659,7 @@ describe('ChatSessionProvider', () => {
   });
 
   describe('when a chat session metadata consumer renders', () => {
-    it('reads session metadata from chat context without taking ownership of active factory state', async () => {
+    it('reads session metadata from chat context without taking ownership of active project state', async () => {
       seedFactory();
       useAgentControllerHandlers();
 
@@ -689,7 +696,7 @@ describe('ChatSessionProvider', () => {
       await waitFor(() => expect(requests).toContain('create'));
     });
 
-    it('binds a GitHub project session with the githubProjectId in session state', async () => {
+    it('binds a GitHub Factory session with Factory project and repository identities', async () => {
       const requests: string[] = [];
       seedFactory([githubProjectWithWorktree], githubProjectWithWorktree);
       useAgentControllerHandlers([], requests);
@@ -698,7 +705,7 @@ describe('ChatSessionProvider', () => {
 
       await waitFor(() =>
         expect(requests).toContain(
-          'setState:{"state":{"projectPath":"/tmp/mastracode-github-test","githubProjectId":"github-project-id"}}',
+          'setState:{"state":{"projectPath":"/tmp/mastracode-github-test","factoryProjectId":"factory-project-id","projectRepositoryId":"project-repository-id"}}',
         ),
       );
     });
@@ -784,7 +791,7 @@ describe('ChatSessionProvider', () => {
     renderProbe();
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
-    await userEvent.click(screen.getByRole('button', { name: 'switch factory' }));
+    await userEvent.click(screen.getByRole('button', { name: 'switch project' }));
 
     await waitFor(() => expect(requests).toContain('setState:next:{"state":{"projectPath":"/tmp/mastracode-next"}}'));
   });
@@ -829,7 +836,7 @@ describe('ChatSessionProvider', () => {
     expect(screen.getByTestId('om-phase')).toHaveTextContent('observing');
     expect(screen.getByTestId('goal-objective')).toHaveTextContent('First project goal');
 
-    await userEvent.click(screen.getByRole('button', { name: 'switch factory' }));
+    await userEvent.click(screen.getByRole('button', { name: 'switch project' }));
 
     await waitFor(() => expect(requests).toContain('stream:next'));
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));

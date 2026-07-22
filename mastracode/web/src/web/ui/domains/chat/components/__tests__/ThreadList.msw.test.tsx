@@ -7,6 +7,7 @@
  * fetch transport with MSW at the network boundary.
  */
 import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@mastra/client-js';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -17,7 +18,6 @@ import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/Ch
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
-import { ToastProvider } from '../../../../ui';
 import type { Factory } from '../../../workspaces';
 import { ActiveFactoryProvider } from '../../../workspaces';
 import { ThreadList } from '../ThreadList';
@@ -37,22 +37,27 @@ const project: Factory = {
   },
 };
 
-/** GitHub project with a feature worktree selected — thread list is read-only. */
+/** Server factory with a feature worktree selected — thread list is read-only. */
+const worktreeRepository = {
+  projectRepositoryId: 'pr-gh-1',
+  slug: 'mastra-ai/mastra',
+  gitBranch: 'main',
+  sandboxWorkdir: '/sandbox/mastra',
+  selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+};
 const worktreeProject: Factory = {
   id: 'p-gh',
   name: 'Mastra',
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {
-    kind: 'github',
-    githubProjectId: 'gh-1',
-    gitBranch: 'main',
-    sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
-    worktrees: [
-      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-    ],
+    kind: 'factory',
+    factoryProjectId: 'fp-gh-1',
+    repositories: [worktreeRepository],
   },
 };
 
@@ -163,17 +168,16 @@ function LocationProbe() {
 function renderThreadList() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/chat']}>
-      <ToastProvider>
-        <ActiveFactoryProvider>
-          <ChatSessionProvider>
-            <OverlaysProvider>
-              <ThreadList />
-              <SidebarOverlayProbe />
-              <LocationProbe />
-            </OverlaysProvider>
-          </ChatSessionProvider>
-        </ActiveFactoryProvider>
-      </ToastProvider>
+      <ActiveFactoryProvider>
+        <ChatSessionProvider>
+          <OverlaysProvider>
+            <ThreadList />
+            <SidebarOverlayProbe />
+            <LocationProbe />
+          </OverlaysProvider>
+        </ChatSessionProvider>
+      </ActiveFactoryProvider>
+      <Toaster position="bottom-right" />
     </MemoryRouter>,
   );
 }
@@ -242,7 +246,11 @@ describe('ThreadList', () => {
     // it is no longer a workspace, so GitHub lists never expose thread controls.
     seedFactory({
       ...worktreeProject,
-      binding: { ...worktreeProject.binding, selectedWorktreePath: '/sandbox/mastra' },
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'fp-gh-1',
+        repositories: [{ ...worktreeRepository, selectedWorktreePath: '/sandbox/mastra' }],
+      },
     });
     useAgentControllerHandlers([threadOne]);
     renderThreadList();

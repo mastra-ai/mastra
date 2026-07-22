@@ -1,8 +1,3 @@
-/**
- * Intake settings domain over a real backend (libsql `:memory:`): default
- * config isolation, save/read round-trip, and per-(org, user) scoping.
- */
-
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
@@ -16,45 +11,43 @@ async function makeStorage(): Promise<IntakeStorage> {
 }
 
 describe('IntakeStorage', () => {
-  it('returns a fresh default config for every caller', async () => {
+  it('returns a fresh empty config for every caller', async () => {
     const storage = await makeStorage();
-
-    const first = await storage.getConfig('org1', 'user1');
-    first.github.enabled = false;
-    const second = await storage.getConfig('org1', 'user1');
+    const first = await storage.getConfig({ orgId: 'org1', userId: 'user1' });
+    first.github = { enabled: false, sourceIds: null };
+    const second = await storage.getConfig({ orgId: 'org1', userId: 'user1' });
 
     expect(second).toEqual(DEFAULT_INTAKE_CONFIG);
     expect(second).not.toBe(DEFAULT_INTAKE_CONFIG);
-    expect(second.github).not.toBe(DEFAULT_INTAKE_CONFIG.github);
   });
 
-  it('round-trips saved config per (org, user)', async () => {
+  it('round-trips dynamic integration selections per org and user', async () => {
     const storage = await makeStorage();
     const config = {
-      github: { enabled: true, repositoryIds: ['p1'] },
-      linear: { enabled: false, projectIds: null },
+      github: { enabled: true, sourceIds: ['repo-1'] },
+      linear: { enabled: false, sourceIds: null },
     };
 
-    await storage.saveConfig('org1', 'user1', config);
-    expect(await storage.getConfig('org1', 'user1')).toEqual(config);
-    // Other tenants are untouched.
-    expect(await storage.getConfig('org1', 'user2')).toEqual(DEFAULT_INTAKE_CONFIG);
-    expect(await storage.getConfig('org2', 'user1')).toEqual(DEFAULT_INTAKE_CONFIG);
+    await storage.saveConfig({ orgId: 'org1', userId: 'user1', config });
+    expect(await storage.getConfig({ orgId: 'org1', userId: 'user1' })).toEqual(config);
+    expect(await storage.getConfig({ orgId: 'org1', userId: 'user2' })).toEqual(DEFAULT_INTAKE_CONFIG);
+    expect(await storage.getConfig({ orgId: 'org2', userId: 'user1' })).toEqual(DEFAULT_INTAKE_CONFIG);
 
-    // Second save updates in place (single row per tenant).
-    const updated = { ...config, linear: { enabled: true, projectIds: ['l1'] } };
-    await storage.saveConfig('org1', 'user1', updated);
-    expect(await storage.getConfig('org1', 'user1')).toEqual(updated);
+    const updated = { ...config, linear: { enabled: true, sourceIds: ['team-1'] } };
+    await storage.saveConfig({ orgId: 'org1', userId: 'user1', config: updated });
+    expect(await storage.getConfig({ orgId: 'org1', userId: 'user1' })).toEqual(updated);
   });
 
   it('converges concurrent first saves onto one row', async () => {
     const storage = await makeStorage();
-    const a = { github: { enabled: true, repositoryIds: ['a'] }, linear: { enabled: true, projectIds: null } };
-    const b = { github: { enabled: true, repositoryIds: ['b'] }, linear: { enabled: true, projectIds: null } };
+    const a = { github: { enabled: true, sourceIds: ['a'] } };
+    const b = { gitlab: { enabled: true, sourceIds: ['b'] } };
 
-    await Promise.all([storage.saveConfig('org1', 'user1', a), storage.saveConfig('org1', 'user1', b)]);
+    await Promise.all([
+      storage.saveConfig({ orgId: 'org1', userId: 'user1', config: a }),
+      storage.saveConfig({ orgId: 'org1', userId: 'user1', config: b }),
+    ]);
 
-    const result = await storage.getConfig('org1', 'user1');
-    expect([a, b]).toContainEqual(result);
+    expect([a, b]).toContainEqual(await storage.getConfig({ orgId: 'org1', userId: 'user1' }));
   });
 });

@@ -385,6 +385,7 @@ export const agentExecutionBodySchema = z
     stopWhen: typedPermissive<StopConditionArg | StopConditionArg[]>(z.unknown()).optional(),
 
     // Model Configuration
+    model: z.string().optional(),
     providerOptions: typedPermissive<Record<string, Record<string, JSONValue>>>(
       z.object({
         anthropic: z.record(z.string(), z.unknown()).optional(),
@@ -494,12 +495,14 @@ export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
  */
 const toolCallActionBodySchema = z.object({
   runId: z.string(),
+  model: z.string().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
   format: z.string().optional(),
 });
 const networkToolCallActionBodySchema = z.object({
   runId: z.string(),
+  model: z.string().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   format: z.string().optional(),
 });

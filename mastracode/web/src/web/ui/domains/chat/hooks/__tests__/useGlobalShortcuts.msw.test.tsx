@@ -3,10 +3,11 @@
  *
  * The hook is now zero-args: it observes `useOverlays()`,
  * `useChatTranscript()` (busy + abort), and `useActiveFactoryContext()` (zero
- * projects force the factories modal open) directly. Specs preserve the
+ * projects force the Factory creation view open) directly. Specs preserve the
  * `?` shortcuts toggle unless typing, and the Escape priority cascade.
  */
 import type { AgentControllerEvent } from '@mastra/client-js';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -112,13 +113,15 @@ function Probe() {
 
 function renderProbe(threadId?: string) {
   return renderWithProviders(
-    <ActiveFactoryProvider>
-      <ChatSessionProvider threadId={threadId}>
-        <OverlaysProvider>
-          <Probe />
-        </OverlaysProvider>
-      </ChatSessionProvider>
-    </ActiveFactoryProvider>,
+    <MainSidebarProvider storageKey="global-shortcuts-test" mobileBreakpoint={768}>
+      <ActiveFactoryProvider>
+        <ChatSessionProvider threadId={threadId}>
+          <OverlaysProvider>
+            <Probe />
+          </OverlaysProvider>
+        </ChatSessionProvider>
+      </ActiveFactoryProvider>
+    </MainSidebarProvider>,
   );
 }
 
@@ -187,7 +190,7 @@ describe('useGlobalShortcuts', () => {
     expectOverlay('sidebar', 'closed');
   });
 
-  it('given the factories modal is open, when Escape is pressed, then nothing closes', async () => {
+  it('given the Factory creation view is open, when Escape is pressed, then the global handler yields to it', async () => {
     seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
@@ -201,8 +204,8 @@ describe('useGlobalShortcuts', () => {
     expectOverlay('settings', 'open');
   });
 
-  it('given zero factories (forced factories modal), when Escape is pressed, then it is a no-op even with overlays open', async () => {
-    // No seedFactory(): the factories modal is force-opened by derivation.
+  it('given zero factories (forced creation view), when Escape is pressed, then it is a no-op even with overlays open', async () => {
+    // No seedFactory(): Factory creation is forced open by derivation.
     useAgentControllerHandlers();
     renderProbe(undefined);
 

@@ -35,12 +35,12 @@ const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-interface GeneralTabProps {
+interface GeneralSettingsProps {
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
 }
 
-export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
+export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) {
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
   const changeDoneSound = (next: DoneSound) => {
     setDoneSound(next);
@@ -74,19 +74,20 @@ export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
   );
 }
 
-interface ModelTabProps {
+interface ModelSettingsProps {
   settings: AgentControllerSessionSettings | null;
+  updating: boolean;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
 }
 
-export function ModelTab({ settings, onBehaviorChange }: ModelTabProps) {
+export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
   return (
     <>
       <FieldRow label="Thinking level" hint="Extended-reasoning budget for the agent">
         <Segmented
           ariaLabel="Thinking level"
           value={settings?.thinkingLevel ?? 'off'}
-          disabled={!settings}
+          disabled={!settings || updating}
           options={THINKING_LEVELS}
           onChange={v => onBehaviorChange({ thinkingLevel: v })}
         />
@@ -95,28 +96,30 @@ export function ModelTab({ settings, onBehaviorChange }: ModelTabProps) {
   );
 }
 
-interface BehaviorTabProps {
+interface BehaviorSettingsProps {
   settings: AgentControllerSessionSettings | null;
+  updating: boolean;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
   permissions: PermissionRules | null;
   pendingPermissionCategory: ToolCategory | null;
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
 }
 
-export function BehaviorTab({
+export function BehaviorSettings({
   settings,
+  updating,
   onBehaviorChange,
   permissions,
   pendingPermissionCategory,
   setPermissionForCategory,
-}: BehaviorTabProps) {
+}: BehaviorSettingsProps) {
   return (
     <>
       <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
         <Toggle
           ariaLabel="Auto-approve tools"
           checked={!!settings?.yolo}
-          disabled={!settings}
+          disabled={!settings || updating}
           onChange={v => onBehaviorChange({ yolo: v })}
         />
       </FieldRow>
@@ -124,7 +127,7 @@ export function BehaviorTab({
         <Toggle
           ariaLabel="Smart editing"
           checked={!!settings?.smartEditing}
-          disabled={!settings}
+          disabled={!settings || updating}
           onChange={v => onBehaviorChange({ smartEditing: v })}
         />
       </FieldRow>
@@ -132,7 +135,7 @@ export function BehaviorTab({
         <Segmented
           ariaLabel="Notifications"
           value={settings?.notifications ?? 'off'}
-          disabled={!settings}
+          disabled={!settings || updating}
           options={NOTIFICATION_MODES}
           onChange={v => onBehaviorChange({ notifications: v })}
         />
@@ -163,7 +166,7 @@ function PermissionsSection({
   permissions,
   pendingPermissionCategory,
   setPermissionForCategory,
-}: Pick<BehaviorTabProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
+}: Pick<BehaviorSettingsProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
   const update = async (category: ToolCategory, policy: PermissionPolicy) => {
     await setPermissionForCategory(category, policy);
   };

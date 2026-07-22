@@ -48,23 +48,73 @@ vi.mock('../auth', async () => {
 });
 
 interface Tables {
-  installations: Array<{
-    id: string;
-    integrationId: string;
-    orgId: string;
-    connectedByUserId: string;
-    externalId: string;
-    accountName: string | null;
-    accountType: string | null;
-    providerMetadata: Record<string, unknown>;
-    createdAt: Date;
-  }>;
-  projects: Array<Record<string, any>>;
+  installations: Array<Record<string, any>>;
+  repositories: Array<Record<string, any>>;
+  connections: Array<Record<string, any>>;
+  projectRepositories: Array<Record<string, any>>;
   sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
 }
-const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [] };
+const tables: Tables = {
+  installations: [],
+  repositories: [],
+  connections: [],
+  projectRepositories: [],
+  sandboxes: [],
+  worktrees: [],
+};
 const sourceControlStorage = new SourceControlStorageInMemory();
+
+function projectRepositoryRow(row: Record<string, any>) {
+  const installationId = row.installationRecordId ?? `installation-${row.orgId}-${row.installationId}`;
+  const repositoryId = `repository-${row.id}`;
+  const connectionId = `connection-${row.id}`;
+  const now = new Date();
+
+  if (!tables.installations.some(candidate => candidate.id === installationId)) {
+    tables.installations.push({
+      id: installationId,
+      integrationId: 'github',
+      orgId: row.orgId,
+      connectedByUserId: row.userId,
+      externalId: String(row.installationId),
+      accountName: 'octo',
+      accountType: 'User',
+      providerMetadata: {},
+      createdAt: now,
+    });
+  }
+  tables.repositories.push({
+    id: repositoryId,
+    installationId,
+    externalId: String(row.repoId ?? 99),
+    slug: row.repoFullName ?? 'octo/hello',
+    defaultBranch: 'main',
+    providerMetadata: {},
+    createdAt: now,
+    updatedAt: now,
+  });
+  tables.connections.push({
+    id: connectionId,
+    factoryProjectId: `factory-${row.id}`,
+    integrationId: 'github',
+    installationId,
+    createdByUserId: row.userId,
+    createdAt: now,
+  });
+
+  return {
+    id: row.id,
+    connectionId,
+    repositoryId,
+    branch: 'main',
+    sandboxProvider: 'railway',
+    sandboxWorkdir: '/workspace/hello',
+    setupCommand: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
 vi.mock('./db', () => {
   const makeDb = () => ({
@@ -107,7 +157,19 @@ const githubStub = {
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
-  listInstallationRepos: vi.fn(async () => []),
+  listInstallationRepos: vi.fn(
+    async (): Promise<
+      Array<{
+        id: number;
+        fullName: string;
+        name: string;
+        owner: string;
+        defaultBranch: string;
+        private: boolean;
+        installationId: number;
+      }>
+    > => [],
+  ),
   getInstallationRepo: vi.fn(async (installationId: number, fullName: string) =>
     fullName === 'octo/hello'
       ? {
@@ -140,7 +202,7 @@ const stateSigner = {
 // the later git routes can reattach. We update the fake DB row in place.
 const ensureProjectSandbox = vi.fn(async (row: any, storage: SourceControlStorageInMemory['sandboxes']) => {
   const sandboxId = row.sandboxId ?? `sb-${row.userId}`;
-  await storage.setSandboxId(row.id, sandboxId);
+  await storage.setSandboxId({ id: row.id, sandboxId });
   return { id: sandboxId };
 });
 const materializeRepo = vi.fn(async () => {});
@@ -211,11 +273,16 @@ import { buildGithubRoutes } from './routes';
 // ── Fake table helpers (mirrors routes.test.ts) ─────────────────────────
 function tableKind(table: any): keyof Tables {
   if (table === installationsRef) return 'installations';
+  if (table === repositoriesRef) return 'repositories';
+  if (table === connectionsRef) return 'connections';
   if (table === worktreesRef) return 'worktrees';
   if (table === sandboxesRef) return 'sandboxes';
-  return 'projects';
+  return 'projectRepositories';
 }
 let installationsRef: any;
+let repositoriesRef: any;
+let connectionsRef: any;
+let projectRepositoriesRef: any;
 let worktreesRef: any;
 let sandboxesRef: any;
 
@@ -270,9 +337,15 @@ function updateRows(table: any, vals: any, cond?: any): void {
 }
 
 const githubInstallations = {};
+const githubRepositories = {};
+const githubConnections = {};
+const githubProjectRepositories = {};
 const githubProjectSandboxes = {};
 const githubWorktrees = {};
 installationsRef = githubInstallations;
+repositoriesRef = githubRepositories;
+connectionsRef = githubConnections;
+projectRepositoriesRef = githubProjectRepositories;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
 
@@ -299,11 +372,15 @@ function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown)
 
 beforeEach(() => {
   tables.installations = [];
-  tables.projects = [];
+  tables.repositories = [];
+  tables.connections = [];
+  tables.projectRepositories = [];
   tables.sandboxes = [];
   tables.worktrees = [];
   sourceControlStorage.installationsRows = tables.installations as any;
-  sourceControlStorage.projectsRows = tables.projects as any;
+  sourceControlStorage.repositoriesRows = tables.repositories as any;
+  sourceControlStorage.connectionsRows = tables.connections as any;
+  sourceControlStorage.projectRepositoriesRows = tables.projectRepositories as any;
   sourceControlStorage.sandboxesRows = tables.sandboxes as any;
   sourceControlStorage.worktreesRows = tables.worktrees as any;
   featureEnabled = true;
@@ -329,72 +406,41 @@ afterEach(() => {
 
 // ── Scenario 1: same repo, two orgs, no bleed ────────────────────────────
 describe('same repo connected by two orgs stays isolated', () => {
-  it('gives each org its own project row and forbids cross-org operations', async () => {
-    // Each org has its own installation for the same repo.
-    tables.installations.push({
-      id: 'installation-a',
-      integrationId: 'github',
+  it('gives each org its own project-repository row and forbids cross-org operations', async () => {
+    const projectRepositoryA = projectRepositoryRow({
+      id: 'project-repository-a',
       orgId: 'orgA',
-      connectedByUserId: 'a1',
-      externalId: '7',
-      accountName: 'octo',
-      accountType: 'User',
-      providerMetadata: {},
-      createdAt: new Date(),
+      userId: 'a1',
+      installationId: 7,
     });
-    tables.installations.push({
-      id: 'installation-b',
-      integrationId: 'github',
+    const projectRepositoryB = projectRepositoryRow({
+      id: 'project-repository-b',
       orgId: 'orgB',
-      connectedByUserId: 'b1',
-      externalId: '7',
-      accountName: 'octo',
-      accountType: 'User',
-      providerMetadata: {},
-      createdAt: new Date(),
+      userId: 'b1',
+      installationId: 7,
     });
+    tables.projectRepositories.push(projectRepositoryA, projectRepositoryB);
 
     const appA = buildApp({ workosId: 'a1', organizationId: 'orgA' });
-    const appB = buildApp({ workosId: 'b1', organizationId: 'orgB' });
 
-    const resA = await postJson(appA, '/web/github/repositories', { repoFullName: 'octo/hello', installationId: 7 });
-    const resB = await postJson(appB, '/web/github/repositories', { repoFullName: 'octo/hello', installationId: 7 });
-    expect(resA.status).toBe(200);
-    expect(resB.status).toBe(200);
-    const projA = (await resA.json()).repository.id as string;
-    const projB = (await resB.json()).repository.id as string;
+    expect(projectRepositoryA.id).not.toBe(projectRepositoryB.id);
+    expect(tables.projectRepositories).toHaveLength(2);
 
-    // The (org_id, repo_id) unique target means two orgs → two distinct rows.
-    expect(projA).not.toBe(projB);
-    expect(tables.projects).toHaveLength(2);
-    expect(tables.projects.find(p => p.id === projA)?.orgId).toBe('orgA');
-    expect(tables.projects.find(p => p.id === projB)?.orgId).toBe('orgB');
-
-    // Org A cannot ensure / worktree / push against Org B's project id.
-    expect((await postJson(appA, `/web/github/repositories/${projB}/ensure`, {})).status).toBe(404);
-    expect((await postJson(appA, `/web/github/repositories/${projB}/worktree`, { branch: 'feat/x' })).status).toBe(404);
-    expect((await postJson(appA, `/web/github/repositories/${projB}/push`, { branch: 'feat/x' })).status).toBe(404);
+    // Org A cannot ensure / worktree / push against Org B's project-repository id.
+    expect((await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/ensure`, {})).status).toBe(404);
+    expect(
+      (await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/worktree`, { branch: 'feat/x' })).status,
+    ).toBe(404);
+    expect(
+      (await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/push`, { branch: 'feat/x' })).status,
+    ).toBe(404);
   });
 });
 
 // ── Scenario 2: two users, one org, own sandboxes ────────────────────────
 describe('two users in one org each get their own sandbox + worktree', () => {
   function seedOrgProject() {
-    tables.projects.push({
-      id: 'p1',
-      integrationId: 'github',
-      orgId: 'orgA',
-      createdByUserId: 'a1',
-      installationExternalId: '7',
-      repositoryExternalId: '99',
-      repositorySlug: 'octo/hello',
-      defaultBranch: 'main',
-      sandboxProvider: 'railway',
-      sandboxWorkdir: '/workspace/hello',
-      setupCommand: null,
-      providerMetadata: {},
-      createdAt: new Date(),
-    });
+    tables.projectRepositories.push(projectRepositoryRow({ id: 'p1', orgId: 'orgA', userId: 'a1', installationId: 7 }));
   }
 
   it('creates a distinct (project,user) sandbox row per user and hides worktrees across users', async () => {
@@ -403,23 +449,23 @@ describe('two users in one org each get their own sandbox + worktree', () => {
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
 
     // Both users open (ensure) the same org-owned project.
-    expect((await postJson(user1, '/web/github/repositories/p1/ensure', {})).status).toBe(200);
-    expect((await postJson(user2, '/web/github/repositories/p1/ensure', {})).status).toBe(200);
+    expect((await postJson(user1, '/web/github/projects/p1/ensure', {})).status).toBe(200);
+    expect((await postJson(user2, '/web/github/projects/p1/ensure', {})).status).toBe(200);
 
     // Each got their own per-(project,user) sandbox binding row.
     expect(tables.sandboxes).toHaveLength(2);
-    expect(tables.sandboxes.filter(s => s.projectId === 'p1' && s.userId === 'a1')).toHaveLength(1);
-    expect(tables.sandboxes.filter(s => s.projectId === 'p1' && s.userId === 'a2')).toHaveLength(1);
+    expect(tables.sandboxes.filter(s => s.projectRepositoryId === 'p1' && s.userId === 'a1')).toHaveLength(1);
+    expect(tables.sandboxes.filter(s => s.projectRepositoryId === 'p1' && s.userId === 'a2')).toHaveLength(1);
 
     // User 1 creates a worktree; it is owned by user 1 only.
-    const wt = await postJson(user1, '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
+    const wt = await postJson(user1, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
     expect(wt.status).toBe(200);
     const wtPath = (await wt.json()).worktreePath as string;
     expect(tables.worktrees).toHaveLength(1);
-    expect(tables.worktrees[0]).toMatchObject({ userId: 'a1', orgId: 'orgA', projectId: 'p1' });
+    expect(tables.worktrees[0]).toMatchObject({ userId: 'a1', projectRepositoryId: 'p1' });
 
     // User 2 cannot commit against user 1's worktree path (scoped to (p,user)).
-    const crossCommit = await postJson(user2, '/web/github/repositories/p1/commit', {
+    const crossCommit = await postJson(user2, '/web/github/projects/p1/commit', {
       message: 'sneaky',
       worktreePath: wtPath,
     });
@@ -427,7 +473,7 @@ describe('two users in one org each get their own sandbox + worktree', () => {
     expect((await crossCommit.json()).error).toBe('Invalid worktreePath');
 
     // User 1 can commit against their own worktree path.
-    const ownCommit = await postJson(user1, '/web/github/repositories/p1/commit', {
+    const ownCommit = await postJson(user1, '/web/github/projects/p1/commit', {
       message: 'wip',
       worktreePath: wtPath,
     });
@@ -439,27 +485,13 @@ describe('two users in one org each get their own sandbox + worktree', () => {
 // ── Scenario 3: cross-user worktree path rejected even with same branch ───
 describe('cross-user worktree paths are rejected', () => {
   it('does not let user 2 push user 1 worktree path when both share a branch name', async () => {
-    tables.projects.push({
-      id: 'p1',
-      integrationId: 'github',
-      orgId: 'orgA',
-      createdByUserId: 'a1',
-      installationExternalId: '7',
-      repositoryExternalId: '99',
-      repositorySlug: 'octo/hello',
-      defaultBranch: 'main',
-      sandboxProvider: 'railway',
-      sandboxWorkdir: '/workspace/hello',
-      setupCommand: null,
-      providerMetadata: {},
-      createdAt: new Date(),
-    });
+    tables.projectRepositories.push(projectRepositoryRow({ id: 'p1', orgId: 'orgA', userId: 'a1', installationId: 7 }));
     // Both users have their own sandbox bindings + a worktree row on the same
     // branch name; uniqueness is (project,user,branch) so both can coexist.
     for (const userId of ['a1', 'a2']) {
       tables.sandboxes.push({
         id: `sbrow-${userId}`,
-        projectId: 'p1',
+        projectRepositoryId: 'p1',
         userId,
         sandboxId: `sb-${userId}`,
         sandboxWorkdir: '/workspace/hello',
@@ -469,7 +501,7 @@ describe('cross-user worktree paths are rejected', () => {
         id: `wt-${userId}`,
         orgId: 'orgA',
         userId,
-        projectId: 'p1',
+        projectRepositoryId: 'p1',
         branch: 'feat/x',
         baseBranch: 'main',
         worktreePath: `/workspace/hello/../worktrees/${userId}/feat/x`,
@@ -479,7 +511,7 @@ describe('cross-user worktree paths are rejected', () => {
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
 
     // User 2 supplies user 1's worktree path → rejected (path not owned).
-    const res = await postJson(user2, '/web/github/repositories/p1/push', {
+    const res = await postJson(user2, '/web/github/projects/p1/push', {
       branch: 'feat/x',
       worktreePath: '/workspace/hello/../worktrees/a1/feat/x',
     });
@@ -488,7 +520,7 @@ describe('cross-user worktree paths are rejected', () => {
     expect(pushBranch).not.toHaveBeenCalled();
 
     // User 2 with their own worktree path succeeds.
-    const ok = await postJson(user2, '/web/github/repositories/p1/push', {
+    const ok = await postJson(user2, '/web/github/projects/p1/push', {
       branch: 'feat/x',
       worktreePath: '/workspace/hello/../worktrees/a2/feat/x',
     });
@@ -518,18 +550,44 @@ describe('install flow binds the installation to the org', () => {
     expect(tables.installations[0]).toMatchObject({ orgId: 'orgA', externalId: '7' });
 
     // A different user in the same org sees the org-level installation and can
-    // create a project from it (no second install required).
+    // discover repositories from it (no second install required).
+    githubStub.listInstallationRepos.mockResolvedValueOnce([
+      {
+        id: 99,
+        fullName: 'octo/hello',
+        name: 'hello',
+        owner: 'octo',
+        defaultBranch: 'main',
+        private: false,
+        installationId: 7,
+      },
+    ]);
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
     const status = await user2.request('/web/github/status');
     expect((await status.json()).connected).toBe(true);
 
-    const proj = await postJson(user2, '/web/github/repositories', {
-      repoFullName: 'octo/hello',
-      installationId: 7,
+    const repos = await user2.request('/web/github/repos');
+    expect(repos.status).toBe(200);
+    expect(tables.repositories).toHaveLength(1);
+    expect(tables.repositories[0]).toMatchObject({
+      installationId: tables.installations[0]!.id,
+      externalId: '99',
+      slug: 'octo/hello',
+      defaultBranch: 'main',
     });
-    expect(proj.status).toBe(200);
-    expect(tables.projects).toHaveLength(1);
-    expect(tables.projects[0]).toMatchObject({ orgId: 'orgA', repositoryExternalId: '99' });
+    expect(await repos.json()).toMatchObject({
+      repos: [
+        {
+          id: 99,
+          fullName: 'octo/hello',
+          installationId: 7,
+          installationStorageId: tables.installations[0]!.id,
+          repositoryStorageId: tables.repositories[0]!.id,
+          sandboxProvider: 'railway',
+          sandboxWorkdir: '/workspace/hello',
+        },
+      ],
+    });
   });
 
   it('rejects a callback whose session org differs from the signed state org', async () => {
