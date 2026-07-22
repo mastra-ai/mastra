@@ -1,5 +1,5 @@
 import { realpathSync } from 'node:fs';
-import { dirname, resolve, sep } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
@@ -10,26 +10,12 @@ import type { Plugin } from 'vite';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
- * This is a standalone pnpm project whose deps are linked into pnpm's global
- * content-addressable store (e.g. `~/Library/pnpm/store`), whose real path
- * lives outside the project root. Vite resolves symlinks and refuses to serve
- * files outside its `fs.allow` list, which breaks linked assets like the
- * `@fontsource-variable/mona-sans` woff2 files. Derive the store root from a
- * linked dep's real path so the dev server can serve them. Dev-only — the
- * production build serves the SPA through the Mastra server, not Vite.
+ * The standalone web package links dependencies from pnpm's store, which sits
+ * outside Vite's default workspace boundary. Allow only the font package that
+ * serves files in development rather than exposing the entire pnpm store.
  */
-function pnpmStoreRoot(): string | null {
-  try {
-    const real = realpathSync(resolve(here, '../../node_modules/@fontsource-variable/mona-sans'));
-    const marker = `${sep}store${sep}`;
-    const idx = real.indexOf(marker);
-    return idx === -1 ? null : real.slice(0, idx + marker.length - 1);
-  } catch {
-    return null;
-  }
-}
-
-const fsAllow = [searchForWorkspaceRoot(here), pnpmStoreRoot()].filter((p): p is string => p !== null);
+const monaSansPackageRoot = realpathSync(resolve(here, '../../node_modules/@fontsource-variable/mona-sans'));
+const fsAllow = [searchForWorkspaceRoot(here), monaSansPackageRoot];
 
 /**
  * Dev-proxy target for the API server and the UI dev-server port. Overridable
@@ -98,8 +84,8 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: uiPort,
     fs: {
-      // See pnpmStoreRoot above — allow serving linked deps (fonts) from the
-      // pnpm store, plus the usual workspace root, in dev.
+      // Linked font files resolve outside the workspace; expose only that
+      // package instead of pnpm's entire global store.
       allow: fsAllow,
     },
     // OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the
