@@ -1,14 +1,14 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils';
-import type { TestAuthUser } from '../../routes/test-utils';
-import type { StateSigner } from '../../state-signing';
-import { createFactoryStorageForTests } from '../../storage/test-utils';
-import type { FactoryStorageTestSeed } from '../../storage/test-utils';
-import type { IntegrationHooks } from '../base';
-import { LinearIntegration } from './integration';
-import { buildLinearRoutes } from './routes';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
+import type { TestAuthUser } from '../../routes/test-utils.js';
+import type { StateSigner } from '../../state-signing.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
+import type { IntegrationHooks } from '../base.js';
+import { LinearIntegration } from './integration.js';
+import { buildLinearRoutes } from './routes.js';
 
 // A real integration instance with the network edges spied out: connection
 // persistence, token refresh single-flight, and scope handling all run the

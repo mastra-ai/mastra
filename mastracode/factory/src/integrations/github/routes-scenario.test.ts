@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CreatePullRequestInput } from '../../capabilities/version-control';
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils';
-import type { SandboxFleet } from '../../sandbox/fleet';
-import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory';
-import { buildGithubRoutes } from './routes';
+import type { CreatePullRequestInput } from '../../capabilities/version-control.js';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
+import type { SandboxFleet } from '../../sandbox/fleet.js';
+import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
+import { buildGithubRoutes } from './routes.js';
 
 // ── Scenario tests (S1, S2) ──────────────────────────────────────────────
 // These exercise the *composition* of the real Phase 4 git route handlers
@@ -157,9 +157,12 @@ const githubStub = {
         }
       : null,
   ),
-  // A fresh token string per call so the scenario can prove per-op minting.
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
   versionControl: {
+    getRepositoryAccess: vi.fn(async ({ repositoryId }: { repositoryId: string }) => ({
+      cloneUrl: 'https://github.com/octo/hello.git',
+      authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}-${++repositoryAccessCount}` },
+    })),
     createPullRequest: async (input: CreatePullRequestInput) => {
       const result = await createPullRequest(input);
       return {
@@ -195,6 +198,7 @@ const stateSigner = {
 };
 
 let mintCount = 0;
+let repositoryAccessCount = 0;
 
 const subscribeToPullRequest = vi.fn(async (_input: unknown) => ({ created: true }));
 vi.mock('./subscriptions', () => ({
@@ -402,6 +406,7 @@ beforeEach(() => {
   // The in-process mutex still serializes same-replica callers (S2).
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   mintCount = 0;
+  repositoryAccessCount = 0;
   pushImpl = async () => {};
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
@@ -421,7 +426,7 @@ afterEach(() => {
 // ── S1: full write-back journey ──────────────────────────────────────────
 describe('S1: full write-back journey through the real route handlers', () => {
   it('drives create → ensure → worktree → commit → push → pr for one user', async () => {
-    const mint = githubStub.mintInstallationToken;
+    const repositoryAccess = githubStub.versionControl.getRepositoryAccess;
     const projectId = 'project-1';
     tables.projectRepositories.push(
       projectRepositoryRow({
@@ -478,24 +483,25 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(await commitRes.json()).toMatchObject({ committed: true });
     expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe(persistedSessionWorkdir);
 
-    // 5. Push that session branch → a fresh token is minted for *this* op.
-    const mintBeforePush = mint.mock.calls.length;
+    // 5. Push that session branch with fresh repository-scoped access for this operation.
+    const accessBeforePush = repositoryAccess.mock.calls.length;
     const pushRes = await postJson(app, `/web/github/projects/${projectId}/push`, {
       branch: 'feat/x',
       sessionId: session.sessionId,
     });
     expect(pushRes.status).toBe(200);
     expect(await pushRes.json()).toMatchObject({ pushed: true, branch: 'feat/x' });
-    expect(mint.mock.calls.length).toBe(mintBeforePush + 1);
+    expect(repositoryAccess.mock.calls.length).toBe(accessBeforePush + 1);
+    expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
     const pushCall = pushBranch.mock.calls[0] as unknown as any[];
     // pushBranch(sandbox, workdir, branch, token, repoFullName)
     expect(pushCall[1]).toBe(persistedSessionWorkdir);
     expect(pushCall[2]).toBe('feat/x');
     const pushToken = pushCall[3] as string;
-    expect(pushToken).toMatch(/^install-token-/);
+    expect(pushToken).toMatch(/^repo-token-/);
 
-    // 6. Open a PR through VersionControl; only the preceding git push needs a sandbox token.
-    const mintBeforePr = mint.mock.calls.length;
+    // 6. Open a PR through VersionControl; only the preceding git push needs repository access.
+    const accessBeforePr = repositoryAccess.mock.calls.length;
     const prRes = await postJson(app, `/web/github/projects/${projectId}/pr`, {
       branch: 'feat/x',
       title: 'My PR',
@@ -504,7 +510,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     });
     expect(prRes.status).toBe(200);
     expect(await prRes.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
-    expect(mint.mock.calls.length).toBe(mintBeforePr);
+    expect(repositoryAccess.mock.calls.length).toBe(accessBeforePr);
     expect(createPullRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         connection: { type: 'app-installation', installationId: 7 },

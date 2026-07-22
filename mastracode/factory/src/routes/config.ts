@@ -18,17 +18,21 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
-import type { CredentialRecord, LoginSessionKind, ModelCredentialsStorage } from '../storage/domains/credentials/base';
-import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base';
+import type {
+  CredentialRecord,
+  LoginSessionKind,
+  ModelCredentialsStorage,
+} from '../storage/domains/credentials/base.js';
+import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
   resolveCredentialContext,
   tenantOrgId,
   WEB_OAUTH_FLOW_KINDS,
-} from './provider-credentials';
-import { Route } from './route';
-import type { RouteAuth, RouteDependencies } from './route';
+} from './provider-credentials.js';
+import { Route } from './route.js';
+import type { RouteAuth, RouteDependencies } from './route.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -233,34 +237,52 @@ export interface ModelPackInfo extends ModePack {
 export async function buildProviderAccess({
   controller,
   authStorage,
+  tenantCredentials,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
+  tenantCredentials?: CredentialRecord[];
 }): Promise<ProviderAccess> {
   const models = await controller.listAvailableModels();
-  const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
-  const accessLevel = (storageProviderId: string): ProviderAccessLevel => {
-    const cred = authStorage?.get(storageProviderId);
-    if (cred?.type === 'oauth') return 'oauth';
-    if (cred?.type === 'api_key' && cred.key.trim().length > 0) return 'apikey';
-    return false;
+  const hasModelKey = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
+  const accessLevel = (provider: string): ProviderAccessLevel => {
+    const authProviderId = getAuthProviderId(provider);
+    if (tenantCredentials) {
+      const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
+      const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
+      const credential = userRec?.credential ?? orgRec?.credential;
+      if (credential?.type === 'oauth') return 'oauth';
+      if (credential?.type === 'api_key' && credential.key.trim().length > 0) return 'apikey';
+      return false;
+    }
+
+    const oauthCredential = authStorage?.get(authProviderId);
+    if (oauthCredential?.type === 'oauth') return 'oauth';
+    if (authStorage?.hasStoredApiKey(provider)) return 'apikey';
+    const directCredential = authStorage?.get(provider);
+    if (directCredential?.type === 'api_key' && directCredential.key.trim().length > 0) return 'apikey';
+    return hasModelKey(provider) ? 'apikey' : false;
   };
   const access: ProviderAccess = {
     anthropic: accessLevel('anthropic'),
-    openai: accessLevel('openai-codex'),
-    cerebras: hasEnv('cerebras') ? 'apikey' : false,
-    google: hasEnv('google') ? 'apikey' : false,
-    deepseek: hasEnv('deepseek') ? 'apikey' : false,
+    openai: accessLevel('openai'),
+    cerebras: accessLevel('cerebras'),
+    google: accessLevel('google'),
+    deepseek: accessLevel('deepseek'),
     'github-copilot': accessLevel('github-copilot'),
   };
   const seen = new Set(Object.keys(access));
   for (const m of models) {
-    if (!seen.has(m.provider) && m.hasApiKey) {
-      access[m.provider] = 'apikey';
+    if (!seen.has(m.provider)) {
+      access[m.provider] = accessLevel(m.provider);
       seen.add(m.provider);
     }
   }
   return access;
+}
+
+function canUseModelProvider(access: ProviderAccess, provider: string): boolean {
+  return Boolean(access[provider]);
 }
 
 /**
@@ -330,15 +352,17 @@ function recordToModePack(record: ModelPackRecord): ModePack {
 export async function listModelPacks({
   controller,
   authStorage,
+  tenantCredentials,
   packContext,
   activePackId,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
+  tenantCredentials?: CredentialRecord[];
   packContext: PackContext;
   activePackId?: string | null;
 }): Promise<ModelPackInfo[]> {
-  const access = await buildProviderAccess({ controller, authStorage });
+  const access = await buildProviderAccess({ controller, authStorage, tenantCredentials });
   const packs =
     packContext.mode === 'local'
       ? getAvailableModePacks(access, loadSettings().customModelPacks)
@@ -664,10 +688,22 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         requiresAuth: false,
         handler: async c => {
           try {
-            const models = await controller.listAvailableModels();
+            const tenantCredentials = await listTenantCredentialsForRequest({
+              c: loose(c),
+              auth,
+              credentials: options.modelCredentials,
+            });
+            const [models, access] = await Promise.all([
+              controller.listAvailableModels(),
+              buildProviderAccess({
+                controller,
+                authStorage: tenantCredentials ? undefined : authStorage,
+                tenantCredentials,
+              }),
+            ]);
             return c.json({
               models: models
-                .filter(m => m.hasApiKey && typeof m.id === 'string')
+                .filter(m => canUseModelProvider(access, m.provider) && typeof m.id === 'string')
                 .map(m => ({ id: m.id, provider: m.provider, modelName: m.modelName, hasApiKey: true }))
                 .sort((a, b) =>
                   a.provider === b.provider ? a.id!.localeCompare(b.id!) : a.provider.localeCompare(b.provider),
@@ -696,8 +732,19 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           try {
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
             const activePackId = await resolveActivePackId(session);
+            const tenantCredentials = await listTenantCredentialsForRequest({
+              c: loose(c),
+              auth,
+              credentials: options.modelCredentials,
+            });
             return c.json({
-              packs: await listModelPacks({ controller, authStorage, packContext, activePackId }),
+              packs: await listModelPacks({
+                controller,
+                authStorage: tenantCredentials ? undefined : authStorage,
+                tenantCredentials,
+                packContext,
+                activePackId,
+              }),
               activePackId,
             });
           } catch (error) {
@@ -791,7 +838,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           try {
             const session = await controller.getSessionByResource?.(resourceId, scope);
             if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-            const packs = await listModelPacks({ controller, authStorage, packContext });
+            const tenantCredentials = await listTenantCredentialsForRequest({
+              c: loose(c),
+              auth,
+              credentials: options.modelCredentials,
+            });
+            const packs = await listModelPacks({
+              controller,
+              authStorage: tenantCredentials ? undefined : authStorage,
+              tenantCredentials,
+              packContext,
+            });
             const pack = packs.find(p => p.id === id);
             if (!pack) return c.json({ error: `Unknown pack "${id}"` }, 404);
             await applyPackToSession({ controller, session, pack });

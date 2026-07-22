@@ -1,15 +1,15 @@
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Navigate, useLocation, useParams } from 'react-router';
 
-import { useKeyDown } from '../../lib/hooks';
-import { Sidebar } from '../../Sidebar';
-import { PageLayout } from '../../ui/PageLayout';
-import { ChatHeader } from '../chat/components/ChatHeader';
-import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
-import { SettingsHeader } from './components/SettingsHeader';
-import { SettingsPanel } from './components/SettingsPanel';
-import { useCloseSettings } from './hooks/useCloseSettings';
-import { DEFAULT_SETTINGS_PATH, isSettingsSection } from './settingsSections';
+import { useKeyDown } from '../lib/hooks';
+import { Sidebar } from '../Sidebar';
+import { PageLayout } from '../ui/PageLayout';
+import { ChatHeader } from '../domains/chat/components/ChatHeader';
+import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
+import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
+import { useCloseSettings } from '../domains/settings/hooks/useCloseSettings';
+import { DEFAULT_SETTINGS_PATH, isSettingsSection } from '../domains/settings/settingsSections';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;

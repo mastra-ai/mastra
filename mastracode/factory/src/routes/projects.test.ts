@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
-import type { FactoryStorageTestSeed } from '../storage/test-utils';
-import { createFactoryStorageForTests } from '../storage/test-utils';
-import { ProjectRoutes } from './projects';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils';
+import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { ProjectRoutes } from './projects.js';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 const projectRoutes = (seed: FactoryStorageTestSeed, versionControlIntegrationIds?: string[]) =>
   new ProjectRoutes({

@@ -1,21 +1,21 @@
 import { useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 
-import { Sidebar } from '../../Sidebar';
-import { ChatLayout } from '../../ui/ChatLayout';
-import { renderedPaths } from '../workspace-viewer/config';
-import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
-import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
-import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
-import { ChatHeader } from './components/ChatHeader';
-import { FactorySessionHeader } from '../factory/components/RelatedFactorySessions';
-import { ChatMessageList } from './components/ChatMessageList';
-import { ComposerPanel } from './components/ComposerPanel';
-import { TaskPanel } from './components/TaskPanel';
-import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
-import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
-import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
+import { Sidebar } from '../Sidebar';
+import { ChatLayout } from '../ui/ChatLayout';
+import { renderedPaths } from '../domains/workspace-viewer/config';
+import { WorkspaceViewerPanel } from '../domains/workspace-viewer/components/WorkspaceViewerPanel';
+import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { activeWorkspacePath, findUserSessionByThreadId } from '../domains/workspaces/services/factories';
+import { ChatHeader } from '../domains/chat/components/ChatHeader';
+import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
+import { ChatMessageList } from '../domains/chat/components/ChatMessageList';
+import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
+import { TaskPanel } from '../domains/chat/components/TaskPanel';
+import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
+import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { useRouteThreadSync } from '../../../shared/hooks/useRouteThreadSync';
+import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';

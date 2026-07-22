@@ -18,22 +18,22 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import type { RouteAuth } from '../../routes/route';
-import { SandboxBudgetError } from '../../sandbox/fleet';
-import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet';
-import type { StateSigner } from '../../state-signing';
-import type { AuditEmitter } from '../../storage/domains/audit/domain';
-import type { FactoryProjectsStorage } from '../../storage/domains/projects/base';
+import type { RouteAuth } from '../../routes/route.js';
+import { SandboxBudgetError } from '../../sandbox/fleet.js';
+import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
+import type { StateSigner } from '../../state-signing.js';
+import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   ProjectRepositorySandbox,
   ProjectSourceControlConnection,
   SourceControlInstallation,
   SourceControlRepository,
-} from '../../storage/domains/source-control/base';
-import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config';
-import type { GithubIntegration } from './integration';
-import { withProjectLock } from './project-lock';
+} from '../../storage/domains/source-control/base.js';
+import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
+import type { GithubIntegration } from './integration.js';
+import { withProjectLock } from './project-lock.js';
 
 import {
   commitAll,
@@ -45,11 +45,11 @@ import {
   pushBranch,
   teardownProjectSandbox,
   WorktreeError,
-} from './sandbox';
-import type { GitIdentity } from './sandbox';
-import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions';
-import { handleGithubWebhook } from './webhook';
-import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook';
+} from './sandbox.js';
+import type { GitIdentity } from './sandbox.js';
+import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions.js';
+import { handleGithubWebhook } from './webhook.js';
+import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook.js';
 
 /**
  * Loose Hono context accepted by the shared GitHub route helpers. The
@@ -1041,13 +1041,19 @@ async function prepareProject(options: {
   });
   // Re-read the sandbox binding so we have the freshly persisted sandboxId.
   const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
-  const token = await github.mintInstallationToken(Number(project.installation.externalId));
+  const access = await github.versionControl.getRepositoryAccess({
+    orgId: project.installation.orgId,
+    repositoryId: project.repository.id,
+  });
+  if (!access.authorization) {
+    throw new MaterializeError('Repository access did not include a bearer token.', 'clone-failed');
+  }
   const finalRow = fresh ?? sandboxRow;
   await materializeRepo({
     row: finalRow,
     repoInfo: { repoFullName: project.repository.slug, defaultBranch: project.defaultBranch },
     sandbox,
-    token,
+    token: access.authorization.token,
     storage: github.sourceControlStorage.sandboxes,
     onProgress,
   });
@@ -1307,7 +1313,7 @@ function buildProjectGitRoutes({
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
         if ('response' in owned) return owned.response;
-        const { userId, project } = owned;
+        const { orgId, userId, project } = owned;
 
         let body: { branch?: unknown; sessionId?: unknown };
         try {
@@ -1331,8 +1337,12 @@ function buildProjectGitRoutes({
             storage,
             fn: async () => {
               const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
-              const token = await github.mintInstallationToken(Number(project.installation.externalId));
-              await pushBranch(sandbox, workdir, branch, token, project.repository.slug);
+              const access = await github.versionControl.getRepositoryAccess({
+                orgId,
+                repositoryId: project.repository.id,
+              });
+              if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
+              await pushBranch(sandbox, workdir, branch, access.authorization.token, project.repository.slug);
               await emitAudit?.({
                 context: loose(c),
                 input: {

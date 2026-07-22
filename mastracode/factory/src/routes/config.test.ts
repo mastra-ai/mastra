@@ -2,15 +2,16 @@ import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createFactoryStorageForTests } from '../storage/test-utils';
-import type { FactoryStorageTestSeed } from '../storage/test-utils';
-import { ConfigRoutes, listProviders } from './config';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { buildProviderAccess, ConfigRoutes, listProviders } from './config.js';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {
   const loggedIn = new Set(opts.loggedIn ?? []);
   const storedKeys = new Set(opts.storedKeys ?? []);
   return {
+    get: (provider: string) => (loggedIn.has(provider) ? { type: 'oauth', refresh: 'r', access: 'a' } : undefined),
     isLoggedIn: (provider: string) => loggedIn.has(provider),
     hasStoredApiKey: (provider: string) => storedKeys.has(provider),
   } as unknown as AuthStorage;
@@ -150,6 +151,55 @@ describe('listProviders', () => {
       // Tenant records take over entirely; auth.json state must not leak.
       expect(list[0]?.source).toBe('none');
     });
+  });
+});
+
+describe('buildProviderAccess', () => {
+  it('does not expose catalog or environment credentials in tenant mode', async () => {
+    const access = await buildProviderAccess({
+      controller: makeAgentController([
+        { provider: 'anthropic', hasApiKey: true },
+        { provider: 'cerebras', hasApiKey: true },
+        { provider: 'google', hasApiKey: true },
+        { provider: 'deepseek', hasApiKey: true },
+        { provider: 'xai', hasApiKey: true },
+      ]),
+      tenantCredentials: [],
+    });
+
+    expect(access).toMatchObject({
+      anthropic: false,
+      cerebras: false,
+      google: false,
+      deepseek: false,
+      xai: false,
+    });
+  });
+
+  it('uses scoped tenant credentials for built-in and dynamic providers', async () => {
+    const access = await buildProviderAccess({
+      controller: makeAgentController([
+        { provider: 'cerebras', hasApiKey: false },
+        { provider: 'xai', hasApiKey: false },
+      ]),
+      tenantCredentials: [
+        {
+          provider: 'cerebras',
+          scope: 'org',
+          credential: { type: 'api_key', key: 'cerebras-key' },
+          updatedAt: new Date(),
+        },
+        {
+          provider: 'xai',
+          scope: 'user',
+          credential: { type: 'api_key', key: 'xai-key' },
+          updatedAt: new Date(),
+        },
+      ],
+    });
+
+    expect(access.cerebras).toBe('apikey');
+    expect(access.xai).toBe('apikey');
   });
 });
 
@@ -315,6 +365,38 @@ describe('GET /web/config/models', () => {
       models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
     });
   });
+
+  it('includes only models reachable through tenant credentials', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
+        { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: true },
+        { id: 'google/gemini', modelName: 'gemini', provider: 'google', hasApiKey: false },
+      ],
+    };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({ auth: fakeRouteAuth(), controller, modelCredentials: seed.credentials }).routes(),
+    );
+
+    const res = await app.request('/web/config/models');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
+    });
+  });
 });
 
 describe('model pack routes with a tenant', () => {
@@ -361,6 +443,42 @@ describe('model pack routes with a tenant', () => {
   it('rejects unauthenticated pack access when web auth is enabled', async () => {
     const res = await buildApp(null).request('/web/config/model-packs');
     expect(res.status).toBe(401);
+  });
+
+  it('includes only builtin packs reachable through tenant credentials', async () => {
+    const controllerWithoutEnv = makeAgentController([
+      { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
+      { provider: 'openai', hasApiKey: true, apiKeyEnvVar: 'OPENAI_API_KEY' },
+    ]);
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, userA as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller: controllerWithoutEnv,
+        modelCredentials: seed.credentials,
+        modelPacks: seed.modelPacks,
+      }).routes(),
+    );
+
+    const listed = await app.request('/web/config/model-packs');
+    expect(listed.status).toBe(200);
+    const { packs } = await listed.json();
+    expect(packs.find((p: { id: string }) => p.id === 'anthropic')).toMatchObject({
+      name: 'Anthropic',
+      custom: false,
+    });
+    expect(packs.find((p: { id: string }) => p.id === 'openai')).toBeUndefined();
   });
 
   it('persists custom packs in the org-scoped storage domain', async () => {

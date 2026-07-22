@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { WorkItemsStorage } from '../storage/domains/work-items/base';
-import { createFactoryStorageForTests } from '../storage/test-utils';
-import { defaultFactoryRules } from './defaults';
-import { FactoryDecisionDispatcher } from './dispatcher';
-import { FactoryStartCoordinator } from './start-coordinator';
-import { FactoryTransitionService } from './transition-service';
-import type { FactoryCommitDecision } from './types';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { defaultFactoryRules } from './defaults.js';
+import { FactoryDecisionDispatcher } from './dispatcher.js';
+import { FactoryStartCoordinator } from './start-coordinator.js';
+import { FactoryTransitionService } from './transition-service.js';
+import type { FactoryCommitDecision } from './types.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 

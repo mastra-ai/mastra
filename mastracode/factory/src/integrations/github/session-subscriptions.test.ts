@@ -1,6 +1,6 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GithubIntegration } from './integration';
+import type { GithubIntegration } from './integration.js';
 
 const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(async (_input: { sessionScope: string }) => ({ created: true })),
@@ -52,7 +52,7 @@ import {
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
   unsubscribeCurrentSessionFromPullRequest,
-} from './session-subscriptions';
+} from './session-subscriptions.js';
 
 function authenticatedRequestContext(scope = '/worktrees/a') {
   const requestContext = new RequestContext();
