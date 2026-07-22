@@ -153,6 +153,7 @@ function FlowCard({
         <Sankey
           data={records}
           columns={chartColumns}
+          columnOrder={chartColumns.map(column => column.id)}
           getColumnHue={column => getSignalHue(column.id)}
           getRecordNodeId={getSignalRecordNodeId}
           getRecordNodeLabel={getSignalRecordNodeLabel}
@@ -203,6 +204,7 @@ export function SankeySignals({
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
   const [signalNames, setSignalNames] = useState(() => initialSignalNames);
+  const [pendingSignalNames, setPendingSignalNames] = useState<TraceSignalName[]>();
   const [isChangingPerspective, setIsChangingPerspective] = useState(false);
   const [perspectiveError, setPerspectiveError] = useState<string>();
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames);
@@ -306,6 +308,13 @@ export function SankeySignals({
   }
 
   const stages = flow.stages;
+  const distributionSignalNames = pendingSignalNames ?? signalNames;
+  const distributionPositions = new Map(distributionSignalNames.map((signalName, index) => [signalName, index]));
+  const distributionStages = [...stages].sort(
+    (left, right) =>
+      (distributionPositions.get(left.signalName) ?? stages.length) -
+      (distributionPositions.get(right.signalName) ?? stages.length),
+  );
   const themeCount = stages.reduce(
     (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
     0,
@@ -330,6 +339,7 @@ export function SankeySignals({
     setDetailSelection(undefined);
     setNoiseSignalName(undefined);
     setPerspectiveError(undefined);
+    setPendingSignalNames(nextSignalNames);
     setIsChangingPerspective(true);
 
     try {
@@ -358,6 +368,7 @@ export function SankeySignals({
     } catch {
       setPerspectiveError('Unable to load that signal perspective. Try reordering the columns again.');
     } finally {
+      setPendingSignalNames(undefined);
       setIsChangingPerspective(false);
     }
   };
@@ -446,7 +457,7 @@ export function SankeySignals({
         <>
           {isChangingPerspective ? (
             <p className="font-mono text-xs text-neutral3" role="status">
-              Updating signal perspective…
+              Reloading snapshots for new signal perspective…
             </p>
           ) : null}
           {perspectiveError ? (
@@ -456,7 +467,7 @@ export function SankeySignals({
           ) : null}
           <SignalDistributions
             disabled={isChangingPerspective}
-            stages={stages}
+            stages={distributionStages}
             onOrderChange={handleSignalOrderChange}
             onViewThemeDetails={selection => {
               setNoiseSignalName(undefined);

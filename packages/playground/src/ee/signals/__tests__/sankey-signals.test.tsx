@@ -62,23 +62,43 @@ function renderSankeySignals() {
   );
 }
 
-function reorderOutcomeAfterBehavior(beforeDrop?: () => void) {
-  const outcomeHandle = screen.getByLabelText('Reorder Outcome');
-  const behaviorCard = screen.getByRole('article', { name: 'Behavior distribution' });
-  const behaviorDropTarget = behaviorCard.parentElement;
-  if (!behaviorDropTarget) throw new Error('Behavior drop target was not rendered');
-  const dataTransfer = {
-    dropEffect: 'none',
-    effectAllowed: 'none',
-    getData: vi.fn(),
-    setData: vi.fn(),
+function rectangle(left: number, width: number, height: number) {
+  return {
+    x: left,
+    y: 0,
+    top: 0,
+    right: left + width,
+    bottom: height,
+    left,
+    width,
+    height,
+    toJSON: () => ({}),
   };
-  fireEvent.dragStart(outcomeHandle, { dataTransfer });
-  fireEvent.dragEnter(behaviorDropTarget, { dataTransfer });
-  fireEvent.dragOver(behaviorDropTarget, { dataTransfer });
+}
+
+async function reorderOutcomeAfterBehavior(beforeDrop?: () => void) {
+  const distributionCards = within(screen.getByRole('region', { name: 'Signal distributions' })).getAllByRole(
+    'article',
+  );
+  distributionCards.forEach((card, index) => {
+    const draggable = card.parentElement;
+    if (!draggable) throw new Error('Signal distribution draggable was not rendered');
+    vi.spyOn(draggable, 'getBoundingClientRect').mockReturnValue(rectangle(index * 250, 240, 300));
+  });
+  vi.spyOn(screen.getByRole('region', { name: 'Signal distributions' }), 'getBoundingClientRect').mockReturnValue(
+    rectangle(0, 990, 300),
+  );
+  const outcomeCard = screen.getByRole('article', { name: 'Outcome distribution' });
+  const outcomeHandle = screen.getByLabelText('Reorder Outcome');
+  expect(outcomeCard.parentElement?.getAttribute('draggable')).not.toBe('true');
+  expect(outcomeHandle.getAttribute('draggable')).not.toBe('true');
+  fireEvent.mouseDown(outcomeHandle, { button: 0, buttons: 1, clientX: 375, clientY: 100 });
+  fireEvent.mouseMove(window, { buttons: 1, clientX: 390, clientY: 100 });
+  await waitFor(() => expect(outcomeCard.parentElement?.style.position).toBe('fixed'));
+  fireEvent.mouseMove(window, { buttons: 1, clientX: 650, clientY: 100 });
+  await waitFor(() => expect(outcomeCard.parentElement?.style.transform).not.toBe(''));
   beforeDrop?.();
-  fireEvent.drop(behaviorDropTarget, { dataTransfer });
-  fireEvent.dragEnd(outcomeHandle, { dataTransfer });
+  fireEvent.mouseUp(window, { button: 0, buttons: 0, clientX: 650, clientY: 100 });
 }
 
 beforeEach(() => {
@@ -407,12 +427,9 @@ describe('SankeySignals', () => {
 
       await screen.findByLabelText('Reorder Outcome');
       expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment']);
-      reorderOutcomeAfterBehavior(() => {
+      await reorderOutcomeAfterBehavior(() => {
         expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment']);
         expect(flowOrders).toEqual(['goal,outcome,behavior,sentiment']);
-        expect(screen.getByRole('article', { name: 'Behavior distribution' }).parentElement?.className).toContain(
-          'ring-accent1',
-        );
       });
 
       await waitFor(() =>
@@ -428,6 +445,13 @@ describe('SankeySignals', () => {
             .map(card => card.getAttribute('aria-label')),
         ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']),
       );
+      const chart = within(screen.getByRole('region', { name: 'Signal theme flow' }));
+      expect(chart.getByText('GOAL')).not.toBeNull();
+      expect(chart.getByText('BEHAVIOR')).not.toBeNull();
+      expect(chart.getByText('OUTCOME')).not.toBeNull();
+      expect(chart.getByText('SENTIMENT')).not.toBeNull();
+      expect(chart.getByLabelText(/Resolve support request.*22 traces/)).not.toBeNull();
+      expect(chart.getByLabelText(/Frustrated.*29 traces/)).not.toBeNull();
     });
 
     it('keeps the current perspective visible while the new perspective loads', async () => {
@@ -461,15 +485,15 @@ describe('SankeySignals', () => {
       renderSankeySignals();
       await screen.findByLabelText('Reorder Outcome');
 
-      reorderOutcomeAfterBehavior();
+      await reorderOutcomeAfterBehavior();
 
-      expect(await screen.findByText('Updating signal perspective…')).not.toBeNull();
+      expect(await screen.findByText('Reloading snapshots for new signal perspective…')).not.toBeNull();
       expect(screen.queryByTestId('signals-loading-skeleton')).toBeNull();
       expect(
         within(screen.getByRole('region', { name: 'Signal distributions' }))
           .getAllByRole('article')
           .map(card => card.getAttribute('aria-label')),
-      ).toEqual(['Goal distribution', 'Outcome distribution', 'Behavior distribution', 'Sentiment distribution']);
+      ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']);
 
       releaseReorderedSnapshots();
       await waitFor(() =>
@@ -519,7 +543,7 @@ describe('SankeySignals', () => {
       fireEvent.change(sliderInput, { target: { value: '0' } });
       await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces');
 
-      reorderOutcomeAfterBehavior();
+      await reorderOutcomeAfterBehavior();
 
       expect(await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces')).not.toBeNull();
       await waitFor(() => expect(reorderedFlowSnapshots).toContain('reordered-snapshot-3'));

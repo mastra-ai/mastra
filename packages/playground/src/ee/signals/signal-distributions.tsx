@@ -1,9 +1,9 @@
+import type { DraggableProvidedDragHandleProps, DropResult, DroppableProvided } from '@hello-pangea/dnd';
+import { DragDropContext, Draggable, Droppable, useMouseSensor, useTouchSensor } from '@hello-pangea/dnd';
 import { Card, CardContent, CardHeader } from '@mastra/playground-ui/components/Card';
 import { nodeColor } from '@mastra/playground-ui/components/SankeyChart';
 import { getSignalHue } from '@mastra/playground-ui/ee/signals';
 import { GripVertical } from 'lucide-react';
-import type { DragEvent } from 'react';
-import { useState } from 'react';
 
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeFlowResponse, ThemeNode, TraceSignalName } from './types';
@@ -102,20 +102,20 @@ function NoiseDistributionRow({
 
 function SignalDistribution({
   disabled,
+  dragHandleProps,
+  isDragging,
   signalName,
   traceCount,
   nodes,
-  onDragStart,
-  onDragEnd,
   onViewThemeDetails,
   onViewNoiseDetails,
 }: {
   disabled: boolean;
+  dragHandleProps?: DraggableProvidedDragHandleProps;
+  isDragging: boolean;
   signalName: TraceSignalName;
   traceCount: number;
   nodes: ThemeNode[];
-  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
-  onDragEnd: () => void;
   onViewThemeDetails: (selection: ThemeSelection) => void;
   onViewNoiseDetails: (signalName: TraceSignalName) => void;
 }) {
@@ -124,22 +124,24 @@ function SignalDistribution({
   const displayNodes = nodes.filter(node => node.kind !== 'noise');
   const noiseNode = nodes.find(node => node.kind === 'noise');
 
+  const cardClassName = isDragging ? 'min-w-0 shadow-lg ring-2 ring-accent1' : 'min-w-0 transition-shadow duration-150';
+
   return (
-    <Card aria-label={`${label} distribution`} as="article" className="min-w-0" elevation="elevated">
+    <Card aria-label={`${label} distribution`} as="article" className={cardClassName} elevation="elevated">
       <CardHeader className="flex flex-row items-center justify-between border-b border-border1 px-4 py-3">
         <h3 className="font-mono text-xs font-semibold tracking-wider" style={{ color }}>
           {label.toUpperCase()}
         </h3>
-        <div
-          aria-disabled={disabled}
-          aria-label={`Reorder ${label}`}
-          className="cursor-grab rounded-xs p-1 text-neutral3 hover:bg-surface3 hover:text-neutral5 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
-          draggable={!disabled}
-          onDragEnd={onDragEnd}
-          onDragStart={onDragStart}
-          title={`Drag to reorder ${label}`}
-        >
-          <GripVertical aria-hidden="true" className="size-4" />
+        <div className="flex items-center gap-2">
+          <div
+            {...dragHandleProps}
+            aria-disabled={disabled}
+            aria-label={`Reorder ${label}`}
+            className="cursor-grab rounded-xs p-1 text-neutral3 group-hover:text-neutral5 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
+            title={`Drag the ${label} card to reorder`}
+          >
+            <GripVertical aria-hidden="true" className="size-4" />
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 p-4">
@@ -203,72 +205,54 @@ export function SignalDistributions({
   onViewThemeDetails: (selection: ThemeSelection) => void;
   onViewNoiseDetails: (signalName: TraceSignalName) => void;
 }) {
-  const [draggedSignalName, setDraggedSignalName] = useState<TraceSignalName>();
-  const [dropTargetSignalName, setDropTargetSignalName] = useState<TraceSignalName>();
-  const clearDragState = () => {
-    setDraggedSignalName(undefined);
-    setDropTargetSignalName(undefined);
-  };
-  const handleDrop = (targetSignalName: TraceSignalName) => {
-    if (!draggedSignalName || draggedSignalName === targetSignalName) {
-      clearDragState();
-      return;
-    }
+  const handleDragEnd = (result: DropResult) => {
+    const destinationIndex = result.destination?.index;
+    if (destinationIndex === undefined || destinationIndex === result.source.index) return;
 
     const reorderedStages = [...stages];
-    const sourceIndex = reorderedStages.findIndex(stage => stage.signalName === draggedSignalName);
-    const targetIndex = reorderedStages.findIndex(stage => stage.signalName === targetSignalName);
-    if (sourceIndex < 0 || targetIndex < 0) {
-      clearDragState();
-      return;
-    }
-    const [movedStage] = reorderedStages.splice(sourceIndex, 1);
-    if (!movedStage) {
-      clearDragState();
-      return;
-    }
-    reorderedStages.splice(targetIndex, 0, movedStage);
-    clearDragState();
+    const [movedStage] = reorderedStages.splice(result.source.index, 1);
+    if (!movedStage) return;
+    reorderedStages.splice(destinationIndex, 0, movedStage);
     onOrderChange(reorderedStages.map(stage => stage.signalName));
   };
 
   return (
-    <section aria-label="Signal distributions" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {stages.map(stage => (
-        <div
-          key={stage.signalName}
-          className={dropTargetSignalName === stage.signalName ? 'rounded-lg ring-2 ring-accent1' : undefined}
-          onDragEnter={() => {
-            if (draggedSignalName && draggedSignalName !== stage.signalName) {
-              setDropTargetSignalName(stage.signalName);
-            }
-          }}
-          onDragOver={event => {
-            if (!draggedSignalName || draggedSignalName === stage.signalName) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = 'move';
-          }}
-          onDrop={event => {
-            event.preventDefault();
-            handleDrop(stage.signalName);
-          }}
-        >
-          <SignalDistribution
-            disabled={disabled}
-            signalName={stage.signalName}
-            traceCount={stage.traceCount}
-            nodes={stage.nodes}
-            onDragStart={event => {
-              event.dataTransfer.effectAllowed = 'move';
-              event.dataTransfer.setData('text/plain', stage.signalName);
-              setDraggedSignalName(stage.signalName);
-            }}
-            onDragEnd={clearDragState}
-            onViewThemeDetails={onViewThemeDetails}
-            onViewNoiseDetails={onViewNoiseDetails}
-          />
-        </div>
-      ))}
-    </section>
+    <DragDropContext enableDefaultSensors={false} sensors={[useMouseSensor, useTouchSensor]} onDragEnd={handleDragEnd}>
+      <Droppable direction="horizontal" droppableId="signal-distributions">
+        {(provided: DroppableProvided) => (
+          <section
+            {...provided.droppableProps}
+            ref={provided.innerRef}
+            aria-label="Signal distributions"
+            className="flex gap-3 overflow-x-auto pb-1"
+          >
+            {stages.map((stage, index) => (
+              <Draggable key={stage.signalName} draggableId={stage.signalName} index={index} isDragDisabled={disabled}>
+                {(provided, snapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    className="min-w-56 flex-1 basis-0"
+                    style={provided.draggableProps.style}
+                  >
+                    <SignalDistribution
+                      disabled={disabled}
+                      dragHandleProps={provided.dragHandleProps ?? undefined}
+                      isDragging={snapshot.isDragging}
+                      signalName={stage.signalName}
+                      traceCount={stage.traceCount}
+                      nodes={stage.nodes}
+                      onViewThemeDetails={onViewThemeDetails}
+                      onViewNoiseDetails={onViewNoiseDetails}
+                    />
+                  </div>
+                )}
+              </Draggable>
+            ))}
+            {provided.placeholder}
+          </section>
+        )}
+      </Droppable>
+    </DragDropContext>
   );
 }
