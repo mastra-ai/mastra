@@ -68,7 +68,7 @@ function json(data: unknown): Response {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.example.com/v1');
-  vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+  vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'platform-token');
   vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '60000');
   harness.reset();
   __resetRuntimeConfigForTests();

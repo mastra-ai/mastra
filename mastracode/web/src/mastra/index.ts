@@ -134,22 +134,21 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
-const PLATFORM_SANDBOX_ENV_KEYS = [
-  'MASTRA_PLATFORM_ACCESS_TOKEN',
-  'MASTRA_PROJECT_ID',
-  'MASTRA_ENVIRONMENT_ID',
-] as const;
+const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_PROJECT_ID', 'MASTRA_ENVIRONMENT_ID'] as const;
+
+function hasPlatformSecretKey(): boolean {
+  // MASTRA_PLATFORM_ACCESS_TOKEN is a deprecated alias for
+  // MASTRA_PLATFORM_SECRET_KEY.
+  return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim() || process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim());
+}
 
 function hasPlatformSandboxEnv(): boolean {
-  return PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
+  return hasPlatformSecretKey() && PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
 }
 
 function missingPlatformSandboxEnv(): string[] {
-  return PLATFORM_SANDBOX_ENV_KEYS.filter(key => !process.env[key]?.trim());
-}
-
-function hasPlatformAccessToken(): boolean {
-  return Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim());
+  const missing: string[] = hasPlatformSecretKey() ? [] : ['MASTRA_PLATFORM_SECRET_KEY'];
+  return [...missing, ...PLATFORM_SANDBOX_ENV_KEYS.filter(key => !process.env[key]?.trim())];
 }
 
 // Sandbox machine, by env precedence (any `WorkspaceSandbox` implementing
@@ -158,8 +157,9 @@ function hasPlatformAccessToken(): boolean {
 //   1. MASTRACODE_SANDBOX_PROVIDER=platform|railway|local — explicit selection.
 //      Platform/Railway selected without their required env is a hard
 //      misconfiguration error.
-//   2. PlatformSandbox when MASTRA_PLATFORM_ACCESS_TOKEN, MASTRA_PROJECT_ID,
-//      and MASTRA_ENVIRONMENT_ID are all set.
+//   2. PlatformSandbox when MASTRA_PLATFORM_SECRET_KEY (or the deprecated
+//      MASTRA_PLATFORM_ACCESS_TOKEN alias), MASTRA_PROJECT_ID, and
+//      MASTRA_ENVIRONMENT_ID are all set.
 //   3. RAILWAY_API_TOKEN set → RailwaySandbox (isolated cloud VMs,
 //      multi-tenant safe).
 //   4. Neither → LocalSandbox, so repos can always be opened with no extra
@@ -255,7 +255,7 @@ const github = githubEnv
       slug: githubEnv.GITHUB_APP_SLUG,
       webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET,
     })
-  : hasPlatformAccessToken()
+  : hasPlatformSecretKey()
     ? new PlatformGithubIntegration()
     : undefined;
 
@@ -269,7 +269,7 @@ const linearEnv = envGroup(
 );
 const linear = linearEnv
   ? new LinearIntegration({ clientId: linearEnv.LINEAR_CLIENT_ID, clientSecret: linearEnv.LINEAR_CLIENT_SECRET })
-  : hasPlatformAccessToken()
+  : hasPlatformSecretKey()
     ? new PlatformLinearIntegration()
     : undefined;
 

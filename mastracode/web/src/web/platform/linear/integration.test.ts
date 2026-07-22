@@ -70,7 +70,7 @@ function json(data: unknown, status = 200): Response {
 
 beforeEach(() => {
   vi.stubEnv('MASTRA_SHARED_API_URL', config.baseUrl);
-  vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', config.accessToken);
+  vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', config.accessToken);
 });
 
 afterEach(() => {
@@ -355,7 +355,8 @@ describe('PlatformLinearIntegration', () => {
       endpointHost: 'platform.mastra.ai',
     });
 
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
-    expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
+    expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 });
