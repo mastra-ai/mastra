@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AuditEmitter } from '../audit/domain';
-import type { IntakeIntegrationCapability } from '../factory-integration';
+import type { Intake } from '../capabilities/intake';
 import { __resetRuntimeConfigForTests } from '../runtime-config';
 import { seedFactoryStorageForTests } from '../storage/test-utils';
 import type { FactoryStorageTestSeed } from '../storage/test-utils';
@@ -17,7 +17,7 @@ const audit: AuditEmitter = {
   },
 };
 
-const github: IntakeIntegrationCapability = {
+const github: Pick<Intake, 'listSources' | 'listItems'> = {
   listSources: vi.fn(async () => [{ id: 'repo-1', name: 'acme/app', type: 'repository' }]),
   listItems: vi.fn(async () => ({
     items: [
@@ -31,7 +31,7 @@ const github: IntakeIntegrationCapability = {
   })),
 };
 
-const linear: IntakeIntegrationCapability = {
+const linear: Pick<Intake, 'listSources' | 'listItems'> = {
   listSources: vi.fn(async () => [{ id: 'team-1', name: 'Platform', type: 'project' }]),
   listItems: vi.fn(async () => ({
     items: [

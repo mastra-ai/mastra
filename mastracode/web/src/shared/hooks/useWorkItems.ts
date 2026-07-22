@@ -6,6 +6,7 @@ import {
   createWorkItem,
   deleteWorkItem,
   listWorkItems,
+  transitionWorkItem,
   updateWorkItem,
 } from '../../web/ui/domains/factory/services/workItems';
 import type {
@@ -21,6 +22,9 @@ export function useWorkItemsQuery(factoryProjectId: string | undefined) {
     queryKey: queryKeys.workItems(factoryProjectId),
     queryFn: () => listWorkItems(baseUrl, factoryProjectId!),
     enabled: Boolean(factoryProjectId),
+    // Relationships can be created by GitHub ingestion or another open tab.
+    // Keep thread-page counterpart links current without requiring a reload.
+    refetchInterval: 5_000,
   });
 }
 
@@ -42,11 +46,7 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
   });
 }
 
-/**
- * Patch a work item (stage moves, session/metadata merges). Stage moves apply
- * optimistically — the card jumps columns immediately and rolls back if the
- * server rejects the patch.
- */
+/** Patch non-stage work-item fields. Stage movement uses the transition authority below. */
 export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
@@ -56,10 +56,10 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueryData<WorkItem[]>(listKey);
-      if (previous && patch.stages) {
+      if (previous && patch.parentWorkItemId !== undefined) {
         queryClient.setQueryData<WorkItem[]>(
           listKey,
-          previous.map(item => (item.id === id ? { ...item, stages: patch.stages! } : item)),
+          previous.map(item => (item.id === id ? { ...item, parentWorkItemId: patch.parentWorkItemId ?? null } : item)),
         );
       }
       return { previous };
@@ -71,6 +71,37 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
       queryClient.setQueryData<WorkItem[]>(listKey, existing =>
         (existing ?? []).map(i => (i.id === item.id ? item : i)),
       );
+    },
+  });
+}
+
+export function useTransitionWorkItemMutation(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const listKey = queryKeys.workItems(factoryProjectId);
+  return useMutation({
+    mutationFn: ({ item, board, stage }: { item: WorkItem; board: 'work' | 'review'; stage: string }) =>
+      transitionWorkItem(baseUrl, factoryProjectId!, item.id, {
+        board,
+        stage: stage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+        expectedRevision: item.revision,
+        requestId: crypto.randomUUID(),
+        cause: 'board_drag',
+      }),
+    onMutate: async ({ item, stage }) => {
+      await queryClient.cancelQueries({ queryKey: listKey });
+      const previous = queryClient.getQueryData<WorkItem[]>(listKey);
+      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
+        (existing ?? []).map(candidate => (candidate.id === item.id ? { ...candidate, stages: [stage] } : candidate)),
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(listKey, context.previous);
+    },
+    onSuccess: (result, _variables, context) => {
+      if (result.status === 'rejected' && context?.previous) queryClient.setQueryData(listKey, context.previous);
+      void queryClient.invalidateQueries({ queryKey: listKey });
     },
   });
 }

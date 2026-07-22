@@ -337,6 +337,7 @@ export class AgentController<TState = {}> {
     id,
     scope,
     tags,
+    threadId,
     workspace,
     browser,
     requestContext,
@@ -362,6 +363,8 @@ export class AgentController<TState = {}> {
      * changing the API. Falls back to `initialState` when omitted.
      */
     tags?: Record<string, string>;
+    /** Exact thread id to bind during session creation. Existing threads are resumed; missing threads are created with this id. */
+    threadId?: string;
     workspace?: Workspace;
     browser?: MastraBrowser;
     requestContext?: RequestContext;
@@ -384,6 +387,7 @@ export class AgentController<TState = {}> {
 
     const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
       scope,
+      threadId,
       workspace,
       browser,
       requestContext,
@@ -409,6 +413,7 @@ export class AgentController<TState = {}> {
     tags?: Record<string, string>,
     overrides?: {
       scope?: string;
+      threadId?: string;
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
@@ -512,38 +517,53 @@ export class AgentController<TState = {}> {
       }
     }
 
-    // Bring the session online with a current thread. Selection is tag-aware so
-    // worktrees sharing a resourceId each resume their own thread without
-    // claiming threads owned by another scope. A thread is a candidate only when
-    // its metadata matches every provided tag; with no tags every thread
-    // qualifies. Tags default to the controller-global state when omitted.
-    const selectionTags: Record<string, string> = {};
-    if (tags && Object.keys(tags).length > 0) {
-      Object.assign(selectionTags, tags);
+    if (overrides?.threadId) {
+      const existingThread = await session.thread.getById({ threadId: overrides.threadId });
+      if (existingThread) {
+        if (existingThread.resourceId !== effectiveResourceId) {
+          throw new Error(`Thread not found: ${overrides.threadId}`);
+        }
+        await this.config.threadLock?.acquire(existingThread.id);
+        session.thread.set({ threadId: existingThread.id });
+        await session.thread.loadMetadata();
+        await session.thread.ensureCurrentSubscription();
+      } else {
+        await session.thread.create({ id: overrides.threadId });
+      }
     } else {
-      const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
-      if (projectPath) selectionTags.projectPath = projectPath;
-    }
-    const tagEntries = Object.entries(selectionTags);
+      // Bring the session online with a current thread. Selection is tag-aware so
+      // worktrees sharing a resourceId each resume their own thread without
+      // claiming threads owned by another scope. A thread is a candidate only when
+      // its metadata matches every provided tag; with no tags every thread
+      // qualifies. Tags default to the controller-global state when omitted.
+      const selectionTags: Record<string, string> = {};
+      if (tags && Object.keys(tags).length > 0) {
+        Object.assign(selectionTags, tags);
+      } else {
+        const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
+        if (projectPath) selectionTags.projectPath = projectPath;
+      }
+      const tagEntries = Object.entries(selectionTags);
 
-    const threads = await session.thread.list();
-    const candidates =
-      tagEntries.length > 0
-        ? threads.filter(t => {
-            const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-            return tagEntries.every(([key, value]) => metadata[key] === value);
-          })
-        : threads;
+      const threads = await session.thread.list();
+      const candidates =
+        tagEntries.length > 0
+          ? threads.filter(t => {
+              const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+              return tagEntries.every(([key, value]) => metadata[key] === value);
+            })
+          : threads;
 
-    // Resume the most recent same-resource candidate, or create a new thread.
-    if (candidates.length === 0) {
-      await session.thread.create();
-    } else {
-      const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
-      await this.config.threadLock?.acquire(mostRecent.id);
-      session.thread.set({ threadId: mostRecent.id });
-      await session.thread.loadMetadata();
-      await session.thread.ensureCurrentSubscription();
+      // Resume the most recent same-resource candidate, or create a new thread.
+      if (candidates.length === 0) {
+        await session.thread.create();
+      } else {
+        const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+        await this.config.threadLock?.acquire(mostRecent.id);
+        session.thread.set({ threadId: mostRecent.id });
+        await session.thread.loadMetadata();
+        await session.thread.ensureCurrentSubscription();
+      }
     }
 
     return session;

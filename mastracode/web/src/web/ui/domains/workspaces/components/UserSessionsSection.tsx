@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -9,8 +10,7 @@ import type { FormEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { queryKeys } from '../../../../../shared/api/keys';
-import { useToast } from '../../../ui/toast';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
 import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { userSessionResourceId } from '../../auth/services/auth';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
@@ -58,7 +58,6 @@ export function UserSessionsSection() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
@@ -83,7 +82,7 @@ export function UserSessionsSection() {
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId: userResourceId,
-    projectPath: worktrees[0]?.worktreePath,
+    scope: worktrees[0]?.worktreePath,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
     enabled: sessionsEnabled && !auth.isPending && worktrees.length > 0,
@@ -132,7 +131,12 @@ export function UserSessionsSection() {
       });
       // A fresh thread has no messages; seed the cache to skip the skeleton.
       queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, userResourceId, thread.id),
+        queryKeys.agentControllerThreadMessages(
+          AGENT_CONTROLLER_ID,
+          userResourceId,
+          thread.id,
+          INITIAL_THREAD_MESSAGE_LIMIT,
+        ),
         [],
       );
       return thread.id;
@@ -172,7 +176,7 @@ export function UserSessionsSection() {
     },
     onError: error => {
       setConfirmDelete(null);
-      toast(error instanceof Error ? error.message : 'Failed to delete session', 'error');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete session');
     },
   });
 
@@ -196,7 +200,7 @@ export function UserSessionsSection() {
       invalidate();
       void navigate(`/user/threads/${thread.id}`);
     } catch (error) {
-      toast(error instanceof Error ? error.message : 'Failed to open session', 'error');
+      toast.error(error instanceof Error ? error.message : 'Failed to open session');
     }
   };
 

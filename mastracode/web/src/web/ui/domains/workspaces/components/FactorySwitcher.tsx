@@ -1,3 +1,4 @@
+import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, ChevronsUpDown, Factory as FactoryIcon, Folder, Plus } from 'lucide-react';
@@ -11,10 +12,16 @@ import { isServerFactory } from '../services/factories';
 export function FactorySwitcher() {
   const { factories, activeFactory, selectFactory } = useActiveFactoryContext();
   const overlays = useOverlays();
+  const { setOpenMobile } = useMainSidebar();
 
+  const openFactories = () => {
+    overlays.open('factories');
+    setOpenMobile(false);
+  };
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
+        id="factory-switcher-trigger"
         aria-label="Select factory"
         className="flex w-full items-center gap-2 rounded-md border border-border1 px-2.5 py-2 text-left hover:bg-surface3"
       >
@@ -40,7 +47,7 @@ export function FactorySwitcher() {
           </DropdownMenu.Item>
         ))}
         {factories.length > 0 && <DropdownMenu.Separator />}
-        <DropdownMenu.Item onSelect={() => overlays.open('factories')}>
+        <DropdownMenu.Item onSelect={openFactories}>
           <Plus />
           <span>Create Factory</span>
         </DropdownMenu.Item>

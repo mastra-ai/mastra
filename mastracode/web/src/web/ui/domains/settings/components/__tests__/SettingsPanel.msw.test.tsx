@@ -1,5 +1,7 @@
-import type { AgentControllerSessionState, PermissionRules } from '@mastra/client-js';
+import type { AgentControllerSessionSettings, AgentControllerSessionState, PermissionRules } from '@mastra/client-js';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -11,8 +13,10 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
 import { ActiveFactoryProvider } from '../../../workspaces';
+import { OverlaysProvider } from '../../../../lib/overlays';
 import { SettingsPanel } from '../../index';
 import { loadDoneSound, playDoneSound } from '../../services/doneSound';
+import { SettingsNavigationProvider, useSetSettingsSection } from '../../context/SettingsNavigationProvider';
 
 // The completion sound synthesizes audio via AudioContext, which jsdom
 // doesn't provide; mock playback (persistence stays real) so specs can
@@ -65,7 +69,16 @@ function sse(): Response {
   });
 }
 
+function isThinkingLevel(value: unknown): value is AgentControllerSessionSettings['thinkingLevel'] {
+  return value === 'off' || value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh';
+}
+
+function isNotificationMode(value: unknown): value is AgentControllerSessionSettings['notifications'] {
+  return value === 'off' || value === 'bell' || value === 'system' || value === 'both';
+}
+
 function useAgentControllerHandlers(): CapturedRequests {
+  let state = sessionState();
   const captured: CapturedRequests = { modelIds: [], stateUpdates: [], permissions: [] };
 
   server.use(
@@ -93,13 +106,37 @@ function useAgentControllerHandlers(): CapturedRequests {
         ],
       }),
     ),
-    http.get(SESSION, () => HttpResponse.json(sessionState())),
+    http.get(SESSION, () => HttpResponse.json(state)),
     http.put(`${SESSION}/state`, async ({ request }) => {
       const body = await request.json();
       if (body && typeof body === 'object' && 'state' in body && body.state && typeof body.state === 'object') {
         captured.stateUpdates.push(body.state);
+        const currentSettings: AgentControllerSessionSettings = state.settings ?? {
+          yolo: false,
+          thinkingLevel: 'medium',
+          notifications: 'bell',
+          smartEditing: true,
+        };
+        state = {
+          ...state,
+          settings: {
+            yolo: 'yolo' in body.state && typeof body.state.yolo === 'boolean' ? body.state.yolo : currentSettings.yolo,
+            thinkingLevel:
+              'thinkingLevel' in body.state && isThinkingLevel(body.state.thinkingLevel)
+                ? body.state.thinkingLevel
+                : currentSettings.thinkingLevel,
+            notifications:
+              'notifications' in body.state && isNotificationMode(body.state.notifications)
+                ? body.state.notifications
+                : currentSettings.notifications,
+            smartEditing:
+              'smartEditing' in body.state && typeof body.state.smartEditing === 'boolean'
+                ? body.state.smartEditing
+                : currentSettings.smartEditing,
+          },
+        };
       }
-      return HttpResponse.json(sessionState());
+      return HttpResponse.json({ ok: true });
     }),
     http.post(`${SESSION}/model`, async ({ request }) => {
       const body = await request.json();
@@ -142,14 +179,39 @@ function ThemeProbe() {
   return <span data-testid="theme-value">{theme}</span>;
 }
 
+function SettingsSectionControls() {
+  const setSection = useSetSettingsSection();
+  return (
+    <div aria-label="Settings test controls">
+      <button type="button" onClick={() => setSection('source-control')}>
+        Show source control settings
+      </button>
+      <button type="button" onClick={() => setSection('model')}>
+        Show model settings
+      </button>
+      <button type="button" onClick={() => setSection('behavior')}>
+        Show behavior settings
+      </button>
+    </div>
+  );
+}
+
 function Harness({ children }: { children: ReactNode }) {
   return (
-    <ActiveFactoryProvider>
-      <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
-        <ThemeProbe />
-        {children}
-      </ChatSessionProvider>
-    </ActiveFactoryProvider>
+    <MainSidebarProvider storageKey="settings-panel-test" mobileBreakpoint={768}>
+      <ActiveFactoryProvider>
+        <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
+          <OverlaysProvider>
+            <SettingsNavigationProvider>
+              <ThemeProbe />
+              <SettingsSectionControls />
+              {children}
+              <Toaster position="bottom-right" />
+            </SettingsNavigationProvider>
+          </OverlaysProvider>
+        </ChatSessionProvider>
+      </ActiveFactoryProvider>
+    </MainSidebarProvider>
   );
 }
 
@@ -158,7 +220,7 @@ function renderSettingsPanel() {
   const captured = useAgentControllerHandlers();
   renderWithProviders(
     <Harness>
-      <SettingsPanel onClose={() => {}} />
+      <SettingsPanel />
     </Harness>,
   );
   return captured;
@@ -169,6 +231,19 @@ afterEach(() => {
 });
 
 describe('SettingsPanel', () => {
+  describe('when rendered', () => {
+    it('exposes a focused, labelled in-layout section without dialog semantics', () => {
+      renderSettingsPanel();
+
+      const settings = screen.getByRole('region', { name: 'Settings' });
+      const heading = within(settings).getByRole('heading', { name: 'Settings' });
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(within(settings).queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
+      expect(heading).toHaveFocus();
+    });
+  });
+
   describe('when changing general preferences', () => {
     it('updates the theme from the real theme provider and omits density controls', async () => {
       const user = userEvent.setup();
@@ -202,13 +277,13 @@ describe('SettingsPanel', () => {
       const user = userEvent.setup();
       renderSettingsPanel();
 
-      await user.click(screen.getByRole('tab', { name: 'Source Control' }));
+      await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
       expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
       await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBeNull());
-      await user.click(screen.getByRole('tab', { name: 'Source Control' }));
+      await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
       await screen.findByText('Select a factory to manage its source control.');
       expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]);
     });
@@ -216,7 +291,7 @@ describe('SettingsPanel', () => {
     it('keeps the factory visible and reports storage failures', async () => {
       const user = userEvent.setup();
       renderSettingsPanel();
-      await user.click(screen.getByRole('tab', { name: 'Source Control' }));
+      await user.click(screen.getByRole('button', { name: 'Show source control settings' }));
       const storageError = new Error('Factory storage is unavailable');
       const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
         throw storageError;
@@ -231,22 +306,42 @@ describe('SettingsPanel', () => {
   });
 
   describe('when changing model preferences', () => {
-    it('updates the thinking level through the chat settings provider', async () => {
+    it('persists the thinking level and updates the selected button', async () => {
       const user = userEvent.setup();
       const captured = renderSettingsPanel();
 
-      await user.click(screen.getByRole('tab', { name: /model/i }));
-      await user.click(await screen.findByRole('button', { name: 'High' }));
+      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
+      const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
+      await waitFor(() => expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).toBePressed());
+      await user.click(within(thinkingLevel).getByRole('button', { name: 'High' }));
 
       await waitFor(() => expect(captured.stateUpdates).toContainEqual({ thinkingLevel: 'high' }));
+      await waitFor(() => expect(within(thinkingLevel).getByRole('button', { name: 'High' })).toBePressed());
+      expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).not.toBePressed();
+      expect(await screen.findByText('Settings updated')).toBeInTheDocument();
     });
 
-    it('hosts model packs inside the Model tab instead of a separate Packs tab', async () => {
+    it('reports an acknowledged but unpersisted update and restores the selected button', async () => {
       const user = userEvent.setup();
       renderSettingsPanel();
 
-      expect(screen.queryByRole('tab', { name: 'Packs' })).not.toBeInTheDocument();
-      await user.click(screen.getByRole('tab', { name: /model/i }));
+      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
+      const thinkingLevel = await screen.findByRole('group', { name: 'Thinking level' });
+      await waitFor(() => expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).toBePressed());
+      server.use(http.put(`${SESSION}/state`, () => HttpResponse.json({ ok: true })));
+      await user.click(within(thinkingLevel).getByRole('button', { name: 'High' }));
+
+      expect(await screen.findByText(/Failed to update settings/)).toBeInTheDocument();
+      expect(within(thinkingLevel).getByRole('button', { name: 'Medium' })).toBePressed();
+      expect(within(thinkingLevel).getByRole('button', { name: 'High' })).not.toBePressed();
+    });
+
+    it('hosts model packs inside the Model settings section', async () => {
+      const user = userEvent.setup();
+      renderSettingsPanel();
+
+      expect(screen.queryByText('Model packs')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Show model settings' }));
 
       expect(await screen.findByText('Model packs')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /New pack/ })).toBeInTheDocument();
@@ -260,7 +355,7 @@ describe('SettingsPanel', () => {
       const user = userEvent.setup();
       const captured = renderSettingsPanel();
 
-      await user.click(screen.getByRole('tab', { name: /behavior/i }));
+      await user.click(screen.getByRole('button', { name: 'Show behavior settings' }));
       const notifications = await screen.findByRole('group', { name: 'Notifications' });
       await user.click(within(notifications).getByRole('button', { name: 'System' }));
       const readPermission = await screen.findByRole('group', { name: 'Read permission' });

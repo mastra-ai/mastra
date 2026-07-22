@@ -10,7 +10,7 @@ import {
   useOverlayControllerHandlers,
 } from '../../../chat/components/__tests__/overlay-test-utils';
 import type { DirectoryListing } from '../../../../../../shared/api/types';
-import { FactoriesModal } from '../../index';
+import { FactoriesPanel } from '../../index';
 import { loadFactories } from '../../services/factories';
 
 const FS_URL = `${TEST_BASE_URL}/web/fs/list`;
@@ -25,7 +25,7 @@ const rootListing: DirectoryListing = {
 function renderFactories() {
   return renderWithProviders(
     <OverlayTestProviders>
-      <FactoriesModal />
+      <FactoriesPanel />
     </OverlayTestProviders>,
   );
 }
@@ -48,7 +48,14 @@ beforeEach(() => {
 
 afterEach(() => localStorage.clear());
 
-describe('FactoriesModal', () => {
+describe('FactoriesPanel', () => {
+  it('renders as a labelled in-layout section without dialog semantics', async () => {
+    renderFactories();
+
+    expect(await screen.findByRole('region', { name: 'Create Factory' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Factory name')).toHaveFocus();
+  });
   it('creates a named server-backed Factory as the primary path', async () => {
     let received: unknown;
     server.use(
@@ -84,12 +91,7 @@ describe('FactoriesModal', () => {
     // The directory browser lists the folders at the fs root.
     expect(await screen.findByText('gamma')).toBeInTheDocument();
 
-    // Two "Create Factory" buttons exist now; the name-first one is disabled
-    // (empty name), the browser's is the enabled folder CTA.
-    const createButtons = screen.getAllByRole('button', { name: 'Create Factory' });
-    const folderCreate = createButtons.find(button => !(button as HTMLButtonElement).disabled);
-    expect(folderCreate).toBeDefined();
-    await user.click(folderCreate!);
+    await user.click(screen.getByRole('button', { name: 'Use this folder' }));
 
     await waitFor(() => {
       expect(loadFactories()).toEqual([

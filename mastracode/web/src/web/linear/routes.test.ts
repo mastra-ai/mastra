@@ -53,6 +53,31 @@ const linearStub = {
   refreshAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
   fetchWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
   listProjects: (...args: any[]) => listLinearProjects(...(args as [])),
+  intake: {
+    listIssues: async (input: import('../capabilities/intake').ListIntakeIssuesInput) => {
+      if (input.connection.type !== 'oauth') throw new Error('expected OAuth connection');
+      const result = await listActiveLinearIssues(input.connection.accessToken, input.cursor, input.sourceIds);
+      return {
+        issues: result.issues.map(issue => ({
+          id: issue.id,
+          identifier: issue.identifier,
+          title: issue.title,
+          url: issue.url,
+          author: null,
+          state: issue.state,
+          stateType: issue.stateType,
+          priority: issue.priorityLabel,
+          assignee: issue.assignee,
+          source: issue.team,
+          labels: issue.labels,
+          commentCount: null,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+        })),
+        nextCursor: result.nextCursor,
+      };
+    },
+  },
   listActiveIssues: (token: string, after?: string, sourceIds?: string[]) =>
     listActiveLinearIssues(token, after, sourceIds),
 } as unknown as import('./integration').LinearIntegration;

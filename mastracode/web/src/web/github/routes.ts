@@ -50,7 +50,6 @@ import type { MaterializationSandbox, PrepareProgress, ProgressFn } from '../san
 import {
   commitAll,
   computeWorktreePath,
-  createPullRequest,
   ensureProjectSandbox,
   ensureWorktree,
   isValidGitRef as isValidGitRefSandbox,
@@ -643,13 +642,28 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const label = parseIssueLabelFilter(c.req.query('label'));
         if (label === null) return c.json({ error: 'invalid_label' }, 400);
         try {
-          const { issues, nextPage } = await github.listRepoOpenIssues(
-            Number(loaded.project.installation.externalId),
-            loaded.project.repository.slug,
-            page,
-            { label },
-          );
-          return c.json({ issues, nextPage });
+          const { issues, nextCursor } = await github.intake.listIssues({
+            connection: {
+              type: 'app-installation',
+              installationId: Number(loaded.project.installation.externalId),
+            },
+            sourceIds: [loaded.project.repository.slug],
+            labels: label ? [label] : undefined,
+            cursor: String(page),
+          });
+          return c.json({
+            issues: issues.map(issue => ({
+              number: Number(issue.id),
+              title: issue.title,
+              url: issue.url,
+              author: issue.author,
+              labels: issue.labels,
+              comments: issue.commentCount ?? 0,
+              createdAt: issue.createdAt,
+              updatedAt: issue.updatedAt,
+            })),
+            nextPage: nextCursor === null ? null : Number(nextCursor),
+          });
         } catch (err) {
           return c.json(
             { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
@@ -742,12 +756,28 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const page = parseListPage(c.req.query('page'));
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
         try {
-          const { pullRequests, nextPage } = await github.listRepoOpenPullRequests(
-            Number(loaded.project.installation.externalId),
-            loaded.project.repository.slug,
-            page,
-          );
-          return c.json({ pullRequests, nextPage });
+          const { pullRequests, nextCursor } = await github.versionControl.listPullRequests({
+            connection: {
+              type: 'app-installation',
+              installationId: Number(loaded.project.installation.externalId),
+            },
+            sourceId: loaded.project.repository.slug,
+            includeDrafts: false,
+            cursor: String(page),
+          });
+          return c.json({
+            pullRequests: pullRequests.map(pr => ({
+              number: Number(pr.id),
+              title: pr.title,
+              url: pr.url,
+              author: pr.author,
+              baseBranch: pr.baseBranch,
+              headBranch: pr.headBranch,
+              createdAt: pr.createdAt,
+              updatedAt: pr.updatedAt,
+            })),
+            nextPage: nextCursor === null ? null : Number(nextCursor),
+          });
         } catch (err) {
           return c.json(
             { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
@@ -1244,7 +1274,7 @@ function buildProjectGitRoutes({
       },
     }),
 
-    // ── Open a pull request via the gh CLI ──────────────────────────────────
+    // ── Open a pull request through the version-control capability ─────────
     registerApiRoute('/web/github/projects/:id/pr', {
       method: 'POST',
       requiresAuth: false,
@@ -1296,9 +1326,17 @@ function buildProjectGitRoutes({
 
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
-            const sandbox = await resolveProjectSandbox(sandboxRow);
-            const token = await github.mintInstallationToken(Number(project.installation.externalId));
-            const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
+            const result = await github.versionControl.createPullRequest({
+              connection: {
+                type: 'app-installation',
+                installationId: Number(project.installation.externalId),
+              },
+              sourceId: project.repository.slug,
+              baseBranch: base,
+              headBranch: head,
+              title,
+              body: prBody,
+            });
             await emitAudit?.({
               context: loose(c),
               input: {
@@ -1345,7 +1383,10 @@ function buildProjectGitRoutes({
             return c.json({ url: result.url });
           });
         } catch (err) {
-          return gitErrorResponse(loose(c), err);
+          return c.json(
+            { error: 'github_pr_create_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
         }
       },
     }),

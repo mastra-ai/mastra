@@ -1,20 +1,23 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Brain, GitBranch, Key, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef } from 'react';
 
-import { useToast } from '../../../ui/toast';
+import { useKeyDown } from '../../../lib/hooks';
+import { CloseIcon } from '../../../ui/icons';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
+import { useSettingsSection } from '../context/SettingsNavigationProvider';
+import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useAgentControllerSettings } from '../../../../../shared/hooks/useAgentControllerSettings';
 import { useAvailableModelsQuery } from '../../../../../shared/hooks/useAvailableModels';
-import { useSetAgentControllerStateMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
+import {
+  SettingsUpdateVerificationError,
+  useUpdateAgentControllerSettingsMutation,
+} from '../../../../../shared/hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
@@ -24,39 +27,29 @@ import { FactorySetupSection } from './FactorySetupSection';
 import { SourceControlSection } from './SourceControlSection';
 import { OMSection } from './OMSection';
 import { ProvidersSection } from './ProvidersSection';
-import { BehaviorTab, GeneralTab, ModelTab } from './SettingsPanel.parts';
+import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
-type Tab = 'general' | 'source-control' | 'model' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
-
-interface SettingsPanelProps {
-  onClose: () => void;
+function getSettingsUpdateErrorMessage(error: unknown): string {
+  if (error instanceof SettingsUpdateVerificationError) return error.message;
+  if (error instanceof Error) return `Failed to update settings: ${error.message}`;
+  return 'Failed to update settings';
 }
 
-const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
-  { id: 'general', label: 'General', icon: Palette },
-  { id: 'source-control', label: 'Source Control', icon: GitBranch },
-  { id: 'model', label: 'Model', icon: Search },
-  { id: 'memory', label: 'Memory', icon: Brain },
-  { id: 'behavior', label: 'Behavior', icon: SlidersHorizontal },
-  { id: 'providers', label: 'API Keys', icon: Key },
-  { id: 'custom-providers', label: 'Custom', icon: Server },
-];
-
 /**
- * Preferences modal. A two-pane layout keeps each settings section reachable
- * in one scrolling content pane; dense provider results use a bounded,
- * virtualized list within that pane.
+ * In-layout settings surface controlled by the application sidebar, with an
+ * independently scrolling content pane.
  */
-export function SettingsPanel({ onClose }: SettingsPanelProps) {
-  const [tab, setTab] = useState<Tab>('general');
+export function SettingsPanel() {
+  const section = useSettingsSection();
+  const closeSettings = useCloseSettings();
+  const titleRef = useRef<HTMLElement>(null);
   const { theme, setTheme } = useTheme();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
-  const { toast } = useToast();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -64,7 +57,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   // catalog even before any chat session exists.
   const modelsQuery = useAvailableModelsQuery();
   const settingsQuery = useAgentControllerSettings(hookArgs);
-  const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
+  const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
   const sessionResourceId = sessionEnabled ? resourceId : undefined;
@@ -72,38 +65,48 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   // session-scoped config routes need the same pair to find the session.
   const sessionScope = sessionEnabled ? projectPath : undefined;
 
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, []);
+
+  useKeyDown({ escape: closeSettings });
+
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
-    void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'));
+    if (!settings || updateSettingsMutation.isPending) return;
+    updateSettingsMutation.mutate(updates, {
+      onSuccess: () => toast.success('Settings updated'),
+      onError: error => toast.error(getSettingsUpdateErrorMessage(error)),
+    });
   };
 
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
-      <DialogContent className="w-full max-w-4xl h-[80vh] grid-rows-[auto_1fr] items-stretch p-0" aria-label="Settings">
-        <DialogHeader className="px-5 pt-4 pb-2">
-          <DialogTitle>Settings</DialogTitle>
-        </DialogHeader>
+    <section aria-labelledby="settings-title" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border1 px-5 py-4">
+        <Txt as="h1" variant="header-sm" id="settings-title" tabIndex={-1} ref={titleRef} className="text-icon6">
+          Settings
+        </Txt>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Close settings" onClick={closeSettings}>
+          <CloseIcon size={16} />
+        </Button>
+      </header>
 
-        <Tabs<Tab> defaultTab="general" value={tab} onValueChange={setTab} className="flex flex-col min-h-0 h-full">
-          <TabList className="px-5 shrink-0">
-            {TABS.map(({ id, label, icon: Icon }) => (
-              <Tab key={id} value={id}>
-                <Icon size={15} />
-                <span>{label}</span>
-              </Tab>
-            ))}
-          </TabList>
-
-          <ScrollArea className="min-h-0 flex-1" viewPortClassName="px-5 pb-5">
-            <TabContent value="general">
-              <GeneralTab theme={theme} onThemeChange={setTheme} />
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+        <div className="mx-auto grid w-full max-w-4xl py-3">
+          {section === 'general' && (
+            <>
+              <GeneralSettings theme={theme} onThemeChange={setTheme} />
               <FactorySetupSection />
               <IntakeSection />
-            </TabContent>
-            <TabContent value="source-control">
-              <SourceControlSection />
-            </TabContent>
-            <TabContent value="model">
-              <ModelTab settings={settings} onBehaviorChange={onBehaviorChange} />
+            </>
+          )}
+          {section === 'source-control' && <SourceControlSection />}
+          {section === 'model' && (
+            <>
+              <ModelSettings
+                settings={settings}
+                updating={updateSettingsMutation.isPending}
+                onBehaviorChange={onBehaviorChange}
+              />
               <FactoryDefaultModelSection models={models} />
               <div className="mt-6 flex flex-col gap-2">
                 <Txt variant="ui-lg" className="font-medium">
@@ -111,28 +114,23 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 </Txt>
                 <ModelPacksSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
               </div>
-            </TabContent>
-            <TabContent value="memory">
-              <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
-            </TabContent>
-            <TabContent value="behavior">
-              <BehaviorTab
-                settings={settings}
-                onBehaviorChange={onBehaviorChange}
-                permissions={permissions ?? null}
-                pendingPermissionCategory={pendingPermissionCategory}
-                setPermissionForCategory={setPermissionForCategory}
-              />
-            </TabContent>
-            <TabContent value="providers">
-              <ProvidersSection />
-            </TabContent>
-            <TabContent value="custom-providers">
-              <CustomProvidersSection />
-            </TabContent>
-          </ScrollArea>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
+            </>
+          )}
+          {section === 'memory' && <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />}
+          {section === 'behavior' && (
+            <BehaviorSettings
+              settings={settings}
+              updating={updateSettingsMutation.isPending}
+              onBehaviorChange={onBehaviorChange}
+              permissions={permissions ?? null}
+              pendingPermissionCategory={pendingPermissionCategory}
+              setPermissionForCategory={setPermissionForCategory}
+            />
+          )}
+          {section === 'providers' && <ProvidersSection />}
+          {section === 'custom-providers' && <CustomProvidersSection />}
+        </div>
+      </div>
+    </section>
   );
 }
