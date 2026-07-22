@@ -47,11 +47,16 @@ export class PlatformApiClient {
   async request<T>(method: string, path: string, body?: unknown, options?: { signal?: AbortSignal }): Promise<T> {
     const response = await this.#send(method, path, body, options);
     if (!response.ok) {
-      throw new PlatformApiError(
-        redact(await extractError(response), this.#accessToken),
-        response.status,
-        parseRetryAfter(response.headers.get('retry-after')),
-      );
+      const message = redact(await extractError(response), this.#accessToken);
+      const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'));
+      logPlatformError('Platform API request failed', {
+        method,
+        path,
+        status: response.status,
+        retryAfterSeconds,
+        message,
+      });
+      throw new PlatformApiError(message, response.status, retryAfterSeconds);
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
@@ -64,12 +69,18 @@ export class PlatformApiClient {
       if (location) return location;
     }
     if (!response.ok) {
-      throw new PlatformApiError(
-        redact(await extractError(response), this.#accessToken),
-        response.status,
-        parseRetryAfter(response.headers.get('retry-after')),
-      );
+      const message = redact(await extractError(response), this.#accessToken);
+      const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'));
+      logPlatformError('Platform API redirect request failed', {
+        method,
+        path,
+        status: response.status,
+        retryAfterSeconds,
+        message,
+      });
+      throw new PlatformApiError(message, response.status, retryAfterSeconds);
     }
+    logPlatformError('Platform API request did not return a redirect', { method, path, status: response.status });
     throw new PlatformApiError('Platform API request did not return a redirect.', response.status);
   }
 
@@ -102,8 +113,20 @@ export class PlatformApiClient {
       if (error instanceof Error && error.message.includes(this.#accessToken)) {
         const redacted = new Error(redact(error.message, this.#accessToken));
         redacted.name = error.name;
+        logPlatformError('Platform API transport error', {
+          method,
+          path,
+          name: redacted.name,
+          message: redacted.message,
+        });
         throw redacted;
       }
+      logPlatformError('Platform API transport error', {
+        method,
+        path,
+        name: error instanceof Error ? error.name : undefined,
+        message: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }
@@ -123,6 +146,10 @@ async function extractError(response: Response): Promise<string> {
 
 function redact(message: string, accessToken: string): string {
   return message.split(accessToken).join('[REDACTED]');
+}
+
+function logPlatformError(message: string, fields: Record<string, unknown>): void {
+  console.error(`[MastraCode Web] ${message}`, fields);
 }
 
 function parseRetryAfter(value: string | null): number | null {
