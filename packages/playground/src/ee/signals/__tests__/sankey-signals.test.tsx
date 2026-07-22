@@ -10,6 +10,7 @@ import { SankeySignals } from '../sankey-signals';
 import { getSignalRecordNodeId, getSignalRecordNodeLabel, themeFlowToSankeyData } from '../sankey-signals-data';
 import {
   duplicateLabelThemeFlowResponse,
+  earlierThemeFlowResponse,
   emptyThemeSnapshotsResponse,
   fourStageThemeFlowResponse,
   inconsistentTraceCountThemeFlowResponse,
@@ -239,6 +240,8 @@ describe('SankeySignals', () => {
 
       const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
       expect(within(chart).queryByTestId('signal-column-heading')).toBeNull();
+      expect(within(chart).getByText('GOAL')).not.toBeNull();
+      expect(within(chart).queryByText(/GOAL \d+ themes?/)).toBeNull();
       expect(within(chart).getByText('RIBBON WIDTH = TRACE COUNT')).not.toBeNull();
       expect(within(chart).getByText('HOVER OR FOCUS TO ISOLATE FLOW')).not.toBeNull();
     });
@@ -258,13 +261,15 @@ describe('SankeySignals', () => {
       ).toEqual(['Goal', 'Outcome', 'Behavior', 'Sentiment']);
     });
 
-    it('renders signal distributions before the flow chart', async () => {
+    it('renders the flow before the timeline and distributions', async () => {
       renderSankeySignals();
 
-      const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
-      const flow = screen.getByRole('region', { name: 'Signal theme flow' });
+      const flow = await screen.findByRole('region', { name: 'Signal theme flow' });
+      const timeline = screen.getByRole('region', { name: 'Snapshot timeline' });
+      const distributions = screen.getByRole('region', { name: 'Signal distributions' });
 
-      expect(distributions.compareDocumentPosition(flow) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      expect(flow.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      expect(timeline.compareDocumentPosition(distributions) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     });
 
     it('summarizes each signal with one stacked bar and compact theme rows', async () => {
@@ -325,9 +330,34 @@ describe('SankeySignals', () => {
           const snapshotId = new URL(request.url).searchParams.get('snapshotId');
           const snapshot = multiThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
           if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
-          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot });
+          return HttpResponse.json(snapshotId === 'snapshot-3' ? earlierThemeFlowResponse : fourStageThemeFlowResponse);
         }),
       );
+    });
+
+    it('keeps themes from every timeline snapshot visible in the latest Sankey frame', async () => {
+      renderSankeySignals();
+
+      const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
+      expect(within(chart).getByLabelText('Legacy support request: 0 traces (0%)')).not.toBeNull();
+    });
+
+    it('keeps the rendered frame visible while playback advances', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, async ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          if (snapshotId === 'snapshot-3') await new Promise(resolve => window.setTimeout(resolve, 100));
+          return HttpResponse.json(snapshotId === 'snapshot-3' ? earlierThemeFlowResponse : fourStageThemeFlowResponse);
+        }),
+      );
+      renderSankeySignals();
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
+
+      await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces', undefined, { timeout: 2000 });
+      expect(screen.queryByRole('status', { name: 'Loading snapshot flow' })).toBeNull();
+      expect(screen.getByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
     });
 
     it('selects the latest ordinal and labels it without parsing its cursor', async () => {
@@ -361,7 +391,7 @@ describe('SankeySignals', () => {
       expect(screen.getByRole('button', { name: 'Pause snapshots' })).not.toBeNull();
     });
 
-    it('stops scheduling snapshots after a playback request fails', async () => {
+    it('does not expose playback when a timeline flow fails to preload', async () => {
       const flowRequests: Array<string> = [];
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
@@ -375,16 +405,13 @@ describe('SankeySignals', () => {
         }),
       );
       renderSankeySignals();
-      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
 
-      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
-      await screen.findByRole('button', { name: 'Retry' }, { timeout: 2000 });
-      await new Promise(resolve => window.setTimeout(resolve, 1100));
-
-      expect(flowRequests).toEqual(['snapshot-1', 'snapshot-3']);
+      expect(await screen.findByRole('button', { name: 'Retry' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Play snapshots' })).toBeNull();
+      expect([...flowRequests].sort()).toEqual(['snapshot-1', 'snapshot-3']);
     });
 
-    it('keeps the pause control available while the next flow is loading', async () => {
+    it('waits for every timeline flow before exposing playback', async () => {
       let releasePendingFlow: (() => void) | undefined;
       const pendingFlow = new Promise<void>(resolve => {
         releasePendingFlow = resolve;
@@ -398,16 +425,11 @@ describe('SankeySignals', () => {
         }),
       );
       renderSankeySignals();
-      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
 
-      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
-
-      expect(
-        await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces', undefined, { timeout: 2000 }),
-      ).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Pause snapshots' })).not.toBeNull();
-      expect(screen.getByRole('status', { name: 'Loading snapshot flow' })).not.toBeNull();
+      expect(await screen.findByRole('status', { name: 'Loading signal analysis' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Play snapshots' })).toBeNull();
       releasePendingFlow?.();
+      expect(await screen.findByRole('button', { name: 'Play snapshots' })).not.toBeNull();
     });
   });
 
@@ -460,22 +482,22 @@ describe('SankeySignals', () => {
       expect(within(distributions).getByText('Metadata only goal')).not.toBeNull();
     });
 
-    it('shows the same graph-derived counts and percentages on chart nodes', async () => {
+    it('shows authoritative node counts on chart nodes independently of layout weights', async () => {
       renderSankeySignals();
 
       const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
       for (const label of [
-        '22 (44%)',
-        '17 (34%)',
-        '11 (22%)',
-        '31 (62%)',
-        '19 (38%)',
-        '34 (68%)',
-        '16 (32%)',
-        '29 (58%)',
-        '21 (42%)',
+        '42 (37%)',
+        '38 (34%)',
+        '33 (29%)',
+        '51 (45%)',
+        '40 (35%)',
+        '54 (48%)',
+        '37 (33%)',
+        '49 (43%)',
+        '42 (37%)',
       ]) {
-        expect(await within(chart).findByText(label)).not.toBeNull();
+        expect(within(chart).getAllByText(label).length).toBeGreaterThan(0);
       }
       expect(within(chart).queryByText('Metadata only goal')).toBeNull();
     });

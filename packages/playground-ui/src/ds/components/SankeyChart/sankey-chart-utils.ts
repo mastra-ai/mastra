@@ -11,6 +11,7 @@ export type SankeyChartNode = {
   label: string;
   column: SankeyChartColumn;
   value: string | number;
+  displayValue?: number;
 };
 
 export type SankeyChartLink = {
@@ -81,6 +82,7 @@ export function buildSankeyChartGraph(
   getRecordWeight: (record: SankeyChartRecord) => number = () => 1,
   getRecordNodeId?: (record: SankeyChartRecord, column: SankeyChartColumn) => string,
   getRecordNodeLabel?: (record: SankeyChartRecord, column: SankeyChartColumn) => string,
+  getRecordNodeValue?: (record: SankeyChartRecord, column: SankeyChartColumn) => number,
 ): SankeyChartGraph {
   if (columns.length < 2 || data.length === 0) return EMPTY_GRAPH;
 
@@ -92,13 +94,14 @@ export function buildSankeyChartGraph(
     column: SankeyChartColumn,
     value: string | number,
     label: string,
+    displayValue: number | undefined,
   ): { node: SankeyChartNode; index: number } => {
     const id = createNodeId(column.id, value);
     const existingIndex = nodeIndexes.get(id);
     const existingNode = existingIndex === undefined ? undefined : nodes[existingIndex];
     if (existingIndex !== undefined && existingNode) return { node: existingNode, index: existingIndex };
 
-    const node: SankeyChartNode = { id, name: String(value), label, column, value };
+    const node: SankeyChartNode = { id, name: String(value), label, column, value, displayValue };
     const index = nodes.length;
     nodes.push(node);
     nodeIndexes.set(id, index);
@@ -128,8 +131,24 @@ export function buildSankeyChartGraph(
 
       const sourceLabel = getRecordNodeLabel?.(record, sourceColumn) ?? String(sourceRecordValue);
       const targetLabel = getRecordNodeLabel?.(record, targetColumn) ?? String(targetRecordValue);
-      const source = getNode(sourceColumn, sourceValue, sourceLabel);
-      const target = getNode(targetColumn, targetValue, targetLabel);
+      const sourceDisplayValue = getRecordNodeValue?.(record, sourceColumn);
+      const targetDisplayValue = getRecordNodeValue?.(record, targetColumn);
+      const source = getNode(
+        sourceColumn,
+        sourceValue,
+        sourceLabel,
+        sourceDisplayValue !== undefined && Number.isFinite(sourceDisplayValue) && sourceDisplayValue >= 0
+          ? sourceDisplayValue
+          : undefined,
+      );
+      const target = getNode(
+        targetColumn,
+        targetValue,
+        targetLabel,
+        targetDisplayValue !== undefined && Number.isFinite(targetDisplayValue) && targetDisplayValue >= 0
+          ? targetDisplayValue
+          : undefined,
+      );
       const id = `${source.node.id}->${target.node.id}`;
       const existingLink = linksById.get(id);
 

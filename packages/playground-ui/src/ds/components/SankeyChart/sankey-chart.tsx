@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
-import { getSankeyChartCurveSelection } from './sankey-chart-utils';
+import { getSankeyChartCurveSelection, getSankeyChartNodeWeights } from './sankey-chart-utils';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
@@ -28,8 +28,10 @@ export function SankeyChart({
   const activeSourceName = hoveredSourceName ?? focusedSourceName;
   const firstColumnId = enabledColumns[0]?.id;
   const lastColumnId = enabledColumns.at(-1)?.id;
-  const total = graph.links.reduce(
-    (sum, link) => (link.sourceNode.column.id === firstColumnId ? sum + link.value : sum),
+  const nodeWeights = getSankeyChartNodeWeights(graph);
+  const total = graph.nodes.reduce(
+    (sum, node) =>
+      node.column.id === firstColumnId ? sum + (node.displayValue ?? nodeWeights.get(node.id) ?? 0) : sum,
     0,
   );
 
@@ -65,6 +67,7 @@ export function SankeyChart({
                     hueMap={hueMap}
                     columnLabel={node?.column.label}
                     label={node?.label}
+                    nodeValue={node?.displayValue}
                     total={total}
                     showColumnLabel={showColumnLabel}
                     isFirstColumn={node?.column.id === firstColumnId}
@@ -122,6 +125,7 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
   hueMap: Record<string, number>;
   columnLabel?: string;
   label?: string;
+  nodeValue?: number;
   total: number;
   showColumnLabel: boolean;
   isFirstColumn: boolean;
@@ -139,6 +143,7 @@ function SankeyNode({
   hueMap,
   columnLabel,
   label,
+  nodeValue,
   total,
   showColumnLabel,
   isFirstColumn,
@@ -161,7 +166,7 @@ function SankeyNode({
     top: number;
     placement: 'above' | 'below';
   }>();
-  const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
+  const numericValue = nodeValue ?? (typeof payload.value === 'number' ? payload.value : Number(payload.value));
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
   const isTruncated = visibleLabel !== visibleDisplayLabel;

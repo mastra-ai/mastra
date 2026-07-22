@@ -7,11 +7,17 @@ import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/
 import { Pause, Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { useThemeFlow } from './hooks/use-theme-flow';
+import { useThemeFlows } from './hooks/use-theme-flows';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
-import { buildSignalGraphSummary, getSignalRecordNodeId, getSignalRecordNodeLabel } from './sankey-signals-data';
+import {
+  buildSignalGraphSummary,
+  getSignalRecordNodeId,
+  getSignalRecordNodeLabel,
+  getSignalRecordNodeValue,
+  stabilizeThemeFlow,
+} from './sankey-signals-data';
 import { SignalsErrorState } from './signals-error-state';
-import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
+import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import type { ThemeFlowResponse, ThemeNode, ThemeSnapshot, TraceSignalName } from './types';
 import { Link } from '@/lib/link';
 
@@ -199,14 +205,7 @@ function FlowCard({
   stages: ThemeFlowResponse['stages'];
   height?: number;
 }) {
-  const chartColumns = columns.map(column => {
-    const stage = stages.find(currentStage => currentStage.signalName === column.id);
-    const themeCount = stage?.nodes.length ?? 0;
-    return {
-      ...column,
-      label: `${column.label.toUpperCase()} ${themeCount} ${themeCount === 1 ? 'theme' : 'themes'}`,
-    };
-  });
+  const chartColumns = columns.map(column => ({ ...column, label: column.label.toUpperCase() }));
 
   return (
     <Card aria-label="Signal theme flow" as="section" className="min-w-0 overflow-hidden" elevation="elevated">
@@ -217,6 +216,7 @@ function FlowCard({
           getColumnHue={column => getSignalHue(column.id)}
           getRecordNodeId={getSignalRecordNodeId}
           getRecordNodeLabel={getSignalRecordNodeLabel}
+          getRecordNodeValue={getSignalRecordNodeValue}
           getRecordWeight={record => Number(record.traceCount)}
         >
           <SankeyChart
@@ -263,23 +263,31 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   const selectSnapshot = (index: number) => setSelectedSnapshotId(snapshots[index]?.snapshotId);
 
   const nextSnapshotId = snapshots[(selectedSnapshotIndex + 1) % snapshots.length]?.snapshotId;
-  const flowQuery = useThemeFlow(entityId, entityType, signalNames, snapshot?.snapshotId);
+  const flowQueries = useThemeFlows(
+    entityId,
+    entityType,
+    signalNames,
+    snapshots.map(candidate => candidate.snapshotId),
+  );
+  const flowQuery = flowQueries[selectedSnapshotIndex];
+  const isFlowPending = flowQueries.some(query => query.isPending);
+  const hasFlowError = flowQueries.some(query => query.isError);
 
   useEffect(() => {
-    if (!isPlaying || snapshots.length < 2 || flowQuery.isFetching || flowQuery.isError) return;
+    if (!isPlaying || snapshots.length < 2 || isFlowPending || hasFlowError) return;
     const timer = window.setTimeout(() => setSelectedSnapshotId(nextSnapshotId), 900);
     return () => window.clearTimeout(timer);
-  }, [flowQuery.isError, flowQuery.isFetching, isPlaying, nextSnapshotId, snapshots.length]);
+  }, [hasFlowError, isFlowPending, isPlaying, nextSnapshotId, snapshots.length]);
 
   if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
 
-  if (snapshotsQuery.isError || flowQuery.isError) {
+  if (snapshotsQuery.isError || hasFlowError) {
     return (
       <SignalsErrorState
         message="Unable to load signal flow."
         onRetry={() => {
           setIsPlaying(false);
-          void Promise.all([snapshotsQuery.refetch(), flowQuery.refetch()]);
+          void Promise.all([snapshotsQuery.refetch(), ...flowQueries.map(query => query.refetch())]);
         }}
       />
     );
@@ -287,27 +295,15 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
 
   if (!snapshot) return <SignalsEmptyState LinkComponent={Link} />;
 
-  if (flowQuery.isPending) {
-    return (
-      <main className="min-w-0 space-y-5 p-4 lg:p-6">
-        <SnapshotTimeline
-          snapshots={snapshots}
-          selectedIndex={selectedSnapshotIndex}
-          isPlaying={isPlaying}
-          onPlayingChange={setIsPlaying}
-          onSnapshotChange={selectSnapshot}
-        />
-        <SignalsFrameLoadingSkeleton />
-      </main>
-    );
-  }
+  if (isFlowPending) return <SignalsLoadingSkeleton />;
 
-  const flow = flowQuery.data;
+  const flow = flowQuery?.data;
   const populatedStageCount = flow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
 
   if (!flow || populatedStageCount < 2) return <SignalsEmptyState LinkComponent={Link} />;
 
-  const graphSummary = buildSignalGraphSummary(flow);
+  const windowFlows = flowQueries.flatMap(query => (query.data ? [query.data] : []));
+  const graphSummary = buildSignalGraphSummary(stabilizeThemeFlow(flow, windowFlows));
   const stages = flow.stages;
   const themeCount = stages.reduce(
     (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
@@ -344,6 +340,7 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
           </li>
         </ul>
       </header>
+      <FlowCard columns={graphSummary.columns} records={graphSummary.records} stages={stages} height={height} />
       <SnapshotTimeline
         snapshots={snapshots}
         selectedIndex={selectedSnapshotIndex}
@@ -352,7 +349,6 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
         onSnapshotChange={selectSnapshot}
       />
       <SignalDistributions stages={stages} />
-      <FlowCard columns={graphSummary.columns} records={graphSummary.records} stages={stages} height={height} />
     </main>
   );
 }

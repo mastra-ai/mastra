@@ -474,3 +474,36 @@ export const singleStageThemeFlowResponse: ThemeFlowResponse = {
   stages: themeFlowResponse.stages.slice(0, 1),
   links: [],
 };
+
+export const earlierThemeFlowResponse: ThemeFlowResponse = {
+  ...fourStageThemeFlowResponse,
+  snapshot: multiThemeSnapshotsResponse.snapshots[0],
+  stages: fourStageThemeFlowResponse.stages.map(stage =>
+    stage.signalName === 'goal'
+      ? {
+          ...stage,
+          nodes: [
+            ...stage.nodes,
+            {
+              nodeId: 'goal-legacy',
+              kind: 'theme',
+              themeId: 'theme-goal-legacy',
+              label: 'Legacy support request',
+              traceCount: 4,
+              stageShare: 0.1,
+            },
+          ],
+        }
+      : stage,
+  ),
+  links: [
+    ...fourStageThemeFlowResponse.links,
+    {
+      sourceNodeId: 'goal-legacy',
+      targetNodeId: 'outcome-resolved',
+      traceCount: 4,
+      sourceShare: 1,
+      targetShare: 0.1,
+    },
+  ],
+};

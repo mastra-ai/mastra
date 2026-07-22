@@ -142,6 +142,22 @@ describe('SankeyChart utilities', () => {
     });
   });
 
+  describe('when node display values differ from layout weights', () => {
+    it('preserves the supplied node values independently of link weights', () => {
+      const graph = buildSankeyChartGraph(
+        [{ source: 'source-1', sourceCount: 0, model: 'model-1', modelCount: 3, layoutWeight: 0.01 }],
+        columns.slice(0, 2),
+        record => Number(record.layoutWeight),
+        undefined,
+        undefined,
+        (record, column) => Number(record[`${column.id}Count`]),
+      );
+
+      expect(graph.links[0]?.value).toBe(0.01);
+      expect(graph.nodes.map(node => node.displayValue)).toEqual([0, 3]);
+    });
+  });
+
   describe('when only one optional node accessor is provided', () => {
     it('keeps record values as labels when only identity is customized', () => {
       const graph = buildSankeyChartGraph(

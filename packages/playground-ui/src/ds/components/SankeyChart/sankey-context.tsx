@@ -15,6 +15,7 @@ export type SankeyProps = {
   getRecordWeight?: (record: SankeyChartRecord) => number;
   getRecordNodeId?: (record: SankeyChartRecord, column: SankeyChartColumn) => string;
   getRecordNodeLabel?: (record: SankeyChartRecord, column: SankeyChartColumn) => string;
+  getRecordNodeValue?: (record: SankeyChartRecord, column: SankeyChartColumn) => number;
   getColumnHue?: (column: SankeyChartColumn) => number;
 };
 
@@ -48,6 +49,7 @@ export function Sankey({
   getRecordWeight,
   getRecordNodeId,
   getRecordNodeLabel,
+  getRecordNodeValue,
   getColumnHue,
 }: SankeyProps) {
   const columnIds = columns.map(column => column.id);
@@ -56,7 +58,14 @@ export function Sankey({
   const orderedColumns = orderColumns(columns, columnOrder ?? internalOrder);
   const visibleIds = new Set(visibleColumnIds ?? internalVisibleIds);
   const enabledColumns = orderedColumns.filter(column => visibleIds.has(column.id));
-  const graph = buildSankeyChartGraph(data, enabledColumns, getRecordWeight, getRecordNodeId, getRecordNodeLabel);
+  const graph = buildSankeyChartGraph(
+    data,
+    enabledColumns,
+    getRecordWeight,
+    getRecordNodeId,
+    getRecordNodeLabel,
+    getRecordNodeValue,
+  );
   const defaultHueMap = buildSankeyHueMap(graph.nodes.map(node => String(node.value)));
   const hueMap = Object.fromEntries(
     graph.nodes.map(node => [
