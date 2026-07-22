@@ -7,7 +7,12 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SankeySignals } from '../sankey-signals';
-import { getSignalRecordNodeId, getSignalRecordNodeLabel, themeFlowToSankeyData } from '../sankey-signals-data';
+import {
+  getSignalRecordNodeId,
+  getSignalRecordNodeLabel,
+  stabilizeThemeFlow,
+  themeFlowToSankeyData,
+} from '../sankey-signals-data';
 import {
   duplicateLabelThemeFlowResponse,
   earlierThemeFlowResponse,
@@ -65,6 +70,44 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+describe('stabilizeThemeFlow', () => {
+  describe('when snapshot counts change within one timeline window', () => {
+    it('keeps link layout weights and node ordering fixed while retaining current node counts', () => {
+      const lowerVolumeFlow = {
+        ...fourStageThemeFlowResponse,
+        snapshot: earlierThemeFlowResponse.snapshot,
+        stages: fourStageThemeFlowResponse.stages.map(stage => ({
+          ...stage,
+          nodes: stage.nodes.map(node => ({
+            ...node,
+            traceCount: Math.max(1, Math.floor(node.traceCount / 2)),
+            stageShare: node.stageShare / 2,
+          })),
+        })),
+        links: fourStageThemeFlowResponse.links.map(link => ({
+          ...link,
+          traceCount: Math.max(1, Math.floor(link.traceCount / 2)),
+          sourceShare: link.sourceShare / 2,
+          targetShare: link.targetShare / 2,
+        })),
+      };
+      const windowFlows = [lowerVolumeFlow, fourStageThemeFlowResponse];
+
+      const lowerFrame = stabilizeThemeFlow(lowerVolumeFlow, windowFlows);
+      const higherFrame = stabilizeThemeFlow(fourStageThemeFlowResponse, windowFlows);
+
+      const getLayoutLinks = (frame: typeof lowerFrame) =>
+        frame.links.map(link => [link.sourceNodeId, link.targetNodeId, link.traceCount]);
+
+      expect(getLayoutLinks(lowerFrame)).toEqual(getLayoutLinks(higherFrame));
+      expect(lowerFrame.stages.map(stage => stage.nodes.map(node => node.nodeId))).toEqual(
+        higherFrame.stages.map(stage => stage.nodes.map(node => node.nodeId)),
+      );
+      expect(lowerFrame.stages[0]?.nodes[0]?.traceCount).not.toBe(higherFrame.stages[0]?.nodes[0]?.traceCount);
+    });
+  });
 });
 
 describe('SankeySignals', () => {

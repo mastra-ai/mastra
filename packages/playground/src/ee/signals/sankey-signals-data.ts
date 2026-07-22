@@ -80,21 +80,15 @@ export function stabilizeThemeFlow(flow: ThemeFlowResponse, windowFlows: ThemeFl
   for (const windowFlow of windowFlows) {
     for (const link of windowFlow.links) {
       const targets = links.get(link.sourceNodeId) ?? new Map();
-      if (!targets.has(link.targetNodeId)) {
+      const existing = targets.get(link.targetNodeId);
+      if (!existing || link.traceCount > existing.traceCount) {
         targets.set(link.targetNodeId, {
           ...link,
-          traceCount: MINIMUM_LAYOUT_WEIGHT,
-          sourceShare: 0,
-          targetShare: 0,
+          traceCount: Math.max(MINIMUM_LAYOUT_WEIGHT, link.traceCount),
         });
       }
       links.set(link.sourceNodeId, targets);
     }
-  }
-  for (const link of flow.links) {
-    const targets = links.get(link.sourceNodeId) ?? new Map();
-    targets.set(link.targetNodeId, link);
-    links.set(link.sourceNodeId, targets);
   }
 
   return { ...flow, stages, links: [...links.values()].flatMap(targets => [...targets.values()]) };
