@@ -1,6 +1,6 @@
 # Mastra Software Factory
 
-An open source, agent-powered software delivery environment built on [Mastra](https://mastra.ai). Connect GitHub and Linear, pull issues into an intake board, hand them to coding agents, and ship pull requests. From a web app you own and can deploy anywhere.
+An open source, agent-powered software delivery environment built on [Mastra](https://mastra.ai). Connect GitHub and Linear, pull issues into an intake board, hand them to coding agents, and ship pull requests. It's your own web app that you can deploy anywhere.
 
 Created with [`npm create factory`](https://www.npmjs.com/package/create-factory).
 
