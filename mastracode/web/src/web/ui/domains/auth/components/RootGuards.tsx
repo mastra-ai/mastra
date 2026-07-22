@@ -1,5 +1,5 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
+import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { ActiveFactoryProvider, useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
 import { useEffect, useEffectEvent, useState } from 'react';
@@ -13,7 +13,7 @@ export const RootGuards = () => {
 };
 
 const AuthGuard = () => {
-  const auth = useWebAuth();
+  const auth = useFactoryAuth();
   const location = useLocation();
 
   if (auth.isPending) return <AuthPendingSkeleton />;
@@ -23,6 +23,8 @@ const AuthGuard = () => {
   if (!state?.authEnabled) return <Outlet />;
 
   if (!state.authenticated) {
+    // Router location (not window.location) so memory routers and in-app
+    // navigations produce the correct returnTo.
     const returnTo = `${location.pathname}${location.search}${location.hash}`;
     return <Navigate to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }

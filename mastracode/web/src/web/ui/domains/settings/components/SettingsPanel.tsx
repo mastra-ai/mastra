@@ -4,12 +4,9 @@ import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { useKeyDown } from '../../../lib/hooks';
-
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { useSettingsSection } from '../context/SettingsNavigationProvider';
-import { useCloseSettings } from '../hooks/useCloseSettings';
+import { useSettingsSection } from '../hooks/useSettingsSection';
 import { useAgentControllerSettings } from '../../../../../shared/hooks/useAgentControllerSettings';
 import { useAvailableModelsQuery } from '../../../../../shared/hooks/useAvailableModels';
 import {
@@ -35,22 +32,22 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 }
 
 /**
- * In-layout settings surface controlled by the application sidebar, with an
- * independently scrolling content pane.
+ * Settings content pane: renders the section addressed by the settings-page
+ * URL, with an independently scrolling content column.
  */
 export function SettingsPanel() {
   const section = useSettingsSection();
-  const closeSettings = useCloseSettings();
   const { theme, setTheme } = useTheme();
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
+  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
+    scope: sessionScope,
     baseUrl,
-    enabled: sessionEnabled,
+    enabled: resourceEnabled,
   };
   // Session-independent: pickers (Factory default model, packs, OM) need the
   // catalog even before any chat session exists.
@@ -59,12 +56,7 @@ export function SettingsPanel() {
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  const sessionResourceId = sessionEnabled ? resourceId : undefined;
-  // Web chat sessions register under (resourceId, scope=projectPath); the
-  // session-scoped config routes need the same pair to find the session.
-  const sessionScope = sessionEnabled ? projectPath : undefined;
-
-  useKeyDown({ escape: closeSettings });
+  const sessionResourceId = resourceEnabled ? resourceId : undefined;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
     if (!settings || updateSettingsMutation.isPending) return;

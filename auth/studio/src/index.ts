@@ -98,7 +98,8 @@ export class MastraAuthStudio
 
   constructor(options?: MastraAuthStudioOptions) {
     super({ name: 'mastra-studio', ...options });
-    this.sharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL || 'http://localhost:3010/v1';
+    const explicitSharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL;
+    this.sharedApiUrl = explicitSharedApiUrl || 'https://platform.mastra.ai/v1';
     this.organizationId = options?.organizationId || process.env.MASTRA_ORGANIZATION_ID;
 
     // Strip trailing slash
@@ -111,14 +112,19 @@ export class MastraAuthStudio
 
     // Use production cookie settings (Secure + Domain) when:
     // 1. An explicit cookieDomain is configured, OR
-    // 2. The shared API is on .mastra.ai (auto-detect default domain)
+    // 2. The shared API is *explicitly* configured on .mastra.ai (auto-detect
+    //    default domain). The built-in platform.mastra.ai fallback doesn't
+    //    count — a localhost studio using the default would otherwise mint
+    //    Domain=.mastra.ai cookies the browser rejects.
     // Use hostname-based detection to avoid false positives (e.g., api.mastra.ai.evil.com)
     let autoDetectMastraAi = false;
-    try {
-      const hostname = new URL(this.sharedApiUrl).hostname.toLowerCase();
-      autoDetectMastraAi = hostname === 'mastra.ai' || hostname.endsWith('.mastra.ai');
-    } catch {
-      autoDetectMastraAi = false;
+    if (explicitSharedApiUrl) {
+      try {
+        const hostname = new URL(this.sharedApiUrl).hostname.toLowerCase();
+        autoDetectMastraAi = hostname === 'mastra.ai' || hostname.endsWith('.mastra.ai');
+      } catch {
+        autoDetectMastraAi = false;
+      }
     }
     this.useProductionCookies = !!this.cookieDomain || autoDetectMastraAi;
 

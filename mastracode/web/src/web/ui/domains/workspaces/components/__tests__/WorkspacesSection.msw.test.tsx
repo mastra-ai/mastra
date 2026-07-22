@@ -266,7 +266,9 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     expect(await screen.findByText('Work Sessions')).toBeInTheDocument();
-    expect(screen.getByText('Review Sessions')).toBeInTheDocument();
+    // The active session row renders before the work-items query resolves, so
+    // the review grouping (which depends on work items) needs its own await.
+    expect(await screen.findByText('Review Sessions')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'feat-api' })).toHaveAttribute('aria-current', 'true');
     expect(await screen.findByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('button', { name: 'factory/issue-99' })).toBeInTheDocument();
@@ -282,7 +284,7 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     const workGroup = await screen.findByRole('region', { name: 'Work Sessions' });
-    const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
+    const reviewGroup = await screen.findByRole('region', { name: 'Review Sessions' });
     expect(screen.queryByRole('button', { name: 'Work Sessions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review Sessions' })).not.toBeInTheDocument();
     expect(await within(workGroup).findByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
@@ -360,7 +362,7 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     const workGroup = await screen.findByRole('region', { name: 'Work Sessions' });
-    const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
+    const reviewGroup = await screen.findByRole('region', { name: 'Review Sessions' });
     await within(reviewGroup).findByRole('button', { name: 'review-5' });
     await waitFor(() => {
       expect(within(workGroup).getByRole('button', { name: 'work-0' })).toHaveAttribute('aria-current', 'true');
@@ -770,5 +772,44 @@ describe('WorkspacesSection', () => {
       'feat-unmatched',
       'user/alice-notes',
     ]);
+  });
+
+  it('does not create an agent session before a Factory workspace is selected', async () => {
+    seedActiveFactory({
+      ...githubProject,
+      id: 'project-unselected',
+      resourceId: 'resource-unselected',
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'factory-project-unselected',
+        repositories: [
+          {
+            projectRepositoryId: PROJECT_REPOSITORY_ID,
+            slug: 'mastra-ai/mastra',
+            gitBranch: 'main',
+            sandboxWorkdir: '/sandbox/mastra',
+            worktrees: [],
+          },
+        ],
+      },
+    });
+    let threadRequests = 0;
+    let workItemRequests = 0;
+    useAgentControllerHandlers([]);
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () => {
+        threadRequests += 1;
+        return HttpResponse.json({ threads: [] });
+      }),
+      http.get(`${ORIGIN}/web/factory/projects/:factoryProjectId/work-items`, () => {
+        workItemRequests += 1;
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+
+    renderSection();
+
+    await waitFor(() => expect(workItemRequests).toBeGreaterThan(0));
+    expect(threadRequests).toBe(0);
   });
 });

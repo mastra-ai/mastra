@@ -1,5 +1,11 @@
 # @mastra/platform
 
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- Renamed the environment variable read by PlatformSandbox and PlatformFilesystem for platform authentication from MASTRA_PLATFORM_ACCESS_TOKEN to MASTRA_PLATFORM_SECRET_KEY. The old variable still works as a deprecated fallback. ([#19932](https://github.com/mastra-ai/mastra/pull/19932))
+
 ## 0.2.0-alpha.0
 
 ### Minor Changes

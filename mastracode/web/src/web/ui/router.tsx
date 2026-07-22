@@ -2,7 +2,7 @@
  * SPA route table (React Router v7, data mode).
  *
  * Auth gating happens in React layout components, not loaders: `RequireAuth`
- * wraps the app routes and reads `/auth/me` through the `useWebAuth` custom
+ * wraps the app routes and reads `/auth/me` through the `useFactoryAuth` custom
  * React Query hook (shared cache key with the rest of the UI), redirecting
  * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
@@ -11,18 +11,19 @@
 import { createBrowserRouter, Navigate } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import { SignInPage } from './domains/auth';
 import Chat from './domains/chat/Chat';
-import { NewPage } from './domains/chat/NewPage';
-import { ThreadPage } from './domains/chat/ThreadPage';
-
-import { AuditPage } from './domains/factory/AuditPage';
-import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
-import { MetricsPage } from './domains/factory/MetricsPage';
-import { OverviewPage } from './domains/factory/OverviewPage';
 import { RootGuards } from './domains/auth/components/RootGuards';
+import { DEFAULT_SETTINGS_PATH } from './domains/settings/settingsSections';
+import { AuditPage } from './pages/AuditPage';
+import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
+import { MetricsPage } from './pages/MetricsPage';
+import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
+import { OverviewPage } from './pages/OverviewPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { SignInPage } from './pages/SignInPage';
+import { ThreadPage } from './pages/ThreadPage';
 import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
 import { isServerFactory } from './domains/workspaces/services/factories';
 
@@ -66,6 +67,13 @@ export function createAppRoutes(): RouteObject[] {
             { path: 'factory/metrics', element: <MetricsPage /> },
             { path: 'factory/audit', element: <AuditPage /> },
             { path: 'factories/create', element: <CreateFactoryPage /> },
+            {
+              path: 'settings',
+              children: [
+                { index: true, element: <Navigate to={DEFAULT_SETTINGS_PATH} replace /> },
+                { path: ':section', element: <SettingsPage /> },
+              ],
+            },
             // Compatibility routes from the former combined Board.
             { path: 'factory/board', element: <Navigate to="/factory/work" replace /> },
             { path: 'factory/intake', element: <Navigate to="/factory/work" replace /> },

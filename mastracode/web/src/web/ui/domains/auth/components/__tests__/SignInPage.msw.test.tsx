@@ -17,7 +17,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import { navigateAfterSignIn, redirectToLogin } from '../../services/auth';
 import type * as AuthService from '../../services/auth';
 import { createAppRoutes } from '../../../../router';
-import { safeReturnTo } from '../SignInPage';
+import { safeReturnTo } from '../../../../pages/SignInPage';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
 // service-level navigation helpers are stubbed instead; `fetchAuthState` and
@@ -52,6 +52,21 @@ describe('SignInPage', () => {
     expect(await screen.findByRole('heading', { name: 'Build with an agent factory' })).toBeInTheDocument();
     expect(screen.getByText(/Turn a repository into a working factory/)).toBeInTheDocument();
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+  });
+
+  describe('given Studio auth', () => {
+    it('renders the Mastra Platform sign-in action', async () => {
+      stubAuthMe({ provider: 'mastra-studio' });
+      renderSignIn('/signin?returnTo=%2Ffactory%2Fboard');
+
+      const button = await screen.findByRole('button', { name: 'Sign in with Mastra Platform' });
+      expect(screen.queryByRole('button', { name: 'Continue with GitHub' })).not.toBeInTheDocument();
+
+      await userEvent.click(button);
+      expect(button).toBeDisabled();
+      expect(button).toHaveTextContent('Opening Mastra Platform…');
+      expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/factory/board');
+    });
   });
 
   describe('given a WorkOS (hosted-login) deploy', () => {

@@ -5,7 +5,7 @@ import { copy } from 'fs-extra';
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/analytics/index.ts', 'src/commands/create/create.ts'],
+  entry: ['src/index.ts', 'src/analytics/index.ts', 'src/commands/create/create.ts', 'src/internal/auth.ts'],
   treeshake: true,
   format: ['esm'],
   publicDir: './src/public',
