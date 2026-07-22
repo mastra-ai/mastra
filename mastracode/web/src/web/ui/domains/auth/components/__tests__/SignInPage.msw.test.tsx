@@ -17,7 +17,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import { navigateAfterSignIn, redirectToLogin } from '../../services/auth';
 import type * as AuthService from '../../services/auth';
 import { createAppRoutes } from '../../../../router';
-import { safeReturnTo } from '../SignInPage';
+import { safeReturnTo } from '../../../../pages/SignInPage';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
 // service-level navigation helpers are stubbed instead; `fetchAuthState` and

@@ -7,11 +7,11 @@ import type { FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
 import '@fontsource-variable/mona-sans/standard.css';
 
-import { useApiConfig } from '../../../../../shared/api/config';
-import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
-import { navigateAfterSignIn, redirectToLogin, signInWithPassword, signUpWithPassword } from '../services/auth';
-import { FactoryHalftoneField } from './FactoryHalftoneField';
-import './sign-in-page.css';
+import { useApiConfig } from '../../../shared/api/config';
+import { useFactoryAuth } from '../../../shared/hooks/useFactoryAuth';
+import { navigateAfterSignIn, redirectToLogin, signInWithPassword, signUpWithPassword } from '../domains/auth/services/auth';
+import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
+import '../domains/auth/components/sign-in-page.css';
 
 /**
  * Only accept same-origin paths so a crafted `?returnTo=` can't bounce the

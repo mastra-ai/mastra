@@ -9,47 +9,47 @@ import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import { useApiConfig } from '../../../../shared/api/config';
-import { relativeTime } from '../../../../shared/lib/date/relativeTime';
-import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
-import { SkeletonRows } from '../../ui/SkeletonRows';
-import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import { ConnectRepositoriesPanel } from '../workspaces/components/ConnectRepositoriesPanel';
-import type { FactoryRepository, ServerFactory } from '../workspaces/services/factories';
-import { selectedRepository } from '../workspaces/services/factories';
-import { FactoryItemActions } from './components/FactoryItemActions';
-import { FactoryPageShell } from './components/FactoryPageShell';
-import { LoadMoreSentinel } from './components/LoadMoreSentinel';
+import { useApiConfig } from '../../../shared/api/config';
+import { relativeTime } from '../../../shared/lib/date/relativeTime';
+import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
+import { SkeletonRows } from '../ui/SkeletonRows';
+import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
+import { ConnectRepositoriesPanel } from '../domains/workspaces/components/ConnectRepositoriesPanel';
+import type { FactoryRepository, ServerFactory } from '../domains/workspaces/services/factories';
+import { selectedRepository } from '../domains/workspaces/services/factories';
+import { FactoryItemActions } from '../domains/factory/components/FactoryItemActions';
+import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import {
   useProjectIssuesQuery,
   useProjectPullRequestsQuery,
   useStartIssueTriageMutation,
-} from '../../../../shared/hooks/useFactoryData';
-import { useIntakeConfigQuery } from '../../../../shared/hooks/useIntakeConfig';
-import { useFactoryDecisionStatus, useRetryFactoryDecision } from '../../../../shared/hooks/useFactoryDecisions';
-import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../shared/hooks/useLinearData';
-import { useStartFactoryRun } from '../../../../shared/hooks/useStartFactoryRun';
-import type { FactoryRunInvocation } from '../../../../shared/hooks/useStartFactoryRun';
+} from '../../../shared/hooks/useFactoryData';
+import { useIntakeConfigQuery } from '../../../shared/hooks/useIntakeConfig';
+import { useFactoryDecisionStatus, useRetryFactoryDecision } from '../../../shared/hooks/useFactoryDecisions';
+import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../shared/hooks/useLinearData';
+import { useStartFactoryRun } from '../../../shared/hooks/useStartFactoryRun';
+import type { FactoryRunInvocation } from '../../../shared/hooks/useStartFactoryRun';
 import {
   useDeleteWorkItemMutation,
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
-} from '../../../../shared/hooks/useWorkItems';
-import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
-import type { FactoryDecisionStatus, FactoryDecisionSummary } from './services/decisions';
-import type { GithubIssue, GithubPullRequest } from './services/factory';
-import type { LinearIssue } from './services/linear';
-import { connectLinear, isLinearReauthError } from './services/linear';
+} from '../../../shared/hooks/useWorkItems';
+import { useWorkItemsQuery } from '../../../shared/hooks/useWorkItems';
+import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
+import type { GithubIssue, GithubPullRequest } from '../domains/factory/services/factory';
+import type { LinearIssue } from '../domains/factory/services/linear';
+import { connectLinear, isLinearReauthError } from '../domains/factory/services/linear';
 import {
   inferredParentWorkItemId,
   relatedWorkItems,
   relationshipLabel,
   relationshipPath,
-} from './services/relationships';
-import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
-import { BOARD_STAGES, stageLabel } from './stages';
-import type { BoardStageId } from './stages';
+} from '../domains/factory/services/relationships';
+import type { WorkItem, WorkItemSessionRef, WorkItemSource } from '../domains/factory/services/workItems';
+import { BOARD_STAGES, stageLabel } from '../domains/factory/stages';
+import type { BoardStageId } from '../domains/factory/stages';
 
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
 const NEEDS_APPROVAL_LABEL = 'needs-approval';

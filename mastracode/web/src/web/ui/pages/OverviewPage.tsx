@@ -12,20 +12,20 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMemo, useState } from 'react';
 
-import { useApiConfig } from '../../../../shared/api/config';
-import { useQueueHealthThresholds } from '../../../../shared/hooks/useQueueHealthThresholds';
-import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
-import { useWorkspaceActivity } from '../../../../shared/hooks/useWorkspaceActivity';
-import { deriveProjectPath, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
-import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
-import { isServerFactory } from '../workspaces/services/factories';
-import { FactoryPageShell } from './components/FactoryPageShell';
-import type { QueueHealthSelection } from './components/QueueHealthChart';
-import { QueueHealthChart, formatAgeSeconds } from './components/QueueHealthChart';
-import type { AgeBucket, QueueHealthEntry } from './queue-health';
-import { computeQueueHealth } from './queue-health';
-import { stageLabel } from './stages';
+import { useApiConfig } from '../../../shared/api/config';
+import { useQueueHealthThresholds } from '../../../shared/hooks/useQueueHealthThresholds';
+import { useWorkItemsQuery } from '../../../shared/hooks/useWorkItems';
+import { useWorkspaceActivity } from '../../../shared/hooks/useWorkspaceActivity';
+import { deriveProjectPath, useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
+import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
+import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
+import { isServerFactory } from '../domains/workspaces/services/factories';
+import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import type { QueueHealthSelection } from '../domains/factory/components/QueueHealthChart';
+import { QueueHealthChart, formatAgeSeconds } from '../domains/factory/components/QueueHealthChart';
+import type { AgeBucket, QueueHealthEntry } from '../domains/factory/queue-health';
+import { computeQueueHealth } from '../domains/factory/queue-health';
+import { stageLabel } from '../domains/factory/stages';
 
 const BUCKET_LABEL: Record<AgeBucket, string> = {
   green: 'Fresh',
