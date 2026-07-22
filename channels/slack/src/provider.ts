@@ -878,8 +878,7 @@ export class SlackProvider implements ChannelProvider {
   #createAgentControllerChannels(controller: AgentController<any>, adapter: SlackAdapter): AgentControllerChannels {
     const adapterConfig = this.#resolveSlackAdapterConfig();
     const slackEntry = (Object.keys(adapterConfig).length > 0 ? { adapter, ...adapterConfig } : adapter) as
-      | ChannelAdapterConfig
-      | SlackAdapter;
+      ChannelAdapterConfig | SlackAdapter;
     const existing = controller.getChannels() as AgentControllerChannels | null;
     const existingConfig = existing?.channelConfig;
     const controllerChannels = new AgentControllerChannels({
