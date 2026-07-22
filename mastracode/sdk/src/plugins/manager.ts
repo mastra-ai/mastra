@@ -248,6 +248,8 @@ export class PluginManager {
 
     if (changedCheckouts.size === 0) return false;
 
+    await this.reload();
+    // Derive names from the reloaded state so a manifest display-name change reports the new name.
     // Multiple plugins can share one checkout — report every plugin whose source changed.
     const updatedPluginNames = this.loadedPlugins
       .filter(
@@ -258,7 +260,6 @@ export class PluginManager {
           changedCheckouts.has(this.resolvePluginSourcePath(plugin)),
       )
       .map(plugin => plugin.name ?? plugin.id);
-    await this.reload();
     await this.notifyGithubUpdateListeners(updatedPluginNames);
     return true;
   }
