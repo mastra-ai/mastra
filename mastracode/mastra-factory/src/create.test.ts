@@ -210,8 +210,9 @@ describe('create (platform provisioning)', () => {
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
 
-    // All five platform keys present with real values.
-    expect(env).toMatch(/^MASTRA_SHARED_API_URL=https:\/\/platform\.example\.test$/m);
+    // All four platform keys present with real values; the shared API URL is
+    // no longer written (consumers default to the production platform URL).
+    expect(env).not.toMatch(/^MASTRA_SHARED_API_URL=/m);
     expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
     expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
@@ -277,7 +278,7 @@ describe('create (platform provisioning)', () => {
     await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
 
     const env = fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8');
-    expect(env).toMatch(/^MASTRA_SHARED_API_URL=/m);
+    expect(env).not.toMatch(/^MASTRA_SHARED_API_URL=/m);
     expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
     expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
