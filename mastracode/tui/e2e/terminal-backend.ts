@@ -401,6 +401,7 @@ async function startMastraCodeApp(
 
   return {
     async stop() {
+      result.session.thread.detachFromCurrent();
       tui.stop();
       const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
       await Promise.allSettled([
@@ -410,7 +411,6 @@ async function startMastraCodeApp(
         result.githubSignals?.stopAllPolling(),
         closeSignalsPubSub?.(),
       ]);
-      await result.storageMaintenance.closeStorage?.();
     },
   };
 }

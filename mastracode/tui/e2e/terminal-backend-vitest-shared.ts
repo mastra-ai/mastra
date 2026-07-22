@@ -17,6 +17,10 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const mastracodeDir = resolve(scriptDir, '../..');
 const fixturesDir = join(scriptDir, 'fixtures');
 const tmpRootDir = join(mastracodeDir, '.tmp-mc-e2e-vitest');
+// The in-process runner shares event infrastructure across scenarios. Keep each
+// DELETE-journal database alive until the shard finishes so stale handles never
+// observe a removed database while the next scenario starts.
+const completedRunRoots = new Set<string>();
 const defaultScenarioNames = [
   'startup',
   'automated-chat',
@@ -247,18 +251,19 @@ async function runScenarioInProcess(scenario: McE2eScenario): Promise<void> {
 
   const runRoot = join(tmpRootDir, `${Date.now()}-${process.pid}`, scenario.name);
   const { aimock, config } = await prepareTerminalRun(scenario, runRoot);
-  let status = 1;
+  let passed = false;
   try {
-    status = await runTerminalBackend(config);
+    const status = await runTerminalBackend(config);
     if (status !== 0) throw new Error(`${scenario.name} exited with status ${status}`);
     if (aimock) {
       const requestCount = aimock.requestCount();
       if (requestCount === 0) throw new Error(`${scenario.name} expected at least one AIMock request but saw none`);
       scenario.verifyAimockRequests?.(aimock.requests());
     }
+    passed = true;
   } finally {
     await aimock?.stop();
-    if (status === 0) rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    if (passed) completedRunRoots.add(runRoot);
   }
 }
 
@@ -268,6 +273,10 @@ export function defineTerminalBackendVitestTests(options: { shardIndex?: number;
   const scenarioNames = selectScenarioNames(shardIndex, shardTotal);
 
   afterAll(() => {
+    for (const runRoot of completedRunRoots) {
+      rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+    completedRunRoots.clear();
     try {
       if (readdirSync(tmpRootDir).length === 0) rmdirSync(tmpRootDir);
     } catch {
