@@ -188,7 +188,9 @@ function fakeGithubIntegration() {
       repositories: {
         get: vi.fn(async () => {
           const project = mocks.projects[0];
-          return project ? { id: 'repository-1', slug: project.repoFullName, defaultBranch: project.defaultBranch } : null;
+          return project
+            ? { id: 'repository-1', slug: project.repoFullName, defaultBranch: project.defaultBranch }
+            : null;
         }),
       },
       installations: { get: vi.fn(async () => ({ id: 'installation-1', externalId: '123' })) },
@@ -286,20 +288,12 @@ describe('GitHub session workspace preparation', () => {
     const workdirB = path.join(root, 'github-sessions', 'octocat', 'hello', 'session-b');
     expect(workspaceA.id).toContain('project-1-session-a');
     expect(workspaceB.id).toContain('project-1-session-b');
-    expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(
-      1,
-      expect.any(Object),
-      { GH_TOKEN: 'gh-token' },
-      undefined,
-      { workingDirectory: workdirA },
-    );
-    expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(
-      2,
-      expect.any(Object),
-      { GH_TOKEN: 'gh-token' },
-      undefined,
-      { workingDirectory: workdirB },
-    );
+    expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(1, expect.any(Object), { GH_TOKEN: 'gh-token' }, undefined, {
+      workingDirectory: workdirA,
+    });
+    expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(2, expect.any(Object), { GH_TOKEN: 'gh-token' }, undefined, {
+      workingDirectory: workdirB,
+    });
     expect(mocks.materializeRepo).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ id: 'session-a', sandboxWorkdir: workdirA }),

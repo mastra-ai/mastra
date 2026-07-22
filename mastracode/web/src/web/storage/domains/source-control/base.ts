@@ -1033,7 +1033,11 @@ export class SourceControlStorage extends FactoryStorageDomain {
           }
         },
         setSandbox: async ({ id, sandboxId, sandboxWorkdir }) => {
-          await db().updateMany(SESSIONS, { id }, { sandbox_id: sandboxId, sandbox_workdir: sandboxWorkdir, updated_at: new Date() });
+          await db().updateMany(
+            SESSIONS,
+            { id },
+            { sandbox_id: sandboxId, sandbox_workdir: sandboxWorkdir, updated_at: new Date() },
+          );
         },
         markMaterialized: async ({ id }) => {
           await db().updateMany(SESSIONS, { id }, { materialized_at: new Date(), updated_at: new Date() });

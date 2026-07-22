@@ -105,7 +105,8 @@ export function createWorkspaceFactory(sandboxConfig?: MastraFactorySandboxConfi
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const github = getSeededGithubIntegration();
-    const session = ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
+    const session =
+      ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
 
     if (!session) {
       if (sandboxConfig && !isLocalSandbox) {
@@ -115,7 +116,12 @@ export function createWorkspaceFactory(sandboxConfig?: MastraFactorySandboxConfi
     }
 
     const user = requestContext.get('user') as WebAuthUser | undefined;
-    if (!user?.organizationId || !user.workosId || user.organizationId !== session.orgId || user.workosId !== session.userId) {
+    if (
+      !user?.organizationId ||
+      !user.workosId ||
+      user.organizationId !== session.orgId ||
+      user.workosId !== session.userId
+    ) {
       throw new Error(`Factory session ${session.sessionId} is not available to the current user`);
     }
     if (!sandboxConfig || !github) {

@@ -177,7 +177,11 @@ describe('sandbox option forwarding', () => {
 
     expect(calls).toEqual([
       expect.objectContaining({ env: { GH_TOKEN: 'token' }, workingDirectory: '/tmp/session-1' }),
-      expect.objectContaining({ providerSandboxId: 'sb-1', env: { GH_TOKEN: 'token' }, workingDirectory: '/tmp/session-1' }),
+      expect.objectContaining({
+        providerSandboxId: 'sb-1',
+        env: { GH_TOKEN: 'token' },
+        workingDirectory: '/tmp/session-1',
+      }),
     ]);
   });
 
@@ -187,10 +191,12 @@ describe('sandbox option forwarding', () => {
 
     await reattachSandbox('sb-2', { workingDirectory: '/tmp/session-2' });
 
-    expect(factory).toHaveBeenCalledWith(expect.objectContaining({
-      providerSandboxId: 'sb-2',
-      workingDirectory: '/tmp/session-2',
-    }));
+    expect(factory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerSandboxId: 'sb-2',
+        workingDirectory: '/tmp/session-2',
+      }),
+    );
   });
 
   it('forwards provider working directory into the seeded machine clone call', async () => {
@@ -210,10 +216,12 @@ describe('sandbox option forwarding', () => {
 
     await reattachSandbox('derived-1', { workingDirectory: '/tmp/session-3' });
 
-    expect(clone).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'derived-1',
-      sandboxId: 'derived-1',
-      workingDirectory: '/tmp/session-3',
-    }));
+    expect(clone).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'derived-1',
+        sandboxId: 'derived-1',
+        workingDirectory: '/tmp/session-3',
+      }),
+    );
   });
 });
