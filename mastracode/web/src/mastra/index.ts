@@ -85,9 +85,9 @@ if (authDisabled) {
 const workosAuditApiKey = process.env.WORKOS_AUDIT_API_KEY;
 const workosAudit = workosAuditApiKey
   ? new WorkOSAuditIntegration({
-    client: new WorkOS(workosAuditApiKey),
-    returnUrl: `${(process.env.MASTRACODE_PUBLIC_URL ?? 'http://localhost:4111').replace(/\/+$/, '')}/factory/audit`,
-  })
+      client: new WorkOS(workosAuditApiKey),
+      returnUrl: `${(process.env.MASTRACODE_PUBLIC_URL ?? 'http://localhost:4111').replace(/\/+$/, '')}/factory/audit`,
+    })
   : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
@@ -176,7 +176,7 @@ if (sandboxKind === 'platform') {
   if (!railwayToken) {
     throw new Error(
       'MASTRACODE_SANDBOX_PROVIDER=railway requires RAILWAY_API_TOKEN — set the token, or unset the ' +
-      'provider to fall back to the local sandbox (single-user dev only).',
+        'provider to fall back to the local sandbox (single-user dev only).',
     );
   }
   sandbox = new RailwaySandbox({
@@ -212,7 +212,7 @@ function envGroup<K extends string>(
   if (missing.length > 0) {
     throw new Error(
       `${integration} integration is partially configured — missing ${missing.join(', ')}. ` +
-      'Set the remaining variable(s) to enable it, or unset the group to disable it.',
+        'Set the remaining variable(s) to enable it, or unset the group to disable it.',
     );
   }
   return Object.fromEntries(entries) as Record<K, string>;
@@ -273,15 +273,15 @@ if (!appDatabaseUrl && !localDevelopmentMode) {
 }
 const storage = appDatabaseUrl
   ? new PgFactoryStorage({
-    id: 'mastra-code-storage',
-    connectionString: appDatabaseUrl,
-    retention: DEFAULT_RETENTION,
-  })
+      id: 'mastra-code-storage',
+      connectionString: appDatabaseUrl,
+      retention: DEFAULT_RETENTION,
+    })
   : new LibSQLFactoryStorage({
-    id: 'mastra-code-storage',
-    url: `file:${getDatabasePath()}`,
-    retention: DEFAULT_RETENTION,
-  });
+      id: 'mastra-code-storage',
+      url: `file:${getDatabasePath()}`,
+      retention: DEFAULT_RETENTION,
+    });
 const vector = appDatabaseUrl
   ? new PgVector({ id: 'mastra-code-vectors', connectionString: appDatabaseUrl })
   : undefined;

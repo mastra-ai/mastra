@@ -1,11 +1,5 @@
 export type SettingsSection =
-  | 'general'
-  | 'source-control'
-  | 'model'
-  | 'memory'
-  | 'behavior'
-  | 'providers'
-  | 'custom-providers';
+  'general' | 'source-control' | 'model' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   general: 'General',
