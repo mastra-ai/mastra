@@ -3,10 +3,8 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { GitBranch } from 'lucide-react';
 import { useLocation } from 'react-router';
 
-import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui/ChatLayout';
-import { PageLayout } from '../../ui/PageLayout';
 import { FolderIcon } from '../../ui/icons';
 import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
@@ -23,17 +21,10 @@ import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
-  const overlays = useOverlays();
   const { activeFactory } = useActiveFactoryContext();
 
   if (!activeFactory) {
-    // Inside the app layout so the Create Factory panel (layout main view) can
-    // open from the empty state's call to action.
-    return (
-      <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
-        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-      </PageLayout>
-    );
+    return <EmptyFactoryState />;
   }
 
   return (

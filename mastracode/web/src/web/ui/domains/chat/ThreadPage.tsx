@@ -1,13 +1,10 @@
 import { useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 
-import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui/ChatLayout';
-import { PageLayout } from '../../ui/PageLayout';
 import { renderedPaths } from '../workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../workspace-viewer/components/WorkspaceViewerPanel';
-import { EmptyFactoryState } from '../workspaces/components/EmptyFactoryState';
 import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { activeWorkspacePath, findUserSessionByThreadId } from '../workspaces/services/factories';
 import { ChatHeader } from './components/ChatHeader';
@@ -19,13 +16,13 @@ import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionP
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
 import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
-  const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending } = useActiveFactoryContext();
   const { threadId } = useParams();
   const location = useLocation();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
@@ -39,13 +36,11 @@ export function ThreadPage() {
     ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
 
-  if (!activeFactory) {
-    // Inside the app layout so the Create Factory panel (layout main view) can
-    // open from the empty state's call to action.
+  if (factoriesPending) {
     return (
-      <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
-        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-      </PageLayout>
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
     );
   }
 
