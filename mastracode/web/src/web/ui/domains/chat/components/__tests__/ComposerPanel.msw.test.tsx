@@ -39,7 +39,6 @@ function seedFactory() {
     },
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -77,12 +76,12 @@ function useAgentControllerHandlers() {
 
 function renderComposerPanel(composerVariant: 'inline' | 'textarea' = 'inline') {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+    <MemoryRouter initialEntries={[`/factories/project-test/threads/${THREAD_ID}`]}>
       <Routes>
         <Route
-          path="/threads/:threadId"
+          path="/factories/:factoryId/threads/:threadId"
           element={
-            <ActiveFactoryProvider>
+            <ActiveFactoryProvider factoryId="project-test">
               <ChatSessionProvider>
                 <ChatCommandsProvider>
                   <ComposerPanel composerVariant={composerVariant} />
@@ -117,6 +116,6 @@ describe('ComposerPanel', () => {
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled());
     expect(screen.getByText('build')).toBeInTheDocument();
-    expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument();
+    expect(await screen.findByText(/GPT-4o Mini/)).toBeInTheDocument();
   });
 });

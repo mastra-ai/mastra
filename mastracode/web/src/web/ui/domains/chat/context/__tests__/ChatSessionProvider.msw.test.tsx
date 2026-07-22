@@ -14,7 +14,7 @@ import type {
   PermissionRules,
 } from '@mastra/client-js';
 import type { ReactNode } from 'react';
-import { Profiler } from 'react';
+import { Profiler, useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -24,7 +24,7 @@ import { ChatSessionTestProvider as ChatSessionProvider } from '../ChatSessionTe
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Factory } from '../../../workspaces';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { ChatMessageList } from '../../components/ChatMessageList';
 import { ModesSelection } from '../../components/StatusLine/ModesSelection';
 import { ChatMessageBoundary } from '../ChatSessionProvider';
@@ -111,9 +111,16 @@ const githubProjectWithWorktree: Factory = {
   },
 };
 
+/**
+ * The URL is the source of truth for the active factory: tests seed the
+ * factory list, and the render helpers mount `ActiveFactoryProvider` with the
+ * seeded "route" factoryId (what `FactoryLayout` does with `useParams`).
+ */
+let routeFactoryId = 'project-test';
+
 function seedFactory(projects: Factory[] = [project], activeProject: Factory = project) {
   localStorage.setItem('mastracode-factories', JSON.stringify(projects));
-  localStorage.setItem('mastracode-active-factory', activeProject.id);
+  routeFactoryId = activeProject.id;
 }
 
 function sessionState(resourceId = RESOURCE_ID): AgentControllerSessionState {
@@ -129,6 +136,28 @@ function sessionState(resourceId = RESOURCE_ID): AgentControllerSessionState {
 
 function requestCount(requests: string[], request: string) {
   return requests.filter(candidate => candidate === request).length;
+}
+
+/**
+ * Mount-driven sandbox materialization for server factories: opening
+ * `/factories/:factoryId/**` runs the `/ensure` SSE route before the session
+ * is allowed to bind.
+ */
+function useEnsureHandler() {
+  server.use(
+    http.post(`${TEST_BASE_URL}/web/github/projects/${githubRepository.projectRepositoryId}/ensure`, () => {
+      const done = {
+        resourceId: RESOURCE_ID,
+        factoryProjectId: 'factory-project-id',
+        projectRepositoryId: githubRepository.projectRepositoryId,
+        sandboxId: 'sbx-test',
+        sandboxWorkdir: '/workspace/mastracode-github-test',
+      };
+      return new HttpResponse(`event: done\ndata: ${JSON.stringify(done)}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }),
+  );
 }
 
 function sse(events: AgentControllerEvent[] = []): Response {
@@ -189,7 +218,6 @@ function Probe() {
   const { status, threadId } = useChatConnection();
   const { transcript, busy, showWorkingIndicator, localUser } = useChatTranscript();
   const { usage, followUpCount, omPhase, goal } = useChatRuntime();
-  const { selectFactory } = useActiveFactoryContext();
   const messageText = transcript.entries
     .filter(entry => entry.kind === 'message')
     .flatMap(entry => entry.message.content.parts)
@@ -211,7 +239,7 @@ function Probe() {
       <span data-testid="om-phase">{omPhase}</span>
       <span data-testid="goal-objective">{goal?.objective ?? '(none)'}</span>
       <button onClick={() => localUser('Hello')}>send local message</button>
-      <button onClick={() => void selectFactory(nextProject)}>switch project</button>
+      <button onClick={() => switchRouteFactory(nextProject.id)}>switch project</button>
     </div>
   );
 }
@@ -292,9 +320,18 @@ function SessionContextProbe() {
   );
 }
 
+/**
+ * Simulates the route change that drives factory switching in the app: the
+ * layout stays mounted while `ActiveFactoryProvider` receives a new
+ * `factoryId` prop from the URL.
+ */
+let switchRouteFactory: (factoryId: string) => void = () => {};
+
 function ProbeSession({ threadId, children }: { threadId?: string; children?: ReactNode }) {
+  const [factoryId, setFactoryId] = useState(routeFactoryId);
+  switchRouteFactory = setFactoryId;
   return (
-    <ActiveFactoryProvider>
+    <ActiveFactoryProvider factoryId={factoryId}>
       <ChatSessionProvider threadId={threadId}>{children ?? <Probe />}</ChatSessionProvider>
     </ActiveFactoryProvider>
   );
@@ -310,7 +347,7 @@ function renderFocusedProbe(children: ReactNode, threadId?: string) {
 
 function renderMessageList(threadId?: string) {
   return renderWithProviders(
-    <ActiveFactoryProvider>
+    <ActiveFactoryProvider factoryId={routeFactoryId}>
       <ChatSessionProvider threadId={threadId}>
         <ChatMessageBoundary>
           <ChatMessageList />
@@ -380,7 +417,8 @@ describe('ChatSessionProvider', () => {
       );
 
       await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Build'));
-      expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'true');
+      const modeSelector = screen.getByRole('combobox', { name: 'Session mode' });
+      expect(modeSelector).toHaveTextContent('Build');
       expect(screen.getByTestId('active-mode-id')).toHaveTextContent('build');
       expect(screen.getByTestId('modes-count')).toHaveTextContent('2');
       const readsBeforeSwitch = {
@@ -393,21 +431,21 @@ describe('ChatSessionProvider', () => {
         messages: requestCount(requests, 'messages'),
       };
 
-      await userEvent.click(screen.getByRole('button', { name: 'Plan' }));
+      await userEvent.click(modeSelector);
+      await userEvent.click(await screen.findByRole('option', { name: 'Plan' }));
 
       await waitFor(() => expect(requests).toContain('mode:{"modeId":"plan"}'));
-      const pendingModeButton = screen.getByRole('button', { name: 'Plan' });
-      expect(pendingModeButton).toHaveAttribute('aria-pressed', 'true');
-      expect(pendingModeButton).toHaveAttribute('aria-busy', 'true');
-      expect(pendingModeButton).toBeEnabled();
-      expect(screen.getByRole('button', { name: 'Build' })).toBeEnabled();
+      expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan');
+      expect(screen.getByTestId('active-mode-id')).toHaveTextContent('plan');
+      expect(modeSelector).toHaveTextContent('Plan');
+      expect(modeSelector).toHaveAttribute('aria-busy', 'true');
+      expect(modeSelector).toBeDisabled();
       expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state);
 
       completeModeSwitch?.();
 
-      await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan'));
-      await waitFor(() => expect(pendingModeButton).toHaveAttribute('aria-busy', 'false'));
-      expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state);
+      await waitFor(() => expect(modeSelector).toHaveAttribute('aria-busy', 'false'));
+      expect(modeSelector).toBeEnabled();
       for (const request of ['create', 'modes', 'models', 'permissions', 'threads', 'messages'] as const) {
         expect(requestCount(requests, request)).toBe(readsBeforeSwitch[request]);
       }
@@ -687,6 +725,7 @@ describe('ChatSessionProvider', () => {
       const requests: string[] = [];
       seedFactory([githubProjectWithWorktree], githubProjectWithWorktree);
       useAgentControllerHandlers([], requests);
+      useEnsureHandler();
 
       renderFocusedProbe(<SessionContextProbe />);
 
@@ -699,12 +738,15 @@ describe('ChatSessionProvider', () => {
       const requests: string[] = [];
       seedFactory([githubProjectWithWorktree], githubProjectWithWorktree);
       useAgentControllerHandlers([], requests);
+      useEnsureHandler();
 
       renderFocusedProbe(<SessionContextProbe />);
 
+      // Mount-driven materialization persists the sandbox identities before
+      // the session binds, so they travel with the initial setState.
       await waitFor(() =>
         expect(requests).toContain(
-          'setState:{"state":{"projectPath":"/tmp/mastracode-github-test","factoryProjectId":"factory-project-id","projectRepositoryId":"project-repository-id"}}',
+          'setState:{"state":{"projectPath":"/tmp/mastracode-github-test","factoryProjectId":"factory-project-id","projectRepositoryId":"project-repository-id","sandboxId":"sbx-test","sandboxWorkdir":"/workspace/mastracode-github-test"}}',
         ),
       );
     });

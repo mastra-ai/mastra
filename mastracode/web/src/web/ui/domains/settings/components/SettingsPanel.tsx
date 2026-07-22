@@ -1,22 +1,21 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useEffect, useRef } from 'react';
-
-import { useKeyDown } from '../../../lib/hooks';
-import { CloseIcon } from '../../../ui/icons';
-import { useToast } from '../../../ui/toast';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { useSettingsSection } from '../context/SettingsNavigationProvider';
-import { useCloseSettings } from '../hooks/useCloseSettings';
+import { useSettingsSection } from '../hooks/useSettingsSection';
 import { useAgentControllerSettings } from '../../../../../shared/hooks/useAgentControllerSettings';
 import { useAvailableModelsQuery } from '../../../../../shared/hooks/useAvailableModels';
-import { useSetAgentControllerStateMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
+import {
+  SettingsUpdateVerificationError,
+  useUpdateAgentControllerSettingsMutation,
+} from '../../../../../shared/hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
+import { SettingsHeader } from './SettingsHeader';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
@@ -26,60 +25,52 @@ import { OMSection } from './OMSection';
 import { ProvidersSection } from './ProvidersSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
+function getSettingsUpdateErrorMessage(error: unknown): string {
+  if (error instanceof SettingsUpdateVerificationError) return error.message;
+  if (error instanceof Error) return `Failed to update settings: ${error.message}`;
+  return 'Failed to update settings';
+}
+
 /**
- * In-layout settings surface controlled by the application sidebar, with an
- * independently scrolling content pane.
+ * Settings content pane: renders the section addressed by the settings-page
+ * URL, with an independently scrolling content column.
  */
 export function SettingsPanel() {
   const section = useSettingsSection();
-  const closeSettings = useCloseSettings();
-  const titleRef = useRef<HTMLElement>(null);
   const { theme, setTheme } = useTheme();
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
-  const { toast } = useToast();
+  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
+    scope: sessionScope,
     baseUrl,
-    enabled: sessionEnabled,
+    enabled: resourceEnabled,
   };
   // Session-independent: pickers (Factory default model, packs, OM) need the
   // catalog even before any chat session exists.
   const modelsQuery = useAvailableModelsQuery();
   const settingsQuery = useAgentControllerSettings(hookArgs);
-  const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
+  const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  const sessionResourceId = sessionEnabled ? resourceId : undefined;
-  // Web chat sessions register under (resourceId, scope=projectPath); the
-  // session-scoped config routes need the same pair to find the session.
-  const sessionScope = sessionEnabled ? projectPath : undefined;
-
-  useEffect(() => {
-    titleRef.current?.focus();
-  }, []);
-
-  useKeyDown({ escape: closeSettings });
+  const sessionResourceId = resourceEnabled ? resourceId : undefined;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
-    void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'));
+    if (!settings || updateSettingsMutation.isPending) return;
+    updateSettingsMutation.mutate(updates, {
+      onSuccess: () => toast.success('Settings updated'),
+      onError: error => toast.error(getSettingsUpdateErrorMessage(error)),
+    });
   };
 
   return (
-    <section aria-labelledby="settings-title" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border1 px-5 py-4">
-        <Txt as="h1" variant="header-sm" id="settings-title" tabIndex={-1} ref={titleRef} className="text-icon6">
-          Settings
-        </Txt>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Close settings" onClick={closeSettings}>
-          <CloseIcon size={16} />
-        </Button>
-      </header>
-
+    <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
         <div className="mx-auto grid w-full max-w-4xl py-3">
+          {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
           {section === 'general' && (
             <>
               <GeneralSettings theme={theme} onThemeChange={setTheme} />
@@ -90,7 +81,11 @@ export function SettingsPanel() {
           {section === 'source-control' && <SourceControlSection />}
           {section === 'model' && (
             <>
-              <ModelSettings settings={settings} onBehaviorChange={onBehaviorChange} />
+              <ModelSettings
+                settings={settings}
+                updating={updateSettingsMutation.isPending}
+                onBehaviorChange={onBehaviorChange}
+              />
               <FactoryDefaultModelSection models={models} />
               <div className="mt-6 flex flex-col gap-2">
                 <Txt variant="ui-lg" className="font-medium">
@@ -104,6 +99,7 @@ export function SettingsPanel() {
           {section === 'behavior' && (
             <BehaviorSettings
               settings={settings}
+              updating={updateSettingsMutation.isPending}
               onBehaviorChange={onBehaviorChange}
               permissions={permissions ?? null}
               pendingPermissionCategory={pendingPermissionCategory}

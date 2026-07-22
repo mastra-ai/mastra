@@ -3,12 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playgr
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
-import { GitBranch, MoreHorizontal } from 'lucide-react';
+import { GitBranch, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { queryKeys } from '../../../../../shared/api/keys';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../../../../shared/hooks/useAgentControllerThreads';
 import {
   conversationThread,
@@ -65,7 +65,7 @@ export function WorkspacesSection() {
     scope: projectPath || undefined,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory)),
+    enabled: sessionEnabled && Boolean(projectPath) && Boolean(activeFactory && isServerFactory(activeFactory)),
   };
   const runningByPath = useWorkspaceActivity(activityOptions);
   // Both hooks read the same cached thread listing — one poll, no extra request.
@@ -84,7 +84,7 @@ export function WorkspacesSection() {
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
     allWorkItems.flatMap(item =>
-      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.projectPath, item] as const),
+      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.sessionId, item] as const),
     ),
   );
   const rows = worktrees.flatMap(worktree => {
@@ -162,27 +162,39 @@ export function WorkspacesSection() {
         // scope, the route-thread sync settles on it instead of erroring on
         // the stale one.
         await queryClient.prefetchQuery({
-          queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, latest.id),
-          queryFn: () => chatSession.listMessages(latest.id),
+          queryKey: queryKeys.agentControllerThreadMessages(
+            AGENT_CONTROLLER_ID,
+            resourceId,
+            latest.id,
+            INITIAL_THREAD_MESSAGE_LIMIT,
+          ),
+          queryFn: () => chatSession.listMessages(latest.id, INITIAL_THREAD_MESSAGE_LIMIT),
         });
-        void navigate(`/threads/${latest.id}`, { replace: true });
+        void navigate(`/factories/${activeFactory.id}/threads/${latest.id}`, { replace: true });
         return;
       }
       // Empty worktree: leave the stale thread route before creating, so the
       // route-thread sync can't race the create call and error on the old
       // thread. The scoped session is pinned to this worktree, so the new
       // thread is tagged with its projectPath.
-      if (location.pathname.startsWith('/threads/')) void navigate('/new', { replace: true });
+      if (location.pathname.startsWith(`/factories/${activeFactory.id}/threads/`)) {
+        void navigate(`/factories/${activeFactory.id}/new`, { replace: true });
+      }
       const created = await chatSession.createThread();
       // A fresh thread has no messages; seed the cache to skip the skeleton.
       queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, created.id),
+        queryKeys.agentControllerThreadMessages(
+          AGENT_CONTROLLER_ID,
+          resourceId,
+          created.id,
+          INITIAL_THREAD_MESSAGE_LIMIT,
+        ),
         [],
       );
       void queryClient.invalidateQueries({ queryKey: threadsKey });
-      void navigate(`/threads/${created.id}`, { replace: true });
+      void navigate(`/factories/${activeFactory.id}/threads/${created.id}`, { replace: true });
     } catch {
-      void navigate('/new', { replace: true });
+      void navigate(`/factories/${activeFactory.id}/new`, { replace: true });
     }
   };
 
@@ -195,50 +207,56 @@ export function WorkspacesSection() {
         // Threads under the deleted worktree are gone; if we were inside one,
         // land on the fallback workspace's latest thread. Factory pages are
         // worktree-independent, so deleting from there stays put.
-        if (wasSelected && !location.pathname.startsWith('/factory')) {
+        if (wasSelected && location.pathname.startsWith(`/factories/${activeFactory.id}/threads/`)) {
           const fallback = selectedRepository(updated)?.selectedWorktreePath;
           if (fallback) void openWorktreeThread(fallback);
-          else void navigate('/new', { replace: true });
+          else void navigate(`/factories/${activeFactory.id}/new`, { replace: true });
         }
       },
       onError: () => setConfirmDelete(null),
     });
   };
 
+  if (workRows.length === 0 && reviewRows.length === 0) return null;
+
   return (
     <section className="flex flex-col gap-4" aria-label="Factory sessions">
-      <WorkspaceGroup
-        title="Work Sessions"
-        rows={workRows}
-        pending={pending}
-        onSelect={row => {
-          clearAttention(row.worktree.worktreePath);
-          if (row.active) {
-            void openWorktreeThread(row.worktree.worktreePath);
-            return;
-          }
-          selectWorkspace.mutate(row.worktree.worktreePath, {
-            onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
-          });
-        }}
-        onDelete={worktree => setConfirmDelete(worktree)}
-      />
-      <WorkspaceGroup
-        title="Review Sessions"
-        rows={reviewRows}
-        pending={pending}
-        onSelect={row => {
-          clearAttention(row.worktree.worktreePath);
-          if (row.active) {
-            void openWorktreeThread(row.worktree.worktreePath);
-            return;
-          }
-          selectWorkspace.mutate(row.worktree.worktreePath, {
-            onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
-          });
-        }}
-        onDelete={worktree => setConfirmDelete(worktree)}
-      />
+      {workRows.length > 0 && (
+        <WorkspaceGroup
+          title="Work Sessions"
+          rows={workRows}
+          pending={pending}
+          onSelect={row => {
+            clearAttention(row.worktree.worktreePath);
+            if (row.active) {
+              void openWorktreeThread(row.worktree.worktreePath);
+              return;
+            }
+            selectWorkspace.mutate(row.worktree.worktreePath, {
+              onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
+            });
+          }}
+          onDelete={worktree => setConfirmDelete(worktree)}
+        />
+      )}
+      {reviewRows.length > 0 && (
+        <WorkspaceGroup
+          title="Review Sessions"
+          rows={reviewRows}
+          pending={pending}
+          onSelect={row => {
+            clearAttention(row.worktree.worktreePath);
+            if (row.active) {
+              void openWorktreeThread(row.worktree.worktreePath);
+              return;
+            }
+            selectWorkspace.mutate(row.worktree.worktreePath, {
+              onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
+            });
+          }}
+          onDelete={worktree => setConfirmDelete(worktree)}
+        />
+      )}
 
       {confirmDelete && (
         <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
@@ -316,13 +334,6 @@ function WorkspaceGroup({
             onDelete={() => onDelete(row.worktree)}
           />
         ))}
-        {rows.length === 0 && (
-          <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
-            {title === 'Review Sessions'
-              ? 'Review sessions appear when a PR review starts.'
-              : 'Work sessions appear when work starts.'}
-          </Txt>
-        )}
       </div>
     </section>
   );
@@ -397,6 +408,7 @@ export function WorkspaceRow({
           />
           <DropdownMenu.Content align="end" className="min-w-28">
             <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+              <Trash2 />
               Delete
             </DropdownMenu.Item>
           </DropdownMenu.Content>

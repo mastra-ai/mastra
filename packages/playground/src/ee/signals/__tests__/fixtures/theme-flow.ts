@@ -1,4 +1,4 @@
-import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeSnapshotsResponse } from '../../types';
+import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeNode, ThemeSnapshotsResponse } from '@mastra/client-js';
 
 export const emptyThemeEntitiesResponse: ThemeEntitiesResponse = { entities: [] };
 
@@ -16,6 +16,51 @@ export const populatedThemeEntitiesResponse: ThemeEntitiesResponse = {
   ],
 };
 
+export const multiAgentThemeEntitiesResponse: ThemeEntitiesResponse = {
+  entities: [
+    ...populatedThemeEntitiesResponse.entities,
+    {
+      entityId: 'triage-agent',
+      entityType: 'agent',
+      availableSignals: ['goal'],
+      latestWindow: {
+        startedAt: '2026-07-01T00:00:00.000Z',
+        endedAt: '2026-07-08T00:00:00.000Z',
+      },
+    },
+  ],
+};
+
+export const lowSignalFirstThemeEntitiesResponse: ThemeEntitiesResponse = {
+  entities: [
+    {
+      entityId: 'triage-agent',
+      entityType: 'agent',
+      availableSignals: ['goal'],
+      latestWindow: {
+        startedAt: '2026-07-01T00:00:00.000Z',
+        endedAt: '2026-07-08T00:00:00.000Z',
+      },
+    },
+    ...populatedThemeEntitiesResponse.entities,
+  ],
+};
+
+export const multiEligibleThemeEntitiesResponse: ThemeEntitiesResponse = {
+  entities: [
+    ...populatedThemeEntitiesResponse.entities,
+    {
+      entityId: 'billing-agent',
+      entityType: 'agent',
+      availableSignals: ['goal', 'outcome'],
+      latestWindow: {
+        startedAt: '2026-07-08T00:00:00.000Z',
+        endedAt: '2026-07-15T00:00:00.000Z',
+      },
+    },
+  ],
+};
+
 export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
   snapshots: [
     {
@@ -27,6 +72,58 @@ export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
       traceCount: 50,
       availableSignals: ['goal', 'outcome'],
     },
+  ],
+};
+
+export const billingThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      snapshotId: 'billing-snapshot-1',
+      ordinal: 1,
+      total: 2,
+      startedAt: '2026-07-01T00:00:00.000Z',
+      endedAt: '2026-07-08T00:00:00.000Z',
+      traceCount: 20,
+      availableSignals: ['goal', 'outcome'],
+    },
+    {
+      snapshotId: 'billing-snapshot-2',
+      ordinal: 2,
+      total: 2,
+      startedAt: '2026-07-08T00:00:00.000Z',
+      endedAt: '2026-07-15T00:00:00.000Z',
+      traceCount: 30,
+      availableSignals: ['goal', 'outcome'],
+    },
+  ],
+};
+
+export const sameDayThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      snapshotId: 'snapshot-same-day',
+      ordinal: 4,
+      total: 4,
+      startedAt: '2026-07-15T08:00:00.000Z',
+      endedAt: '2026-07-15T09:00:00.000Z',
+      traceCount: 50,
+      availableSignals: ['goal', 'outcome'],
+    },
+  ],
+};
+
+export const multiThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      snapshotId: 'snapshot-3',
+      ordinal: 3,
+      total: 4,
+      startedAt: '2026-06-24T00:00:00.000Z',
+      endedAt: '2026-07-01T00:00:00.000Z',
+      traceCount: 40,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+    },
+    ...themeSnapshotsResponse.snapshots,
   ],
 };
 
@@ -77,8 +174,12 @@ export const themeFlowResponse: ThemeFlowResponse = {
 
 export const fourStageThemeFlowResponse: ThemeFlowResponse = {
   snapshot: {
-    ...themeSnapshotsResponse.snapshots[0],
-    availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+    snapshotId: 'snapshot-4',
+    ordinal: 4,
+    total: 4,
+    startedAt: '2026-07-01T00:00:00.000Z',
+    endedAt: '2026-07-08T00:00:00.000Z',
+    traceCount: 50,
   },
   stages: [
     {
@@ -90,6 +191,7 @@ export const fourStageThemeFlowResponse: ThemeFlowResponse = {
           kind: 'theme',
           themeId: 'theme-goal-support',
           label: 'Resolve support request',
+          description: 'The user wants help resolving a support issue.',
           traceCount: 22,
           stageShare: 0.44,
         },
@@ -280,6 +382,15 @@ export const fourStageThemeFlowResponse: ThemeFlowResponse = {
   ],
 };
 
+const metadataOnlyGoalNode: ThemeNode = {
+  nodeId: 'goal-disconnected',
+  kind: 'theme',
+  themeId: 'theme-goal-disconnected',
+  label: 'Metadata only goal',
+  traceCount: 99,
+  stageShare: 0.99,
+};
+
 export const inconsistentTraceCountThemeFlowResponse: ThemeFlowResponse = {
   ...fourStageThemeFlowResponse,
   snapshot: {
@@ -295,24 +406,104 @@ export const inconsistentTraceCountThemeFlowResponse: ThemeFlowResponse = {
         traceCount: node.traceCount + 20 + nodeIndex,
         stageShare: 0.9 - nodeIndex * 0.1,
       })),
-      ...(stage.signalName === 'goal'
-        ? [
-            {
-              nodeId: 'goal-disconnected',
-              kind: 'theme',
-              themeId: 'theme-goal-disconnected',
-              label: 'Metadata only goal',
-              traceCount: 99,
-              stageShare: 0.99,
-            },
-          ]
-        : []),
+      ...(stage.signalName === 'goal' ? [metadataOnlyGoalNode] : []),
     ],
   })),
+};
+
+export const duplicateLabelThemeFlowResponse: ThemeFlowResponse = {
+  snapshot: themeFlowResponse.snapshot,
+  stages: [
+    {
+      signalName: 'goal',
+      traceCount: 50,
+      nodes: [
+        {
+          nodeId: 'goal-theme-one',
+          kind: 'theme',
+          themeId: 'theme-one',
+          label: 'Shared theme label',
+          traceCount: 20,
+          stageShare: 0.4,
+        },
+        {
+          nodeId: 'goal-theme-two',
+          kind: 'theme',
+          themeId: 'theme-two',
+          label: 'Shared theme label',
+          traceCount: 30,
+          stageShare: 0.6,
+        },
+      ],
+    },
+    {
+      signalName: 'outcome',
+      traceCount: 50,
+      nodes: [
+        {
+          nodeId: 'outcome-theme',
+          kind: 'theme',
+          themeId: 'outcome-theme',
+          label: 'Resolved outcome',
+          traceCount: 50,
+          stageShare: 1,
+        },
+      ],
+    },
+  ],
+  links: [
+    {
+      sourceNodeId: 'goal-theme-one',
+      targetNodeId: 'outcome-theme',
+      traceCount: 20,
+      sourceShare: 1,
+      targetShare: 0.4,
+    },
+    {
+      sourceNodeId: 'goal-theme-two',
+      targetNodeId: 'outcome-theme',
+      traceCount: 30,
+      sourceShare: 1,
+      targetShare: 0.6,
+    },
+  ],
 };
 
 export const singleStageThemeFlowResponse: ThemeFlowResponse = {
   ...themeFlowResponse,
   stages: themeFlowResponse.stages.slice(0, 1),
   links: [],
+};
+
+export const earlierThemeFlowResponse: ThemeFlowResponse = {
+  ...fourStageThemeFlowResponse,
+  snapshot: multiThemeSnapshotsResponse.snapshots[0],
+  stages: fourStageThemeFlowResponse.stages.map(stage =>
+    stage.signalName === 'goal'
+      ? {
+          ...stage,
+          nodes: [
+            ...stage.nodes,
+            {
+              nodeId: 'goal-legacy',
+              kind: 'theme',
+              themeId: 'theme-goal-legacy',
+              label: 'Legacy support request',
+              traceCount: 4,
+              stageShare: 0.1,
+            },
+          ],
+        }
+      : stage,
+  ),
+  links: [
+    ...fourStageThemeFlowResponse.links,
+    {
+      sourceNodeId: 'goal-legacy',
+      targetNodeId: 'outcome-resolved',
+      traceCount: 4,
+      sourceShare: 1,
+      targetShare: 0.1,
+    },
+  ],
 };

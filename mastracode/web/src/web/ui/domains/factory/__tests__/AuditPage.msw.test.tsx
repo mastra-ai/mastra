@@ -1,10 +1,9 @@
 /**
- * BDD coverage for the Factory Audit page.
+ * BDD coverage for the Factory Rules and Audit log pages.
  *
  * Drives the real route table through a memory router with the full provider
- * stack, so the specs exercise what a user sees at /factory/audit: the
- * append-only audit trail fed by the server's org+project-scoped read API.
- * Only the network is mocked (MSW).
+ * stack, so the specs exercise the separately addressable rule-decision and
+ * append-only audit-log workflows. Only the network is mocked (MSW).
  */
 import { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor, within } from '@testing-library/react';
@@ -18,6 +17,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui
 import type { GithubStatus, Factory } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
 import type { AuditEvent } from '../services/audit';
+import type { FactoryDecisionPage, FactoryDecisionSummary } from '../services/decisions';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-gh';
@@ -79,6 +79,22 @@ function makeEvent(overrides: Partial<AuditEvent> = {}): AuditEvent {
   };
 }
 
+function makeDecision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecisionSummary {
+  return {
+    id: 'decision-1',
+    evaluationId: 'evaluation-1',
+    workItemId: 'wi-1',
+    type: 'invokeSkill',
+    status: 'retry',
+    attempts: 2,
+    lastError: 'Session temporarily unavailable.',
+    createdAt: '2026-07-15T18:00:00.000Z',
+    updatedAt: '2026-07-15T18:01:00.000Z',
+    completedAt: null,
+    ...overrides,
+  };
+}
+
 function emptySse(): Response {
   return new Response(
     new ReadableStream<Uint8Array>({
@@ -103,28 +119,35 @@ function sessionState() {
 interface AuditHandlerState {
   /** `(actions, before)` of every audit list request, in order. */
   requests: { actions: string | null; before: string | null }[];
+  decisionRequests: { statuses: string | null; before: string | null }[];
+  decisionRetries: string[];
 }
 
 interface AuditHandlerOptions {
   /** Pages served in order; the last page is repeated for extra requests. */
   pages?: { events: AuditEvent[]; nextCursor?: string }[];
+  decisionPages?: FactoryDecisionPage[];
   /** Portal-link response: a URL when WorkOS is configured, otherwise 404. */
   portalUrl?: string;
 }
 
 function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState {
   const pages = options.pages ?? [{ events: [makeEvent()] }];
-  const state: AuditHandlerState = { requests: [] };
+  const decisionPages = options.decisionPages ?? [{ decisions: [] }];
+  const state: AuditHandlerState = { requests: [], decisionRequests: [], decisionRetries: [] };
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
-        config: { github: { enabled: true, repositoryIds: [] }, linear: { enabled: false, projectIds: [] } },
+        config: { github: { enabled: true, sourceIds: [] }, linear: { enabled: false, sourceIds: [] } },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
+      HttpResponse.json({ workItems: [] }),
     ),
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
@@ -137,12 +160,44 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
+    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, () =>
+      HttpResponse.json({ sessions: [] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/audit`, ({ request }) => {
       const url = new URL(request.url);
-      state.requests.push({ actions: url.searchParams.get('actions'), before: url.searchParams.get('before') });
-      const page = pages[Math.min(state.requests.length - 1, pages.length - 1)]!;
-      return HttpResponse.json(page);
+      const before = url.searchParams.get('before');
+      const actions = url.searchParams.get('actions');
+      state.requests.push({ actions, before });
+      const page = pages[before ? 1 : 0] ?? pages.at(-1)!;
+      const allowed = actions?.split(',');
+      return HttpResponse.json({
+        ...page,
+        events: page.events.filter(event => !allowed || allowed.includes(event.action)),
+      });
     }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/decisions`, ({ request }) => {
+      const url = new URL(request.url);
+      const before = url.searchParams.get('before');
+      const statuses = url.searchParams.get('statuses');
+      state.decisionRequests.push({ statuses, before });
+      const page = decisionPages[before ? 1 : 0] ?? decisionPages.at(-1)!;
+      const allowed = statuses?.split(',');
+      return HttpResponse.json({
+        ...page,
+        decisions: page.decisions.filter(decision => !allowed || allowed.includes(decision.status)),
+      });
+    }),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/decisions/:decisionId/retry`,
+      ({ params }) => {
+        const decisionId = String(params.decisionId);
+        state.decisionRetries.push(decisionId);
+        const decision = decisionPages.flatMap(page => page.decisions).find(candidate => candidate.id === decisionId);
+        return decision
+          ? HttpResponse.json({ decision: { ...decision, status: 'retry', completedAt: null } })
+          : HttpResponse.json({ error: 'decision_not_retryable' }, { status: 409 });
+      },
+    ),
     http.get(`${TEST_BASE_URL}/web/audit/portal-link`, () =>
       options.portalUrl
         ? HttpResponse.json({ url: options.portalUrl })
@@ -152,11 +207,10 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
   return state;
 }
 
-function renderAt(initialEntry: string, project: Factory = githubProject) {
+function renderAt(page: 'audit' | 'rules' = 'audit', project: Factory = githubProject) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${project.id}/${page}`] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -166,7 +220,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Factory Audit page', () => {
+describe('Factory Rules and Audit log pages', () => {
   it('given recorded events, when the page renders, then the trail shows action, target, actor, and metadata details', async () => {
     useAuditHandlers({
       pages: [
@@ -185,9 +239,9 @@ describe('Factory Audit page', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt();
 
-    expect(await screen.findByRole('heading', { name: 'Audit' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'Audit log' }))[0]).toBeInTheDocument();
     const list = await screen.findByRole('list', { name: 'Audit events' });
     const rows = within(list).getAllByRole('listitem');
     expect(rows).toHaveLength(2);
@@ -208,9 +262,76 @@ describe('Factory Audit page', () => {
     expect(screen.queryByRole('button', { name: 'Open in WorkOS' })).not.toBeInTheDocument();
   });
 
-  it('given the All filter, when the user picks Git, then events are refetched with the git action list', async () => {
+  it('given durable rule decisions, when Rules renders and filters failures, then status, attempts, and bounded errors remain visible', async () => {
+    const state = useAuditHandlers({
+      decisionPages: [
+        {
+          decisions: [
+            makeDecision(),
+            makeDecision({
+              id: 'decision-failed',
+              status: 'failed',
+              type: 'notify',
+              attempts: 5,
+              lastError: 'Delivery exhausted its retry budget.',
+            }),
+          ],
+        },
+      ],
+    });
+    renderAt('rules');
+    expect((await screen.findAllByRole('heading', { name: 'Rules' }))[0]).toBeInTheDocument();
+
+    const list = await screen.findByRole('list', { name: 'Rule decisions' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(list).getByText('attempts 2', { exact: false })).toBeInTheDocument();
+    expect(within(list).getByText('Session temporarily unavailable.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Failed' }));
+    await waitFor(() => expect(state.decisionRequests.map(request => request.statuses)).toContain('failed'));
+    await waitFor(() =>
+      expect(within(screen.getByRole('list', { name: 'Rule decisions' })).getAllByRole('listitem')).toHaveLength(1),
+    );
+    expect(
+      within(screen.getByRole('list', { name: 'Rule decisions' })).getByText('Delivery exhausted its retry budget.'),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      within(screen.getByRole('list', { name: 'Rule decisions' })).getByRole('button', { name: 'Retry' }),
+    );
+    await waitFor(() => expect(state.decisionRetries).toEqual(['decision-failed']));
+  });
+
+  it('given more decisions than one page, when Load more effects is chosen, then the cursor page appends', async () => {
+    const state = useAuditHandlers({
+      decisionPages: [
+        { decisions: [makeDecision()], nextCursor: 'decision-cursor' },
+        {
+          decisions: [
+            makeDecision({
+              id: 'decision-succeeded',
+              status: 'succeeded',
+              type: 'sendMessage',
+              attempts: 1,
+              lastError: null,
+              completedAt: '2026-07-15T18:02:00.000Z',
+            }),
+          ],
+        },
+      ],
+    });
+    renderAt('rules');
+
+    const list = await screen.findByRole('list', { name: 'Rule decisions' });
+    await userEvent.click(screen.getByRole('button', { name: 'Load more effects' }));
+    await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(2));
+    expect(state.decisionRequests.some(request => request.before === 'decision-cursor')).toBe(true);
+    expect(within(list).getByText('sendMessage')).toBeInTheDocument();
+  });
+
+  it('given the All filter, when the user picks Git, then only matching events are shown and the filter can reset', async () => {
     const state = useAuditHandlers();
-    renderAt('/factory/audit');
+    renderAt();
 
     await screen.findByRole('list', { name: 'Audit events' });
     expect(state.requests[0]!.actions).toBeNull();
@@ -220,11 +341,17 @@ describe('Factory Audit page', () => {
     await waitFor(() =>
       expect(state.requests.map(r => r.actions)).toContain('factory.git.commit,factory.git.push,factory.git.pr_opened'),
     );
+    expect(await screen.findByText('No matching audit events')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Git' })).toHaveAttribute('aria-pressed', 'true');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show all events' }));
+    expect(await screen.findByRole('list', { name: 'Audit events' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('given the All filter, when the user picks Agent, then events are refetched with the agent action list', async () => {
     const state = useAuditHandlers();
-    renderAt('/factory/audit');
+    renderAt();
 
     await screen.findByRole('list', { name: 'Audit events' });
 
@@ -254,7 +381,7 @@ describe('Factory Audit page', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt();
 
     const list = await screen.findByRole('list', { name: 'Audit events' });
     const row = within(list).getAllByRole('listitem')[0]!;
@@ -274,7 +401,7 @@ describe('Factory Audit page', () => {
         },
       ],
     });
-    renderAt('/factory/audit');
+    renderAt();
 
     const list = await screen.findByRole('list', { name: 'Audit events' });
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
@@ -289,26 +416,37 @@ describe('Factory Audit page', () => {
   it('given WorkOS is configured, when the user clicks Open in WorkOS, then the one-time portal link opens in a new tab', async () => {
     useAuditHandlers({ portalUrl: 'https://portal.workos.com/audit-logs/one-time' });
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
-    renderAt('/factory/audit');
+    renderAt();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Open in WorkOS' }));
 
     expect(open).toHaveBeenCalledWith('https://portal.workos.com/audit-logs/one-time', '_blank', 'noopener,noreferrer');
   });
 
-  it('given no events yet, when the page renders, then a friendly empty state appears', async () => {
-    useAuditHandlers({ pages: [{ events: [] }] });
-    renderAt('/factory/audit');
+  it('given no events yet, when Audit log renders, then it shows its empty state without loading rule decisions', async () => {
+    const state = useAuditHandlers({ pages: [{ events: [] }] });
+    renderAt();
 
-    expect(await screen.findByText(/No audit events yet/)).toBeInTheDocument();
+    expect(await screen.findByText('No audit events yet')).toBeInTheDocument();
+    expect(screen.queryByText('No rule effects yet')).not.toBeInTheDocument();
+    expect(state.decisionRequests).toEqual([]);
   });
 
-  it('given a local project, when visiting Audit, then the GitHub-only notice renders instead of the trail', async () => {
+  it('given no rule effects yet, when Rules renders, then it shows its empty state without loading audit events', async () => {
+    const state = useAuditHandlers({ decisionPages: [{ decisions: [] }] });
+    renderAt('rules');
+
+    expect(await screen.findByText('No rule effects yet')).toBeInTheDocument();
+    expect(screen.queryByText('No audit events yet')).not.toBeInTheDocument();
+    expect(state.requests).toEqual([]);
+  });
+
+  it('given a local project, when visiting Audit log, then the server-factory notice renders instead of the trail', async () => {
     useAuditHandlers();
-    renderAt('/factory/audit', localProject);
+    renderAt('audit', localProject);
 
     expect(
-      await screen.findByText(/Board, metrics, and audit are available for server-backed Factories/),
+      await screen.findByText(/Board, metrics, rules, and audit are available for server-backed Factories/),
     ).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Audit events' })).not.toBeInTheDocument();
   });

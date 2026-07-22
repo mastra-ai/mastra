@@ -1,8 +1,13 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
 
-import { useToast } from '../../../ui';
 import {
   useRepositorySettingsQuery,
   useSaveRepositorySettingsMutation,
@@ -16,7 +21,6 @@ import { isServerFactory } from '../../workspaces/services/factories';
  * server. Saving a blank field clears the command.
  */
 function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryId: string; label: string }) {
-  const { toast } = useToast();
   const settingsQuery = useRepositorySettingsQuery(projectRepositoryId);
   const saveMutation = useSaveRepositorySettingsMutation();
 
@@ -30,8 +34,8 @@ function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryI
     saveMutation.mutate(
       { projectRepositoryId, settings: { setupCommand: draft.trim() || null } },
       {
-        onSuccess: () => toast('Setup command saved', 'success'),
-        onError: err => toast(err instanceof Error ? err.message : 'Failed to save setup command', 'error'),
+        onSuccess: () => toast.success('Setup command saved'),
+        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save setup command'),
       },
     );
   };
@@ -41,23 +45,29 @@ function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryI
       <Txt as="span" variant="ui-sm" className="text-icon5">
         {label}
       </Txt>
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
+      <InputGroup size="sm">
+        <InputGroupInput
           aria-label={`Setup command for ${label}`}
           placeholder="e.g. pnpm i && pnpm build"
+          className="font-mono"
           value={draft}
           disabled={settingsQuery.isPending || saveMutation.isPending}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter' && dirty) save();
           }}
-          className="flex-1 rounded-md border border-border1 bg-transparent px-2.5 py-1.5 text-ui-sm text-icon6 font-mono placeholder:text-icon3 focus:outline-none focus:border-border2 disabled:opacity-50"
         />
-        <Button size="xs" disabled={!dirty || settingsQuery.isPending || saveMutation.isPending} onClick={save}>
-          Save
-        </Button>
-      </div>
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            size="sm"
+            variant="default"
+            disabled={!dirty || settingsQuery.isPending || saveMutation.isPending}
+            onClick={save}
+          >
+            Save
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
     </div>
   );
 }
@@ -79,7 +89,7 @@ export function FactorySetupSection() {
   if (rows.length === 0) return null;
 
   return (
-    <div className="mt-6 pt-4 border-t border-border1/40 flex flex-col gap-4">
+    <div className="mt-6 pt-4 flex flex-col gap-4 not-last:border-b not-last:border-border1/40 not-last:pb-6">
       <div className="flex flex-col">
         <Txt variant="ui-lg" className="text-icon6 font-medium">
           Worktree setup

@@ -844,6 +844,28 @@ export function pgTests() {
           'CREATE INDEX IF NOT EXISTS "my_schema_idx_om_lookup_key" ON "my_schema"."mastra_observational_memory" ("lookupKey")',
         );
       });
+
+      it('should apply the full exported schema as a single multi-statement query', async () => {
+        const pool = new Pool({ connectionString });
+
+        try {
+          await pool.query('DROP SCHEMA IF EXISTS export_apply CASCADE');
+          // Fails with a syntax error if any statement boundary is missing a semicolon
+          await pool.query(exportSchemas('export_apply'));
+
+          const result = await pool.query(
+            `SELECT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_schema = 'export_apply'
+              AND table_name = 'mastra_favorites'
+            )`,
+          );
+          expect(result.rows[0]?.exists).toBe(true);
+        } finally {
+          await pool.query('DROP SCHEMA IF EXISTS export_apply CASCADE');
+          await pool.end();
+        }
+      });
     });
 
     // PG-specific: Unicode escape sequence handling in workflow snapshots

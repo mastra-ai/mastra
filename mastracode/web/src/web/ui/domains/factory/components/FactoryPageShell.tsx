@@ -1,19 +1,19 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useOverlays } from '../../../lib/overlays';
 import { Sidebar } from '../../../Sidebar';
-import { PageLayout } from '../../../ui';
+import { PageLayout } from '../../../ui/PageLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { EmptyFactoryState, useActiveFactoryContext } from '../../workspaces';
-import type { ServerFactory } from '../../workspaces';
-import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import type { ServerFactory } from '../../workspaces/services/factories';
+import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces/services/factories';
 
 interface FactoryPageShellProps {
   title: string;
@@ -23,22 +23,24 @@ interface FactoryPageShellProps {
 }
 
 /**
- * Shared frame for the Factory pages (Board, Metrics, Audit): the standard app
- * layout (sidebar + mobile header) around a titled content column. Any
+ * Shared frame for the Factory pages (Board, Metrics, Rules, Audit): the standard
+ * app layout (sidebar + mobile header) around a titled content column. Any
  * server-backed Factory renders its pages — including one with zero linked
  * repositories (the pages show connect prompts). Local folder factories get an
  * explanatory notice; when a factory links multiple repositories a picker in
  * the header scopes repository-based intake.
  */
 export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
-  const overlays = useOverlays();
-  const { activeFactory } = useActiveFactoryContext();
+  const { activeFactory, factoriesPending } = useActiveFactoryContext();
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
 
-  if (!activeFactory) {
-    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+  if (factoriesPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
   }
-
   return (
     <PageLayout
       sidebar={<Sidebar />}
@@ -51,8 +53,8 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
         children(serverFactory)
       ) : (
         <Notice variant="info">
-          Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder —
-          create a Factory from the switcher to use the Board.
+          Board, metrics, rules, and audit are available for server-backed Factories. This factory is bound to a local
+          folder — create a Factory from the switcher to use the Board.
         </Notice>
       )}
     </PageLayout>

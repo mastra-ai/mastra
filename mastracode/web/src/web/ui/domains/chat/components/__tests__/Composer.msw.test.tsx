@@ -51,7 +51,6 @@ function seedFactory() {
     },
   };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function useAgentControllerHandlers({ running = false }: { running?: boolean } = {}) {
@@ -113,26 +112,23 @@ function NoticeProbe() {
 }
 
 function PaletteCommandProbe() {
-  const { composerCommandName, run } = useChatCommands();
+  const { run } = useChatCommands();
   const modelCommand = SLASH_COMMANDS.find(command => command.name === 'model');
   return (
-    <>
-      <output aria-label="Composer command state">{composerCommandName ?? 'none'}</output>
-      <button type="button" onClick={() => modelCommand && run(modelCommand)}>
-        Run model command
-      </button>
-    </>
+    <button type="button" onClick={() => modelCommand && run(modelCommand)}>
+      Run model command
+    </button>
   );
 }
 
 function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+    <MemoryRouter initialEntries={[`/factories/project-test/threads/${THREAD_ID}`]}>
       <Routes>
         <Route
-          path="/threads/:threadId"
+          path="/factories/:factoryId/threads/:threadId"
           element={
-            <ActiveFactoryProvider>
+            <ActiveFactoryProvider factoryId="project-test">
               <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatCommandsProvider>
                   <Composer {...props} />
@@ -177,6 +173,37 @@ describe('Composer', () => {
 
       expect(input).toHaveValue('first line\nsecond line');
       expect(onSend).not.toHaveBeenCalled();
+    });
+
+    it('cycles to the next mode on Shift+Tab without changing the draft', async () => {
+      seedFactory();
+      useAgentControllerHandlers();
+      const onMode = vi.fn();
+      server.use(
+        http.get(`${API}/modes`, () =>
+          HttpResponse.json({
+            modes: [
+              { id: 'build', name: 'Build' },
+              { id: 'plan', name: 'Plan' },
+              { id: 'fast', name: 'Explore' },
+            ],
+          }),
+        ),
+        http.post(`${SESSION}/mode`, async ({ request }) => {
+          onMode(await request.json());
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.type(input, 'keep this draft');
+      await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
+
+      await waitFor(() => expect(onMode).toHaveBeenCalledWith({ modeId: 'plan' }));
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue('keep this draft');
     });
   });
 
@@ -264,7 +291,7 @@ describe('Composer', () => {
   });
 
   describe('when a palette command is applied', () => {
-    it('prefills the composer once and clears the command state', async () => {
+    it('prefills the composer each time the command is selected', async () => {
       seedFactory();
       useAgentControllerHandlers();
       renderComposer();
@@ -273,12 +300,12 @@ describe('Composer', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Run model command' }));
 
       await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('/model '));
-      await waitFor(() => expect(screen.getByLabelText('Composer command state')).toHaveTextContent('none'));
+      await userEvent.clear(screen.getByRole('textbox'));
+      await userEvent.type(screen.getByRole('textbox'), 'changed draft');
 
       await userEvent.click(screen.getByRole('button', { name: 'Run model command' }));
 
       await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('/model '));
-      await waitFor(() => expect(screen.getByLabelText('Composer command state')).toHaveTextContent('none'));
     });
   });
 
@@ -355,18 +382,6 @@ describe('Composer', () => {
       const statusLine = await screen.findByLabelText('Session status line');
 
       expect(statusLine.closest('[data-slot="composer-actions"]')).toBeInTheDocument();
-    });
-
-    it('colors the composer box border with the active mode', async () => {
-      seedFactory();
-      useAgentControllerHandlers();
-      renderComposer();
-
-      const textbox = await screen.findByRole('textbox', { name: 'Message' });
-
-      const composerBox = textbox.closest('[data-slot="composer-box"]');
-      if (!composerBox) throw new Error('Expected the textbox to be inside a composer box');
-      expect(getComputedStyle(composerBox).borderColor).toBe('rgb(22, 200, 88)');
     });
   });
 

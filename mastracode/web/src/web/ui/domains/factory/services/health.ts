@@ -7,7 +7,7 @@
  * `services/metrics.ts` fetcher shape.
  */
 
-import type { QueueHealthConfig } from '../../../../storage/domains/queue-health/base';
+import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
 
 /** Fetch the org's age-threshold config for a project (defaults when unset). */
 export async function fetchQueueHealthThresholds(

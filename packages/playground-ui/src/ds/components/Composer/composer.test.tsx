@@ -104,6 +104,22 @@ describe('Composer', () => {
     });
   });
 
+  describe('when the input viewport height is configured', () => {
+    it('applies the limit to the scrolling viewport instead of the textarea', () => {
+      render(
+        <Composer>
+          <ComposerInput aria-label="Message" maxHeight="16rem" />
+        </Composer>,
+      );
+
+      const input = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
+      const viewport = document.querySelector<HTMLElement>('[style*="max-height"]');
+      assert(viewport);
+      expect(viewport.style.maxHeight).toBe('16rem');
+      expect(input.style.maxHeight).toBe('');
+    });
+  });
+
   describe('when optional regions are omitted', () => {
     it('renders only the provided input region', () => {
       render(

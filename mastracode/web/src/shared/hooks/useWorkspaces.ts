@@ -1,9 +1,9 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { useToast } from '../../web/ui/ui/toast';
-import { createWorktree, deleteWorktree } from '../../web/ui/domains/workspaces/services/github';
+import { createUserSession, deleteUserSession } from '../../web/ui/domains/workspaces/services/github';
 import type { Factory, Worktree } from '../../web/ui/domains/workspaces/services/factories';
 import {
   boardSessionWorktrees,
@@ -102,7 +102,6 @@ export function useSelectWorkspaceMutation(factory: Factory | null | undefined, 
 export function useCreateWorkspaceMutation(factory: Factory | null | undefined, scope?: AgentControllerThreadsScope) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (branch: string) => {
@@ -110,16 +109,17 @@ export function useCreateWorkspaceMutation(factory: Factory | null | undefined, 
       if (!factory || !isServerFactory(factory)) throw new Error('No server-backed factory selected');
       const repository = selectedRepository(factory);
       if (!repository) throw new Error('Connect a repository before creating a workspace');
-      const result = await createWorktree(baseUrl, repository.projectRepositoryId, trimmedBranch);
+      const result = await createUserSession(baseUrl, repository.projectRepositoryId, trimmedBranch);
       const worktree: Worktree = {
         branch: result.branch,
-        worktreePath: result.worktreePath,
+        worktreePath: result.sessionId,
         baseBranch: result.baseBranch,
+        threadId: result.sessionId,
       };
       return selectWorktree(upsertWorktree(latestFactory(factory), worktree), worktree.worktreePath);
     },
     onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
-    onError: error => toast(error instanceof Error ? error.message : 'Failed to create workspace', 'error'),
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to create workspace'),
   });
 }
 
@@ -138,14 +138,13 @@ export function useDeleteWorkspaceMutation(
 ) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (worktree: Worktree) => {
       if (!factory || !isServerFactory(factory)) throw new Error('No server-backed factory selected');
       const repository = selectedRepository(factory);
       if (!repository) throw new Error('Connect a repository before deleting a workspace');
-      await deleteWorktree(baseUrl, repository.projectRepositoryId, worktree.branch);
+      await deleteUserSession(baseUrl, worktree.worktreePath);
 
       // Cascade: delete the threads scoped to this worktree. Re-list between
       // rounds since the page size caps each fetch; bail after a sane number
@@ -172,6 +171,6 @@ export function useDeleteWorkspaceMutation(
       });
       toast('Workspace deleted');
     },
-    onError: error => toast(error instanceof Error ? error.message : 'Failed to delete workspace', 'error'),
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to delete workspace'),
   });
 }

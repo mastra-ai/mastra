@@ -1,3 +1,4 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -5,7 +6,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { ToastProvider } from '../../../../ui';
 import type { IntakeConfig } from '../../../factory/services/intake';
 import type { LinearProject, LinearStatus } from '../../../factory/services/linear';
 import { IntakeSection } from '../IntakeSection';
@@ -16,8 +16,8 @@ const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
 
 function baseConfig(): IntakeConfig {
   return {
-    github: { enabled: true, repositoryIds: null },
-    linear: { enabled: true, projectIds: null },
+    github: { enabled: true, sourceIds: null },
+    linear: { enabled: true, sourceIds: null },
   };
 }
 
@@ -76,9 +76,10 @@ function useIntakeHandlers({
 
 function renderIntakeSection() {
   return renderWithProviders(
-    <ToastProvider>
+    <>
       <IntakeSection />
-    </ToastProvider>,
+      <Toaster position="bottom-right" />
+    </>,
   );
 }
 
@@ -145,12 +146,12 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.projectIds).toEqual(['lproj-1']);
+      expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
     });
   });
 
   describe('when a GitHub repository is picked', () => {
-    it('persists an explicit repository selection under repositoryIds', async () => {
+    it('persists an explicit repository selection under sourceIds', async () => {
       seedGithubProject();
       const saved = useIntakeHandlers();
 
@@ -159,8 +160,8 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'mastra' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.github.repositoryIds).toEqual(['ghp-1']);
-      expect(saved[0]).not.toHaveProperty('github.projectIds');
+      expect(saved[0]!.github.sourceIds).toEqual(['ghp-1']);
+      expect(saved[0]).not.toHaveProperty('github.repositoryIds');
     });
   });
 

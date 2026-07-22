@@ -21,6 +21,7 @@ const LINKED_PACKAGES = {
   '@mastra/client-js': '../../client-sdks/client-js',
   '@mastra/code-sdk': '../sdk',
   '@mastra/core': '../../packages/core',
+  '@mastra/factory': '../factory',
   '@mastra/hono': '../../server-adapters/hono',
   '@mastra/libsql': '../../stores/libsql',
   '@mastra/playground-ui': '../../packages/playground-ui',
