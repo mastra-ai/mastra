@@ -89,12 +89,14 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   itemRevision?: number;
   event: FactoryGithubEventName;
   deliveryId: string;
+  factory: { createdAt: string };
   repository: { id: number; fullName: string };
-  issue?: { number: number; title: string; url: string };
+  issue?: { number: number; title: string; url: string; createdAt?: string };
   pullRequest?: {
     number: number;
     title: string;
     url: string;
+    createdAt?: string;
     state: 'open' | 'closed';
     merged: boolean;
     headBranch: string;

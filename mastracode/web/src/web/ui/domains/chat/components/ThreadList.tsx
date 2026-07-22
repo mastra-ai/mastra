@@ -22,7 +22,7 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 export function ThreadList() {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { threadId: routeThreadId } = useParams<{ threadId: string }>();
+  const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
 
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -47,9 +47,11 @@ export function ThreadList() {
     return tb.localeCompare(ta);
   });
 
+  if (!factoryId) return null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      {!readOnly && <ThreadListHeader threadCount={threads.length} />}
+      {!readOnly && <ThreadListHeader factoryId={factoryId} threadCount={threads.length} />}
       <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {sortedThreads.length === 0 && (
           <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
@@ -63,6 +65,7 @@ export function ThreadList() {
             <ThreadRow
               key={thread.id}
               thread={thread}
+              factoryId={factoryId}
               active={thread.id === activeThreadId}
               readOnly={readOnly}
               onStartRename={() => setRenamingId(thread.id)}
@@ -85,10 +88,9 @@ function useThreadHookArgs() {
   };
 }
 
-function ThreadListHeader({ threadCount }: { threadCount: number }) {
+function ThreadListHeader({ factoryId, threadCount }: { factoryId: string; threadCount: number }) {
   const overlays = useOverlays();
   const navigate = useNavigate();
-  const { factoryId } = useParams<{ factoryId: string }>();
 
   return (
     <div className="flex items-center justify-between px-1">
@@ -149,11 +151,13 @@ function RenameThreadRow({ thread, onDone }: { thread: AgentControllerThreadInfo
 
 function ThreadRow({
   thread,
+  factoryId,
   active,
   readOnly,
   onStartRename,
 }: {
   thread: AgentControllerThreadInfo;
+  factoryId: string;
   active: boolean;
   readOnly: boolean;
   onStartRename: () => void;
@@ -161,7 +165,7 @@ function ThreadRow({
   const hookArgs = useThreadHookArgs();
   const overlays = useOverlays();
   const navigate = useNavigate();
-  const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
+  const { threadId: routeThreadId } = useParams<{ threadId: string }>();
 
   const deleteThreadMutation = useDeleteAgentControllerThreadMutation(hookArgs);
   const cloneThreadMutation = useCloneAgentControllerThreadMutation(hookArgs);

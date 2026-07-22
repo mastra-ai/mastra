@@ -1,5 +1,20 @@
 # create-factory
 
+## 0.0.3-alpha.3
+
+### Patch Changes
+
+- The Software Factory template now pins every Mastra dep to `"latest"` instead of a caret range anchored on the current monorepo version, matching how every other create-mastra template ships. `sync-template.mjs` no longer shells out to `npm view` and no longer needs the `--tag` flag or the `legacy-peer-deps=true` `.npmrc` (which only existed to work around prerelease pins). The sync workflow no longer breaks whenever a linked package sits mid-alpha between publishes. ([#19989](https://github.com/mastra-ai/mastra/pull/19989))
+
+## 0.0.3-alpha.2
+
+### Patch Changes
+
+- Marked projects created by create-factory as factory-enabled on the Mastra platform. ([#19973](https://github.com/mastra-ai/mastra/pull/19973))
+
+- Updated dependencies:
+  - mastra@1.20.0-alpha.13
+
 ## 0.0.3-alpha.1
 
 ### Patch Changes

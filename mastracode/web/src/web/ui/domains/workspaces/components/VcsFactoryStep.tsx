@@ -40,7 +40,7 @@ export function VcsFactoryStep({
         Choose your codebase.
       </h1>
       <Txt as="p" variant="ui-lg" className="mx-auto mt-6 max-w-2xl leading-7 text-neutral3 sm:text-lg">
-        Connect GitHub, then select the repository that will become your first Factory.
+        Connect GitHub, then select the repository that will become your first factory.
       </Txt>
       <section
         aria-label="GitHub repository"

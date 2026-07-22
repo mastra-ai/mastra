@@ -1,5 +1,46 @@
 # @mastra/playground-ui
 
+## 42.0.0-alpha.16
+
+### Patch Changes
+
+- Removed interaction hints from the date range timeline. ([#19987](https://github.com/mastra-ai/mastra/pull/19987))
+
+## 42.0.0-alpha.15
+
+### Minor Changes
+
+- Added separate Sankey node identity, display label, display value, and layout weight accessors, plus constrained labels with full hover text. Stable layout weights can now keep node positions fixed while current record weights animate bar and ribbon sizes. ([#19871](https://github.com/mastra-ai/mastra/pull/19871))
+
+  ```tsx
+  <Sankey
+    data={records}
+    columns={columns}
+    getRecordNodeId={(record, column) => String(record[`${column.id}Id`])}
+    getRecordNodeLabel={(record, column) => String(record[`${column.id}Label`])}
+    getRecordNodeValue={(record, column) => Number(record[`${column.id}Count`])}
+    getRecordWeight={record => Number(record.count)}
+    getRecordLayoutWeight={record => Number(record.windowMaxCount)}
+  >
+    <SankeyChart />
+  </Sankey>
+  ```
+
+- Added optional Sankey node activation with mouse and keyboard support, including per-node eligibility. ([#19896](https://github.com/mastra-ai/mastra/pull/19896))
+
+  ```tsx
+  <SankeyChart
+    onNodeClick={({ column, value }) => openDrilldown(column.id, value)}
+    isNodeClickable={({ value }) => drillableNodeIds.has(value)}
+  />
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`f901b73`](https://github.com/mastra-ai/mastra/commit/f901b7363b8d21849b98c167bae168fa11d3edcf)]:
+  - @mastra/client-js@1.33.0-alpha.13
+  - @mastra/react@1.3.0-alpha.13
+
 ## 42.0.0-alpha.14
 
 ### Minor Changes

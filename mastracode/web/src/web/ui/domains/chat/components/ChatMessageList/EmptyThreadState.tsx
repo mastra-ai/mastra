@@ -5,10 +5,18 @@ import { useParams } from 'react-router';
 import { useFactoryQuery } from '../../../../../../shared/hooks/useFactories';
 import { useChatCommands } from '../../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { FactoryMetadata } from './FactoryMetadata';
 
 const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
+
+function FactoryMetadata({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
+      <dt className="text-icon3">{label}</dt>
+      <dd className="min-w-0 truncate text-icon5">{value}</dd>
+    </div>
+  );
+}
 
 export function EmptyThreadState() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -16,6 +24,7 @@ export function EmptyThreadState() {
   const { projectPath, resourceId, factorySessionState } = useChatSessionContext();
   const { prefillComposer } = useChatCommands();
   if (!activeFactory) return null;
+
   const repository = activeFactory.repositories.find(repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId);
   const gitBranch = repository?.gitBranch;
 
