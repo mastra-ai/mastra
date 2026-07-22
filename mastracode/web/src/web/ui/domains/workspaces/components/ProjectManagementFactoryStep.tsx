@@ -23,10 +23,7 @@ export function ProjectManagementFactoryStep({
   const linearStatus = useLinearStatusQuery();
 
   return (
-    <section
-      aria-label="Linear connection"
-      className="max-w-xl rounded-2xl border border-border1 bg-surface2/80 p-5"
-    >
+    <section aria-label="Linear connection" className="max-w-xl rounded-2xl border border-border1 bg-surface2/80 p-5">
       {linearStatus.isPending ? (
         <SkeletonRows label="Loading Linear status" rows={2} rowClassName="h-12 w-full rounded-xl" />
       ) : linearStatus.data?.connected ? (
