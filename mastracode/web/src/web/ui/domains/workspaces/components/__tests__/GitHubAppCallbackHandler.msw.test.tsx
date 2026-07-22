@@ -10,7 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
-import { GitHubAppCallbackHandler } from '../../../workspaces/components/GitHubAppCallbackHandler';
+import { GitHubAppCallbackHandler } from '../GitHubAppCallbackHandler';
 
 function renderCallback(initialEntry: string) {
   const router = createMemoryRouter(
