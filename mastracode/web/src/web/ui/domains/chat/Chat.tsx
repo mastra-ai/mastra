@@ -8,7 +8,7 @@ import { SettingsPanel } from '../settings/components/SettingsPanel';
 import { SettingsHeader } from '../settings/components/SettingsHeader';
 import { SettingsNavigationProvider } from '../settings/context/SettingsNavigationProvider';
 import { FactoriesPanel } from '../workspaces/components/FactoriesPanel';
-import { ActiveFactoryProvider, useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
+import { useActiveFactoryContext } from '../workspaces/context/ActiveFactoryProvider';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';

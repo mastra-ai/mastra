@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
 
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useLoadFactories } from '../../../../../shared/hooks/useFactories';
@@ -42,6 +41,7 @@ export function useFactoryOnboarding() {
       return { step, pendingFactory } satisfies FactoryOnboardingState;
     },
   });
+  const setState = useFactoryOnboardingSetState();
 
   const complete = useMutation({
     mutationFn: async () => {

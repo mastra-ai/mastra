@@ -8,9 +8,7 @@
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
  * `/` so the app can choose the active factory's board or draft composer.
  */
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { createBrowserRouter, Navigate, Outlet, useLocation, useSearchParams } from 'react-router';
+import { createBrowserRouter, Navigate } from 'react-router';
 import type { RouteObject } from 'react-router';
 
 import { SignInPage } from './domains/auth';
@@ -24,15 +22,15 @@ import { MetricsPage } from './domains/factory/MetricsPage';
 import { OverviewPage } from './domains/factory/OverviewPage';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { useActiveFactoryContext } from './domains/workspaces';
+import { useActiveFactoryContext } from './domains/workspaces/context/ActiveFactoryProvider';
+import { isServerFactory } from './domains/workspaces/services/factories';
 
 function RootLanding() {
   const { activeFactory } = useActiveFactoryContext();
 
-  // RootGuards is fetching and guarding stuff
   if (!activeFactory) return null;
 
-  return <Navigate to={'/factory/board'} replace />;
+  return <Navigate to={isServerFactory(activeFactory) ? '/factory/work' : '/new'} replace />;
 }
 
 function RedirectToDraftThread() {

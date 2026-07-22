@@ -83,11 +83,6 @@
   );
 }
 
-.composer-spotlight:focus-within::before,
-.composer-spotlight:focus-within .composer-spotlight-surface::before {
-  opacity: 1;
-}
-
 @media (hover: hover) {
   .composer-spotlight:hover::before,
   .composer-spotlight:hover .composer-spotlight-surface::before {
