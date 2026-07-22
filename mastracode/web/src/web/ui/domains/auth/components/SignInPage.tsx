@@ -1,15 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useSearchParams } from 'react-router';
+import { Navigate, useSearchParams } from 'react-router';
+import '@fontsource-variable/mona-sans/standard.css';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { navigateAfterSignIn, redirectToLogin, signInWithPassword, signUpWithPassword } from '../services/auth';
+import { FactoryHalftoneField } from './FactoryHalftoneField';
+import './sign-in-page.css';
 
 /**
  * Only accept same-origin paths so a crafted `?returnTo=` can't bounce the
@@ -143,37 +145,31 @@ export function SignInPage() {
   const returnTo = safeReturnTo(searchParams.get('returnTo')?.toString());
   const credentialForm = auth.data?.provider === 'better-auth';
 
+  if (!auth.isPending && (!auth.data?.authEnabled || auth.data.authenticated)) {
+    return <Navigate to={returnTo} replace />;
+  }
+
   return (
-    <main className="relative min-h-dvh overflow-hidden bg-surface1 text-neutral6">
-      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,color-mix(in_oklab,var(--accent1)_15%,transparent),transparent_32%),radial-gradient(circle_at_85%_80%,color-mix(in_oklab,var(--accent3)_12%,transparent),transparent_34%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border1)_1px,transparent_1px),linear-gradient(to_bottom,var(--border1)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]" />
-        <div className="absolute top-[-12rem] left-1/2 h-[28rem] w-[42rem] -translate-x-1/2 rounded-full bg-accent1/5 blur-3xl" />
-      </div>
-
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-7xl items-center px-6 py-10 sm:px-10 lg:px-16 lg:py-16">
-        <section className="flex w-full max-w-4xl flex-col items-start">
-          <div className="mb-12 flex items-center gap-3" aria-label="Mastra Factory">
-            <LogoWithoutText className="w-9 text-accent1" aria-hidden="true" />
-            <span className="text-lg font-semibold tracking-tight">Mastra Factory</span>
-          </div>
-
-          <Txt as="p" variant="ui-md" className="mb-5 font-medium tracking-wide text-accent1 uppercase">
-            From backlog to production
-          </Txt>
-          <h1 className="max-w-3xl text-4xl leading-[1.02] font-semibold tracking-[-0.04em] text-balance sm:text-5xl lg:text-6xl">
-            Turn issues into production-ready code.
+    <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
+      <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
+        <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
+          <h1 className="max-w-xl text-[clamp(2.625rem,5.3vw,4.25rem)] leading-[1.1] font-[520] tracking-[0.015em] text-balance [font-stretch:112%]">
+            Build with an agent factory
           </h1>
-          <Txt as="p" variant="ui-lg" className="mt-7 max-w-2xl leading-7 text-neutral3 sm:text-lg">
-            Mastra Factory turns work from GitHub Issues, Linear, and other trackers into reviewed pull requests that
-            are ready to merge and ship.
+          <Txt
+            as="p"
+            variant="ui-lg"
+            className="mt-6 max-w-lg text-[clamp(1.0625rem,1.65vw,1.375rem)] leading-[1.36] tracking-[0.015em] text-neutral3"
+          >
+            Turn a repository into a working factory. Agents pick up scoped work, collaborate, and ship changes you
+            can review.
           </Txt>
 
-          <section aria-label="Authentication" className="mt-10 w-full max-w-md">
+          <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
             {credentialForm ? (
               <>
-                <div className="mb-7">
-                  <h2 className="font-display text-2xl font-semibold tracking-tight">Welcome back</h2>
+                <div className="mb-6">
+                  <h2 className="font-display text-2xl font-medium">Welcome back</h2>
                   <Txt as="p" variant="ui-md" className="mt-2 leading-6 text-neutral3">
                     Sign in to continue building with your team.
                   </Txt>
@@ -182,9 +178,9 @@ export function SignInPage() {
               </>
             ) : (
               <Button
-                variant="primary"
+                variant="default"
                 size="lg"
-                className="min-h-14 w-fit text-base"
+                className="w-80 max-w-full"
                 disabled={redirecting || auth.isPending}
                 onClick={() => {
                   setRedirecting(true);
@@ -197,6 +193,8 @@ export function SignInPage() {
             )}
           </section>
         </section>
+
+        <FactoryHalftoneField />
       </div>
     </main>
   );

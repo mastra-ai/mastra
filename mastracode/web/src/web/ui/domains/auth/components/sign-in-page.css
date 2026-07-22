@@ -1,0 +1,103 @@
+.factory-signin-theme {
+  --surface1: #080808;
+  --surface2: #0f0f0f;
+  --surface3: #171717;
+  --surface4: #1c1c1c;
+  --surface5: #262626;
+  --surface6: #303030;
+  --neutral1: #424242;
+  --neutral2: #686868;
+  --neutral3: #939393;
+  --neutral4: #cccccc;
+  --neutral5: #e0e0e0;
+  --neutral6: #f0f0f0;
+  --border1: #1c1c1c;
+  --border2: #2e2e2e;
+  --accent1: #7aff78;
+  --accent2: #ff4758;
+  --accent3: #b588fe;
+  --color-surface1: var(--surface1);
+  --color-surface2: var(--surface2);
+  --color-surface3: var(--surface3);
+  --color-surface4: var(--surface4);
+  --color-surface5: var(--surface5);
+  --color-surface6: var(--surface6);
+  --color-neutral1: var(--neutral1);
+  --color-neutral2: var(--neutral2);
+  --color-neutral3: var(--neutral3);
+  --color-neutral4: var(--neutral4);
+  --color-neutral5: var(--neutral5);
+  --color-neutral6: var(--neutral6);
+  --color-border1: var(--border1);
+  --color-border2: var(--border2);
+  --color-accent1: var(--accent1);
+  --color-accent2: var(--accent2);
+  --color-accent3: var(--accent3);
+  --font-display: 'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  color-scheme: dark;
+  font-family: 'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif;
+}
+
+.factory-halftone-field {
+  --factory-blue: #6ccdfb;
+  --factory-green: #7aff78;
+  --factory-purple: #b588fe;
+  --factory-orange: #fdac53;
+  --factory-dot: #9f9f9f;
+  --factory-lane-line: #1c1c1c;
+  --factory-rail-line: #333333;
+}
+
+.factory-stage-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--neutral3);
+  font-size: 0.8125rem;
+  font-weight: 450;
+}
+
+.factory-stage-label::before {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: var(--factory-stage-color);
+  content: '';
+}
+
+.factory-stage-label:nth-child(1) {
+  --factory-stage-color: var(--factory-blue);
+}
+
+.factory-stage-label:nth-child(2) {
+  --factory-stage-color: var(--factory-green);
+}
+
+.factory-stage-label:nth-child(3) {
+  --factory-stage-color: var(--factory-purple);
+}
+
+.factory-stage-label:nth-child(4) {
+  --factory-stage-color: var(--factory-orange);
+}
+
+.factory-visual-hint::before {
+  width: 1.375rem;
+  height: 1px;
+  background: var(--factory-rail-line);
+  content: '';
+}
+
+@media (width < 31.25rem) {
+  .factory-stage-label {
+    justify-content: center;
+    gap: 0;
+    font-size: 0;
+  }
+
+  .factory-stage-label::before {
+    width: 0.4375rem;
+    height: 0.4375rem;
+  }
+}

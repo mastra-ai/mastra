@@ -8,6 +8,7 @@
 import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
@@ -40,10 +41,12 @@ function seedFactory(project: Factory = PROJECT) {
 function StateProbe() {
   const overlays = useOverlays();
   const { openMobile, setOpenMobile } = useMainSidebar();
+  const location = useLocation();
   return (
     <div>
       <output data-testid="factories-open">{overlays.isOpen('factories') ? 'yes' : 'no'}</output>
       <output data-testid="sidebar-open">{openMobile ? 'yes' : 'no'}</output>
+      <output data-testid="location">{location.pathname}</output>
       <button onClick={() => setOpenMobile(true)}>Open mobile sidebar</button>
     </div>
   );
@@ -51,14 +54,16 @@ function StateProbe() {
 
 function renderSwitcher() {
   return renderWithProviders(
-    <MainSidebarProvider storageKey="factory-switcher-test" mobileBreakpoint={768}>
-      <ActiveFactoryProvider>
-        <OverlaysProvider>
-          <FactorySwitcher />
-          <StateProbe />
-        </OverlaysProvider>
-      </ActiveFactoryProvider>
-    </MainSidebarProvider>,
+    <MemoryRouter initialEntries={['/new']}>
+      <MainSidebarProvider storageKey="factory-switcher-test" mobileBreakpoint={768}>
+        <ActiveFactoryProvider>
+          <OverlaysProvider>
+            <FactorySwitcher />
+            <StateProbe />
+          </OverlaysProvider>
+        </ActiveFactoryProvider>
+      </MainSidebarProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -86,6 +91,27 @@ describe('FactorySwitcher', () => {
     const factoryItem = await screen.findByRole('menuitem', { name: /MastraCode Test/ });
     expect(within(factoryItem).getByText('/tmp/mastracode-test')).toBeInTheDocument();
     expect(screen.getByTestId('factories-open')).toHaveTextContent('no');
+  });
+
+  it('when a server-backed Factory is selected from /new, then the user is taken to Work', async () => {
+    const serverFactory: Factory = {
+      id: 'server-factory',
+      name: 'Server Factory',
+      createdAt: 2,
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'server-project',
+        repositories: [],
+      },
+    };
+    localStorage.setItem('mastracode-factories', JSON.stringify([PROJECT, serverFactory]));
+    localStorage.setItem('mastracode-active-factory', PROJECT.id);
+    renderSwitcher();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Server Factory/ }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/factory/work'));
   });
 
   it('when Create Factory is selected on mobile, then the layout view opens and the sidebar closes', async () => {

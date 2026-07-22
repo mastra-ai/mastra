@@ -45,14 +45,13 @@ function renderSignIn(initialEntry = '/signin') {
 }
 
 describe('SignInPage', () => {
-  it('renders the Mastra Factory brand and product message', async () => {
+  it('renders the agent factory welcome message without a separate page header', async () => {
     stubAuthMe({ provider: 'workos' });
     renderSignIn();
 
-    expect(await screen.findByLabelText('Mastra Factory')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Turn issues into production-ready code.' })).toBeInTheDocument();
-    expect(screen.getByText(/GitHub Issues, Linear, and other trackers/)).toBeInTheDocument();
-    expect(screen.queryByLabelText('Mastra Code')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Build with an agent factory' })).toBeInTheDocument();
+    expect(screen.getByText(/Turn a repository into a working factory/)).toBeInTheDocument();
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 
   describe('given a WorkOS (hosted-login) deploy', () => {

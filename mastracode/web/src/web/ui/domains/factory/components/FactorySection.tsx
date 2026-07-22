@@ -1,10 +1,12 @@
+import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChartLine, GitPullRequest, LayoutDashboard, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
-import { NavLink } from 'react-router';
+import { NavLink, useLocation } from 'react-router';
 
 import { useOverlays } from '../../../lib/overlays';
-import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import { isServerFactory } from '../../workspaces/services/factories';
 
 /**
  * The Factory menu: Board navigation plus whatever the caller nests under it
@@ -25,13 +27,13 @@ export function FactorySection({ children }: { children?: ReactNode }) {
           Factory
         </Txt>
       </div>
-      <div className="flex flex-col gap-1">
+      <MainSidebar.NavList>
         <FactoryLink to="/factory/overview" icon={LayoutDashboard} label="Overview" />
         <FactoryLink to="/factory/work" icon={SquareKanban} label="Work" />
         <FactoryLink to="/factory/review" icon={GitPullRequest} label="Review" />
         <FactoryLink to="/factory/metrics" icon={ChartLine} label="Metrics" />
         <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit" />
-      </div>
+      </MainSidebar.NavList>
       {children}
     </nav>
   );
@@ -39,17 +41,15 @@ export function FactorySection({ children }: { children?: ReactNode }) {
 
 function FactoryLink({ to, icon: Icon, label }: { to: string; icon: ComponentType<{ size?: number }>; label: string }) {
   const overlays = useOverlays();
+  const { pathname } = useLocation();
+  const isActive = pathname === to || pathname.startsWith(`${to}/`);
 
   return (
-    <NavLink
-      to={to}
-      onClick={() => overlays.close('sidebar')}
-      className={({ isActive }) =>
-        `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs no-underline transition ${isActive ? 'bg-surface4 text-icon6' : 'text-icon3 hover:bg-surface3 hover:text-icon5'}`
-      }
-    >
-      <Icon size={13} />
-      <span className="truncate">{label}</span>
-    </NavLink>
+    <MainSidebar.NavLink asChild link={{ name: label, url: to }} isActive={isActive}>
+      <NavLink to={to} onClick={() => overlays.close('sidebar')}>
+        <Icon />
+        <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
+      </NavLink>
+    </MainSidebar.NavLink>
   );
 }
