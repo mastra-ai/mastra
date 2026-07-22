@@ -808,7 +808,11 @@ export class AIV5Adapter {
         const base64 = data.toString('base64');
         return `data:${mimeType};base64,${base64}`;
       } else if (typeof data === 'string') {
-        return data.startsWith('data:') || data.startsWith('http') ? data : `data:${mimeType};base64,${data}`;
+        // OpenAI Files API file IDs (e.g. "file-abc123") must pass through as-is so
+        // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
+        return data.startsWith('data:') || data.startsWith('http') || data.startsWith('file-')
+          ? data
+          : `data:${mimeType};base64,${data}`;
       } else if (data instanceof Uint8Array) {
         const base64 = Buffer.from(data).toString('base64');
         return `data:${mimeType};base64,${base64}`;
