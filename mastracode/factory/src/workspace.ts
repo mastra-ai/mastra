@@ -10,6 +10,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSandbox, LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
+import { getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -129,12 +130,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
 
     const user = requestContext.get('user') as FactoryAuthUser | undefined;
-    if (
-      !user?.organizationId ||
-      !user.workosId ||
-      user.organizationId !== session.orgId ||
-      user.workosId !== session.userId
-    ) {
+    const userId = getFactoryAuthUserId(user);
+    if (!user?.organizationId || !userId || user.organizationId !== session.orgId || userId !== session.userId) {
       throw new Error(`Factory session ${session.sessionId} is not available to the current user`);
     }
     if (!sandboxConfig || !github || !fleet) {
@@ -184,8 +181,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // Not registered yet.
     }
 
-    const token = await github.mintInstallationToken(Number(installation.externalId));
-    if (!token) throw new Error('GitHub token could not be generated for the Factory session');
+    const access = await github.versionControl.getRepositoryAccess({
+      orgId: session.orgId,
+      repositoryId: repository.id,
+    });
+    const token = access.authorization?.token;
+    if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
 
     const sandbox = await fleet.ensureSandbox(
       binding,

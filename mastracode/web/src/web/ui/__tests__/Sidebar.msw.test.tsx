@@ -21,9 +21,8 @@ import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { redirectToLogout } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
-import type { Factory } from '../domains/workspaces';
+import type { Factory, FactoryUserSession } from '../domains/workspaces';
 import { ActiveFactoryProvider } from '../domains/workspaces';
-import { SettingsNavigationProvider } from '../domains/settings/context/SettingsNavigationProvider';
 import { OverlaysProvider } from '../lib/overlays';
 import { Sidebar } from '../Sidebar';
 
@@ -82,6 +81,21 @@ const githubProject: Factory = {
     factoryProjectId: 'fp-github-project-1',
     repositories: [githubRepository],
   },
+};
+
+const userSession: FactoryUserSession = {
+  id: 'user-session-1',
+  sessionId: 'user-session-1',
+  projectRepositoryId: githubRepository.projectRepositoryId,
+  orgId: 'org-1',
+  userId: 'user-1',
+  branch: 'user/alice-notes',
+  baseBranch: 'main',
+  sandboxId: 'sandbox-1',
+  sandboxWorkdir: '/sandbox/mastra-worktrees/user-alice-notes',
+  materializedAt: null,
+  createdAt: '2026-06-05T00:00:00.000Z',
+  updatedAt: '2026-06-05T00:00:00.000Z',
 };
 
 const threadOne: AgentControllerThreadInfo = {
@@ -234,10 +248,8 @@ function FactoryRouteHarness() {
     <ActiveFactoryProvider factoryId={factoryId!}>
       <ChatSessionProvider>
         <OverlaysProvider>
-          <SettingsNavigationProvider>
-            <Sidebar />
-            <LocationProbe />
-          </SettingsNavigationProvider>
+          <Sidebar />
+          <LocationProbe />
         </OverlaysProvider>
       </ChatSessionProvider>
     </ActiveFactoryProvider>
@@ -309,31 +321,40 @@ describe('Sidebar', () => {
 
       await user.click(settingsTrigger);
 
+      // Opening settings is navigation: the sidebar swaps to section links
+      // driven by the `/settings/:section` URL.
+      expect(screen.getByTestId('location')).toHaveTextContent('/settings/general');
       const settingsNavigation = screen.getByRole('navigation', { name: 'Settings sections' });
-      const generalButton = within(settingsNavigation).getByRole('button', { name: 'General' });
+      const generalLink = within(settingsNavigation).getByRole('link', { name: 'General' });
       const backButton = within(settingsNavigation).getByRole('button', { name: 'Back to app' });
-      const behaviorButton = within(settingsNavigation).getByRole('button', { name: 'Behavior' });
+      const behaviorLink = within(settingsNavigation).getByRole('link', { name: 'Behavior' });
       expect(settingsTrigger).toHaveAttribute('aria-current', 'page');
-      expect(generalButton).toHaveAttribute('aria-current', 'page');
+      expect(generalLink).toHaveAttribute('aria-current', 'page');
       expect(screen.queryByRole('region', { name: 'Factory switcher' })).not.toBeInTheDocument();
-      expect(backButton.compareDocumentPosition(generalButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(backButton.compareDocumentPosition(generalLink)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 
-      await user.click(behaviorButton);
-      expect(behaviorButton).toHaveAttribute('aria-current', 'page');
-      expect(generalButton).not.toHaveAttribute('aria-current');
+      await user.click(behaviorLink);
+      expect(screen.getByTestId('location')).toHaveTextContent('/settings/behavior');
+      expect(behaviorLink).toHaveAttribute('aria-current', 'page');
+      expect(generalLink).not.toHaveAttribute('aria-current');
 
       await user.click(backButton);
 
+      // Leaving settings returns to the page it was opened from and hands
+      // focus back to the trigger that opened it.
+      expect(screen.getByTestId('location')).toHaveTextContent('/chat');
       expect(settingsTrigger).not.toHaveAttribute('aria-current');
       expect(await screen.findByText('First thread')).toBeInTheDocument();
       expect(screen.queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
+      await waitFor(() => expect(settingsTrigger).toHaveFocus());
 
       await user.click(settingsTrigger);
       expect(
-        within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('button', { name: 'General' }),
+        within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('link', { name: 'General' }),
       ).toHaveAttribute('aria-current', 'page');
 
       await user.click(settingsTrigger);
+      expect(screen.getByTestId('location')).toHaveTextContent('/chat');
       expect(settingsTrigger).not.toHaveAttribute('aria-current');
       expect(await screen.findByText('First thread')).toBeInTheDocument();
     });
@@ -353,11 +374,11 @@ describe('Sidebar', () => {
 
       await user.type(search, 'notifications');
 
-      expect(within(settingsNavigation).getByRole('button', { name: 'Behavior' })).toBeInTheDocument();
-      expect(within(settingsNavigation).queryByRole('button', { name: 'General' })).not.toBeInTheDocument();
+      expect(within(settingsNavigation).getByRole('link', { name: 'Behavior' })).toBeInTheDocument();
+      expect(within(settingsNavigation).queryByRole('link', { name: 'General' })).not.toBeInTheDocument();
 
       await user.clear(search);
-      expect(within(settingsNavigation).getByRole('button', { name: 'General' })).toBeInTheDocument();
+      expect(within(settingsNavigation).getByRole('link', { name: 'General' })).toBeInTheDocument();
 
       await user.type(search, 'not a setting');
       expect(within(settingsNavigation).getByRole('status')).toHaveTextContent('No settings found.');
@@ -449,9 +470,18 @@ describe('Sidebar', () => {
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-github-project-1/work-items`, () =>
+          HttpResponse.json({ workItems: [] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/github/projects/${githubRepository.projectRepositoryId}/sessions`, () =>
+          HttpResponse.json({ sessions: [userSession] }),
+        ),
+      );
       renderSidebar(githubProject.id);
 
-      expect(await screen.findByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+      const userSessions = await screen.findByRole('region', { name: 'User sessions' });
+      expect(await within(userSessions).findByRole('button', { name: 'alice-notes' })).toBeInTheDocument();
       // Each worktree holds a single conversation, so GitHub projects have no
       // thread list — neither nested nor flat.
       await screen.findByRole('button', { name: 'feat-ui' });

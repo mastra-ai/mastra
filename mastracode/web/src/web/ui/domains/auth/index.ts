@@ -1,5 +1,6 @@
 export { useFactoryAuth } from '../../../../shared/hooks/useFactoryAuth';
 export {
+  clearMastraCodeStorage,
   fetchAuthState,
   loginUrl,
   logoutUrl,

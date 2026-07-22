@@ -1,5 +1,4 @@
 import type { ToolCategory } from '@mastra/client-js';
-import type { Dispatch, SetStateAction } from 'react';
 
 import { useActiveFactoryContext } from '../../workspaces';
 import {
@@ -24,7 +23,7 @@ import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
-export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAction<string | undefined>>) {
+export function useRunPaletteCommand(prefillComposer: (draft: string) => void) {
   const { activeFactory } = useActiveFactoryContext();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
@@ -124,7 +123,7 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
 
   const run = (command: SlashCommand) => {
     if (command.args) {
-      setComposerCommandName(command.name);
+      prefillComposer(`/${command.name} `);
       return;
     }
 

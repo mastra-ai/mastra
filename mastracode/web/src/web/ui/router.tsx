@@ -23,6 +23,7 @@ import { MetricsPage } from './pages/MetricsPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { SignInPage } from './pages/SignInPage';
 import { ThreadPage } from './pages/ThreadPage';
 import { useFactoriesQuery } from '../../shared/hooks/useFactories';
@@ -76,6 +77,13 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'metrics', element: <MetricsPage /> },
                 { path: 'audit', element: <AuditPage /> },
+                {
+                  path: 'settings',
+                  children: [
+                    { index: true, element: <Navigate to="general" replace /> },
+                    { path: ':section', element: <SettingsPage /> },
+                  ],
+                },
               ],
             },
           ],

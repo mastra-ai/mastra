@@ -54,6 +54,21 @@ describe('SignInPage', () => {
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 
+  describe('given Studio auth', () => {
+    it('renders the Mastra Platform sign-in action', async () => {
+      stubAuthMe({ provider: 'mastra-studio' });
+      renderSignIn('/signin?returnTo=%2Ffactory%2Fboard');
+
+      const button = await screen.findByRole('button', { name: 'Sign in with Mastra Platform' });
+      expect(screen.queryByRole('button', { name: 'Continue with GitHub' })).not.toBeInTheDocument();
+
+      await userEvent.click(button);
+      expect(button).toBeDisabled();
+      expect(button).toHaveTextContent('Opening Mastra Platform…');
+      expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/factory/board');
+    });
+  });
+
   describe('given a WorkOS (hosted-login) deploy', () => {
     it('renders the GitHub sign-in action and redirects to the login route', async () => {
       stubAuthMe({ provider: 'workos' });

@@ -11,7 +11,7 @@ import {
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
@@ -85,7 +85,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { status } = useChatConnection();
   const { busy, localUser, reset } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
-  const { composerCommandName, clearComposerCommand, runComposerCommand } = useChatCommands();
+  const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
   const hookArgs = {
@@ -100,42 +100,23 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
 
-  const [draft, setDraft] = useState('');
   const [images, setImages] = useState<PendingImage[]>([]);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const spotlightRef = useComposerSpotlight();
-  const appliedCommandNameRef = useRef<string | null>(null);
   const modeSwitchPendingRef = useRef(false);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
 
   const updateDraft = (next: string) => {
-    setDraft(next);
+    setComposerDraft(next);
     setActiveSuggestion(0);
   };
 
-  const applyCommandDraft = (name: string) => {
-    updateDraft(`/${name} `);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  };
-
   const applyCommand = (name: string) => {
-    applyCommandDraft(name);
-    clearComposerCommand();
+    updateDraft(`/${name} `);
+    inputRef.current?.focus();
   };
-
-  useEffect(() => {
-    if (!composerCommandName) {
-      appliedCommandNameRef.current = null;
-      return;
-    }
-    if (appliedCommandNameRef.current === composerCommandName) return;
-    appliedCommandNameRef.current = composerCommandName;
-    applyCommandDraft(composerCommandName);
-    clearComposerCommand();
-  }, [composerCommandName, clearComposerCommand]);
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -353,7 +334,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
           disabled={disabled}
           maxHeight={composerVariantMaxHeight[variant]}
-          className={composerVariantClass[variant]}
+          className={cn(composerVariantClass[variant], 'text-[15px] text-neutral3')}
           aria-label="Message"
           aria-keyshortcuts="Shift+Tab"
         />

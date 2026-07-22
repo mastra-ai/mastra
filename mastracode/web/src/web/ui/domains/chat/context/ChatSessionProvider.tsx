@@ -36,7 +36,7 @@ export function ChatSessionConfigProvider({
   threadId?: string;
   userScoped?: boolean;
 }) {
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const { activeFactory, resourceId, sessionEnabled: activeResourceEnabled } = useActiveFactoryContext();
   const { baseUrl } = useApiConfig();
   const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
   const repository = serverFactory ? selectedRepository(serverFactory) : undefined;
@@ -51,10 +51,12 @@ export function ChatSessionConfigProvider({
   const projectPath = storedSession || resolvingStoredSession ? undefined : deriveProjectPath(activeFactory);
   const projectSessionEnabled =
     !resolvingStoredSession &&
-    (storedSession ? sessionEnabled : sessionEnabled && (!repository || Boolean(projectPath)));
+    (storedSession ? activeResourceEnabled : activeResourceEnabled && (!repository || Boolean(projectPath)));
+  const userSessionEnabled = Boolean(storedSession) && !sessionQuery.isPending;
   const value = {
     resourceId: storedSession?.sessionId ?? resourceId,
-    sessionEnabled: userScoped ? Boolean(storedSession) && !sessionQuery.isPending : projectSessionEnabled,
+    sessionEnabled: userScoped ? userSessionEnabled : projectSessionEnabled,
+    resourceEnabled: userScoped ? userSessionEnabled : activeResourceEnabled,
     projectPath,
     factorySessionState:
       serverFactory && repository

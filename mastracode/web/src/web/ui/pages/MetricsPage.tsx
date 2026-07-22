@@ -1,9 +1,14 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import {
+  DateRangeTimeline,
+  clampDateRangeToBounds,
+  getDateRangeBounds,
+} from '@mastra/playground-ui/components/DateRangeTimeline';
+import type { DateRangeValue } from '@mastra/playground-ui/components/DateRangeTimeline';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useState } from 'react';
+import { format, subDays } from 'date-fns';
+import { useMemo, useState } from 'react';
 
 import { useApiConfig } from '../../../shared/api/config';
 import { useFactoryMetrics } from '../../../shared/hooks/useFactoryMetrics';
@@ -13,16 +18,19 @@ import { formatDuration, relativeTime } from '../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { isServerFactory, useActiveFactoryContext } from '../domains/workspaces';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
-import type { FactoryMetrics } from '../domains/factory/services/metrics';
+import type { FactoryMetrics, FactoryMetricsRange } from '../domains/factory/services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
 
-const WINDOW_OPTIONS = [
-  { value: 7, label: '7d' },
-  { value: 30, label: '30d' },
-  { value: 90, label: '90d' },
-] as const;
+const API_DATE_FORMAT = 'yyyy-MM-dd';
+/** Domain lower bound when the board has no items yet — there's no real
+ * creation date to anchor to, so offer a modest explorable window. */
+const EMPTY_BOARD_LOOKBACK_DAYS = 90;
 
-type WindowDays = (typeof WINDOW_OPTIONS)[number]['value'];
+/** Default window: the last 30 days, as `yyyy-MM-dd` bounds. */
+function defaultRange(): DateRangeValue {
+  const today = new Date();
+  return { from: format(subDays(today, 30), API_DATE_FORMAT), to: format(today, API_DATE_FORMAT) };
+}
 
 const THROUGHPUT_SERIES = [{ dataKey: 'done', label: 'Done per day', color: '#34d399' }];
 
@@ -32,6 +40,11 @@ const SOURCE_LABELS: Record<string, string> = {
   'linear-issue': 'Linear issues',
   manual: 'Manual',
 };
+
+/** Terminal stages have no "pass through", so they never get automation rows. */
+const TERMINAL_STAGE_IDS = new Set(['done', 'canceled']);
+
+const EM_DASH = '—';
 
 /**
  * Factory flow metrics: throughput, cycle time, stage breakdown, aging WIP,
@@ -51,8 +64,25 @@ export function MetricsPage() {
 }
 
 function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const [days, setDays] = useState<WindowDays>(30);
-  const metricsQuery = useFactoryMetrics(factoryProjectId, days);
+  const [today] = useState(() => format(new Date(), API_DATE_FORMAT));
+  const [range, setRange] = useState<DateRangeValue>(defaultRange);
+
+  // Expand the day-granular range to a precise instant window: full first day
+  // through end of the last day (the server clamps the end to `now`). Keyed on
+  // the day strings so the query key stays stable across renders.
+  const fetchRange = useMemo<FactoryMetricsRange>(
+    () => ({
+      from: new Date(`${range.from}T00:00:00.000Z`).toISOString(),
+      to: new Date(`${range.to}T23:59:59.999Z`).toISOString(),
+    }),
+    [range.from, range.to],
+  );
+  // Whole-day span of the selected window, for labels like "Automated moves (30d)".
+  const windowDays = Math.max(
+    1,
+    Math.round((Date.parse(`${range.to}T00:00:00.000Z`) - Date.parse(`${range.from}T00:00:00.000Z`)) / 86_400_000),
+  );
+  const metricsQuery = useFactoryMetrics(factoryProjectId, fetchRange);
   const agentsRunning = useAgentsRunningCount();
 
   if (metricsQuery.isError) {
@@ -60,29 +90,29 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
   }
   const metrics = metricsQuery.data;
 
+  // Bounds: project's first work item (once metrics load) → today. Fall back to
+  // the max lookback until the earliest date is known.
+  const earliestDay = metrics?.earliestItemAt
+    ? metrics.earliestItemAt.slice(0, 10)
+    : format(subDays(new Date(`${today}T00:00:00.000Z`), EMPTY_BOARD_LOOKBACK_DAYS), API_DATE_FORMAT);
+  const bounds = getDateRangeBounds(earliestDay, today);
+  const selectedRange = clampDateRangeToBounds(range, bounds);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-      <div className="flex items-center justify-between">
-        <ButtonsGroup spacing="close" role="group" aria-label="Metrics window">
-          {WINDOW_OPTIONS.map(option => (
-            <Button
-              key={option.value}
-              variant={days === option.value ? 'primary' : 'outline'}
-              size="sm"
-              aria-pressed={days === option.value}
-              onClick={() => setDays(option.value)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </ButtonsGroup>
-      </div>
+      <DateRangeTimeline
+        key={`${bounds.min}:${bounds.max}`}
+        value={selectedRange}
+        min={bounds.min}
+        max={bounds.max}
+        onCommit={setRange}
+      />
 
       {!metrics ? null : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <StatCard
-              label={`Completed (${days}d)`}
+              label="Completed"
               value={String(metrics.throughput.reduce((sum, point) => sum + point.count, 0))}
             />
             <StatCard
@@ -92,6 +122,15 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
             />
             <StatCard label="In flight" value={String(metrics.wipTotal)} />
             <StatCard label="Agents running" value={String(agentsRunning)} />
+            <StatCard
+              label={`Automated moves (${windowDays}d)`}
+              value={
+                metrics.transitions.total === 0
+                  ? EM_DASH
+                  : String(metrics.transitions.total - metrics.transitions.human)
+              }
+              hint={metrics.transitions.total === 0 ? undefined : `of ${metrics.transitions.total} stage moves`}
+            />
           </div>
 
           <Section title="Throughput">
@@ -99,11 +138,17 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
               data={metrics.throughput.map(point => ({ time: point.date, done: point.count }))}
               series={THROUGHPUT_SERIES}
               height={180}
+              xAxisInterval="preserveStartEnd"
+              xAxisMinTickGap={40}
             />
           </Section>
 
           <Section title="Stages">
             <StageBreakdown metrics={metrics} />
+          </Section>
+
+          <Section title="Automation by stage">
+            <StageAutomation metrics={metrics} />
           </Section>
 
           <Section title="Oldest in-flight items">
@@ -202,6 +247,72 @@ function StageBreakdown({ metrics }: { metrics: FactoryMetrics }) {
       })}
     </ul>
   );
+}
+
+/**
+ * Per-stage automation: what share of completed passes through each stage was
+ * fully automated (entered and exited by automation, first visit), and how
+ * the automated passes' items ended up.
+ */
+function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
+  // Rows only exist for stages with ≥1 exit, so an empty list means no stage
+  // had a completed pass in the window.
+  if (metrics.stageAutomation.length === 0) {
+    return (
+      <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+        No completed stage passes in this window yet.
+      </Txt>
+    );
+  }
+
+  const rowsByStage = new Map(metrics.stageAutomation.map(row => [row.stage, row]));
+  // Non-terminal board stages in column order, plus any stages present in the
+  // data but unknown to the board (raw id, sorted last — same rule as
+  // stageLabel/stageOrder).
+  const stages = [
+    ...new Set([
+      ...BOARD_STAGES.map(stage => stage.id as string).filter(id => !TERMINAL_STAGE_IDS.has(id)),
+      ...metrics.stageAutomation.map(row => row.stage),
+    ]),
+  ].sort((a, b) => stageOrder(a) - stageOrder(b));
+
+  return (
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      {stages.map(stage => {
+        const row = rowsByStage.get(stage);
+        const exits = row?.exits ?? 0;
+        const automated = row?.automated ?? 0;
+        const pct = exits === 0 ? null : Math.round((automated / exits) * 100);
+        return (
+          <li key={stage} className="grid grid-cols-[7rem_1fr_auto] items-center gap-3">
+            <Txt as="span" variant="ui-sm" className="text-icon4">
+              {stageLabel(stage)}
+            </Txt>
+            <div className="h-2 overflow-hidden rounded-full bg-surface4">
+              {pct !== null && automated > 0 ? (
+                <div className="h-full rounded-full bg-accent1" style={{ width: `${Math.max(2, pct)}%` }} />
+              ) : null}
+            </div>
+            <Txt as="span" variant="ui-xs" className="text-right text-icon3">
+              {pct === null
+                ? EM_DASH
+                : `${pct}% automated (${automated}/${exits})${row && automated > 0 ? ` · ${outcomeSummary(row.outcomes)}` : ''}`}
+            </Txt>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Compact split of automated-pass outcomes, omitting zero buckets. */
+function outcomeSummary(outcomes: FactoryMetrics['stageAutomation'][number]['outcomes']): string {
+  const parts: string[] = [];
+  if (outcomes.done > 0) parts.push(`${outcomes.done} done`);
+  if (outcomes.canceled > 0) parts.push(`${outcomes.canceled} canceled`);
+  if (outcomes.reworked > 0) parts.push(`${outcomes.reworked} reworked`);
+  if (outcomes.inFlight > 0) parts.push(`${outcomes.inFlight} in flight`);
+  return parts.join(', ');
 }
 
 function AgingWipTable({ metrics }: { metrics: FactoryMetrics }) {

@@ -5,7 +5,7 @@ import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-cont
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
+import { createMemoryRouter, Navigate, Outlet, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
@@ -13,6 +13,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/rende
 import { loginUrl, logoutUrl } from '../domains/auth';
 import Chat from '../domains/chat/Chat';
 import { NewPage } from '../pages/NewPage';
+import { SettingsPage } from '../pages/SettingsPage';
 import { ThreadPage } from '../pages/ThreadPage';
 import type { Factory } from '../domains/workspaces';
 import { ActiveFactoryProvider } from '../domains/workspaces/context/ActiveFactoryProvider';
@@ -41,6 +42,13 @@ function renderChat(initialEntry = '/factories/project-test/threads/thread-test'
               // the draft composer and hides the bound thread's history.
               { path: 'new', element: <NewPage /> },
               { path: 'threads/:threadId', element: <ThreadPage /> },
+              {
+                path: 'settings',
+                children: [
+                  { index: true, element: <Navigate to="general" replace /> },
+                  { path: ':section', element: <SettingsPage /> },
+                ],
+              },
             ],
           },
         ],
@@ -262,15 +270,19 @@ describe('MastraCode sidebar auth actions', () => {
 });
 
 describe('MastraCode empty thread state', () => {
-  it('given a project with no messages, when the app renders, then the Mastra Code wordmark hero appears', async () => {
+  it('given a project with no messages, when a starter is chosen, then it prefills and focuses the composer', async () => {
+    const user = userEvent.setup();
     renderSeededApp();
 
+    expect(await screen.findByRole('heading', { name: 'What can I help you build?' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Mastra Code')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Explore this codebase' }));
+
+    const composer = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
     await waitFor(() => {
-      expect(screen.getByText('Ready for new conversation')).toBeInTheDocument();
-      const wordmark = screen.getByLabelText('Mastra Code');
-      expect(wordmark).toBeInTheDocument();
-      // The hero sits inside the transcript scroller, which centers empty content vertically.
-      expect(wordmark.closest('.place-items-center')).not.toBeNull();
+      expect(composer).toHaveValue('Help me understand how this codebase is structured.');
+      expect(composer).toHaveFocus();
     });
   });
 });
@@ -446,14 +458,16 @@ describe('MastraCode message rendering', () => {
 
     renderChat();
 
-    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'What can I help you build?' })).toBeInTheDocument(),
+    );
     await new Promise(resolve => setTimeout(resolve, 100));
     await stream.emit();
 
     await waitFor(() => expect(screen.getByText('Streaming now')).toBeInTheDocument());
   });
 
-  it('keeps the running conversation and stream subscription alive while Settings is open', async () => {
+  it('recovers the running conversation after visiting the Settings page and back', async () => {
     const user = userEvent.setup();
     seedProject();
     const stream = delayedSse({
@@ -470,6 +484,17 @@ describe('MastraCode message rendering', () => {
         streamRequests();
         return stream.response();
       }),
+      // Settings page (general section) data.
+      http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json({ packs: [], activePackId: null })),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: { github: { enabled: true, repositoryIds: [] }, linear: { enabled: false, projectIds: [] } },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: false, connected: false, workspace: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),
     );
 
     renderChat();
@@ -477,17 +502,20 @@ describe('MastraCode message rendering', () => {
     expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
     await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
 
-    const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
-    await user.click(settingsTrigger);
-    expect(screen.getByRole('region', { name: 'Settings' })).toBeInTheDocument();
+    // Opening settings navigates to /settings/general; the thread page (and
+    // its sidebar instance) unmounts while the session layout stays mounted.
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(await screen.findByRole('region', { name: 'Settings' })).toBeInTheDocument();
 
     await stream.emit();
-    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Back to app' }));
 
     expect(await screen.findByText('Streaming while settings are open')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
-    await waitFor(() => expect(settingsTrigger).toHaveFocus());
-    expect(streamRequests).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Settings' })).toHaveFocus());
+    // Leaving the thread route drops the session's threadId, so returning
+    // re-subscribes (same as any thread → /new → thread navigation).
+    expect(streamRequests).toHaveBeenCalledTimes(2);
   });
 
   it('recovers the running conversation after navigating to Create Factory and back', async () => {

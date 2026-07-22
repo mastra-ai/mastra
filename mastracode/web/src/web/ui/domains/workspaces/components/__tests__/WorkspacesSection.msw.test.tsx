@@ -786,4 +786,43 @@ describe('WorkspacesSection', () => {
       'user/alice-notes',
     ]);
   });
+
+  it('does not create an agent session before a Factory workspace is selected', async () => {
+    seedActiveFactory({
+      ...githubProject,
+      id: 'project-unselected',
+      resourceId: 'resource-unselected',
+      binding: {
+        kind: 'factory',
+        factoryProjectId: 'factory-project-unselected',
+        repositories: [
+          {
+            projectRepositoryId: PROJECT_REPOSITORY_ID,
+            slug: 'mastra-ai/mastra',
+            gitBranch: 'main',
+            sandboxWorkdir: '/sandbox/mastra',
+            worktrees: [],
+          },
+        ],
+      },
+    });
+    let threadRequests = 0;
+    let workItemRequests = 0;
+    useAgentControllerHandlers([]);
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () => {
+        threadRequests += 1;
+        return HttpResponse.json({ threads: [] });
+      }),
+      http.get(`${ORIGIN}/web/factory/projects/:factoryProjectId/work-items`, () => {
+        workItemRequests += 1;
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+
+    renderSection();
+
+    await waitFor(() => expect(workItemRequests).toBeGreaterThan(0));
+    expect(threadRequests).toBe(0);
+  });
 });

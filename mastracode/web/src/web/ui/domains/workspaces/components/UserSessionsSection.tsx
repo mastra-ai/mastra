@@ -1,10 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { GitBranch, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -14,25 +16,14 @@ import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/a
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
-import type { Worktree } from '../services/factories';
 import { isServerFactory, selectedRepository, USER_SESSION_BRANCH_PREFIX } from '../services/factories';
 import type { FactoryUserSession } from '../services/github';
 import { createUserSession, deleteUserSession, listUserSessions } from '../services/github';
-import { WorkspaceRow } from './WorkspacesSection';
 
 function sessionLabel(session: FactoryUserSession): string {
   return session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)
     ? session.branch.slice(USER_SESSION_BRANCH_PREFIX.length)
     : session.branch;
-}
-
-function sessionWorktree(session: FactoryUserSession): Worktree {
-  return {
-    branch: session.branch,
-    baseBranch: session.baseBranch,
-    worktreePath: session.sessionId,
-    threadId: session.sessionId,
-  };
 }
 
 /** Personal sessions whose isolated repository workspace is prepared lazily by AgentController. */
@@ -173,23 +164,59 @@ export function UserSessionsSection() {
       </div>
 
       <div className="flex flex-col gap-1">
-        {sessions.map(session => {
-          const active = location.pathname === `/factories/${activeFactory?.id}/user/threads/${session.sessionId}`;
-          return (
-            <WorkspaceRow
-              key={session.sessionId}
-              worktree={sessionWorktree(session)}
-              label={sessionLabel(session)}
-              active={active}
-              running={false}
-              attention={false}
-              disabled={pending}
-              onSelect={() => void openSession(session)}
-              onDelete={() => setConfirmDelete(session)}
-            />
-          );
-        })}
+        <MainSidebar.NavList>
+          {sessions.map(session => {
+            const name = sessionLabel(session);
+            const url = `/factories/${activeFactory?.id}/user/threads/${session.sessionId}`;
+            const active = location.pathname === url;
 
+            return (
+              <MainSidebar.NavLink
+                key={session.sessionId}
+                link={{ name, url }}
+                isActive={active}
+                className="group/session"
+                render={
+                  <button
+                    type="button"
+                    aria-current={active ? 'page' : undefined}
+                    aria-label={name}
+                    disabled={pending}
+                    onClick={() => void openSession(session)}
+                    title={session.branch}
+                  >
+                    <GitBranch />
+                    <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
+                  </button>
+                }
+                action={
+                  <DropdownMenu>
+                    <DropdownMenu.Trigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Session actions for ${name}`}
+                          disabled={pending}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/session:opacity-100 group-focus-within/session:opacity-100 data-[popup-open]:opacity-100"
+                        >
+                          <MoreHorizontal />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenu.Content align="end" className="min-w-28">
+                      <DropdownMenu.Item variant="destructive" onClick={() => setConfirmDelete(session)}>
+                        <Trash2 />
+                        Delete
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu>
+                }
+              />
+            );
+          })}
+        </MainSidebar.NavList>
         {sessions.length === 0 && !creating && (
           <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
             No sessions yet

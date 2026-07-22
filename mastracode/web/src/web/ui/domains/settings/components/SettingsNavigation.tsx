@@ -4,10 +4,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeft, Brain, GitBranch, Key, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Link, useLocation } from 'react-router';
 
-import { useSetSettingsSection, useSettingsSection, type SettingsSection } from '../context/SettingsNavigationProvider';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
 import { useCloseSettings } from '../hooks/useCloseSettings';
-import { SETTINGS_SECTION_LABELS } from '../settingsSections';
+import { useSettingsSection } from '../hooks/useSettingsSection';
+import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
 
 const SETTINGS_SECTIONS: {
   id: SettingsSection;
@@ -61,7 +63,8 @@ const SETTINGS_SECTIONS: {
 
 export function SettingsNavigation() {
   const section = useSettingsSection();
-  const setSection = useSetSettingsSection();
+  const { activeFactory } = useActiveFactoryContext();
+  const location = useLocation();
   const closeSettings = useCloseSettings();
   const { state } = useMainSidebar();
   const [query, setQuery] = useState('');
@@ -107,15 +110,15 @@ export function SettingsNavigation() {
                 isActive={isActive}
                 link={{ name: label, url: '#', icon: <Icon /> }}
               >
-                <button
-                  type="button"
+                <Link
+                  to={settingsSectionPath(activeFactory!.id, id)}
+                  state={location.state}
                   aria-label={label}
                   aria-current={isActive ? 'page' : undefined}
-                  onClick={() => setSection(id)}
                 >
                   <Icon aria-hidden="true" />
                   <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
-                </button>
+                </Link>
               </MainSidebar.NavLink>
             );
           })}

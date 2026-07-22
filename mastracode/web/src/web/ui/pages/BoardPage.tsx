@@ -524,11 +524,11 @@ function BoardContent({
   // in Intake and only move once the Factory acts on them.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
-  const githubSelected = config ? (config.github.repositoryIds?.includes(projectRepositoryId) ?? false) : true;
+  const githubSelected = config ? (config.github.sourceIds?.includes(projectRepositoryId) ?? false) : true;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
   const linearReady =
-    (config?.linear.enabled ?? false) && linearConnected && (config?.linear.projectIds?.length ?? 0) > 0;
+    (config?.linear.enabled ?? false) && linearConnected && (config?.linear.sourceIds?.length ?? 0) > 0;
 
   // Work intake owns issues; Review intake owns pull requests. Keeping the
   // feeds on separate routes prevents review-producing PR work from being
