@@ -22,6 +22,9 @@ program
   .option('--template-ref <ref>', 'Pin a template repo tag/branch')
   .option('--template-dir <dir>', 'Use a local template directory instead of cloning (development)')
   .option('-t, --timeout [ms]', 'Timeout for dependency installation in ms')
+  .option('--no-platform', 'Skip Mastra platform sign-in, project, and Neon provisioning')
+  .option('--org <org>', 'Mastra organization id or name — skips the interactive org picker')
+  .option('--region <region>', 'Neon region id (passed to the platform verbatim)')
   .action(async (projectNameArg: string | undefined, args: Record<string, unknown>) => {
     let timeout: number | undefined;
     if (args.timeout !== undefined) {
@@ -36,6 +39,10 @@ program
       templateRef: args.templateRef ? String(args.templateRef) : undefined,
       templateDir: args.templateDir ? String(args.templateDir) : undefined,
       timeout,
+      // commander's `--no-platform` flips `platform` to false when present, true by default.
+      noPlatform: args.platform === false,
+      org: args.org ? String(args.org) : undefined,
+      region: args.region ? String(args.region) : undefined,
       analytics,
     });
   });

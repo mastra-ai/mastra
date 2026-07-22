@@ -353,7 +353,7 @@ describe('PlatformLinearIntegration', () => {
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
 
-  it('defaults the Platform base URL and requires the access token environment variable', () => {
+  it('defaults the Platform base URL and requires MASTRA_PLATFORM_SECRET_KEY', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', '');
     expect(new PlatformLinearIntegration().diagnostics()).toEqual({
       mode: 'platform',
@@ -361,7 +361,7 @@ describe('PlatformLinearIntegration', () => {
     });
 
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
     expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 });
