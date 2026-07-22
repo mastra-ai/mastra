@@ -7575,6 +7575,52 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
+  stores/turso:
+    dependencies:
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../libsql
+      '@tursodatabase/database':
+        specifier: 0.7.0
+        version: 0.7.0
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/storage-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.10(vitest@4.1.10)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.1.10(vitest@4.1.10)
+      eslint:
+        specifier: ^10.7.0
+        version: 10.7.0(jiti@2.7.0)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.9(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.7.0)(postcss@8.5.16)(tsx@4.23.1)(typescript@6.0.3)(yaml@2.9.0)
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+
   stores/upstash:
     dependencies:
       '@mastra/redis':
@@ -19125,13 +19171,27 @@ packages:
   '@tursodatabase/database-common@0.4.4':
     resolution: {integrity: sha512-iuSYWgBQEETjwfWOmi3E4Q++jQTb+VOPXeaKozQqW8fXtgU6ZaYUMmWbqQVMGSS9sAWZlZi9qyPVz0rkT8zoqQ==}
 
+  '@tursodatabase/database-common@0.7.0':
+    resolution: {integrity: sha512-7Www/wk04L558B3ioa6LnXMktd9+6BkMj7RnoveanyOCGKkJHRVlIUzAR9lblQH1AHIXG4VIpb0/tZ5IndRoxA==}
+
   '@tursodatabase/database-darwin-arm64@0.4.4':
     resolution: {integrity: sha512-nQMYrJY1X0sNgNWdbuPdbNCL9S/Ei9KLMwx3hFdyUDYJWU0h7o+kZv50QoNXB7vb7LmEBMeVWZaVEQbHd/Ionw==}
     cpu: [arm64]
     os: [darwin]
 
+  '@tursodatabase/database-darwin-arm64@0.7.0':
+    resolution: {integrity: sha512-QlK5WzEa5q0e3PjGS/jTCROAEOw0TZSey3++cJmJkmZL3nfv2O9yMurr6IHQYBSO5fLbXKsT9f0oPLVVdgv5vQ==}
+    cpu: [arm64]
+    os: [darwin]
+
   '@tursodatabase/database-linux-arm64-gnu@0.4.4':
     resolution: {integrity: sha512-6vnnKBgAgfKhspr+nScPevOSrrnZwNJKuUbiHMSagOqNDZCzOAGDcfeC83sKd2QvZquR17l6V3tFxcFN5FnByQ==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@tursodatabase/database-linux-arm64-gnu@0.7.0':
+    resolution: {integrity: sha512-pk0Zd9WUyCmW4oEMull2MI42C6pnk/kU+fxGki4HAm2YrLAOHgHniDTpiZx3EMr2WJU5hbapIaXNvhH7Do7Jrg==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
@@ -19142,13 +19202,27 @@ packages:
     os: [linux]
     libc: [glibc]
 
+  '@tursodatabase/database-linux-x64-gnu@0.7.0':
+    resolution: {integrity: sha512-6qH+f1dErF8GfLxTrKI6b30DDrsIb38n17j8ayiMqkW5CX9Z+1pCSghqFLTXhfIBvwThUbeS1F9Vthc468qXQA==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
   '@tursodatabase/database-win32-x64-msvc@0.4.4':
     resolution: {integrity: sha512-TYEl5FaUAImgZew05FvxvcFWLb1AQ+Zeyw/ApEbBDqS7mQmbz8VGs4iq04ECzJG2esfBR+zrLdDEG3X1BnaDTg==}
     cpu: [x64]
     os: [win32]
 
+  '@tursodatabase/database-win32-x64-msvc@0.7.0':
+    resolution: {integrity: sha512-+AECWhFs7/8P5nZiC+GcABfSrScVuTAAxa0WjbeJg+0ihZr3OPxOblda2FUIZ086sHbnKhRF152TFFv8Fl8gDw==}
+    cpu: [x64]
+    os: [win32]
+
   '@tursodatabase/database@0.4.4':
     resolution: {integrity: sha512-QkQ0qLp0AY8dC9BOrIMyeyUXoFCvhlRaH+wcg013OvzYufSmDnnzg44U0tQkmnXYfUZEIp+IpADO/UeGNL0M2Q==}
+
+  '@tursodatabase/database@0.7.0':
+    resolution: {integrity: sha512-rp5qHS1/ToZP1E3feuh5P1bNgWIdiLXI4wMm8pEb8+uQTctskmH9NnroWGuiYjL59y40CHbN/oIPinZnMJDclw==}
 
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
@@ -41989,16 +42063,30 @@ snapshots:
 
   '@tursodatabase/database-common@0.4.4': {}
 
+  '@tursodatabase/database-common@0.7.0': {}
+
   '@tursodatabase/database-darwin-arm64@0.4.4':
+    optional: true
+
+  '@tursodatabase/database-darwin-arm64@0.7.0':
     optional: true
 
   '@tursodatabase/database-linux-arm64-gnu@0.4.4':
     optional: true
 
+  '@tursodatabase/database-linux-arm64-gnu@0.7.0':
+    optional: true
+
   '@tursodatabase/database-linux-x64-gnu@0.4.4':
     optional: true
 
+  '@tursodatabase/database-linux-x64-gnu@0.7.0':
+    optional: true
+
   '@tursodatabase/database-win32-x64-msvc@0.4.4':
+    optional: true
+
+  '@tursodatabase/database-win32-x64-msvc@0.7.0':
     optional: true
 
   '@tursodatabase/database@0.4.4':
@@ -42009,6 +42097,15 @@ snapshots:
       '@tursodatabase/database-linux-arm64-gnu': 0.4.4
       '@tursodatabase/database-linux-x64-gnu': 0.4.4
       '@tursodatabase/database-win32-x64-msvc': 0.4.4
+
+  '@tursodatabase/database@0.7.0':
+    dependencies:
+      '@tursodatabase/database-common': 0.7.0
+    optionalDependencies:
+      '@tursodatabase/database-darwin-arm64': 0.7.0
+      '@tursodatabase/database-linux-arm64-gnu': 0.7.0
+      '@tursodatabase/database-linux-x64-gnu': 0.7.0
+      '@tursodatabase/database-win32-x64-msvc': 0.7.0
 
   '@tybys/wasm-util@0.10.3':
     dependencies:
