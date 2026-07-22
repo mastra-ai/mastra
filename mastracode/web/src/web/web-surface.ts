@@ -7,7 +7,6 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { AuditEmitter } from '@mastra/factory/storage/domains/audit/domain';
-import { factoryRouteAuth } from './auth.js';
 import type { FactoryIntegration, IntegrationContext } from '@mastra/factory/integrations/base';
 import { getGithubFeatureDiagnostics } from '@mastra/factory/integrations/github/config';
 import type { SandboxFleet } from '@mastra/factory/sandbox/fleet';
@@ -16,6 +15,7 @@ import { buildFsRoutes } from '@mastra/factory/routes/fs';
 import { IntakeRoutes } from '@mastra/factory/routes/intake';
 import { OAuthRoutes } from '@mastra/factory/routes/oauth';
 import { SkillRoutes } from '@mastra/factory/routes/skills';
+import type { RouteAuth } from '@mastra/factory/routes/route';
 import type { StateSigner } from '@mastra/factory/state-signing';
 import { invalidateTenantCredentialSnapshots } from '@mastra/factory/routes/tenant-credentials';
 import { ConfigRoutes } from '@mastra/factory/routes/config';
@@ -37,6 +37,8 @@ export interface IntegrationRegistration {
 export interface WebApiRoutesDeps {
   controllerId: string;
   controller: AgentController<MastraCodeState>;
+  /** Request-auth seam threaded from the host (no service locator). */
+  auth: RouteAuth;
   authStorage: AuthStorage;
   audit: AuditEmitter;
   fsRoot?: string;
@@ -118,7 +120,7 @@ function guardIntegrationRoutes({
 export function buildIntegrationContext(
   deps: Pick<
     WebApiRoutesDeps,
-    'controller' | 'publicOrigin' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
+    'controller' | 'publicOrigin' | 'auth' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
@@ -127,7 +129,7 @@ export function buildIntegrationContext(
   integrationId: string,
 ): IntegrationContext {
   return {
-    auth: factoryRouteAuth,
+    auth: deps.auth,
     fleet: deps.fleet,
     factoryStorage: deps.factoryStorage,
     baseUrl: deps.publicOrigin,
@@ -163,7 +165,7 @@ function disabledIntegrationStatusRoutes(deps: WebApiRoutesDeps, id: string, con
             reason: 'missing_config',
             diagnostics: getGithubFeatureDiagnostics({
               github: undefined,
-              auth: factoryRouteAuth,
+              auth: deps.auth,
               appDbConfigured: deps.factoryStorage !== undefined,
               stateSigner: deps.stateSigner,
               fleet: deps.fleet,
@@ -185,7 +187,7 @@ function disabledIntegrationStatusRoutes(deps: WebApiRoutesDeps, id: string, con
             reason: 'missing_config',
             diagnostics: {
               linearAppConfigured: configured,
-              factoryAuthEnabled: factoryRouteAuth.enabled(),
+              factoryAuthEnabled: deps.auth.enabled(),
               appDbConfigured: true,
             },
           }),
@@ -221,7 +223,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
     ...new ConfigRoutes({
-      auth: factoryRouteAuth,
+      auth: deps.auth,
       controller: deps.controller,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
@@ -229,13 +231,13 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
     ...new OAuthRoutes({
-      auth: factoryRouteAuth,
+      auth: deps.auth,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
     ...new SkillRoutes({
-      auth: factoryRouteAuth,
+      auth: deps.auth,
       controllerId: deps.controllerId,
       controller: deps.controller,
       sourceControlStorage: githubStorage,
@@ -245,7 +247,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...absentStubs,
     ...(deps.intakeReady
       ? new IntakeRoutes({
-          auth: factoryRouteAuth,
+          auth: deps.auth,
           audit: deps.audit,
           intake: deps.domains.intake,
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
@@ -255,7 +257,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
       : []),
     ...(deps.factoryReady
       ? new WorkItemRoutes({
-          auth: factoryRouteAuth,
+          auth: deps.auth,
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,

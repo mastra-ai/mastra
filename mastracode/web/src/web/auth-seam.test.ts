@@ -3,24 +3,15 @@ import type { IMastraAuthProvider } from '@mastra/core/server';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  buildAuthRoutes,
-  getWorkOSProvider,
-  isFactoryAuthEnabled,
-  isWorkOSAuth,
-  mountFactoryAuth,
-  factoryAuthTenant,
-} from './auth.js';
-import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config.js';
+import { buildAuthRoutes, getWorkOSProvider, isWorkOSAuth, mountFactoryAuth, factoryAuthTenant } from './auth.js';
 
 /**
- * Provider-seam behavior: the auth module resolves the ACTIVE provider from
- * the factory-seeded registry (seeded config authoritative, including "seeded
- * with no provider" = auth explicitly disabled) and falls back to a WorkOS
- * provider implied by the `WORKOS_*` env vars only when the factory never ran.
- * Public `/auth/*` routes are derived from the provider's capabilities
- * (SSO-shaped vs HTTP-handler-shaped). Provider-specific behavior lives in the
- * provider packages' own tests.
+ * Provider-seam behavior: the auth module operates on an explicitly-passed
+ * provider (DI — an explicit provider is authoritative regardless of env) and
+ * falls back to a WorkOS provider implied by the `WORKOS_*` env vars only when
+ * the caller passes none. Public `/auth/*` routes are derived from the
+ * provider's capabilities (SSO-shaped vs HTTP-handler-shaped).
+ * Provider-specific behavior lives in the provider packages' own tests.
  */
 
 // Mock @mastra/auth-workos so no real WorkOS client is constructed.
@@ -68,66 +59,51 @@ function httpHandlerCapability(overrides: Record<string, unknown> = {}): Record<
 
 beforeEach(() => {
   vi.clearAllMocks();
-  __resetRuntimeConfigForTests();
   delete process.env.WORKOS_API_KEY;
   delete process.env.WORKOS_CLIENT_ID;
   delete process.env.WORKOS_REDIRECT_URI;
 });
 
 afterEach(() => {
-  __resetRuntimeConfigForTests();
   process.env = { ...ORIGINAL_ENV };
 });
 
 describe('active provider resolution', () => {
-  it('a seeded provider enables auth regardless of env', () => {
-    seedRuntimeConfig({ authProvider: fakeProvider() });
-    expect(isFactoryAuthEnabled()).toBe(true);
+  it('an explicit provider enables auth regardless of env', () => {
+    const enabled = mountFactoryAuth(new Hono(), { provider: fakeProvider() });
+    expect(enabled).toBe(true);
   });
 
-  it('seeding without a provider disables auth even when WORKOS env vars are set', () => {
-    process.env.WORKOS_API_KEY = 'sk_test';
-    process.env.WORKOS_CLIENT_ID = 'client_test';
-    seedRuntimeConfig({});
-    expect(isFactoryAuthEnabled()).toBe(false);
-  });
-
-  it('falls back to env-implied WorkOS when the factory never seeded (back-compat)', () => {
-    process.env.WORKOS_API_KEY = 'sk_test';
-    process.env.WORKOS_CLIENT_ID = 'client_test';
-    expect(isFactoryAuthEnabled()).toBe(true);
-    expect(isWorkOSAuth()).toBe(true);
-  });
-
-  it('a seeded MastraAuthWorkos reports isWorkOSAuth and is exposed directly', () => {
-    const provider = new MastraAuthWorkos({ redirectUri: 'http://localhost:4111/auth/callback' });
-    seedRuntimeConfig({ authProvider: provider as unknown as IMastraAuthProvider });
-    expect(isWorkOSAuth()).toBe(true);
-    expect(getWorkOSProvider()).toBe(provider);
-  });
-
-  it('getWorkOSProvider throws when the active provider is not WorkOS', () => {
-    seedRuntimeConfig({ authProvider: fakeProvider() });
-    expect(() => getWorkOSProvider()).toThrow(/not WorkOS/);
-  });
-});
-
-describe('mountFactoryAuth with a seeded custom provider', () => {
-  function buildApp(provider: IMastraAuthProvider) {
-    seedRuntimeConfig({ authProvider: provider });
-    const app = new Hono();
-    const enabled = mountFactoryAuth(app);
-    app.get('*', c => c.text('ok'));
-    return { app, enabled };
-  }
-
-  it('returns false when the registry is seeded without a provider', () => {
-    process.env.WORKOS_API_KEY = 'sk_test';
-    process.env.WORKOS_CLIENT_ID = 'client_test';
-    seedRuntimeConfig({});
+  it('no provider and no WORKOS env vars disables auth', () => {
     const enabled = mountFactoryAuth(new Hono());
     expect(enabled).toBe(false);
   });
+
+  it('falls back to env-implied WorkOS when no provider is passed (back-compat)', () => {
+    process.env.WORKOS_API_KEY = 'sk_test';
+    process.env.WORKOS_CLIENT_ID = 'client_test';
+    const enabled = mountFactoryAuth(new Hono());
+    expect(enabled).toBe(true);
+  });
+
+  it('a MastraAuthWorkos provider reports isWorkOSAuth and is exposed directly', () => {
+    const provider = new MastraAuthWorkos({ redirectUri: 'http://localhost:4111/auth/callback' });
+    expect(isWorkOSAuth(provider as unknown as IMastraAuthProvider)).toBe(true);
+    expect(getWorkOSProvider(provider as unknown as IMastraAuthProvider)).toBe(provider);
+  });
+
+  it('getWorkOSProvider throws when the active provider is not WorkOS', () => {
+    expect(() => getWorkOSProvider(fakeProvider())).toThrow(/not WorkOS/);
+  });
+});
+
+describe('mountFactoryAuth with an explicit custom provider', () => {
+  function buildApp(provider: IMastraAuthProvider) {
+    const app = new Hono();
+    const enabled = mountFactoryAuth(app, { provider });
+    app.get('*', c => c.text('ok'));
+    return { app, enabled };
+  }
 
   it('derives hosted-login routes for an SSO-shaped provider', async () => {
     const { app, enabled } = buildApp(fakeProvider(ssoCapability()));
@@ -157,9 +133,8 @@ describe('mountFactoryAuth with a seeded custom provider', () => {
 
   it('gates protected routes through provider.authenticateToken and stashes the tenant', async () => {
     const provider = fakeProvider();
-    seedRuntimeConfig({ authProvider: provider });
     const app = new Hono();
-    mountFactoryAuth(app);
+    mountFactoryAuth(app, { provider });
     app.get('/web/whoami', c => c.json(factoryAuthTenant(c) ?? { tenant: null }));
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
@@ -175,9 +150,8 @@ describe('mountFactoryAuth with a seeded custom provider', () => {
       ensureOrganization,
       isOrganizationAdmin: vi.fn(async () => false),
     });
-    seedRuntimeConfig({ authProvider: provider });
     const app = new Hono();
-    mountFactoryAuth(app);
+    mountFactoryAuth(app, { provider });
     app.get('/web/whoami', c => c.json(factoryAuthTenant(c) ?? { tenant: null }));
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });

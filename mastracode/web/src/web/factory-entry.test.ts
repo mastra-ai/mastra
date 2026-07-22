@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MastraWorker } from '@mastra/core/worker';
 import { LocalSandbox } from '@mastra/core/workspace';
@@ -10,14 +10,6 @@ import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import { MastraFactory } from './factory-entry.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
 import type { FactoryIntegration, IntegrationContext } from '@mastra/factory/integrations/base';
-import {
-  __resetRuntimeConfigForTests,
-  getFactoryStorage,
-  getSeededAuthProvider,
-  getSeededIntegration,
-  getSeededStateSigner,
-  getSeededStorage,
-} from './runtime-config.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
@@ -42,6 +34,30 @@ const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
 vi.mock('@mastra/code-sdk', () => ({
   prepareAgentControllerMount: (config: Record<string, unknown>) => prepareMock(config),
 }));
+
+// The default-auth path constructs `MastraAuthStudio` internally (no service
+// locator to peek at), so capture every instance the factory creates and let
+// tests observe the resolved default provider directly.
+const studioInstances = vi.hoisted(() => [] as unknown[]);
+vi.mock('@mastra/auth-studio', async importOriginal => {
+  const mod = (await importOriginal()) as typeof import('@mastra/auth-studio');
+  class TrackedMastraAuthStudio extends mod.MastraAuthStudio {
+    constructor(...args: ConstructorParameters<typeof mod.MastraAuthStudio>) {
+      super(...args);
+      studioInstances.push(this);
+    }
+  }
+  return { ...mod, MastraAuthStudio: TrackedMastraAuthStudio };
+});
+
+/** The default `MastraAuthStudio` provider minted by the last `prepare()`. */
+function lastStudioProvider():
+  | (IMastraAuthProvider & {
+      getSessionHeaders?: (s: { id: string; userId: string }) => Record<string, string>;
+    })
+  | undefined {
+  return studioInstances.at(-1) as ReturnType<typeof lastStudioProvider>;
+}
 
 /** An SSO-shaped fake provider: gets the hosted-login `/auth/*` routes. */
 function fakeProvider(
@@ -85,11 +101,7 @@ async function prepareIntegrationContext(config: ConstructorParameters<typeof Ma
 
 beforeEach(() => {
   vi.clearAllMocks();
-  __resetRuntimeConfigForTests();
-});
-
-afterEach(() => {
-  __resetRuntimeConfigForTests();
+  studioInstances.length = 0;
 });
 
 describe('MastraFactory constructor', () => {
@@ -115,15 +127,6 @@ describe('MastraFactory.prepare', () => {
     // The overlapping call must not double-run one-time adapter init.
     expect(auth.init).toHaveBeenCalledOnce();
     expect(prepareMock).toHaveBeenCalledOnce();
-  });
-
-  it('seeds the runtime-config registry with the explicit config', async () => {
-    const auth = fakeProvider();
-    const storage = fakeStorage();
-    await prepareFactory({ storage, auth });
-    expect(getSeededStorage()).toBe(storage);
-    expect(getFactoryStorage()).toBe(storage);
-    expect(getSeededAuthProvider()).toBe(auth);
   });
 
   it('constructs an enabled sandbox fleet from the configured machine', async () => {
@@ -175,7 +178,6 @@ describe('MastraFactory.prepare', () => {
     expect(local.fleet.computeWorkdir('acme/api')).toBe('/srv/checkouts/acme/api');
 
     prepareMock.mockClear();
-    __resetRuntimeConfigForTests();
 
     const remote = {
       id: 'sb-2',
@@ -285,7 +287,6 @@ describe('MastraFactory.prepare', () => {
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
     prepareMock.mockClear();
-    __resetRuntimeConfigForTests();
 
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
@@ -293,13 +294,12 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('defaults to MastraAuthStudio when no auth is configured', async () => {
-    // No `auth` slot in config → factory falls back to `MastraAuthStudio`, so
-    // the runtime-config registry ends up seeded with a Studio provider and
+    // No `auth` slot in config → factory falls back to `MastraAuthStudio` and
     // the public `/auth/*` routes are folded into the API surface.
     const config = await prepareFactory({ storage: fakeStorage() });
-    const seeded = getSeededAuthProvider();
-    expect(seeded).toBeDefined();
-    expect(seeded?.name).toBe('mastra-studio');
+    const provider = lastStudioProvider();
+    expect(provider).toBeDefined();
+    expect(provider?.name).toBe('mastra-studio');
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
     const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/auth/login');
@@ -328,10 +328,7 @@ describe('MastraFactory.prepare', () => {
   }
 
   function seededSetCookie(): string | undefined {
-    const seeded = getSeededAuthProvider() as {
-      getSessionHeaders?: (s: { id: string; userId: string }) => Record<string, string>;
-    };
-    return seeded?.getSessionHeaders?.({ id: 'test-token', userId: 'u_1' })?.['Set-Cookie'];
+    return lastStudioProvider()?.getSessionHeaders?.({ id: 'test-token', userId: 'u_1' })?.['Set-Cookie'];
   }
 
   it('derives the default Studio cookie domain from publicUrl for subdomain deploys', async () => {
@@ -393,10 +390,10 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('boots with auth off when auth is explicitly disabled (auth: null)', async () => {
-    // `auth: null` opts out of the default entirely — no provider seeded, no
-    // `/auth/*` routes, no gate middleware.
+    // `auth: null` opts out of the default entirely — no default Studio
+    // provider constructed, no `/auth/*` routes, no gate middleware.
     await prepareFactory({ storage: fakeStorage(), auth: null });
-    expect(getSeededAuthProvider()).toBeUndefined();
+    expect(lastStudioProvider()).toBeUndefined();
   });
 });
 
@@ -480,13 +477,6 @@ describe('MastraFactory.prepare integrations', () => {
     await expect(factory.prepare()).rejects.toThrow(/duplicate integration id 'custom'/);
   });
 
-  it('seeds integrations into the runtime-config registry', async () => {
-    const custom = fakeIntegration({ id: 'custom' });
-    await prepareFactory({ storage: fakeStorage(), integrations: [custom] });
-    expect(getSeededIntegration('custom')).toBe(custom);
-    expect(getSeededIntegration('missing')).toBeUndefined();
-  });
-
   it('initializes version-control capabilities with integration-scoped storage', async () => {
     const initialize = vi.fn();
     const custom = fakeIntegration({
@@ -517,7 +507,8 @@ describe('MastraFactory.prepare integrations', () => {
     const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/custom/status');
     const ctx = routes.mock.calls[0]![0];
-    expect(ctx.stateSigner).toBe(getSeededStateSigner());
+    expect(ctx.stateSigner).toBeDefined();
+    expect(ctx.stateSigner?.stable).toBe(false);
     expect(typeof ctx.hooks?.emitAudit).toBe('function');
   });
 
@@ -574,19 +565,19 @@ describe('MastraFactory.prepare integrations', () => {
   });
 
   it('accepts a stability-requiring integration when stateSecret is configured', async () => {
-    await prepareFactory({
+    const ctx = await prepareIntegrationContext({
       storage: fakeStorage(),
       stateSecret: 'deployment-stable-secret',
       integrations: [fakeIntegration({ id: 'custom', requiresStableStateSigner: true })],
     });
-    expect(getSeededStateSigner()?.stable).toBe(true);
+    expect(ctx.stateSigner?.stable).toBe(true);
   });
 
   it('does not inspect provider-specific integration secrets for state signing', async () => {
     const integration = fakeIntegration({ id: 'custom' }) as FactoryIntegration & { webhookSecret?: string };
     integration.webhookSecret = 'provider-owned-secret';
-    await prepareFactory({ storage: fakeStorage(), integrations: [integration] });
-    expect(getSeededStateSigner()?.stable).toBe(false);
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), integrations: [integration] });
+    expect(ctx.stateSigner?.stable).toBe(false);
   });
 
   it("folds a ready integration's workers into the returned Mastra args", async () => {
@@ -600,7 +591,7 @@ describe('MastraFactory.prepare integrations', () => {
     expect(args.workers).toEqual([worker]);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
-    expect(ctx.stateSigner).toBe(getSeededStateSigner());
+    expect(ctx.stateSigner).toBeDefined();
     expect(ctx.storage.generic).toBeDefined();
     expect(ctx.storage.sourceControl).toBeDefined();
   });

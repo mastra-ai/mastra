@@ -6,7 +6,7 @@
  * here explicitly. The factory itself never reads deployment env vars and
  * never constructs providers on the caller's behalf.
  *
- * `prepare()` resolves feature readiness, seeds the runtime-config registry,
+ * `prepare()` resolves feature readiness, threads every dependency explicitly,
  * assembles the web routes/middleware, and returns the constructor args for
  * `new Mastra(...)`. The literal `export const mastra = new Mastra(...)` must
  * stay in the entry file — the deployer's `checkConfigExport` Babel plugin
@@ -33,7 +33,7 @@ import type { FactoryAuthUser } from './auth.js';
 import {
   buildAuthRoutes,
   createFactoryAuthGate,
-  factoryRouteAuth,
+  createFactoryRouteAuth,
   getFactoryAuthOrgId,
   getFactoryAuthUserId,
 } from './auth.js';
@@ -47,7 +47,6 @@ import { ProjectRoutes } from '@mastra/factory/routes/projects';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { SandboxFleet } from '@mastra/factory/sandbox/fleet';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
-import { seedRuntimeConfig } from './runtime-config.js';
 import { AuditStorage } from '@mastra/factory/storage/domains/audit/base';
 import { ModelCredentialsStorage } from '@mastra/factory/storage/domains/credentials/base';
 import { ModelPacksStorage } from '@mastra/factory/storage/domains/model-packs/base';
@@ -263,7 +262,7 @@ export class MastraFactory {
   }
 
   /**
-   * Resolve feature readiness, seed the runtime-config registry, and assemble
+   * Resolve feature readiness, wire every dependency explicitly, and assemble
    * everything needed to construct the server-owned Mastra. Returns the args
    * for the `new Mastra(...)` literal that must live in the entry file.
    */
@@ -287,6 +286,9 @@ export class MastraFactory {
     const configuredAuth = this.#config.auth;
     const auth: IMastraAuthProvider | undefined =
       configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth(publicOrigin));
+    // One RouteAuth seam per boot, closed over the resolved provider. Every
+    // factory route module receives this handle — no service locator.
+    const routeAuth = createFactoryRouteAuth(auth);
 
     // Registered integrations: validate ids up front so a copy-paste duplicate
     // fails loud instead of one instance silently shadowing the other.
@@ -322,7 +324,7 @@ export class MastraFactory {
       workItems: workItemsStorage,
     };
     const projectRoutes = new ProjectRoutes({
-      auth: factoryRouteAuth,
+      auth: routeAuth,
       projects: factoryProjectsStorage,
       sourceControl: sourceControlStorage,
       versionControlIntegrationIds: integrations
@@ -330,7 +332,7 @@ export class MastraFactory {
         .map(integration => integration.id),
     });
     const auditDomain = new AuditDomain({
-      auth: factoryRouteAuth,
+      auth: routeAuth,
       audit: auditStorage,
       projects: factoryProjectsStorage,
       sinks: integrations,
@@ -381,21 +383,10 @@ export class MastraFactory {
     // SDK seam; only this factory owns the fleet, so register it here.
     registerSandboxReattach(fleet);
 
-    // Seed runtime config first: readiness checks below reach app domains
-    // through the seeded FactoryStorage and gate on the active auth adapter.
     // One shared OAuth state signer per boot. The deploy entry supplies a
     // replica-stable secret when needed; otherwise local development gets a
     // per-process random signer (`stable: false`).
     const stateSigner = createStateSigner(this.#config.stateSecret);
-
-    seedRuntimeConfig({
-      storage,
-      vector,
-      integrations,
-      publicUrl: publicOrigin,
-      authProvider: auth,
-      stateSigner,
-    });
 
     // One-time provider initialization with factory-level context (e.g.
     // better-auth builds its default instance on the backend's auth
@@ -419,7 +410,7 @@ export class MastraFactory {
       integration.initialize?.({
         storage: integrationStorage.forIntegration(integration.id),
         projects: factoryProjectsStorage,
-        auth: factoryRouteAuth,
+        auth: routeAuth,
       });
       if (integration.versionControl) {
         integration.versionControl.initialize({
@@ -535,11 +526,12 @@ export class MastraFactory {
         // `apiRoutes` (not plain Hono routes) because the entry can't touch the
         // Hono app the deployer generates. `requiresAuth: false`; the gate
         // skips `/auth/*`.
-        ...(auth ? buildAuthRoutes(auth) : []),
+        ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
         // Custom `/web/*` routes (fs / config / integrations / factory / audit).
         ...assembleWebApiRoutes({
           controllerId: CONTROLLER_ID,
           controller,
+          auth: routeAuth,
           authStorage,
           audit: auditDomain,
           publicOrigin,
@@ -582,7 +574,7 @@ export class MastraFactory {
         return {
           middleware: [
             createFactoryAuthGate(auth),
-            createTenantCredentialPrimer({ auth: factoryRouteAuth, credentials: modelCredentialsStorage }),
+            createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
             ...spa,
           ],
           ...cors,
@@ -607,6 +599,7 @@ export class MastraFactory {
             {
               controller: prepared.base.controller,
               publicOrigin,
+              auth: routeAuth,
               stateSigner,
               fleet,
               factoryStorage: storage,

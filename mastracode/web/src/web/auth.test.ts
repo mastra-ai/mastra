@@ -5,7 +5,6 @@ import {
   getFactoryAuthOrgId,
   getFactoryAuthUser,
   getFactoryAuthUserId,
-  isFactoryAuthEnabled,
   mountFactoryAuth,
   factoryAuthTenant,
 } from './auth.js';
@@ -75,19 +74,19 @@ function buildApp() {
   return { app, enabled };
 }
 
-describe('isFactoryAuthEnabled', () => {
-  it('is false when env vars are missing', () => {
-    expect(isFactoryAuthEnabled()).toBe(false);
+describe('env-implied WorkOS fallback', () => {
+  it('leaves auth disabled when env vars are missing', () => {
+    expect(mountFactoryAuth(new Hono())).toBe(false);
   });
 
-  it('is false when only one env var is set', () => {
+  it('leaves auth disabled when only one env var is set', () => {
     process.env.WORKOS_API_KEY = 'sk_test';
-    expect(isFactoryAuthEnabled()).toBe(false);
+    expect(mountFactoryAuth(new Hono())).toBe(false);
   });
 
-  it('is true when both env vars are set', () => {
+  it('enables auth when both env vars are set', () => {
     enableEnv();
-    expect(isFactoryAuthEnabled()).toBe(true);
+    expect(mountFactoryAuth(new Hono())).toBe(true);
   });
 });
 
