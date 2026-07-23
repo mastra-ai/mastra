@@ -23,6 +23,11 @@ export interface ChannelAccountLink {
   /** Undefined for personal accounts (no organization). */
   orgId?: string;
   userId: string;
+  /**
+   * Which Factory project this sender's channel runs route to. Unset until
+   * the user picks one (or the dispatch path auto-stamps their only factory).
+   */
+  defaultFactoryProjectId?: string;
   linkedAt: Date;
 }
 
@@ -53,6 +58,7 @@ export const CHANNEL_ACCOUNT_LINKS_SCHEMA: CollectionSchema = {
     user_id: { type: 'text' },
     external_team_name: { type: 'text', nullable: true },
     external_user_name: { type: 'text', nullable: true },
+    default_factory_project_id: { type: 'text', nullable: true },
     linked_at: { type: 'timestamp' },
   },
   uniqueIndexes: [
@@ -72,6 +78,7 @@ interface ChannelAccountLinkDbRow extends Record<string, unknown> {
   user_id: string;
   external_team_name: string | null;
   external_user_name: string | null;
+  default_factory_project_id: string | null;
   linked_at: Date;
 }
 
@@ -79,6 +86,7 @@ function toLink(row: ChannelAccountLinkDbRow): ChannelAccountLink {
   return {
     ...(row.org_id ? { orgId: row.org_id } : {}),
     userId: row.user_id,
+    ...(row.default_factory_project_id ? { defaultFactoryProjectId: row.default_factory_project_id } : {}),
     linkedAt: row.linked_at,
   };
 }
@@ -144,6 +152,34 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
       },
     );
     return toLink(row);
+  }
+
+  /**
+   * Set (or clear, with `null`) which Factory project a link's channel runs
+   * route to. The `userId` guard makes this self-service only — a caller can
+   * never repoint another tenant's link. Returns whether a row was updated.
+   *
+   * Note: `saveAccountLink` deliberately omits this column from its upsert
+   * row, so a re-link keeps the stored default.
+   */
+  async setDefaultFactory({
+    platform,
+    externalTeamId,
+    externalUserId,
+    userId,
+    factoryProjectId,
+  }: ChannelAccountLinkKey & { userId: string; factoryProjectId: string | null }): Promise<boolean> {
+    const updated = await this.#db.updateMany(
+      'channel_account_links',
+      {
+        user_id: userId,
+        platform,
+        external_team_id: externalTeamId,
+        external_user_id: externalUserId,
+      },
+      { default_factory_project_id: factoryProjectId },
+    );
+    return updated > 0;
   }
 
   /** Resolve the tenant a platform sender is linked to, or `null` if unlinked. */

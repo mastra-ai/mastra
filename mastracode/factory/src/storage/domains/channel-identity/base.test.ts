@@ -151,6 +151,49 @@ describe('ChannelIdentityStorage', () => {
     expect(relinked?.externalUserName).toBeUndefined();
   });
 
+  it('sets, reads back, and clears the default factory on an own link', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.channelIdentity.saveAccountLink({ ...slackKey, orgId: 'org-1', userId: 'user-1' });
+
+    // Unset by default.
+    expect((await seed.channelIdentity.getAccountLink(slackKey))?.defaultFactoryProjectId).toBeUndefined();
+
+    expect(
+      await seed.channelIdentity.setDefaultFactory({ ...slackKey, userId: 'user-1', factoryProjectId: 'fp-1' }),
+    ).toBe(true);
+    expect((await seed.channelIdentity.getAccountLink(slackKey))?.defaultFactoryProjectId).toBe('fp-1');
+    // Listed entries carry it too (settings surface).
+    const [entry] = await seed.channelIdentity.listAccountLinksForUser('user-1');
+    expect(entry?.defaultFactoryProjectId).toBe('fp-1');
+
+    // Clear with null.
+    expect(
+      await seed.channelIdentity.setDefaultFactory({ ...slackKey, userId: 'user-1', factoryProjectId: null }),
+    ).toBe(true);
+    expect((await seed.channelIdentity.getAccountLink(slackKey))?.defaultFactoryProjectId).toBeUndefined();
+  });
+
+  it('setDefaultFactory cannot repoint another tenant link', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.channelIdentity.saveAccountLink({ ...slackKey, orgId: 'org-1', userId: 'user-1' });
+
+    expect(
+      await seed.channelIdentity.setDefaultFactory({ ...slackKey, userId: 'intruder', factoryProjectId: 'fp-evil' }),
+    ).toBe(false);
+    expect((await seed.channelIdentity.getAccountLink(slackKey))?.defaultFactoryProjectId).toBeUndefined();
+  });
+
+  it('re-link keeps the stored default factory', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.channelIdentity.saveAccountLink({ ...slackKey, orgId: 'org-1', userId: 'user-1' });
+    await seed.channelIdentity.setDefaultFactory({ ...slackKey, userId: 'user-1', factoryProjectId: 'fp-1' });
+
+    // Re-link (e.g. OIDC again) omits the default column — it must survive.
+    await seed.channelIdentity.saveAccountLink({ ...slackKey, orgId: 'org-1', userId: 'user-1' });
+
+    expect((await seed.channelIdentity.getAccountLink(slackKey))?.defaultFactoryProjectId).toBe('fp-1');
+  });
+
   it('self-service delete cannot sever another tenant link', async () => {
     const seed = await createFactoryStorageForTests();
 

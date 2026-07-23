@@ -7,6 +7,8 @@ export type {
   ChannelAccountLinkKey,
   ChannelAccountLinkNames,
 } from './storage/domains/channel-identity/base.js';
+export { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+export type { FactoryProject } from './storage/domains/projects/base.js';
 export { createChannelLinkStateSigner, createStateSigner } from './state-signing.js';
 export type { ChannelLinkState, ChannelLinkStateSigner, StateSigner, StateTenant } from './state-signing.js';
 export { createFactoryRouteAuth } from './auth.js';

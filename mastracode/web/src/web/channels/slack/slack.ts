@@ -5,7 +5,13 @@ import {
   type ChannelHandlers,
 } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
-import type { ChannelIdentityStorage, ChannelLinkStateSigner } from '@mastra/factory';
+import type {
+  ChannelAccountLink,
+  ChannelAccountLinkKey,
+  ChannelIdentityStorage,
+  ChannelLinkStateSigner,
+  FactoryProjectsStorage,
+} from '@mastra/factory';
 import { createSlackAdapter, SlackProvider } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
@@ -40,6 +46,15 @@ interface SlackChannelDeps {
    * unlinked path silently skips (defense-in-depth still blocks the run).
    */
   channelLinkStateSigner?: ChannelLinkStateSigner;
+  /**
+   * Factory projects domain. When provided (alongside `accountLinks`), a
+   * linked sender's run must also resolve to a Factory project before it
+   * dispatches: their link's default factory, else their tenant's only
+   * factory (stamped back onto the link), else an ephemeral "pick a default
+   * factory" card and no run. Unset → no factory routing (runs dispatch as
+   * before).
+   */
+  projects?: FactoryProjectsStorage;
 }
 
 /**
@@ -74,13 +89,21 @@ function webPublicUrl(): string | undefined {
   return process.env.MASTRACODE_PUBLIC_URL ?? process.env.MASTRACODE_CHANNELS_PUBLIC_URL;
 }
 
+/** Outcome of the sender-link gate for one inbound message. */
+export type LinkedSenderResult =
+  /** Gating not configured — dispatch as before account linking existed. */
+  | { status: 'ungated' }
+  /** Sender unlinked — Connect card posted (when possible), do not dispatch. */
+  | { status: 'blocked' }
+  /** Sender linked — their tenant plus the sender key the link lives under. */
+  | { status: 'linked'; link: ChannelAccountLink; key: ChannelAccountLinkKey };
+
 /**
- * Post an ephemeral "connect your account" card (visible only to the sender)
- * with a signed deep link into the web UI's Slack-connect flow. Returns `true`
- * when the sender is unlinked (caller must not dispatch a run), `false` when
- * they're linked or when the check is not configured (dispatch as usual).
+ * Resolve the sender's account link, posting an ephemeral "connect your
+ * account" card (visible only to the sender) with a signed deep link into the
+ * web UI's Slack-connect flow when they're unlinked.
  */
-export async function promptIfUnlinked({
+export async function resolveLinkedSender({
   thread,
   message,
   accountLinks,
@@ -90,15 +113,16 @@ export async function promptIfUnlinked({
   message: HandlerMessage;
   accountLinks?: ChannelIdentityStorage;
   channelLinkStateSigner?: ChannelLinkStateSigner;
-}): Promise<boolean> {
-  if (!accountLinks) return false;
+}): Promise<LinkedSenderResult> {
+  if (!accountLinks) return { status: 'ungated' };
   const platform = thread.adapter.name;
   const externalUserId = message.author.userId;
   const externalTeamId = slackTeamId(message);
   // Without a team id we can't identify the workspace-scoped link; treat as
   // unlinked so a run never proceeds tenant-less.
-  const link = externalTeamId ? await accountLinks.getAccountLink({ platform, externalTeamId, externalUserId }) : null;
-  if (link) return false;
+  const key = externalTeamId ? { platform, externalTeamId, externalUserId } : undefined;
+  const link = key ? await accountLinks.getAccountLink(key) : null;
+  if (link && key) return { status: 'linked', link, key };
 
   const publicUrl = webPublicUrl();
   // Need both a signer (anti-spoofing) and a public origin to build a usable
@@ -127,7 +151,98 @@ export async function promptIfUnlinked({
       { fallbackToDM: true },
     );
   }
-  return true;
+  return { status: 'blocked' };
+}
+
+/**
+ * Boolean view of {@link resolveLinkedSender}: `true` when the sender is
+ * unlinked (caller must not dispatch a run), `false` when they're linked or
+ * when the check is not configured (dispatch as usual).
+ */
+export async function promptIfUnlinked(args: {
+  thread: HandlerThread;
+  message: HandlerMessage;
+  accountLinks?: ChannelIdentityStorage;
+  channelLinkStateSigner?: ChannelLinkStateSigner;
+}): Promise<boolean> {
+  return (await resolveLinkedSender(args)).status === 'blocked';
+}
+
+/** Outcome of factory routing for one linked sender's inbound message. */
+export type FactoryRouteResult =
+  /** Factory routing not configured — dispatch without a factory. */
+  | { status: 'ungated' }
+  /** No factory resolved — prompt card posted (when possible), do not dispatch. */
+  | { status: 'blocked' }
+  /** The Factory project this sender's runs route to. */
+  | { status: 'resolved'; factoryProjectId: string };
+
+/**
+ * Decide which Factory project a linked sender's run belongs to:
+ *
+ * 1. The link's `defaultFactoryProjectId`, when it still exists (a stale id —
+ *    deleted factory — falls through as if unset).
+ * 2. Else, the tenant's only factory, stamped back onto the link so it shows
+ *    up (and stays editable) in Connected Accounts settings.
+ * 3. Else — zero or several factories — an ephemeral "pick a default factory"
+ *    card deep-linking to settings, and the run is blocked.
+ */
+export async function resolveFactoryForLink({
+  thread,
+  message,
+  link,
+  key,
+  accountLinks,
+  projects,
+}: {
+  thread: HandlerThread;
+  message: HandlerMessage;
+  link: ChannelAccountLink;
+  key: ChannelAccountLinkKey;
+  accountLinks: ChannelIdentityStorage;
+  projects?: FactoryProjectsStorage;
+}): Promise<FactoryRouteResult> {
+  if (!projects) return { status: 'ungated' };
+  // Factories are org-scoped; a personal account (no org) has none and lands
+  // on the prompt below.
+  const orgId = link.orgId ?? '';
+
+  if (link.defaultFactoryProjectId) {
+    const existing = await projects.get({ orgId, id: link.defaultFactoryProjectId });
+    if (existing) return { status: 'resolved', factoryProjectId: existing.id };
+  }
+
+  const factories = orgId ? await projects.list({ orgId }) : [];
+  if (factories.length === 1) {
+    const only = factories[0]!;
+    await accountLinks.setDefaultFactory({ ...key, userId: link.userId, factoryProjectId: only.id });
+    return { status: 'resolved', factoryProjectId: only.id };
+  }
+
+  const publicUrl = webPublicUrl();
+  if (publicUrl) {
+    await thread.postEphemeral(
+      message.author,
+      Card({
+        title: 'Pick a default factory',
+        children: [
+          CardText(
+            factories.length === 0
+              ? 'Your account has no factory yet. Create one in the web app, then message me again.'
+              : 'Your account has several factories. Pick which one Slack sessions should go to, then message me again.',
+          ),
+          Actions([
+            LinkButton({
+              url: `${publicUrl}/settings/connected-accounts`,
+              label: 'Open settings',
+            }),
+          ]),
+        ],
+      }),
+      { fallbackToDM: true },
+    );
+  }
+  return { status: 'blocked' };
 }
 
 /**
@@ -157,13 +272,20 @@ function createNewSessionChatHandler({
   getMastra,
   accountLinks,
   channelLinkStateSigner,
+  projects,
 }: SlackChannelDeps): ChannelHandler {
   return async (thread, message, defaultHandler) => {
     // Gate on the sender having linked their Slack account to a Mastra tenant.
     // Unlinked → post the ephemeral Connect card and stop; no session/run is
     // created (which would otherwise be tenant-less and fail credential
     // resolution). The core dispatch seam enforces the same gate as a backstop.
-    if (await promptIfUnlinked({ thread, message, accountLinks, channelLinkStateSigner })) return;
+    const sender = await resolveLinkedSender({ thread, message, accountLinks, channelLinkStateSigner });
+    if (sender.status === 'blocked') return;
+    // Linked senders must also route to a Factory project before a run starts.
+    if (sender.status === 'linked' && accountLinks) {
+      const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
+      if (route.status === 'blocked') return;
+    }
 
     // A mention on a not-yet-subscribed thread is a NEW session. The
     // default handler auto-subscribes, so once subscribed this is a
@@ -224,9 +346,9 @@ function createNewSessionChatHandler({
     );
   };
 }
-const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
+export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
   const newSessionChatHandler = createNewSessionChatHandler(deps);
-  const { accountLinks, channelLinkStateSigner } = deps;
+  const { accountLinks, channelLinkStateSigner, projects } = deps;
 
   return {
     onSubscribedMessage: async (thread, message, defaultHandler) => {
@@ -235,8 +357,15 @@ const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // merely start with "aside..." (e.g. "asides can wait") still route.
       if (/^aside\b/i.test(message.text)) return;
       // A subscribed follow-up from an unlinked sender must not run either
-      // (e.g. the link was removed mid-conversation).
-      if (await promptIfUnlinked({ thread, message, accountLinks, channelLinkStateSigner })) return;
+      // (e.g. the link was removed mid-conversation), and it must still
+      // resolve a factory (e.g. the default was cleared or its factory
+      // deleted mid-conversation).
+      const sender = await resolveLinkedSender({ thread, message, accountLinks, channelLinkStateSigner });
+      if (sender.status === 'blocked') return;
+      if (sender.status === 'linked' && accountLinks) {
+        const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
+        if (route.status === 'blocked') return;
+      }
       return defaultHandler(thread, message);
     },
     onMention: newSessionChatHandler,

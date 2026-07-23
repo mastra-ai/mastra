@@ -31,6 +31,7 @@ import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import {
   MastraFactory,
   ChannelIdentityStorage,
+  FactoryProjectsStorage,
   createChannelLinkStateSigner,
   createFactoryRouteAuth,
   createStateSigner,
@@ -242,9 +243,11 @@ const preparedArgs = await factory.prepare();
 // a link. Same secret as the factory's integration signer.
 export const channelLinkStateSigner = createChannelLinkStateSigner(stateSecret);
 
-// The channel-identity domain is registered during `factory.prepare()`, so
-// it's resolvable off the shared FactoryStorage by the time we get here.
+// The channel-identity + projects domains are registered during
+// `factory.prepare()`, so they're resolvable off the shared FactoryStorage by
+// the time we get here.
 const accountLinks = storage.getDomain<ChannelIdentityStorage>('channel-identity');
+const factoryProjects = storage.getDomain<FactoryProjectsStorage>('projects');
 
 const mcAgentController = preparedArgs.agentControllers?.['code'];
 if (mcAgentController) {
@@ -253,6 +256,7 @@ if (mcAgentController) {
       getMastra: () => mcAgentController.getMastra(),
       accountLinks,
       channelLinkStateSigner,
+      projects: factoryProjects,
     }),
   );
 }
