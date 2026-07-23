@@ -19,4 +19,6 @@ export type {
   BlobStoreProvider,
   BrowserProvider,
   WorkspaceProvider,
+  WorkflowBuilderOptions,
+  IWorkflowBuilder,
 } from './types';

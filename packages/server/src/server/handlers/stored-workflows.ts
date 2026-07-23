@@ -30,6 +30,7 @@ export const LIST_STORED_WORKFLOWS_ROUTE = createRoute({
   description: 'Returns workflow definitions persisted to storage. Filterable by status and authorId.',
   tags: ['Stored Workflows'],
   requiresAuth: true,
+  requiresPermission: 'stored-workflows:read',
   handler: async ({ mastra, status, authorId }) => {
     try {
       const storage = mastra.getStorage();
@@ -59,6 +60,7 @@ export const GET_STORED_WORKFLOW_ROUTE = createRoute({
   description: 'Returns a single workflow definition persisted to storage.',
   tags: ['Stored Workflows'],
   requiresAuth: true,
+  requiresPermission: 'stored-workflows:read',
   handler: async ({ mastra, storedWorkflowId }) => {
     try {
       const storage = mastra.getStorage();
@@ -96,6 +98,7 @@ export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
     'Persists a static workflow definition and live-registers it on the running Mastra instance. Idempotent — same id updates in place.',
   tags: ['Stored Workflows'],
   requiresAuth: true,
+  requiresPermission: 'stored-workflows:write',
   handler: async ({ mastra, ...def }) => {
     try {
       // The Zod schema output is structurally compatible with
@@ -131,6 +134,7 @@ export const DELETE_STORED_WORKFLOW_ROUTE = createRoute({
   description: 'Removes a stored workflow definition and unregisters the live workflow instance. Idempotent.',
   tags: ['Stored Workflows'],
   requiresAuth: true,
+  requiresPermission: 'stored-workflows:write',
   handler: async ({ mastra, storedWorkflowId }) => {
     try {
       const storage = mastra.getStorage();

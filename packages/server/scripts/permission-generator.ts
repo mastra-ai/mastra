@@ -59,6 +59,7 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   'stored-prompt-blocks': 'stored prompt blocks',
   'stored-scorers': 'stored scorers',
   'stored-skills': 'stored skills',
+  'stored-workflows': 'stored workflows',
   'stored-workspaces': 'stored workspaces',
   system: 'system info',
   tools: 'tools',

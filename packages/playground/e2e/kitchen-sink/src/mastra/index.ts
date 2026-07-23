@@ -1,7 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
 import { computeNextFireAt } from '@mastra/core/workflows';
-import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
 
 import {
@@ -19,6 +18,7 @@ import { responseQualityScorer, responseTimeScorer } from './scorers';
 import { initE2EStorage, storage } from './storage';
 import { complexWorkflow, enumWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 import { scheduledWorkflow, multiScheduledWorkflow } from './workflows/scheduled-workflow';
+import { E2EEditor } from './workflow-builder-editor';
 
 await initE2EStorage();
 
@@ -38,7 +38,7 @@ export const mastra = new Mastra({
     level: 'error',
   }),
   storage,
-  editor: new MastraEditor({
+  editor: new E2EEditor({
     source: 'code',
     builder: {
       enabled: true,
@@ -49,6 +49,7 @@ export const mastra = new Mastra({
         },
       },
     },
+    workflowBuilder: { enabled: true },
   }),
   mcpServers: {
     simpleMcpServer,

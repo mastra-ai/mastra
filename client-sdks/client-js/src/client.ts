@@ -80,6 +80,7 @@ import {
   Conversations,
   Observability,
   StoredAgent,
+  StoredWorkflow,
   StoredPromptBlock,
   StoredMCPClient,
   StoredScorer,
@@ -129,6 +130,10 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListStoredWorkflowsParams,
+  ListStoredWorkflowsResponse,
+  UpsertStoredWorkflowParams,
+  UpsertStoredWorkflowResponse,
   ListStoredPromptBlocksParams,
   ListStoredPromptBlocksResponse,
   CreateStoredPromptBlockParams,
@@ -147,6 +152,7 @@ import type {
   StoredSkillResponse,
   GetSystemPackagesResponse,
   BuilderSettingsResponse,
+  WorkflowBuilderSettingsResponse,
   BuilderAvailableModelsResponse,
   PermissionPatternsResponse,
   InfrastructureStatusResponse,
@@ -252,8 +258,8 @@ export class MastraClient extends BaseResource {
    * @param version - Optional version selector for stored agent overrides
    * @returns Agent instance
    */
-  public getAgent(agentId: string, version?: AgentVersionIdentifier) {
-    return new Agent(this.options, agentId, version);
+  public getAgent(agentId: string, version?: AgentVersionIdentifier, routeOverrides?: { stream?: string }) {
+    return new Agent(this.options, agentId, version, routeOverrides);
   }
 
   /**
@@ -1285,6 +1291,30 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
+  // Stored Workflows
+  // ============================================================================
+
+  public listStoredWorkflows(params?: ListStoredWorkflowsParams): Promise<ListStoredWorkflowsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.authorId) searchParams.set('authorId', params.authorId);
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/workflows${queryString ? `?${queryString}` : ''}`);
+  }
+
+  public upsertStoredWorkflow(params: UpsertStoredWorkflowParams): Promise<UpsertStoredWorkflowResponse> {
+    return this.request('/stored/workflows', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  public getStoredWorkflow(storedWorkflowId: string): StoredWorkflow {
+    return new StoredWorkflow(this.options, storedWorkflowId);
+  }
+
+  // ============================================================================
   // Stored Prompt Blocks
   // ============================================================================
 
@@ -1593,6 +1623,13 @@ export class MastraClient extends BaseResource {
    */
   public getBuilderSettings(): Promise<BuilderSettingsResponse> {
     return this.request('/editor/builder/settings');
+  }
+
+  /**
+   * Retrieves workflow builder settings for UI gating.
+   */
+  public getWorkflowBuilderSettings(): Promise<WorkflowBuilderSettingsResponse> {
+    return this.request('/editor/workflow-builder/settings');
   }
 
   /**

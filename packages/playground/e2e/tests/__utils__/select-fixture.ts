@@ -12,7 +12,8 @@ export type Fixtures =
   | 'agent-builder-standup'
   | 'agent-builder-pr-reviewer'
   | 'agent-builder-onboarding'
-  | 'agent-builder-complex';
+  | 'agent-builder-complex'
+  | 'workflow-builder-lifecycle';
 
 export const selectFixture = async (page: Page, fixture: Fixtures) => {
   const setFixture = (browserFixture: Fixtures) => {
@@ -23,7 +24,7 @@ export const selectFixture = async (page: Page, fixture: Fixtures) => {
   };
 
   await page.route(
-    /\/agents\/[^/]+\/(?:generate|stream|generate-legacy|stream-legacy|stream-until-idle|network|signals|send-message)(?:[/?#]|$)/,
+    /(?:\/agents\/[^/]+\/(?:generate|stream|generate-legacy|stream-legacy|stream-until-idle|network|signals|send-message)|\/editor\/workflow-builder\/stream)(?:[/?#]|$)/,
     route => injectFixtureIntoAgentRequest(route, fixture),
   );
   await page.context().addInitScript(setFixture, fixture);

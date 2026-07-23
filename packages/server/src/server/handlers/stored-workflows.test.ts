@@ -17,6 +17,18 @@ import {
   UPSERT_STORED_WORKFLOW_ROUTE,
 } from './stored-workflows';
 
+describe('stored workflow route permissions', () => {
+  it('requires read access for list and detail routes', () => {
+    expect(LIST_STORED_WORKFLOWS_ROUTE.requiresPermission).toBe('stored-workflows:read');
+    expect(GET_STORED_WORKFLOW_ROUTE.requiresPermission).toBe('stored-workflows:read');
+  });
+
+  it('requires write access for upsert and delete routes', () => {
+    expect(UPSERT_STORED_WORKFLOW_ROUTE.requiresPermission).toBe('stored-workflows:write');
+    expect(DELETE_STORED_WORKFLOW_ROUTE.requiresPermission).toBe('stored-workflows:write');
+  });
+});
+
 // =============================================================================
 // Helpers
 // =============================================================================
@@ -65,7 +77,7 @@ function buildMastra() {
     logger: false,
     storage,
     tools: { 'echo-tool': echoTool, 'inc-tool': incTool } as any,
-    agents: { summarizer: summarizerAgent } as any,
+    agents: { summarizerRegistration: summarizerAgent } as any,
   });
 
   return mastra;

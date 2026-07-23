@@ -33,6 +33,7 @@ export interface StreamChatProviderProps {
    */
   initialUserMessage?: string;
   clientTools?: ClientToolsInput;
+  createClientTools?: () => ClientToolsInput;
   /**
    * Optional per-call system-prompt augmentation forwarded to the agent on
    * every send via `modelSettings.instructions`. Read fresh at send time so the
@@ -40,6 +41,8 @@ export interface StreamChatProviderProps {
    * list and is not persisted as a chat turn.
    */
   extraInstructions?: string;
+  streamPath?: string;
+  enableThreadSignals?: boolean;
   debounceTime?: number;
   children: ReactNode;
 }
@@ -50,15 +53,19 @@ export const StreamChatProvider = ({
   initialMessages,
   initialUserMessage,
   clientTools,
+  createClientTools,
   extraInstructions,
+  streamPath,
+  enableThreadSignals,
   debounceTime = 0,
   children,
 }: StreamChatProviderProps) => {
-  const threadSignalsEnabled = window.MASTRA_AGENT_SIGNALS !== 'false';
+  const threadSignalsEnabled = enableThreadSignals ?? window.MASTRA_AGENT_SIGNALS !== 'false';
   const { messages, isRunning, sendMessage, approveToolCall, declineToolCall } = useChat({
     agentId,
     initialMessages,
     enableThreadSignals: threadSignalsEnabled,
+    streamPath,
   });
   const { data: currentUser } = useCurrentUser();
 
@@ -74,7 +81,7 @@ export const StreamChatProvider = ({
 
   const send = useCallback(
     (message: string) => {
-      const tools = clientToolsRef.current;
+      const tools = createClientTools?.() ?? clientToolsRef.current;
       const instructions = instructionsRef.current;
       const requestContext = new RequestContext();
       requestContext.set('user', currentUser);
@@ -110,7 +117,7 @@ export const StreamChatProvider = ({
 
       void sendMessage(payload);
     },
-    [sendMessage, currentUser],
+    [sendMessage, currentUser, createClientTools],
   );
 
   const hasDispatchedStarterRef = useRef(false);

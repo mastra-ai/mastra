@@ -5,6 +5,7 @@
  */
 import type { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
+import { normalizeWorkflowBuilderDefinition } from '@mastra/core/workflows/builder';
 import { z } from 'zod';
 
 // Optional step-level knobs that round-trip on both agent and tool entries.
@@ -111,13 +112,13 @@ const graphEntry = z.discriminatedUnion('type', [
     steps: z
       .array(singleStepEntry)
       .describe(
-        'Children run in parallel on the same input. Each child MUST be agent/tool/mapping — no nested containers.',
+        'Children run in parallel on the same input. Each child MUST be agent/tool/mapping/nested workflow — no nested containers.',
       ),
   }),
   z.object({
     type: z.literal('foreach'),
     step: foreachInnerStep.describe(
-      "The inner step, run once per element of the previous step's array output. MUST be `agent` or `tool` — mapping steps cannot be foreach inner steps because their output shape isn't per-element executable. Give this inner step its own unique `id` distinct from surrounding steps.",
+      "The inner step, run once per element of the previous step's array output. MUST be `agent`, `tool`, or nested `workflow` — mapping steps cannot be foreach inner steps. Give this inner step its own unique `id` distinct from surrounding steps.",
     ),
     opts: z
       .object({ concurrency: z.number().int().positive() })
@@ -161,21 +162,28 @@ const graphEntry = z.discriminatedUnion('type', [
   }),
 ]);
 
-export const saveWorkflowTool = createTool({
-  id: 'save-workflow',
-  description:
-    'Persist a static workflow definition and live-register it on the running Mastra instance. Supports all nine step types the engine can rehydrate: agent, tool, mapping, parallel, foreach, sleep, sleepUntil, conditional, loop. Conditional and loop entries require a declarative `predicate` payload — JS closure conditions cannot round-trip through storage. After this returns, the workflow is immediately runnable. Call it exactly once with the complete definition; there is no incremental save API.',
-  inputSchema: z.object({
+export const workflowDefinitionInputSchema = z.preprocess(
+  normalizeWorkflowBuilderDefinition,
+  z.object({
     id: z.string().describe('Workflow id — kebab-case, descriptive.'),
     description: z.string().optional(),
     inputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow input.'),
     outputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow output.'),
+    stateSchema: z.any().optional().describe('Optional JSON Schema for persisted workflow state.'),
+    requestContextSchema: z.any().optional().describe('Optional JSON Schema for request context values.'),
     graph: z
       .array(graphEntry)
       .describe(
-        'The workflow as an ordered array of step entries. Every one of the seven step types is a first-class option here; the discriminated-union schema lists them explicitly.',
+        'The workflow as an ordered array covering all ten persisted graph families: agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop.',
       ),
   }),
+);
+
+export const saveWorkflowTool = createTool({
+  id: 'save-workflow',
+  description:
+    'Persist a static workflow definition and live-register it on the running Mastra instance. Supports all ten persisted graph families: agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop. Conditional and loop entries require declarative predicates; JS closures cannot round-trip through storage. After this returns, the workflow is immediately runnable. Call it exactly once with the complete definition; there is no incremental save API.',
+  inputSchema: workflowDefinitionInputSchema,
   outputSchema: z.object({
     ok: z.literal(true),
     id: z.string(),
@@ -183,13 +191,14 @@ export const saveWorkflowTool = createTool({
   execute: async (def, { mastra }) => {
     if (!mastra) throw new Error('save-workflow requires a Mastra context.');
     const m = mastra as Mastra;
+    const normalizedDefinition = normalizeWorkflowBuilderDefinition(def);
 
     // `mastra.addStoredWorkflow` performs registry pre-flight — a mis-classified
     // agentId/toolId or unregistered id throws before rehydration with an
     // actionable message listing every offender. It also rejects JSON Schemas
     // that use keywords the storage-side converter can't rehydrate
     // (oneOf/anyOf/allOf/not/$ref/patternProperties/discriminator).
-    await m.addStoredWorkflow(def as Parameters<Mastra['addStoredWorkflow']>[0]);
-    return { ok: true as const, id: def.id };
+    await m.addStoredWorkflow(normalizedDefinition as Parameters<Mastra['addStoredWorkflow']>[0]);
+    return { ok: true as const, id: normalizedDefinition.id };
   },
 });

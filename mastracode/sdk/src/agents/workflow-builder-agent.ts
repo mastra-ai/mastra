@@ -11,6 +11,7 @@
  * no per-step mutations.
  */
 import { Agent } from '@mastra/core/agent';
+import { WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS } from '@mastra/core/workflows/builder';
 import { listAvailableAgentsTool } from '../tools/workflows/list-available-agents.js';
 import { listAvailableToolsTool } from '../tools/workflows/list-available-tools.js';
 import { listAvailableWorkflowsTool } from '../tools/workflows/list-available-workflows.js';
@@ -30,6 +31,8 @@ export const workflowBuilderAgent = new Agent({
   instructions: `You are the Workflow Builder.
 
 Your job: turn a plain-language description into a complete static workflow definition that you then persist by calling save-workflow exactly once.
+
+${WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS}
 
 # How a workflow runs
 
@@ -62,7 +65,7 @@ For every adjacent pair of steps you plan, run this check:
 - If the NEXT step is a **tool** → its required input is the tool's \`inputSchema\` from \`list-available-tools\`. If the previous step's output doesn't match every required field, insert a mapping producing exactly that shape.
 - If the NEXT step is a **workflow** → its required input is the referenced workflow's \`inputSchema\` (from \`list-available-workflows\`). If the previous step's output doesn't match, insert a mapping. The nested workflow runs to completion and its final output becomes the next step's input.
 - If the NEXT step is a **mapping** → no check. Mappings can pull from any prior step by id.
-- If the NEXT step is a **foreach** → the previous step's output MUST be a raw array \`Array<T>\`, where \`T\` structurally matches the foreach's INNER step's input. Recurse the check: inner is agent → \`T\` must be \`{ prompt: string }\`; inner is tool → \`T\` must be that tool's \`inputSchema\`.
+- If the NEXT step is a **foreach** → the previous step's output MUST be a raw array \`Array<T>\`, where \`T\` structurally matches the foreach's INNER step's input. Recurse the check: inner is agent → \`T\` must be \`{ prompt: string }\`; inner is tool → \`T\` must be that tool's \`inputSchema\`; inner is workflow → \`T\` must be the referenced workflow's \`inputSchema\`.
 - If the NEXT step is a **parallel** → its children each receive the previous step's output. Each child runs the check independently for its own input shape.
 - If the NEXT step is **sleep** or **sleepUntil** → pass-through; the check applies to the step AFTER it.
 - If the NEXT step is a **conditional** → each branch step receives the previous step's output; recurse the check independently per branch step. The predicates themselves only read paths — they do not consume input.

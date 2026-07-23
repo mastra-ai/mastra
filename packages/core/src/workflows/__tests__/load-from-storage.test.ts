@@ -186,6 +186,92 @@ describe('storage round-trip', () => {
     expect((rehydratedResult as any).result.message).toBe('Doubled value is 10');
   });
 
+  it('rehydrates mappings by local tool step id when it differs from the registered tool id', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      storage: new InMemoryStore({ id: 'local-tool-step-mapping' }),
+    });
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'local-tool-step-mapping',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { result: { type: 'number' } }, required: ['result'] },
+        graph: [
+          { type: 'tool', id: 'calculate', toolId: 'double-tool' },
+          {
+            type: 'mapping',
+            id: 'output',
+            mapConfig: JSON.stringify({ result: { step: 'calculate', path: 'doubled' } }),
+          },
+        ],
+      },
+      mastra,
+    );
+    mastra.addWorkflow(workflow, 'local-tool-step-mapping');
+
+    const run = await mastra.getWorkflow('local-tool-step-mapping').createRun();
+    const result = await run.start({ inputData: { value: 5 } });
+
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ result: 10 });
+  });
+
+  it('rehydrates mappings by local agent step id when it differs from the registered agent id', async () => {
+    const supportAgent = fixedResponseAgent('support-agent', 'resolved');
+    const mastra = new Mastra({
+      logger: false,
+      agents: { supportAgent },
+      storage: new InMemoryStore({ id: 'local-agent-step-mapping' }),
+    });
+
+    await expect(
+      rehydrateWorkflow(
+        {
+          id: 'local-agent-step-mapping',
+          inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
+          outputSchema: { type: 'object', properties: { response: { type: 'string' } }, required: ['response'] },
+          graph: [
+            { type: 'agent', id: 'answer-request', agentId: 'support-agent' },
+            {
+              type: 'mapping',
+              id: 'output',
+              mapConfig: JSON.stringify({ response: { step: 'answer-request', path: 'text' } }),
+            },
+          ],
+        },
+        mastra,
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it('rejects nested workflow call-site ids that cannot be preserved by live rehydration', async () => {
+    const inner = makeInnerWorkflow('inner-wf');
+    const mastra = new Mastra({
+      logger: false,
+      workflows: { 'inner-wf': inner },
+      storage: new InMemoryStore({ id: 'nested-call-site-identity' }),
+    });
+
+    await expect(
+      rehydrateWorkflow(
+        {
+          id: 'outer-wf',
+          inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+          outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+          graph: [
+            {
+              type: 'parallel',
+              steps: [{ type: 'workflow', id: 'local-inner', workflowId: 'inner-wf' }],
+            },
+          ],
+        },
+        mastra,
+      ),
+    ).rejects.toThrow(/id "local-inner" must match workflowId "inner-wf"/);
+  });
+
   it('addStoredWorkflow persists + live-registers; loadStoredWorkflows brings it back on a fresh boot', async () => {
     const storage = new InMemoryStore({ id: 'fresh-store' });
 
@@ -240,8 +326,8 @@ describe('rehydrate static subset — parallel / foreach / sleep / sleepUntil', 
       {
         type: 'parallel',
         steps: [
-          { type: 'tool', id: 'echo-tool', toolId: 'echo-tool' },
-          { type: 'tool', id: 'upper-tool', toolId: 'upper-tool' },
+          { type: 'tool', id: 'echo-left', toolId: 'echo-tool' },
+          { type: 'tool', id: 'echo-right', toolId: 'echo-tool' },
         ],
       },
       {
@@ -282,8 +368,8 @@ describe('rehydrate static subset — parallel / foreach / sleep / sleepUntil', 
     expect(parallel).toMatchObject({
       type: 'parallel',
       steps: [
-        { type: 'tool', toolId: 'echo-tool' },
-        { type: 'tool', toolId: 'upper-tool' },
+        { type: 'tool', id: 'echo-left', toolId: 'echo-tool' },
+        { type: 'tool', id: 'echo-right', toolId: 'echo-tool' },
       ],
     });
 
@@ -994,6 +1080,24 @@ describe('nested-workflow round-trip', () => {
     ).rejects.toThrow(/ghost-wf/);
   });
 
+  it('addStoredWorkflow rejects a nested workflow call-site id that differs from workflowId', async () => {
+    const inner = makeInnerWorkflow('shared-child');
+    const mastra = new Mastra({
+      storage: new InMemoryStore(),
+      workflows: { 'shared-child': inner },
+      tools: { 'plus-one': plusOneTool as any },
+    });
+
+    await expect(
+      mastra.addStoredWorkflow({
+        id: 'outer-mismatched-child',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
+        outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
+        graph: [{ type: 'workflow', id: 'local-child', workflowId: 'shared-child' }],
+      }),
+    ).rejects.toThrow('Nested workflow step id "local-child" must match workflowId "shared-child"');
+  });
+
   it('addStoredWorkflow rejects self-referencing (cycle)', async () => {
     const mastra = new Mastra({
       storage: new InMemoryStore(),
@@ -1130,7 +1234,7 @@ describe('nested-workflow round-trip', () => {
       inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       graph: [
-        { type: 'workflow', id: 'leaf-ref', workflowId: 'leaf-stored' },
+        { type: 'workflow', id: 'leaf-stored', workflowId: 'leaf-stored' },
         { type: 'tool', id: 'double', toolId: 'double-tool' },
       ],
     } as any);

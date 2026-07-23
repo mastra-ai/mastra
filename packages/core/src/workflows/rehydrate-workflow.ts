@@ -141,6 +141,7 @@ function applyGraphEntry(
       return;
     }
     case 'workflow': {
+      assertNestedWorkflowIdentity(entry.id, entry.workflowId);
       const nested = assertWorkflowExists(mastra, entry.workflowId);
       wf.then(nested);
       return;
@@ -280,6 +281,7 @@ function rehydrateSingleEntry(
       return { type: 'step', step: resolved as unknown as Step };
     }
     case 'workflow':
+      assertNestedWorkflowIdentity(entry.id, entry.workflowId);
       return { type: 'step', step: assertWorkflowExists(mastra, entry.workflowId) as unknown as Step };
     case 'mapping':
       throw new Error(
@@ -297,8 +299,8 @@ function parseMapConfig(raw: string, stepId: string): Record<string, any> {
 }
 
 /**
- * Walk a parsed (id-only) mapping config and turn step/initData id strings back
- * into live references. The result is the object shape that `.map()` accepts.
+ * Rebuild the object shape that `.map()` accepts. Step sources remain workflow-local
+ * step IDs because mapping execution resolves them from the run's step results.
  */
 function rehydrateMapConfig(cfg: Record<string, any>, mastra: Mastra): Record<string, any> {
   const out: Record<string, any> = {};
@@ -320,29 +322,12 @@ function rehydrateMapConfig(cfg: Record<string, any>, mastra: Mastra): Record<st
       }
       out[key] = mapVariable({ initData: wf as any, path: source.path });
     } else if ('step' in source) {
-      const stepRef = Array.isArray(source.step)
-        ? source.step.map((id: string) => resolveStepReferenceById(id, mastra))
-        : resolveStepReferenceById(source.step, mastra);
-      out[key] = mapVariable({ step: stepRef as any, path: source.path });
+      out[key] = mapVariable({ step: source.step as any, path: source.path });
     } else {
       out[key] = source;
     }
   }
   return out;
-}
-
-function resolveStepReferenceById(id: string, mastra: Mastra): any {
-  const agent = tryGetAgentById(mastra, id);
-  if (agent) return agent;
-  const tool = mastra.getTool?.(id);
-  if (tool) return tool;
-  // A mapping's `step:` source must point to a real step that ran earlier in
-  // the graph. If neither an agent nor a tool with this id is registered,
-  // rehydration is broken: don't paper over it with a synthetic {id} that
-  // would silently drop mapping wiring and only fail deep inside execution.
-  throw new Error(
-    `Stored workflow mapping references step "${id}" which is not registered as an agent or tool on this Mastra instance.`,
-  );
 }
 
 /**
@@ -366,6 +351,14 @@ function tryGetWorkflowById(mastra: Mastra, id: string): any | undefined {
     return (mastra as any).getWorkflow(id);
   } catch {
     return undefined;
+  }
+}
+
+function assertNestedWorkflowIdentity(id: string, workflowId: string): void {
+  if (id !== workflowId) {
+    throw new Error(
+      `Stored nested workflow step id "${id}" must match workflowId "${workflowId}" because live workflows do not support a distinct call-site id.`,
+    );
   }
 }
 

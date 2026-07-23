@@ -5332,6 +5332,18 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /editor/workflow-builder/settings": {
+    "method": "GET",
+    "path": "/editor/workflow-builder/settings",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /editor/builder/models/available": {
     "method": "GET",
     "path": "/editor/builder/models/available",

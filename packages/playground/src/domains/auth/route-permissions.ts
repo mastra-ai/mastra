@@ -47,6 +47,7 @@ export type RoutePermission = {
 export const ROUTE_PERMISSIONS: RoutePermission[] = [
   // Primary routes (highest priority for redirects)
   { route: '/agents', permission: 'agents:read', name: 'Agents' },
+  { route: '/workflow-builder', permission: 'stored-workflows:read', name: 'Workflow Builder' },
   { route: '/workflows', permission: 'workflows:read', name: 'Workflows' },
 
   // Observability - uses 'observability' resource for traces/metrics, 'logs' for logs

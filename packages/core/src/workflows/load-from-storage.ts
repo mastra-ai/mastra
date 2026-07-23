@@ -1,7 +1,5 @@
 /**
- * Round-trip a workflow between its in-process form (live `stepFlow` with
- * runtime references) and a JSON-safe storable form (ids + serialized mapping
- * configs, no closures). Used by the workflow-builder pipeline:
+ * Public barrel for the workflow persistence round-trip:
  *
  *   build → toStorableGraph(stepFlow) → persist → rehydrateWorkflow → addWorkflow
  *
