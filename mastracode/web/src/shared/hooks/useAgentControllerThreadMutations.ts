@@ -1,7 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
-import { agentControllerSessionMutationScope, agentControllerSwitchThreadMutationKey } from './agentControllerMutationArgs';
+import {
+  agentControllerSessionMutationScope,
+  agentControllerSwitchThreadMutationKey,
+} from './agentControllerMutationArgs';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,
