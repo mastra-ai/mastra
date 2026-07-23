@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useQuery } from '@tanstack/react-query';
 import { CircleDot, CircleX, GitMerge } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -23,10 +24,10 @@ function PullRequestIcon({ status }: { status: PullRequestSubscription['status']
   return <CircleDot size={13} aria-hidden />;
 }
 
-function statusColor(status: PullRequestSubscription['status']): string {
-  if (status === 'merged') return 'text-accent3 hover:text-accent3';
-  if (status === 'closed') return 'text-error hover:text-error';
-  return 'text-accent1 hover:text-accent1';
+function statusHoverColor(status: PullRequestSubscription['status']): string {
+  if (status === 'merged') return 'group-hover:text-accent3';
+  if (status === 'closed') return 'group-hover:text-error';
+  return 'group-hover:text-accent1';
 }
 
 interface PullRequestLinksProps {
@@ -131,16 +132,20 @@ export function PullRequestLinks({
   return (
     <div className="ml-auto flex items-center gap-2">
       {links.map(subscription => (
-        <a
+        <Button
           key={subscription.id}
+          as="a"
+          variant="ghost"
+          size="xs"
           href={subscription.url}
           target="_blank"
           rel="noreferrer"
-          className={`inline-flex items-center gap-1 ${statusColor(subscription.status)}`}
+          className="group"
           aria-label={`Open ${subscription.status} ${subscription.repoFullName} pull request ${subscription.pullRequestNumber}`}
         >
-          <PullRequestIcon status={subscription.status} /> PR #{subscription.pullRequestNumber}
-        </a>
+          <PullRequestIcon status={subscription.status} />
+          <span className={statusHoverColor(subscription.status)}>PR #{subscription.pullRequestNumber}</span>
+        </Button>
       ))}
     </div>
   );
