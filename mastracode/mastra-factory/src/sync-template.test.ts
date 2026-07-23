@@ -7,9 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
  * Validates the output of scripts/sync-template.mjs — the artifact users
- * actually receive. Runs the real script with no network dependency: the
- * script no longer shells out to npm, so the emitted template is entirely
- * derived from local monorepo state.
+ * actually receive. Runs the real script offline: a fake `npm` on PATH
+ * answers the latest-version lookups so no network is needed.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -19,11 +18,15 @@ const script = path.join(pkgRoot, 'scripts', 'sync-template.mjs');
 
 let workDir: string;
 let outDir: string;
+let fakeBinDir: string;
 let sentinel: string;
 
 function runSync(args: string[]): { status: number; stderr: string } {
   try {
-    execFileSync(process.execPath, [script, ...args], { stdio: 'pipe' });
+    execFileSync(process.execPath, [script, ...args], {
+      stdio: 'pipe',
+      env: { ...process.env, PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}` },
+    });
     return { status: 0, stderr: '' };
   } catch (err) {
     const e = err as { status?: number; stderr?: Buffer };
@@ -34,6 +37,11 @@ function runSync(args: string[]): { status: number; stderr: string } {
 beforeAll(() => {
   workDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sf-sync-test-')));
   outDir = path.join(workDir, 'out');
+
+  // Fake npm: resolves every `latest` dist-tag to a deterministic version.
+  fakeBinDir = path.join(workDir, 'bin');
+  fs.mkdirSync(fakeBinDir);
+  fs.writeFileSync(path.join(fakeBinDir, 'npm'), '#!/bin/sh\necho "9.9.9"\n', { mode: 0o755 });
 
   // Sentinel env file in the source tree — must never reach the template.
   sentinel = path.join(webRoot, '.env.test-sentinel');
@@ -86,17 +94,17 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     const envExample = fs.readFileSync(path.join(outDir, '.env.example'), 'utf8');
     expect(envExample).not.toMatch(/^[A-Z][A-Z0-9_]*=\s*$/m);
 
-    // package.json: monorepo coupling removed; every Mastra dep pins `latest`,
-    // matching every other create-mastra template.
+    // package.json: monorepo coupling removed; every Mastra dep uses the exact
+    // version resolved from npm's `latest` dist-tag.
     const pkg = JSON.parse(fs.readFileSync(path.join(outDir, 'package.json'), 'utf8'));
     const allDeps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies };
     for (const [name, spec] of Object.entries(allDeps)) {
       expect(spec, `${name} must not use a link:/workspace: spec`).not.toMatch(/^(link|workspace|catalog|file):/);
       if (name === 'mastra' || name.startsWith('@mastra/')) {
-        expect(spec, `${name} must be pinned to "latest"`).toBe('latest');
+        expect(spec, `${name} must use the resolved latest version`).toBe('9.9.9');
       }
     }
-    expect(pkg.dependencies['@mastra/memory']).toBe('latest');
+    expect(pkg.dependencies['@mastra/memory']).toBe('9.9.9');
     // No `.npmrc` ships — the template installs cleanly on npm with the
     // published `latest` set, same as every other create-mastra template.
     expect(fs.existsSync(path.join(outDir, '.npmrc'))).toBe(false);
@@ -107,10 +115,9 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     // expose. Remove once the deployer supports tsgo.
     expect(pkg.devDependencies.typescript).toMatch(/^\^5\./);
 
-    // Package-manager coupling never ships: the web project's pnpm lockfiles
-    // stay behind (a stale npm lock would pin the floating `latest` dist-tag
-    // at sync time). A template-specific `pnpm-workspace.yaml` with only
-    // `allowBuilds` is emitted so pnpm v10+ installs don't error on
+    // Package-manager coupling never ships: the web project's lockfiles stay
+    // behind. A template-specific `pnpm-workspace.yaml` with only `allowBuilds`
+    // is emitted so pnpm v10+ installs don't error on
     // ERR_PNPM_IGNORED_BUILDS.
     expect(fs.existsSync(path.join(outDir, 'pnpm-lock.yaml'))).toBe(false);
     expect(fs.existsSync(path.join(outDir, 'package-lock.json'))).toBe(false);
