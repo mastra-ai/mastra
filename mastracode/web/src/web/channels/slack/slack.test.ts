@@ -394,6 +394,7 @@ describe('work-item intake on dispatch', () => {
       reuseMode: 'preserve',
       input: {
         title: 'fix the login bug',
+        stages: ['execute'],
         externalSource: {
           integrationId: 'slack',
           type: 'thread',

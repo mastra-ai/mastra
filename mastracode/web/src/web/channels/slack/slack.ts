@@ -464,6 +464,9 @@ export async function upsertThreadWorkItem({
       reuseMode: 'preserve',
       input: {
         title: title || 'Slack thread',
+        // The run has already dispatched, so the card starts in `execute`
+        // (work in progress) rather than `intake` (awaiting triage).
+        stages: ['execute'],
         externalSource: {
           integrationId: platform,
           type: 'thread',
