@@ -191,6 +191,7 @@ describe('FactoryGithubEventService', () => {
             return { accepted: Promise.resolve({ accepted: true }) };
           },
         ),
+        state: { set: vi.fn(async () => {}) },
         sendMessage: vi.fn(async () => {}),
         sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
       };

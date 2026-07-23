@@ -27,6 +27,7 @@ function makeController(sendMessage = vi.fn(async () => {})) {
       }),
     },
     getWorkspace: vi.fn(() => ({ skills: undefined })),
+    state: { set: vi.fn(async () => {}) },
     sendMessage,
   };
   return {
@@ -203,8 +204,20 @@ describe('FactoryStartCoordinator', () => {
 
     expect(prepared).toMatchObject({ threadId: 'session-1', resourceId: 'session-1', sessionId: 'session-1' });
     expect(controller.createSession).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'session-1', resourceId: 'session-1', threadId: 'session-1' }),
+      expect.objectContaining({
+        id: 'session-1',
+        resourceId: 'session-1',
+        threadId: 'session-1',
+        tags: { factoryProjectId: PROJECT_ID, projectRepositoryId: 'project-repository-1' },
+      }),
     );
+    // Bound-agent gates (transition tool, factory-phase processor) resolve the
+    // session address from controller state — the coordinator must seed it
+    // server-side, never relying on a browser connecting to set it.
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      projectRepositoryId: 'project-repository-1',
+    });
     expect(session.thread.list).not.toHaveBeenCalled();
     expect(session.thread.switch).not.toHaveBeenCalled();
     expect(session.thread.create).not.toHaveBeenCalled();
