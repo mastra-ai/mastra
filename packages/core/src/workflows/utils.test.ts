@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  abortableSleep,
   cleanStepResult,
   createDeprecationProxy,
   getResumeLabelsByStepId,
@@ -332,5 +333,41 @@ describe('createDeprecationProxy', () => {
     });
 
     expect(proxy.retryCount).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// abortableSleep
+// ---------------------------------------------------------------------------
+
+describe('abortableSleep', () => {
+  it('resolves after the given duration when not aborted', async () => {
+    const start = Date.now();
+    await abortableSleep(50);
+    expect(Date.now() - start).toBeGreaterThanOrEqual(40);
+  });
+
+  it('resolves immediately when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const start = Date.now();
+    await abortableSleep(60_000, controller.signal);
+    expect(Date.now() - start).toBeLessThan(1_000);
+  });
+
+  it('resolves early and clears the timer when aborted mid-sleep', async () => {
+    const controller = new AbortController();
+    const start = Date.now();
+    const p = abortableSleep(60_000, controller.signal);
+    setTimeout(() => controller.abort(), 50);
+    await p;
+    expect(Date.now() - start).toBeLessThan(1_000);
+  });
+
+  it('resolves immediately for a non-positive duration', async () => {
+    const start = Date.now();
+    await abortableSleep(0);
+    await abortableSleep(-100);
+    expect(Date.now() - start).toBeLessThan(1_000);
   });
 });

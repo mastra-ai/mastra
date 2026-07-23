@@ -218,6 +218,36 @@ export function getResumeLabelsByStepId(
     );
 }
 
+/**
+ * Sleep for `ms` milliseconds, resolving early if `signal` aborts.
+ *
+ * The underlying timer is cleared on abort (so a canceled run does not hold the
+ * process open for the full sleep duration) and is `unref`'d so a long sleep
+ * never keeps the Node event loop alive on its own.
+ */
+export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0 || signal?.aborted) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>(resolve => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+
+    // Don't keep the event loop alive solely for a pending sleep timer.
+    (timer as unknown as { unref?: () => void }).unref?.();
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 export const runCountDeprecationMessage =
   "Warning: 'runCount' is deprecated and will be removed on November 4th, 2025. Please use 'retryCount' instead.";
 
