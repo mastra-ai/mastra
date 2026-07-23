@@ -132,6 +132,17 @@ Channels with no resolver set dispatch as before, with no tenant stamped.
 
 Once senders are linked, the `resolveResourceId` config hook can key new channel threads to tenant-owned resources. For example, return a workspace session ID owned by the linked user so the channel conversation runs in that user's session instead of a per-thread default.
 
+The `resolveThreadId` config hook controls the internal Mastra thread ID the same way. It runs after `resolveResourceId` with the resolved owner on its context, and only for newly created threads. Return `defaultThreadId` to keep the built-in random ID, or an ID you control — for example the session ID from `resolveResourceId`, so channel-created threads use the same `threadId === sessionId` convention as threads your app creates itself:
+
+```typescript filename="channels.ts"
+const channels = new AgentControllerChannels({
+  adapters,
+  resolveResourceId: async (ctx) => resolveSessionId(ctx),
+  resolveThreadId: ({ resourceId, defaultThreadId }) =>
+    isSessionId(resourceId) ? resourceId : defaultThreadId,
+})
+```
+
 ## Custom Chat SDK handlers
 
 The Chat SDK instance is constructed lazily during channel initialization, after the server boots. To register extra Chat SDK handlers — for example a custom slash command — use `onSdkReady`. The callback runs with the SDK instance as soon as it exists, or immediately when it already does.

@@ -31,6 +31,8 @@ export type {
   PostableMessage,
   ResolveResourceId,
   ResolveResourceIdContext,
+  ResolveThreadId,
+  ResolveThreadIdContext,
   StaticToolDisplay,
   StreamingConfig,
   StreamingOnlyToolDisplay,

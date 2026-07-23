@@ -6,6 +6,7 @@ import {
   type ChannelHandler,
   type ChannelHandlers,
   type ResolveResourceId,
+  type ResolveThreadId,
 } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
 import type {
@@ -479,6 +480,18 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
 }
 
 /**
+ * Thread id for a NEW Slack channel thread. Repo-backed threads take the
+ * user-session id AS their thread id, matching the web convention
+ * (FactoryStartCoordinator seeds threads with threadId = sessionId) so
+ * `/workspaces/{sessionId}/threads/{sessionId}` resolves Slack-created
+ * sessions exactly like web-created ones — no `?resourceId=` override needed.
+ * Chat-only threads keep the default random id: their `channel:...`
+ * resourceId is a memory key, not a unique thread id.
+ */
+export const resolveChannelThreadId: ResolveThreadId = ({ resourceId, defaultThreadId }) =>
+  resourceId.startsWith('channel:') ? defaultThreadId : resourceId;
+
+/**
  * Structural view of the chat SDK surface the `/factory` command needs.
  * Local rather than imported from `chat` for the same version-clash reason as
  * `HandlerThread` — and the command only touches this sliver.
@@ -740,6 +753,7 @@ export function createAgentControllerSlackChannels(deps: SlackChannelDeps): Agen
     // New linked+repo-backed threads own a Factory user-session id as their
     // resourceId, which is what makes the controller session repo-backed.
     resolveResourceId: createChannelResourceIdResolver(deps),
+    resolveThreadId: resolveChannelThreadId,
   });
 
   // Gate dispatch on the sender having linked their Slack account to a Mastra

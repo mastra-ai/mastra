@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createChannelResourceIdResolver,
+  resolveChannelThreadId,
   createHandlers,
   promptIfUnlinked,
   registerFactoryCommand,
@@ -460,6 +461,18 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe('repo-backed thread ids (resolveThreadId)', () => {
+  it('a repo-backed thread takes the session id as its thread id (web convention: threadId = sessionId)', () => {
+    expect(resolveChannelThreadId({ resourceId: 'us-new', defaultThreadId: 'uuid-1' } as any)).toBe('us-new');
+  });
+
+  it('a chat-only thread keeps the default random id', () => {
+    expect(resolveChannelThreadId({ resourceId: 'channel:slack:C-1:1700.42', defaultThreadId: 'uuid-1' } as any)).toBe(
+      'uuid-1',
+    );
   });
 });
 
