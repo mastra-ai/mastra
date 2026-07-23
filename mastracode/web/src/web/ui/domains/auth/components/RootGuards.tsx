@@ -34,12 +34,7 @@ const OnboardingGuard = () => {
 
   if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
   if ((factories?.length ?? 0) === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
-  if (
-    factories &&
-    factories.length > 0 &&
-    pathname === '/onboarding' &&
-    !hasResumableFactoryOnboarding(factories)
-  ) {
+  if (factories && factories.length > 0 && pathname === '/onboarding' && !hasResumableFactoryOnboarding(factories)) {
     return <Navigate to={`/factories/${factories[0].id}`} replace />;
   }
 

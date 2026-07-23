@@ -71,9 +71,7 @@ describe('Factory root route', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
         HttpResponse.json({ connections: [] }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () =>
-        HttpResponse.json({ workItems: [] }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
     );
 
     const router = renderFactoryRoute('/onboarding');
@@ -154,9 +152,7 @@ describe('Factory root route', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
         HttpResponse.json({ connections: [] }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () =>
-        HttpResponse.json({ workItems: [] }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
     );
 
     const router = renderFactoryRoute('/');
@@ -184,9 +180,7 @@ describe('Factory root route', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
         HttpResponse.json({ connections: [] }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () =>
-        HttpResponse.json({ workItems: [] }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
     );
 
     const router = renderFactoryRoute('/onboarding');

@@ -2,11 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import {
-  deleteGithubPat,
-  fetchGithubPatStatus,
-  saveGithubPat,
-} from '../../web/ui/domains/workspaces/services/github';
+import { deleteGithubPat, fetchGithubPatStatus, saveGithubPat } from '../../web/ui/domains/workspaces/services/github';
 import type { GithubPatKind } from '../../web/ui/domains/workspaces/services/github';
 
 /**
