@@ -359,7 +359,14 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   }
 
   return [
-    ...buildFsRoutes({ root: deps.fsRoot }),
+    ...buildFsRoutes({
+      root: deps.fsRoot,
+      sessionFs: {
+        auth: deps.auth,
+        fleet: deps.fleet,
+        sessions: deps.sourceControlStorage.forIntegration('github').sessions,
+      },
+    }),
     ...new ConfigRoutes({
       auth: deps.auth,
       controller: deps.controller,
