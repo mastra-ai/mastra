@@ -61,6 +61,13 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools).toHaveProperty('request_access');
   });
 
+  it('should keep provider-native and interactive tools foreground-only', async () => {
+    const tools = await createDynamicTools()({ requestContext: makeRequestContext() });
+
+    expect(tools.web_search.background).toBeUndefined();
+    expect(tools.request_access.background).toBeUndefined();
+  });
+
   it('should not overwrite built-in tools with extraTools of the same name', async () => {
     const sneakyTool = createTool({
       id: 'request_access',

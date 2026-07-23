@@ -22,8 +22,13 @@ const WORKER_GROUP = 'background-task-workers';
 
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
+  private readonly workerId = randomUUID();
+  private readonly processAffineDispatchTopic = `${TOPIC_DISPATCH}:${this.workerId}`;
   config: Required<
-    Pick<BackgroundTaskManagerConfig, 'globalConcurrency' | 'perAgentConcurrency' | 'backpressure' | 'defaultTimeoutMs'>
+    Pick<
+      BackgroundTaskManagerConfig,
+      'globalConcurrency' | 'perAgentConcurrency' | 'backpressure' | 'defaultTimeoutMs' | 'recoverStaleTasksOnStart'
+    >
   > &
     BackgroundTaskManagerConfig;
 
@@ -67,6 +72,7 @@ export class BackgroundTaskManager {
       perAgentConcurrency: config.perAgentConcurrency ?? 5,
       backpressure: config.backpressure ?? 'queue',
       defaultTimeoutMs: config.defaultTimeoutMs ?? 300_000,
+      recoverStaleTasksOnStart: config.recoverStaleTasksOnStart ?? true,
       ...config,
     };
   }
@@ -143,10 +149,12 @@ export class BackgroundTaskManager {
     }
 
     await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
+    await this.pubsub.subscribe(this.processAffineDispatchTopic, this.workerCallback);
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
 
-    // Recover stale tasks from a previous process
-    await this.recoverStaleTasks();
+    if (this.config.recoverStaleTasksOnStart) {
+      await this.recoverStaleTasks();
+    }
 
     // Start periodic cleanup if configured
     const cleanupConfig = this.config.cleanup;
@@ -347,8 +355,9 @@ export class BackgroundTaskManager {
       if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
       this.deregisterTaskContext(taskId);
 
-      // Also publish cancel on dispatch topic for distributed worker abort
-      await this.pubsub.publish(TOPIC_DISPATCH, {
+      // Route cancellation to the same process that owns an invocation-bound executor.
+      const dispatchTopic = this.taskContexts.has(taskId) ? this.processAffineDispatchTopic : TOPIC_DISPATCH;
+      await this.pubsub.publish(dispatchTopic, {
         type: 'task.cancel',
         data: { taskId },
         runId: taskId,
@@ -394,11 +403,10 @@ export class BackgroundTaskManager {
     // lazy worker start for the library-mode process-restart case.
     await this.#ensureExecutionWorkersStarted();
 
-    // Hand off to the worker subscriber. `task.resume` rides the same
-    // `TOPIC_DISPATCH` + `WORKER_GROUP` exactly-once channel as
-    // `task.dispatch`, so any worker (including a different process from
-    // the one that suspended the task) can pick it up.
-    await this.pubsub.publish(TOPIC_DISPATCH, {
+    // Resume invocation-bound executors on their owning manager. A task
+    // without local context remains portable through the shared worker group.
+    const dispatchTopic = this.taskContexts.has(taskId) ? this.processAffineDispatchTopic : TOPIC_DISPATCH;
+    await this.pubsub.publish(dispatchTopic, {
       type: 'task.resume',
       data: { taskId, resumeData },
       runId: taskId,
@@ -724,6 +732,7 @@ export class BackgroundTaskManager {
 
     if (this.workerCallback) {
       await this.pubsub.unsubscribe(TOPIC_DISPATCH, this.workerCallback);
+      await this.pubsub.unsubscribe(this.processAffineDispatchTopic, this.workerCallback);
     }
     if (this.resultCallback) {
       await this.pubsub.unsubscribe(TOPIC_RESULT, this.resultCallback);
@@ -760,10 +769,11 @@ export class BackgroundTaskManager {
   private async dispatch(task: BackgroundTask, isRestart?: boolean): Promise<void> {
     await this.#ensureExecutionWorkersStarted();
 
-    // Publish `task.dispatch` on `TOPIC_DISPATCH` with `WORKER_GROUP`, so
-    // exactly one worker handles the task. `handleDispatch` flips the
-    // task to running and starts the per-task workflow run.
-    await this.pubsub.publish(TOPIC_DISPATCH, {
+    // Invocation-bound executors are closures owned by this manager and cannot
+    // run in another process. Static executors remain portable and use the
+    // shared competing-consumer topic.
+    const dispatchTopic = this.taskContexts.has(task.id) ? this.processAffineDispatchTopic : TOPIC_DISPATCH;
+    await this.pubsub.publish(dispatchTopic, {
       type: 'task.dispatch',
       data: {
         taskId: task.id,

@@ -901,6 +901,44 @@ describe('BackgroundTaskManager', () => {
   });
 
   describe('recovery on startup', () => {
+    it('leaves running tasks untouched when startup recovery is disabled', async () => {
+      const seedStorage = new MockStore();
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      const startedAt = new Date(Date.now() - 60_000);
+      await bgStore!.createTask({
+        id: 'live-elsewhere',
+        status: 'running',
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt,
+      });
+
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true, recoverStaleTasksOnStart: false },
+      });
+      await local.startWorkers();
+
+      try {
+        await tick(150);
+        await expect(local.backgroundTaskManager!.getTask('live-elsewhere')).resolves.toMatchObject({
+          status: 'running',
+          startedAt,
+        });
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
     it('recovers stale running tasks with retries available', async () => {
       // Pre-seed storage with a task in 'running' status as if a previous
       // process crashed mid-execution. A fresh manager.init() should flip

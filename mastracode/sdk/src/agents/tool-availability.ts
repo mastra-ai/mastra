@@ -83,6 +83,26 @@ export function guardPlanModePlanFileWrites({ workspaceToolName, input, context 
 
 export const MASTRACODE_WORKSPACE_TOOLS: WorkspaceToolsConfig = {
   ...TOOL_NAME_OVERRIDES,
+  [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+    ...TOOL_NAME_OVERRIDES[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE],
+    background: { enabled: true },
+  },
+  [WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]: {
+    ...TOOL_NAME_OVERRIDES[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES],
+    background: { enabled: true },
+  },
+  [WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT]: {
+    ...TOOL_NAME_OVERRIDES[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT],
+    background: { enabled: true },
+  },
+  [WORKSPACE_TOOLS.FILESYSTEM.GREP]: {
+    ...TOOL_NAME_OVERRIDES[WORKSPACE_TOOLS.FILESYSTEM.GREP],
+    background: { enabled: true },
+  },
+  [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: {
+    ...TOOL_NAME_OVERRIDES[WORKSPACE_TOOLS.LSP.LSP_INSPECT],
+    background: { enabled: true },
+  },
   hooks: {
     beforeToolCall: guardPlanModePlanFileWrites,
   },

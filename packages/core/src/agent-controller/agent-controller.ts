@@ -733,6 +733,7 @@ export class AgentController<TState = {}> {
       this.#internalMastra = new Mastra({
         logger: false,
         storage: this.config.storage,
+        ...(this.config.backgroundTasks ? { backgroundTasks: this.config.backgroundTasks } : {}),
         ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
         ...(gateways ? { gateways } : {}),

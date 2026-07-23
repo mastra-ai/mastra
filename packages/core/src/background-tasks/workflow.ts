@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { InternalSpans } from '../observability';
+import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
-import { createStep, createWorkflow } from '../workflows/evented';
 import type { BackgroundTaskManager } from './manager';
 import type { BackgroundTaskStatus } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
@@ -34,7 +34,12 @@ const bodyOutputSchema = z.object({
 const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting'];
 
 /**
- * Builds the per-task evented workflow that owns executor + retries.
+ * Builds the per-task workflow that owns executor + retries.
+ *
+ * The default execution engine is intentional: dispatch may arrive over a
+ * cross-process PubSub, but invocation-bound executors must remain in the
+ * originating manager process. Evented workflow dispatch would introduce a
+ * second competing-consumer hop that could move execution to another process.
  *
  * Shape: outer workflow runs an inner `[run-attempt, classify-outcome]`
  * workflow inside a `dountil` loop. `run-attempt` invokes the executor and
