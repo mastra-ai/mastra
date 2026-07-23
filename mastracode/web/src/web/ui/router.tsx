@@ -11,7 +11,7 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
-import { createBrowserRouter, Navigate, useLocation } from 'react-router';
+import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
 import Chat from './domains/chat/Chat';
@@ -53,6 +53,32 @@ function RootLanding() {
 
 function FactoryHomeRedirect() {
   return <Navigate to="work" replace />;
+}
+
+/**
+ * Factory-agnostic thread deep link, used by server-built links that don't
+ * know a factory id (e.g. the Slack "View Session" card, whose channel
+ * sessions are controller-scoped). Forwards to the first factory's workspaces
+ * thread route, preserving the query string — the `?resourceId=` override
+ * binds the chat surface to the channel session's resource there.
+ */
+function ChannelThreadRedirect() {
+  const { data: factories, isPending } = useFactoriesQuery();
+  const { threadId } = useParams<{ threadId: string }>();
+  const { search } = useLocation();
+
+  if (isPending) return null;
+
+  const firstFactory = factories?.[0];
+  // Empty list is bounced to /onboarding by OnboardingGuard before we render.
+  if (!firstFactory || !threadId) return null;
+
+  return (
+    <Navigate
+      to={`/factories/${firstFactory.id}/workspaces/channel/threads/${encodeURIComponent(threadId)}${search}`}
+      replace
+    />
+  );
 }
 
 export function createAppRoutes(): RouteObject[] {
@@ -110,6 +136,8 @@ export function createAppRoutes(): RouteObject[] {
             },
           ],
         },
+        // Server-built thread deep links without a factory id (Slack cards).
+        { path: 'threads/:threadId', element: <ChannelThreadRedirect /> },
         // Legacy deep links (the app used to serve everything at any path).
         { path: '*', element: <Navigate to="/" replace /> },
       ],
