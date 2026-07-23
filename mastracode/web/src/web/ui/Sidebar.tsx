@@ -6,7 +6,6 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../shared/api/config';
 import { clearMastraCodeStorage, redirectToLogout, useFactoryAuth } from './domains/auth';
-import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
@@ -81,7 +80,6 @@ export function Sidebar() {
                 <WorkspacesSection />
               </FactorySection>
               <UserSessionsSection />
-              <ThreadList />
             </section>
           </div>
         )}

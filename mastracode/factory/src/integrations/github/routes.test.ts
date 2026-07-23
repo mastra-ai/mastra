@@ -142,7 +142,15 @@ function subscriptionRow(row: Record<string, any>) {
   };
 }
 
+const settingsRows = new Map<string, Record<string, any>>();
+
 const integrationStorage = {
+  settings: {
+    get: vi.fn(async (orgId: string, userId: string) => settingsRows.get(`${orgId}:${userId}`) ?? null),
+    save: vi.fn(async (orgId: string, userId: string, config: Record<string, any>) => {
+      settingsRows.set(`${orgId}:${userId}`, config);
+    }),
+  },
   subscriptions: {
     create: vi.fn(async (input: Record<string, any>) => {
       const row = subscriptionRow({
@@ -643,6 +651,7 @@ beforeEach(() => {
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
+  settingsRows.clear();
   auditRecorded = [];
   auditFailure = undefined;
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
@@ -888,6 +897,81 @@ describe('status route', () => {
     expect(json.enabled).toBe(true);
     expect(json.connected).toBe(true);
     expect(json.installations[0].installationId).toBe(7);
+  });
+});
+
+describe('pat route', () => {
+  const jsonPost = (token: unknown, kind?: unknown) =>
+    new Request('http://localhost/web/github/pat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(kind === undefined ? { token } : { token, kind }),
+    });
+  const del = (kind?: string) =>
+    new Request(`http://localhost/web/github/pat${kind ? `?kind=${kind}` : ''}`, { method: 'DELETE' });
+
+  it('requires an authenticated org tenant', async () => {
+    const res = await buildApp(null).request('/web/github/pat');
+    expect(res.status).toBe(401);
+  });
+
+  it('reports not configured by default', async () => {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/pat');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ configured: false, reviewerConfigured: false });
+  });
+
+  it('saves a pasted worker token and reports configured without ever returning it', async () => {
+    const app = buildApp({ workosId: 'u1' });
+    const saved = await app.request(jsonPost('ghp_secret123'));
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({ configured: true, reviewerConfigured: false });
+
+    const status = await app.request('/web/github/pat');
+    const body = await status.json();
+    expect(body).toEqual({ configured: true, reviewerConfigured: false });
+    expect(JSON.stringify(body)).not.toContain('ghp_secret123');
+  });
+
+  it('saves and removes a reviewer token independently of the worker token', async () => {
+    const app = buildApp({ workosId: 'u1' });
+    await app.request(jsonPost('ghp_worker', 'default'));
+    const saved = await app.request(jsonPost('ghp_reviewer', 'reviewer'));
+    expect(await saved.json()).toEqual({ configured: true, reviewerConfigured: true });
+
+    const removed = await app.request(del('reviewer'));
+    expect(await removed.json()).toEqual({ configured: true, reviewerConfigured: false });
+  });
+
+  it('rejects an unknown token kind', async () => {
+    const app = buildApp({ workosId: 'u1' });
+    expect((await app.request(jsonPost('ghp_x', 'author'))).status).toBe(400);
+    expect((await app.request(del('author'))).status).toBe(400);
+  });
+
+  it('rejects an empty or whitespace token', async () => {
+    const app = buildApp({ workosId: 'u1' });
+    expect((await app.request(jsonPost('   '))).status).toBe(400);
+    expect((await app.request(jsonPost('bad token'))).status).toBe(400);
+    expect((await app.request(jsonPost(42))).status).toBe(400);
+    const status = await app.request('/web/github/pat');
+    expect(await status.json()).toEqual({ configured: false, reviewerConfigured: false });
+  });
+
+  it('removes the configured worker token', async () => {
+    const app = buildApp({ workosId: 'u1' });
+    await app.request(jsonPost('ghp_secret123'));
+    const removed = await app.request(del());
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ configured: false, reviewerConfigured: false });
+    const status = await app.request('/web/github/pat');
+    expect(await status.json()).toEqual({ configured: false, reviewerConfigured: false });
+  });
+
+  it('scopes the tokens per org', async () => {
+    await buildApp({ workosId: 'u1' }).request(jsonPost('ghp_org1'));
+    const other = await buildApp({ workosId: 'u2', organizationId: 'org2' }).request('/web/github/pat');
+    expect(await other.json()).toEqual({ configured: false, reviewerConfigured: false });
   });
 });
 
