@@ -8,14 +8,15 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { WorkflowChatProvider } from './workflow-chat-provider';
+import type { WorkflowDraftValidationIssue } from './workflow-draft';
 import {
   checkpointWorkflowDraft,
   createWorkflowDraftAuthoringState,
   finalizeWorkflowDraft,
   mutateWorkflowDraftAuthoringState,
 } from './workflow-draft';
-import { createWorkflowDraftTools } from './workflow-draft-tools';
 import type { WorkflowDraftToolResult } from './workflow-draft-tools';
+import { createWorkflowDraftTools } from './workflow-draft-tools';
 import { useStreamMessages, useStreamSend } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { server } from '@/test/msw-server';
 
@@ -150,6 +151,115 @@ describe('WorkflowChatProvider', () => {
       });
 
       expect(failureCode).toBe('repair-budget-exhausted');
+    });
+  });
+
+  describe('when rejected repairs make diagnostic progress', () => {
+    it('preserves the repair budget until the same rejection repeats three times', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+        http.post(
+          `${BASE_URL}/api/editor/workflow-builder/stream`,
+          () =>
+            new HttpResponse(new ReadableStream({ start: () => {} }), {
+              headers: { 'content-type': 'text/event-stream' },
+            }),
+        ),
+      );
+      let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
+      let failureCode: string | undefined;
+
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-progress-aware-repair"
+            authoringState={createWorkflowDraftAuthoringState('progress-aware-repair')}
+            initialMessages={[]}
+            createTools={(_, onResult) => {
+              reportResult = onResult;
+              return {};
+            }}
+            onGenerationFailure={failure => {
+              failureCode = failure?.code;
+            }}
+          >
+            <Composer message="Build a workflow" />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      const rejection = (code: WorkflowDraftValidationIssue['code']): WorkflowDraftToolResult => ({
+        toolId: 'checkpoint-workflow-draft',
+        result: { success: false, error: 'Invalid draft', issues: [{ code, path: 'graph.0', message: code }] },
+      });
+
+      act(() => {
+        reportResult?.(rejection('invalid-map-config'));
+        reportResult?.(rejection('invalid-schema'));
+        reportResult?.(rejection('incompatible-schema'));
+        reportResult?.(rejection('incompatible-schema'));
+      });
+      expect(failureCode).toBeUndefined();
+
+      act(() => {
+        reportResult?.(rejection('incompatible-schema'));
+      });
+      expect(failureCode).toBe('repair-budget-exhausted');
+    });
+  });
+
+  describe('when a checkpoint conflicts with a newer accepted revision', () => {
+    it('does not consume the structured repair budget', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+        http.post(
+          `${BASE_URL}/api/editor/workflow-builder/stream`,
+          () =>
+            new HttpResponse(new ReadableStream({ start: () => {} }), {
+              headers: { 'content-type': 'text/event-stream' },
+            }),
+        ),
+      );
+      let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
+      let failureCode: string | undefined;
+
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-revision-conflict"
+            authoringState={createWorkflowDraftAuthoringState('revision-conflict')}
+            initialMessages={[]}
+            createTools={(_, onResult) => {
+              reportResult = onResult;
+              return {};
+            }}
+            onGenerationFailure={failure => {
+              failureCode = failure?.code;
+            }}
+          >
+            <Composer message="Build a workflow" />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      const conflict: WorkflowDraftToolResult = {
+        toolId: 'checkpoint-workflow-candidate',
+        result: { success: false, error: 'Draft changed before this operation completed.' },
+      };
+
+      act(() => {
+        reportResult?.(conflict);
+        reportResult?.(conflict);
+        reportResult?.(conflict);
+      });
+
+      expect(failureCode).toBeUndefined();
     });
   });
 

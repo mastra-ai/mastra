@@ -55,7 +55,13 @@ function WorkflowChatSession({
   const authoringStateRef = useRef(authoringState);
   authoringStateRef.current = authoringState;
   const generationRef = useRef(0);
-  const generationStateRef = useRef({ accepted: false, finalized: false, rejected: 0, stopped: false });
+  const generationStateRef = useRef({
+    accepted: false,
+    finalized: false,
+    rejected: 0,
+    rejectionSignature: undefined as string | undefined,
+    stopped: false,
+  });
 
   const updateCandidate = useCallback(
     (candidate: WorkflowDraftCandidate) => {
@@ -76,7 +82,13 @@ function WorkflowChatSession({
 
   const createClientTools = useCallback(() => {
     const generation = ++generationRef.current;
-    generationStateRef.current = { accepted: false, finalized: false, rejected: 0, stopped: false };
+    generationStateRef.current = {
+      accepted: false,
+      finalized: false,
+      rejected: 0,
+      rejectionSignature: undefined,
+      stopped: false,
+    };
     onGenerationFailure?.(null);
     const acceptedState = authoringStateRef.current;
     const existingCandidate = candidateRef.current;
@@ -88,23 +100,41 @@ function WorkflowChatSession({
 
     const onResult = ({ toolId, result }: WorkflowDraftToolResult) => {
       if (generation !== generationRef.current || generationStateRef.current.stopped) return;
+      const isCheckpoint = toolId === 'checkpoint-workflow-draft' || toolId === 'checkpoint-workflow-candidate';
+      const isFinalize = toolId === 'finalize-workflow-draft';
       if (result.success) {
-        generationStateRef.current.accepted = true;
-        if (toolId === 'finalize-workflow-draft') generationStateRef.current.finalized = true;
+        if (isCheckpoint || isFinalize) {
+          generationStateRef.current.accepted = true;
+          generationStateRef.current.rejected = 0;
+          generationStateRef.current.rejectionSignature = undefined;
+        }
+        if (isFinalize) generationStateRef.current.finalized = true;
         return;
       }
+      if (!isCheckpoint && !isFinalize) return;
       if (
-        toolId !== 'checkpoint-workflow-draft' &&
-        toolId !== 'checkpoint-workflow-candidate' &&
-        toolId !== 'finalize-workflow-draft'
+        result.error === 'Draft changed before this operation completed.' ||
+        result.error === 'Generation candidate changed before checkpoint completed.' ||
+        result.error === 'Submission was superseded.'
       )
         return;
-      generationStateRef.current.rejected += 1;
+
+      const rejectionSignature = JSON.stringify({
+        toolId,
+        issues: result.issues?.map(issue => ({ code: issue.code, path: issue.path })) ?? [],
+        error: result.issues?.length ? undefined : result.error,
+      });
+      if (generationStateRef.current.rejectionSignature === rejectionSignature) {
+        generationStateRef.current.rejected += 1;
+      } else {
+        generationStateRef.current.rejectionSignature = rejectionSignature;
+        generationStateRef.current.rejected = 1;
+      }
       if (generationStateRef.current.rejected >= 3) {
         failGeneration({
           code: 'repair-budget-exhausted',
           message:
-            'Workflow generation stopped after three rejected draft repairs. Review the latest issues and retry.',
+            'Workflow generation stopped after three equivalent rejected draft repairs. Review the latest issues and retry.',
         });
       }
     };

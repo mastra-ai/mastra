@@ -262,7 +262,7 @@ describe('workflow draft client tools', () => {
       {
         type: 'conditional',
         steps: [{ type: 'agent', id: 'conditional-agent', agent: 'summary-agent' }],
-        predicates: [{ op: 'exists', path: 'inputData.value' }],
+        predicates: [{ op: 'exists', path: 'inputData' }],
       },
       {
         type: 'loop',

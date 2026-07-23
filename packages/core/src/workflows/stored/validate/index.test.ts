@@ -396,6 +396,90 @@ describe('validateStoredWorkflow', () => {
       ]);
     });
 
+    it('validates predicate namespaces and known paths against the execution context', () => {
+      const inputSchema = {
+        type: 'object',
+        properties: { priority: { type: 'string' } },
+        required: ['priority'],
+      };
+      const issues = validateStoredWorkflow(
+        def({
+          inputSchema,
+          graph: [
+            {
+              type: 'conditional',
+              steps: [{ type: 'tool', id: 'route', toolId: 'routeTool' }],
+              predicates: [
+                {
+                  op: 'eq',
+                  left: { path: '$.priority' },
+                  right: { path: 'inputData.missing' },
+                },
+              ],
+            },
+          ],
+        }),
+        { tools: { routeTool: { inputSchema } } },
+      );
+
+      expect(issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'invalid-predicate-reference',
+            path: 'graph.0.predicates.0.left.path',
+            message: expect.stringContaining('initData, inputData, stepResults, or state'),
+          }),
+          expect.objectContaining({
+            code: 'invalid-predicate-reference',
+            path: 'graph.0.predicates.0.right.path',
+            message: expect.stringContaining('does not exist'),
+          }),
+        ]),
+      );
+    });
+
+    it('accepts predicate references to workflow input and preceding step results', () => {
+      const inputSchema = {
+        type: 'object',
+        properties: { priority: { type: 'string' } },
+        required: ['priority'],
+      };
+      const outputSchema = {
+        type: 'object',
+        properties: { customerId: { type: 'string' } },
+        required: ['customerId'],
+      };
+      const issues = validateStoredWorkflow(
+        def({
+          inputSchema,
+          graph: [
+            { type: 'tool', id: 'lookup', toolId: 'lookupTool' },
+            {
+              type: 'conditional',
+              steps: [{ type: 'tool', id: 'route', toolId: 'routeTool' }],
+              predicates: [
+                {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+                    { op: 'exists', path: 'stepResults.lookup.customerId' },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+        {
+          tools: {
+            lookupTool: { inputSchema, outputSchema },
+            routeTool: { inputSchema: outputSchema },
+          },
+        },
+      );
+
+      expect(issues).toEqual([]);
+    });
+
     it('flags a workflow output schema the final step cannot satisfy', () => {
       const issues = validateStoredWorkflow(
         def({

@@ -174,7 +174,7 @@ export function useWorkflowDraft(
     [initialId, replaceState, validationContext],
   );
 
-  const save = async () => {
+  const save = async (metadata?: Record<string, unknown>) => {
     const expectedRevision = stateRef.current.revision;
     const reservation = reserveWorkflowDraftSave(stateRef.current, expectedRevision, validationContext);
     applyResult(reservation);
@@ -187,7 +187,7 @@ export function useWorkflowDraft(
     const reservedDraft = reservation.state.draft;
     const reservedIdentity = identityRef.current;
     try {
-      const result = await saveMutation.mutateAsync(reservedDraft);
+      const result = await saveMutation.mutateAsync({ ...reservedDraft, metadata });
       if (
         mountedRef.current &&
         identityRef.current === reservedIdentity &&

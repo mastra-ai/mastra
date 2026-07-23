@@ -23,13 +23,15 @@ import {
 } from '@/domains/workflows/builder';
 import type {
   WorkflowDraftCandidate,
-  WorkflowDraftStepSchema,
   WorkflowDraftValidationContext,
   WorkflowGenerationFailure,
 } from '@/domains/workflows/builder';
+import { parseWorkflowCatalogSchema } from '@/domains/workflows/builder/workflow-catalog-schema';
 import {
+  createWorkflowConversationMetadata,
   getWorkflowConversationThreadId,
   rememberWorkflowConversationThread,
+  WORKFLOW_BUILDER_AGENT_ID,
 } from '@/domains/workflows/builder/workflow-conversation-thread';
 import { useDeleteStoredWorkflow, useStoredWorkflow } from '@/domains/workflows/hooks/use-stored-workflows';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
@@ -37,20 +39,6 @@ import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 const EMPTY_MESSAGES: MastraDBMessage[] = [];
 const WORKFLOW_BUILDER_ROUTE = '/workflow-builder';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function parseSchema(schema: string | undefined): WorkflowDraftStepSchema['inputSchema'] | undefined {
-  if (!schema) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(schema);
-    return isRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 export default function WorkflowBuilderEditorPage({ create = false }: { create?: boolean }) {
   const params = useParams();
@@ -76,13 +64,19 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
       tools: Object.fromEntries(
         Object.entries(toolsQuery.data ?? {}).map(([id, tool]) => [
           id,
-          { inputSchema: parseSchema(tool.inputSchema), outputSchema: parseSchema(tool.outputSchema) },
+          {
+            inputSchema: parseWorkflowCatalogSchema(tool.inputSchema),
+            outputSchema: parseWorkflowCatalogSchema(tool.outputSchema),
+          },
         ]),
       ),
       workflows: Object.fromEntries(
         Object.entries(workflowsQuery.data ?? {}).map(([id, workflow]) => [
           id,
-          { inputSchema: parseSchema(workflow.inputSchema), outputSchema: parseSchema(workflow.outputSchema) },
+          {
+            inputSchema: parseWorkflowCatalogSchema(workflow.inputSchema),
+            outputSchema: parseWorkflowCatalogSchema(workflow.outputSchema),
+          },
         ]),
       ),
       workflowCatalog: workflowCatalogUnavailable ? 'unavailable' : 'available',
@@ -90,8 +84,8 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
     [agentsQuery.data, toolsQuery.data, workflowCatalogUnavailable, workflowsQuery.data],
   );
   const workflowDraft = useWorkflowDraft(workflowQuery.data, initialWorkflowId, validationContext);
-  const threadId = getWorkflowConversationThreadId(initialWorkflowId);
-  const conversationQuery = useAgentMessages({ agentId: 'workflow-builder', threadId, memory: true });
+  const threadId = getWorkflowConversationThreadId(initialWorkflowId, workflowQuery.data?.metadata);
+  const conversationQuery = useAgentMessages({ agentId: WORKFLOW_BUILDER_AGENT_ID, threadId, memory: true });
   const initialMessages = conversationQuery.data?.messages ?? EMPTY_MESSAGES;
   const deleteWorkflow = useDeleteStoredWorkflow();
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -122,7 +116,9 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
 
   const handleSave = async () => {
     try {
-      const saved = await workflowDraft.save();
+      const saved = await workflowDraft.save(
+        createWorkflowConversationMetadata(workflowQuery.data?.metadata, threadId),
+      );
       rememberWorkflowConversationThread(saved.id, threadId);
       toast.success('Workflow saved');
       if (create) await navigate(`/workflow-builder/${encodeURIComponent(saved.id)}`, { replace: true });
@@ -134,7 +130,9 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   const handleRun = async () => {
     try {
       if (access.canWrite && workflowDraft.isReady) {
-        const saved = await workflowDraft.save();
+        const saved = await workflowDraft.save(
+          createWorkflowConversationMetadata(workflowQuery.data?.metadata, threadId),
+        );
         rememberWorkflowConversationThread(saved.id, threadId);
       }
       await navigate(`/workflows/${encodeURIComponent(workflowDraft.draft.id)}/graph`);

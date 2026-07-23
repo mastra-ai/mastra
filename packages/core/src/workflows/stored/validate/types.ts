@@ -23,6 +23,7 @@ export type WorkflowValidationIssueCode =
   | 'invalid-foreach'
   | 'invalid-conditional'
   | 'invalid-loop'
+  | 'invalid-predicate-reference'
   | 'incompatible-schema'
   | 'unsupported-schema-keyword'
   | 'self-reference';

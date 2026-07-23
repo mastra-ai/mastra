@@ -29,6 +29,8 @@ describe('workflow conversation', () => {
       expect(instructions).toContain('"workflowCatalog": "unavailable"');
       expect(instructions).toContain('support-agent');
       expect(instructions).toContain('"id": "daily-report"');
+      expect(instructions).toContain('{ "initData": "prompt", "path": "" }');
+      expect(instructions).toContain('After a successful checkpoint, Finalize immediately');
     });
 
     it('includes the repairable generation candidate separately from accepted state', () => {

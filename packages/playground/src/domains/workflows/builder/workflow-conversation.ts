@@ -42,6 +42,12 @@ Finalized revision: ${authoringState.finalizedRevision ?? 'none'}
 ${JSON.stringify(catalogContext, null, 2)}
 \`\`\`
 
+## Workflow construction rules
+Mapping steps use canonical descriptor objects, never template expressions or stringified objects. Examples:
+- Workflow input: { "initData": "prompt", "path": "" }
+- Preceding step output: { "step": "lookup-customer", "path": "customerId" }
+Use mapConfig as a JSON object whose output fields each contain exactly one source descriptor. After a successful checkpoint, Finalize immediately unless the requested workflow still needs another candidate edit.
+
 ## Current accepted workflow definition
 \`\`\`json
 ${JSON.stringify(authoringState.draft, null, 2)}
