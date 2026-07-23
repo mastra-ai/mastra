@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useMatch, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
-import { ChatLayout } from '../ui/ChatLayout';
+import { ChatLayout } from '../layouts/ChatLayout';
 import { renderedPaths } from '../domains/workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../domains/workspace-viewer/components/WorkspaceViewerPanel';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';

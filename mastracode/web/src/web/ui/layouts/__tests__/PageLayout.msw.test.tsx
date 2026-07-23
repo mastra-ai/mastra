@@ -1,15 +1,18 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { PageLayout } from '../PageLayout';
+import { PageLayout, ViewportLayout } from '../PageLayout';
 
-describe('PageLayout', () => {
+describe.each([
+  { mode: 'document', Layout: PageLayout },
+  { mode: 'viewport', Layout: ViewportLayout },
+])('$mode page layout', ({ Layout }) => {
   describe('given page slots are provided', () => {
     it('renders the sidebar, mobile header, and content inside the main surface', () => {
       render(
-        <PageLayout sidebar={<div>sidebar-slot</div>} header={<div>header-slot</div>}>
+        <Layout sidebar={<div>sidebar-slot</div>} header={<div>header-slot</div>}>
           <div>content-slot</div>
-        </PageLayout>,
+        </Layout>,
       );
 
       expect(screen.getByText('sidebar-slot')).toBeInTheDocument();
@@ -21,9 +24,9 @@ describe('PageLayout', () => {
   describe('given the header slot is omitted', () => {
     it('renders an unlabelled full-height content surface', () => {
       render(
-        <PageLayout sidebar={<div>sidebar-slot</div>}>
+        <Layout sidebar={<div>sidebar-slot</div>}>
           <div>content-slot</div>
-        </PageLayout>,
+        </Layout>,
       );
 
       expect(screen.queryByRole('heading')).not.toBeInTheDocument();

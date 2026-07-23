@@ -4,7 +4,7 @@ import { GitBranch } from 'lucide-react';
 import { useLocation, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
-import { ChatLayout } from '../ui/ChatLayout';
+import { ChatLayout } from '../layouts/ChatLayout';
 import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useUserSessionQuery } from '../../../shared/hooks/useWorkspaces';
