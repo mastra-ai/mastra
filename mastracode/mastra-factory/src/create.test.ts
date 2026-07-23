@@ -37,6 +37,7 @@ const platform = vi.hoisted(() => ({
 
 const cliAuth = vi.hoisted(() => ({
   getToken: vi.fn(),
+  loadCredentials: vi.fn(),
   resolveCurrentOrg: vi.fn(),
   fetchOrgs: vi.fn(),
   MASTRA_PLATFORM_API_URL: 'https://platform.example.test',
@@ -77,6 +78,8 @@ beforeEach(() => {
   vi.clearAllMocks();
 
   // Sensible default: platform provisioning succeeds. Tests can override.
+  // Cached credentials exist, so no "press enter to open auth flow" pause.
+  cliAuth.loadCredentials.mockResolvedValue({ token: 'cached' });
   cliAuth.getToken.mockResolvedValue('wos-token');
   cliAuth.resolveCurrentOrg.mockResolvedValue({ orgId: 'org_123', orgName: 'Acme' });
   cliAuth.fetchOrgs.mockResolvedValue([
@@ -153,8 +156,11 @@ describe('create --no-platform', () => {
     expect(cliAuth.getToken).not.toHaveBeenCalled();
     expect(platform.createServerProject).not.toHaveBeenCalled();
 
-    // Next steps shown.
+    // Next steps show the integrated Factory UI on the Mastra server port.
     expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Your Mastra Factory is ready!'), 'Next steps');
+    expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('http://localhost:4111'), 'Next steps');
+    expect(clack.note).not.toHaveBeenCalledWith(expect.stringContaining('http://localhost:5173'), 'Next steps');
+    expect(clack.note).not.toHaveBeenCalledWith(expect.stringContaining('Mastra Studio'), 'Next steps');
   });
 
   it('fails the run when the template clone fails, without a success outro', async () => {
@@ -242,11 +248,16 @@ describe('create (platform provisioning)', () => {
       }),
     );
 
-    // Success outro mentions the connected project.
+    // Success outro summarizes the provisioned infra so the user isn't
+    // surprised by what now exists in their platform org.
     const note = clack.note.mock.calls[0]![0] as string;
-    expect(note).toContain('Platform connected.');
+    expect(note).toContain('Provisioned on Mastra platform');
     expect(note).toContain('my-factory');
     expect(note).toContain('Acme');
+    expect(note).toContain('Postgres database');
+    expect(note).toContain('code agent sessions run inside Mastra platform sandboxes');
+    expect(note).toContain('Manage your project at');
+    expect(note).toContain('https://projects.mastra.ai');
   });
 
   it('surfaces a Neon 403 as a "need admin role" hint without failing the run', async () => {
@@ -311,6 +322,44 @@ describe('create (platform provisioning)', () => {
     expect(cliAuth.fetchOrgs).toHaveBeenCalledTimes(1);
     expect(cliAuth.resolveCurrentOrg).not.toHaveBeenCalled();
     expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org_456' }));
+  });
+
+  it('pauses with a "press enter" prompt before opening the auth flow when not logged in', async () => {
+    vi.stubEnv('MASTRA_API_TOKEN', '');
+    cliAuth.loadCredentials.mockResolvedValue(null);
+    clack.text.mockResolvedValue('');
+
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+    expect(clack.text).toHaveBeenCalledWith({
+      message: 'Mastra account is required, press enter to continue...',
+      defaultValue: '',
+    });
+    // Prompt shown before the auth flow starts.
+    expect(clack.text.mock.invocationCallOrder[0]!).toBeLessThan(cliAuth.getToken.mock.invocationCallOrder[0]!);
+    expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Provisioned on Mastra platform'), 'Next steps');
+    vi.unstubAllEnvs();
+  });
+
+  it('skips the auth pause when cached credentials already exist', async () => {
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(cliAuth.getToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats cancelling the auth pause as a provisioning failure without opening the auth flow', async () => {
+    vi.stubEnv('MASTRA_API_TOKEN', '');
+    cliAuth.loadCredentials.mockResolvedValue(null);
+    clack.text.mockResolvedValue(Symbol.for('clack.cancel'));
+
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+    expect(cliAuth.getToken).not.toHaveBeenCalled();
+    const note = clack.note.mock.calls[0]![0] as string;
+    expect(note).toContain('Platform provisioning failed');
+    expect(note).toContain('Sign-in cancelled.');
+    vi.unstubAllEnvs();
   });
 
   it('--org fails with a clear message when no org matches', async () => {

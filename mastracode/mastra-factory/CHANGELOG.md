@@ -1,5 +1,22 @@
 # create-factory
 
+## 0.1.0-alpha.6
+
+### Patch Changes
+
+- Improved the create-factory sign-in and success experience: ([#20024](https://github.com/mastra-ai/mastra/pull/20024))
+
+  - When no Mastra platform session exists, the CLI now pauses with "Mastra account is required, press enter to continue..." before opening the browser auth flow instead of opening it unannounced.
+  - The success message now summarizes the infrastructure provisioned on Mastra platform (project, Postgres database, credentials in .env), notes that deployed code agent sessions run inside Mastra platform sandboxes, and links to https://projects.mastra.ai for managing the project.
+
+- Fixed generated Factory projects to serve the UI and API from a single Mastra development server. ([#20019](https://github.com/mastra-ai/mastra/pull/20019))
+
+## 0.1.0-alpha.5
+
+### Patch Changes
+
+- Stopped writing MASTRA_SHARED_API_URL to the scaffolded project's .env during platform provisioning. Platform consumers now use their built-in default platform URL, so scaffolded factories no longer pin the API endpoint at create time. ([#20021](https://github.com/mastra-ai/mastra/pull/20021))
+
 ## 0.1.0-alpha.4
 
 ### Minor Changes

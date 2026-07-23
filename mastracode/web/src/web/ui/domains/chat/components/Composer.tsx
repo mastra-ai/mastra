@@ -70,7 +70,7 @@ function readFileAsBase64(file: File): Promise<string> {
 }
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { kind, resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { kind, resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const navigate = useNavigate();
@@ -91,7 +91,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };

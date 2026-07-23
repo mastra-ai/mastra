@@ -38,14 +38,12 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 export function SettingsPanel() {
   const section = useSettingsSection();
   const { theme, setTheme } = useTheme();
-  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceEnabled, baseUrl } = useChatSessionContext();
   const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
-  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: sessionScope,
     baseUrl,
     enabled: resourceEnabled,
   };
@@ -91,11 +89,11 @@ export function SettingsPanel() {
                 <Txt variant="ui-lg" className="font-medium">
                   Model packs
                 </Txt>
-                <ModelPacksSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+                <ModelPacksSection resourceId={sessionResourceId} models={models} />
               </div>
             </>
           )}
-          {section === 'memory' && <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />}
+          {section === 'memory' && <OMSection resourceId={sessionResourceId} models={models} />}
           {section === 'behavior' && (
             <BehaviorSettings
               settings={settings}

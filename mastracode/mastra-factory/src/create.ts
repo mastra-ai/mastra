@@ -4,7 +4,7 @@ import * as p from '@clack/prompts';
 // `mastra/internal/auth` is the CLI's internal barrel — drives the browser-auth
 // flow and reuses persisted credentials + org resolution rather than duplicating
 // them here.
-import { fetchOrgs, getToken, resolveCurrentOrg } from 'mastra/internal/auth';
+import { fetchOrgs, getToken, loadCredentials, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
 import { x } from 'tinyexec';
 
@@ -179,14 +179,17 @@ export async function create(args: CreateArgs): Promise<void> {
     `${color.cyan('cd')} ${projectName}`,
     color.cyan(`${packageManager} run dev`),
     '',
-    `Factory UI     ${color.underline('http://localhost:5173')}`,
-    `Mastra Studio  ${color.underline('http://localhost:4111')}`,
+    `Factory UI     ${color.underline('http://localhost:4111')}`,
     '',
   ];
   if (platformResult) {
     lines.push(
-      `${color.green('Platform connected.')} Project ${color.cyan(platformResult.project.name)} in ${color.cyan(platformResult.orgName)}.`,
-      `Wrote ${color.cyan('MASTRA_PROJECT_ID')}, ${color.cyan('MASTRA_PLATFORM_SECRET_KEY')}, and ${color.cyan('DATABASE_URL')} to ${color.cyan('.env')}.`,
+      `${color.green('Provisioned on Mastra platform')} in ${color.cyan(platformResult.orgName)}:`,
+      `  - Project ${color.cyan(platformResult.project.name)}`,
+      `  - Postgres database (credentials written to ${color.cyan('.env')})`,
+      '',
+      'When deployed, code agent sessions run inside Mastra platform sandboxes.',
+      `Manage your project at ${color.underline('https://projects.mastra.ai')}`,
     );
   } else if (args.noPlatform) {
     lines.push(
@@ -229,6 +232,18 @@ async function runPlatformProvisioning({
 
   try {
     // 1. Auth — triggers the browser-auth flow if no cached credential.
+    //    When that flow is about to open (no env token, no cached credential),
+    //    pause first so the browser doesn't pop open unannounced.
+    const willOpenAuthFlow = !process.env.MASTRA_API_TOKEN && !(await loadCredentials());
+    if (willOpenAuthFlow) {
+      const proceed = await p.text({
+        message: 'Mastra account is required, press enter to continue...',
+        defaultValue: '',
+      });
+      if (p.isCancel(proceed)) {
+        throw new Error('Sign-in cancelled.');
+      }
+    }
     p.log.info('Signing in to Mastra…');
     const token = await getToken();
 

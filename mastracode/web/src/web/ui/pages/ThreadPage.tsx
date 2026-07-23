@@ -15,7 +15,6 @@ import { ChatComposerStateProvider } from '../domains/chat/context/ChatCommandsP
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatSessionContext } from '../domains/chat/context/useChatSessionContext';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
 import {
   FactorySessionContextPanel,
   type FactorySessionContextTab,
@@ -198,7 +197,6 @@ function ThreadComposer() {
 
 function ThreadPageContent() {
   useRouteThreadSync();
-  useThreadPageKickoffs();
 
   return (
     <div className="flex min-h-0 flex-col">
