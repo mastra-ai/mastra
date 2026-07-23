@@ -111,7 +111,7 @@ export function WorkspacesSection() {
         enabled: sessionEnabled,
       });
       const chatSession = requireAgentControllerSession(targetSession);
-      await chatSession.create();
+      await chatSession.create({});
       const threadsKey = queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, workspace.sessionId, undefined);
       const threads = await queryClient.fetchQuery({
         queryKey: threadsKey,

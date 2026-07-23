@@ -12,6 +12,14 @@ import { connectLinear } from '../../factory/services/linear';
 import type { FactoryProject, FactoryProjectPayload } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import type { GithubRepo } from '../services/github';
+import {
+  clearOnboardingFlow,
+  ONBOARDING_FACTORY_KEY as FACTORY_KEY,
+  persistOnboardingFactory,
+  persistOnboardingStep,
+  readOnboardingStep,
+  type OnboardingStep as Step,
+} from '../services/onboardingFlow';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
 import { InitialFactoryStep } from './InitialFactoryStep';
@@ -19,11 +27,6 @@ import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { useNavigate } from 'react-router';
 import '@fontsource-variable/mona-sans/standard.css';
-
-export type Step = 'initial' | 'vcs' | 'project-management';
-
-const STEP_KEY = 'mastracode.factory-onboarding.step';
-const FACTORY_KEY = 'mastracode.factory-onboarding.factory-id';
 
 const STEP_META: Record<Step, { title: string; description?: string }> = {
   initial: {
@@ -40,11 +43,6 @@ const STEP_META: Record<Step, { title: string; description?: string }> = {
   },
 };
 
-function storedStep(): Step {
-  const value = sessionStorage.getItem(STEP_KEY);
-  return value === 'vcs' || value === 'project-management' ? value : 'initial';
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 }
@@ -55,7 +53,7 @@ export function EmptyFactoryState() {
   const persistedFactories = useFactoriesQuery();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
-  const [step, setStep] = useState<Step>(storedStep);
+  const [step, setStep] = useState<Step>(readOnboardingStep);
   const [pendingFactory, setPendingFactory] = useState<FactoryProject | FactoryProjectPayload | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
@@ -77,18 +75,18 @@ export function EmptyFactoryState() {
       return;
     }
     sessionStorage.removeItem(FACTORY_KEY);
-    sessionStorage.setItem(STEP_KEY, 'vcs');
+    persistOnboardingStep('vcs');
     setStep('vcs');
   }, [pendingFactory, persistedFactories.data, persistedFactories.isPending, step]);
 
   const goTo = (next: Step) => {
-    sessionStorage.setItem(STEP_KEY, next);
+    persistOnboardingStep(next);
     setStep(next);
   };
 
   const persistBeforeRedirect = (currentStep: Step) => {
-    sessionStorage.setItem(STEP_KEY, currentStep);
-    if (pendingFactory) sessionStorage.setItem(FACTORY_KEY, pendingFactory.id);
+    persistOnboardingStep(currentStep);
+    if (pendingFactory) persistOnboardingFactory(pendingFactory.id);
   };
 
   const chooseRepository = async (repo: GithubRepo) => {
@@ -98,7 +96,7 @@ export function EmptyFactoryState() {
     try {
       const factory = await createFactory.mutateAsync({ name: repo.name });
       setPendingFactory(factory);
-      sessionStorage.setItem(FACTORY_KEY, factory.id);
+      persistOnboardingFactory(factory.id);
       const linkedRepository = await linkRepository.mutateAsync({
         factoryProjectId: factory.id,
         repo,
@@ -126,8 +124,7 @@ export function EmptyFactoryState() {
     setFinishing(true);
     try {
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-      sessionStorage.removeItem(STEP_KEY);
-      sessionStorage.removeItem(FACTORY_KEY);
+      clearOnboardingFlow();
       void navigate(`/factories/${pendingFactory.id}`);
     } catch (error) {
       setCompletionError(errorMessage(error));

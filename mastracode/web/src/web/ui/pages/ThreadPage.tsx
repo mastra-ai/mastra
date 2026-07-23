@@ -14,6 +14,7 @@ import { TaskPanel } from '../domains/chat/components/TaskPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../shared/hooks/useRouteThreadSync';
+import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
 import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useUserSessionQuery } from '../../../shared/hooks/useWorkspaces';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -94,6 +95,7 @@ function ThreadComposer() {
 
 function ThreadPageContent() {
   useRouteThreadSync();
+  useThreadPageKickoffs();
 
   return (
     <div className="flex min-h-0 flex-col">

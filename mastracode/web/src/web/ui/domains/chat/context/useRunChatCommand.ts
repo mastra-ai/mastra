@@ -23,7 +23,7 @@ const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'othe
 export function useRunChatCommand() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
-  const { resourceId, sessionEnabled, factorySessionState, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { busy, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { threadId } = useChatConnection();
@@ -88,7 +88,7 @@ export function useRunChatCommand() {
         pushNotice(
           [
             `Factory: ${factoryQuery.data?.name ?? '(none)'}`,
-            `Path: ${factorySessionState?.sandboxWorkdir ?? '(no workspace selected)'}`,
+            `Path: ${projectPath ?? '(no workspace selected)'}`,
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${threadId ?? '—'}`,
