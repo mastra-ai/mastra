@@ -351,13 +351,10 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
   let bufferedSteps = new Map<string, any>();
   let tripwireOccurred = false;
   let finishEventSent = false;
-  // Processors can rotate the active response message id between the run-level
-  // `start` chunk and the first model step (e.g. observational memory sealing a
-  // buffer chunk). The rotated id only reaches the wire via
-  // `step-start.payload.messageId`, so hold `start` (and any processor `data-*`
-  // chunks emitted before the model runs) until the first `step-start` and
-  // announce that step's id — the id the first assistant message is actually
-  // persisted under. Held chunks are flushed in their original order.
+  // Processors can rotate the response message id before the first model step
+  // (e.g. observational memory). Hold `start` (and any preceding `data-*`
+  // chunks) until the first `step-start` so the announced id matches the id
+  // the response is actually persisted under.
   let heldChunks: ChunkType<OUTPUT>[] | null = null;
   let startIdResolved = false;
 
@@ -460,12 +457,10 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
           const held = heldChunks;
           heldChunks = null;
           if (chunk.type === 'step-start') {
-            // held[0] is always the run-level `start` chunk (the only chunk type that opens the hold).
+            // held[0] is the run-level `start` chunk (the only chunk type that opens the hold).
             const startPayload = (held[0] as { payload?: { messageId?: unknown } } | undefined)?.payload;
             const stepMessageId = (chunk.payload as { messageId?: unknown } | undefined)?.messageId;
-            // Re-announce under the step's id only when the run's `start`
-            // carried an id in the first place (durable streams emit `start`
-            // without a payload and must stay untouched).
+            // Durable streams emit `start` without an id — leave those untouched.
             if (
               held[0] &&
               typeof stepMessageId === 'string' &&
