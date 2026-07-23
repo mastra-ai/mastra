@@ -524,20 +524,30 @@ export class PgFactoryStorage extends FactoryStorage {
   async withDistributedLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const [k1, k2] = hashAdvisoryLockKey(key);
     const client = await this.#pool.connect();
+    let transactionOpen = false;
+    let releaseError: Error | undefined;
     try {
       await client.query('BEGIN');
+      transactionOpen = true;
       // Blocks until no other transaction holds this advisory key.
       await client.query('SELECT pg_advisory_xact_lock($1, $2)', [k1, k2]);
-      try {
-        const result = await fn();
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
+      const result = await fn();
+      await client.query('COMMIT');
+      transactionOpen = false;
+      return result;
+    } catch (error) {
+      if (transactionOpen) {
+        try {
+          await client.query('ROLLBACK');
+          transactionOpen = false;
+        } catch (rollbackError) {
+          releaseError = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+          throw new AggregateError([error, rollbackError], 'Distributed lock operation and rollback both failed');
+        }
       }
+      throw error;
     } finally {
-      client.release();
+      client.release(releaseError);
     }
   }
 

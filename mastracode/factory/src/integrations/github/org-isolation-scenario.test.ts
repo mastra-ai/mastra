@@ -399,8 +399,6 @@ beforeEach(() => {
   sandboxEnabled = true;
   cookieUser = null;
   bootstrapSucceeds = true;
-  // No Postgres in these scenario tests: keep the project lock in-process.
-  process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   mintCount = 0;
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
@@ -412,7 +410,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
   vi.clearAllMocks();
 });
 

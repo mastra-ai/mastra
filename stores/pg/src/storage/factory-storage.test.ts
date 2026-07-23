@@ -1,5 +1,5 @@
 import { describeFactoryStorageContract } from '@internal/storage-test-utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { PgFactoryStorage } from './factory-storage';
 import { connectionString } from './test-utils';
@@ -27,6 +27,30 @@ describe('PgFactoryStorage capabilities', () => {
       );
       expect(maxActive).toBe(1);
     } finally {
+      await storage.close();
+    }
+  });
+
+  it('destroys the client when rollback fails', async () => {
+    const storage = new PgFactoryStorage({ connectionString });
+    const rollbackError = new Error('rollback failed');
+    const release = vi.fn();
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('commit failed'))
+      .mockRejectedValueOnce(rollbackError);
+    const pool = storage.authDatabase().pool;
+    const connect = vi.spyOn(pool, 'connect').mockResolvedValue({ query, release } as never);
+
+    try {
+      await expect(storage.withDistributedLock('rollback-failure', async () => 'result')).rejects.toThrow(
+        'Distributed lock operation and rollback both failed',
+      );
+      expect(release).toHaveBeenCalledWith(rollbackError);
+    } finally {
+      connect.mockRestore();
       await storage.close();
     }
   });
