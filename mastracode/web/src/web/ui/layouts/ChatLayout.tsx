@@ -105,11 +105,12 @@ function DesktopRightPanelFrame({
     return () => resizeCleanupRef.current?.();
   }, [initialWidth]);
 
-  const setPanelWidth = (requestedWidth: number) => {
+  const setPanelWidth = (requestedWidth: number, frameWidth?: number) => {
     const frame = frameRef.current;
     if (!frame) return;
 
-    const maximumWidth = Math.min(EXPANDED_RIGHT_PANEL_WIDTH, Math.max(0, frame.getBoundingClientRect().width - 16));
+    const availableWidth = frameWidth ?? frame.getBoundingClientRect().width;
+    const maximumWidth = Math.min(EXPANDED_RIGHT_PANEL_WIDTH, Math.max(0, availableWidth - 16));
     const minimumWidth = Math.min(MIN_RIGHT_PANEL_WIDTH, maximumWidth);
     const nextWidth = Math.min(maximumWidth, Math.max(minimumWidth, requestedWidth));
     frame.style.setProperty('--chat-right-panel-width', `${nextWidth}px`);
@@ -124,8 +125,9 @@ function DesktopRightPanelFrame({
     frameRef.current?.setAttribute('data-panel-gesture', 'active');
     const startX = event.clientX;
     const startWidth = panelSlot.getBoundingClientRect().width || initialWidth;
+    const frameWidth = frameRef.current?.getBoundingClientRect().width;
     const onPointerMove = (moveEvent: PointerEvent) => {
-      setPanelWidth(startWidth - (moveEvent.clientX - startX));
+      setPanelWidth(startWidth - (moveEvent.clientX - startX), frameWidth);
     };
     const cleanup = () => {
       window.removeEventListener('pointermove', onPointerMove);
