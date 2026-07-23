@@ -14,7 +14,6 @@ import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvoc
 import {
   Bell,
   BookOpen,
-  Check,
   ChevronDown,
   CircleDot,
   CircleX,
@@ -61,7 +60,7 @@ const resultBlock =
   'm-0 mt-1 max-h-72 max-w-full overflow-auto whitespace-pre rounded-sm bg-surface1 p-2 font-mono text-xs leading-normal text-icon5';
 
 // Prompt cards (approval / suspension) — an elevated card with a colored left rail.
-const promptCardBase = 'rounded-lg border border-border1 bg-surface3 px-4 py-3 shadow-md';
+const promptCardBase = 'my-2 rounded-lg border border-border1 bg-surface3 px-4 py-3 shadow-md';
 const promptCardApproval = `${promptCardBase} border-l-4 border-l-warning1`;
 const promptCardSuspension = `${promptCardBase} border-l-4 border-l-accent2`;
 const promptTitle = 'mb-1.5 text-sm font-semibold text-icon6';
@@ -149,11 +148,11 @@ function SkillActivationCard({ activation }: { activation: SkillActivation }) {
 // Tool card (collapsible)
 // ---------------------------------------------------------------------------
 
-/** Quiet status indicator: muted spinner while running, colored check/cross when settled. */
+/** Quiet status indicator: muted spinner while running, red cross on failure, nothing on success. */
 function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
   if (status === 'running') return <Spinner size="sm" aria-label="Running" className="size-3.5 text-icon3" />;
   if (status === 'error') return <X size={14} role="img" aria-label="Failed" className="text-error" />;
-  return <Check size={14} role="img" aria-label="Done" className="text-accent1" />;
+  return null;
 }
 
 /** Label + copy header for a section inside a tool card body. */
@@ -544,7 +543,7 @@ function AskUserCard({
 
 function SubagentCard({ entry }: { entry: SubagentEntry }) {
   return (
-    <div className="rounded-lg border border-l-4 border-border1 border-l-accent5 bg-surface2 px-3 py-2 shadow-sm">
+    <div className="my-2 rounded-lg border border-l-4 border-border1 border-l-accent5 bg-surface2 px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
         <Badge variant={entry.done ? 'success' : 'info'}>subagent: {entry.agentType}</Badge>
         <Txt variant="ui-xs" className="text-icon3">
@@ -761,24 +760,6 @@ export function Transcript() {
   );
 }
 
-function followsToolEntry(entries: TimelineEntry[], index: number): boolean {
-  const current = entries[index];
-  if (current?.kind !== 'message' || current.message.role !== 'assistant') return false;
-
-  for (let previousIndex = index - 1; previousIndex >= 0; previousIndex--) {
-    const previous = entries[previousIndex];
-    if (previous.kind !== 'message') return false;
-    if (previous.message.role === 'user') return false;
-    if (previous.message.role === 'signal') continue;
-
-    const parts = previous.message.content.parts;
-    if (parts.some(part => part.type === 'text' && part.text.trim().length > 0)) return false;
-    if (parts.some(part => part.type === 'tool-invocation')) return true;
-  }
-
-  return false;
-}
-
 export function TranscriptEntries({
   entries,
   isSubmitting = false,
@@ -805,14 +786,13 @@ export function TranscriptEntries({
 
   return (
     <>
-      {entries.map((entry, index) => {
+      {entries.map(entry => {
         switch (entry.kind) {
           case 'message':
             return (
               <MessageBubble
                 key={entry.id}
                 entry={entry}
-                followsToolEntry={followsToolEntry(entries, index)}
                 suspensions={suspensions}
                 isSubmitting={isSubmitting}
                 onRespond={onRespond}
@@ -842,13 +822,11 @@ export function TranscriptEntries({
 
 function MessageBubble({
   entry,
-  followsToolEntry,
   suspensions,
   isSubmitting,
   onRespond,
 }: {
   entry: MessageEntry;
-  followsToolEntry: boolean;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
@@ -878,7 +856,7 @@ function MessageBubble({
 
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
-      <div className="flex w-full flex-col items-end">
+      <div className="my-3 flex w-full flex-col items-end">
         <div
           className={`max-w-[70%] break-words rounded-xl px-4 py-2 text-text1 ${
             entry.steer ? 'bg-warning1/10' : 'bg-surface3'
@@ -895,10 +873,6 @@ function MessageBubble({
 
   const renderers = {
     Text: (part: TextPart) => {
-      const renderedPart: unknown = part;
-      const partIndex = parts.findIndex(candidate => candidate === renderedPart);
-      const followsTool = partIndex > 0 && parts[partIndex - 1]?.type === 'tool-invocation';
-
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
         return activation ? (
@@ -911,7 +885,7 @@ function MessageBubble({
       }
 
       return (
-        <div className={cn('prose', followsToolEntry ? 'mt-4' : followsTool ? 'mt-3' : undefined)}>
+        <div className="prose my-3">
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
@@ -948,7 +922,7 @@ function MessageBubble({
   const notifications = notificationMetadata(entry);
   if (notifications.length > 0) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col">
         {notifications.map(notification =>
           notification.kind === 'notification' ? (
             <NotificationCard key={notification.id} entry={notification} />
@@ -1201,12 +1175,16 @@ function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {
-  return <Notice variant={status.level === 'error' ? 'destructive' : 'info'}>{status.text}</Notice>;
+  return (
+    <Notice className="my-2" variant={status.level === 'error' ? 'destructive' : 'info'}>
+      {status.text}
+    </Notice>
+  );
 }
 
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
   return (
-    <Notice variant={entry.level === 'error' ? 'destructive' : 'info'}>
+    <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
       <div className="prose">
         <Markdown>{entry.text}</Markdown>
       </div>
