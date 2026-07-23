@@ -120,8 +120,10 @@ describe('AgentControllerChannels account linking', () => {
     // Wrap the created session's sendSignal to capture the requestContext the
     // dispatcher hands it, so we can assert the tenant was stamped as `user`.
     let signalUser: unknown;
+    let createSessionUser: unknown;
     const createSession = controller.createSession.bind(controller);
     vi.spyOn(controller, 'createSession').mockImplementation(async (opts: any) => {
+      createSessionUser = opts?.requestContext?.get('user');
       const session = await createSession(opts);
       const sendSignal = session.sendSignal.bind(session);
       vi.spyOn(session, 'sendSignal').mockImplementation((signalArgs: any) => {
@@ -142,6 +144,11 @@ describe('AgentControllerChannels account linking', () => {
     // The tenant was stamped on the run's requestContext as `user` — the single
     // seam `resolveCredentialStore` reads to load the sender's model creds.
     expect(signalUser).toEqual({ id: 'tenant-user-9', organizationId: 'org-9' });
+
+    // Session creation received the same stamped context: a dynamic workspace
+    // factory resolves once at creation time, and it must see the tenant or a
+    // repo-backed session workspace fails its owner check on the first message.
+    expect(createSessionUser).toEqual({ id: 'tenant-user-9', organizationId: 'org-9' });
 
     // And the run proceeded: a session exists and the reply rendered.
     const session = await controller.getSessionByResource('channel:C-1:t-1');
