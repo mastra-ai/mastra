@@ -29,9 +29,7 @@ describe('Channel thread deep link (/threads/:threadId)', () => {
 
     const router = renderAt('/threads/th-1?resourceId=channel%3Aslack%3AD0BJUSE45QE%3A1784829459.879119');
 
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe('/factories/fp-1/workspaces/channel/threads/th-1'),
-    );
+    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/workspaces/channel/threads/th-1'));
     expect(router.state.location.search).toBe('?resourceId=channel%3Aslack%3AD0BJUSE45QE%3A1784829459.879119');
   });
 });

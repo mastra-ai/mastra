@@ -840,7 +840,11 @@ export function channelOrigin(entry: MessageEntry): { platform: string; authorNa
   const info = channels[platform];
   const author = isRecord(info) && isRecord(info.author) ? info.author : undefined;
   const authorName =
-    typeof author?.fullName === 'string' ? author.fullName : typeof author?.userName === 'string' ? author.userName : undefined;
+    typeof author?.fullName === 'string'
+      ? author.fullName
+      : typeof author?.userName === 'string'
+        ? author.userName
+        : undefined;
   return { platform, authorName };
 }
 
