@@ -3,17 +3,16 @@
  * Produces the Mastra Factory template tree from `mastracode/web`.
  *
  * The template is the web project minus monorepo coupling:
- *   - `link:` deps           -> `"latest"` (matches every other create-mastra template)
+ *   - `link:` deps           -> exact versions resolved from npm's `latest` tag
  *   - monorepo tsconfig      -> standalone tsconfig
  *   - contributor README     -> checked-in template/README.md
  *   - e2e/tests/test deps    -> stripped
  *   - monorepo-only scripts  -> user-facing scripts (dev/build/start/deploy)
  *   - .env.schema            -> also emitted as .env.example (decorators stripped)
  *
- * Versions: every `link:` dep becomes `"latest"`, matching how every other
- * create-mastra template ships. The Mastra packages ship as a coordinated set
- * on the `latest` dist-tag; pinning here to the same tag keeps the standalone
- * template's install path identical to the rest of the template ecosystem.
+ * Versions: every `link:` dep is resolved from npm's `latest` dist-tag and
+ * written as an exact version. This prevents a later install from resolving
+ * different package versions than the set used when the template was synced.
  *
  * Usage:
  *   node scripts/sync-template.mjs [--out <dir>]
@@ -24,6 +23,7 @@
  * softwarefactory-template repository, mirroring the templates/* sync process
  * (one-way overwrite; the monorepo is truth).
  */
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -140,16 +140,27 @@ function copyTree(srcDir, destDir, relBase = '') {
   }
 }
 
-/**
- * Verify the linked package exists in the monorepo and its manifest name
- * matches the dependency key. This is a source-of-truth check only — no
- * version is read from it; the template pins `"latest"` from npm.
- */
+/** Verify the linked package exists and its manifest name matches the dependency key. */
 function assertLinkedPackage(name, relPath) {
   const pkgJsonPath = path.join(monorepoRoot, relPath, 'package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
   if (pkg.name !== name) {
     throw new Error(`sync-template: ${pkgJsonPath} is named ${pkg.name}, expected ${name}`);
+  }
+}
+
+const latestVersions = new Map();
+function resolveLatestVersion(name) {
+  const cached = latestVersions.get(name);
+  if (cached) return cached;
+
+  try {
+    const version = execFileSync('npm', ['view', name, 'dist-tags.latest'], { stdio: 'pipe' }).toString().trim();
+    if (!version) throw new Error('empty version');
+    latestVersions.set(name, version);
+    return version;
+  } catch {
+    throw new Error(`sync-template: could not resolve ${name}@latest on npm.`);
   }
 }
 
@@ -175,18 +186,19 @@ function transformPackageJson() {
     deploy: 'mastra deploy',
   };
 
-  // Every `link:` dep becomes `"latest"`, matching every other create-mastra
-  // template. We still resolve the link target so an invalid `link:` spec
-  // (typo, deleted package) fails the sync loudly.
-  console.log('sync-template: rewriting link: deps to "latest"...');
+  // Resolve every `link:` dep's `latest` dist-tag now so the generated
+  // template installs the exact package set selected at sync time. We still
+  // resolve the link target so an invalid `link:` spec fails loudly.
+  console.log('sync-template: resolving latest versions for link: deps...');
   for (const section of ['dependencies', 'devDependencies']) {
     const deps = manifest[section];
     if (!deps) continue;
     for (const [name, spec] of Object.entries(deps)) {
       if (!spec.startsWith('link:')) continue;
       assertLinkedPackage(name, linkSpecToRelPath(spec));
-      deps[name] = 'latest';
-      console.log(`  ✓ ${name}@latest`);
+      const version = resolveLatestVersion(name);
+      deps[name] = version;
+      console.log(`  ✓ ${name}@${version}`);
     }
   }
 
@@ -206,7 +218,7 @@ function transformPackageJson() {
   // Transitive runtime peers that must be declared as direct deps so npm
   // resolves them without needing pnpm's auto-install-peers behavior.
   // (In the monorepo dev setup pnpm provides them automatically.)
-  manifest.dependencies['@mastra/memory'] = 'latest'; // peer of @mastra/playground-ui
+  manifest.dependencies['@mastra/memory'] = resolveLatestVersion('@mastra/memory'); // peer of @mastra/playground-ui
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
 
   // Downgrade `typescript` from tsgo (v7) to classic (v5). The Mastra Factory
