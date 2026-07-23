@@ -186,20 +186,22 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
 
-  it('links a live-thread title to its workspace route and explains the click outcome', async () => {
+  it('shows a dedicated thread link while keeping the work item title static', async () => {
     stubBoardEndpoints();
     const user = userEvent.setup();
     renderWorkBoard();
 
-    const titleLink = await screen.findByRole('link', { name: /Fix login bug/ });
-    expect(titleLink).toHaveAttribute(
+    const titleText = await screen.findByText('Fix login bug');
+    expect(titleText.closest('a, button')).toBeNull();
+    const threadLink = screen.getByRole('link', { name: 'Open thread for Fix login bug' });
+    expect(threadLink).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
     );
-    const matches = matchRoutes(createAppRoutes(), titleLink.getAttribute('href') ?? '');
+    const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
 
-    await user.hover(titleLink);
+    await user.hover(threadLink);
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Open thread — does not start an agent run');
   });
 
@@ -207,13 +209,13 @@ describe('Board card pending states', () => {
     const { transitionRequests } = stubBoardEndpoints();
     renderWorkBoard();
 
-    const titleLink = await screen.findByRole('link', { name: /Fix login bug/ });
-    const card = titleLink.closest<HTMLElement>('[data-testid="work-item-card"]');
-    if (!card) throw new Error('Expected the title link inside its work item card');
+    const titleText = await screen.findByText('Fix login bug');
+    const card = titleText.closest<HTMLElement>('[data-testid="work-item-card"]');
+    if (!card) throw new Error('Expected the title inside its work item card');
     const currentColumn = screen.getByTestId('board-column-triage');
     const dataTransfer = createDataTransfer();
 
-    fireEvent.dragStart(titleLink, { dataTransfer });
+    fireEvent.dragStart(titleText, { dataTransfer });
     fireEvent.dragOver(currentColumn, { dataTransfer });
     fireEvent.drop(currentColumn, { dataTransfer });
     await delay(50);

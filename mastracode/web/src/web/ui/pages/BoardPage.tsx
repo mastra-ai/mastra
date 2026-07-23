@@ -5,7 +5,6 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   ArrowUpRight,
@@ -16,6 +15,7 @@ import {
   GitCompareArrows,
   GitPullRequest,
   Link2,
+  MessageSquareText,
   Plus,
   Stethoscope,
   Trash2,
@@ -1411,88 +1411,85 @@ function WorkItemCard({
         runPending && 'opacity-70',
       )}
     >
-      <DropdownMenu>
-        <DropdownMenu.Trigger
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              disabled={evaluating}
-              aria-label={`Actions for ${item.title}`}
-              className="absolute top-2 right-2"
-            >
-              <EllipsisVertical size={13} aria-hidden />
-            </Button>
-          }
-        />
-        <DropdownMenu.Content align="end" className="min-w-44">
-          {runSpec !== null &&
-            runActions.map(action => {
-              const starting = pendingRunRoles.has(action.role);
-              return (
-                <DropdownMenu.Item
-                  key={action.label}
-                  disabled={runDisabled || starting}
-                  onClick={() => onStartRun(runSpec, action)}
-                >
-                  {actionIcon(action.label)}
-                  <span>{starting ? 'Starting…' : action.label}</span>
+      <div className="absolute top-2 right-2 flex items-center gap-0.5">
+        {threadSession !== null ? (
+          <Button
+            as={Link}
+            to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+            variant="ghost"
+            size="xs"
+            aria-label={`Open thread for ${item.title}`}
+            tooltip="Open thread — does not start an agent run"
+          >
+            <MessageSquareText aria-hidden />
+            Open thread
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            disabled={runDisabled}
+            aria-busy={pendingRunRoles.size > 0 || undefined}
+            aria-label={`Create thread for ${item.title}`}
+            tooltip="Create thread — does not start an agent run"
+            onClick={() => onCreateSession(itemSessionSpec(item))}
+          >
+            <MessageSquareText aria-hidden />
+            New thread
+          </Button>
+        )}
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                disabled={evaluating}
+                aria-label={`Actions for ${item.title}`}
+              >
+                <EllipsisVertical size={13} aria-hidden />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end" className="min-w-44">
+            {runSpec !== null &&
+              runActions.map(action => {
+                const starting = pendingRunRoles.has(action.role);
+                return (
+                  <DropdownMenu.Item
+                    key={action.label}
+                    disabled={runDisabled || starting}
+                    onClick={() => onStartRun(runSpec, action)}
+                  >
+                    {actionIcon(action.label)}
+                    <span>{starting ? 'Starting…' : action.label}</span>
+                  </DropdownMenu.Item>
+                );
+              })}
+            {itemStageOptions(item)
+              .filter(stage => stage.id !== columnStage)
+              .map(stage => (
+                <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+                  <BoardStageIcon stage={stage.id} />
+                  <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
                 </DropdownMenu.Item>
-              );
-            })}
-          {itemStageOptions(item)
-            .filter(stage => stage.id !== columnStage)
-            .map(stage => (
-              <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
-                <BoardStageIcon stage={stage.id} />
-                <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
-              </DropdownMenu.Item>
-            ))}
-          <DropdownMenu.Item onClick={onRemove}>
-            <Trash2 aria-hidden />
-            <span>Remove</span>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu>
-      <div className="flex min-w-0 flex-col gap-1.5 pr-6">
-        <span className="truncate text-ui-xs text-icon2">{workItemMeta(item)}</span>
+              ))}
+            <DropdownMenu.Item onClick={onRemove}>
+              <Trash2 aria-hidden />
+              <span>Remove</span>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      </div>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <span className="truncate pr-30 text-ui-xs text-icon2">{workItemMeta(item)}</span>
         <div className="flex min-w-0 items-center gap-1.5">
           <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
-          {threadSession !== null ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Link
-                    to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
-                    aria-label={`Open thread for ${item.title}; does not start an agent run`}
-                    className="min-w-0 flex-1 cursor-pointer truncate text-ui-smd font-semibold text-icon6 no-underline hover:underline"
-                  >
-                    <SourceTitle source={item.source} title={item.title} />
-                  </Link>
-                }
-              />
-              <TooltipContent>Open thread — does not start an agent run</TooltipContent>
-            </Tooltip>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    disabled={runDisabled}
-                    aria-busy={pendingRunRoles.size > 0 || undefined}
-                    aria-label={`Create thread for ${item.title}; does not start an agent run`}
-                    onClick={() => onCreateSession(itemSessionSpec(item))}
-                    className="min-w-0 flex-1 cursor-pointer truncate text-left text-ui-smd font-semibold text-icon6 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <SourceTitle source={item.source} title={item.title} />
-                  </button>
-                }
-              />
-              <TooltipContent>Create thread — does not start an agent run</TooltipContent>
-            </Tooltip>
-          )}
+          <span className="min-w-0 flex-1 truncate text-ui-smd font-semibold text-icon6">
+            <SourceTitle source={item.source} title={item.title} />
+          </span>
           {item.url !== null && (
             <a
               href={item.url}
