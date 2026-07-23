@@ -1,5 +1,25 @@
 # @mastra/factory
 
+## 0.2.0
+
+### Minor Changes
+
+- Added guided model-provider setup to Factory onboarding with a recommended default model and provider-specific observational-memory defaults. ([#20079](https://github.com/mastra-ai/mastra/pull/20079))
+
+### Patch Changes
+
+- Renamed Mastra Factory server log prefix from "[MastraCode Web]" to "[Mastra Factory]" ([#20088](https://github.com/mastra-ai/mastra/pull/20088))
+
+- Link Factory Review cards to their work item when a PR opens without recorded provenance. GitHub PR-opened ingress now falls back to matching the PR head branch against work item session branches, and Review intake records `headBranch`/`baseBranch` metadata so the board and session views can relate the cards. ([#20074](https://github.com/mastra-ai/mastra/pull/20074))
+
+- Fixed board-started work sessions to use the Factory's default coding model and persisted observational-memory settings. ([#20081](https://github.com/mastra-ai/mastra/pull/20081))
+
+- Restored observational-memory settings so Factory users can choose models and preferences before opening a chat session. ([#20079](https://github.com/mastra-ai/mastra/pull/20079))
+
+- Updated dependencies [[`55adddf`](https://github.com/mastra-ai/mastra/commit/55adddfda2a170b00c112bf37d677e8ce5b65d5a)]:
+  - @mastra/core@1.52.1
+  - @mastra/code-sdk@1.0.1
+
 ## 0.2.0-alpha.0
 
 ### Minor Changes

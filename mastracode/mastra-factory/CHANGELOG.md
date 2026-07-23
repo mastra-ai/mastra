@@ -1,5 +1,16 @@
 # create-factory
 
+## 0.1.1
+
+### Patch Changes
+
+- Fixed generated Factory projects installing stale Mastra package versions. ([#20087](https://github.com/mastra-ai/mastra/pull/20087))
+
+- Fixed the Factory template sync to replace linked dependencies with the exact versions currently published under npm's latest tag. ([#20093](https://github.com/mastra-ai/mastra/pull/20093))
+
+- Updated dependencies [[`7d3a12e`](https://github.com/mastra-ai/mastra/commit/7d3a12ecfd0c4994ace2583e5497cb3a544ae350)]:
+  - mastra@1.20.1
+
 ## 0.1.1-alpha.0
 
 ### Patch Changes
