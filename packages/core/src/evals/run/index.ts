@@ -18,8 +18,16 @@ import type { WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../
 import type { AnyWorkflow } from '../../workflows/workflow';
 import { Workflow } from '../../workflows/workflow';
 import type { MastraScorer } from '../base';
+import { checkThresholdPassed, isScorerWithThreshold, validateThresholdConfig } from '../thresholds';
+import type {
+  ScorerEntry as ThresholdScorerEntry,
+  ScorerWithThreshold as GenericScorerWithThreshold,
+  ThresholdConfig,
+} from '../thresholds';
 import { extractTrajectory, extractTrajectoryFromTrace, extractWorkflowTrajectory } from '../types';
 import { ScoreAccumulator } from './scorerAccumulator';
+
+export type { ThresholdConfig } from '../thresholds';
 
 type WorkflowRunOptions = WorkflowRunStartOptions & {
   initialState?: any;
@@ -90,18 +98,13 @@ export type AgentScorerConfig = {
   trajectory?: MastraScorer<any, any, any, any>[];
 };
 
-/** Threshold configuration: a number implies minimum, or an object with min/max bounds. */
-export type ThresholdConfig = number | { min?: number; max?: number };
+type RunEvalsScorer = MastraScorer<any, any, any, any>;
 
 /** A scorer with an associated pass/fail threshold. */
-export type ScorerWithThreshold = {
-  scorer: MastraScorer<any, any, any, any>;
-  /** A number implies minimum threshold. Use { min, max } for range-based checks. */
-  threshold: ThresholdConfig;
-};
+export type ScorerWithThreshold = GenericScorerWithThreshold<RunEvalsScorer>;
 
 /** A scorer entry: either a bare scorer or one with a threshold. */
-export type ScorerEntry = MastraScorer<any, any, any, any> | ScorerWithThreshold;
+export type ScorerEntry = ThresholdScorerEntry<RunEvalsScorer>;
 
 /** Result of a gate evaluation for a single data item. */
 export type GateResult = {
@@ -605,51 +608,6 @@ function aggregateTurnResults(perItemTurnResults: ItemTurnResults[]): {
   }
 
   return { turnResults, turnGatesPassed, turnThresholdsPassed, hasTurnGates, hasTurnThresholds };
-}
-
-function checkThresholdPassed(score: number, threshold: ThresholdConfig): boolean {
-  if (typeof threshold === 'number') {
-    return score >= threshold;
-  }
-  if (threshold.min !== undefined && score < threshold.min) return false;
-  if (threshold.max !== undefined && score > threshold.max) return false;
-  return true;
-}
-
-function isScorerWithThreshold(entry: ScorerEntry): entry is ScorerWithThreshold {
-  return typeof entry === 'object' && 'scorer' in entry && 'threshold' in entry;
-}
-
-function validateThresholdBound(value: number, label: string, scorerId: string): void {
-  if (!Number.isFinite(value) || value < 0 || value > 1) {
-    throw new MastraError({
-      domain: 'SCORER',
-      id: 'INVALID_SCORER_THRESHOLD',
-      category: 'USER',
-      text: `${label} threshold for scorer "${scorerId}" must be a finite number between 0 and 1, got ${value}`,
-    });
-  }
-}
-
-function validateThresholdConfig(threshold: ThresholdConfig, scorerId: string): void {
-  if (typeof threshold === 'number') {
-    validateThresholdBound(threshold, 'Minimum', scorerId);
-    return;
-  }
-  if (threshold.min !== undefined) {
-    validateThresholdBound(threshold.min, 'Minimum', scorerId);
-  }
-  if (threshold.max !== undefined) {
-    validateThresholdBound(threshold.max, 'Maximum', scorerId);
-  }
-  if (threshold.min !== undefined && threshold.max !== undefined && threshold.min > threshold.max) {
-    throw new MastraError({
-      domain: 'SCORER',
-      id: 'INVALID_SCORER_THRESHOLD',
-      category: 'USER',
-      text: `Threshold for scorer "${scorerId}" has min (${threshold.min}) greater than max (${threshold.max})`,
-    });
-  }
 }
 
 function normalizeScorerEntries(
