@@ -1419,7 +1419,7 @@ function WorkItemCard({
             variant="ghost"
             size="xs"
             aria-label={`Open thread for ${item.title}`}
-            tooltip="Open thread — does not start an agent run"
+            className="transition-opacity pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:pointer-events-auto pointer-fine:focus-visible:opacity-100 motion-reduce:transition-none"
           >
             <MessageSquareText aria-hidden />
             Open thread
@@ -1432,7 +1432,7 @@ function WorkItemCard({
             disabled={runDisabled}
             aria-busy={pendingRunRoles.size > 0 || undefined}
             aria-label={`Create thread for ${item.title}`}
-            tooltip="Create thread — does not start an agent run"
+            className="transition-opacity pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:pointer-events-auto pointer-fine:focus-visible:opacity-100 motion-reduce:transition-none"
             onClick={() => onCreateSession(itemSessionSpec(item))}
           >
             <MessageSquareText aria-hidden />

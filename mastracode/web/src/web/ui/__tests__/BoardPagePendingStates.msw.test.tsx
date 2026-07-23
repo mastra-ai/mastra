@@ -188,7 +188,6 @@ describe('Board card pending states', () => {
 
   it('shows a dedicated thread link while keeping the work item title static', async () => {
     stubBoardEndpoints();
-    const user = userEvent.setup();
     renderWorkBoard();
 
     const titleText = await screen.findByText('Fix login bug');
@@ -200,9 +199,6 @@ describe('Board card pending states', () => {
     );
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
-
-    await user.hover(threadLink);
-    expect(await screen.findByRole('tooltip')).toHaveTextContent('Open thread — does not start an agent run');
   });
 
   it('ignores a card dropped back into its current column', async () => {
