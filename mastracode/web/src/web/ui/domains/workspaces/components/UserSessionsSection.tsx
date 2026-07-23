@@ -38,6 +38,7 @@ export function UserSessionsSection() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
   const repository = factoryQuery.data?.repositories[0];
   const sessionsEnabled = Boolean(repository);
@@ -117,11 +118,15 @@ export function UserSessionsSection() {
   const pending = createSession.isPending || deleteSession.isPending;
 
   const openSession = async (session: FactoryUserSession) => {
+    if (openingId) return;
+    setOpeningId(session.sessionId);
     try {
       await controllerSession(session.sessionId).create({ threadId: session.sessionId });
       void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to open session');
+    } finally {
+      setOpeningId(null);
     }
   };
 
@@ -161,6 +166,7 @@ export function UserSessionsSection() {
                 url={url}
                 active={active}
                 disabled={pending}
+                loading={openingId === session.sessionId}
                 onSelect={() => void openSession(session)}
                 onDelete={() => setConfirmDelete(session)}
               />

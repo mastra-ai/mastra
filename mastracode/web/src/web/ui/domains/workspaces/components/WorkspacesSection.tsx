@@ -40,6 +40,7 @@ export function WorkspacesSection() {
   });
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, session, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const activityOptions = {
@@ -101,6 +102,8 @@ export function WorkspacesSection() {
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = async (workspace: FactoryUserSession) => {
+    if (openingId) return;
+    setOpeningId(workspace.sessionId);
     clearAttention(workspace.sessionId);
     try {
       // Workspace sessions (and their threads) live under the session's own id
@@ -138,6 +141,8 @@ export function WorkspacesSection() {
       }
     } catch {
       void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}`, { state: { from: location } });
+    } finally {
+      setOpeningId(null);
     }
   };
 
@@ -155,6 +160,7 @@ export function WorkspacesSection() {
           title="Work Sessions"
           rows={workRows}
           pending={pending}
+          openingId={openingId}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
@@ -164,6 +170,7 @@ export function WorkspacesSection() {
           title="Review Sessions"
           rows={reviewRows}
           pending={pending}
+          openingId={openingId}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
@@ -216,12 +223,14 @@ function WorkspaceGroup({
   title,
   rows,
   pending,
+  openingId,
   onSelect,
   onDelete,
 }: {
   title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
   pending: boolean;
+  openingId: string | null;
   onSelect: (workspace: FactoryUserSession) => void;
   onDelete: (workspace: FactoryUserSession) => void;
 }) {
@@ -241,6 +250,7 @@ function WorkspaceGroup({
             url={row.url}
             active={row.active}
             disabled={pending}
+            loading={openingId === row.workspace.sessionId}
             status={row.running ? 'running' : row.attention ? 'attention' : undefined}
             onSelect={() => onSelect(row.workspace)}
             onDelete={() => onDelete(row.workspace)}

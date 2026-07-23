@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { GitBranch, MoreHorizontal, Trash2 } from 'lucide-react';
 
 /**
@@ -15,6 +16,7 @@ export function SessionNavRow({
   url,
   active,
   disabled,
+  loading,
   status,
   onSelect,
   onDelete,
@@ -25,6 +27,8 @@ export function SessionNavRow({
   url: string;
   active: boolean;
   disabled: boolean;
+  /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
+  loading?: boolean;
   status?: 'running' | 'attention';
   onSelect: () => void;
   onDelete: () => void;
@@ -39,13 +43,15 @@ export function SessionNavRow({
           type="button"
           aria-current={active ? 'page' : undefined}
           aria-label={name}
-          disabled={disabled}
+          disabled={disabled || loading}
           onClick={onSelect}
           title={title}
         >
           <GitBranch />
           <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
-          {status === 'running' ? (
+          {loading ? (
+            <Spinner size="sm" aria-label={`Opening ${name}`} className="ml-auto shrink-0 text-icon3" />
+          ) : status === 'running' ? (
             <span
               role="status"
               aria-label={`Agent working in ${name}`}
@@ -63,28 +69,30 @@ export function SessionNavRow({
         </button>
       }
       action={
-        <DropdownMenu>
-          <DropdownMenu.Trigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Session actions for ${name}`}
-                disabled={disabled}
-                className="opacity-0 group-hover/session:opacity-100 group-focus-within/session:opacity-100 data-[popup-open]:opacity-100"
-              >
-                <MoreHorizontal />
-              </Button>
-            }
-          />
-          <DropdownMenu.Content align="end" className="min-w-28">
-            <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-              <Trash2 />
-              Delete
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu>
+        loading ? undefined : (
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Session actions for ${name}`}
+                  disabled={disabled}
+                  className="opacity-0 group-hover/session:opacity-100 group-focus-within/session:opacity-100 data-[popup-open]:opacity-100"
+                >
+                  <MoreHorizontal />
+                </Button>
+              }
+            />
+            <DropdownMenu.Content align="end" className="min-w-28">
+              <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+                <Trash2 />
+                Delete
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
+        )
       }
     />
   );
