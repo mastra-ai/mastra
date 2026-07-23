@@ -59,7 +59,7 @@ async function fixture() {
     },
     sendSignal: vi.fn(() => ({ accepted })),
   };
-  const controller = { getSessionByResource: vi.fn(async () => workerSession) };
+  const controller = { getSessionByResource: vi.fn(async (_resourceId: string) => workerSession) };
   const approvals = {
     list: vi.fn(async () => []),
     get: vi.fn(async () => null),
@@ -74,12 +74,18 @@ async function fixture() {
   const describeWorkerBindings = vi.fn(async () => [
     { workItemId: prepared.item.id, role: 'work', bindingId: prepared.binding.id, activity: 'idle' as const },
   ]);
+  const resolveWorkerSession = vi.fn(async (input: { binding: { resourceId: string } }) => {
+    const session = await controller.getSessionByResource(input.binding.resourceId);
+    if (!session) throw new Error('Bound Factory session is unavailable.');
+    return session;
+  });
   const service = {
     requireProject: vi.fn(async ({ orgId }: { orgId: string }) => {
       if (orgId !== ORG_ID) throw new Error('Factory project not found.');
     }),
     getState,
     describeWorkerBindings,
+    resolveWorkerSession,
     workItems: storage,
     approvals,
     controller,

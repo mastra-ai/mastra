@@ -180,11 +180,12 @@ export async function createFactorySupervisorTools(options: {
         );
         if (!binding)
           throw new Error(role ? `No active Factory binding for role '${role}'.` : 'No active Factory binding found.');
-        const session = await options.service.controller.getSessionByResource(binding.resourceId);
-        if (!session) throw new Error('Bound Factory session is unavailable.');
-        if (session.thread.getId() !== binding.threadId) {
-          await session.thread.switch({ threadId: binding.threadId, emitEvent: false });
-        }
+        const session = await options.service.resolveWorkerSession({
+          orgId: current.orgId,
+          factoryProjectId: current.factoryProjectId,
+          binding: { resourceId: binding.resourceId, threadId: binding.threadId },
+          requestContext: execution.requestContext,
+        });
         const signalId = randomUUID();
         const accepted = await session.sendSignal(
           {
