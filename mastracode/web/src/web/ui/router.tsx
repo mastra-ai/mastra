@@ -30,6 +30,7 @@ import { ThreadPage } from './pages/ThreadPage';
 import { useFactoriesQuery } from '../../shared/hooks/useFactories';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { hasPendingCreateFlow } from './domains/workspaces/hooks/useCreateFactoryFlow';
+import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
 function RootLanding() {
   const { data: factories, isPending } = useFactoriesQuery();
@@ -42,11 +43,15 @@ function RootLanding() {
   // landing on the first factory's home.
   if (hasPendingCreateFlow()) return <Navigate to={`/factories/create${search}`} replace />;
 
-  if (isPending) return null;
+  if (isPending || !factories) return null;
 
-  const firstFactory = factories?.[0];
+  const firstFactory = factories[0];
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
+
+  // Same for onboarding once its factory exists (created on repo pick): the
+  // GitHub/Linear round-trips must resume the wizard, not land on the factory.
+  if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
 
   return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
 }

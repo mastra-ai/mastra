@@ -12,6 +12,10 @@ import { connectLinear } from '../../factory/services/linear';
 import type { FactoryProject, FactoryProjectPayload } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import type { GithubRepo } from '../services/github';
+import {
+  ONBOARDING_FACTORY_KEY as FACTORY_KEY,
+  ONBOARDING_STEP_KEY as STEP_KEY,
+} from '../services/onboardingFlow';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
 import { InitialFactoryStep } from './InitialFactoryStep';
@@ -21,9 +25,6 @@ import { useNavigate } from 'react-router';
 import '@fontsource-variable/mona-sans/standard.css';
 
 export type Step = 'initial' | 'vcs' | 'project-management';
-
-const STEP_KEY = 'mastracode.factory-onboarding.step';
-const FACTORY_KEY = 'mastracode.factory-onboarding.factory-id';
 
 const STEP_META: Record<Step, { title: string; description?: string }> = {
   initial: {

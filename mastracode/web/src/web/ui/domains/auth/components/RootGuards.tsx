@@ -1,6 +1,7 @@
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
+import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
 import { Navigate, Outlet, useLocation } from 'react-router';
 
 export const RootGuards = () => {
@@ -33,6 +34,14 @@ const OnboardingGuard = () => {
 
   if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
   if ((factories?.length ?? 0) === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
+  if (
+    factories &&
+    factories.length > 0 &&
+    pathname === '/onboarding' &&
+    !hasResumableFactoryOnboarding(factories)
+  ) {
+    return <Navigate to={`/factories/${factories[0].id}`} replace />;
+  }
 
   return <Outlet />;
 };

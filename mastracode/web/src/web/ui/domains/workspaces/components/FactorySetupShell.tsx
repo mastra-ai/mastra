@@ -3,22 +3,28 @@ import type { ReactNode } from 'react';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
+import '@fontsource-variable/mona-sans/standard.css';
 
 /**
  * Full-screen chrome shared by the onboarding flow and the `/factories/create`
- * wizard: halftone backdrop, centered column, and slots for the progress dots,
- * step heading, and animated step content. Steps stay independent components
- * composed by each flow, so future step variants slot in without mode flags.
+ * wizard: a side-by-side layout with the step column on the left and the
+ * animated halftone factory panel on the right (hidden on mobile). Slots for the
+ * `topLeft` control, progress dots, step heading, and animated step content.
+ * Steps stay independent components composed by each flow, so future step
+ * variants slot in without mode flags.
  */
 export function FactorySetupShell({ topLeft, children }: { topLeft?: ReactNode; children: ReactNode }) {
   return (
-    <main className="relative min-h-dvh overflow-hidden bg-surface1 text-neutral6">
-      <FactoryHalftoneField variant="backdrop" />
-      {topLeft && <div className="absolute top-6 left-6 z-10 sm:top-8 sm:left-8">{topLeft}</div>}
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-6 py-8 sm:px-10 lg:px-16">
-        <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center text-center">
-          {children}
+    <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
+      <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
+        <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
+          {topLeft && <div className="absolute top-6 left-6 z-10 sm:top-8 sm:left-8 lg:left-16">{topLeft}</div>}
+          <div className="w-full max-w-2xl">{children}</div>
         </section>
+
+        <div className="hidden lg:grid">
+          <FactoryHalftoneField />
+        </div>
       </div>
     </main>
   );
@@ -29,11 +35,15 @@ function Header({ title, description, children }: { title: ReactNode; descriptio
   return (
     <div className="w-full">
       {children}
-      <h1 className="mx-auto max-w-2xl text-3xl leading-tight font-semibold tracking-[-0.035em] text-balance sm:text-4xl lg:text-5xl">
+      <h1 className="max-w-xl text-[clamp(2rem,3.9vw,3.25rem)] leading-[1.1] font-[520] tracking-[0.01em] text-balance [font-stretch:112%]">
         {title}
       </h1>
       {description && (
-        <Txt as="p" variant="ui-lg" className="mx-auto mt-6 max-w-2xl leading-7 text-neutral3 sm:text-lg">
+        <Txt
+          as="p"
+          variant="ui-lg"
+          className="mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em] text-neutral3"
+        >
           {description}
         </Txt>
       )}
@@ -44,12 +54,12 @@ function Header({ title, description, children }: { title: ReactNode; descriptio
 function Progress({ steps, current }: { steps: string[]; current: string }) {
   const currentIndex = steps.indexOf(current);
   return (
-    <ol className="mb-6 flex justify-center gap-2" aria-label="Factory setup progress">
+    <ol className="mb-9 flex gap-2" aria-label="Factory setup progress">
       {steps.map((item, index) => (
         <li
           key={item}
           aria-current={current === item ? 'step' : undefined}
-          className={`h-1 w-14 rounded-full ${index <= currentIndex ? 'bg-accent1' : 'bg-surface4'}`}
+          className={`h-1 w-14 rounded-full transition-colors ${index <= currentIndex ? 'bg-accent1' : 'bg-surface4'}`}
         >
           <span className="sr-only">Step {index + 1}</span>
         </li>
@@ -61,13 +71,11 @@ function Progress({ steps, current }: { steps: string[]; current: string }) {
 /** Animated container for the current step; re-keys on step change to replay the entrance. */
 function Step({ stepKey, children }: { stepKey: string; children: ReactNode }) {
   return (
-    <div className="flex w-full justify-center pt-12">
-      <div
-        key={stepKey}
-        className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none"
-      >
-        {children}
-      </div>
+    <div
+      key={stepKey}
+      className="mt-11 w-full animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none"
+    >
+      {children}
     </div>
   );
 }
