@@ -23,8 +23,10 @@ export interface FakeSandboxOptions {
   withNetworking?: boolean;
   /** Content returned when a command `cat`s the install marker. */
   installMarker?: string;
-  /** Content returned when a command tails the server log. */
+  /** Content returned when a command tails a deployment log. */
   serverLog?: string;
+  /** Status returned when worker lifecycle state is queried. Defaults to running. */
+  workerStatus?: 'running' | 'cancelled' | `exited ${number}` | 'unknown';
   /** Provide info returned from getInfo(). */
   info?: Partial<SandboxInfo>;
 }
@@ -106,6 +108,8 @@ export class FakeSandbox implements WorkspaceSandbox {
       stdout = this.opts.installMarker ?? '';
     } else if (script.startsWith('tail')) {
       stdout = this.opts.serverLog ?? '';
+    } else if (script.includes('kill -0') && script.includes('.mastra-worker.status')) {
+      stdout = this.opts.workerStatus ?? 'running';
     } else if (script.includes('$HOME') || script.includes('${HOME')) {
       stdout = '/home/fake';
     }
