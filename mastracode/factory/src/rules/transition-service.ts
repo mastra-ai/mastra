@@ -209,11 +209,13 @@ export class FactoryTransitionService {
             });
             const raw = await rule.handler(context);
             if (raw === undefined) continue;
-            const decision = validateFactoryRuleDecision(raw, context.causalChain.length);
-            if (decision.type === 'reject') {
-              return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
+            for (const entry of Array.isArray(raw) ? raw : [raw]) {
+              const decision = validateFactoryRuleDecision(entry, context.causalChain.length);
+              if (decision.type === 'reject') {
+                return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
+              }
+              decisions.push(decision);
             }
-            decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
           if (request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage) {
@@ -273,6 +275,7 @@ export class FactoryTransitionService {
       expectedRevision: request.expectedRevision,
       destinationStage: request.stage,
       actorId: actorId(request.actor),
+      actor: request.actor,
       ingress: { identity: request.ingress.identity, triggerType: request.ingress.type, transitionId },
       ruleSetVersion: this.#rules.version,
       causalChain: [...(request.causalChain ?? [])],

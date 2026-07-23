@@ -73,19 +73,19 @@ describe('FactoryTransitionService', () => {
       cause: 'board_drag',
     });
 
-    expect(result).toMatchObject({
-      status: 'accepted',
-      decisions: [
-        {
+    expect(result).toMatchObject({ status: 'accepted' });
+    expect(result.status === 'accepted' ? result.decisions : []).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
           type: 'sendMessage',
           role: 'work',
           message: 'This work was moved from the triage stage to the execute stage.',
           priority: 'urgent',
           idleBehavior: 'wake',
           prepareBinding: true,
-        },
-      ],
-    });
+        }),
+      ]),
+    );
   });
 
   it('attaches a persisted notice to a skill triggered by a board drag', async () => {
@@ -101,17 +101,17 @@ describe('FactoryTransitionService', () => {
       cause: 'board_drag',
     });
 
-    expect(result).toMatchObject({
-      status: 'accepted',
-      decisions: [
-        {
+    expect(result).toMatchObject({ status: 'accepted' });
+    expect(result.status === 'accepted' ? result.decisions : []).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
           type: 'invokeSkill',
           role: 'triage',
           skillName: 'factory-triage',
           precedingMessage: 'This work was moved from the intake stage to the triage stage.',
-        },
-      ],
-    });
+        }),
+      ]),
+    );
   });
 
   it('runs onExit before onEnter and atomically persists accepted decisions', async () => {

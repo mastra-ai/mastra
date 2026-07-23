@@ -31,6 +31,10 @@ function reject() {
   return { type: 'reject', code: 'forbidden', reason: 'Not allowed.' } as const;
 }
 
+function decisions(result: Awaited<ReturnType<NonNullable<FactoryBoardRuleLeaf['onEnter']>>>) {
+  return result === undefined ? [] : Array.isArray(result) ? result : [result];
+}
+
 function stageContext(actor: FactoryStageRuleContext['actor'], board: 'work' | 'review'): FactoryStageRuleContext {
   const source = board === 'work' ? 'issue' : 'pullRequest';
   return {
@@ -187,12 +191,18 @@ describe('defaultFactoryRules', () => {
       toStage: 'triage',
     } as FactoryStageRuleContext;
 
-    expect(await rule?.(context)).toMatchObject({
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'factory-triage',
-      arguments: 'Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)',
-    });
+    expect(decisions(await rule?.(context))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'invokeSkill',
+          role: 'triage',
+          skillName: 'factory-triage',
+          arguments: 'Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)',
+        }),
+        expect.objectContaining({ type: 'commentExternalSource' }),
+        expect.objectContaining({ type: 'updateExternalSource', state: { kind: 'byType', stateType: 'started' } }),
+      ]),
+    );
   });
 
   it('starts the same investigation when a human moves an issue into Triage', async () => {
@@ -203,12 +213,17 @@ describe('defaultFactoryRules', () => {
       fromStage: 'intake',
       toStage: 'triage',
     } as FactoryStageRuleContext;
-    expect(await rule?.(context)).toMatchObject({
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'factory-triage',
-      arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
-    });
+    expect(decisions(await rule?.(context))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'invokeSkill',
+          role: 'triage',
+          skillName: 'factory-triage',
+          arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
+        }),
+        expect.objectContaining({ type: 'commentExternalSource' }),
+      ]),
+    );
   });
 
   it('starts PR understanding when a human moves a pull request into Review', async () => {
@@ -219,12 +234,17 @@ describe('defaultFactoryRules', () => {
       fromStage: 'intake',
       toStage: 'review',
     } as FactoryStageRuleContext;
-    expect(await rule?.(context)).toMatchObject({
-      type: 'invokeSkill',
-      role: 'review',
-      skillName: 'factory-review',
-      arguments: 'GitHub pull request (https://github.test/acme/repo/issues/42)',
-    });
+    expect(decisions(await rule?.(context))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'invokeSkill',
+          role: 'review',
+          skillName: 'factory-review',
+          arguments: 'GitHub pull request (https://github.test/acme/repo/issues/42)',
+        }),
+        expect.objectContaining({ type: 'commentExternalSource' }),
+      ]),
+    );
   });
 
   it.each([
@@ -242,13 +262,17 @@ describe('defaultFactoryRules', () => {
       toStage: 'planning',
     } as FactoryStageRuleContext;
 
-    expect(await rule?.(context)).toMatchObject({
-      type: 'invokeSkill',
-      idempotencyKey: 'delivery-1:factory-plan',
-      role: 'plan',
-      skillName: 'factory-plan',
-      arguments: 'Work item (https://github.test/acme/repo/issues/42)',
-    });
+    expect(decisions(await rule?.(context))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'invokeSkill',
+          idempotencyKey: 'delivery-1:factory-plan',
+          role: 'plan',
+          skillName: 'factory-plan',
+          arguments: 'Work item (https://github.test/acme/repo/issues/42)',
+        }),
+      ]),
+    );
   });
 
   it('keys the planning skill invocation once per ingress', async () => {
@@ -260,13 +284,65 @@ describe('defaultFactoryRules', () => {
       toStage: 'planning',
     } as FactoryStageRuleContext;
 
-    const first = await rule?.(context);
-    const second = await rule?.(context);
-    expect(first).toMatchObject({ idempotencyKey: 'delivery-1:factory-plan' });
-    expect(second).toMatchObject({ idempotencyKey: 'delivery-1:factory-plan' });
-    expect(await rule?.({ ...context, ingress: { type: 'human' as const, id: 'delivery-2' } })).toMatchObject({
-      idempotencyKey: 'delivery-2:factory-plan',
-    });
+    const first = decisions(await rule?.(context));
+    const second = decisions(await rule?.(context));
+    expect(first).toContainEqual(expect.objectContaining({ idempotencyKey: 'delivery-1:factory-plan' }));
+    expect(second).toContainEqual(expect.objectContaining({ idempotencyKey: 'delivery-1:factory-plan' }));
+    expect(
+      decisions(await rule?.({ ...context, ingress: { type: 'human' as const, id: 'delivery-2' } })),
+    ).toContainEqual(expect.objectContaining({ idempotencyKey: 'delivery-2:factory-plan' }));
+  });
+
+  it.each([
+    ['done', 'completed'],
+    ['canceled', 'canceled'],
+  ] as const)('comments and closes GitHub issues entering %s', async (stage, stateType) => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work[stage]?.issue?.onEnter;
+    const result = decisions(
+      await rule?.({
+        ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+        stage,
+        fromStage: 'review',
+        toStage: stage,
+      }),
+    );
+
+    expect(result).toContainEqual(expect.objectContaining({ type: 'commentExternalSource' }));
+    expect(result).toContainEqual(
+      expect.objectContaining({ type: 'updateExternalSource', state: { kind: 'byType', stateType } }),
+    );
+  });
+
+  it('keeps pull-request transitions comment-only', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).review.done?.pullRequest?.onEnter;
+    const result = decisions(
+      await rule?.({
+        ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
+        stage: 'done',
+        fromStage: 'review',
+        toStage: 'done',
+      }),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ type: 'commentExternalSource' });
+  });
+
+  it('does not externally sync manual work items', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.planning?.manual?.onEnter;
+    const result = decisions(
+      await rule?.({
+        ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+        item: { ...item, source: 'manual' },
+        source: 'manual',
+        stage: 'planning',
+        fromStage: 'triage',
+        toStage: 'planning',
+      }),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ type: 'invokeSkill' });
   });
 
   it('advances only an approved plan from a bound planning role', async () => {

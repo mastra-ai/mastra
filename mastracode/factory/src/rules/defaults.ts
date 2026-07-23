@@ -7,6 +7,7 @@ import type {
   FactoryLinearEventName,
   FactoryLinearRuleContext,
   FactoryLinearRuleLeaf,
+  FactoryRuleDecision,
   FactoryRules,
   FactoryRulesOverrides,
   FactoryRuleSource,
@@ -68,6 +69,45 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
     skillName: 'factory-review',
     arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
   } as const;
+}
+
+const STAGE_COMMENTS: Record<Exclude<FactoryRuleStage, 'intake'>, string> = {
+  triage: 'Factory picked this up and is triaging it.',
+  planning: 'Factory is planning the work.',
+  execute: 'Factory is working on this.',
+  review: 'Factory has moved this to review.',
+  done: 'Factory completed this work.',
+  canceled: 'Factory canceled this work.',
+};
+
+function externalSyncDecisions(context: FactoryStageRuleContext): FactoryRuleDecision[] {
+  if (context.item.source === 'manual' || context.stage === 'intake') return [];
+  const decisions: FactoryRuleDecision[] = [
+    {
+      type: 'commentExternalSource',
+      idempotencyKey: `${context.ingress.id}:external-comment:${context.stage}`,
+      body: STAGE_COMMENTS[context.stage],
+    } as const,
+  ];
+  if (context.item.source === 'github-pr') return decisions;
+  if (context.item.source === 'linear-issue' || context.stage === 'done' || context.stage === 'canceled') {
+    decisions.push({
+      type: 'updateExternalSource',
+      idempotencyKey: `${context.ingress.id}:external-state:${context.stage}`,
+      state: {
+        kind: 'byType',
+        stateType: context.stage === 'done' ? 'completed' : context.stage === 'canceled' ? 'canceled' : 'started',
+      },
+    } as const);
+  }
+  return decisions;
+}
+
+function withExternalSync(handler?: (context: FactoryStageRuleContext) => FactoryRuleDecision | void) {
+  return (context: FactoryStageRuleContext) => {
+    const decision = handler?.(context);
+    return decision ? [decision, ...externalSyncDecisions(context)] : externalSyncDecisions(context);
+  };
 }
 
 function resultContent(value: unknown): string | undefined {
@@ -189,16 +229,39 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   work: {
     triage: {
-      issue: { onEnter: investigateTriagedIssue },
-      linearIssue: { onEnter: investigateTriagedLinearIssue },
+      issue: { onEnter: withExternalSync(investigateTriagedIssue) },
+      linearIssue: { onEnter: withExternalSync(investigateTriagedLinearIssue) },
     },
     planning: {
-      issue: { onEnter: planWorkItem },
-      linearIssue: { onEnter: planWorkItem },
+      issue: { onEnter: withExternalSync(planWorkItem) },
+      linearIssue: { onEnter: withExternalSync(planWorkItem) },
       manual: { onEnter: planWorkItem },
     },
+    execute: {
+      issue: { onEnter: withExternalSync() },
+      linearIssue: { onEnter: withExternalSync() },
+    },
+    review: {
+      issue: { onEnter: withExternalSync() },
+      linearIssue: { onEnter: withExternalSync() },
+    },
+    done: {
+      issue: { onEnter: withExternalSync() },
+      linearIssue: { onEnter: withExternalSync() },
+    },
+    canceled: {
+      issue: { onEnter: withExternalSync() },
+      linearIssue: { onEnter: withExternalSync() },
+    },
   },
-  review: { review: { pullRequest: { onEnter: reviewPullRequest } } },
+  review: {
+    triage: { pullRequest: { onEnter: withExternalSync() } },
+    planning: { pullRequest: { onEnter: withExternalSync() } },
+    execute: { pullRequest: { onEnter: withExternalSync() } },
+    review: { pullRequest: { onEnter: withExternalSync(reviewPullRequest) } },
+    done: { pullRequest: { onEnter: withExternalSync() } },
+    canceled: { pullRequest: { onEnter: withExternalSync() } },
+  },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },

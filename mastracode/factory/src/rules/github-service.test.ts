@@ -219,6 +219,15 @@ describe('FactoryGithubEventService', () => {
       storage: workItems,
       ownerId: 'worker-1',
       primeCredentials,
+      intake: async () => ({
+        intake: {
+          getIssue: vi.fn(),
+          updateIssue: vi.fn(),
+          createComment: vi.fn(async () => ({ id: 'comment-1' })),
+        } as never,
+        connection: { type: 'app-installation', installationId: 1 },
+        issueId: '42',
+      }),
       prepareBinding: async ({ record, item, role }) => {
         await coordinator.prepare({
           orgId: record.orgId,
@@ -260,12 +269,14 @@ describe('FactoryGithubEventService', () => {
     expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
       'succeeded',
       'succeeded',
+      'succeeded',
     ]);
 
     await workItems.delete({ orgId: 'org-1', id: item!.id });
     await expect(service.ingest(issueOpened('delivery-full-flow'))).resolves.toEqual({ status: 'replayed' });
     expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
       'retry',
+      'succeeded',
       'succeeded',
     ]);
 

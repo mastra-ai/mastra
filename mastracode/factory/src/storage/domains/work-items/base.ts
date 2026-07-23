@@ -251,6 +251,7 @@ export interface CommitFactoryTransitionInput {
   expectedRevision: number;
   destinationStage: string;
   actorId: string;
+  actor: Record<string, unknown>;
   ingress: { identity: string; triggerType: string; transitionId: string };
   ruleSetVersion: string;
   causalChain: Array<{ ingressId: string; decisionType: string }>;
@@ -1029,7 +1030,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 effect_ordinal: index,
                 effect_hash: factoryDecisionHash(decision),
                 causal_chain: input.causalChain,
-                actor: null,
+                actor: input.actor,
                 decision,
                 status: 'pending',
                 attempts: 0,

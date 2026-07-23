@@ -16,7 +16,6 @@ import { FACTORY_RULE_STAGES } from './types.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleBoard,
-  FactoryRuleDecision,
   FactoryRuleJsonValue,
   FactoryRules,
   FactoryToolResultRuleContext,
@@ -415,15 +414,16 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       result: { status: toolResult.status, value: toolResult.value },
     };
 
-    let decision: FactoryRuleDecision | void = undefined;
     let decisions: FactoryCommitDecision[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
-      decision = await withRuleTimeout(Promise.resolve(rule(Object.freeze(context))));
-      if (decision?.type === 'reject') {
-        outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
-      } else if (decision) {
-        decisions = validateFactoryRuleDecisions([decision]);
+      const result = await withRuleTimeout(Promise.resolve(rule(Object.freeze(context))));
+      const entries = result === undefined ? [] : Array.isArray(result) ? result : [result];
+      const rejection = entries.find(entry => entry.type === 'reject');
+      if (rejection?.type === 'reject') {
+        outcome = { status: 'rejected', code: rejection.code, reason: rejection.reason };
+      } else {
+        decisions = validateFactoryRuleDecisions(entries);
       }
     } catch (error) {
       const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
