@@ -22,8 +22,16 @@ const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 const items = await dataset.addItems({
   items: [
-    { input: { question: 'What is AI?' }, groundTruth: { answer: 'Artificial Intelligence' } },
-    { input: { question: 'What is ML?' }, groundTruth: { answer: 'Machine Learning' } },
+    {
+      input: { question: 'What is AI?' },
+      groundTruth: { answer: 'Artificial Intelligence' },
+      scorerIds: ['accuracy'],
+    },
+    {
+      input: { question: 'What is ML?' },
+      groundTruth: { answer: 'Machine Learning' },
+      scorerIds: [],
+    },
     { input: { question: 'What is DL?' }, metadata: { category: 'deep-learning' } },
   ],
 })
@@ -53,6 +61,13 @@ console.log(`Added ${items.length} items`)
             type: 'unknown',
             isOptional: true,
             description: 'Expected output or ground truth.',
+          },
+          {
+            name: 'scorerIds',
+            type: 'string[]',
+            isOptional: true,
+            description:
+              'Scorer IDs that override dataset-attached scorers for this item. An empty array runs no scorers for the item.',
           },
           {
             name: 'metadata',

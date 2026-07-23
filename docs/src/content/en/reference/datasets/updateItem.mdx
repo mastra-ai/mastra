@@ -24,6 +24,7 @@ const updated = await dataset.updateItem({
   itemId: 'item-id',
   input: { question: 'What is TypeScript?' },
   groundTruth: { answer: 'A typed superset of JavaScript' },
+  scorerIds: null,
   metadata: { reviewed: true },
 })
 ```
@@ -48,6 +49,13 @@ const updated = await dataset.updateItem({
     type: 'unknown',
     isOptional: true,
     description: 'Updated ground truth.',
+  },
+  {
+    name: 'scorerIds',
+    type: 'string[] | null',
+    isOptional: true,
+    description:
+      'Scorer IDs that override dataset-attached scorers for this item. Use `[]` to run no scorers, `null` to remove the override and restore dataset inheritance, or omit the field to preserve the current value.',
   },
   {
     name: 'metadata',

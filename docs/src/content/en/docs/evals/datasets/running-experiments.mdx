@@ -45,6 +45,8 @@ console.log(summary.failedCount) // number of items that failed
 
 You can also run experiments in [Studio](/docs/studio/overview). After you've added a dataset item, open it and select **Run Experiment** and configure the target, scorers, and options.
 
+To configure scorers for one item, edit the item and enable **Override dataset scorers**. Select one or more scorers, or leave the selection empty to run no scorers for that item.
+
 After running an experiment, the **Experiments** tab shows all runs for that dataset (with status, counts, and timestamps). Select an experiment to see per-item results, scores, and execution traces.
 
 In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
@@ -142,6 +144,48 @@ for (const item of summary.results) {
 ```
 
 Visit the [Scorers overview](/docs/evals/overview) for details on available and custom scorers.
+
+## Select scorers per item
+
+Add registered scorer IDs to a dataset item to override the scorers attached to its dataset:
+
+```typescript title="src/mastra/datasets/items.ts"
+await dataset.addItem({
+  input: 'Translate "hello" to French.',
+  scorerIds: ['accuracy', 'fluency'],
+})
+```
+
+An experiment uses exactly one scorer source for each item, in this order:
+
+1. The experiment's `scorers` option, when provided
+1. The item's `scorerIds` field, when provided
+1. The dataset's `scorerIds` field
+1. No scorers
+
+Mastra doesn't merge these sources. An explicit empty array at the run or item level selects no scorers and prevents fallback to the next source. An empty categorized run-level configuration has the same effect. Duplicate item or dataset IDs run once, in the order of their first occurrence.
+
+The following updates switch between an explicit empty override and dataset inheritance:
+
+```typescript title="src/mastra/datasets/items.ts"
+// Run no scorers for this item
+await dataset.updateItem({
+  itemId: 'translation-item-id',
+  scorerIds: [],
+})
+
+// Remove the item override and inherit the dataset's scorers
+await dataset.updateItem({
+  itemId: 'translation-item-id',
+  scorerIds: null,
+})
+```
+
+Omitting `scorerIds` from an update preserves its current value. Each item version stores its scorer ID list, including an empty list. Scorer definitions aren't copied into the item version and continue to use their existing registry or Editor behavior.
+
+Mastra resolves all item-level IDs before running the target. It checks registered scorers first, then asks the Editor to hydrate a stored scorer. A stale item-level ID produces the `EXPERIMENT_ITEM_SCORER_NOT_FOUND` code for that item. Mastra skips its target execution and retries, while the rest of the experiment continues. Missing run-level and dataset-level IDs keep their previous skip-and-warn behavior.
+
+Workflow step scorers are available only through a run-level categorized `scorers` configuration. Item-level IDs apply to the flat agent, workflow, and trajectory scorer dispatch.
 
 ## Tool mocks
 
