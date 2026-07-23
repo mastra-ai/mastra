@@ -32,7 +32,7 @@ describe('ChatOverlays', () => {
     const user = userEvent.setup();
     renderOverlays();
 
-    await user.click(screen.getByRole('button', { name: 'Shortcuts' }));
+    await user.click(await screen.findByRole('button', { name: 'Shortcuts' }));
     expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).not.toBeInTheDocument();

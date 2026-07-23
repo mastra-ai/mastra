@@ -32,7 +32,6 @@ function statusColor(status: PullRequestSubscription['status']): string {
 interface PullRequestLinksProps {
   baseUrl: string;
   resourceId: string;
-  projectPath: string | undefined;
   projectRepositoryId: unknown;
   factoryProjectId: unknown;
   repositorySlug: string | undefined;
@@ -45,7 +44,6 @@ interface PullRequestLinksProps {
 export function PullRequestLinks({
   baseUrl,
   resourceId,
-  projectPath,
   projectRepositoryId,
   factoryProjectId,
   repositorySlug,
@@ -57,11 +55,7 @@ export function PullRequestLinks({
   const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
   const workItems = useWorkItemsQuery(factoryProjectKey);
   const reviewItem = workItems.data?.find(
-    item =>
-      item.source === 'github-pr' &&
-      Object.values(item.sessions).some(
-        session => session.threadId === threadId && (!projectPath || session.sessionId === projectPath),
-      ),
+    item => item.source === 'github-pr' && Object.values(item.sessions).some(session => session.threadId === threadId),
   );
   const reviewNumber = reviewItem?.metadata.githubPullRequestNumber ?? reviewItem?.metadata.number;
   const normalizedReviewNumber = Number(reviewNumber);
@@ -95,11 +89,10 @@ export function PullRequestLinks({
     .join(':');
   const enabled = typeof projectRepositoryId === 'string' && Boolean(threadId);
   const query = useQuery({
-    queryKey: ['github', 'subscriptions', resourceId, threadId, projectPath],
+    queryKey: ['github', 'subscriptions', resourceId, threadId],
     queryFn: async () => {
       if (!threadId) return { subscriptions: [] };
       const params = new URLSearchParams({ resourceId, threadId });
-      if (projectPath) params.set('scope', projectPath);
       const response = await fetch(`${baseUrl}/web/github/subscriptions?${params}`, { credentials: 'include' });
       if (!response.ok) throw new Error(`Failed to load pull request subscriptions (${response.status}).`);
       return response.json() as Promise<PullRequestSubscriptionsResponse>;
@@ -129,7 +122,7 @@ export function PullRequestLinks({
   if (links.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="ml-auto flex items-center gap-2">
       {links.map(subscription => (
         <a
           key={subscription.id}

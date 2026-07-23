@@ -1,5 +1,73 @@
 # @mastra/code-sdk
 
+## 1.0.0-alpha.17
+
+### Patch Changes
+
+- Fixed a crash (`TypeError: Cannot read properties of undefined (reading 'includes')`) when a Mastra store instance is injected into the SDK from a project whose dependency graph contains duplicate copies of @mastra/core. Injected stores are now detected structurally instead of with `instanceof`, so stores built against a different core copy are recognized correctly instead of being mistaken for a storage config. ([#20030](https://github.com/mastra-ai/mastra/pull/20030))
+
+## 1.0.0-alpha.16
+
+### Patch Changes
+
+- Moved custom model providers and custom model packs off settings.json in the factory web app: both now live in the app database (org-scoped rows in deployed mode, a sentinel local scope in no-auth mode). Custom providers saved in the web settings page are picked up by model resolution and the model catalog through a new pluggable custom-providers source in the SDK, so the gateway no longer reads the host machine's settings.json for them, and models from your custom providers appear in the web model pickers. ([#19964](https://github.com/mastra-ai/mastra/pull/19964))
+
+  Hosts that store custom providers elsewhere (like the factory's database) register a source at boot; when none is registered, the SDK keeps reading settings.json as before:
+
+  ```ts
+  import { setCustomProvidersSource } from '@mastra/code-sdk/agents/custom-provider-source';
+
+  setCustomProvidersSource(tenant => (tenant ? snapshotForOrg(tenant.orgId) : []));
+  ```
+
+- Added a memory-settings storage domain: observational memory settings (observer and reflector models, thresholds, attachment observation) changed in the web app are now stored in the app database — one row per user — instead of settings.json, and the settings page reads them back from the database. Factory-mounted agent controllers no longer seed observational memory settings from the host machine's settings.json (new `disableSettingsOmSeed` SDK option), so server sessions start from built-in defaults plus whatever is stored in the database. The OM settings model pickers in the web UI are now searchable comboboxes. ([#19964](https://github.com/mastra-ai/mastra/pull/19964))
+
+  Server embedders that persist memory settings in their own database can opt out of the settings.json seed:
+
+  ```ts
+  import { createMastraCode } from '@mastra/code-sdk';
+
+  const mastraCode = await createMastraCode({
+    cwd: process.cwd(),
+    // Don't seed observer/reflector models or thresholds from the host
+    // machine's settings.json — sessions start from built-in defaults.
+    disableSettingsOmSeed: true,
+  });
+  ```
+
+- Updated dependencies [[`90ed0d0`](https://github.com/mastra-ai/mastra/commit/90ed0d0ca8fce0e1fc751fba16b30a5c00bb3fd1)]:
+  - @mastra/libsql@1.17.0-alpha.4
+  - @mastra/pg@1.17.0-alpha.4
+  - @mastra/core@1.52.0-alpha.13
+
+## 1.0.0-alpha.15
+
+### Patch Changes
+
+- Fixed provider request history repair so incompatible tool-call IDs are sanitized and retried instead of being blindly resent after a provider rejects the request ([#19969](https://github.com/mastra-ai/mastra/pull/19969))
+
+- Fixed session thread cloning failing with "Source thread not found" when the cached dynamic memory instance was bound to a previous storage instance. The memory cache is now scoped to the storage it was created with. ([#19969](https://github.com/mastra-ai/mastra/pull/19969))
+
+- Fixed cloned session threads reading from a previous storage instance. The dynamic memory cache now invalidates when the storage or vector instance changes, so thread cloning always uses the current database. ([#19966](https://github.com/mastra-ai/mastra/pull/19966))
+
+## 1.0.0-alpha.14
+
+### Patch Changes
+
+- Added a session notification when a GitHub plugin is automatically updated to its latest version ([#19943](https://github.com/mastra-ai/mastra/pull/19943))
+
+  ```ts
+  const unsubscribe = pluginManager.onGithubPluginsUpdated(pluginNames => {
+    console.log(`Updated plugins: ${pluginNames.join(', ')}`);
+  });
+
+  // Call during shutdown.
+  unsubscribe();
+  ```
+
+- Updated dependencies [[`d7385ad`](https://github.com/mastra-ai/mastra/commit/d7385ad9e88f9e4f33d15c0ec0bfebedde0cbc2e), [`3d6e539`](https://github.com/mastra-ai/mastra/commit/3d6e539272eb2ea0407034605ee1906b3be06b39), [`35865a5`](https://github.com/mastra-ai/mastra/commit/35865a53e194aa9634d6a70a97010e7a6b9d58b1), [`70687f7`](https://github.com/mastra-ai/mastra/commit/70687f7e495a322a02070b4a67cb0c77a5ca91ec), [`3d6e539`](https://github.com/mastra-ai/mastra/commit/3d6e539272eb2ea0407034605ee1906b3be06b39)]:
+  - @mastra/core@1.52.0-alpha.12
+
 ## 1.0.0-alpha.13
 
 ### Patch Changes

@@ -27,18 +27,22 @@ async function createItem(storage: WorkItemsStorage, sourceKey = 'github-issue:1
   ).item;
 }
 
-function createSession(accepted: Promise<unknown> = Promise.resolve({ action: 'wake' })) {
+function createSession(accepted?: Promise<unknown>) {
   let threadId = 'thread-1';
+  const consumeStream = vi.fn(async () => {});
+  const notificationAccepted = accepted ?? Promise.resolve({ action: 'wake', output: { consumeStream } });
   const deliveredKeys = new Set<string>();
   const deliveredSignals = new Set<string>();
   const delivered: string[] = [];
-  const sendNotificationSignal = vi.fn(async (input: { dedupeKey?: string }) => {
-    if (input.dedupeKey && !deliveredKeys.has(input.dedupeKey)) {
-      deliveredKeys.add(input.dedupeKey);
-      delivered.push(input.dedupeKey);
-    }
-    return { persisted: Promise.resolve(), accepted };
-  });
+  const sendNotificationSignal = vi.fn(
+    async (input: { dedupeKey?: string }, _options?: { requestContext?: { get(key: string): unknown } }) => {
+      if (input.dedupeKey && !deliveredKeys.has(input.dedupeKey)) {
+        deliveredKeys.add(input.dedupeKey);
+        delivered.push(input.dedupeKey);
+      }
+      return { persisted: Promise.resolve(), accepted: notificationAccepted };
+    },
+  );
   const session = {
     thread: {
       list: vi.fn(async () => []),
@@ -68,7 +72,7 @@ function createSession(accepted: Promise<unknown> = Promise.resolve({ action: 'w
     createSession: vi.fn(async () => session),
     getSessionByResource: vi.fn(async (): Promise<typeof session | undefined> => session),
   };
-  return { controller, session, delivered, sendNotificationSignal };
+  return { controller, session, delivered, sendNotificationSignal, consumeStream };
 }
 
 async function queueDecision(storage: WorkItemsStorage, decision: FactoryCommitDecision) {
@@ -220,6 +224,70 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  it('prepares a binding, delivers to active sessions, and consumes idle wake streams for an urgent stage transition', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'plan',
+      message: 'This work was moved from the triage stage to the planning stage.',
+      priority: 'urgent',
+      idleBehavior: 'wake',
+      prepareBinding: true,
+      idempotencyKey: 'stage-transition-1',
+    });
+    const { controller, sendNotificationSignal, consumeStream } = createSession();
+    const prepareBinding = vi.fn(async () => {
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'plan',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'stage-transition-1',
+        kickoffMessage: null,
+      });
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledWith(
+      expect.objectContaining({ item: expect.objectContaining({ id: item.id }), role: 'plan' }),
+    );
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'rule-message',
+        priority: 'urgent',
+        summary: 'This work was moved from the triage stage to the planning stage.',
+      }),
+      {
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'wake' },
+        requestContext: expect.anything(),
+      },
+    );
+    const requestContext = sendNotificationSignal.mock.calls[0]?.[1]?.requestContext;
+    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(consumeStream).toHaveBeenCalledOnce();
+  });
+
   it('renews the lease while an external delivery remains in flight', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
@@ -270,7 +338,7 @@ describe('FactoryDecisionDispatcher', () => {
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.leaseExpiresAt?.toISOString()).toBe(
         '2030-01-01T00:00:40.000Z',
       );
-      accept({ action: 'wake' });
+      accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
       await dispatch;
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
     } finally {
@@ -286,8 +354,9 @@ describe('FactoryDecisionDispatcher', () => {
       skillName: 'understand-issue',
       arguments: 'Issue 42',
       idempotencyKey: 'skill-1',
+      precedingMessage: 'This work was moved from the planning stage to the execute stage.',
     });
-    const { controller, session } = createSession();
+    const { controller, session, sendNotificationSignal } = createSession();
     await storage.prepareRunStart({
       orgId: 'org-1',
       userId: 'user-1',
@@ -320,6 +389,25 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      {
+        source: 'factory',
+        kind: 'stage-transition',
+        summary: 'This work was moved from the planning stage to the execute stage.',
+        priority: 'medium',
+        payload: { message: 'This work was moved from the planning stage to the execute stage.' },
+        sourceId: expect.stringMatching(/:stage-transition$/),
+        dedupeKey: 'skill-1:stage-transition',
+      },
+      {
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'persist' },
+        requestContext: expect.anything(),
+      },
+    );
+    expect(sendNotificationSignal.mock.invocationCallOrder[0]).toBeLessThan(
+      session.sendSignal.mock.invocationCallOrder[0]!,
+    );
     expect(session.sendSignal).toHaveBeenCalledWith(
       {
         id: expect.any(String),

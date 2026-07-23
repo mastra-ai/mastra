@@ -11,9 +11,9 @@ import {
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
@@ -77,20 +77,20 @@ function readFileAsBase64(file: File): Promise<string> {
 }
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { kind, resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const location = useLocation();
+  const { kind, resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
   const { busy, localUser, reset } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
-  const { composerCommandName, clearComposerCommand, runComposerCommand } = useChatCommands();
+  const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -99,42 +99,23 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
 
-  const [draft, setDraft] = useState('');
   const [images, setImages] = useState<PendingImage[]>([]);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const spotlightRef = useComposerSpotlight();
-  const appliedCommandNameRef = useRef<string | null>(null);
   const modeSwitchPendingRef = useRef(false);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
 
   const updateDraft = (next: string) => {
-    setDraft(next);
+    setComposerDraft(next);
     setActiveSuggestion(0);
   };
 
-  const applyCommandDraft = (name: string) => {
-    updateDraft(`/${name} `);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  };
-
   const applyCommand = (name: string) => {
-    applyCommandDraft(name);
-    clearComposerCommand();
+    updateDraft(`/${name} `);
+    inputRef.current?.focus();
   };
-
-  useEffect(() => {
-    if (!composerCommandName) {
-      appliedCommandNameRef.current = null;
-      return;
-    }
-    if (appliedCommandNameRef.current === composerCommandName) return;
-    appliedCommandNameRef.current = composerCommandName;
-    applyCommandDraft(composerCommandName);
-    clearComposerCommand();
-  }, [composerCommandName, clearComposerCommand]);
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -212,12 +193,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const send = async (text: string, files: PendingImage[]) => {
     if (!text.trim() && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
-    if (location.pathname === '/new') {
+    if (onDraftComposer) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
       await sendMutation.mutateAsync({ text, files: outgoing });
       seedThreadMessageCache(threadId, text, files);
-      void navigate(`/threads/${threadId}`, { replace: true });
+      void navigate(`/factories/${factoryId}/threads/${threadId}`, { replace: true });
       return;
     }
     localUser(text, false, outgoing);
@@ -352,7 +333,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
           disabled={disabled}
           maxHeight={composerVariantMaxHeight[variant]}
-          className={composerVariantClass[variant]}
+          className={cn(composerVariantClass[variant], 'text-[15px] text-neutral3')}
           aria-label="Message"
           aria-keyshortcuts="Shift+Tab"
         />
@@ -386,9 +367,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           className="hidden"
           aria-label="Attach images"
         />
-        <ComposerActions className="static w-full justify-between px-3 pb-2">
+        <ComposerActions className="static w-full flex-wrap items-end justify-between px-3 pb-3">
           <StatusLine />
-          <ButtonsGroup spacing="close" aria-label="Composer actions">
+          <ButtonsGroup className="ml-auto" spacing="close" aria-label="Composer actions">
             <Button
               type="button"
               variant="outline"

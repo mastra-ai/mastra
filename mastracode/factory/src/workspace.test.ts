@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
       start: vi.fn(async () => {}),
       getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'sandbox-1' } })),
       executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      setEnvironmentVariable: mocks.setEnvironmentVariable,
     };
   }),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
@@ -29,6 +30,7 @@ const mocks = vi.hoisted(() => ({
     authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
   })),
   mintInstallationToken: vi.fn(async () => 'gh-token'),
+  setEnvironmentVariable: vi.fn(),
 }));
 
 vi.mock('./integrations/github/sandbox', () => ({
@@ -37,6 +39,7 @@ vi.mock('./integrations/github/sandbox', () => ({
   runWorktreeSetup: (...args: unknown[]) => (mocks.runWorktreeSetup as any)(...args),
 }));
 
+import { injectGithubToken } from './integrations/github/token-refresh.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { checkpointNameForSession, createWorkspaceFactory, getFactoryWorkspace } from './workspace.js';
 
@@ -53,6 +56,7 @@ afterEach(async () => {
   mocks.runWorktreeSetup.mockClear();
   mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
+  mocks.setEnvironmentVariable.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -70,14 +74,18 @@ function createRequestContext(projectPath: string) {
   return requestContext;
 }
 
-function createGithubRequestContext(_projectId: string, sessionId: string) {
+function createGithubRequestContext(
+  _projectId: string,
+  sessionId: string,
+  user: Record<string, unknown> = { organizationId: 'org-1', workosId: 'user-1' },
+) {
   const requestContext = createRequestContext('/unused');
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: sessionId,
     session: { id: sessionId },
   });
-  requestContext.set('user', { organizationId: 'org-1', workosId: 'user-1' });
+  requestContext.set('user', user);
   return requestContext;
 }
 
@@ -325,6 +333,34 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
   });
 
+  it('registers a runtime injector for refreshing GH_TOKEN in the active sandbox', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext });
+    injectGithubToken(requestContext, 'fresh-token');
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'fresh-token');
+  });
+
+  it('re-registers the token injector when reusing a workspace on a later request', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({
+      requestContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+    injectGithubToken(requestContext, 'later-token');
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'later-token');
+  });
+
   it('reuses an already registered workspace for the exact GitHub session', async () => {
     const { workspace } = await createLocalFactory();
     addProject();
@@ -360,6 +396,23 @@ describe('GitHub session workspace preparation', () => {
     await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
       /Factory session session-a is not available/,
     );
+  });
+
+  it('accepts session owners identified by provider-neutral id instead of workosId', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const existing = { id: 'existing', setToolsConfig: vi.fn() };
+
+    const result = await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a', {
+        organizationId: 'org-1',
+        id: 'user-1',
+      }),
+      mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+    });
+
+    expect(result).toBe(existing);
   });
 
   it('keeps ordinary local-folder projects on the dynamic workspace resolver', async () => {

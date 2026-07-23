@@ -34,7 +34,7 @@ export function WorkspaceFileViewer({ filePath, file, isLoading, error }: Worksp
       className="flex h-full min-w-0 flex-col border-l border-border1 bg-surface1"
       aria-label="Workspace file viewer"
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border1 px-3 py-2 pl-10">
+      <div className="flex items-center justify-between gap-2 border-b border-border1 px-3 py-2 pl-10 lg:pl-3">
         <div className="min-w-0">
           <Txt variant="ui-sm" className="truncate font-medium text-icon6">
             {file?.name ?? filePath ?? 'Select a file'}

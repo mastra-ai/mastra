@@ -66,18 +66,28 @@ function toolContext(
   };
 }
 
-function githubContext(event: FactoryGithubRuleContext['event']): FactoryGithubRuleContext {
+function githubContext(
+  event: FactoryGithubRuleContext['event'],
+  sourceCreatedAt = '2026-07-01T00:00:00Z',
+): FactoryGithubRuleContext {
   return {
     ...base,
     actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
     event,
     deliveryId: 'delivery-1',
+    factory: { createdAt: '2026-06-01T00:00:00Z' },
     repository: { id: 10, fullName: 'acme/repo' },
-    issue: { number: 42, title: 'Issue 42', url: 'https://github.test/acme/repo/issues/42' },
+    issue: {
+      number: 42,
+      title: 'Issue 42',
+      url: 'https://github.test/acme/repo/issues/42',
+      createdAt: sourceCreatedAt,
+    },
     pullRequest: {
       number: 17,
       title: 'PR 17',
       url: 'https://github.test/acme/repo/pull/17',
+      createdAt: sourceCreatedAt,
       state: 'open',
       merged: false,
       headBranch: 'feature',
@@ -263,6 +273,19 @@ describe('defaultFactoryRules', () => {
         stage: 'intake',
       });
       expect(await rules.github[event]?.onEvent?.(factoryAuthored)).toMatchObject({
+        type: 'upsertLinkedWorkItem',
+        stage: 'intake',
+      });
+    },
+  );
+
+  it.each(['issueOpened', 'pullRequestOpened'] as const)(
+    'keeps trusted %s items created before the Factory in Intake',
+    async event => {
+      const rules = defaultFactoryRules({ version: 'deployment-7' });
+      const olderContext = githubContext(event, '2026-05-01T00:00:00Z');
+
+      expect(await rules.github[event]?.onEvent?.(olderContext)).toMatchObject({
         type: 'upsertLinkedWorkItem',
         stage: 'intake',
       });
