@@ -2,7 +2,7 @@ import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
-import { executeTarget } from './executor';
+import { executeTarget, raceWithSignal } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
 import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED } from './tool-mocks';
@@ -15,6 +15,7 @@ type ExperimentItem = {
   datasetVersion: number | null; // null for inline experiments
   input: unknown;
   groundTruth?: unknown;
+  timeout?: number;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   /** Resume data for suspended workflow steps, keyed by step ID */
@@ -24,6 +25,39 @@ type ExperimentItem = {
   /** Item-level static tool mocks (agent targets only) */
   toolMocks?: ItemToolMock[];
 };
+
+function executionFailure(error: unknown): ExecutionResult {
+  return {
+    output: null,
+    error: {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    },
+    ...(error instanceof Error && error.name === 'AbortError' ? { aborted: true } : {}),
+    traceId: null,
+  };
+}
+
+function waitForRetry(delay: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    return new Promise(resolve => setTimeout(resolve, delay));
+  }
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+  }
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, delay);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 // Re-export types and helpers
 export type {
@@ -136,6 +170,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           datasetVersion: null,
           input: dataItem.input,
           groundTruth: dataItem.groundTruth,
+          timeout: dataItem.timeout,
           requestContext: dataItem.requestContext,
           metadata: dataItem.metadata,
           resumeSteps: dataItem.resumeSteps,
@@ -180,6 +215,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         datasetVersion: v.datasetVersion,
         input: v.input,
         groundTruth: v.groundTruth,
+        timeout: v.timeout,
         requestContext: v.requestContext,
         metadata: v.metadata,
         toolMocks: v.toolMocks,
@@ -201,23 +237,19 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       const taskFn = config.task;
       execFn = async (item, itemSignal) => {
         try {
-          const result = await taskFn({
-            input: item.input,
-            mastra,
-            groundTruth: item.groundTruth,
-            metadata: item.metadata,
-            signal: itemSignal,
-          });
+          const taskPromise = Promise.resolve(
+            taskFn({
+              input: item.input,
+              mastra,
+              groundTruth: item.groundTruth,
+              metadata: item.metadata,
+              signal: itemSignal,
+            }),
+          );
+          const result = itemSignal ? await raceWithSignal(taskPromise, itemSignal) : await taskPromise;
           return { output: result, error: null, traceId: null };
         } catch (err: unknown) {
-          return {
-            output: null,
-            error: {
-              message: err instanceof Error ? err.message : String(err),
-              stack: err instanceof Error ? err.stack : undefined,
-            },
-            traceId: null,
-          };
+          return executionFailure(err);
         }
       };
     } else if (targetType && targetId) {
@@ -360,20 +392,28 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         }
 
         const itemStartedAt = new Date();
-        // Compose per-item signal (timeout + run-level abort)
+        // Compose one per-item signal before the first attempt so timeout is a whole-item budget.
+        const effectiveTimeout = item.timeout ?? itemTimeout;
         let itemSignal: AbortSignal | undefined = signal;
-        if (itemTimeout) {
-          const timeoutSignal = AbortSignal.timeout(itemTimeout);
+        if (effectiveTimeout) {
+          const timeoutSignal = AbortSignal.timeout(effectiveTimeout);
           itemSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
         }
 
         // Retry loop
         let retryCount = 0;
         let execResult = await execFn(item, itemSignal);
+        if (signal?.aborted) {
+          throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+        }
 
         while (execResult.error && retryCount < maxRetries) {
-          // Don't retry abort errors
-          if (execResult.error.message.toLowerCase().includes('abort')) break;
+          if (signal?.aborted) {
+            throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+          }
+
+          // The item deadline and explicit abort errors are non-retryable.
+          if (itemSignal?.aborted || execResult.aborted) break;
 
           // Don't retry deterministic tool-mock failures — the matcher state cannot
           // change between attempts, so retrying would always fail identically.
@@ -381,17 +421,28 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             break;
           }
 
-          retryCount++;
-          const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
           const jitter = delay * 0.2 * Math.random();
-          await new Promise(r => setTimeout(r, delay + jitter));
-
-          // Re-check cancellation before retry
-          if (signal?.aborted) {
-            throw new DOMException('Aborted', 'AbortError');
+          try {
+            await waitForRetry(delay + jitter, itemSignal);
+          } catch (error) {
+            if (signal?.aborted) {
+              throw signal.reason ?? error;
+            }
+            execResult = executionFailure(error);
+            break;
           }
 
+          if (itemSignal?.aborted) {
+            execResult = executionFailure(itemSignal.reason);
+            break;
+          }
+
+          retryCount++;
           execResult = await execFn(item, itemSignal);
+          if (signal?.aborted) {
+            throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+          }
         }
 
         const itemCompletedAt = new Date();
