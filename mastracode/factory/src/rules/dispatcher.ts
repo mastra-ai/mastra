@@ -109,15 +109,36 @@ function retryAt(now: Date, attempts: number): Date {
 }
 
 function externalSourceForDecision(decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>) {
-  const [integrationId, type] =
-    decision.source === 'github-pr'
-      ? ['github', 'pull-request']
-      : decision.source === 'github-issue'
-        ? ['github', 'issue']
-        : decision.source === 'linear-issue'
-          ? ['linear', 'issue']
-          : ['factory', 'manual'];
-  return { integrationId, type, externalId: decision.sourceKey, url: decision.url ?? undefined };
+  const metadata = decision.metadata ?? {};
+  if (decision.source === 'github-issue' || decision.source === 'github-pr') {
+    const repositoryId = metadata.githubRepositoryId;
+    const issueNumber =
+      decision.source === 'github-issue' ? metadata.githubIssueNumber : metadata.githubPullRequestNumber;
+    const externalId =
+      typeof repositoryId === 'number' && typeof issueNumber === 'number'
+        ? `${repositoryId}:${issueNumber}`
+        : decision.sourceKey;
+    return {
+      integrationId: 'github',
+      type: decision.source === 'github-pr' ? 'pull-request' : 'issue',
+      externalId,
+      url: decision.url ?? undefined,
+    };
+  }
+  if (decision.source === 'linear-issue') {
+    return {
+      integrationId: 'linear',
+      type: 'issue',
+      externalId: typeof metadata.linearIssueId === 'string' ? metadata.linearIssueId : decision.sourceKey,
+      url: decision.url ?? undefined,
+    };
+  }
+  return {
+    integrationId: 'factory',
+    type: 'manual',
+    externalId: decision.sourceKey,
+    url: decision.url ?? undefined,
+  };
 }
 
 function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor {

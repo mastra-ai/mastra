@@ -682,11 +682,7 @@ export class MastraFactory {
                 const intake = registration?.integration.intake;
                 if (!intake?.resolveIntakeDispatch) return null;
                 if (registration && !registration.ready) await registration.ensureReady();
-                const resolved = await intake.resolveIntakeDispatch({
-                  orgId,
-                  externalSource,
-                  ...(workItem.metadata ? { metadata: workItem.metadata } : {}),
-                });
+                const resolved = await intake.resolveIntakeDispatch({ orgId, externalSource });
                 if (!resolved) return null;
                 return { intake, ...resolved };
               },

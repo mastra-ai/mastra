@@ -239,7 +239,7 @@ describe('FactoryGithubEventService', () => {
 
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(item).toMatchObject({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: '10:42' },
       stages: ['triage'],
       sessions: {
         triage: {
@@ -274,7 +274,7 @@ describe('FactoryGithubEventService', () => {
 
     const [rematerialized] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(rematerialized).toMatchObject({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: '10:42' },
       stages: ['triage'],
     });
     expect(rematerialized?.id).not.toBe(item?.id);

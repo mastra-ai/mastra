@@ -1020,7 +1020,6 @@ describe('FactoryDecisionDispatcher', () => {
       connection,
       issueId: 'issue-1',
       state: { kind: 'byType', stateType: 'started' },
-      actingUserId: 'user-1',
     });
 
     const first = await storage.listDeferredDecisions('org-1', PROJECT_ID);
@@ -1092,7 +1091,6 @@ describe('FactoryDecisionDispatcher', () => {
       connection,
       issueId: 'issue-1',
       body: 'Factory picked this up.',
-      actingUserId: 'user-1',
     });
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(record?.status).toBe('succeeded');
