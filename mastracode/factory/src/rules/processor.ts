@@ -37,7 +37,7 @@ const PHASE_LABELS: Record<(typeof FACTORY_RULE_STAGES)[number], string> = {
   canceled: 'Canceled',
 };
 
-type PersistedMessageReader = {
+export type PersistedMessageReader = {
   listMessages(input: {
     threadId: string;
     resourceId?: string;
@@ -119,7 +119,7 @@ function completedStepToolCallIds(steps: unknown[]): Set<string> {
   return ids;
 }
 
-function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
+export function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
   if (message.role !== 'assistant') return [];
   const createdAt = message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt);
   const completed: CompletedToolResult[] = [];

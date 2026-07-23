@@ -493,6 +493,137 @@ describe('FactoryGithubEventService', () => {
     ]);
   });
 
+  it('links an opened Review card via the bound-session transcript when provenance and head branch both miss', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        // The agent pushed its own branch (`feature`), not the factory
+        // worktree branch, so the head-branch fallback finds nothing.
+        sessions: { work: { sessionId: 'session-issue-42', branch: 'factory/issue-42', threadId: 'thread-issue-42' } },
+        metadata: {},
+      },
+    });
+    const service = new FactoryGithubEventService({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+      messageReader: {
+        listMessages: async input => ({
+          messages:
+            input.threadId === 'thread-issue-42'
+              ? [
+                  {
+                    id: 'message-1',
+                    role: 'assistant',
+                    createdAt: new Date('2030-01-01T00:00:00Z'),
+                    content: {
+                      format: 2,
+                      parts: [
+                        {
+                          type: 'tool-invocation',
+                          toolInvocation: {
+                            state: 'result',
+                            toolCallId: 'call-pr',
+                            toolName: 'execute_command',
+                            args: { command: 'gh pr create --title "PR 17" --head feature' },
+                            result: 'https://github.com/acme/repo/pull/17\n',
+                          },
+                        },
+                      ],
+                    },
+                  } as never,
+                ]
+              : [],
+          hasMore: false,
+        }),
+      },
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-transcript-link'));
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: work.item.id,
+        decision: expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr' }),
+      }),
+    ]);
+  });
+
+  it('leaves an opened Review card unlinked when no bound-session transcript opened the PR', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: { work: { sessionId: 'session-issue-42', branch: 'factory/issue-42', threadId: 'thread-issue-42' } },
+        metadata: {},
+      },
+    });
+    const service = new FactoryGithubEventService({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+      messageReader: {
+        listMessages: async () => ({
+          messages: [
+            {
+              id: 'message-1',
+              role: 'assistant',
+              createdAt: new Date('2030-01-01T00:00:00Z'),
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'tool-invocation',
+                    toolInvocation: {
+                      state: 'result',
+                      toolCallId: 'call-tests',
+                      toolName: 'execute_command',
+                      args: { command: 'pnpm test' },
+                      result: '11 passed',
+                    },
+                  },
+                ],
+              },
+            } as never,
+          ],
+          hasMore: false,
+        }),
+      },
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-no-transcript-link'));
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.workItemId ?? null).toBeNull();
+  });
+
   it('evaluates the same delivery independently for every tenant project mapped to the repository', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const second = await projects.create({

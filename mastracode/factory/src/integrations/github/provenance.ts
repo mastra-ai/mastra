@@ -113,7 +113,15 @@ export async function recordFactoryPullRequestProvenance(
         toolCallId: input.toolCallId,
       },
     });
-  } catch {
+  } catch (error) {
+    // Best-effort by design, but never silently: a swallowed failure here
+    // (e.g. a token mint 404 on a broken installation during the PR
+    // verification fetch) is exactly what breaks the PR auto-link later.
+    console.warn('[Factory] Failed to record PR provenance', {
+      pullRequestUrl: url,
+      workItemId: input.item.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return;
   }
 }
