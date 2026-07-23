@@ -49,13 +49,7 @@ export function ThreadPage() {
     setWorkspaceViewerOverride({ workspacePath, visible });
   };
 
-  if (factoryQuery.isPending || (Boolean(routeSessionId) && userSessionQuery.isPending)) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
-  }
+  const resolvingSession = factoryQuery.isPending || (isUserThreadRoute && userSessionQuery.isPending);
   return (
     <ChatLayout
       sidebar={<Sidebar />}
@@ -76,9 +70,15 @@ export function ThreadPage() {
         ) : undefined
       }
       main={
-        <ChatSessionBoundary threadId={threadId}>
-          <ThreadPageMain />
-        </ChatSessionBoundary>
+        resolvingSession ? (
+          <div className="grid h-full min-h-0 place-items-center">
+            <Spinner aria-label="Loading session" className="text-icon3" />
+          </div>
+        ) : (
+          <ChatSessionBoundary threadId={threadId}>
+            <ThreadPageMain />
+          </ChatSessionBoundary>
+        )
       }
     />
   );

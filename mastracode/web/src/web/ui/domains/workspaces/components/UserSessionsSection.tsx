@@ -1,14 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { GitBranch, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
+import type { FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
@@ -20,6 +19,7 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { USER_SESSION_BRANCH_PREFIX } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
 import { createUserSession, deleteUserSession } from '../services/github';
+import { SessionNavRow } from './SessionNavRow';
 
 function sessionLabel(session: FactoryUserSession): string {
   return session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)
@@ -38,6 +38,7 @@ export function UserSessionsSection() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
   const repository = factoryQuery.data?.repositories[0];
   const sessionsEnabled = Boolean(repository);
@@ -117,28 +118,26 @@ export function UserSessionsSection() {
   const pending = createSession.isPending || deleteSession.isPending;
 
   const openSession = async (session: FactoryUserSession) => {
+    if (openingId) return;
+    setOpeningId(session.sessionId);
     try {
       await controllerSession(session.sessionId).create({ threadId: session.sessionId });
       void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to open session');
+    } finally {
+      setOpeningId(null);
     }
   };
 
-  const resetCreate = () => {
+  const closeCreateDialog = () => {
     setCreating(false);
     setName('');
+    createSession.reset();
   };
   const submitCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (name.trim()) createSession.mutate(name);
-  };
-  const onCreateKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Escape') resetCreate();
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      if (name.trim()) createSession.mutate(name);
-    }
   };
 
   return (
@@ -152,7 +151,7 @@ export function UserSessionsSection() {
           size="icon-sm"
           aria-label="New user session"
           onClick={() => setCreating(true)}
-          disabled={creating || pending}
+          disabled={pending}
         >
           <Plus size={15} />
         </Button>
@@ -166,78 +165,59 @@ export function UserSessionsSection() {
             const active = location.pathname === url;
 
             return (
-              <MainSidebar.NavLink
+              <SessionNavRow
                 key={session.sessionId}
-                link={{ name, url }}
-                isActive={active}
-                className="group/session"
-                render={
-                  <button
-                    type="button"
-                    aria-current={active ? 'page' : undefined}
-                    aria-label={name}
-                    disabled={pending}
-                    onClick={() => void openSession(session)}
-                    title={session.branch}
-                  >
-                    <GitBranch />
-                    <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
-                  </button>
-                }
-                action={
-                  <DropdownMenu>
-                    <DropdownMenu.Trigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Session actions for ${name}`}
-                          disabled={pending}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/session:opacity-100 group-focus-within/session:opacity-100 data-[popup-open]:opacity-100"
-                        >
-                          <MoreHorizontal />
-                        </Button>
-                      }
-                    />
-                    <DropdownMenu.Content align="end" className="min-w-28">
-                      <DropdownMenu.Item variant="destructive" onClick={() => setConfirmDelete(session)}>
-                        <Trash2 />
-                        Delete
-                      </DropdownMenu.Item>
-                    </DropdownMenu.Content>
-                  </DropdownMenu>
-                }
+                name={name}
+                title={session.branch}
+                url={url}
+                active={active}
+                disabled={pending}
+                loading={openingId === session.sessionId}
+                onSelect={() => void openSession(session)}
+                onDelete={() => setConfirmDelete(session)}
               />
             );
           })}
         </MainSidebar.NavList>
-        {sessions.length === 0 && !creating && (
+        {sessions.length === 0 && (
           <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
             No sessions yet
           </Txt>
         )}
-
-        {creating && (
-          <form aria-label="Create user session" className="flex flex-col gap-1" onSubmit={submitCreate}>
-            <Input
-              aria-label="Session name"
-              autoFocus
-              value={name}
-              onChange={event => setName(event.target.value)}
-              onKeyDown={onCreateKeyDown}
-              placeholder="session-name"
-              disabled={createSession.isPending}
-              className="h-8 text-xs"
-            />
-            {createSession.error && (
-              <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
-                {createSession.error instanceof Error ? createSession.error.message : 'Failed to create session'}
-              </Txt>
-            )}
-          </form>
-        )}
       </div>
+
+      {creating && (
+        <Dialog open onOpenChange={open => !open && closeCreateDialog()}>
+          <DialogContent className="w-full max-w-sm" aria-label="New user session">
+            <DialogHeader className="px-5 pt-4 pb-2">
+              <DialogTitle>New user session</DialogTitle>
+            </DialogHeader>
+            <form aria-label="Create user session" className="flex flex-col gap-4 px-5 pb-4" onSubmit={submitCreate}>
+              <Input
+                aria-label="Session name"
+                autoFocus
+                value={name}
+                onChange={event => setName(event.target.value)}
+                placeholder="session-name"
+                disabled={createSession.isPending}
+              />
+              {createSession.error && (
+                <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
+                  {createSession.error instanceof Error ? createSession.error.message : 'Failed to create session'}
+                </Txt>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={closeCreateDialog} disabled={createSession.isPending}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={createSession.isPending || !name.trim()}>
+                  {createSession.isPending ? 'Creating…' : 'Create'}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {confirmDelete && (
         <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>

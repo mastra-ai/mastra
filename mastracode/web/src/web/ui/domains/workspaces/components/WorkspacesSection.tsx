@@ -1,9 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
-import { GitBranch, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -21,6 +20,7 @@ import { useChatSessionContext } from '../../chat/context/useChatSessionContext'
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import type { FactoryUserSession } from '../services/github';
+import { SessionNavRow } from './SessionNavRow';
 
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
@@ -40,6 +40,7 @@ export function WorkspacesSection() {
   });
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, session, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const activityOptions = {
@@ -69,6 +70,7 @@ export function WorkspacesSection() {
     return [
       {
         workspace,
+        url: `/factories/${factoryId}/workspaces/${workspace.sessionId}`,
         label: titleByPath[workspace.sessionId],
         active,
         running,
@@ -100,6 +102,8 @@ export function WorkspacesSection() {
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = async (workspace: FactoryUserSession) => {
+    if (openingId) return;
+    setOpeningId(workspace.sessionId);
     clearAttention(workspace.sessionId);
     try {
       // Workspace sessions (and their threads) live under the session's own id
@@ -137,6 +141,8 @@ export function WorkspacesSection() {
       }
     } catch {
       void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}`, { state: { from: location } });
+    } finally {
+      setOpeningId(null);
     }
   };
 
@@ -154,6 +160,7 @@ export function WorkspacesSection() {
           title="Work Sessions"
           rows={workRows}
           pending={pending}
+          openingId={openingId}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
@@ -163,6 +170,7 @@ export function WorkspacesSection() {
           title="Review Sessions"
           rows={reviewRows}
           pending={pending}
+          openingId={openingId}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
@@ -202,6 +210,7 @@ export function WorkspacesSection() {
 
 interface FactoryWorkspaceRow {
   workspace: FactoryUserSession;
+  url: string;
   label?: string;
   active: boolean;
   running: boolean;
@@ -214,12 +223,14 @@ function WorkspaceGroup({
   title,
   rows,
   pending,
+  openingId,
   onSelect,
   onDelete,
 }: {
   title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
   pending: boolean;
+  openingId: string | null;
   onSelect: (workspace: FactoryUserSession) => void;
   onDelete: (workspace: FactoryUserSession) => void;
 }) {
@@ -230,98 +241,22 @@ function WorkspaceGroup({
           {title}
         </Txt>
       </div>
-      <div className="flex flex-col gap-1">
+      <MainSidebar.NavList>
         {rows.map(row => (
-          <WorkspaceRow
+          <SessionNavRow
             key={row.workspace.sessionId}
-            workspace={row.workspace}
-            label={row.label}
+            name={row.label ?? row.workspace.branch}
+            title={row.workspace.branch}
+            url={row.url}
             active={row.active}
-            running={row.running}
-            attention={row.attention}
             disabled={pending}
+            loading={openingId === row.workspace.sessionId}
+            status={row.running ? 'running' : row.attention ? 'attention' : undefined}
             onSelect={() => onSelect(row.workspace)}
             onDelete={() => onDelete(row.workspace)}
           />
         ))}
-      </div>
+      </MainSidebar.NavList>
     </section>
-  );
-}
-
-export function WorkspaceRow({
-  workspace,
-  label,
-  active,
-  running,
-  attention,
-  disabled,
-  onSelect,
-  onDelete,
-}: {
-  workspace: FactoryUserSession;
-  label?: string;
-  active: boolean;
-  running: boolean;
-  attention: boolean;
-  disabled: boolean;
-  onSelect: () => void;
-  onDelete?: () => void;
-}) {
-  const name = label ?? workspace.branch;
-  return (
-    <div className={`group relative rounded-md ${active ? 'bg-sidebar-nav-active' : 'hover:bg-sidebar-nav-hover'}`}>
-      <button
-        type="button"
-        aria-current={active ? 'true' : undefined}
-        aria-label={name}
-        disabled={disabled}
-        onClick={onSelect}
-        title={workspace.branch}
-        className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
-      >
-        <GitBranch size={13} />
-        <span className="min-w-0 flex-1 truncate">{name}</span>
-        {running ? (
-          <span
-            role="status"
-            aria-label={`Agent working in ${name}`}
-            title="Agent working"
-            className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-accent1 group-hover:opacity-0"
-          />
-        ) : attention ? (
-          <span
-            role="status"
-            aria-label={`Agent finished in ${name}`}
-            title="Agent finished — open to dismiss"
-            className="ml-auto size-2 shrink-0 rounded-full bg-accent1 group-hover:opacity-0"
-          />
-        ) : null}
-      </button>
-      {onDelete && (
-        <DropdownMenu>
-          <DropdownMenu.Trigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label="Workspace actions"
-                disabled={disabled}
-                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
-              >
-                <MoreHorizontal size={15} />
-              </Button>
-            }
-          />
-          <DropdownMenu.Content align="end" className="min-w-28">
-            <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-              <Trash2 />
-              Delete
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu>
-      )}
-    </div>
   );
 }
