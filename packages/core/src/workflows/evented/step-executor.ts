@@ -11,16 +11,10 @@ import { EntityType, SpanType, createObservabilityContext } from '../../observab
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { runAgentEntry, runMappingEntry, runToolEntry } from '../entry-executors';
 import { getStepResult } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
-import {
-  getEntryComponent,
-  getEntryId,
-  getEntrySchemas,
-  runAgentEntry,
-  runMappingEntry,
-  runToolEntry,
-} from '../step-entry';
+import { getEntryComponent, getEntryId, getEntrySchemas } from '../step-entry';
 import type { SingleStepEntry, StepFlowEntry, StepResult } from '../types';
 import {
   validateStepInput,

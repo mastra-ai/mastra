@@ -55,7 +55,9 @@ import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
+import { runAgentEntry, runMappingEntry, runToolEntry } from './entry-executors';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
+import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
 import type {
@@ -66,7 +68,6 @@ import type {
   Step,
   SuspendOptions,
 } from './step';
-import { runAgentEntry, runMappingEntry, runToolEntry, validateTemplate } from './step-entry';
 import type {
   DefaultEngineType,
   DynamicMapping,
