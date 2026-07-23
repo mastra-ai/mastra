@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
+import type { ToolCallConcurrency } from '../../../loop/workflows/agentic-execution/tool-call-concurrency';
 import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
@@ -39,7 +40,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: RequireToolApproval;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: ToolCallConcurrency;
   resumeContext?: {
     resumeData: any;
     snapshot: any;

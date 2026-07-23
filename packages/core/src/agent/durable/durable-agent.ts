@@ -77,8 +77,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   requireToolApproval?: AgentExecutionOptions<OUTPUT>['requireToolApproval'];
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
-  /** Maximum number of tool calls to execute concurrently */
-  toolCallConcurrency?: number;
+  /** Maximum number of tool calls to execute concurrently. See {@link AgentExecutionOptions.toolCallConcurrency}. */
+  toolCallConcurrency?: AgentExecutionOptions<OUTPUT>['toolCallConcurrency'];
   /** Whether to include raw chunks in the stream output */
   includeRawChunks?: boolean;
   /** Maximum processor retries */

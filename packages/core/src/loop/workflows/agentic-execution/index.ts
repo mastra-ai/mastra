@@ -11,7 +11,11 @@ import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
 import { createSignalDrainStep } from './signal-drain-step';
-import { resolveConfiguredToolCallConcurrency, resolveToolCallConcurrency } from './tool-call-concurrency';
+import {
+  resolveConfiguredToolCallConcurrency,
+  resolveToolCallConcurrency,
+  resolveToolCallConcurrencyStrategy,
+} from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
 
@@ -23,6 +27,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
   ...rest
 }: OuterLLMRun<Tools, OUTPUT>) {
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(rest.toolCallConcurrency);
+  const toolCallConcurrencyStrategy = resolveToolCallConcurrencyStrategy(rest.toolCallConcurrency);
   const toolCallForeachOptions: ToolCallForeachOptions = {
     // This initial value is a conservative fallback for resume paths that can enter
     // a suspended foreach before llm-execution recomputes the effective step tools.
@@ -113,16 +118,23 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
         const toolCalls = typedInputData.output.toolCalls || [];
-        // Recompute concurrency from the step's effective active tool set (set by
-        // llm-execution-step), NOT from the tools the model actually called. A
-        // registered approval/suspending tool that the model did not call this
-        // step must still force sequential execution, so narrowing to called
-        // tool names here would incorrectly allow concurrent execution.
+        // Recompute concurrency now that the step's effective active tool set
+        // (set by llm-execution-step) and the model's actual tool calls are known.
+        //
+        // Default (`'available'` strategy): a registered approval/suspending tool
+        // that the model did not call this step still forces sequential execution
+        // — narrowing to called tool names would incorrectly allow concurrent
+        // execution. The `'called'` strategy opts into that narrowing: only tools
+        // actually called this step are checked, so a batch of purely safe calls
+        // runs concurrently even while an approval/suspend tool stays registered.
         const stepActiveTools = _internal?.stepActiveTools as string[] | undefined;
+        const calledToolNames =
+          toolCallConcurrencyStrategy === 'called' ? toolCalls.map(toolCall => toolCall.toolName) : undefined;
         toolCallForeachOptions.concurrency = resolveToolCallConcurrency({
           requireToolApproval: rest.requireToolApproval,
           tools: ((_internal?.stepTools as Tools | undefined) ?? rest.tools) as Tools | undefined,
           activeTools: stepActiveTools,
+          calledToolNames,
           configuredConcurrency: configuredToolCallConcurrency,
         });
         return toolCalls;

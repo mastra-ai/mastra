@@ -44,6 +44,7 @@ import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
+import type { ToolCallConcurrency } from './workflows/agentic-execution/tool-call-concurrency';
 
 type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
 
@@ -214,7 +215,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   requireToolApproval?: RequireToolApproval;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: ToolCallConcurrency;
   agentName?: string;
   requestContext?: RequestContext;
   /** Trusted server-side signal for this loop's FGA checks. */

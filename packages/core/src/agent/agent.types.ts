@@ -6,6 +6,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
+import type { ToolCallConcurrency } from '../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
@@ -588,8 +589,15 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
 
-  /** Maximum number of tool calls to execute concurrently (default: 1 when approval may be required, otherwise 10) */
-  toolCallConcurrency?: number;
+  /**
+   * Controls parallel tool-call execution. A number sets the concurrency limit
+   * (default 10, but forced to 1 whenever an approval/suspending tool is available).
+   * Pass an object to also select the strategy: `{ limit?, strategy?: 'available' | 'called' }`.
+   * `'available'` (default) forces sequential whenever such a tool is available in the
+   * step; `'called'` only forces sequential when the model actually calls one this step,
+   * so batches of purely safe calls run concurrently even with an approval tool registered.
+   */
+  toolCallConcurrency?: ToolCallConcurrency;
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;

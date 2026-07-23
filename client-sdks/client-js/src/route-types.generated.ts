@@ -7,22 +7,22 @@
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-type Shared_Auxiliary_290 =
+type Shared_Auxiliary_294 =
   | string
   | number
   | boolean
   | null
-  | Shared_Auxiliary_290[]
+  | Shared_Auxiliary_294[]
   | {
-      [key: string]: Shared_Auxiliary_290;
+      [key: string]: Shared_Auxiliary_294;
     };
 
-type Shared_Auxiliary_1159 = {
+type Shared_Auxiliary_1163 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1159[] | undefined;
+  children?: Shared_Auxiliary_1163[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -90,7 +90,15 @@ type Shared_Type_4 = {
   tracingOptions?: Shared_Type_3 | undefined;
   requireToolApproval?: boolean | undefined;
   autoResumeSuspendedTools?: boolean | undefined;
-  toolCallConcurrency?: number | undefined;
+  toolCallConcurrency?:
+    | (
+        | number
+        | {
+            limit?: number | undefined;
+            strategy?: ('available' | 'called') | undefined;
+          }
+      )
+    | undefined;
   includeRawChunks?: boolean | undefined;
   [x: string]: unknown;
 };
@@ -976,7 +984,7 @@ type Shared_Type_49 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_290;
+          [key: string]: Shared_Auxiliary_294;
         };
       }
     | undefined;
@@ -990,7 +998,7 @@ type Shared_Type_50 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_290;
+          [key: string]: Shared_Auxiliary_294;
         };
       }
     | undefined;
@@ -1005,13 +1013,13 @@ type Shared_Type_51 = {
     | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_290;
+        [key: string]: Shared_Auxiliary_294;
       }
     | undefined;
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_290;
+          [key: string]: Shared_Auxiliary_294;
         };
       }
     | undefined;
@@ -1099,7 +1107,7 @@ type Shared_Type_54 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_290;
+        [key: string]: Shared_Auxiliary_294;
       }
     | undefined;
   attributes?:
@@ -1113,7 +1121,7 @@ type Shared_Type_54 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_290;
+          [key: string]: Shared_Auxiliary_294;
         };
       }
     | undefined;
@@ -2538,7 +2546,7 @@ type Shared_Type_112 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1159[] | undefined;
+  files?: Shared_Auxiliary_1163[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -15800,7 +15808,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1159[] | undefined;
+  files?: Shared_Auxiliary_1163[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -15858,7 +15866,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1159[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1163[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
