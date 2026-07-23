@@ -390,7 +390,12 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     },
   });
 
-  it('passes authenticated tenant identity to the coordinator and audits the prepared binding', async () => {
+  it('passes authenticated tenant identity and the Factory default model to the coordinator', async () => {
+    await seed.projects.update({
+      orgId: 'org1',
+      id: PROJECT_ID,
+      input: { defaultModelId: 'anthropic/claude-fable-5' },
+    });
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();
     auditRecorded = [];
@@ -421,6 +426,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         orgId: 'org1',
         userId: 'u1',
         factoryProjectId: PROJECT_ID,
+        defaultModelId: 'anthropic/claude-fable-5',
         requestContext,
       }),
     );

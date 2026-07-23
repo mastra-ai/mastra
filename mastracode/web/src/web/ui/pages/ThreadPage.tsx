@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useMatch, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
-import { ChatLayout } from '../ui/ChatLayout';
+import { ChatLayout } from '../layouts/ChatLayout';
 import { renderedPaths } from '../domains/workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../domains/workspace-viewer/components/WorkspaceViewerPanel';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
@@ -14,6 +14,7 @@ import { TaskPanel } from '../domains/chat/components/TaskPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../shared/hooks/useRouteThreadSync';
+import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
 import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useUserSessionQuery } from '../../../shared/hooks/useWorkspaces';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -33,13 +34,8 @@ export function ThreadPage() {
   const workspaceFactory = factoryQuery.data;
   const workspacePath = isUserThreadRoute ? userSessionQuery.data?.sessionId : sessionId;
 
-  if (factoryQuery.isPending || (isUserThreadRoute && userSessionQuery.isPending)) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
-  }
+  const resolvingSession = factoryQuery.isPending || (isUserThreadRoute && userSessionQuery.isPending);
+
   return (
     <ChatLayout
       sidebar={<Sidebar />}
@@ -60,9 +56,15 @@ export function ThreadPage() {
         ) : undefined
       }
       main={
-        <ChatSessionBoundary threadId={threadId}>
-          <ThreadPageMain />
-        </ChatSessionBoundary>
+        resolvingSession ? (
+          <div className="grid h-full min-h-0 place-items-center">
+            <Spinner aria-label="Loading session" className="text-icon3" />
+          </div>
+        ) : (
+          <ChatSessionBoundary threadId={threadId}>
+            <ThreadPageMain />
+          </ChatSessionBoundary>
+        )
       }
     />
   );
@@ -94,6 +96,7 @@ function ThreadComposer() {
 
 function ThreadPageContent() {
   useRouteThreadSync();
+  useThreadPageKickoffs();
 
   return (
     <div className="flex min-h-0 flex-col">

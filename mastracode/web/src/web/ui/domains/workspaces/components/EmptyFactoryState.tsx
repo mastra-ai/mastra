@@ -12,18 +12,22 @@ import { connectLinear } from '../../factory/services/linear';
 import type { FactoryProject, FactoryProjectPayload } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import type { GithubRepo } from '../services/github';
+import {
+  clearOnboardingFlow,
+  ONBOARDING_FACTORY_KEY as FACTORY_KEY,
+  persistOnboardingFactory,
+  persistOnboardingStep,
+  readOnboardingStep,
+  type OnboardingStep as Step,
+} from '../services/onboardingFlow';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
 import { InitialFactoryStep } from './InitialFactoryStep';
+import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { useNavigate } from 'react-router';
 import '@fontsource-variable/mona-sans/standard.css';
-
-export type Step = 'initial' | 'vcs' | 'project-management';
-
-const STEP_KEY = 'mastracode.factory-onboarding.step';
-const FACTORY_KEY = 'mastracode.factory-onboarding.factory-id';
 
 const STEP_META: Record<Step, { title: string; description?: string }> = {
   initial: {
@@ -38,12 +42,11 @@ const STEP_META: Record<Step, { title: string; description?: string }> = {
   'project-management': {
     title: 'Connect the work behind the code.',
   },
+  'model-provider': {
+    title: 'Choose your Factory model.',
+    description: 'Connect a provider and select the default model for Factory runs.',
+  },
 };
-
-function storedStep(): Step {
-  const value = sessionStorage.getItem(STEP_KEY);
-  return value === 'vcs' || value === 'project-management' ? value : 'initial';
-}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
@@ -55,20 +58,19 @@ export function EmptyFactoryState() {
   const persistedFactories = useFactoriesQuery();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
-  const [step, setStep] = useState<Step>(storedStep);
+  const [step, setStep] = useState<Step>(readOnboardingStep);
   const [pendingFactory, setPendingFactory] = useState<FactoryProject | FactoryProjectPayload | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | null>(null);
   const [githubRedirecting, setGithubRedirecting] = useState(false);
-  const [finishing, setFinishing] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (persistedFactories.isPending || pendingFactory) return;
     const pendingId = sessionStorage.getItem(FACTORY_KEY);
     if (!pendingId) {
-      if (step === 'project-management') setStep('vcs');
+      if (step !== 'initial' && step !== 'vcs') setStep('vcs');
       return;
     }
     const restored = persistedFactories.data?.find(factory => factory.id === pendingId);
@@ -77,18 +79,18 @@ export function EmptyFactoryState() {
       return;
     }
     sessionStorage.removeItem(FACTORY_KEY);
-    sessionStorage.setItem(STEP_KEY, 'vcs');
+    persistOnboardingStep('vcs');
     setStep('vcs');
   }, [pendingFactory, persistedFactories.data, persistedFactories.isPending, step]);
 
   const goTo = (next: Step) => {
-    sessionStorage.setItem(STEP_KEY, next);
+    persistOnboardingStep(next);
     setStep(next);
   };
 
   const persistBeforeRedirect = (currentStep: Step) => {
-    sessionStorage.setItem(STEP_KEY, currentStep);
-    if (pendingFactory) sessionStorage.setItem(FACTORY_KEY, pendingFactory.id);
+    persistOnboardingStep(currentStep);
+    if (pendingFactory) persistOnboardingFactory(pendingFactory.id);
   };
 
   const chooseRepository = async (repo: GithubRepo) => {
@@ -98,7 +100,7 @@ export function EmptyFactoryState() {
     try {
       const factory = await createFactory.mutateAsync({ name: repo.name });
       setPendingFactory(factory);
-      sessionStorage.setItem(FACTORY_KEY, factory.id);
+      persistOnboardingFactory(factory.id);
       const linkedRepository = await linkRepository.mutateAsync({
         factoryProjectId: factory.id,
         repo,
@@ -123,19 +125,17 @@ export function EmptyFactoryState() {
       return;
     }
     setCompletionError(null);
-    setFinishing(true);
     try {
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-      sessionStorage.removeItem(STEP_KEY);
-      sessionStorage.removeItem(FACTORY_KEY);
+      clearOnboardingFlow();
       void navigate(`/factories/${pendingFactory.id}`);
     } catch (error) {
       setCompletionError(errorMessage(error));
-      setFinishing(false);
     }
   };
 
-  const stepIndex = ['initial', 'vcs', 'project-management'].indexOf(step);
+  const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider'];
+  const stepIndex = steps.indexOf(step);
 
   return (
     <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
@@ -143,7 +143,7 @@ export function EmptyFactoryState() {
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">
             <ol className="mb-9 flex gap-2" aria-label="Factory setup progress">
-              {(['initial', 'vcs', 'project-management'] as const).map((item, index) => (
+              {steps.map((item, index) => (
                 <li
                   key={item}
                   aria-current={step === item ? 'step' : undefined}
@@ -192,13 +192,18 @@ export function EmptyFactoryState() {
               )}
               {step === 'project-management' && (
                 <ProjectManagementFactoryStep
-                  completionError={completionError}
-                  finishing={finishing}
                   onConnect={() => {
                     persistBeforeRedirect('project-management');
                     connectLinear(baseUrl);
                   }}
-                  onFinish={() => void finish()}
+                  onContinue={() => goTo('model-provider')}
+                />
+              )}
+              {step === 'model-provider' && pendingFactory && (
+                <ModelProviderFactoryStep
+                  factoryId={pendingFactory.id}
+                  completionError={completionError ?? undefined}
+                  onComplete={() => void finish()}
                 />
               )}
             </div>

@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useQuery } from '@tanstack/react-query';
 import { CircleDot, CircleX, GitMerge } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -24,14 +25,15 @@ function PullRequestIcon({ status }: { status: PullRequestSubscription['status']
 }
 
 function statusColor(status: PullRequestSubscription['status']): string {
-  if (status === 'merged') return 'text-accent3 hover:text-accent3';
-  if (status === 'closed') return 'text-error hover:text-error';
-  return 'text-accent1 hover:text-accent1';
+  if (status === 'merged') return 'text-accent3';
+  if (status === 'closed') return 'text-error';
+  return 'text-accent1';
 }
 
 interface PullRequestLinksProps {
   baseUrl: string;
   resourceId: string;
+  projectPath: string | undefined;
   projectRepositoryId: unknown;
   factoryProjectId: unknown;
   repositorySlug: string | undefined;
@@ -44,6 +46,7 @@ interface PullRequestLinksProps {
 export function PullRequestLinks({
   baseUrl,
   resourceId,
+  projectPath,
   projectRepositoryId,
   factoryProjectId,
   repositorySlug,
@@ -55,7 +58,11 @@ export function PullRequestLinks({
   const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
   const workItems = useWorkItemsQuery(factoryProjectKey);
   const reviewItem = workItems.data?.find(
-    item => item.source === 'github-pr' && Object.values(item.sessions).some(session => session.threadId === threadId),
+    item =>
+      item.source === 'github-pr' &&
+      Object.values(item.sessions).some(
+        session => session.threadId === threadId && (!projectPath || session.sessionId === projectPath),
+      ),
   );
   const reviewNumber = reviewItem?.metadata.githubPullRequestNumber ?? reviewItem?.metadata.number;
   const normalizedReviewNumber = Number(reviewNumber);
@@ -89,10 +96,11 @@ export function PullRequestLinks({
     .join(':');
   const enabled = typeof projectRepositoryId === 'string' && Boolean(threadId);
   const query = useQuery({
-    queryKey: ['github', 'subscriptions', resourceId, threadId],
+    queryKey: ['github', 'subscriptions', resourceId, threadId, projectPath],
     queryFn: async () => {
       if (!threadId) return { subscriptions: [] };
       const params = new URLSearchParams({ resourceId, threadId });
+      if (projectPath) params.set('scope', projectPath);
       const response = await fetch(`${baseUrl}/web/github/subscriptions?${params}`, { credentials: 'include' });
       if (!response.ok) throw new Error(`Failed to load pull request subscriptions (${response.status}).`);
       return response.json() as Promise<PullRequestSubscriptionsResponse>;
@@ -124,16 +132,19 @@ export function PullRequestLinks({
   return (
     <div className="ml-auto flex items-center gap-2">
       {links.map(subscription => (
-        <a
+        <Button
           key={subscription.id}
+          as="a"
+          variant="ghost"
+          size="xs"
           href={subscription.url}
           target="_blank"
           rel="noreferrer"
-          className={`inline-flex items-center gap-1 ${statusColor(subscription.status)}`}
           aria-label={`Open ${subscription.status} ${subscription.repoFullName} pull request ${subscription.pullRequestNumber}`}
         >
-          <PullRequestIcon status={subscription.status} /> PR #{subscription.pullRequestNumber}
-        </a>
+          <PullRequestIcon status={subscription.status} />
+          <span className={statusColor(subscription.status)}>PR #{subscription.pullRequestNumber}</span>
+        </Button>
       ))}
     </div>
   );

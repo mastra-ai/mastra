@@ -569,6 +569,7 @@ export class MastraFactory {
       workspace: createWorkspaceFactory({
         ...(this.#config.sandbox ? { sandbox: this.#config.sandbox } : {}),
         ...(githubIntegration ? { github: githubIntegration } : {}),
+        ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
         fleet,
       }),
       disableGithubSignals: true,

@@ -343,6 +343,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         deps.domains.workItems,
         transitionService,
         githubIntegration?.sourceControlStorage,
+        deps.domains.memorySettings,
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -358,7 +359,14 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   }
 
   return [
-    ...buildFsRoutes({ root: deps.fsRoot }),
+    ...buildFsRoutes({
+      root: deps.fsRoot,
+      sessionFs: {
+        auth: deps.auth,
+        fleet: deps.fleet,
+        sessions: deps.sourceControlStorage.forIntegration('github').sessions,
+      },
+    }),
     ...new ConfigRoutes({
       auth: deps.auth,
       controller: deps.controller,

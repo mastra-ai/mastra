@@ -14,9 +14,13 @@ import { getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
+import { getGithubPat } from './integrations/github/pat.js';
+import type { GithubPatKind } from './integrations/github/pat.js';
 import { checkoutSessionBranch, materializeRepo, runWorktreeSetup } from './integrations/github/sandbox.js';
-import { registerGithubTokenInjector } from './integrations/github/token-refresh.js';
+import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
+import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
+import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 const SESSION_CHECKPOINT_PREFIX = 'mastracode-session';
@@ -39,7 +43,7 @@ const FACTORY_SKILLS_SOURCE_PATH =
     join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
   ].find(existsSync) ?? bundledFactorySkillsPath;
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
-const FACTORY_SKILL_NAMES = new Set(['configure-factory-rules', 'understand-issue', 'understand-pr']);
+const FACTORY_SKILL_NAMES = new Set(['configure-factory-rules', 'factory-plan', 'factory-review', 'factory-triage']);
 
 class FactorySkillSource implements SkillSource {
   readonly #factorySource = new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH });
@@ -111,12 +115,19 @@ export interface CreateWorkspaceFactoryOptions {
   github?: GithubIntegration;
   /** Fleet the per-session sandboxes are provisioned/reattached through. */
   fleet?: SandboxFleet;
+  /** Work-items storage used to resolve the session's run-binding role, so
+   * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
+   * without it every session uses the default (worker) PAT. */
+  workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, fleet } = options;
+  const { sandbox: sandboxConfig, github, fleet, workItems } = options;
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
-  const githubTokenInjectors = new Map<string, (token: string) => void>();
+  const githubTokenInjectors = new Map<
+    string,
+    { inject: (token: string) => void; patKind: GithubPatKind; ghToken: string }
+  >();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
@@ -177,8 +188,23 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
       if (existing) {
         existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
-        const injectGithubToken = githubTokenInjectors.get(workspaceId);
-        if (injectGithubToken) registerGithubTokenInjector(requestContext, injectGithubToken);
+        const registered = githubTokenInjectors.get(workspaceId);
+        if (registered) {
+          registerGithubTokenInjector(requestContext, registered.inject);
+          registerGithubPatKind(requestContext, registered.patKind);
+          // A PAT saved in Settings after this sandbox was provisioned must
+          // reach the running sandbox without a server restart — re-read it
+          // on every reuse and push it into the live sandbox when it changed.
+          // Best-effort: a failed read or inject keeps the installed token.
+          try {
+            const pat = await getGithubPat(() => github.integrationStorage, session.orgId, registered.patKind);
+            if (pat && pat !== registered.ghToken) {
+              registered.inject(pat);
+            }
+          } catch {
+            // Keep the token already installed in the sandbox.
+          }
+        }
         return existing;
       }
     } catch {
@@ -192,9 +218,27 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const token = access.authorization?.token;
     if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
 
+    // The `gh` CLI needs a PAT when the org configured one (installation
+    // tokens 403 on integration-restricted endpoints); git clone/checkout
+    // below keep using the minted installation token. Review-board sessions
+    // (run-binding role `review`) authenticate `gh` as the reviewer account
+    // when a reviewer token is configured; everything else — including
+    // sessions with no resolvable run binding — uses the worker token.
+    let patKind: GithubPatKind = 'default';
+    if (workItems) {
+      try {
+        const address = getFactorySessionAddress(requestContext);
+        const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
+        if (runBinding?.role === 'review' && runBinding.orgId === session.orgId) patKind = 'reviewer';
+      } catch {
+        // No resolvable binding — worker token.
+      }
+    }
+    const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
+
     const sandbox = await fleet.ensureSandbox(
       binding,
-      { GH_TOKEN: token },
+      { GH_TOKEN: ghCliToken },
       undefined,
       isLocalSandbox ? { workingDirectory: workdir } : {},
     );
@@ -218,9 +262,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
       }
       sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
+      const registered = githubTokenInjectors.get(workspaceId);
+      if (registered) registered.ghToken = freshToken;
     };
-    githubTokenInjectors.set(workspaceId, injectGithubToken);
+    githubTokenInjectors.set(workspaceId, { inject: injectGithubToken, patKind, ghToken: ghCliToken });
     registerGithubTokenInjector(requestContext, injectGithubToken);
+    registerGithubPatKind(requestContext, patKind);
 
     const filesystem = new SandboxFilesystem({ sandbox, workdir });
     const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];

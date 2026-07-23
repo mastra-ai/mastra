@@ -27,6 +27,12 @@ function makeController(sendMessage = vi.fn(async () => {})) {
       }),
     },
     getWorkspace: vi.fn(() => ({ skills: undefined })),
+    state: { set: vi.fn(async () => {}) },
+    model: { switch: vi.fn(async () => {}) },
+    om: {
+      observer: { switchModel: vi.fn(async () => {}) },
+      reflector: { switchModel: vi.fn(async () => {}) },
+    },
     sendMessage,
   };
   return {
@@ -85,6 +91,7 @@ function startRequest(
     kickoffKey: string;
     role: string;
     kickoffMessage: string | null;
+    defaultModelId: string;
     id: string;
   }> = {},
 ) {
@@ -101,6 +108,7 @@ function startRequest(
         ? undefined
         : { type: 'prompt' as const, prompt: overrides.kickoffMessage ?? 'Start work' },
     destinationStage: 'intake' as const,
+    defaultModelId: overrides.defaultModelId,
     workItem: {
       id: overrides.id,
       role: overrides.role ?? 'work',
@@ -150,6 +158,76 @@ describe('FactoryStartCoordinator', () => {
       branch: 'factory/issue-1',
       startedBy: 'user-1',
     });
+  });
+
+  it('applies the Factory default model before preparing a board run', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+
+    await coordinator.prepare(startRequest({ defaultModelId: 'anthropic/claude-fable-5' }));
+
+    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
+  });
+
+  it('applies persisted observational-memory settings before preparing a board run', async () => {
+    const storage = await createFactoryStorageForTests();
+    await storage.memorySettings.patch({
+      orgId: 'org-1',
+      userId: 'user-1',
+      patch: {
+        observerModelId: 'anthropic/claude-haiku-4-5',
+        reflectorModelId: 'anthropic/claude-haiku-4-5',
+        observationThreshold: 12_000,
+        reflectionThreshold: 23_000,
+        observeAttachments: false,
+      },
+    });
+    const { controller, session } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage.workItems,
+      undefined,
+      makeSourceControl() as never,
+      storage.memorySettings,
+    );
+
+    await coordinator.prepare(startRequest());
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.state.set).toHaveBeenCalledWith({
+      observationThreshold: 12_000,
+      reflectionThreshold: 23_000,
+      observeAttachments: false,
+    });
+  });
+
+  it('continues preparing a board run when its saved default model is no longer available', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    session.model.switch.mockRejectedValueOnce(new Error('Unknown model'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+
+    await expect(
+      coordinator.prepare(startRequest({ defaultModelId: 'anthropic/claude-fable-5' })),
+    ).resolves.toMatchObject({ threadId: 'session-1', kickoffStatus: 'pending' });
+    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default model', {
+      modelId: 'anthropic/claude-fable-5',
+      error: 'Unknown model',
+    });
+    warn.mockRestore();
   });
 
   it('binds before requesting the governed run-stage transition', async () => {
@@ -203,8 +281,20 @@ describe('FactoryStartCoordinator', () => {
 
     expect(prepared).toMatchObject({ threadId: 'session-1', resourceId: 'session-1', sessionId: 'session-1' });
     expect(controller.createSession).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'session-1', resourceId: 'session-1', threadId: 'session-1' }),
+      expect.objectContaining({
+        id: 'session-1',
+        resourceId: 'session-1',
+        threadId: 'session-1',
+        tags: { factoryProjectId: PROJECT_ID, projectRepositoryId: 'project-repository-1' },
+      }),
     );
+    // Bound-agent gates (transition tool, factory-phase processor) resolve the
+    // session address from controller state — the coordinator must seed it
+    // server-side, never relying on a browser connecting to set it.
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      projectRepositoryId: 'project-repository-1',
+    });
     expect(session.thread.list).not.toHaveBeenCalled();
     expect(session.thread.switch).not.toHaveBeenCalled();
     expect(session.thread.create).not.toHaveBeenCalled();

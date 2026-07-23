@@ -22,6 +22,7 @@ import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { FactorySetupSection } from './FactorySetupSection';
 import { SourceControlSection } from './SourceControlSection';
+import { OMSection } from './OMSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
@@ -69,17 +70,19 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 
 /**
  * Settings content pane: renders the section addressed by the settings-page
- * URL, with an independently scrolling content column.
+ * URL while the page shell supplies document scrolling.
  */
 export function SettingsPanel() {
   const section = useSettingsSection();
   const { theme, setTheme } = useTheme();
-  const { resourceId, resourceEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
+  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: sessionScope,
     baseUrl,
     enabled: resourceEnabled,
   };
@@ -101,60 +104,64 @@ export function SettingsPanel() {
   };
 
   return (
-    <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
-        <div className="mx-auto grid w-full max-w-4xl py-3">
-          {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
-          {section === 'general' && (
-            <>
-              <GeneralSettings theme={theme} onThemeChange={setTheme} />
-              <FactorySetupSection />
-              <IntakeSection />
-              <div className="mt-6 flex flex-col gap-3 pt-4">
-                <Txt variant="ui-lg" className="text-icon6 font-medium">
-                  Connected accounts
-                </Txt>
-                <ConnectedAccountsSection />
-              </div>
-            </>
-          )}
-          {section === 'source-control' && <SourceControlSection />}
-          {section === 'model' && (
-            <div className="flex flex-col gap-8">
-              <SettingsSubsection title="Defaults">
-                {/* Rows bring their own py-3; -my-3 keeps the card's effective padding even on all sides. */}
-                <div className="-my-3 divide-y divide-border1/40">
-                  <FactoryDefaultModelSection models={models} />
-                  <ModelSettings
-                    settings={settings}
-                    updating={updateSettingsMutation.isPending}
-                    onBehaviorChange={onBehaviorChange}
-                  />
-                </div>
-              </SettingsSubsection>
-              <SettingsSubsection title="Providers">
-                <ProviderAccessSection />
-              </SettingsSubsection>
-              <SettingsSubsection
-                title="Model packs"
-                description="A pack sets a model for each mode (build / plan / fast)."
-              >
-                <ModelPacksSection resourceId={sessionResourceId} models={models} />
-              </SettingsSubsection>
+    <section aria-label="Settings" className="flex flex-1 flex-col px-5 pb-5">
+      <div className="mx-auto grid w-full max-w-4xl py-3">
+        {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
+        {section === 'general' && (
+          <>
+            <GeneralSettings theme={theme} onThemeChange={setTheme} />
+            <FactorySetupSection />
+            <IntakeSection />
+            <div className="mt-6 flex flex-col gap-3 pt-4">
+              <Txt variant="ui-lg" className="text-icon6 font-medium">
+                Connected accounts
+              </Txt>
+              <ConnectedAccountsSection />
             </div>
-          )}
-          {section === 'behavior' && (
-            <BehaviorSettings
-              settings={settings}
-              updating={updateSettingsMutation.isPending}
-              onBehaviorChange={onBehaviorChange}
-              permissions={permissions ?? null}
-              pendingPermissionCategory={pendingPermissionCategory}
-              setPermissionForCategory={setPermissionForCategory}
-            />
-          )}
-          {section === 'custom-providers' && <CustomProvidersSection />}
-        </div>
+          </>
+        )}
+        {section === 'source-control' && <SourceControlSection />}
+        {section === 'model' && (
+          <div className="flex flex-col gap-8">
+            <SettingsSubsection title="Defaults">
+              {/* Rows bring their own py-3; -my-3 keeps the card's effective padding even on all sides. */}
+              <div className="-my-3 divide-y divide-border1/40">
+                <FactoryDefaultModelSection models={models} />
+                <ModelSettings
+                  settings={settings}
+                  updating={updateSettingsMutation.isPending}
+                  onBehaviorChange={onBehaviorChange}
+                />
+              </div>
+            </SettingsSubsection>
+            <SettingsSubsection title="Providers">
+              <ProviderAccessSection />
+            </SettingsSubsection>
+            <SettingsSubsection
+              title="Model packs"
+              description="A pack sets a model for each mode (build / plan / fast)."
+            >
+              <ModelPacksSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+            </SettingsSubsection>
+            <SettingsSubsection
+              title="Observational memory"
+              description="Choose the models and token thresholds used to summarize and retain conversation context."
+            >
+              <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+            </SettingsSubsection>
+          </div>
+        )}
+        {section === 'behavior' && (
+          <BehaviorSettings
+            settings={settings}
+            updating={updateSettingsMutation.isPending}
+            onBehaviorChange={onBehaviorChange}
+            permissions={permissions ?? null}
+            pendingPermissionCategory={pendingPermissionCategory}
+            setPermissionForCategory={setPermissionForCategory}
+          />
+        )}
+        {section === 'custom-providers' && <CustomProvidersSection />}
       </div>
     </section>
   );
