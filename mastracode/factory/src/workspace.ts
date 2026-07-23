@@ -124,7 +124,10 @@ export interface CreateWorkspaceFactoryOptions {
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
   const { sandbox: sandboxConfig, github, fleet, workItems } = options;
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
-  const githubTokenInjectors = new Map<string, { inject: (token: string) => void; patKind: GithubPatKind }>();
+  const githubTokenInjectors = new Map<
+    string,
+    { inject: (token: string) => void; patKind: GithubPatKind; ghToken: string }
+  >();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
@@ -189,6 +192,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         if (registered) {
           registerGithubTokenInjector(requestContext, registered.inject);
           registerGithubPatKind(requestContext, registered.patKind);
+          // A PAT saved in Settings after this sandbox was provisioned must
+          // reach the running sandbox without a server restart — re-read it
+          // on every reuse and push it into the live sandbox when it changed.
+          // Best-effort: a failed read or inject keeps the installed token.
+          try {
+            const pat = await getGithubPat(() => github.integrationStorage, session.orgId, registered.patKind);
+            if (pat && pat !== registered.ghToken) {
+              registered.inject(pat);
+            }
+          } catch {
+            // Keep the token already installed in the sandbox.
+          }
         }
         return existing;
       }
@@ -247,8 +262,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
       }
       sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
+      const registered = githubTokenInjectors.get(workspaceId);
+      if (registered) registered.ghToken = freshToken;
     };
-    githubTokenInjectors.set(workspaceId, { inject: injectGithubToken, patKind });
+    githubTokenInjectors.set(workspaceId, { inject: injectGithubToken, patKind, ghToken: ghCliToken });
     registerGithubTokenInjector(requestContext, injectGithubToken);
     registerGithubPatKind(requestContext, patKind);
 

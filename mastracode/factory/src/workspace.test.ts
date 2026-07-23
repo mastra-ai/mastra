@@ -480,6 +480,40 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'later-token');
   });
 
+  it('installs a PAT saved after provisioning into the running sandbox on the next reuse', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+
+    // The org pastes a PAT in Settings while the sandbox is already running —
+    // it must take effect without a server restart.
+    mocks.githubPat = 'ghp_saved_later';
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_saved_later');
+  });
+
+  it('does not re-inject an unchanged PAT on workspace reuse', async () => {
+    mocks.githubPat = 'ghp_org_pat';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.setEnvironmentVariable.mockClear();
+
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+  });
+
   it('reuses an already registered workspace for the exact GitHub session', async () => {
     const { workspace } = await createLocalFactory();
     addProject();
