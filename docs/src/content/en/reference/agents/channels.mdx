@@ -467,7 +467,7 @@ const agent = new Agent({
       slack: createSlackAdapter(),
     },
     // Owner: a session id resolved from the sender's linked account
-    resolveResourceId: async (ctx) => resolveSessionId(ctx),
+    resolveResourceId: async ctx => resolveSessionId(ctx),
     // Thread id: align with the session id so app URLs that address
     // threads by session id resolve channel-created threads too
     resolveThreadId: ({ resourceId, defaultThreadId }) => {
