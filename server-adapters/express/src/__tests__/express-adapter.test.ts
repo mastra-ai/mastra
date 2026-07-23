@@ -13,6 +13,7 @@ import {
   expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
+  createBodyLimitTestSuite,
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
@@ -1230,5 +1231,45 @@ describe('Express Server Adapter', () => {
       const data = await response.json();
       expect(data).toEqual({ message: 'Hello from custom route!' });
     });
+  });
+
+  createBodyLimitTestSuite({
+    suiteName: 'Body Size Limit',
+
+    createApp: () => {
+      const app = express();
+      app.use(express.json());
+      return app;
+    },
+
+    setupAdapter: (app, mastra, bodyLimitOptions) => {
+      const adapter = new MastraServer({ app, mastra, bodyLimitOptions });
+      app.use(adapter.createContextMiddleware());
+      return { adapter, app };
+    },
+
+    registerRoute: (adapter, app, route) => adapter.registerRoute(app, route, { prefix: '' }),
+
+    executeRequest: async (app, method, url, options = {}) => {
+      const server: Server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      try {
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Failed to get server address');
+        }
+        const parsedUrl = new URL(url);
+        const response = await fetch(`http://localhost:${address.port}${parsedUrl.pathname}${parsedUrl.search}`, {
+          method,
+          headers: options.headers,
+          ...(options.body ? { body: options.body } : {}),
+        });
+        return { status: response.status };
+      } finally {
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    },
   });
 });

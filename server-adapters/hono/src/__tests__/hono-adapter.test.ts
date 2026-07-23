@@ -14,6 +14,7 @@ import {
   expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
+  createBodyLimitTestSuite,
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
@@ -1233,77 +1234,28 @@ describe('Hono Server Adapter', () => {
     });
   });
 
-  describe('Body Size Limit', () => {
-    // Regression coverage for the `shouldApplyBodyLimit` check in registerRoute: DELETE
-    // requests previously bypassed bodyLimitOptions.maxSize entirely, even though
-    // getParams() reads and JSON-parses the body for DELETE requests too. A DELETE request
-    // could therefore carry a body far larger than maxSize with no rejection.
-    const maxSize = 100; // bytes
-    const oversizedPayload = JSON.stringify({ padding: 'x'.repeat(maxSize * 4) });
+  createBodyLimitTestSuite({
+    suiteName: 'Body Size Limit',
 
-    function buildAdapter() {
-      const mastra = new Mastra({});
-      const app = new Hono();
-      const adapter = new MastraServer({
-        app,
-        mastra,
-        bodyLimitOptions: {
-          maxSize,
-          onError: () => ({ error: 'Request body too large' }),
-        },
-      });
-      return { app, adapter };
-    }
+    createApp: () => new Hono(),
 
-    it('rejects an oversized POST body with 413', async () => {
-      const { app, adapter } = buildAdapter();
-
-      const testRoute: ServerRoute<any, any, any> = {
-        method: 'POST',
-        path: '/test/body-limit',
-        responseType: 'json',
-        handler: async ({ body }) => ({ receivedBody: body }),
-      };
-
+    setupAdapter: (app, mastra, bodyLimitOptions) => {
+      const adapter = new MastraServer({ app, mastra, bodyLimitOptions });
       app.use('*', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      return { adapter, app };
+    },
 
+    registerRoute: (adapter, app, route) => adapter.registerRoute(app, route, { prefix: '' }),
+
+    executeRequest: async (app, method, url, options = {}) => {
       const response = await app.request(
-        new Request('http://localhost/test/body-limit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: oversizedPayload,
+        new Request(url, {
+          method,
+          headers: options.headers,
+          ...(options.body ? { body: options.body } : {}),
         }),
       );
-
-      expect(response.status).toBe(413);
-    });
-
-    it('rejects an oversized DELETE body with 413 (regression: DELETE used to bypass the limit)', async () => {
-      const { app, adapter } = buildAdapter();
-
-      const testRoute: ServerRoute<any, any, any> = {
-        method: 'DELETE',
-        path: '/test/body-limit',
-        responseType: 'json',
-        handler: async ({ body }) => ({ receivedBody: body }),
-      };
-
-      app.use('*', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
-
-      const response = await app.request(
-        new Request('http://localhost/test/body-limit', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: oversizedPayload,
-        }),
-      );
-
-      // Same maxSize, same payload size, only the method differs from the POST case above.
-      // DELETE used to return 200 here because it was excluded from `shouldApplyBodyLimit`,
-      // even though getParams() still buffers and JSON-parses the whole body for DELETE.
-      expect(response.status).toBe(413);
-    });
+      return { status: response.status };
+    },
   });
 });
