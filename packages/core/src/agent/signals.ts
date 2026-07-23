@@ -89,6 +89,10 @@ export type AgentSignalInput =
        * for this turn), but it is not retained as part of the conversation: it is not written to
        * storage and never re-enters the prompt on later turns. Re-send it each turn from a processor
        * to keep a single fresh copy near the latest message instead of an accumulating history.
+       *
+       * Transient takes precedence over `persist` delivery behaviors: combining them means the
+       * signal is dropped without being stored or delivered, even though the accepted result
+       * still reports `action: 'persist'`.
        */
       transient?: boolean;
     });
