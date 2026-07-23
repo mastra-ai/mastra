@@ -295,6 +295,7 @@ const slackConnectRoutes = createSlackConnectRoutes({
   channelLinkStateSigner,
   tenantStateSigner: createStateSigner(stateSecret),
   oidc: slackOidc,
+  projects: factoryProjects,
 });
 preparedArgs.server = {
   ...preparedArgs.server,

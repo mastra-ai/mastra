@@ -2,7 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { disconnectChannelAccount, listChannelAccounts } from '../../web/ui/domains/settings/services/channelAccounts';
+import {
+  disconnectChannelAccount,
+  listChannelAccounts,
+  setDefaultFactoryAccount,
+} from '../../web/ui/domains/settings/services/channelAccounts';
 import type { ConnectedChannelAccount } from '../../web/ui/domains/settings/services/channelAccounts';
 
 /**
@@ -14,6 +18,23 @@ export function useChannelAccountsQuery() {
   return useQuery({
     queryKey: queryKeys.channelAccounts(),
     queryFn: () => listChannelAccounts(baseUrl),
+  });
+}
+
+/** Point one of the caller's links at a Factory project; refreshes the list. */
+export function useSetDefaultFactoryMutation() {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      factoryProjectId,
+      ...key
+    }: Pick<ConnectedChannelAccount, 'platform' | 'externalTeamId' | 'externalUserId'> & {
+      factoryProjectId: string | null;
+    }) => setDefaultFactoryAccount(baseUrl, key, factoryProjectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.channelAccounts() });
+    },
   });
 }
 

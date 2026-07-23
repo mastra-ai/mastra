@@ -12,6 +12,8 @@ export interface ConnectedChannelAccount {
   /** Display names captured at link time (OIDC profile claims); ids fall back. */
   externalTeamName?: string;
   externalUserName?: string;
+  /** Which Factory project this link's channel runs route to (unset = not picked yet). */
+  defaultFactoryProjectId?: string;
   linkedAt: string;
 }
 
@@ -53,6 +55,26 @@ export async function listChannelAccounts(baseUrl: string): Promise<ChannelAccou
  */
 export function connectSlackUrl(baseUrl: string): string {
   return `${baseUrl}/connect/slack/oidc/start`;
+}
+
+/**
+ * Point one of the caller's own links at a Factory project (or clear it with
+ * `null`). Channel runs from that sender route to this factory.
+ */
+export async function setDefaultFactoryAccount(
+  baseUrl: string,
+  key: Pick<ConnectedChannelAccount, 'platform' | 'externalTeamId' | 'externalUserId'>,
+  factoryProjectId: string | null,
+): Promise<boolean> {
+  const res = await fetch(`${baseUrl}/web/channel-accounts/default-factory`, {
+    method: 'PATCH',
+    headers: { Accept: 'application/json', 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ ...key, factoryProjectId }),
+  });
+  if (!res.ok) throw await parseError(res);
+  const { updated } = (await res.json()) as { updated: boolean };
+  return updated;
 }
 
 /** Sever one of the caller's own links, addressed by its platform sender key. */

@@ -16,12 +16,21 @@ function fakeStore() {
   const saveAccountLink = vi.fn().mockResolvedValue({ userId: 'x', linkedAt: new Date() });
   const listAccountLinksForUser = vi.fn().mockResolvedValue([]);
   const deleteAccountLinkForUser = vi.fn().mockResolvedValue(true);
+  const setDefaultFactory = vi.fn().mockResolvedValue(true);
   return {
-    store: { saveAccountLink, listAccountLinksForUser, deleteAccountLinkForUser } as any,
+    store: { saveAccountLink, listAccountLinksForUser, deleteAccountLinkForUser, setDefaultFactory } as any,
     saveAccountLink,
     listAccountLinksForUser,
     deleteAccountLinkForUser,
+    setDefaultFactory,
   };
+}
+
+function fakeProjects(factories: Array<{ id: string }>) {
+  return {
+    get: vi.fn(async ({ id }: { id: string }) => factories.find(f => f.id === id) ?? null),
+    list: vi.fn(async () => factories),
+  } as any;
 }
 
 // Minimal Hono-ish context: query() + json body + redirect() + json().
@@ -210,6 +219,99 @@ describe('/web/channel-accounts routes', () => {
 
     expect(result.status).toBe(400);
     expect(deleteAccountLinkForUser).not.toHaveBeenCalled();
+  });
+
+  it('lists include the default factory when set', async () => {
+    const { store, listAccountLinksForUser } = fakeStore();
+    const linkedAt = new Date('2026-07-23T17:57:43.368Z');
+    listAccountLinksForUser.mockResolvedValue([
+      {
+        platform: 'slack',
+        externalTeamId: 'T-1',
+        externalUserId: 'U-1',
+        userId: 'user-9',
+        defaultFactoryProjectId: 'fp-1',
+        linkedAt,
+      },
+    ]);
+    const routes = createSlackConnectRoutes({
+      auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
+      accountLinks: store,
+      channelLinkStateSigner: signer,
+    });
+
+    const result = await getHandler(routes, 'GET', '/web/channel-accounts')(fakeCtx());
+
+    expect(result.payload.accounts[0].defaultFactoryProjectId).toBe('fp-1');
+  });
+});
+
+describe('PATCH /web/channel-accounts/default-factory', () => {
+  const signer = createChannelLinkStateSigner('secret');
+  const senderKey = { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1' };
+
+  function patchRoutes(overrides?: Partial<Parameters<typeof createSlackConnectRoutes>[0]>) {
+    const { store, setDefaultFactory } = fakeStore();
+    const routes = createSlackConnectRoutes({
+      auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
+      accountLinks: store,
+      channelLinkStateSigner: signer,
+      projects: fakeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]),
+      ...overrides,
+    });
+    const handler = getHandler(routes, 'PATCH', '/web/channel-accounts/default-factory');
+    return { handler, setDefaultFactory };
+  }
+
+  it('sets the default factory on the caller own link', async () => {
+    const { handler, setDefaultFactory } = patchRoutes();
+
+    const result = await handler(fakeCtx(undefined, { ...senderKey, factoryProjectId: 'fp-2' }));
+
+    expect(setDefaultFactory).toHaveBeenCalledWith({
+      userId: 'user-9',
+      ...senderKey,
+      factoryProjectId: 'fp-2',
+    });
+    expect(result.payload).toEqual({ updated: true });
+  });
+
+  it('clears the default with an explicit null (no factory lookup)', async () => {
+    const projects = fakeProjects([{ id: 'fp-1' }]);
+    const { handler, setDefaultFactory } = patchRoutes({ projects });
+
+    const result = await handler(fakeCtx(undefined, { ...senderKey, factoryProjectId: null }));
+
+    expect(projects.get).not.toHaveBeenCalled();
+    expect(setDefaultFactory).toHaveBeenCalledWith({ userId: 'user-9', ...senderKey, factoryProjectId: null });
+    expect(result.payload).toEqual({ updated: true });
+  });
+
+  it('rejects a factory that does not exist in the caller org', async () => {
+    const { handler, setDefaultFactory } = patchRoutes();
+
+    const result = await handler(fakeCtx(undefined, { ...senderKey, factoryProjectId: 'fp-elsewhere' }));
+
+    expect(result.status).toBe(400);
+    expect(setDefaultFactory).not.toHaveBeenCalled();
+  });
+
+  it('rejects unauthenticated calls', async () => {
+    const { handler, setDefaultFactory } = patchRoutes({ auth: fakeAuth(undefined) });
+
+    const result = await handler(fakeCtx(undefined, { ...senderKey, factoryProjectId: 'fp-1' }));
+
+    expect(result.status).toBe(401);
+    expect(setDefaultFactory).not.toHaveBeenCalled();
+  });
+
+  it('400s when factoryProjectId is missing entirely', async () => {
+    const { handler, setDefaultFactory } = patchRoutes();
+
+    const result = await handler(fakeCtx(undefined, { ...senderKey }));
+
+    expect(result.status).toBe(400);
+    expect(setDefaultFactory).not.toHaveBeenCalled();
   });
 });
 

@@ -25,6 +25,15 @@ function mockAccounts(accounts: ConnectedChannelAccount[], canConnect = false) {
   server.use(http.get(`${TEST_BASE_URL}/web/channel-accounts`, () => HttpResponse.json({ accounts, canConnect })));
 }
 
+function mockFactories(factories: Array<{ id: string; name: string }>) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: factories })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/source-control-connections`, () =>
+      HttpResponse.json({ connections: [] }),
+    ),
+  );
+}
+
 describe('ConnectedAccountsSection', () => {
   it('given no links and no OIDC config, when rendered, then it explains how linking starts from Slack', async () => {
     mockAccounts([]);
@@ -101,6 +110,61 @@ describe('ConnectedAccountsSection', () => {
     // Refetch after invalidation renders the empty state.
     expect(await screen.findByText(/No connected accounts/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Disconnect/ })).not.toBeInTheDocument();
+  });
+
+  it('given factories, when rendered, then each row offers a default-factory picker', async () => {
+    mockAccounts([{ ...slackLink, defaultFactoryProjectId: 'fp-2' }]);
+    mockFactories([
+      { id: 'fp-1', name: 'Mastra OSS' },
+      { id: 'fp-2', name: 'Kepler' },
+    ]);
+
+    renderWithProviders(<ConnectedAccountsSection />);
+
+    // The trigger shows the current default's name.
+    const trigger = await screen.findByRole('combobox', { name: /Default factory for/ });
+    expect(trigger).toHaveTextContent('Kepler');
+  });
+
+  it('given no default yet, when a factory is picked, then the PATCH carries the sender key and the list refreshes', async () => {
+    let listCalls = 0;
+    let patchBody: unknown;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () => {
+        listCalls += 1;
+        return HttpResponse.json({
+          accounts: [listCalls === 1 ? slackLink : { ...slackLink, defaultFactoryProjectId: 'fp-1' }],
+          canConnect: false,
+        });
+      }),
+      http.patch(`${TEST_BASE_URL}/web/channel-accounts/default-factory`, async ({ request }) => {
+        patchBody = await request.json();
+        return HttpResponse.json({ updated: true });
+      }),
+    );
+    mockFactories([
+      { id: 'fp-1', name: 'Mastra OSS' },
+      { id: 'fp-2', name: 'Kepler' },
+    ]);
+
+    renderWithProviders(<ConnectedAccountsSection />);
+    const user = userEvent.setup();
+
+    const trigger = await screen.findByRole('combobox', { name: /Default factory for/ });
+    expect(trigger).toHaveTextContent('Set default factory');
+    await user.click(trigger);
+    await user.click(await screen.findByRole('option', { name: 'Mastra OSS' }));
+
+    await waitFor(() =>
+      expect(patchBody).toEqual({
+        platform: 'slack',
+        externalTeamId: 'T06CB4A5FT9',
+        externalUserId: 'U095PUH0FKL',
+        factoryProjectId: 'fp-1',
+      }),
+    );
+    // Refetch after invalidation shows the new default.
+    await waitFor(() => expect(trigger).toHaveTextContent('Mastra OSS'));
   });
 
   it('given a delete that fails, when disconnected, then the row stays', async () => {

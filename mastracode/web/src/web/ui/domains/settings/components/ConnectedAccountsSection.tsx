@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList } from '@mastra/playground-ui/components/DataList';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Slack } from 'lucide-react';
@@ -9,7 +10,9 @@ import { useApiConfig } from '../../../../../shared/api/config';
 import {
   useChannelAccountsQuery,
   useDisconnectChannelAccountMutation,
+  useSetDefaultFactoryMutation,
 } from '../../../../../shared/hooks/useChannelAccounts';
+import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
 import { connectSlackUrl } from '../services/channelAccounts';
 import type { ConnectedChannelAccount } from '../services/channelAccounts';
 
@@ -36,9 +39,30 @@ export function ConnectedAccountsSection() {
   const { baseUrl } = useApiConfig();
   const accountsQuery = useChannelAccountsQuery();
   const disconnectMutation = useDisconnectChannelAccountMutation();
+  const setDefaultFactoryMutation = useSetDefaultFactoryMutation();
+  const factoriesQuery = useFactoriesQuery();
 
   const accounts = accountsQuery.data?.accounts ?? [];
   const canConnect = accountsQuery.data?.canConnect ?? false;
+  const factories = factoriesQuery.data ?? [];
+
+  const setDefaultFactory = (account: ConnectedChannelAccount, factoryProjectId: string) => {
+    setDefaultFactoryMutation.mutate(
+      {
+        platform: account.platform,
+        externalTeamId: account.externalTeamId,
+        externalUserId: account.externalUserId,
+        factoryProjectId,
+      },
+      {
+        onSuccess: () => {
+          const name = factories.find(factory => factory.id === factoryProjectId)?.name ?? factoryProjectId;
+          toast.success(`Slack sessions will go to ${name}`);
+        },
+        onError: error => toast.error(error instanceof Error ? error.message : 'Failed to set default factory'),
+      },
+    );
+  };
 
   // Full-page navigation: the server route redirects out to Slack's consent
   // screen and back, so this can't be an XHR.
@@ -101,10 +125,38 @@ export function ConnectedAccountsSection() {
 
   return (
     <div className="flex flex-col items-start gap-3">
-      <DataList aria-label="Connected accounts" variant="lined" columns="minmax(0,1fr) auto auto">
+      <DataList aria-label="Connected accounts" variant="lined" columns="minmax(0,1fr) auto auto auto">
         {accounts.map(account => (
           <DataList.RowStatic key={`${account.platform}:${account.externalTeamId}:${account.externalUserId}`}>
             <DataList.NameCell>{accountLabel(account)}</DataList.NameCell>
+            <DataList.Cell>
+              {/* Which factory this sender's Slack sessions go to. Empty until
+                  picked (or auto-stamped by the first single-factory run). */}
+              <Select
+                value={account.defaultFactoryProjectId ?? ''}
+                disabled={factories.length === 0 || setDefaultFactoryMutation.isPending}
+                onValueChange={factoryProjectId => setDefaultFactory(account, factoryProjectId)}
+              >
+                <SelectTrigger
+                  variant="ghost"
+                  size="xs"
+                  aria-label={`Default factory for ${accountLabel(account)}`}
+                  className="w-auto"
+                >
+                  <Txt as="span" variant="ui-xs" className="text-icon3">
+                    {factories.find(factory => factory.id === account.defaultFactoryProjectId)?.name ??
+                      'Set default factory'}
+                  </Txt>
+                </SelectTrigger>
+                <SelectContent>
+                  {factories.map(factory => (
+                    <SelectItem key={factory.id} value={factory.id}>
+                      {factory.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </DataList.Cell>
             <DataList.Cell>
               <Txt as="span" variant="ui-xs" className="text-icon3">
                 Linked {new Date(account.linkedAt).toLocaleDateString()}

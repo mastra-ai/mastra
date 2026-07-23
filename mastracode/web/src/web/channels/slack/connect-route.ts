@@ -1,6 +1,12 @@
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
-import type { ChannelIdentityStorage, ChannelLinkStateSigner, RouteAuth, StateSigner } from '@mastra/factory';
+import type {
+  ChannelIdentityStorage,
+  ChannelLinkStateSigner,
+  FactoryProjectsStorage,
+  RouteAuth,
+  StateSigner,
+} from '@mastra/factory';
 
 /**
  * Payload shape for the connected-accounts list: the platform sender key +
@@ -13,6 +19,8 @@ export interface ConnectedChannelAccountPayload {
   /** Display names captured at link time (OIDC profile claims); ids fall back. */
   externalTeamName?: string;
   externalUserName?: string;
+  /** Which Factory project this link's channel runs route to (unset = not picked yet). */
+  defaultFactoryProjectId?: string;
   linkedAt: string;
 }
 
@@ -79,8 +87,13 @@ export function createSlackConnectRoutes(deps: {
   /** Signs the OIDC `state`, binding the round-trip to the initiating tenant. */
   tenantStateSigner?: StateSigner;
   oidc?: SlackOidcConfig;
+  /**
+   * Factory projects domain, for validating (and listing to) the per-link
+   * default factory. Unset → the default-factory PATCH route rejects.
+   */
+  projects?: FactoryProjectsStorage;
 }): ApiRoute[] {
-  const { auth, accountLinks, channelLinkStateSigner, tenantStateSigner, oidc } = deps;
+  const { auth, accountLinks, channelLinkStateSigner, tenantStateSigner, oidc, projects } = deps;
   const oidcEnabled = Boolean(oidc && tenantStateSigner);
   const uiOrigin = oidc?.uiOrigin?.replace(/\/$/, '') ?? '';
 
@@ -240,6 +253,7 @@ export function createSlackConnectRoutes(deps: {
           externalUserId: link.externalUserId,
           externalTeamName: link.externalTeamName,
           externalUserName: link.externalUserName,
+          defaultFactoryProjectId: link.defaultFactoryProjectId,
           linkedAt: link.linkedAt.toISOString(),
         }));
         // `canConnect` tells the settings UI whether the web-initiated OIDC
@@ -274,6 +288,48 @@ export function createSlackConnectRoutes(deps: {
           externalUserId: body.externalUserId,
         });
         return c.json({ deleted });
+      },
+    }),
+    // Set (or clear, with `factoryProjectId: null`) which Factory project a
+    // link's channel runs route to. The storage write is guarded by the
+    // caller's tenant userId — a known sender key alone can never repoint
+    // someone else's link — and a non-null factory must exist in the caller's
+    // org.
+    registerApiRoute('/web/channel-accounts/default-factory', {
+      method: 'PATCH',
+      requiresAuth: false,
+      handler: async c => {
+        await auth.ensureUser(loose(c));
+        const tenant = auth.tenant(loose(c));
+        if (!tenant) return c.json({ error: 'unauthorized' }, 401);
+
+        const body = (await c.req.json().catch(() => null)) as {
+          platform?: string;
+          externalTeamId?: string;
+          externalUserId?: string;
+          factoryProjectId?: string | null;
+        } | null;
+        if (!body?.platform || !body.externalTeamId || !body.externalUserId || body.factoryProjectId === undefined) {
+          return c.json(
+            { error: 'platform, externalTeamId, externalUserId and factoryProjectId (nullable) are required' },
+            400,
+          );
+        }
+
+        if (body.factoryProjectId !== null) {
+          if (!projects) return c.json({ error: 'factory routing is not configured' }, 400);
+          const factory = await projects.get({ orgId: tenant.orgId ?? '', id: body.factoryProjectId });
+          if (!factory) return c.json({ error: 'unknown factory' }, 400);
+        }
+
+        const updated = await accountLinks.setDefaultFactory({
+          userId: tenant.userId,
+          platform: body.platform,
+          externalTeamId: body.externalTeamId,
+          externalUserId: body.externalUserId,
+          factoryProjectId: body.factoryProjectId,
+        });
+        return c.json({ updated });
       },
     }),
   ];
