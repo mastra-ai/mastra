@@ -98,11 +98,52 @@ export interface CreatedIntakeComment {
   url: string;
 }
 
+/**
+ * Provider-neutral target state for `Intake.updateIssue`.
+ *
+ * `byType` uses the workflow-state family so callers don't have to know per-team
+ * state names; `byName` is escape hatch for teams that need a specific state.
+ * Adapters that don't support custom states (GitHub) ignore `byName` with a
+ * warn log.
+ */
+export type IntakeIssueTargetState =
+  { kind: 'byType'; stateType: 'unstarted' | 'started' | 'completed' | 'canceled' } | { kind: 'byName'; name: string };
+
+export interface UpdateIntakeIssueInput extends GetIntakeIssueInput {
+  state: IntakeIssueTargetState;
+  /** End user the state change should be attributed to, when the provider supports acting on a user's behalf. */
+  actingUserId?: string;
+}
+
+export interface ResolveIntakeDispatchInput {
+  orgId: string;
+  externalSource: { type: string; externalId: string };
+}
+
+export interface ResolvedIntakeDispatch {
+  connection: IntegrationConnection;
+  sourceId?: string;
+  issueId: string;
+}
+
 /** Fixed issue-oriented contract implemented by GitHub, Linear, and future sources. */
 export interface Intake {
+  /**
+   * Resolve the connection and provider-specific identifiers needed to call
+   * this capability from a background dispatch context.
+   */
+  resolveIntakeDispatch?(input: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null>;
   listSources(input: ListIntakeSourcesInput): Promise<IntakeSource[]>;
   listItems(input: ListIntakeItemsInput): Promise<IntakeItemPage>;
   listIssues(input: ListIntakeIssuesInput): Promise<IntakeIssuePage>;
   getIssue(input: GetIntakeIssueInput): Promise<IntakeIssueDetail | null>;
   createComment(input: CreateIntakeCommentInput): Promise<CreatedIntakeComment | null>;
+  /**
+   * Move an issue to a target state. Returns the refreshed `IntakeIssue` on
+   * success, or `null` when the target is not applicable (e.g., a GitHub PR,
+   * or no matching workflow state). Adapters MUST NOT throw for policy misses
+   * — only for infrastructure errors (network, auth). This distinction lets
+   * the executor idempotency guard treat `null` as "done, nothing to do".
+   */
+  updateIssue(input: UpdateIntakeIssueInput): Promise<IntakeIssue | null>;
 }
