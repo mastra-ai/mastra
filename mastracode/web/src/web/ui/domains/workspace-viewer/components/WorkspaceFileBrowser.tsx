@@ -183,7 +183,10 @@ export function WorkspaceFileBrowser({
   };
 
   return (
-    <aside className="flex h-full w-full min-w-0 flex-col rounded-xl bg-surface3" aria-label="Workspace files">
+    <aside
+      className="flex max-h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl bg-surface3"
+      aria-label="Workspace files"
+    >
       <div className="flex items-center justify-end gap-2 px-3 py-2 lg:pr-12">
         <Button size="sm" variant="ghost" onClick={onRefresh} aria-label="Refresh workspace files">
           <RefreshCw size={14} />

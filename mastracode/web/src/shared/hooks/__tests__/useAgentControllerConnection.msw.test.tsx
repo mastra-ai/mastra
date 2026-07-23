@@ -13,10 +13,12 @@ import {
   useAgentControllerConnection,
 } from '../../../web/ui/domains/chat/hooks/useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../useAgentControllerSessionSync';
+import { useWorkspaceRenderedListing } from '../use-fs';
 
 const controllerId = 'code';
 const resourceId = 'resource-test';
 const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}`;
+const workspaceRenderedUrl = `${TEST_BASE_URL}/web/workspace/rendered/list`;
 const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
 
 describe('useAgentControllerConnection', () => {
@@ -223,6 +225,68 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.state?.running).toBe(true));
     expect(result.current.status).toBe('ready');
     expect(onStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('given an active workspace listing, when a file mutation ends, then the listing refreshes', async () => {
+    const encoder = new TextEncoder();
+    const onListing = vi.fn();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          running: true,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              },
+              cancel() {},
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+      http.get(workspaceRenderedUrl, () => {
+        onListing();
+        return HttpResponse.json({
+          workspacePath: '/workspace',
+          root: '.artifacts',
+          rootPath: '/workspace/.artifacts',
+          entries: [],
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => {
+      const connection = useAgentControllerConnection({ ...hookArgs, onEvent: vi.fn() });
+      const workspaceListing = useWorkspaceRenderedListing('/workspace', '.artifacts');
+      return { connection, workspaceListing };
+    });
+
+    await waitFor(() => {
+      expect(result.current.connection.status).toBe('ready');
+      expect(result.current.workspaceListing.isSuccess).toBe(true);
+    });
+    expect(onListing).toHaveBeenCalledOnce();
+
+    emit({ type: 'tool_start', toolCallId: 'write-1', toolName: 'write_file', args: { path: '.artifacts/a.md' } });
+    emit({ type: 'tool_end', toolCallId: 'write-1', result: { ok: true } });
+
+    await waitFor(() => expect(onListing).toHaveBeenCalledTimes(2));
   });
 
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {

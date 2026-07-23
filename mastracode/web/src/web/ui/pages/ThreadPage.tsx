@@ -28,7 +28,10 @@ export function ThreadPage() {
   const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
   const isMobile = useIsMobile();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
-  const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
+  const [workspaceViewerOverride, setWorkspaceViewerOverride] = useState<{
+    workspacePath: string;
+    visible: boolean;
+  }>();
   const isUserThreadRoute = Boolean(userThreadMatch);
   const routeSessionId = isUserThreadRoute ? threadId : sessionId;
   const factoryQuery = useFactoryQuery(factoryId);
@@ -37,6 +40,14 @@ export function ThreadPage() {
   const workspacePath = userSessionQuery.data?.sandboxWorkdir ?? undefined;
   const artifactsListing = useWorkspaceRenderedListing(workspacePath, renderedPaths[0]?.root);
   const hasWorkspaceFiles = (artifactsListing.data?.entries.length ?? 0) > 0;
+  const workspaceViewerVisible =
+    workspaceViewerOverride && workspaceViewerOverride.workspacePath === workspacePath
+      ? workspaceViewerOverride.visible
+      : hasWorkspaceFiles;
+  const setWorkspaceViewerVisible = (visible: boolean) => {
+    if (!workspacePath) return;
+    setWorkspaceViewerOverride({ workspacePath, visible });
+  };
 
   if (factoryQuery.isPending || (Boolean(routeSessionId) && userSessionQuery.isPending)) {
     return (
@@ -50,11 +61,11 @@ export function ThreadPage() {
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       rightPanelExpanded={workspaceViewerExpanded}
-      rightPanelAvailable={Boolean(workspacePath && hasWorkspaceFiles)}
+      rightPanelAvailable={Boolean(workspacePath)}
       onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
       onRightPanelClose={() => setWorkspaceViewerVisible(false)}
       rightPanel={
-        workspacePath && hasWorkspaceFiles && (workspaceViewerVisible || isMobile) ? (
+        workspacePath && (workspaceViewerVisible || isMobile) ? (
           <WorkspaceViewerPanel
             workspacePath={workspacePath}
             renderedPaths={renderedPaths}

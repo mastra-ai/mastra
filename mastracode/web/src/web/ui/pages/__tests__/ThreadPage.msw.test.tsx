@@ -1,5 +1,6 @@
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,10 +11,19 @@ import type { WorkspaceRenderedEntry } from '../../../../shared/api/types';
 import { ThreadPage } from '../ThreadPage';
 
 vi.mock('../../layouts/ChatLayout', () => ({
-  ChatLayout: ({ rightPanel, rightPanelAvailable }: { rightPanel?: ReactNode; rightPanelAvailable?: boolean }) => (
+  ChatLayout: ({
+    rightPanel,
+    rightPanelAvailable,
+    onRightPanelOpen,
+  }: {
+    rightPanel?: ReactNode;
+    rightPanelAvailable?: boolean;
+    onRightPanelOpen?: () => void;
+  }) => (
     <div>
       <span>{rightPanel ? 'workspace-panel-visible' : 'workspace-panel-hidden'}</span>
       <span>{rightPanelAvailable ? 'workspace-panel-available' : 'workspace-panel-unavailable'}</span>
+      {rightPanelAvailable && !rightPanel ? <button onClick={onRightPanelOpen}>Open workspace files</button> : null}
     </div>
   ),
 }));
@@ -30,9 +40,7 @@ function installHandlers(entries: WorkspaceRenderedEntry[]) {
   const onListing = vi.fn();
   const listingWorkspacePaths: Array<string | null> = [];
   server.use(
-    http.get(FACTORIES_URL, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Factory' }] }),
-    ),
+    http.get(FACTORIES_URL, () => HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Factory' }] })),
     http.get(CONNECTIONS_URL, () => HttpResponse.json({ connections: [] })),
     http.get(USER_SESSION_URL, () =>
       HttpResponse.json({
@@ -81,14 +89,19 @@ function renderThreadPage() {
 
 describe('ThreadPage workspace panel', () => {
   describe('when the workspace has no rendered artifacts', () => {
-    it('keeps the workspace panel hidden', async () => {
+    it('keeps the workspace panel available behind its open button', async () => {
+      const user = userEvent.setup();
       const { onListing } = installHandlers([]);
 
       renderThreadPage();
 
       await waitFor(() => expect(onListing).toHaveBeenCalledOnce());
       expect(screen.getByText('workspace-panel-hidden')).toBeInTheDocument();
-      expect(screen.getByText('workspace-panel-unavailable')).toBeInTheDocument();
+      expect(screen.getByText('workspace-panel-available')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Open workspace files' }));
+
+      expect(screen.getByText('workspace-panel-visible')).toBeInTheDocument();
     });
   });
 

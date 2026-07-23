@@ -109,7 +109,7 @@ function DesktopRightPanelFrame({
     const frame = frameRef.current;
     if (!frame) return;
 
-    const maximumWidth = frame.getBoundingClientRect().width / 2;
+    const maximumWidth = Math.min(EXPANDED_RIGHT_PANEL_WIDTH, Math.max(0, frame.getBoundingClientRect().width - 16));
     const minimumWidth = Math.min(MIN_RIGHT_PANEL_WIDTH, maximumWidth);
     const nextWidth = Math.min(maximumWidth, Math.max(minimumWidth, requestedWidth));
     frame.style.setProperty('--chat-right-panel-width', `${nextWidth}px`);
@@ -156,27 +156,27 @@ function DesktopRightPanelFrame({
     <div
       ref={frameRef}
       data-expanded={initialWidth === EXPANDED_RIGHT_PANEL_WIDTH}
-      className={
-        hasRightPanel
-          ? 'relative grid h-full min-h-0 w-full min-w-0 flex-1 grid-cols-[minmax(0,1fr)_min(var(--chat-right-panel-width),50%)] [--chat-right-panel-width:320px] data-[expanded=true]:[--chat-right-panel-width:720px]'
-          : 'relative grid h-full min-h-0 w-full min-w-0 flex-1 grid-cols-1 [--chat-right-panel-width:320px]'
-      }
+      className="relative h-full min-h-0 w-full min-w-0 flex-1 [--chat-right-panel-width:320px] data-[expanded=true]:[--chat-right-panel-width:720px]"
     >
       <div id="chat-main-slot" className="h-full min-h-0 min-w-0">
         {children}
       </div>
       {hasRightPanel ? (
-        <div ref={rightPanelSlotRef} id="chat-right-slot" className="relative h-full min-h-0 min-w-0 p-2">
+        <div
+          ref={rightPanelSlotRef}
+          id="chat-right-slot"
+          className="absolute right-0 top-0 z-20 flex max-h-[70dvh] w-(--chat-right-panel-width) max-w-[calc(100%-1rem)] min-w-0 p-2"
+        >
           <button
             type="button"
-            className="group absolute top-0 left-1 z-20 flex h-full w-2 -translate-x-1/2 cursor-col-resize touch-none items-center justify-center focus-visible:outline-hidden"
+            className="group absolute inset-y-2 left-2 z-20 flex w-2 -translate-x-1/2 cursor-col-resize touch-none items-center justify-center focus-visible:outline-hidden"
             onPointerDown={startResize}
             onKeyDown={resizeWithKeyboard}
             aria-label="Resize workspace files"
           >
             <ResizeHandleIndicator className="group-hover:opacity-100 group-focus-visible:via-accent1 group-focus-visible:opacity-100 in-data-[panel-gesture=active]:via-neutral6/45 in-data-[panel-gesture=active]:opacity-100" />
           </button>
-          <div className="relative h-full min-w-0 rounded-xl border border-border1/40 bg-surface3 shadow-main-frame">
+          <div className="relative flex max-h-[calc(70dvh-1rem)] min-h-0 w-full overflow-hidden rounded-xl border border-border1/40 bg-surface3 shadow-main-frame">
             {rightPanel}
             {onRightPanelClose ? (
               <Button

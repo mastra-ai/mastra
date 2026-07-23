@@ -1,6 +1,6 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { queryKeys } from '../../../../../shared/api/keys';
 import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
@@ -10,6 +10,16 @@ import { useAgentControllerSessionSync } from '../../../../../shared/hooks/useAg
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
+
+// Browser-side subset of the canonical MC_TOOLS names in @mastra/code-sdk/tool-names.
+const WORKSPACE_MUTATION_TOOLS: Record<string, true> = {
+  write_file: true,
+  string_replace_lsp: true,
+  delete_file: true,
+  mkdir: true,
+  ast_smart_edit: true,
+  execute_command: true,
+};
 
 interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
@@ -31,6 +41,7 @@ export function useAgentControllerConnection({
   onEvent,
 }: UseAgentControllerConnectionArgs) {
   const queryClient = useQueryClient();
+  const workspaceMutationCallsRef = useRef(new Set<string>());
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
@@ -82,6 +93,21 @@ export function useAgentControllerConnection({
         current => (current ? { ...current, running } : current),
         { updatedAt },
       );
+    }
+    if (
+      event.type === 'tool_start' &&
+      typeof event.toolCallId === 'string' &&
+      typeof event.toolName === 'string' &&
+      WORKSPACE_MUTATION_TOOLS[event.toolName] === true
+    ) {
+      workspaceMutationCallsRef.current.add(event.toolCallId);
+    }
+    const mutatingToolEnded =
+      event.type === 'tool_end' &&
+      typeof event.toolCallId === 'string' &&
+      workspaceMutationCallsRef.current.delete(event.toolCallId);
+    if (mutatingToolEnded || event.type === 'subagent_end' || event.type === 'agent_end') {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceRenderedListAll() });
     }
     onEvent(event);
   };

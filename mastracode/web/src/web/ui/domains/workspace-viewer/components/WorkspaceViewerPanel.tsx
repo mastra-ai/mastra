@@ -71,9 +71,12 @@ function WorkspaceViewerPanelInner({
   };
 
   return (
-    <div className="relative flex h-full w-full min-w-0 rounded-xl bg-surface3" data-testid="workspace-viewer-panel">
+    <div
+      className="relative flex max-h-[calc(70dvh-1rem)] w-full min-w-0 overflow-hidden rounded-xl bg-surface3"
+      data-testid="workspace-viewer-panel"
+    >
       {viewerOpen ? (
-        <div className="relative h-full min-w-0 flex-1 overflow-hidden">
+        <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
           <Button
             size="icon-sm"
             variant="ghost"
@@ -103,8 +106,8 @@ function WorkspaceViewerPanelInner({
       <div
         className={
           viewerOpen
-            ? 'hidden h-full min-w-0 shrink-0 overflow-hidden lg:block'
-            : 'h-full min-w-0 flex-1 overflow-hidden'
+            ? 'hidden max-h-full min-h-0 min-w-0 shrink-0 overflow-hidden lg:block'
+            : 'max-h-full min-h-0 min-w-0 flex-1 overflow-hidden'
         }
         style={viewerOpen ? { width: browserWidth } : undefined}
       >

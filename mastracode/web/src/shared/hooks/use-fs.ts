@@ -32,15 +32,15 @@ export function useArtifactListing(path: string | undefined) {
   });
 }
 
-const WORKSPACE_RENDERED_POLL_MS = 5_000;
-
 export function useWorkspaceRenderedListing(workspacePath: string | undefined, renderedRoot: string | undefined) {
   const { client } = useApiConfig();
   return useQuery<WorkspaceRenderedListing>({
     queryKey: queryKeys.workspaceRenderedList(workspacePath, renderedRoot),
     enabled: Boolean(workspacePath && renderedRoot),
-    refetchInterval: WORKSPACE_RENDERED_POLL_MS,
-    refetchOnWindowFocus: true,
+    // Controller mutation and run-completion events invalidate this query.
+    // Reuse that fresh result across observers and refresh when the tab returns.
+    staleTime: Infinity,
+    refetchOnWindowFocus: 'always',
     queryFn: () =>
       client.get<WorkspaceRenderedListing>(
         `/web/workspace/rendered/list?workspacePath=${encodeURIComponent(workspacePath ?? '')}&root=${encodeURIComponent(renderedRoot ?? '')}`,
