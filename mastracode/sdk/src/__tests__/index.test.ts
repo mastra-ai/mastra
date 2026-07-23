@@ -471,6 +471,56 @@ describe('createMastraCode', () => {
     expect(createStorageMock).not.toHaveBeenCalled();
   });
 
+  // Simulates a duplicated-dependency graph: the injected store was built
+  // against a different copy of @mastra/core, so `instanceof
+  // MastraCompositeStore` (and `instanceof LibSQLStore`/`PostgresStore`) fail
+  // even though the instance is a real store. Detection must be structural.
+  describe('injected storage from a foreign @mastra/core copy', () => {
+    class ForeignCompositeStore {
+      stores = {};
+      async init() {}
+      __registerMastra() {}
+    }
+
+    it('detects a foreign LibSQLStore instance and resolves the libsql backend', async () => {
+      class LibSQLStore extends ForeignCompositeStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ storage: new LibSQLStore() as any });
+
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+
+    it('detects a foreign PostgresStore subclass and resolves the pg backend', async () => {
+      class PostgresStore extends ForeignCompositeStore {}
+      class CustomPgStore extends PostgresStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ storage: new CustomPgStore() as any });
+
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+
+    it('accepts an unrecognized foreign store when storageBackend is configured', async () => {
+      class SomeOtherStore extends ForeignCompositeStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ storage: new SomeOtherStore() as any, storageBackend: 'pg' });
+
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+
+    it('still requires an explicit backend for unrecognized foreign stores', async () => {
+      class SomeOtherStore extends ForeignCompositeStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await expect(createMastraCode({ storage: new SomeOtherStore() as any })).rejects.toThrow(
+        'storageBackend is required when injecting a custom storage instance.',
+      );
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('uses caller memory while applying configDir to startup services and state', async () => {
     const projectPath = '/tmp/mastracode-project';
     const customMemory = { id: 'custom-memory' };
@@ -492,8 +542,7 @@ describe('createMastraCode', () => {
     });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      | { memory?: unknown; initialState?: Record<string, unknown> }
-      | undefined;
+      { memory?: unknown; initialState?: Record<string, unknown> } | undefined;
     expect(agentControllerConfig?.memory).toBe(customMemory);
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
@@ -535,8 +584,7 @@ describe('createMastraCode', () => {
     await createMastraCode({ pluginManager: pluginManager as any });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      | { modes?: Array<{ id: string; availableTools?: string[] }>; initialState?: Record<string, unknown> }
-      | undefined;
+      { modes?: Array<{ id: string; availableTools?: string[] }>; initialState?: Record<string, unknown> } | undefined;
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'plan')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'fast')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.initialState?.pluginInstructions).toEqual(['Use plugin policy.']);
@@ -579,8 +627,7 @@ describe('createMastraCode', () => {
     });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      | { modes?: { id: string; default?: boolean; defaultModelId: string }[] }
-      | undefined;
+      { modes?: { id: string; default?: boolean; defaultModelId: string }[] } | undefined;
     expect(agentControllerConfig?.modes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: 'review', default: true, defaultModelId: '__GATEWAY_OPENAI_MODEL__' }),
@@ -604,8 +651,7 @@ describe('createMastraCode', () => {
     await createMastraCode({ cwd: projectPath });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      | { initialState?: Record<string, unknown> }
-      | undefined;
+      { initialState?: Record<string, unknown> } | undefined;
     expect(agentControllerConfig?.initialState?.projectPath).toBe(projectPath);
   });
 
@@ -632,8 +678,7 @@ describe('createMastraCode', () => {
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      | { initialState?: Record<string, unknown> }
-      | undefined;
+      { initialState?: Record<string, unknown> } | undefined;
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
   });
 
@@ -680,8 +725,7 @@ describe('createMastraCode', () => {
     await createMastraCode({ pubsub, unixSocketPubSub: true });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      | { pubsub?: unknown; threadLock?: unknown }
-      | undefined;
+      { pubsub?: unknown; threadLock?: unknown } | undefined;
     expect(agentControllerConfig?.pubsub).toBe(pubsub);
     expect(agentControllerConfig?.threadLock).toBeDefined();
   });
@@ -693,8 +737,7 @@ describe('createMastraCode', () => {
     await createMastraCode({ pubsub, crossProcessPubSub: true });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      | { pubsub?: unknown; threadLock?: unknown }
-      | undefined;
+      { pubsub?: unknown; threadLock?: unknown } | undefined;
     expect(agentControllerConfig?.pubsub).toBe(pubsub);
     expect(agentControllerConfig?.threadLock).toBeUndefined();
   });
@@ -733,8 +776,7 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     const agentControllerCall = controllerConstructorMock.mock.calls[0]?.[0] as
-      | { initialState?: Record<string, unknown> }
-      | undefined;
+      { initialState?: Record<string, unknown> } | undefined;
     expect(agentControllerCall?.initialState?.observeAttachments).toBe(false);
   });
 
@@ -744,8 +786,7 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     const agentControllerCall = controllerConstructorMock.mock.calls[0]?.[0] as
-      | { initialState?: Record<string, unknown> }
-      | undefined;
+      { initialState?: Record<string, unknown> } | undefined;
     expect(agentControllerCall?.initialState?.observeAttachments).toBe('auto');
   });
 
@@ -762,19 +803,18 @@ describe('createMastraCode', () => {
     expect(controllerSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
-  it('runs stream error retries before provider-specific error recovery processors', async () => {
+  it('runs provider history compat before stream error retries so bad requests are repaired, not blindly retried', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { errorProcessors?: Array<{ id?: string }> }
-      | undefined;
+      { errorProcessors?: Array<{ id?: string }> } | undefined;
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
       'stream-error-retry-processor',
       'prefill-error-handler',
-      'provider-history-compat',
     ]);
   });
 
@@ -785,8 +825,7 @@ describe('createMastraCode', () => {
 
     expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(1);
     const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
-      | { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown }> }
-      | undefined;
+      { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown }> } | undefined;
     expect(options?.matchers).toHaveLength(2);
 
     // First matcher: Bad Request (400) with maxRetries 1 and 2s delay.
@@ -813,6 +852,24 @@ describe('createMastraCode', () => {
     expect(transientConnectionPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
   });
 
+  it('prepends embedding input processors without replacing mandatory built-ins', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const customProcessor = { id: 'embedding-reconciler', processInputStep: vi.fn() };
+
+    await createMastraCode({ inputProcessors: [customProcessor] });
+
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      { inputProcessors?: Array<{ id?: string }> } | undefined;
+    const processors = agentConfig?.inputProcessors ?? [];
+    expect(processors[0]).toBe(customProcessor);
+    expect(processors.map(processor => processor.id)).toEqual([
+      'embedding-reconciler',
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+    ]);
+  });
+
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
     const { createMastraCode } = await import('../index.js');
 
@@ -820,8 +877,7 @@ describe('createMastraCode', () => {
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> }
-      | undefined;
+      { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> } | undefined;
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });

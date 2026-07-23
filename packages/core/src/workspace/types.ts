@@ -35,5 +35,4 @@ export type WorkspaceStatus = 'pending' | 'initializing' | 'ready' | 'paused' | 
  * ```
  */
 export type InstructionsOption =
-  | string
-  | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
+  string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);

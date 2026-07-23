@@ -14,12 +14,12 @@ import { useAgentControllerThreads } from '../useAgentControllerThreads';
 
 const controllerId = 'code';
 const resourceId = 'resource-test';
-const projectPath = '/sandbox/mastra';
+const scope = '/sandbox/mastra';
 const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}`;
 const hookArgs = {
   agentControllerId: controllerId,
   resourceId,
-  projectPath,
+  scope,
   baseUrl: TEST_BASE_URL,
   enabled: true,
 };

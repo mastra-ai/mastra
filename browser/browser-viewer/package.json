@@ -1,6 +1,6 @@
 {
   "name": "@mastra/browser-viewer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Playwright-based browser viewer for Mastra CLI providers",
   "type": "module",
   "files": [
@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "playwright-core": "^1.60.0",
+    "playwright-core": "^1.61.1",
     "typed-emitter": "^2.1.0"
   },
   "devDependencies": {
@@ -40,7 +40,7 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

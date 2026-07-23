@@ -128,6 +128,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aki-io',
+          label: 'AKI.IO',
+        },
+        {
+          type: 'doc',
           id: 'providers/alibaba',
           label: 'Alibaba',
         },
@@ -225,6 +230,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/claudinio',
           label: 'Claudinio',
+        },
+        {
+          type: 'doc',
+          id: 'providers/cline-pass',
+          label: 'ClinePass',
         },
         {
           type: 'doc',
@@ -560,6 +570,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nvidia',
           label: 'Nvidia',
+        },
+        {
+          type: 'doc',
+          id: 'providers/ofox',
+          label: 'Ofox',
         },
         {
           type: 'doc',

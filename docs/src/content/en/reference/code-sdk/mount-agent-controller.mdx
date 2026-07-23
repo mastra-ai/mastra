@@ -13,7 +13,7 @@ The `@mastra/code-sdk` package is experimental and subject to breaking changes i
 
 :::
 
-The `mountAgentControllerOnMastra()` function builds the Mastra Code agent controller — the coding agent behind the [`mastracode`](https://www.npmjs.com/package/mastracode) CLI, with its modes, tools, memory, and thread management — and registers it on a server-owned [Mastra](/reference/core/mastra-class) instance. Use it to serve the Mastra Code agent to your own UI (web app, editor, bot): each client creates or resumes its own isolated session through the returned [`AgentController`](/reference/agent-controller/agent-controller-class).
+The `mountAgentControllerOnMastra()` function builds the Mastra Code agent controller (the coding agent behind the [`mastracode`](https://www.npmjs.com/package/mastracode) CLI, with its modes, tools, memory, and thread management) and registers it on a server-owned [Mastra](/reference/core/mastra-class) instance. Use it to serve the Mastra Code agent to your own UI (web app, editor, bot): each client creates or resumes its own isolated session through the returned [`AgentController`](/reference/agent-controller/agent-controller-class).
 
 To construct the `Mastra` instance yourself (for example in a deployable entry file), use `prepareAgentControllerMount()` from the same package, which returns the constructor args plus a `finalize()` callback.
 
@@ -36,9 +36,7 @@ Pass an existing `mastra` to mount the controller onto a Mastra instance that al
 import { Mastra } from '@mastra/core/mastra'
 import { mountAgentControllerOnMastra } from '@mastra/code-sdk'
 
-const mastra = new Mastra({
-  /* ... */
-})
+const mastra = new Mastra({/* ... */})
 
 const { controller } = await mountAgentControllerOnMastra({ mastra })
 ```
@@ -92,6 +90,13 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     type: '(context: ToolAfterHookContext) => void | Promise<void>',
     description:
       'Observes completed tool calls without replacing the tool or changing hook-manager behavior. Observer errors are logged and do not fail successful tool calls.',
+    isOptional: true,
+  },
+  {
+    name: 'inputProcessors',
+    type: 'InputProcessor[]',
+    description:
+      "Stateless input processors prepended before Mastra Code's mandatory safety and compatibility processors. Custom processors extend the pipeline but can't replace the built-in processors.",
     isOptional: true,
   },
   {

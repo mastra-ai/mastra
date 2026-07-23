@@ -1,6 +1,6 @@
 {
   "name": "@internal/auth",
-  "version": "0.0.6",
+  "version": "0.0.8",
   "description": "Internal Mastra auth primitives and utilities",
   "private": true,
   "type": "module",
@@ -90,7 +90,7 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

@@ -103,6 +103,44 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('restores suspended tool prompts from persisted assistant metadata', () => {
+    const message = dbMessage('assistant-ask', 'assistant', [
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: { question: 'Which database?' },
+        },
+      },
+    ]);
+    message.content.metadata = {
+      suspendedTools: {
+        'ask-1': {
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: { question: 'Which database?' },
+          suspendPayload: { question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
+        },
+      },
+    };
+
+    const state = createInitialTranscript({ messages: [message] });
+
+    expect(state.entries).toEqual([
+      expect.objectContaining({ kind: 'message', id: 'assistant-ask' }),
+      {
+        kind: 'suspension',
+        id: 'suspension-ask-1',
+        toolCallId: 'ask-1',
+        toolName: 'ask_user',
+        args: { question: 'Which database?' },
+        suspendPayload: { question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
+      },
+    ]);
+  });
+
   it('projects persisted and live user signals to user messages without changing canonical content', () => {
     const persisted = signalMessage({
       id: 'user-signal-1',
@@ -154,57 +192,6 @@ describe('transcript reducer message entries', () => {
       steer: true,
     });
     expect(steered.role).toBe('signal');
-  });
-
-  it('removes empty text parts while preserving surrounding tool and text content', () => {
-    const state = createInitialTranscript({
-      messages: [
-        dbMessage('assistant-1', 'assistant', [
-          { type: 'text', text: '   \n' },
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tool-1',
-              toolName: 'view',
-              args: { path: 'src/index.ts' },
-              result: 'export const value = 1;',
-            },
-          },
-          { type: 'text', text: 'Summary follows.' },
-        ]),
-      ],
-    });
-
-    expect(messageParts(state.entries[0])).toEqual([
-      {
-        type: 'tool-invocation',
-        toolInvocation: {
-          state: 'result',
-          toolCallId: 'tool-1',
-          toolName: 'view',
-          args: { path: 'src/index.ts' },
-          result: 'export const value = 1;',
-        },
-      },
-      { type: 'text', text: 'Summary follows.' },
-    ]);
-  });
-
-  it('drops hydrated and streamed messages that contain only empty text', () => {
-    const hydrated = createInitialTranscript({
-      messages: [dbMessage('assistant-empty', 'assistant', [{ type: 'text', text: '  \n ' }])],
-    });
-    expect(hydrated.entries).toEqual([]);
-
-    const streamed = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: {
-        type: 'message_update',
-        message: dbMessage('assistant-empty', 'assistant', [{ type: 'text', text: '\t' }]),
-      },
-    });
-    expect(streamed.entries).toEqual([]);
   });
 
   it('streams message updates without replacing non-message transcript state', () => {
@@ -331,6 +318,63 @@ describe('transcript reducer message entries', () => {
     expect(ended.entries[0]).toMatchObject({ id: 'reminder-1', streaming: false });
   });
 
+  it('keeps a resumed specialized tool call in exactly one assistant message', () => {
+    const suspendedMessage = dbMessage('assistant-before-suspend', 'assistant', [
+      { type: 'text', text: 'Before question' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: { question: 'Which database?' },
+        },
+      },
+    ]);
+    const resumedMessage = dbMessage('assistant-after-resume', 'assistant', [
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: { question: 'Which database?' },
+          result: { content: 'User answered: Postgres', isError: false },
+        },
+      },
+      { type: 'text', text: 'After question' },
+    ]);
+
+    const beforeResume = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_end', message: suspendedMessage },
+    });
+    const afterResume = transcriptReducer(beforeResume, {
+      type: 'event',
+      event: { type: 'message_update', message: resumedMessage },
+    });
+
+    const matchingParts = afterResume.entries.flatMap(entry =>
+      messageParts(entry).filter(
+        part =>
+          typeof part === 'object' &&
+          part !== null &&
+          'type' in part &&
+          part.type === 'tool-invocation' &&
+          'toolInvocation' in part &&
+          typeof part.toolInvocation === 'object' &&
+          part.toolInvocation !== null &&
+          'toolCallId' in part.toolInvocation &&
+          part.toolInvocation.toolCallId === 'ask-1',
+      ),
+    );
+
+    expect(matchingParts).toHaveLength(1);
+    expect(afterResume.entries).toHaveLength(2);
+    expect(messageParts(afterResume.entries[0])).toEqual([{ type: 'text', text: 'Before question' }]);
+    expect(messageParts(afterResume.entries[1])).toEqual(resumedMessage.content.parts);
+  });
+
   it('keeps tool lifecycle events visible inline before a message update re-emits the tool call', () => {
     const started = transcriptReducer(initialTranscript, {
       type: 'event',
@@ -366,6 +410,80 @@ describe('transcript reducer message entries', () => {
         },
       },
     ]);
+  });
+});
+
+describe('transcript reducer prependOlder', () => {
+  it('prepends only messages older than the oldest entry already on screen', () => {
+    // On screen: newest window (msg-3, msg-4). Grown fetch returns an older
+    // window that overlaps at msg-3 (the anchor).
+    const onScreen = createInitialTranscript({
+      messages: [
+        dbMessage('msg-3', 'user', [{ type: 'text', text: 'third' }]),
+        dbMessage('msg-4', 'assistant', [{ type: 'text', text: 'fourth' }]),
+      ],
+    });
+
+    const grown = [
+      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+      dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
+      dbMessage('msg-3', 'user', [{ type: 'text', text: 'third' }]),
+      dbMessage('msg-4', 'assistant', [{ type: 'text', text: 'fourth' }]),
+    ];
+
+    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: grown });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3', 'msg-4']);
+  });
+
+  it('does not duplicate the overlapping/anchor message', () => {
+    const onScreen = createInitialTranscript({
+      messages: [dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }])],
+    });
+
+    const grown = [
+      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+      dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
+    ];
+
+    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: grown });
+    const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
+
+    expect(ids).toEqual(['msg-1', 'msg-2']);
+    expect(ids.filter(id => id === 'msg-2')).toHaveLength(1);
+  });
+
+  it('preserves live-streamed messages at the tail when prepending older history', () => {
+    let state = createInitialTranscript({
+      messages: [dbMessage('history-2', 'assistant', [{ type: 'text', text: 'older reply' }])],
+    });
+    // A message streams in live after mount and persists at the tail.
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_end',
+        message: dbMessage('live-1', 'assistant', [{ type: 'text', text: 'live reply' }]),
+      },
+    });
+
+    const grown = [
+      dbMessage('history-1', 'user', [{ type: 'text', text: 'oldest' }]),
+      dbMessage('history-2', 'assistant', [{ type: 'text', text: 'older reply' }]),
+    ];
+
+    const next = transcriptReducer(state, { type: 'prependOlder', messages: grown });
+    const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
+
+    // Older history joins the front; the live message stays at the tail.
+    expect(ids).toEqual(['history-1', 'history-2', 'live-1']);
+  });
+
+  it('is a no-op for an empty older window', () => {
+    const onScreen = createInitialTranscript({
+      messages: [dbMessage('msg-1', 'user', [{ type: 'text', text: 'only' }])],
+    });
+    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: [] });
+    expect(next).toBe(onScreen);
   });
 });
 

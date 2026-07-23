@@ -1,6 +1,6 @@
 {
   "name": "@mastra/acp",
-  "version": "0.4.0-alpha.0",
+  "version": "0.4.0",
   "description": "ACP package for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -41,7 +41,7 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "tsx": "catalog:",
     "typescript": "catalog:",

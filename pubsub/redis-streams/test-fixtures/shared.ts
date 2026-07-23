@@ -165,8 +165,7 @@ const fanoutEnqueueAndWait = createStep({
 
     const storage = (mastra as any).getStorage();
     const bgStore = (await storage.getStore('backgroundTasks')) as
-      | { getTask: (id: string) => Promise<{ status: string } | null> }
-      | undefined;
+      { getTask: (id: string) => Promise<{ status: string } | null> } | undefined;
     if (!bgStore) throw new Error('backgroundTasks store not available in workflow step');
 
     const deadline = Date.now() + 15_000;

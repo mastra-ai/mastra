@@ -284,9 +284,7 @@ const server = new MCPServer({
   id: 'my-server',
   name: 'My Server',
   version: '1.0.0',
-  tools: {
-    /* ... */
-  },
+  tools: {/* ... */},
 })
 await server.startStdio()
 ```
@@ -490,9 +488,7 @@ const server = new MCPServer({
   id: 'my-serverless-mcp',
   name: 'My Serverless MCP',
   version: '1.0.0',
-  tools: {
-    /* your tools */
-  },
+  tools: {/* your tools */},
 })
 
 serve(async req => {
@@ -848,9 +844,7 @@ const serverWithResources = new MCPServer({
   id: 'resourceful-server',
   name: 'Resourceful Server',
   version: '1.0.0',
-  tools: {
-    /* ... your tools ... */
-  },
+  tools: {/* ... your tools ... */},
   resources: myResourceHandlers,
 })
 ```
@@ -979,9 +973,7 @@ const serverWithPrompts = new MCPServer({
   id: 'promptful-server',
   name: 'Promptful Server',
   version: '1.0.0',
-  tools: {
-    /* ... */
-  },
+  tools: {/* ... */},
   prompts: myPromptHandlers,
 })
 ```
@@ -1177,9 +1169,7 @@ execute: async (inputData, context) => {
   // Use elicitation capabilities
   const result = await context.mcp.elicitation.sendRequest({
     message: 'Please provide information',
-    requestedSchema: {
-      /* schema */
-    },
+    requestedSchema: {/* schema */},
   })
 
   return result
@@ -1370,9 +1360,7 @@ const mcpServer = new MCPServer({
   id: 'protected-server',
   name: 'Protected MCP Server',
   version: '1.0.0',
-  tools: {
-    /* your tools */
-  },
+  tools: {/* your tools */},
 })
 
 // Create OAuth middleware

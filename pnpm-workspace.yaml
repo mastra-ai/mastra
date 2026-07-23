@@ -1,6 +1,8 @@
 packages:
   - mastracode/sdk
   - mastracode/tui
+  - mastracode/factory
+  - mastracode/mastra-factory
   - docs
   - packages/_vendored/*
   - packages/_internals/*
@@ -42,7 +44,7 @@ catalog:
   typescript: ^6.0.3
   vitest: 4.1.10
   zod: ^4.4.3
-  tsx: ^4.22.4
+  tsx: ^4.23.1
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
@@ -118,6 +120,26 @@ minimumReleaseAgeExclude:
   - shell-quote@1.10.0
   # Renovate security update: tmp@0.2.7
   - tmp@0.2.7
+  # Renovate security update: axios@1.18.0
+  - axios@1.18.0
+  # Renovate security update: body-parser@2.3.0
+  - body-parser@2.3.0
+  # Renovate security update: protobufjs@8.6.6 || 7.6.5
+  - protobufjs@8.6.6 || 7.6.5
+  # Renovate security update: tar@7.5.19
+  - tar@7.5.19
+  # Renovate security update: webpack-dev-server@5.2.6
+  - webpack-dev-server@5.2.6
+  # Renovate security update: dompurify@3.4.12
+  - dompurify@3.4.12
+  # Renovate security update: fast-uri@3.1.4
+  - fast-uri@3.1.4
+  # Renovate security update: fast-xml-parser@5.10.1
+  - fast-xml-parser@5.10.1
+  # Renovate security update: svgo@3.3.4
+  - svgo@3.3.4
+  # Renovate security update: @hono/node-server@2.0.10
+  - "@hono/node-server@2.0.10"
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -156,9 +178,9 @@ overrides:
   # Scoped to @mastra/memory only — a global override breaks the docs build,
   # which relies on the `image-size/fromFile` subpath export added in 2.x.
   '@mastra/memory>image-size': 1.2.1
-  body-parser@<=2.2.1: 2.2.2
+  body-parser@<=2.2.1: 2.3.0
   inngest: ^4.2.2
-  fast-xml-parser@<5.5.7: ^5.7.1
+  fast-xml-parser@<5.5.7: ^5.10.1
   langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
@@ -166,15 +188,15 @@ overrides:
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
   simple-git@<3.36.0: 3.36.0
-  axios@>=1.0.0 <1.16.0: 1.16.0
-  protobufjs@>=7.0.0 <7.6.3: 7.6.3
-  protobufjs@>=8.0.0 <8.6.0: 8.6.0
+  axios@>=1.0.0 <1.16.0: 1.18.0
+  protobufjs@>=7.0.0 <7.6.3: 7.6.5
+  protobufjs@>=8.0.0 <8.6.0: 8.6.6
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
   ws@>=8.0.0 <8.21.0: 8.21.0
-  webpack-dev-server@<5.2.5: 5.2.5
+  webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.15.2: 6.15.2
-  fast-uri@<3.1.2: 3.1.2
+  fast-uri@<3.1.2: 3.1.4
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@<1.1.13: 1.1.13
@@ -183,7 +205,7 @@ overrides:
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.4: 17.13.4
-  svgo@>=3.0.0 <3.3.3: 3.3.3
+  svgo@>=3.0.0 <3.3.3: 3.3.4
   # undici 5.x has no patched release (fixes land in 6.23+); the only 5.x
   # consumer is @connectrpc/connect-node@1.7.0 (via @cursor/sdk), which is
   # compatible with the undici 6 Client/Pool APIs.
@@ -200,14 +222,14 @@ overrides:
   # majors (msal-node/google-gax/etc. declare uuid ^8-^10; the sqlite3
   # install chain declares tar ^6). Both keep the APIs those parents use.
   uuid@<11.1.1: 11.1.1
-  tar@<7.5.16: 7.5.16
+  tar@<7.5.16: 7.5.19
   http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
   launch-editor@<2.14.1: 2.14.1
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
   websocket-driver@<0.7.5: 0.7.5
-  '@babel/core@>=7.0.0 <7.29.6': 7.29.7
-  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 7.29.7
-  dompurify@>=3.0.0 <3.4.11: 3.4.11
+  '@babel/core@>=7.0.0 <7.29.6': 8.0.1
+  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
+  dompurify@>=3.0.0 <3.4.11: 3.4.12
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1
   'aggregate-error': 'npm:@socketregistry/aggregate-error@^1'

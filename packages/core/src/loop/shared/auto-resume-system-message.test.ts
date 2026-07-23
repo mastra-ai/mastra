@@ -107,6 +107,22 @@ describe('buildAutoResumeSystemMessageSuffix', () => {
     expect(suffix!).toContain('Analyse the suspended tools');
     expect(suffix!).toContain('fooTool');
   });
+
+  it('omits parentRunId from the serialized suspended tools', () => {
+    const suffix = buildAutoResumeSystemMessageSuffix([
+      {
+        toolName: 'fooTool',
+        runId: 'sub-run',
+        parentRunId: 'parent-run',
+        toolCallId: 'call-1',
+      },
+    ]);
+    expect(suffix).not.toBeNull();
+    expect(suffix!).toContain('"runId":"sub-run"');
+    expect(suffix!).toContain('"toolName":"fooTool"');
+    expect(suffix!).not.toContain('parentRunId');
+    expect(suffix!).not.toContain('parent-run');
+  });
 });
 
 describe('appendSuffixToLeadingSystemMessage', () => {

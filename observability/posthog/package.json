@@ -1,6 +1,6 @@
 {
   "name": "@mastra/posthog",
-  "version": "1.1.5-alpha.0",
+  "version": "1.2.0",
   "description": "PostHog observability provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -40,7 +40,7 @@
     "@mastra/core": "workspace:*",
     "@observability/test-utils": "workspace:*",
     "@types/node": "22.20.1",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

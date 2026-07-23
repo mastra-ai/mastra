@@ -197,10 +197,7 @@ export interface DataOmActivationPart {
  * `@mastra/memory` and is intentionally absent — channels don't render it.
  */
 export type OmChunk =
-  | DataOmBufferingStartPart
-  | DataOmBufferingEndPart
-  | DataOmBufferingFailedPart
-  | DataOmActivationPart;
+  DataOmBufferingStartPart | DataOmBufferingEndPart | DataOmBufferingFailedPart | DataOmActivationPart;
 
 // ---------------------------------------------------------------------------
 // Guards + formatting + rendering

@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
@@ -33,10 +33,12 @@ function collectInstructionPaths(agents: DiscoveredFsAgent[]): string[] {
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
+  private factory: boolean;
 
-  constructor(customEnvFile?: string) {
+  constructor(customEnvFile?: string, factory = false) {
     super('Dev');
     this.customEnvFile = customEnvFile;
+    this.factory = factory;
     // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
     this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
@@ -65,15 +67,34 @@ export class DevBundler extends Bundler {
   }
 
   async prepare(outputDirectory: string): Promise<void> {
+    // Preserve the dev lock across super.prepare(), which calls emptyDir()
+    const lockPath = join(outputDirectory, 'dev.lock');
+    let lockContents: string | null = null;
+    try {
+      lockContents = await readFile(lockPath, 'utf-8');
+    } catch {
+      // No lock file — nothing to preserve
+    }
+
     await super.prepare(outputDirectory);
 
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
+    if (lockContents) {
+      try {
+        await writeFile(lockPath, lockContents, 'utf-8');
+      } catch {
+        // Best-effort — don't block dev startup
+      }
+    }
 
-    const studioServePath = join(outputDirectory, this.outputDir, 'studio');
-    await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
-      overwrite: true,
-    });
+    if (!this.factory) {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+
+      const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+      await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
+        overwrite: true,
+      });
+    }
   }
 
   async watch(
@@ -184,7 +205,7 @@ export class DevBundler extends Bundler {
           },
         ],
         input: {
-          index: join(__dirname, 'templates', 'dev.entry.js'),
+          index: join(__dirname, 'templates', this.factory ? 'factory-dev.entry.js' : 'dev.entry.js'),
           ...toolsInputOptions,
         },
       },

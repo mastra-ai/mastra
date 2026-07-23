@@ -33,8 +33,7 @@ export type McpHttpFixture = {
 };
 
 export type McpHttpFixtureRequestGateResult =
-  | { status: number; body: string; headers?: Record<string, string> }
-  | undefined;
+  { status: number; body: string; headers?: Record<string, string> } | undefined;
 
 export type McpHttpFixtureOptions = {
   beforeRequest?: () => McpHttpFixtureRequestGateResult | Promise<McpHttpFixtureRequestGateResult>;
@@ -47,7 +46,7 @@ export type McpHttpFixtureOptions = {
 
 const requireFromMcpPackage = createRequire(new URL('../../../packages/mcp/package.json', import.meta.url));
 
-async function loadMcpSdk(): Promise<{
+export async function loadMcpSdk(): Promise<{
   McpServer: McpServerConstructor;
   StreamableHTTPServerTransport: StreamableHttpTransportConstructor;
 }> {

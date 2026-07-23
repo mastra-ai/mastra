@@ -427,14 +427,7 @@ export interface DurableAgenticLoopOutput {
  * Event types emitted via pubsub for agent streaming
  */
 export type AgentStreamEventType =
-  | 'chunk'
-  | 'step-start'
-  | 'step-finish'
-  | 'finish'
-  | 'error'
-  | 'suspended'
-  | 'abort'
-  | 'iteration-complete';
+  'chunk' | 'step-start' | 'step-finish' | 'finish' | 'error' | 'suspended' | 'abort' | 'iteration-complete';
 
 /**
  * Event emitted via pubsub for agent streaming

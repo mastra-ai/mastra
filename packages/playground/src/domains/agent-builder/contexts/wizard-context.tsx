@@ -5,16 +5,7 @@ import type { BuilderPaneGates } from '../hooks/use-builder-pane-gates';
 import { useAgentPrimitives } from './agent-primitives-context';
 
 export type WizardStep =
-  | 'ready'
-  | 'identity'
-  | 'end'
-  | 'tools'
-  | 'model'
-  | 'instructions'
-  | 'browser'
-  | 'integrations'
-  | 'skills'
-  | 'library';
+  'ready' | 'identity' | 'end' | 'tools' | 'model' | 'instructions' | 'browser' | 'integrations' | 'skills' | 'library';
 
 export interface WizardContextValue {
   /** The current step the wizard is on. */

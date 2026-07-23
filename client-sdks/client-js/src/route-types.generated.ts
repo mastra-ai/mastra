@@ -301,11 +301,7 @@ type Shared_Type_16 = {
   };
   /** Which processor phases to enable */
   enabledPhases: (
-    | 'processInput'
-    | 'processInputStep'
-    | 'processOutputStream'
-    | 'processOutputResult'
-    | 'processOutputStep'
+    'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
   )[];
 };
 
@@ -1036,6 +1032,7 @@ type Shared_Type_52 = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -3336,6 +3333,7 @@ export type PostAgentsAgentIdGenerate_Body = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -3487,6 +3485,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -3860,6 +3859,7 @@ export type PostAgentsAgentIdApproveToolCall_PathParams = GetAgentsAgentId_PathP
 
 export type PostAgentsAgentIdApproveToolCall_Body = {
   runId: string;
+  model?: string | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -4043,6 +4043,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -4235,6 +4236,7 @@ export type PostAgentsAgentIdApproveNetworkToolCall_PathParams = GetAgentsAgentI
 
 export type PostAgentsAgentIdApproveNetworkToolCall_Body = {
   runId: string;
+  model?: string | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -4316,6 +4318,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -11579,6 +11582,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -12883,6 +12887,8 @@ export type PatchStoredAgentsStoredAgentId_Body = {
     | undefined;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string | undefined;
+  /** Immediately activate the auto-created version. Defaults to false when omitted. */
+  autoPublish?: boolean | undefined;
 };
 
 export type PatchStoredAgentsStoredAgentId_Response =
@@ -16554,11 +16560,7 @@ export type GetProcessorProviders_Response = {
     name: string;
     description?: string | undefined;
     availablePhases: (
-      | 'processInput'
-      | 'processInputStep'
-      | 'processOutputStream'
-      | 'processOutputResult'
-      | 'processOutputStep'
+      'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
     )[];
   }[];
 };
@@ -16591,11 +16593,7 @@ export type GetProcessorProvidersProviderId_Response = {
   name: string;
   description?: string | undefined;
   availablePhases: (
-    | 'processInput'
-    | 'processInputStep'
-    | 'processOutputStream'
-    | 'processOutputResult'
-    | 'processOutputStep'
+    'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
   )[];
   configSchema: {
     [key: string]: unknown;
@@ -19394,6 +19392,7 @@ export type PostAgentControllerControllerIdSessions_Body = {
         [key: string]: string;
       }
     | undefined;
+  threadId?: string | undefined;
   sessionScope?: string | undefined;
 };
 

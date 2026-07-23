@@ -26,7 +26,13 @@ import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
 import { z } from 'zod/v4';
-import { MASTRA_IS_STUDIO_KEY, WORKSPACE_TOOLS, isReservedRequestContextKey, resolveToolConfig } from '../constants';
+import {
+  MASTRA_IS_STUDIO_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  WORKSPACE_TOOLS,
+  isReservedRequestContextKey,
+  resolveToolConfig,
+} from '../constants';
 import type { WorkspaceToolName } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 
@@ -145,15 +151,140 @@ function mergeBodyRequestContext(serverRequestContext: RequestContext, bodyReque
   }
 }
 
+function normalizePublicExecutionOptions(
+  options: Record<string, unknown> | undefined,
+  serverRequestContext: RequestContext,
+): Record<string, unknown> | undefined {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) return undefined;
+
+  const { actor: _actor, requestContext, ...normalized } = options;
+  mergeBodyRequestContext(serverRequestContext, requestContext);
+  return { ...normalized, requestContext: serverRequestContext };
+}
+
+function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string): boolean {
+  const resumeTarget = snapshot.resumeLabels?.[toolCallId];
+  const resumeStep = resumeTarget?.stepId ? snapshot.context?.[resumeTarget.stepId] : undefined;
+  if (
+    resumeStep?.status === 'suspended' &&
+    (resumeStep.suspendPayload?.requireToolApproval ||
+      resumeStep.suspendPayload?.toolCallSuspended ||
+      resumeStep.suspendPayload?.toolCallId)
+  ) {
+    return true;
+  }
+
+  const visit = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return false;
+    if (Array.isArray(value)) return value.some(visit);
+
+    const record = value as Record<string, any>;
+    const payload = record.suspendPayload;
+    if (
+      record.status === 'suspended' &&
+      (payload?.requireToolApproval?.toolCallId === toolCallId || payload?.toolCallId === toolCallId)
+    ) {
+      return true;
+    }
+    return Object.values(record).some(visit);
+  };
+
+  return visit(snapshot.context);
+}
+
+async function validateDurableToolCallAccess({
+  mastra,
+  agent,
+  runId,
+  toolCallId,
+  requestContext,
+}: {
+  mastra: any;
+  agent: Agent;
+  runId: string;
+  toolCallId: string;
+  requestContext: RequestContext;
+}): Promise<void> {
+  if (!isDurableAgentLike(agent)) return;
+
+  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+  const workflowRun = await workflowsStore?.getWorkflowRunById({
+    workflowName: DurableStepIds.AGENTIC_LOOP,
+    runId,
+  });
+  if (!workflowRun) {
+    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+  }
+
+  let snapshot = workflowRun.snapshot as Record<string, any> | string | undefined;
+  if (typeof snapshot === 'string') {
+    try {
+      snapshot = JSON.parse(snapshot) as Record<string, any>;
+    } catch {
+      snapshot = undefined;
+    }
+  }
+
+  const input = snapshot?.context?.input;
+  const persistedResourceIds = new Set(
+    [
+      workflowRun.resourceId,
+      input?.state?.resourceId,
+      input?.messageListState?.memoryInfo?.resourceId,
+      input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
+    ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
+  );
+  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+  const [persistedResourceId] = persistedResourceIds;
+  if (persistedResourceIds.size > 1 || (persistedResourceId && persistedResourceId !== effectiveResourceId)) {
+    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+  }
+
+  if (
+    !snapshot ||
+    snapshot.status !== 'suspended' ||
+    input?.agentId !== agent.id ||
+    !hasSuspendedToolCall(snapshot, toolCallId)
+  ) {
+    throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+  }
+}
+
+/**
+ * Providers whose apiKeyEnvVar entries are aliases for the same credential (any one
+ * suffices), rather than distinct required values (all needed — the default assumption).
+ * Keep this list to cases with a confirmed alias relationship; see the "google" entry in
+ * PROVIDER_OVERRIDES in packages/core/src/llm/model/gateways/models-dev.ts and #17343.
+ */
+const ALIASED_API_KEY_ENV_VAR_PROVIDERS = new Set(['google']);
+
 /**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
  * Also handles custom gateway providers that are stored with gateway prefix (e.g., "acme/acme-openai").
  * @param providerId - The provider identifier (may include a suffix like ".chat" or be from a custom gateway)
  * @param customProviders - Optional record of custom gateway providers to check
- * @returns true if all required environment variables are set, false otherwise
+ * @returns true if all required environment variables are set (or, for aliased providers, if any one is set), false otherwise
  */
 export function isProviderConnected(providerId: string, customProviders?: Record<string, ProviderConfig>): boolean {
+  // Vertex AI is a distinct provider from Google AI Studio and must not be collapsed to the
+  // "google" registry entry below (e.g. "google.vertex.chat", "google.vertex.anthropic.chat",
+  // or the bare docs-sidebar id "google-vertex"). Vertex has no registry entry of its own
+  // (provider-registry.json is machine-generated from gateway APIs, so a hand-authored Vertex
+  // entry there would be overwritten on the next regeneration).
+  //
+  // @ai-sdk/google-vertex's createVertex() calls loadSetting() for both project and location,
+  // which throws unconditionally when the env var is absent (no default) — see
+  // GOOGLE_VERTEX_PROJECT/GOOGLE_VERTEX_LOCATION in @ai-sdk/google-vertex's
+  // google-vertex-provider.ts. Both are therefore hard requirements we can check directly.
+  // GOOGLE_APPLICATION_CREDENTIALS is deliberately NOT required here: it's only one of several
+  // ways Application Default Credentials can be supplied (gcloud CLI login, GCE/Cloud Run
+  // metadata server also work with no env var at all), so requiring it would produce new false
+  // negatives for anyone authenticated through one of those other paths.
+  if (providerId === 'google-vertex' || providerId.startsWith('google.vertex')) {
+    return !!(process.env.GOOGLE_VERTEX_PROJECT && process.env.GOOGLE_VERTEX_LOCATION);
+  }
+
   // Clean provider ID (e.g., "openai.chat" -> "openai")
   const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
 
@@ -194,6 +325,16 @@ export function isProviderConnected(providerId: string, customProviders?: Record
   if (!provider) return false;
 
   const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+
+  // Most providers with multiple apiKeyEnvVar entries need every one of them (e.g. Netlify's
+  // NETLIFY_TOKEN + NETLIFY_SITE_ID are two distinct required values, checked separately by
+  // NetlifyGateway.getApiKey — see packages/core/src/llm/model/gateways/netlify.ts). Google is a
+  // deliberate exception: GOOGLE_API_KEY and GOOGLE_GENERATIVE_AI_API_KEY are aliases for the same
+  // credential (see the "google" entry in PROVIDER_OVERRIDES in
+  // packages/core/src/llm/model/gateways/models-dev.ts, and #17343), so only one needs to be set.
+  if (ALIASED_API_KEY_ENV_VAR_PROVIDERS.has(cleanId)) {
+    return envVars.some(envVar => !!process.env[envVar]);
+  }
   return envVars.every(envVar => !!process.env[envVar]);
 }
 
@@ -1238,7 +1379,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
@@ -1346,7 +1487,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
@@ -1416,7 +1557,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
@@ -1622,7 +1763,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
@@ -1780,7 +1921,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
         | undefined;
       const bodyRequestContext = idleStreamOptions?.requestContext;
-      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
       const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
 
       const agent = await getAgentFromSystem({
@@ -1789,14 +1930,17 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         versionOptions,
         requestContext: serverRequestContext,
       });
-      stashVersionOverrides(serverRequestContext, idleStreamOptions?.versions);
+      stashVersionOverrides(
+        serverRequestContext,
+        normalizedIdleStreamOptions?.versions as VersionOverrides | undefined,
+      );
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {
         ifIdle: {
           ...(ifIdle ?? {}),
-          streamOptions: { ...(idleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
+          streamOptions: { ...(normalizedIdleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
         },
       };
 
@@ -1881,10 +2025,9 @@ async function handleAgentMessageRoute({
   methodName: 'sendMessage' | 'queueMessage';
 }) {
   const idleStreamOptions = ifIdle?.streamOptions as
-    | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
-    | undefined;
+    (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides }) | undefined;
   const bodyRequestContext = idleStreamOptions?.requestContext;
-  mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+  const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
   const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
 
   const agent = await getAgentFromSystem({
@@ -1893,14 +2036,14 @@ async function handleAgentMessageRoute({
     versionOptions,
     requestContext: serverRequestContext,
   });
-  stashVersionOverrides(serverRequestContext, idleStreamOptions?.versions);
+  stashVersionOverrides(serverRequestContext, normalizedIdleStreamOptions?.versions as VersionOverrides | undefined);
   ensureDefaultVersionStatus(serverRequestContext, versionOptions);
   const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
   const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
   const ifIdleWithContext = {
     ifIdle: {
       ...(ifIdle ?? {}),
-      streamOptions: { ...(idleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
+      streamOptions: { ...(normalizedIdleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
     },
   };
 
@@ -2160,7 +2303,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
@@ -2386,7 +2529,15 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
+
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+        requestContext,
+      });
 
       const streamResult = await agent.approveToolCall({
         ...params,
@@ -2459,7 +2610,11 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       }
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
+      const normalizedStreamOptions = normalizePublicExecutionOptions(
+        params.streamOptions as Record<string, unknown> | undefined,
+        serverRequestContext,
+      );
       const { effectiveResourceId, effectiveThreadId } = await validateSubscriptionToolCallThreadAccess({
         agent,
         requestContext: serverRequestContext,
@@ -2469,6 +2624,7 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
 
       return await agent.sendToolApproval({
         ...params,
+        ...(normalizedStreamOptions ? { streamOptions: normalizedStreamOptions } : {}),
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         requestContext: serverRequestContext,
@@ -2574,7 +2730,15 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
+
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+        requestContext,
+      });
 
       const streamResult = await agent.declineToolCall({
         ...params,
@@ -2608,7 +2772,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const {
         resumeData,
@@ -2795,7 +2959,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const {
         resumeData,
@@ -2821,13 +2985,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         versionOptions,
       });
 
-      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
-        for (const [key, value] of Object.entries(bodyRequestContext)) {
-          if (serverRequestContext.get(key) === undefined) {
-            serverRequestContext.set(key, value);
-          }
-        }
-      }
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       stashVersionOverrides(serverRequestContext, versions);
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
@@ -2925,7 +3083,15 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
+
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+        requestContext,
+      });
 
       const result = await agent.approveToolCallGenerate({
         ...params,
@@ -2969,7 +3135,15 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
+
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+        requestContext,
+      });
 
       const result = await agent.declineToolCallGenerate({
         ...params,
@@ -3006,7 +3180,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       validateBody({ messages });
 
@@ -3056,7 +3230,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const streamResult = await agent.approveNetworkToolCall({
         ...params,
@@ -3095,7 +3269,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const streamResult = await agent.declineNetworkToolCall({
         ...params,

@@ -5,11 +5,7 @@ import type { Processor } from '../processors';
  * The five processor phases corresponding to the five optional methods on Processor.
  */
 export type ProcessorPhase =
-  | 'processInput'
-  | 'processInputStep'
-  | 'processOutputStream'
-  | 'processOutputResult'
-  | 'processOutputStep';
+  'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep';
 
 /**
  * All processor phases.
