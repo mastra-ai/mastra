@@ -604,7 +604,9 @@ export class RailwaySandbox extends MastraSandbox {
       ...(this._token !== undefined && { token: this._token }),
       ...(this._environmentId !== undefined && { environmentId: this._environmentId }),
       ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
-      ...(this._checkpointName !== undefined && { checkpointName: this._checkpointName }),
+      ...((options.checkpointName ?? this._checkpointName) !== undefined && {
+        checkpointName: options.checkpointName ?? this._checkpointName,
+      }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
       env: options.env ?? this._env,

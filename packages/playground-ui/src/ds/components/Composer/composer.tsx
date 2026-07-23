@@ -8,6 +8,11 @@ import './composer-sending.css';
 
 export type ComposerProps = ComponentPropsWithoutRef<'form'>;
 
+export interface ComposerInputProps extends ComponentPropsWithoutRef<'textarea'> {
+  /** Maximum height of the scrolling input viewport. */
+  maxHeight?: string;
+}
+
 export const Composer = forwardRef<HTMLFormElement, ComposerProps>(({ children, ...props }, ref) => (
   <form ref={ref} data-slot="composer" {...props}>
     {children}
@@ -50,14 +55,14 @@ export const ComposerAttachments = forwardRef<HTMLDivElement, ComponentPropsWith
 );
 ComposerAttachments.displayName = 'ComposerAttachments';
 
-export const ComposerInput = forwardRef<HTMLTextAreaElement, ComponentPropsWithoutRef<'textarea'>>(
-  ({ className, ...props }, ref) => (
-    <ScrollArea maxHeight="212px">
+export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>(
+  ({ className, maxHeight = '212px', ...props }, ref) => (
+    <ScrollArea maxHeight={maxHeight}>
       <textarea
         ref={ref}
         data-slot="composer-input"
         className={cn(
-          'min-h-17 field-sizing-content w-full resize-none bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+          'min-h-17 field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
         {...props}

@@ -14,14 +14,17 @@ interface ChatPermissionsProviderProps {
 }
 
 export function ChatPermissionsProvider({ children }: ChatPermissionsProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, sessionEnabled, resourceEnabled } = useChatSessionContext();
   const [pendingPermissionCategory, setPendingPermissionCategory] = useState<ToolCategory | null>(null);
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
-    enabled: sessionEnabled,
+    // Workspace routes wait for their stored session; session-less factory
+    // surfaces (the routed Settings pages) address the factory-level session
+    // so tool permissions stay editable there.
+    enabled: sessionEnabled || (resourceEnabled && Boolean(resourceId)),
   };
   const permissionsQuery = useAgentControllerPermissions(hookArgs);
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);

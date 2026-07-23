@@ -24,10 +24,10 @@ export function useSaveRepositorySettingsMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ githubProjectId, settings }: { githubProjectId: string; settings: RepositorySettings }) =>
-      saveRepositorySettings(baseUrl, githubProjectId, settings),
-    onSuccess: (saved, { githubProjectId }) => {
-      queryClient.setQueryData(queryKeys.githubRepositorySettings(githubProjectId), saved);
+    mutationFn: ({ projectRepositoryId, settings }: { projectRepositoryId: string; settings: RepositorySettings }) =>
+      saveRepositorySettings(baseUrl, projectRepositoryId, settings),
+    onSuccess: (saved, { projectRepositoryId }) => {
+      queryClient.setQueryData(queryKeys.githubRepositorySettings(projectRepositoryId), saved);
     },
   });
 }
