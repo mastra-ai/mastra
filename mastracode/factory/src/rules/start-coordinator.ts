@@ -3,6 +3,7 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
+import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -18,6 +19,7 @@ export interface FactoryStartRequest {
   kickoffKey: string;
   invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
   destinationStage: FactoryRuleStage;
+  defaultModelId?: string;
   workItem: {
     id?: string;
     role: string;
@@ -101,22 +103,37 @@ async function configureThread(session: FactorySession, request: FactoryStartReq
   return threadId;
 }
 
+async function applyMemorySettings(session: FactorySession, record: MemorySettingsRecord | null): Promise<void> {
+  if (record?.observerModelId) await session.om.observer.switchModel({ modelId: record.observerModelId });
+  if (record?.reflectorModelId) await session.om.reflector.switchModel({ modelId: record.reflectorModelId });
+
+  const state = {
+    ...(record?.observationThreshold != null ? { observationThreshold: record.observationThreshold } : {}),
+    ...(record?.reflectionThreshold != null ? { reflectionThreshold: record.reflectionThreshold } : {}),
+    ...(record?.observeAttachments != null ? { observeAttachments: record.observeAttachments } : {}),
+  };
+  if (Object.keys(state).length > 0) await session.state.set(state);
+}
+
 export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage: WorkItemsStorage;
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?: SourceControlStorageHandle;
+  readonly #memorySettings?: MemorySettingsStorage;
 
   constructor(
     controller: FactoryController,
     storage: WorkItemsStorage,
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?: SourceControlStorageHandle,
+    memorySettings?: MemorySettingsStorage,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
+    this.#memorySettings = memorySettings;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -146,6 +163,26 @@ export class FactoryStartCoordinator {
     // caller created without them — so autonomous runs never depend on a
     // browser connecting to populate the state.
     await session.state.set(sessionState);
+    if (this.#memorySettings) {
+      try {
+        const record = await this.#memorySettings.get({ orgId: request.orgId, userId: request.userId });
+        await applyMemorySettings(session, record);
+      } catch (error) {
+        console.warn('[Factory Start] Failed to apply observational-memory settings', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    if (request.defaultModelId) {
+      try {
+        await session.model.switch({ modelId: request.defaultModelId });
+      } catch (error) {
+        console.warn('[Factory Start] Failed to apply factory default model', {
+          modelId: request.defaultModelId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     const threadId = await configureThread(session, request);
     const kickoffMessage = await resolveKickoffMessage(session, request.invocation);
     const prepared = await storage.prepareRunStart({
