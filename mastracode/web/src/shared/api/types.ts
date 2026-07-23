@@ -9,6 +9,7 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
+import type { FactoryThreadTaskContext } from '@mastra/factory/thread-context';
 import type { CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderInfo } from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
@@ -20,7 +21,7 @@ import type {
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
 
-export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo };
+export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo, FactoryThreadTaskContext };
 export type {
   ArtifactEntry,
   ArtifactListing,

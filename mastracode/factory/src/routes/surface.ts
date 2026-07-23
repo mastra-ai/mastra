@@ -28,6 +28,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import type { SourceControlStorage } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { LinearTaskContextIntegration } from '../thread-context.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
@@ -42,6 +43,28 @@ export interface IntegrationRegistration {
   integration: FactoryIntegration;
   ready: boolean;
   ensureReady: () => Promise<void>;
+}
+
+function providesTaskContextConnection(integration: FactoryIntegration): integration is LinearTaskContextIntegration {
+  return 'getTaskContextConnection' in integration && typeof integration.getTaskContextConnection === 'function';
+}
+
+function providesLinearOAuthConnection(integration: FactoryIntegration): integration is LinearTaskContextIntegration {
+  return (
+    'loadConnection' in integration &&
+    typeof integration.loadConnection === 'function' &&
+    'getFreshAccessToken' in integration &&
+    typeof integration.getFreshAccessToken === 'function'
+  );
+}
+
+export function linearTaskContextIntegration(
+  integration: FactoryIntegration | undefined,
+): LinearTaskContextIntegration | undefined {
+  if (!integration?.taskContext?.getIssue) return undefined;
+  return providesTaskContextConnection(integration) || providesLinearOAuthConnection(integration)
+    ? integration
+    : undefined;
 }
 
 export interface FactoryApiRoutesDeps {
@@ -292,6 +315,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const linearRegistration = registrations.find(({ integration }) => integration.id === 'linear');
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
+  const linearTaskContext = linearTaskContextIntegration(linearRegistration?.integration);
   const workItems = deps.factoryReady ? deps.domains.workItems : undefined;
   const githubEventService =
     githubIntegration && githubStorage && workItems
@@ -404,6 +428,21 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
+          taskContext: {
+            ...(githubRegistration && githubStorage
+              ? {
+                  sourceControlStorage: githubStorage,
+                  githubIntegration: githubRegistration.integration,
+                  ensureGithubReady: githubRegistration.ensureReady,
+                }
+              : {}),
+            ...(linearRegistration && linearTaskContext
+              ? {
+                  linearIntegration: linearTaskContext,
+                  ensureLinearReady: linearRegistration.ensureReady,
+                }
+              : {}),
+          },
         }).routes()
       : []),
   ];

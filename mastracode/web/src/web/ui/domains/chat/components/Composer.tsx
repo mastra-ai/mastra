@@ -17,6 +17,7 @@ import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
+import type { PendingComposerImage } from '../context/ChatCommandsProvider';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatModes } from '../context/useChatModes';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -49,14 +50,6 @@ type ComposerProps = {
   variant?: ComposerVariant;
 };
 
-interface PendingImage {
-  id: string;
-  /** Raw base64 payload (no `data:` prefix). */
-  data: string;
-  mediaType: string;
-  filename?: string;
-}
-
 let pendingImageSeq = 0;
 
 /** Per-image cap; base64 adds ~33% and attachments travel in a JSON POST body. */
@@ -85,7 +78,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { status } = useChatConnection();
   const { busy, localUser, reset } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
-  const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
+  const {
+    composerDraft: draft,
+    composerInputRef: inputRef,
+    pendingImages: images,
+    setComposerDraft,
+    setPendingImages: setImages,
+    runComposerCommand,
+  } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
   const hookArgs = {
@@ -99,7 +99,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
 
-  const [images, setImages] = useState<PendingImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
@@ -123,7 +122,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     return thread.id;
   };
 
-  const seedThreadMessageCache = (threadId: string, text: string, files: PendingImage[]) => {
+  const seedThreadMessageCache = (threadId: string, text: string, files: PendingComposerImage[]) => {
     const message: MastraDBMessage = {
       id: `local-${Date.now()}`,
       role: 'user',
@@ -156,7 +155,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     });
     if (accepted.length === 0) return;
     const additions = await Promise.all(
-      accepted.map(async (file): Promise<PendingImage> => ({
+      accepted.map(async (file): Promise<PendingComposerImage> => ({
         id: `pending-image-${pendingImageSeq++}`,
         data: await readFileAsBase64(file),
         mediaType: file.type,
@@ -190,7 +189,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     e.target.value = '';
   };
 
-  const send = async (text: string, files: PendingImage[]) => {
+  const send = async (text: string, files: PendingComposerImage[]) => {
     if (!text.trim() && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
     if (onDraftComposer) {

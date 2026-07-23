@@ -5,14 +5,24 @@
  * mocked (MSW). Handlers register on the ApiConfig base URL the test providers
  * inject (`TEST_BASE_URL`), matching how the app wires it.
  */
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
+import { renderHookWithProviders, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
+import type { FactoryThreadTaskContext } from '../../api/types';
 import type { GithubIssue, GithubPullRequest } from '../../../web/ui/domains/factory/services/factory';
-import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../useFactoryData';
+import {
+  useFactoryThreadTaskContextQuery,
+  useProjectIssuesQuery,
+  useProjectPullRequestsQuery,
+} from '../useFactoryData';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const PROJECT_ID = 'github-project-1';
 const ISSUES_URL = `${TEST_BASE_URL}/web/github/projects/${PROJECT_ID}/issues`;
@@ -134,5 +144,164 @@ describe('useProjectPullRequestsQuery', () => {
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(result.current.fetchStatus).toBe('idle');
     expect(hit).not.toHaveBeenCalled();
+  });
+});
+
+const THREAD_ID = 'factory-thread-1';
+const RESOURCE_ID = 'resource-1';
+const SESSION_ID = 'session-1';
+const THREAD_CONTEXT_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/threads/${THREAD_ID}/context`;
+
+function deferred() {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>(next => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+function taskContext(title: string): FactoryThreadTaskContext {
+  return {
+    task: {
+      source: 'github-issue',
+      identifier: '42',
+      title,
+      description: 'Task description',
+      state: 'open',
+      labels: ['bug'],
+      assignees: ['ada'],
+      url: 'https://github.com/mastra-ai/mastra/issues/42',
+    },
+    resolution: { mode: 'live' },
+  };
+}
+
+function StrictModeTaskContextProbe() {
+  useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, true);
+  return null;
+}
+
+describe('useFactoryThreadTaskContextQuery', () => {
+  it('given the Task observer is disabled, when the hook mounts, then it makes zero requests', async () => {
+    const hit = vi.fn();
+    server.use(
+      http.get(THREAD_CONTEXT_URL, () => {
+        hit();
+        return HttpResponse.json({ context: taskContext('Disabled') });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() =>
+      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, false),
+    );
+
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(hit).not.toHaveBeenCalled();
+  });
+
+  it('given Task is enabled, when it loads, then the credentialed request carries the exact session address', async () => {
+    const credentials: RequestCredentials[] = [];
+    const requests: URL[] = [];
+    server.use(
+      http.get(THREAD_CONTEXT_URL, ({ request }) => {
+        credentials.push(request.credentials);
+        requests.push(new URL(request.url));
+        return HttpResponse.json({ context: taskContext('Live task') });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() =>
+      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, true),
+    );
+
+    await waitFor(() => expect(result.current.data?.task.title).toBe('Live task'));
+    expect(credentials).toEqual(['include']);
+    expect(requests[0]?.searchParams.get('resourceId')).toBe(RESOURCE_ID);
+    expect(requests[0]?.searchParams.get('sessionId')).toBe(SESSION_ID);
+  });
+
+  it('given the app mounts in StrictMode, when Task loads, then the discarded mount makes no network request', async () => {
+    const hit = vi.fn();
+    server.use(
+      http.get(THREAD_CONTEXT_URL, () => {
+        hit();
+        return HttpResponse.json({ context: taskContext('Strict task') });
+      }),
+    );
+
+    renderWithProviders(
+      <StrictMode>
+        <StrictModeTaskContextProbe />
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(hit).toHaveBeenCalledTimes(1));
+  });
+
+  it('given an enabled request is in flight, when its observer unmounts, then the fetch signal aborts', async () => {
+    const started = deferred();
+    const aborted = deferred();
+    server.use(
+      http.get(THREAD_CONTEXT_URL, async ({ request }) => {
+        request.signal.addEventListener('abort', () => aborted.resolve(), { once: true });
+        started.resolve();
+        await aborted.promise;
+        return HttpResponse.json({ context: taskContext('Cancelled') });
+      }),
+    );
+
+    const { unmount } = renderHookWithProviders(() =>
+      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, true),
+    );
+    await started.promise;
+
+    unmount();
+
+    await expect(aborted.promise).resolves.toBeUndefined();
+  });
+
+  it('given fresh provider data, when Refresh is requested, then it replaces the cached context', async () => {
+    let requestCount = 0;
+    server.use(
+      http.get(THREAD_CONTEXT_URL, () => {
+        requestCount += 1;
+        return HttpResponse.json({ context: taskContext(`Task version ${requestCount}`) });
+      }),
+    );
+    const { result } = renderHookWithProviders(() =>
+      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, true),
+    );
+    await waitFor(() => expect(result.current.data?.task.title).toBe('Task version 1'));
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    await waitFor(() => expect(result.current.data?.task.title).toBe('Task version 2'));
+    expect(requestCount).toBe(2);
+  });
+
+  it('given Task has loaded, when time, focus, and connectivity change, then it does not refresh automatically', async () => {
+    const hit = vi.fn();
+    server.use(
+      http.get(THREAD_CONTEXT_URL, () => {
+        hit();
+        return HttpResponse.json({ context: taskContext('Stable task') });
+      }),
+    );
+    const { result } = renderHookWithProviders(() =>
+      useFactoryThreadTaskContextQuery(PROJECT_ID, THREAD_ID, RESOURCE_ID, SESSION_ID, true),
+    );
+    await waitFor(() => expect(result.current.data?.task.title).toBe('Stable task'));
+    expect(hit).toHaveBeenCalledTimes(1);
+
+    vi.useFakeTimers();
+    window.dispatchEvent(new Event('focus'));
+    window.dispatchEvent(new Event('online'));
+    await vi.advanceTimersByTimeAsync(120_000);
+    vi.useRealTimers();
+
+    expect(hit).toHaveBeenCalledTimes(1);
   });
 });

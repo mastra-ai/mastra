@@ -29,6 +29,12 @@ export class PlatformApiError extends Error {
   }
 }
 
+export interface PlatformApiRequestOptions {
+  signal?: AbortSignal;
+  logErrorDetail?: boolean;
+  actingUserId?: string;
+}
+
 export class PlatformApiClient {
   readonly #baseUrl: string;
   readonly #accessToken: string;
@@ -44,12 +50,7 @@ export class PlatformApiClient {
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 
-  async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-    options?: { signal?: AbortSignal; actingUserId?: string },
-  ): Promise<T> {
+  async request<T>(method: string, path: string, body?: unknown, options?: PlatformApiRequestOptions): Promise<T> {
     const response = await this.#send(method, path, body, options);
     if (!response.ok) {
       const message = redact(await extractError(response), this.#accessToken);
@@ -59,7 +60,7 @@ export class PlatformApiClient {
         path,
         status: response.status,
         retryAfterSeconds,
-        message,
+        ...(options?.logErrorDetail === false ? {} : { message }),
       });
       throw new PlatformApiError(message, response.status, retryAfterSeconds);
     }
@@ -93,7 +94,7 @@ export class PlatformApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: { signal?: AbortSignal; actingUserId?: string },
+    options?: PlatformApiRequestOptions,
     redirect?: RequestInit['redirect'],
   ): Promise<Response> {
     const headers: Record<string, string> = {
@@ -121,23 +122,24 @@ export class PlatformApiClient {
     try {
       return await this.#fetch(`${this.#baseUrl}${path}`, init);
     } catch (error) {
-      if (error instanceof Error && error.message.includes(this.#accessToken)) {
-        const redacted = new Error(redact(error.message, this.#accessToken));
-        redacted.name = error.name;
-        logPlatformError('Platform API transport error', {
-          method,
-          path,
-          name: redacted.name,
-          message: redacted.message,
-        });
-        throw redacted;
+      if (options?.logErrorDetail === false) {
+        logPlatformError('Platform API transport error', { method, path });
+        throw error;
       }
-      logPlatformError('Platform API transport error', {
-        method,
-        path,
-        name: error instanceof Error ? error.name : undefined,
-        message: error instanceof Error ? error.message : String(error),
-      });
+      if (error instanceof Error) {
+        const rawName = error.name;
+        const rawMessage = error.message;
+        const name = redact(rawName, this.#accessToken);
+        const message = redact(rawMessage, this.#accessToken);
+        logPlatformError('Platform API transport error', { method, path, name, message });
+        if (message !== rawMessage || name !== rawName) {
+          const redacted = new Error(message);
+          redacted.name = name;
+          throw redacted;
+        }
+        throw error;
+      }
+      logPlatformError('Platform API transport error', { method, path, message: String(error) });
       throw error;
     }
   }

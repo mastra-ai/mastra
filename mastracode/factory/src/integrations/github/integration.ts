@@ -37,9 +37,12 @@ import type {
   IntakeIssueDetail,
   ListIntakeIssuesInput,
 } from '../../capabilities/intake.js';
+import { boundedTaskContextDetail, TaskContextProviderRequestError } from '../../capabilities/task-context.js';
+import type { TaskContext } from '../../capabilities/task-context.js';
 import type {
   PullRequest,
   PullRequestComment,
+  PullRequestRef,
   Review,
   ReviewComment,
   VersionControl,
@@ -115,6 +118,13 @@ export interface IssuePage {
 
 export interface ListRepoOpenIssuesOptions {
   label?: string;
+}
+
+export class GithubProviderRequestError extends TaskContextProviderRequestError {
+  constructor(cause: unknown) {
+    super('GitHub API request failed.', { cause });
+    this.name = 'GithubProviderRequestError';
+  }
 }
 
 export interface GithubIntegrationConfig {
@@ -227,6 +237,10 @@ export class GithubIntegration implements FactoryIntegration {
     listIssues: input => this.#listIntakeIssues(input),
     getIssue: input => this.#getIntakeIssue(input),
     createComment: input => this.#createIntakeComment(input),
+  };
+  readonly taskContext: TaskContext = {
+    getIssue: input => this.#getTaskIssueContext(input),
+    getPullRequest: input => this.#getTaskPullRequestContext(input),
   };
   readonly versionControl: VersionControl = {
     initialize: ({ storage }) => {
@@ -488,6 +502,7 @@ export class GithubIntegration implements FactoryIntegration {
     return {
       issues: result.issues.map(issue => ({
         id: String(issue.number),
+        sourceId: repoFullName,
         identifier: `#${issue.number}`,
         title: issue.title,
         url: issue.url,
@@ -513,8 +528,9 @@ export class GithubIntegration implements FactoryIntegration {
     const issueNumber = parsePositiveInteger(input.issueId);
     if (!parts || issueNumber === null) return null;
     const octokit = this.getInstallationOctokit(installationId);
+    let response;
     try {
-      const [{ data: issue }, comments] = await Promise.all([
+      response = await Promise.all([
         octokit.issues.get({ owner: parts.owner, repo: parts.repo, issue_number: issueNumber }),
         octokit.paginate(octokit.issues.listComments, {
           owner: parts.owner,
@@ -523,33 +539,62 @@ export class GithubIntegration implements FactoryIntegration {
           per_page: 100,
         }),
       ]);
-      if (issue.pull_request) return null;
-      return {
-        id: String(issue.number),
-        identifier: `#${issue.number}`,
-        title: issue.title,
-        url: issue.html_url,
-        author: issue.user?.login ?? null,
-        state: issue.state,
-        stateType: issue.state,
-        priority: null,
-        assignee: issue.assignee?.login ?? null,
-        source: repoFullName,
-        labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
-        commentCount: issue.comments,
-        createdAt: issue.created_at,
-        updatedAt: issue.updated_at,
-        description: issue.body?.trim() ? issue.body : null,
-        comments: comments.map(comment => ({
-          author: comment.user?.login ?? null,
-          body: comment.body ?? '',
-          createdAt: comment.created_at,
-        })),
-      };
     } catch (err) {
       if (isNotFoundError(err)) return null;
-      throw err;
+      throw new GithubProviderRequestError(err);
     }
+    const [{ data: issue }, comments] = response;
+    if (issue.pull_request) return null;
+    return {
+      id: String(issue.number),
+      sourceId: repoFullName,
+      identifier: `#${issue.number}`,
+      title: issue.title,
+      url: issue.html_url,
+      author: issue.user?.login ?? null,
+      state: issue.state,
+      stateType: issue.state,
+      priority: null,
+      assignee: issue.assignee?.login ?? null,
+      source: repoFullName,
+      labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
+      commentCount: issue.comments,
+      createdAt: issue.created_at,
+      updatedAt: issue.updated_at,
+      description: issue.body?.trim() ? issue.body : null,
+      comments: comments.map(comment => ({
+        author: comment.user?.login ?? null,
+        body: comment.body ?? '',
+        createdAt: comment.created_at,
+      })),
+    };
+  }
+
+  async #getTaskIssueContext(input: GetIntakeIssueInput) {
+    const installationId = getGithubInstallationId(input.connection);
+    const repoFullName = requireSourceId(input.sourceId, 'GitHub task context requires a repository source.');
+    const parts = splitRepoFullName(repoFullName);
+    const issueNumber = parsePositiveInteger(input.issueId);
+    if (!parts || issueNumber === null) return null;
+    const octokit = this.getInstallationOctokit(installationId);
+    let issue;
+    try {
+      ({ data: issue } = await octokit.issues.get({ owner: parts.owner, repo: parts.repo, issue_number: issueNumber }));
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw new GithubProviderRequestError(err);
+    }
+    if (issue.pull_request) return null;
+    const assignees = issue.assignees ?? (issue.assignee ? [issue.assignee] : []);
+    return boundedTaskContextDetail({
+      identifier: `#${issue.number}`,
+      title: issue.title,
+      description: issue.body?.trim() ? issue.body : null,
+      state: issue.state,
+      labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
+      assignees: assignees.map(assignee => assignee.login).filter((login): login is string => Boolean(login)),
+      url: issue.html_url,
+    });
   }
 
   async #createIntakeComment(input: CreateIntakeCommentInput): Promise<{ id: string; url: string } | null> {
@@ -601,13 +646,36 @@ export class GithubIntegration implements FactoryIntegration {
   async #getPullRequest(input: InputOf<'getPullRequest'>) {
     const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
     const pullNumber = requirePullRequestNumber(input.pullRequestId);
+    let data;
     try {
-      const { data } = await octokit.pulls.get({ ...parts, pull_number: pullNumber });
-      return parsePullRequest(data);
+      ({ data } = await octokit.pulls.get({ ...parts, pull_number: pullNumber }));
     } catch (err) {
       if (isNotFoundError(err)) return null;
-      throw err;
+      throw new GithubProviderRequestError(err);
     }
+    return parsePullRequest(data);
+  }
+
+  async #getTaskPullRequestContext(input: PullRequestRef) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const pullNumber = requirePullRequestNumber(input.pullRequestId);
+    let data;
+    try {
+      ({ data } = await octokit.pulls.get({ ...parts, pull_number: pullNumber }));
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw new GithubProviderRequestError(err);
+    }
+    const assignees = data.assignees ?? (data.assignee ? [data.assignee] : []);
+    return boundedTaskContextDetail({
+      identifier: `#${data.number}`,
+      title: data.title,
+      description: data.body?.trim() ? data.body : null,
+      state: data.merged ? 'merged' : data.state,
+      labels: data.labels.map(label => label.name).filter((name): name is string => Boolean(name)),
+      assignees: assignees.map(assignee => assignee.login).filter((login): login is string => Boolean(login)),
+      url: data.html_url,
+    });
   }
 
   async #createPullRequest(input: InputOf<'createPullRequest'>) {

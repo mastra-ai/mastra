@@ -103,6 +103,34 @@ describe('PlatformApiClient', () => {
     expect(logged).toContain('"message":"Rate limited"');
   });
 
+  it('can suppress upstream HTTP and transport details from logs', async () => {
+    const errorLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const httpFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'provider token must not leak' }), {
+        status: 502,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const transportError = new Error('network token must not leak');
+    transportError.name = `provider-name-${accessToken}-must-not-leak`;
+    const transportFetch = vi.fn<typeof fetch>().mockRejectedValue(transportError);
+
+    await expect(
+      client(httpFetch).request('GET', '/v1/task-context', undefined, { logErrorDetail: false }),
+    ).rejects.toBeInstanceOf(PlatformApiError);
+    await expect(
+      client(transportFetch).request('GET', '/v1/task-context', undefined, { logErrorDetail: false }),
+    ).rejects.toThrow('network token must not leak');
+
+    const logged = JSON.stringify(errorLog.mock.calls);
+    expect(logged).toContain('/v1/task-context');
+    expect(logged).toContain('502');
+    expect(logged).not.toContain('provider token must not leak');
+    expect(logged).not.toContain('network token must not leak');
+    expect(logged).not.toContain('provider-name');
+    expect(logged).not.toContain(accessToken);
+  });
+
   it('redacts the access token from HTTP, transport errors, and logs', async () => {
     const errorLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const httpFetch = vi.fn<typeof fetch>().mockResolvedValue(

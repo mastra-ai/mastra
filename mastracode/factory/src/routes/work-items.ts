@@ -11,6 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import type { FactoryIntegration } from '../integrations/base';
 import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
@@ -24,6 +25,7 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type {
   CreateWorkItemInput,
   ExternalWorkItemSource,
@@ -38,6 +40,8 @@ import type {
 } from '../storage/domains/work-items/base.js';
 import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import { loadFactoryThreadTaskContext } from '../thread-context.js';
+import type { LinearTaskContextIntegration } from '../thread-context.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
@@ -53,6 +57,14 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
+  /** Provider clients used to hydrate task details for one exact Factory session binding. */
+  taskContext?: {
+    sourceControlStorage?: SourceControlStorageHandle;
+    githubIntegration?: FactoryIntegration;
+    ensureGithubReady?: () => Promise<void>;
+    linearIntegration?: LinearTaskContextIntegration;
+    ensureLinearReady?: () => Promise<void>;
+  };
 }
 
 function loose(c: unknown): Context {
@@ -94,12 +106,21 @@ function validMetadata(value: unknown): value is Record<string, unknown> | null 
 function parseExternalSource(value: unknown): ExternalWorkItemSource | null | undefined {
   if (value === undefined || value === null) return value;
   if (!isRecord(value)) return undefined;
-  const { integrationId, type, externalId, url } = value;
+  const { integrationId, type, sourceId, externalId, url } = value;
   if (typeof integrationId !== 'string' || integrationId.length === 0 || integrationId.length > 128) return undefined;
   if (typeof type !== 'string' || type.length === 0 || type.length > 128) return undefined;
+  if (sourceId !== undefined && (typeof sourceId !== 'string' || sourceId.length === 0 || sourceId.length > 512)) {
+    return undefined;
+  }
   if (typeof externalId !== 'string' || externalId.length === 0 || externalId.length > 512) return undefined;
   if (url !== undefined && (typeof url !== 'string' || url.length > 2048)) return undefined;
-  return { integrationId, type, externalId, ...(url !== undefined ? { url } : {}) };
+  return {
+    integrationId,
+    type,
+    ...(sourceId !== undefined ? { sourceId } : {}),
+    externalId,
+    ...(url !== undefined ? { url } : {}),
+  };
 }
 
 function parseParentWorkItemId(value: unknown): string | null | undefined {
@@ -196,6 +217,20 @@ function boundedText(value: unknown, max: number): string | undefined {
   if (typeof value !== 'string') return undefined;
   const normalized = value.trim();
   return normalized.length > 0 && normalized.length <= max ? normalized : undefined;
+}
+
+function taskContextLoadError(cause: unknown): Error {
+  let causeType: string = typeof cause;
+  try {
+    if (cause instanceof TypeError) causeType = 'TypeError';
+    else if (cause instanceof RangeError) causeType = 'RangeError';
+    else if (cause instanceof Error) causeType = 'Error';
+  } catch {
+    causeType = 'unknown';
+  }
+  const error = new Error('Factory task context could not be loaded.');
+  error.stack = `${error.stack ?? error.message}\nCause type: ${causeType}`;
+  return error;
 }
 
 function parseTransitionBody(
@@ -462,8 +497,63 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth, transitionService, startCoordinator } = this.deps;
+    const { audit, workItems, queueHealth, transitionService, startCoordinator, taskContext } = this.deps;
     return [
+      // ── Task context for one exact Factory session binding ─────────────────
+      registerApiRoute('/web/factory/projects/:id/threads/:threadId/context', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          try {
+            const context = loose(c);
+            const resolved = await this.#resolveProject(context);
+            if ('response' in resolved) return resolved.response;
+            const threadId = boundedText(context.req.param('threadId'), 512);
+            const resourceId = boundedText(context.req.query('resourceId'), 256);
+            const sessionId = boundedText(context.req.query('sessionId'), 256);
+            if (!threadId || !resourceId || !sessionId) {
+              return c.json(
+                { error: 'invalid_session_address', message: 'The Factory session address is incomplete.' },
+                400,
+              );
+            }
+            await workItems.ensureReady();
+            const bindingResult = await workItems.findRunBinding({
+              orgId: resolved.orgId,
+              factoryProjectId: resolved.factoryProjectId,
+              threadId,
+              resourceId,
+              sessionId,
+            });
+            if (bindingResult.status === 'none') return c.json({ context: null });
+            if (bindingResult.status === 'ambiguous-active') {
+              return c.json(
+                {
+                  error: 'ambiguous_factory_binding',
+                  message: 'Multiple active Factory runs share this session address.',
+                },
+                409,
+              );
+            }
+            const workItem = await workItems.getForProject(
+              resolved.orgId,
+              resolved.factoryProjectId,
+              bindingResult.binding.workItemId,
+            );
+            if (!workItem) throw new Error('Factory run binding references a missing work item.');
+            const loaded = await loadFactoryThreadTaskContext({
+              orgId: resolved.orgId,
+              factoryProjectId: resolved.factoryProjectId,
+              workItem,
+              ...taskContext,
+            });
+            return c.json({ context: loaded });
+          } catch (error) {
+            throw taskContextLoadError(error);
+          }
+        },
+      }),
+
       // ── List the org's work items for a project ─────────────────────────────
       registerApiRoute('/web/factory/projects/:id/work-items', {
         method: 'GET',

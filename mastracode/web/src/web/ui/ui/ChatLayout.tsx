@@ -23,6 +23,8 @@ type ChatLayoutProps = {
   rightPanel?: ReactNode;
   rightPanelExpanded?: boolean;
   rightPanelAvailable?: boolean;
+  rightPanelOpenLabel?: string;
+  rightPanelCloseLabel?: string;
   onRightPanelOpen?: () => void;
   onRightPanelClose?: () => void;
 };
@@ -42,6 +44,8 @@ export function ChatLayout({
   rightPanel,
   rightPanelExpanded = false,
   rightPanelAvailable = false,
+  rightPanelOpenLabel = 'Open workspace files',
+  rightPanelCloseLabel = 'Close workspace files',
   onRightPanelOpen,
   onRightPanelClose,
 }: ChatLayoutProps) {
@@ -53,6 +57,7 @@ export function ChatLayout({
         <DesktopRightPanelFrame
           initialWidth={rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH}
           rightPanel={isMobile ? undefined : rightPanel}
+          rightPanelCloseLabel={rightPanelCloseLabel}
           onRightPanelClose={onRightPanelClose}
         >
           <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -65,7 +70,7 @@ export function ChatLayout({
           </div>
         </DesktopRightPanelFrame>
         {isMobile && rightPanel ? (
-          <PanelDrawer direction="right" label="Open workspace files">
+          <PanelDrawer direction="right" label={rightPanelOpenLabel}>
             {rightPanel}
           </PanelDrawer>
         ) : null}
@@ -73,10 +78,10 @@ export function ChatLayout({
           <Button
             size="icon-md"
             variant="ghost"
-            tooltip="Open workspace files"
+            tooltip={rightPanelOpenLabel}
             className="absolute right-2 top-2 z-10 hidden rounded-md lg:inline-flex"
             onClick={onRightPanelOpen}
-            aria-label="Open workspace files"
+            aria-label={rightPanelOpenLabel}
             aria-expanded="false"
           >
             <PanelRightIcon className="rotate-180" />
@@ -90,11 +95,13 @@ export function ChatLayout({
 function DesktopRightPanelFrame({
   initialWidth,
   rightPanel,
+  rightPanelCloseLabel,
   children,
   onRightPanelClose,
 }: {
   initialWidth: number;
   rightPanel?: ReactNode;
+  rightPanelCloseLabel: string;
   children: ReactNode;
   onRightPanelClose?: () => void;
 }) {
@@ -135,10 +142,10 @@ function DesktopRightPanelFrame({
                 <Button
                   size="icon-md"
                   variant="ghost"
-                  tooltip="Close workspace files"
+                  tooltip={rightPanelCloseLabel}
                   className="absolute right-2 top-2 z-10 rounded-md"
                   onClick={onRightPanelClose}
-                  aria-label="Close workspace files"
+                  aria-label={rightPanelCloseLabel}
                   aria-expanded="true"
                 >
                   <PanelRightIcon />

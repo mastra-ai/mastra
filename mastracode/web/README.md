@@ -91,6 +91,10 @@ Open GitHub issues appear as **Work** intake candidates. Open pull requests appe
 
 When a Factory pull request branch matches a related work session branch, the Review item stores the Work item as its parent. The Work card links to the Review session, and the Review card links back to the Work session. The same reciprocal links appear in the session header. Links to a thread are shown only while its referenced worktree still exists; the related board item remains available after worktree deletion.
 
+### Session task and workspace context
+
+Desktop server-backed Factory sessions share one right-side context panel with `Task` and `Files` tabs. `Task` resolves the session's exact Factory run binding, reads the linked GitHub issue, GitHub pull request, or Linear issue on demand, and shows its title, markdown description, state, labels, assignees, and source link. If the provider is disconnected or unavailable, the panel keeps the stored Factory task title and safe link visible. Refresh is manual; task context does not poll or refetch on window focus or reconnect. `Files` continues to use the existing workspace artifact viewer. Personal sessions and local Factories remain Files-only.
+
 ## Workspace skill invocation
 
 The private Web API can activate a user-invocable skill on an existing scoped AgentController session with `POST /web/agent-controller/:controllerId/skills/invoke`. The Web Factory packages workflow skills such as `understand-issue` and `understand-pr` as ordinary, read-only `SKILL.md` files and adds them only to workspaces created by `MastraFactory`; the shared SDK and TUI workspace resolver do not load them. The route resolves every ID through the session workspace, uses the same `<skill name="…">` activation envelope as `/skill/<name>` in the TUI, and returns an error without dispatching when the skill is missing. Authenticated requests may target only the caller's personal session or a Factory worktree owned by that organization user.

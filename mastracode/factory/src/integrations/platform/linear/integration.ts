@@ -4,7 +4,9 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
-import type { Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
+import type { GetIntakeIssueInput, Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
+import { boundedTaskContextDetail, TaskContextProviderRequestError } from '../../../capabilities/task-context.js';
+import type { TaskContext } from '../../../capabilities/task-context.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
@@ -85,6 +87,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
 
+  readonly taskContext: TaskContext = {
+    getIssue: input => this.#getTaskIssueContext(input),
+  };
+
   readonly intake: Intake = {
     listSources: async () => {
       const sources = await this.#listProjectSources();
@@ -130,7 +136,9 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       requireLinearConnection(connection);
       const result = await this.#listIssues(sourceIds, cursor, labels);
       return {
-        issues: result.issues.map(({ issue }) => parseIssue(issue)),
+        issues: result.issues.map(({ issue, source }) =>
+          parseIssue(issue, encodeSourceId(source.workspace.linearWorkspaceId, source.project.id)),
+        ),
         nextCursor: result.nextCursor,
       };
     },
@@ -139,7 +147,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       const located = await this.#findIssue(sourceId, issueId);
       if (!located) return null;
       const comments = await this.#loadComments(located.workspaceId, issueId, located.issue.comments);
-      return parseIssueDetail(located.issue, comments);
+      return parseIssueDetail(located.issue, sourceId ?? `linear-workspace:${located.workspaceId}`, comments);
     },
     createComment: async ({ connection, sourceId, issueId, body }) => {
       requireLinearConnection(connection);
@@ -212,6 +220,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     } catch {
       return null;
     }
+  }
+
+  async getTaskContextConnection(_orgId: string): Promise<IntegrationConnection> {
+    return { type: 'oauth', accessToken: PLATFORM_MANAGED_CONNECTION_TOKEN };
   }
 
   async loadConnection(orgId: string): Promise<LinearConnectionRow | null> {
@@ -301,6 +313,39 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       id: encodeSourceId(workspace.linearWorkspaceId, project.id),
       workspaceId: workspace.linearWorkspaceId,
     }));
+  }
+
+  async #getTaskIssueContext(input: GetIntakeIssueInput) {
+    requireLinearConnection(input.connection);
+    if (!input.sourceId) return null;
+    let workspaceId: string;
+    try {
+      ({ workspaceId } = decodeSourceId(input.sourceId));
+    } catch {
+      throw new TaskContextProviderRequestError('Platform task-context source scope is unavailable.');
+    }
+
+    let issue: LinearIssue;
+    try {
+      issue = await this.#client.request<LinearIssue>(
+        'GET',
+        `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(input.issueId)}`,
+        undefined,
+        { logErrorDetail: false },
+      );
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw new TaskContextProviderRequestError('Platform task-context request failed.');
+    }
+    return boundedTaskContextDetail({
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description?.trim() ? issue.description : null,
+      state: issue.state.name,
+      labels: issue.labels.map(label => label.name),
+      assignees: issue.assignee ? [issue.assignee.displayName || issue.assignee.name] : [],
+      url: issue.url,
+    });
   }
 
   async #listProjectSources(): Promise<ProjectSource[]> {
@@ -447,9 +492,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 }
 
-function parseIssue(issue: LinearIssue): IntakeIssue {
+function parseIssue(issue: LinearIssue, sourceId: string): IntakeIssue {
   return {
     id: issue.id,
+    sourceId,
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,
@@ -466,9 +512,9 @@ function parseIssue(issue: LinearIssue): IntakeIssue {
   };
 }
 
-function parseIssueDetail(issue: LinearIssue, comments: LinearComment[]): IntakeIssueDetail {
+function parseIssueDetail(issue: LinearIssue, sourceId: string, comments: LinearComment[]): IntakeIssueDetail {
   return {
-    ...parseIssue(issue),
+    ...parseIssue(issue, sourceId),
     commentCount: comments.length,
     description: issue.description?.trim() ? issue.description : null,
     comments: comments.map(comment => ({

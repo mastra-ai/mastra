@@ -104,6 +104,7 @@ function linearContext(): FactoryLinearRuleContext {
     event: 'issueObserved',
     issue: {
       id: 'issue-1',
+      sourceId: 'project-1',
       identifier: 'ENG-42',
       title: 'Fix intake sync',
       url: 'https://linear.app/acme/issue/ENG-42',
@@ -145,10 +146,15 @@ describe('defaultFactoryRules', () => {
     expect(await rule?.(linearContext())).toMatchObject({
       type: 'upsertLinkedWorkItem',
       source: 'linear-issue',
-      sourceKey: 'linear:ENG-42',
+      sourceId: 'project-1',
+      sourceKey: 'linear:project-1:issue-1',
       title: 'ENG-42: Fix intake sync',
       stage: 'triage',
-      metadata: { linearIssueId: 'issue-1', linearIssueIdentifier: 'ENG-42' },
+      metadata: {
+        linearIssueId: 'issue-1',
+        linearIssueIdentifier: 'ENG-42',
+        linearIssueSourceId: 'project-1',
+      },
     });
   });
 

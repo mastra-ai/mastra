@@ -24,6 +24,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { Intake } from '../capabilities/intake.js';
+import type { TaskContext } from '../capabilities/task-context.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
@@ -38,6 +39,7 @@ import type { ParsedGithubWebhook } from './github/webhook.js';
 
 export interface LinearIssueIngress {
   id: string;
+  sourceId: string;
   identifier: string;
   title: string;
   url: string;
@@ -128,6 +130,8 @@ export interface FactoryIntegration {
   readonly id: string;
   /** Issue-oriented capability consumed by Intake. */
   readonly intake?: Intake;
+  /** Bounded issue and pull-request detail reads for session task context. */
+  readonly taskContext?: TaskContext;
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
   /**

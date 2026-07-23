@@ -1,11 +1,12 @@
 import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
+import { TASK_CONTEXT_LIMITS } from '../../capabilities/task-context.js';
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { SandboxFleet } from '../../sandbox/fleet.js';
 import { createStateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { GithubIntegration, normalizePrivateKey } from './integration.js';
+import { GithubIntegration, GithubProviderRequestError, normalizePrivateKey } from './integration.js';
 
 // Real RSA key so we can prove Node's PEM decoder accepts the normalized
 // output (the failure mode is `error:1E08010C:DECODER routines::unsupported`).
@@ -39,6 +40,9 @@ function pullRequestData() {
     draft: false,
     merged: false,
     mergeable: true,
+    labels: [{ name: 'factory' }, { name: 'ready' }],
+    assignee: { login: 'ada' },
+    assignees: [{ login: 'ada' }, { login: 'grace' }],
     created_at: '2026-07-01T00:00:00Z',
     updated_at: '2026-07-02T00:00:00Z',
   };
@@ -179,6 +183,145 @@ describe('GithubIntegration capability surface', () => {
     await expect(
       github.intake.createComment({ connection, sourceId: 'acme/app', issueId: '12', body: 'Done' }),
     ).resolves.toEqual({ id: '99', url: 'https://github.com/acme/app/issues/12#issuecomment-99' });
+  });
+
+  it('sanitizes GitHub issue request failures without hiding response mapping bugs', async () => {
+    const github = new GithubIntegration(validConfig());
+    const requestFailure = new Error('provider token must not leak');
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(requestFailure)
+      .mockResolvedValueOnce({ data: { number: 12 } });
+    const paginate = vi.fn().mockResolvedValue([]);
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      issues: { get, listComments: vi.fn() },
+      paginate,
+    } as any);
+    const input = {
+      connection: { type: 'app-installation' as const, installationId: 7 },
+      sourceId: 'acme/app',
+      issueId: '12',
+    };
+
+    const providerError = await github.intake.getIssue(input).catch(error => error);
+    expect(providerError).toBeInstanceOf(GithubProviderRequestError);
+    expect(providerError).toHaveProperty('message', 'GitHub API request failed.');
+    expect(providerError.message).not.toContain('provider token must not leak');
+    await expect(github.intake.getIssue(input)).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it('reads bounded GitHub issue task context without requesting comments', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn().mockResolvedValue({
+      data: {
+        number: 12,
+        title: 'Fix intake',
+        html_url: 'https://github.com/acme/app/issues/12',
+        state: 'open',
+        assignee: { login: 'ada' },
+        assignees: [{ login: 'ada' }, { login: 'grace' }],
+        labels: [{ name: 'bug' }],
+        body: 'Issue body',
+      },
+    });
+    const paginate = vi.fn();
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { get }, paginate } as any);
+
+    await expect(
+      github.taskContext.getIssue?.({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        issueId: '12',
+      }),
+    ).resolves.toEqual({
+      identifier: '#12',
+      title: 'Fix intake',
+      description: 'Issue body',
+      state: 'open',
+      labels: ['bug'],
+      assignees: ['ada', 'grace'],
+      url: 'https://github.com/acme/app/issues/12',
+    });
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(paginate).not.toHaveBeenCalled();
+  });
+
+  it('bounds GitHub task-context fields at the provider capability', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn().mockResolvedValue({
+      data: {
+        number: 12,
+        title: 't'.repeat(TASK_CONTEXT_LIMITS.title + 10),
+        html_url: `https://github.com/${'u'.repeat(TASK_CONTEXT_LIMITS.url)}`,
+        state: 's'.repeat(TASK_CONTEXT_LIMITS.state + 10),
+        assignees: Array.from({ length: TASK_CONTEXT_LIMITS.listItems + 10 }, (_, index) => ({
+          login: `${index}-${'a'.repeat(TASK_CONTEXT_LIMITS.listItem + 10)}`,
+        })),
+        labels: Array.from({ length: TASK_CONTEXT_LIMITS.listItems + 10 }, (_, index) => ({
+          name: `${index}-${'l'.repeat(TASK_CONTEXT_LIMITS.listItem + 10)}`,
+        })),
+        body: 'd'.repeat(TASK_CONTEXT_LIMITS.description + 10),
+      },
+    });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { get } } as any);
+
+    const detail = await github.taskContext.getIssue?.({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'acme/app',
+      issueId: '12',
+    });
+
+    expect(detail?.title).toHaveLength(TASK_CONTEXT_LIMITS.title);
+    expect(detail?.description).toHaveLength(TASK_CONTEXT_LIMITS.description);
+    expect(detail?.state).toHaveLength(TASK_CONTEXT_LIMITS.state);
+    expect(detail?.labels).toHaveLength(TASK_CONTEXT_LIMITS.listItems);
+    expect(detail?.labels[0]).toHaveLength(TASK_CONTEXT_LIMITS.listItem);
+    expect(detail?.assignees).toHaveLength(TASK_CONTEXT_LIMITS.listItems);
+    expect(detail?.assignees[0]).toHaveLength(TASK_CONTEXT_LIMITS.listItem);
+    expect(detail?.url).toBeNull();
+  });
+
+  it('reads GitHub pull-request task context from one request', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn().mockResolvedValue({ data: { ...pullRequestData(), merged: true, state: 'closed' } });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { get } } as any);
+
+    await expect(
+      github.taskContext.getPullRequest?.({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        pullRequestId: '34',
+      }),
+    ).resolves.toEqual({
+      identifier: '#34',
+      title: 'Ship intake',
+      description: 'Ready to ship',
+      state: 'merged',
+      labels: ['factory', 'ready'],
+      assignees: ['ada', 'grace'],
+      url: 'https://github.com/acme/app/pull/34',
+    });
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('sanitizes task-context request failures without hiding mapper bugs', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('provider token must not leak'))
+      .mockResolvedValueOnce({ data: { number: 12, labels: null } });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { get } } as any);
+    const input = {
+      connection: { type: 'app-installation' as const, installationId: 7 },
+      sourceId: 'acme/app',
+      issueId: '12',
+    };
+
+    const providerError = await github.taskContext.getIssue?.(input).catch(error => error);
+    expect(providerError).toBeInstanceOf(GithubProviderRequestError);
+    expect(providerError).toHaveProperty('message', 'GitHub API request failed.');
+    expect(providerError.message).not.toContain('provider token must not leak');
+    await expect(github.taskContext.getIssue?.(input)).rejects.toBeInstanceOf(TypeError);
   });
 
   it('normalizes pull requests through the shared VersionControl contract', async () => {

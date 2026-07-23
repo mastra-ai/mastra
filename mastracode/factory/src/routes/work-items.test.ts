@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import { handleServerError } from '../server-error.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 
 let auditRecorded: Array<Record<string, any>> = [];
@@ -36,16 +37,21 @@ const audit: AuditEmitter = {
 };
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import type { LinearTaskContextIntegration } from '../thread-context.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
+import type { WorkItemRoutesDeps } from './work-items.js';
 
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
+  transitionService: any = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+  options: Pick<WorkItemRoutesDeps, 'taskContext'> = {},
 ) {
   const app = new Hono();
+  app.onError(handleServerError);
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
     if (requestContext) c.set('requestContext' as never, requestContext as never);
@@ -59,8 +65,9 @@ function buildApp(
       projects: seed.projects,
       workItems: seed.workItems,
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+      transitionService,
       startCoordinator,
+      ...options,
     }).routes(),
   );
   return app;
@@ -144,6 +151,260 @@ describe('auth and scoping', () => {
     const body = await res.json();
     expect(body.workItems).toHaveLength(1);
     expect(body.workItems[0].createdBy).toBe('u1');
+  });
+});
+
+// ── Thread task context ──────────────────────────────────────────────────
+describe('GET /web/factory/projects/:id/threads/:threadId/context', () => {
+  const threadId = 'thread:/opaque?value=1';
+  const resourceId = 'resource-1';
+  const sessionId = 'session-1';
+
+  function contextPath(overrides: { resourceId?: string; sessionId?: string } = {}) {
+    const query = new URLSearchParams({
+      resourceId: overrides.resourceId ?? resourceId,
+      sessionId: overrides.sessionId ?? sessionId,
+    });
+    return `/web/factory/projects/${PROJECT_ID}/threads/${encodeURIComponent(threadId)}/context?${query}`;
+  }
+
+  async function prepareLinearBinding(identifier: string, kickoffKey: string) {
+    return seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId: identifier,
+            url: `https://linear.app/mastra/issue/${identifier}`,
+          },
+          title: `Stored ${identifier} title`,
+          stages: ['intake'],
+          metadata: { linearIssueIdentifier: identifier },
+        },
+      },
+      role: 'work',
+      session: { threadId, sessionId, branch: `feature/${identifier.toLowerCase()}` },
+      resourceId,
+      kickoffKey,
+      kickoffMessage: null,
+    });
+  }
+
+  it('returns null when the exact session address has no binding history', async () => {
+    const res = await buildApp(orgUser).request(contextPath());
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ context: null });
+  });
+
+  it('requires the full session address', async () => {
+    const res = await buildApp(orgUser).request(
+      `/web/factory/projects/${PROJECT_ID}/threads/${encodeURIComponent(threadId)}/context`,
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_session_address' });
+  });
+
+  it('returns stored context for the exact historical binding after revocation', async () => {
+    const prepared = await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { input: { title: 'Manual task title', stages: ['intake'] } },
+      role: 'work',
+      session: { threadId, sessionId, branch: 'feature/context' },
+      resourceId,
+      kickoffKey: 'context-kickoff',
+      kickoffMessage: null,
+    });
+    await seed.workItems.revokeRunBinding({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: prepared.binding.id,
+      revokedAt: new Date(),
+    });
+
+    const res = await buildApp(orgUser).request(contextPath());
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      context: {
+        task: { source: 'manual', title: 'Manual task title', labels: [], assignees: [] },
+        resolution: { mode: 'stored', reason: 'manual' },
+      },
+    });
+    const mismatchedResource = await buildApp(orgUser).request(contextPath({ resourceId: 'other-resource' }));
+    await expect(mismatchedResource.json()).resolves.toEqual({ context: null });
+    const mismatchedSession = await buildApp(orgUser).request(contextPath({ sessionId: 'other-session' }));
+    await expect(mismatchedSession.json()).resolves.toEqual({ context: null });
+  });
+
+  it('hydrates a bound Linear issue through the bounded task-context capability', async () => {
+    await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId: 'ENG-42',
+            url: 'https://linear.app/mastra/issue/ENG-42',
+          },
+          title: 'Stored Linear title',
+          stages: ['intake'],
+          metadata: { linearIssueIdentifier: 'ENG-42' },
+        },
+      },
+      role: 'work',
+      session: { threadId, sessionId, branch: 'feature/context' },
+      resourceId,
+      kickoffKey: 'linear-context-kickoff',
+      kickoffMessage: null,
+    });
+    const getIssue = vi.fn().mockResolvedValue({
+      identifier: 'ENG-42',
+      title: 'Live Linear title',
+      description: 'Live Linear description',
+      state: 'In Progress',
+      labels: ['factory'],
+      assignees: ['Ada'],
+      url: 'https://linear.app/mastra/issue/ENG-42',
+    });
+    const linearIntegration = {
+      id: 'linear',
+      taskContext: { getIssue },
+      loadConnection: vi.fn().mockResolvedValue({ orgId: 'org1' }),
+      getFreshAccessToken: vi.fn().mockResolvedValue('linear-access-token'),
+    } as unknown as LinearTaskContextIntegration;
+
+    const res = await buildApp(orgUser, undefined, undefined, undefined, {
+      taskContext: { linearIntegration, ensureLinearReady: vi.fn().mockResolvedValue(undefined) },
+    }).request(contextPath());
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      context: {
+        task: {
+          source: 'linear-issue',
+          identifier: 'ENG-42',
+          title: 'Live Linear title',
+          description: 'Live Linear description',
+          state: 'In Progress',
+          labels: ['factory'],
+          assignees: ['Ada'],
+        },
+        resolution: { mode: 'live' },
+      },
+    });
+    expect(getIssue).toHaveBeenCalledWith({
+      connection: { type: 'oauth', accessToken: 'linear-access-token' },
+      issueId: 'ENG-42',
+    });
+  });
+
+  it('returns 409 without provider hydration for ambiguous active session bindings', async () => {
+    await prepareLinearBinding('ENG-42', 'linear-context-ambiguous-1');
+    await prepareLinearBinding('ENG-43', 'linear-context-ambiguous-2');
+    const getIssue = vi.fn();
+    const loadConnection = vi.fn();
+    const linearIntegration = {
+      id: 'linear',
+      taskContext: { getIssue },
+      loadConnection,
+      getFreshAccessToken: vi.fn(),
+    } as unknown as LinearTaskContextIntegration;
+
+    const res = await buildApp(orgUser, undefined, undefined, undefined, {
+      taskContext: { linearIntegration, ensureLinearReady: vi.fn() },
+    }).request(contextPath());
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toEqual({
+      error: 'ambiguous_factory_binding',
+      message: 'Multiple active Factory runs share this session address.',
+    });
+    expect(loadConnection).not.toHaveBeenCalled();
+    expect(getIssue).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: 'multiline provider messages',
+      secret: 'provider-token-must-not-leak',
+      providerError: () => new Error('GraphQL failed\n    at provider-token-must-not-leak'),
+    },
+    {
+      label: 'throwing stack getters',
+      secret: 'stack-getter-secret-must-not-leak',
+      providerError: () => {
+        const error = new Error('provider request failed');
+        Object.defineProperty(error, 'stack', {
+          get: () => {
+            throw new Error('stack-getter-secret-must-not-leak');
+          },
+        });
+        return error;
+      },
+    },
+  ])('does not expose provider details from $label', async ({ secret, providerError }) => {
+    await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId: 'ENG-42',
+            url: 'https://linear.app/mastra/issue/ENG-42',
+          },
+          title: 'Stored Linear title',
+          stages: ['intake'],
+          metadata: { linearIssueIdentifier: 'ENG-42' },
+        },
+      },
+      role: 'work',
+      session: { threadId, sessionId, branch: 'feature/context' },
+      resourceId,
+      kickoffKey: 'linear-context-error-kickoff',
+      kickoffMessage: null,
+    });
+    const linearIntegration = {
+      id: 'linear',
+      taskContext: { getIssue: vi.fn().mockRejectedValue(providerError()) },
+      loadConnection: vi.fn().mockResolvedValue({ orgId: 'org1' }),
+      getFreshAccessToken: vi.fn().mockResolvedValue('linear-access-token'),
+    } as unknown as LinearTaskContextIntegration;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      const res = await buildApp(orgUser, undefined, undefined, undefined, {
+        taskContext: { linearIntegration, ensureLinearReady: vi.fn().mockResolvedValue(undefined) },
+      }).request(contextPath());
+      const body = await res.json();
+      const logs = JSON.stringify(consoleError.mock.calls);
+
+      expect(res.status).toBe(500);
+      expect(body).toEqual({
+        error: 'internal_error',
+        message: 'Factory task context could not be loaded.',
+      });
+      expect(JSON.stringify(body)).not.toContain(secret);
+      expect(JSON.stringify(body)).not.toContain('linear-access-token');
+      expect(logs).toContain('Cause type: Error');
+      expect(logs).not.toContain(secret);
+      expect(logs).not.toContain('linear-access-token');
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });
 

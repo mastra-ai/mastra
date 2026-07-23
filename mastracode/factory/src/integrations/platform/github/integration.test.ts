@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TaskContextProviderRequestError } from '../../../capabilities/task-context.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
@@ -180,6 +181,62 @@ describe('PlatformGithubIntegration', () => {
       nextCursor: null,
     });
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('label=bug%2Curgent');
+  });
+
+  it('hydrates lightweight issue and pull-request task context', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json(issue))
+      .mockResolvedValueOnce(json({ ...pullRequest, merged: true, state: 'closed' }));
+    const integration = createIntegration(fetchImpl);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+
+    await expect(
+      integration.taskContext.getIssue?.({ connection, sourceId: 'acme/app', issueId: '12' }),
+    ).resolves.toEqual({
+      identifier: '#12',
+      title: 'Fix intake',
+      description: 'Issue body',
+      state: 'open',
+      labels: ['bug'],
+      assignees: ['grace'],
+      url: 'https://github.com/acme/app/issues/12',
+    });
+    await expect(
+      integration.taskContext.getPullRequest?.({ connection, sourceId: 'acme/app', pullRequestId: '34' }),
+    ).resolves.toEqual({
+      identifier: '#34',
+      title: 'Ship intake',
+      description: 'Ready to ship',
+      state: 'merged',
+      labels: [],
+      assignees: [],
+      url: 'https://github.com/acme/app/pull/34',
+    });
+    expect(fetchImpl.mock.calls.map(call => String(call[0]))).toEqual([
+      'https://platform.example.com/v1/server/github/repos/acme/app/issues/12',
+      'https://platform.example.com/v1/server/github/repos/acme/app/pulls/34',
+    ]);
+  });
+
+  it('preserves task-context not-found, provider-failure, mapper-error, and log-sanitization boundaries', async () => {
+    const errorLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ detail: 'Not found' }, 404))
+      .mockResolvedValueOnce(json({ detail: 'provider token must not leak' }, 500))
+      .mockRejectedValueOnce(new Error('network token must not leak'))
+      .mockResolvedValueOnce(json({}));
+    const integration = createIntegration(fetchImpl);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+    const input = { connection, sourceId: 'acme/app', issueId: '12' };
+
+    await expect(integration.taskContext.getIssue?.(input)).resolves.toBeNull();
+    await expect(integration.taskContext.getIssue?.(input)).rejects.toBeInstanceOf(TaskContextProviderRequestError);
+    await expect(integration.taskContext.getIssue?.(input)).rejects.toBeInstanceOf(TaskContextProviderRequestError);
+    await expect(integration.taskContext.getIssue?.(input)).rejects.toBeInstanceOf(TypeError);
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain('provider token must not leak');
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain('network token must not leak');
   });
 
   it('fetches issue details, creates comments, and preserves not-found semantics', async () => {

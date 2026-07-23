@@ -613,6 +613,45 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(versionChanged?.cacheKey).not.toBe(first?.cacheKey);
   });
 
+  it('skips restart reconciliation when an exact session address has multiple active bindings', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github-issue:2',
+            url: 'https://example.test/issues/2',
+          },
+          title: 'Fix the duplicate binding',
+          stages: ['planning'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'resource-1', branch: 'factory/issue-2', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-2',
+      kickoffMessage: null,
+    });
+    const reader = { listMessages: vi.fn() };
+    const processor = new FactoryPhaseStateProcessor({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      messageReader: reader as never,
+    });
+
+    await processor.reconcileAllBoundThreads();
+
+    expect(reader.listMessages).not.toHaveBeenCalled();
+  });
+
   it('revisits the inclusive cursor when a suspended invocation later resumes with a result', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);

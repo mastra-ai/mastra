@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -8,6 +8,49 @@ import {
   startRepositoryIssueTriage,
 } from '../../web/ui/domains/factory/services/factory';
 import type { GithubIssue } from '../../web/ui/domains/factory/services/factory';
+import { fetchFactoryThreadTaskContext } from '../../web/ui/domains/factory/services/workItems';
+
+function waitForCommittedQueryMount(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(signal.reason);
+    };
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, 0);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export function useFactoryThreadTaskContextQuery(
+  factoryProjectId: string,
+  threadId: string,
+  resourceId: string,
+  sessionId: string,
+  enabled: boolean,
+) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.factoryThreadTaskContext(factoryProjectId, threadId, resourceId, sessionId),
+    queryFn: async ({ signal }) => {
+      await waitForCommittedQueryMount(signal);
+      return fetchFactoryThreadTaskContext(baseUrl, factoryProjectId, threadId, resourceId, sessionId, signal);
+    },
+    enabled,
+    staleTime: 0,
+    retry: false,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
 
 /**
  * Open issues for a GitHub project, loaded one page at a time as the list is

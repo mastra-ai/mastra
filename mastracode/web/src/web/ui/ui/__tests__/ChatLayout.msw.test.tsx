@@ -117,6 +117,34 @@ describe('ChatLayout', () => {
       expect(screen.getByText('workspace-panel')).toBeInTheDocument();
     });
   });
+
+  describe('given contextual right-panel labels', () => {
+    it('uses them for the desktop open and close controls', () => {
+      const { rerender } = render(
+        <ChatLayout
+          sidebar={<div />}
+          content={<div />}
+          rightPanelAvailable
+          rightPanelOpenLabel="Open task and workspace context"
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Open task and workspace context' })).toBeInTheDocument();
+
+      rerender(
+        <ChatLayout
+          sidebar={<div />}
+          content={<div />}
+          rightPanel={<div>context-panel</div>}
+          rightPanelCloseLabel="Close task and workspace context"
+          onRightPanelClose={() => {}}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Close task and workspace context' })).toBeInTheDocument();
+    });
+  });
+
   describe('given a workspace panel on mobile', () => {
     it('opens the panel from the top-right drawer trigger', async () => {
       mockMobileViewport();
@@ -129,6 +157,21 @@ describe('ChatLayout', () => {
       await user.click(await screen.findByRole('button', { name: 'Open workspace files' }));
 
       expect(screen.getByText('workspace-panel')).toBeVisible();
+    });
+
+    it('uses the contextual open label for the drawer trigger', () => {
+      mockMobileViewport();
+
+      render(
+        <ChatLayout
+          sidebar={<div />}
+          content={<div>chat-content</div>}
+          rightPanel={<div>context-panel</div>}
+          rightPanelOpenLabel="Open task and workspace context"
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Open task and workspace context' })).toBeInTheDocument();
     });
   });
 });

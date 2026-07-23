@@ -653,6 +653,7 @@ describe('FactoryDecisionDispatcher', () => {
                 idempotencyKey: 'linked-1',
                 board: 'work',
                 source: 'github-issue',
+                sourceId: 'acme/repo',
                 sourceKey: 'github-issue:2',
                 title: 'Linked issue',
                 url: null,
@@ -701,7 +702,11 @@ describe('FactoryDecisionDispatcher', () => {
     const linked = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).find(
       item => item.externalSource?.externalId === 'github-issue:2',
     );
-    expect(linked).toMatchObject({ parentWorkItemId: parent.id, stages: ['intake'] });
+    expect(linked).toMatchObject({
+      externalSource: { sourceId: 'acme/repo' },
+      parentWorkItemId: parent.id,
+      stages: ['intake'],
+    });
     expect(intakeEntered).toHaveBeenCalledTimes(1);
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
@@ -784,6 +789,7 @@ describe('FactoryDecisionDispatcher', () => {
                 idempotencyKey: 'linked-1',
                 board: 'work',
                 source: 'github-issue',
+                sourceId: 'acme/repo',
                 sourceKey: 'github-issue:2',
                 title: 'Linked issue',
                 url: null,

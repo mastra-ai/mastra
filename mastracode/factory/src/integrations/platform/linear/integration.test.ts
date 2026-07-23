@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TASK_CONTEXT_LIMITS, TaskContextProviderRequestError } from '../../../capabilities/task-context.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests } from '../test-utils.js';
@@ -73,6 +74,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -198,6 +200,129 @@ describe('PlatformLinearIntegration', () => {
     expect(fetchImpl.mock.calls[1]?.[1]).toEqual(
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ body: 'Done' }) }),
     );
+  });
+
+  it('loads bounded task context from one explicit workspace without requesting comments', async () => {
+    const longValue = 'x'.repeat(TASK_CONTEXT_LIMITS.title + 20);
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      json({
+        ...issue,
+        title: longValue,
+        description: 'd'.repeat(TASK_CONTEXT_LIMITS.description + 20),
+        labels: Array.from({ length: TASK_CONTEXT_LIMITS.listItems + 2 }, (_, index) => ({
+          id: `label-${index}`,
+          name: longValue,
+        })),
+        assignee: { ...user, displayName: longValue },
+      }),
+    );
+    const integration = createIntegration(fetchImpl);
+
+    const detail = await integration.taskContext.getIssue!({
+      connection: { type: 'oauth', accessToken: 'platform-managed' },
+      sourceId: project1SourceId,
+      issueId: 'ENG-42',
+    });
+
+    expect(detail).toMatchObject({
+      identifier: 'ENG-42',
+      state: 'Todo',
+      url: issue.url,
+    });
+    expect(detail?.title).toHaveLength(TASK_CONTEXT_LIMITS.title);
+    expect(detail?.description).toHaveLength(TASK_CONTEXT_LIMITS.description);
+    expect(detail?.labels).toHaveLength(TASK_CONTEXT_LIMITS.listItems);
+    expect(detail?.labels[0]).toHaveLength(TASK_CONTEXT_LIMITS.listItem);
+    expect(detail?.assignees[0]).toHaveLength(TASK_CONTEXT_LIMITS.listItem);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      'https://platform.example.com/v1/server/linear/workspaces/workspace-1/issues/ENG-42',
+    );
+  });
+
+  it('does not guess a workspace when task context has no exact source id', async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.taskContext.getIssue!({
+        connection: { type: 'oauth', accessToken: 'platform-managed' },
+        issueId: 'ENG-42',
+      }),
+    ).resolves.toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('treats malformed task-context source scope as provider unavailable without making a request', async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.taskContext.getIssue!({
+        connection: { type: 'oauth', accessToken: 'platform-managed' },
+        sourceId: 'linear-project:not-valid',
+        issueId: 'ENG-42',
+      }),
+    ).rejects.toMatchObject({
+      name: 'TaskContextProviderRequestError',
+      message: 'Platform task-context source scope is unavailable.',
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('returns null after the exact task-context workspace reports not found', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ detail: 'Not found' }, 404));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.taskContext.getIssue!({
+        connection: { type: 'oauth', accessToken: 'platform-managed' },
+        sourceId: project1SourceId,
+        issueId: 'ENG-404',
+      }),
+    ).resolves.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/workspaces/workspace-1/issues/ENG-404');
+  });
+
+  it('sanitizes task-context HTTP and transport failures', async () => {
+    const errorLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ detail: 'provider token must not leak' }, 502))
+      .mockRejectedValueOnce(new Error('network token must not leak'));
+    const integration = createIntegration(fetchImpl);
+    const input = {
+      connection: { type: 'oauth' as const, accessToken: 'platform-managed' },
+      sourceId: project1SourceId,
+      issueId: 'ENG-42',
+    };
+
+    await expect(integration.taskContext.getIssue!(input)).rejects.toMatchObject({
+      name: 'TaskContextProviderRequestError',
+      message: 'Platform task-context request failed.',
+    });
+    await expect(integration.taskContext.getIssue!(input)).rejects.toMatchObject({
+      name: 'TaskContextProviderRequestError',
+      message: 'Platform task-context request failed.',
+    });
+    const logged = JSON.stringify(errorLog.mock.calls);
+    expect(logged).not.toContain('provider token must not leak');
+    expect(logged).not.toContain('network token must not leak');
+    expect(logged).not.toContain(config.accessToken);
+  });
+
+  it('does not classify malformed successful task-context payloads as provider failures', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ ...issue, labels: null }));
+    const integration = createIntegration(fetchImpl);
+
+    const error = await integration.taskContext.getIssue!({
+      connection: { type: 'oauth', accessToken: 'platform-managed' },
+      sourceId: project1SourceId,
+      issueId: 'ENG-42',
+    }).catch(caught => caught);
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error).not.toBeInstanceOf(TaskContextProviderRequestError);
   });
 
   it('searches connected workspaces when issue operations have no source id and returns null on 404', async () => {

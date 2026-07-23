@@ -44,10 +44,15 @@ export class FactoryLinearIssueService {
     if (!project) return { status: 'missing', ingested: 0 };
 
     const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
+    const itemsByIssueId = new Map<string, WorkItemRow>();
+    for (const item of items) {
+      if (item.externalSource?.integrationId !== 'linear') continue;
+      const issueId = item.metadata?.linearIssueId;
+      if (typeof issueId === 'string') itemsByIssueId.set(issueId, item);
+    }
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(`linear:${issue.identifier}`)));
+      statuses.push(await this.#ingestIssue(input, issue, itemsByIssueId.get(issue.id)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };

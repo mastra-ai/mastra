@@ -11,7 +11,7 @@ import { useEnsureMaterializedSandbox } from '../../../../../shared/hooks/useEns
 import { useUserSessionQuery } from '../../../../../shared/hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { ChatCommandsProvider } from './ChatCommandsProvider';
+import { ChatCommandsProvider, ChatComposerStateBoundary } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
@@ -111,22 +111,24 @@ export function ChatSessionBoundary({
   }
 
   return (
-    <ChatTranscriptProvider
-      key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.isPending ? 'loading' : 'ready'}`}
-      threadId={threadId}
-      initialMessages={messagesQuery.data}
-      hasMoreHistory={messagesQuery.hasMore}
-      isLoadingMoreHistory={messagesQuery.isLoadingMore}
-      loadMoreHistory={messagesQuery.loadMore}
-    >
-      <ChatModesProvider>
-        <ChatModelsProvider>
-          <ChatCommandsProvider>
-            <ChatThreadMessagesContext.Provider value={messages}>{children}</ChatThreadMessagesContext.Provider>
-          </ChatCommandsProvider>
-        </ChatModelsProvider>
-      </ChatModesProvider>
-    </ChatTranscriptProvider>
+    <ChatComposerStateBoundary>
+      <ChatTranscriptProvider
+        key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.isPending ? 'loading' : 'ready'}`}
+        threadId={threadId}
+        initialMessages={messagesQuery.data}
+        hasMoreHistory={messagesQuery.hasMore}
+        isLoadingMoreHistory={messagesQuery.isLoadingMore}
+        loadMoreHistory={messagesQuery.loadMore}
+      >
+        <ChatModesProvider>
+          <ChatModelsProvider>
+            <ChatCommandsProvider>
+              <ChatThreadMessagesContext.Provider value={messages}>{children}</ChatThreadMessagesContext.Provider>
+            </ChatCommandsProvider>
+          </ChatModelsProvider>
+        </ChatModesProvider>
+      </ChatTranscriptProvider>
+    </ChatComposerStateBoundary>
   );
 }
 

@@ -5,6 +5,7 @@ import { FactoryLinearIssueService } from './linear-service.js';
 
 const issue = {
   id: 'issue-1',
+  sourceId: 'project-1',
   identifier: 'ENG-42',
   title: 'Fix intake sync',
   url: 'https://linear.app/acme/issue/ENG-42',
@@ -48,10 +49,32 @@ describe('FactoryLinearIssueService', () => {
       decision: {
         type: 'upsertLinkedWorkItem',
         source: 'linear-issue',
-        sourceKey: 'linear:ENG-42',
+        sourceId: 'project-1',
+        sourceKey: 'linear:project-1:issue-1',
         stage: 'triage',
       },
     });
+  });
+
+  it('keeps duplicate human identifiers distinct across Linear sources', async () => {
+    const { project, service, workItems } = await setup();
+
+    await expect(
+      service.ingest({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        userId: 'user-1',
+        issues: [issue, { ...issue, id: 'issue-2', sourceId: 'project-2', title: 'Fix another intake sync' }],
+      }),
+    ).resolves.toEqual({ status: 'committed', ingested: 2 });
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(record => record.decision)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourceId: 'project-1', sourceKey: 'linear:project-1:issue-1' }),
+        expect.objectContaining({ sourceId: 'project-2', sourceKey: 'linear:project-2:issue-2' }),
+      ]),
+    );
   });
 
   it('fails closed when the active Factory project belongs to another organization', async () => {

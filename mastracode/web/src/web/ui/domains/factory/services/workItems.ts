@@ -6,6 +6,8 @@
  * org-wide, so every member of the org reads and moves the same cards.
  */
 
+import type { FactoryThreadTaskContext } from '../../../../../shared/api/types';
+
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
 
 export interface WorkItemSessionRef {
@@ -158,6 +160,23 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(message);
   }
   return (await res.json()) as T;
+}
+
+/** Load task context for one exact Factory session binding. */
+export async function fetchFactoryThreadTaskContext(
+  baseUrl: string,
+  factoryProjectId: string,
+  threadId: string,
+  resourceId: string,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<FactoryThreadTaskContext | null> {
+  const query = new URLSearchParams({ resourceId, sessionId });
+  const data = await requestJson<{ context: FactoryThreadTaskContext | null }>(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/threads/${encodeURIComponent(threadId)}/context?${query}`,
+    { signal },
+  );
+  return data.context;
 }
 
 /** List the org's work items for a Factory project. */

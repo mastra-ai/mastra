@@ -5,6 +5,8 @@ import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type { CreateIntakeCommentInput, Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
+import { boundedTaskContextDetail, TaskContextProviderRequestError } from '../../../capabilities/task-context.js';
+import type { TaskContext } from '../../../capabilities/task-context.js';
 import type {
   CreatePullRequestCommentInput,
   CreatePullRequestInput,
@@ -151,6 +153,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #pollingIntervalMs: number | undefined;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
+
+  readonly taskContext: TaskContext = {
+    getIssue: input => this.#getTaskIssueContext(input.connection, input.sourceId, input.issueId),
+    getPullRequest: input => this.#getTaskPullRequestContext(input),
+  };
 
   readonly intake: Intake = {
     listSources: async ({ orgId, userId }) => {
@@ -675,6 +682,59 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     } as unknown as ReturnType<GithubIntegration['getInstallationOctokit']>;
   }
 
+  async #getTaskIssueContext(connection: IntegrationConnection, sourceId: string | undefined, issueId: string) {
+    requireGithubConnection(connection);
+    const repository = requireSource(sourceId, 'GitHub task context requires a repository source.');
+    const issueNumber = requirePositiveId(issueId, 'issue');
+    let issue: GithubIssue;
+    try {
+      issue = await this.#client.request<GithubIssue>(
+        'GET',
+        repositoryPath(repository, `issues/${issueNumber}`),
+        undefined,
+        { logErrorDetail: false },
+      );
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw new TaskContextProviderRequestError('Platform task-context request failed.');
+    }
+    return boundedTaskContextDetail({
+      identifier: `#${issue.number}`,
+      title: issue.title,
+      description: issue.body?.trim() ? issue.body : null,
+      state: issue.state,
+      labels: issue.labels,
+      assignees: issue.assignees,
+      url: issue.htmlUrl,
+    });
+  }
+
+  async #getTaskPullRequestContext(input: PullRequestRef) {
+    requireGithubConnection(input.connection);
+    const pullRequestNumber = requirePositiveId(input.pullRequestId, 'pull request');
+    let pullRequest: GithubPullRequest;
+    try {
+      pullRequest = await this.#client.request<GithubPullRequest>(
+        'GET',
+        repositoryPath(input.sourceId, `pulls/${pullRequestNumber}`),
+        undefined,
+        { logErrorDetail: false },
+      );
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw new TaskContextProviderRequestError('Platform task-context request failed.');
+    }
+    return boundedTaskContextDetail({
+      identifier: `#${pullRequest.number}`,
+      title: pullRequest.title,
+      description: pullRequest.body?.trim() ? pullRequest.body : null,
+      state: pullRequest.merged ? 'merged' : pullRequest.state,
+      labels: [],
+      assignees: [],
+      url: pullRequest.htmlUrl,
+    });
+  }
+
   async #listIssues(connection: IntegrationConnection, sourceId: string, page: number, labels?: string[]) {
     requireGithubConnection(connection);
     const path = repositoryPath(sourceId, 'issues');
@@ -1012,6 +1072,7 @@ function splitRepository(sourceId: string): { owner: string; repo: string } {
 function parseIntakeIssue(sourceId: string, issue: GithubIssue): IntakeIssue {
   return {
     id: String(issue.number),
+    sourceId,
     identifier: `#${issue.number}`,
     title: issue.title,
     url: issue.htmlUrl,

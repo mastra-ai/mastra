@@ -31,6 +31,8 @@ import type {
   IntakeIssueDetail,
   ListIntakeIssuesInput,
 } from '../../capabilities/intake.js';
+import { boundedTaskContextDetail, TaskContextProviderRequestError } from '../../capabilities/task-context.js';
+import type { TaskContext } from '../../capabilities/task-context.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -152,6 +154,14 @@ export class LinearReauthRequiredError extends Error {
   }
 }
 
+/** Thrown when Linear cannot refresh a connection because the provider is unavailable. */
+export class LinearProviderUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super('Linear authorization could not be refreshed.', { cause });
+    this.name = 'LinearProviderUnavailableError';
+  }
+}
+
 /** Cached result of {@link LinearIntegration.checkConnection}. */
 export interface LinearConnectionCheck {
   connected: boolean;
@@ -214,6 +224,18 @@ interface IssueCommentsQueryData {
   issue: { comments: IssueCommentsPage } | null;
 }
 
+interface TaskContextIssueQueryData {
+  issue: {
+    identifier: string;
+    title: string;
+    description: string | null;
+    url: string;
+    state: { name: string };
+    assignee: { name: string } | null;
+    labels: { nodes: Array<{ name: string }> };
+  } | null;
+}
+
 interface IssueIdQueryData {
   issue: { id: string } | null;
 }
@@ -222,37 +244,86 @@ interface CommentCreateMutationData {
   commentCreate: { success: boolean; comment: { id: string; url: string } | null };
 }
 
+interface LinearGraphqlError {
+  message?: string;
+  extensions?: { code?: string };
+}
+
+export class LinearProviderRequestError extends TaskContextProviderRequestError {
+  readonly status?: number;
+
+  constructor(message: string, options?: { cause?: unknown; status?: number }) {
+    super(message, { cause: options?.cause });
+    this.name = 'LinearProviderRequestError';
+    this.status = options?.status;
+  }
+}
+
+export class LinearGraphqlOperationError extends Error {
+  readonly errors: LinearGraphqlError[];
+
+  constructor(errors: LinearGraphqlError[]) {
+    super(`Linear API error: ${errors[0]?.message ?? 'unknown error'}`);
+    this.name = 'LinearGraphqlOperationError';
+    this.errors = errors;
+  }
+}
+
+function isLinearTaskContextProviderFailure(error: LinearGraphqlOperationError): boolean {
+  return !error.errors.some(({ message = '', extensions }) => {
+    const code = extensions?.code;
+    return (
+      code === 'GRAPHQL_PARSE_FAILED' ||
+      code === 'GRAPHQL_VALIDATION_FAILED' ||
+      code === 'BAD_USER_INPUT' ||
+      /cannot query field|unknown (?:argument|type)|syntax error|variable .+ (?:was not provided|got invalid value)|validation/i.test(
+        message,
+      )
+    );
+  });
+}
+
 /** POST a GraphQL query to Linear with the given OAuth access token. */
 async function linearGraphql<T>(accessToken: string, query: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = await fetch(LINEAR_GRAPHQL_URL, {
-    method: 'POST',
-    signal: AbortSignal.timeout(15_000),
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) {
-    // Linear returns GraphQL errors (validation, missing scopes, …) with a
-    // 400 status — surface the actual message instead of just the code.
-    let detail: string | null = null;
-    try {
-      const errBody = (await res.json()) as { errors?: Array<{ message?: string }> };
-      detail = errBody.errors?.[0]?.message ?? null;
-    } catch {
-      // Non-JSON error body; fall back to the status code alone.
-    }
-    const err = new Error(`Linear API request failed (${res.status})${detail ? `: ${detail}` : ''}`);
-    (err as { status?: number }).status = res.status;
-    throw err;
+  let res: Response;
+  try {
+    res = await fetch(LINEAR_GRAPHQL_URL, {
+      method: 'POST',
+      signal: AbortSignal.timeout(15_000),
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+  } catch (error) {
+    throw new LinearProviderRequestError('Linear API request failed.', { cause: error });
   }
-  const body = (await res.json()) as { data?: T; errors?: Array<{ message?: string }> };
+
+  if (!res.ok) {
+    // Linear can return GraphQL operation errors with a 400 status. Preserve
+    // their structured classification so task context can distinguish query
+    // bugs from provider authorization or availability failures.
+    try {
+      const errBody = (await res.json()) as { errors?: LinearGraphqlError[] };
+      if (errBody.errors?.length) throw new LinearGraphqlOperationError(errBody.errors);
+    } catch (error) {
+      if (error instanceof LinearGraphqlOperationError) throw error;
+    }
+    throw new LinearProviderRequestError(`Linear API request failed (${res.status}).`, { status: res.status });
+  }
+
+  let body: { data?: T; errors?: LinearGraphqlError[] };
+  try {
+    body = (await res.json()) as { data?: T; errors?: LinearGraphqlError[] };
+  } catch (error) {
+    throw new LinearProviderRequestError('Linear API returned invalid JSON.', { cause: error });
+  }
   if (body.errors?.length) {
-    throw new Error(`Linear API error: ${body.errors[0]?.message ?? 'unknown error'}`);
+    throw new LinearGraphqlOperationError(body.errors);
   }
   if (!body.data) {
-    throw new Error('Linear API returned no data.');
+    throw new LinearProviderRequestError('Linear API returned no data.');
   }
   return body.data;
 }
@@ -344,7 +415,7 @@ export class LinearIntegration implements FactoryIntegration {
 
   /** Persist a rotated token set on the org's existing connection row. */
   async #updateTokens(orgId: string, tokens: LinearTokenSet): Promise<void> {
-    await this.storage.connections.update(orgId, data => ({
+    const updated = await this.storage.connections.update(orgId, data => ({
       ...data,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -352,6 +423,7 @@ export class LinearIntegration implements FactoryIntegration {
       // Refresh responses may omit scope; keep the recorded grant.
       scope: tokens.scope ?? data.scope,
     }));
+    if (!updated) throw new Error('Linear connection disappeared during token refresh.');
   }
 
   /**
@@ -406,15 +478,18 @@ export class LinearIntegration implements FactoryIntegration {
     const refreshToken = latest.refreshToken;
     const refresh = (async () => {
       try {
-        const tokens = await this.refreshAccessToken(refreshToken);
+        let tokens: LinearTokenSet;
+        try {
+          tokens = await this.refreshAccessToken(refreshToken);
+        } catch (error) {
+          const status = (error as { status?: number }).status;
+          // invalid_grant surfaces as 400/401: the refresh token was revoked or
+          // already rotated away. Terminal for this connection.
+          if (status === 400 || status === 401) throw new LinearReauthRequiredError();
+          throw new LinearProviderUnavailableError(error);
+        }
         await this.#updateTokens(connection.orgId, tokens);
         return tokens.accessToken;
-      } catch (err) {
-        const status = (err as { status?: number }).status;
-        // invalid_grant surfaces as 400/401: the refresh token was revoked or
-        // already rotated away. Terminal for this connection.
-        if (status === 400 || status === 401) throw new LinearReauthRequiredError();
-        throw err;
       } finally {
         this.#inflightRefreshes.delete(connection.orgId);
       }
@@ -535,6 +610,9 @@ export class LinearIntegration implements FactoryIntegration {
     getIssue: input => this.#getIntakeIssue(input),
     createComment: input => this.#createIntakeComment(input),
   };
+  readonly taskContext: TaskContext = {
+    getIssue: input => this.#getTaskIssueContext(input),
+  };
   /**
    * The OAuth connect/callback flow round-trips a signed `state` through
    * Linear, so a multi-replica deploy needs a deployment-stable state secret.
@@ -652,6 +730,45 @@ export class LinearIntegration implements FactoryIntegration {
       commentCount: issue.comments.length,
       comments: issue.comments,
     };
+  }
+
+  async #getTaskIssueContext(input: GetIntakeIssueInput) {
+    const accessToken = getLinearAccessToken(input.connection);
+    let data: TaskContextIssueQueryData;
+    try {
+      data = await linearGraphql<TaskContextIssueQueryData>(
+        accessToken,
+        `query TaskContextIssue($id: String!) {
+          issue(id: $id) {
+            identifier
+            title
+            description
+            url
+            state { name }
+            assignee { name }
+            labels { nodes { name } }
+          }
+        }`,
+        { id: input.issueId },
+      );
+    } catch (err) {
+      if (err instanceof Error && /entity not found/i.test(err.message)) return null;
+      if (err instanceof LinearGraphqlOperationError && isLinearTaskContextProviderFailure(err)) {
+        throw new LinearProviderRequestError('Linear API request failed.', { cause: err });
+      }
+      throw err;
+    }
+    const issue = data.issue;
+    if (!issue) return null;
+    return boundedTaskContextDetail({
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description?.trim() ? issue.description : null,
+      state: issue.state.name,
+      labels: issue.labels.nodes.map(label => label.name),
+      assignees: issue.assignee ? [issue.assignee.name] : [],
+      url: issue.url,
+    });
   }
 
   async #createIntakeComment(input: CreateIntakeCommentInput): Promise<{ id: string; url: string } | null> {
@@ -931,6 +1048,7 @@ function getLinearAccessToken(connection: IntegrationConnection): string {
 function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
   return {
     id: issue.id,
+    sourceId: issue.projectId,
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,

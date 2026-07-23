@@ -244,7 +244,7 @@ describe('issues route', () => {
     await connect();
     const res = await buildApp(org1()).request('/web/linear/issues');
     const json = await res.json();
-    expect(json.issues[0]).toMatchObject({ identifier: 'ENG-42', title: 'Fix intake sync' });
+    expect(json.issues[0]).toMatchObject({ sourceId: 'proj-1', identifier: 'ENG-42', title: 'Fix intake sync' });
     expect(json.nextCursor).toBe('cursor-2');
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
   });
@@ -262,7 +262,9 @@ describe('issues route', () => {
       orgId: 'org1',
       userId: 'u1',
       factoryProjectId,
-      issues: expect.arrayContaining([expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42' })]),
+      issues: expect.arrayContaining([
+        expect.objectContaining({ id: 'issue-1', sourceId: 'proj-1', identifier: 'ENG-42' }),
+      ]),
     });
   });
 
