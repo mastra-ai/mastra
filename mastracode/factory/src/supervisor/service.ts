@@ -15,6 +15,17 @@ export function factorySupervisorThreadId(factoryProjectId: string): string {
   return `${factoryProjectId}${FACTORY_SUPERVISOR_SESSION_SUFFIX}`;
 }
 
+/**
+ * The supervisor owns a dedicated controller resource. The bare factory id is
+ * already claimed by the factory-level session that `/ensure` provisions for
+ * settings/permissions surfaces, and the controller registry allows only one
+ * live session per (resourceId, scope) — sharing that resource made every
+ * supervisor open collide with an existing non-supervisor session.
+ */
+export function factorySupervisorResourceId(factoryProjectId: string): string {
+  return `${factoryProjectId}${FACTORY_SUPERVISOR_SESSION_SUFFIX}`;
+}
+
 export interface FactorySupervisorAddress {
   factoryProjectId: string;
   resourceId: string;
@@ -99,7 +110,8 @@ export class FactorySupervisorService {
     defaultModelId?: string,
   ): Promise<FactorySupervisorAddress> {
     const threadId = factorySupervisorThreadId(input.factoryProjectId);
-    const live = await this.#controller.getSessionByResource(input.factoryProjectId);
+    const resourceId = factorySupervisorResourceId(input.factoryProjectId);
+    const live = await this.#controller.getSessionByResource(resourceId);
     if (live) {
       const state = live.state.get();
       if (
@@ -113,7 +125,7 @@ export class FactorySupervisorService {
       await this.#configureSession(live, input.orgId, input.factoryProjectId, threadId);
       return {
         factoryProjectId: input.factoryProjectId,
-        resourceId: input.factoryProjectId,
+        resourceId,
         sessionId: threadId,
         threadId,
       };
@@ -122,7 +134,7 @@ export class FactorySupervisorService {
     const session = await this.#controller.createSession({
       id: threadId,
       ownerId: `factory:${input.orgId}`,
-      resourceId: input.factoryProjectId,
+      resourceId,
       threadId,
       tags: {
         factoryProjectId: input.factoryProjectId,
@@ -135,7 +147,7 @@ export class FactorySupervisorService {
     await this.#configureSession(session, input.orgId, input.factoryProjectId, threadId);
     return {
       factoryProjectId: input.factoryProjectId,
-      resourceId: input.factoryProjectId,
+      resourceId,
       sessionId: threadId,
       threadId,
     };
@@ -151,7 +163,7 @@ export class FactorySupervisorService {
     const metadata = thread?.metadata as Record<string, unknown> | undefined;
     if (
       !thread ||
-      thread.resourceId !== factoryProjectId ||
+      thread.resourceId !== factorySupervisorResourceId(factoryProjectId) ||
       metadata?.factoryProjectId !== factoryProjectId ||
       metadata?.factoryOrgId !== orgId ||
       metadata?.factorySupervisor !== 'true'

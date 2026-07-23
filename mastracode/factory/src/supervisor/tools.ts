@@ -11,7 +11,7 @@ import { getFactoryAuthOrgId, getFactoryAuthUserId } from '../auth.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
-import { factorySupervisorThreadId } from './service.js';
+import { factorySupervisorResourceId, factorySupervisorThreadId } from './service.js';
 import type { FactorySupervisorService } from './service.js';
 import { supervisorApprovalSummary } from './state.js';
 
@@ -57,7 +57,7 @@ function resolveSupervisorContext(requestContext: RequestContext | undefined): S
     !factoryProjectId ||
     state.factoryOrgId !== orgId ||
     (state.factorySupervisor !== true && state.factorySupervisor !== 'true') ||
-    controller.resourceId !== factoryProjectId ||
+    controller.resourceId !== factorySupervisorResourceId(factoryProjectId) ||
     controller.threadId !== factorySupervisorThreadId(factoryProjectId)
   ) {
     return null;

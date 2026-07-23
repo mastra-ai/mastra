@@ -17,12 +17,12 @@ function fixture(options: { projectExists?: boolean; liveState?: Record<string, 
     ...options.liveState,
   };
   const session = {
-    identity: { getResourceId: () => PROJECT_ID },
+    identity: { getResourceId: () => `${PROJECT_ID}-supervisor` },
     thread: {
       getId: vi.fn(() => threadId),
       getById: vi.fn(async () => ({
         id: threadId,
-        resourceId: PROJECT_ID,
+        resourceId: `${PROJECT_ID}-supervisor`,
         metadata: { factoryProjectId: PROJECT_ID, factoryOrgId: ORG_ID, factorySupervisor: 'true' },
       })),
       rename: vi.fn(async () => undefined),
@@ -36,8 +36,13 @@ function fixture(options: { projectExists?: boolean; liveState?: Record<string, 
     },
   };
   let live = options.liveState ? session : undefined;
+  // A factory-level (non-supervisor) session always occupies the bare factory
+  // id in practice — the supervisor must never resolve or collide with it.
+  const factoryLevelSession = { state: { get: vi.fn(() => ({})) } };
   const controller = {
-    getSessionByResource: vi.fn(async () => live),
+    getSessionByResource: vi.fn(async (resourceId: string) =>
+      resourceId === `${PROJECT_ID}-supervisor` ? live : resourceId === PROJECT_ID ? factoryLevelSession : undefined,
+    ),
     createSession: vi.fn(async (_input: Record<string, unknown>) => {
       live = session;
       return session;
@@ -74,7 +79,7 @@ describe('FactorySupervisorService', () => {
 
     expect(address).toEqual({
       factoryProjectId: PROJECT_ID,
-      resourceId: PROJECT_ID,
+      resourceId: `${PROJECT_ID}-supervisor`,
       sessionId: `${PROJECT_ID}-supervisor`,
       threadId: `${PROJECT_ID}-supervisor`,
     });
@@ -82,7 +87,7 @@ describe('FactorySupervisorService', () => {
       expect.objectContaining({
         id: `${PROJECT_ID}-supervisor`,
         ownerId: `factory:${ORG_ID}`,
-        resourceId: PROJECT_ID,
+        resourceId: `${PROJECT_ID}-supervisor`,
         threadId: `${PROJECT_ID}-supervisor`,
         tags: {
           factoryProjectId: PROJECT_ID,
@@ -94,6 +99,10 @@ describe('FactorySupervisorService', () => {
     );
     expect(controller.createSession.mock.calls[0]?.[0]).not.toHaveProperty('scope');
     expect(controller.createSession.mock.calls[0]?.[0]).not.toHaveProperty('workspace');
+    // Regression: the bare factory id belongs to the factory-level session
+    // provisioned by /ensure; the supervisor must address its own resource.
+    expect(controller.getSessionByResource).toHaveBeenCalledWith(`${PROJECT_ID}-supervisor`);
+    expect(controller.getSessionByResource).not.toHaveBeenCalledWith(PROJECT_ID);
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: ORG_ID, userId: 'user-1' });
     expect(session.thread.rename).toHaveBeenCalledWith({ title: 'Factory Supervisor' });
     expect(getState()).toMatchObject({

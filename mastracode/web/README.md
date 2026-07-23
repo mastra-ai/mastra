@@ -93,7 +93,7 @@ When a Factory pull request branch matches a related work session branch, the Re
 
 ## Factory supervisor
 
-The **Supervisor** page at `/factories/:factoryId/supervisor` gives each server-backed Factory one shared conversation. Its AgentController thread ID is always `${factoryProjectId}-supervisor`, so every authenticated member of the Factory sees the same history rather than receiving a personal, repository-specific, or browser-specific thread. The page shows a bounded Factory state summary and pending transition approvals beside the existing chat transcript and composer.
+The **Supervisor** page at `/factories/:factoryId/supervisor` gives each server-backed Factory one shared conversation. Its AgentController resource and thread IDs are both `${factoryProjectId}-supervisor` — a dedicated resource, because the bare factory ID is claimed by the factory-level session used for settings and permissions — so every authenticated member of the Factory sees the same history rather than receiving a personal, repository-specific, or browser-specific thread. The page shows a bounded Factory state summary and pending transition approvals beside the existing chat transcript and composer.
 
 Approval controls call the tenant-scoped Factory API and never move a card optimistically. Approving a request applies the captured transition automatically only when its work item revision is still current; otherwise the request becomes stale. Rejecting leaves the item unchanged. User messages use the authenticated display name for model context and transcript attribution, but authorization continues to come from the authenticated tenant and session.
 
