@@ -20,7 +20,8 @@ import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
  * the row.
  */
 export interface ChannelAccountLink {
-  orgId: string;
+  /** Undefined for personal accounts (no organization). */
+  orgId?: string;
   userId: string;
   linkedAt: Date;
 }
@@ -39,7 +40,7 @@ export const CHANNEL_ACCOUNT_LINKS_SCHEMA: CollectionSchema = {
     platform: { type: 'text' },
     external_team_id: { type: 'text' },
     external_user_id: { type: 'text' },
-    org_id: { type: 'text' },
+    org_id: { type: 'text', nullable: true },
     user_id: { type: 'text' },
     linked_at: { type: 'timestamp' },
   },
@@ -56,14 +57,14 @@ interface ChannelAccountLinkDbRow extends Record<string, unknown> {
   platform: string;
   external_team_id: string;
   external_user_id: string;
-  org_id: string;
+  org_id: string | null;
   user_id: string;
   linked_at: Date;
 }
 
 function toLink(row: ChannelAccountLinkDbRow): ChannelAccountLink {
   return {
-    orgId: row.org_id,
+    ...(row.org_id ? { orgId: row.org_id } : {}),
     userId: row.user_id,
     linkedAt: row.linked_at,
   };
@@ -97,7 +98,7 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
     externalUserId,
     orgId,
     userId,
-  }: ChannelAccountLinkKey & { orgId: string; userId: string }): Promise<ChannelAccountLink> {
+  }: ChannelAccountLinkKey & { orgId?: string; userId: string }): Promise<ChannelAccountLink> {
     const row = await this.#db.upsertOne<ChannelAccountLinkDbRow>(
       'channel_account_links',
       ['platform', 'external_team_id', 'external_user_id'],
@@ -105,7 +106,7 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
         platform,
         external_team_id: externalTeamId,
         external_user_id: externalUserId,
-        org_id: orgId,
+        org_id: orgId ?? null,
         user_id: userId,
         linked_at: new Date(),
       },

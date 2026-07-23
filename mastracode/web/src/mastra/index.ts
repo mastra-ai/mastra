@@ -28,9 +28,15 @@ import { PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { MastraFactory, ChannelIdentityStorage, createChannelLinkStateSigner } from '@mastra/factory';
+import {
+  MastraFactory,
+  ChannelIdentityStorage,
+  createChannelLinkStateSigner,
+  createFactoryRouteAuth,
+} from '@mastra/factory';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { createAgentControllerSlackChannels } from '../web/channels/slack/slack.js';
+import { createSlackConnectRoutes } from '../web/channels/slack/connect-route.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -194,11 +200,12 @@ const preparedArgs = await factory.prepare();
 // a link. Same secret as the factory's integration signer.
 export const channelLinkStateSigner = createChannelLinkStateSigner(stateSecret);
 
+// The channel-identity domain is registered during `factory.prepare()`, so
+// it's resolvable off the shared FactoryStorage by the time we get here.
+const accountLinks = storage.getDomain<ChannelIdentityStorage>('channel-identity');
+
 const mcAgentController = preparedArgs.agentControllers?.['code'];
 if (mcAgentController) {
-  // The channel-identity domain is registered during `factory.prepare()`, so
-  // it's resolvable off the shared FactoryStorage by the time we get here.
-  const accountLinks = storage.getDomain<ChannelIdentityStorage>('channel-identity');
   mcAgentController.setChannels(
     createAgentControllerSlackChannels({
       getMastra: () => mcAgentController.getMastra(),
@@ -207,6 +214,18 @@ if (mcAgentController) {
     }),
   );
 }
+
+// The authed `/connect/slack` route (per-user link write). Appended to the
+// factory-assembled apiRoutes so it rides the same server + auth gate.
+const slackConnectRoutes = createSlackConnectRoutes({
+  auth: createFactoryRouteAuth(auth ?? undefined),
+  accountLinks,
+  channelLinkStateSigner,
+});
+preparedArgs.server = {
+  ...preparedArgs.server,
+  apiRoutes: [...(preparedArgs.server?.apiRoutes ?? []), ...slackConnectRoutes],
+};
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args

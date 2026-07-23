@@ -35,6 +35,16 @@ describe('ChannelIdentityStorage', () => {
     expect(await seed.channelIdentity.getAccountLink({ ...slackKey, externalUserId: 'U-other' })).toBeNull();
   });
 
+  it('links a personal account with no org id', async () => {
+    const seed = await createFactoryStorageForTests();
+
+    const saved = await seed.channelIdentity.saveAccountLink({ ...slackKey, userId: 'solo-user' });
+
+    expect(saved.userId).toBe('solo-user');
+    expect(saved.orgId).toBeUndefined();
+    expect(await seed.channelIdentity.getAccountLink(slackKey)).toEqual(saved);
+  });
+
   it('re-links last-write-wins on the same sender key', async () => {
     const seed = await createFactoryStorageForTests();
 
