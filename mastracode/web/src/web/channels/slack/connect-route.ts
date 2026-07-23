@@ -44,10 +44,10 @@ const OIDC_CALLBACK_PATH = '/connect/slack/oidc/callback';
  * checked by the caller.
  */
 function decodeJwtPayload(jwt: string): Record<string, unknown> | null {
-  const parts = jwt.split('.');
-  if (parts.length !== 3) return null;
+  const payload = jwt.split('.')[1];
+  if (!payload) return null;
   try {
-    return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as Record<string, unknown>;
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -142,7 +142,9 @@ export function createSlackConnectRoutes(deps: {
           response_type: 'code',
           scope: 'openid',
           client_id: oidc!.clientId,
-          state: tenantStateSigner!.sign(tenant.orgId, tenant.userId),
+          // Personal accounts have no org; the signer requires a string, so an
+          // empty org round-trips and is mapped back to undefined on save.
+          state: tenantStateSigner!.sign(tenant.orgId ?? '', tenant.userId),
           redirect_uri: `${oidc!.redirectBaseUrl.replace(/\/$/, '')}${OIDC_CALLBACK_PATH}`,
         });
         return c.redirect(`${SLACK_AUTHORIZE_URL}?${params.toString()}`);
@@ -194,7 +196,7 @@ export function createSlackConnectRoutes(deps: {
           platform: 'slack',
           externalTeamId: teamId,
           externalUserId: slackUserId,
-          orgId: tenant.orgId,
+          orgId: tenant.orgId || undefined,
           userId: tenant.userId,
         });
 

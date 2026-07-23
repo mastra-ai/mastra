@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Slack } from 'lucide-react';
 
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useApiConfig } from '../../../../../shared/api/config';
@@ -86,6 +87,7 @@ export function ConnectedAccountsSection() {
         </Txt>
         {canConnect && (
           <Button variant="outline" size="sm" onClick={connectSlack}>
+            <Slack className="size-3" aria-hidden="true" />
             Connect Slack
           </Button>
         )}
@@ -120,6 +122,7 @@ export function ConnectedAccountsSection() {
       </DataList>
       {canConnect && (
         <Button variant="outline" size="sm" onClick={connectSlack}>
+          <Slack className="size-3" aria-hidden="true" />
           Connect another Slack account
         </Button>
       )}
