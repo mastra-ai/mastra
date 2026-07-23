@@ -64,9 +64,7 @@ function reactiveSignalEntry(id: string, tagName: string, text: string): Timelin
 }
 
 function renderEntries(entries: TimelineEntry[]) {
-  return renderWithProviders(
-    <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />,
-  );
+  return renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
 }
 
 const FACTORY_TEXT =

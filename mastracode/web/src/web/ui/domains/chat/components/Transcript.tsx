@@ -968,11 +968,7 @@ function MessageBubble({
     if (signalRow.kind === 'state') {
       if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
       return (
-        <SignalRow
-          kind="state"
-          label={`State ${signalRow.mode}: ${signalRow.stateId}`}
-          message={signalRow.text}
-        />
+        <SignalRow kind="state" label={`State ${signalRow.mode}: ${signalRow.stateId}`} message={signalRow.text} />
       );
     }
     if (signalRow.kind === 'reminder') {
