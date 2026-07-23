@@ -173,6 +173,12 @@
     "@mastra/vercel": "1.3.0"
   },
   "changesets": [
-    "green-birds-knock"
+    "automated-provider-registry-20260723-070221",
+    "green-birds-knock",
+    "pr-auto-link-head-branch",
+    "sharp-chairs-write",
+    "sixty-beans-jog",
+    "solid-nights-mix",
+    "wacky-cougars-invent"
   ]
 }
