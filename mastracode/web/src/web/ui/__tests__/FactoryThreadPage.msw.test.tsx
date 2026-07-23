@@ -236,7 +236,9 @@ describe('Factory thread task context', () => {
       {
         factoryProjectId: FACTORY_ID,
         threadId: 'thread-one',
-        resourceId: RESOURCE_ID,
+        // Per-session addressing: the chat surface addresses the session's own
+        // id as the memory resourceId (see ChatSessionConfigProvider).
+        resourceId: 'session-one',
         sessionId: 'session-one',
       },
     ]);
@@ -270,13 +272,13 @@ describe('Factory thread task context', () => {
         {
           factoryProjectId: FACTORY_ID,
           threadId: 'thread-one',
-          resourceId: RESOURCE_ID,
+          resourceId: 'session-one',
           sessionId: 'session-one',
         },
         {
           factoryProjectId: FACTORY_ID,
           threadId: 'thread-two',
-          resourceId: RESOURCE_ID,
+          resourceId: 'session-two',
           sessionId: 'session-two',
         },
       ]),
