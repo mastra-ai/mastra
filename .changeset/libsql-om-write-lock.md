@@ -2,4 +2,4 @@
 '@mastra/libsql': patch
 ---
 
-Fixed lost writes and transaction contamination in observational-memory buffering by routing all memory-domain mutations through the per-client write lock. Read-modify-write operations (buffered observation appends, config updates, buffered-to-active swaps) now run inside locked write transactions, preventing concurrent autocommit statements from being swept into open interactive transactions.
+Fixed data loss and corruption in observational memory when it is written to concurrently on a local SQLite database. Buffered observations could previously be dropped or leave the memory record in an inconsistent state under load; memory updates are now serialized so concurrent writes are preserved.
