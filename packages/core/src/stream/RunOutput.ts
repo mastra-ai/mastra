@@ -35,6 +35,8 @@ export class WorkflowRunOutput<
 
   #streamError: Error | undefined;
 
+  #finalWorkflowResult: unknown;
+
   #delayedPromises = {
     usage: new DelayedPromise<LanguageModelUsage>(),
     result: new DelayedPromise<TResult>(),
@@ -135,6 +137,9 @@ export class WorkflowRunOutput<
                 output: {
                   usage: self.#usageCount,
                 },
+                ...(self.#status === 'success' && self.#finalWorkflowResult !== undefined
+                  ? { finalWorkflowResult: self.#finalWorkflowResult }
+                  : {}),
                 // Include tripwire data when status is 'tripwire'
                 ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
               },
@@ -213,6 +218,9 @@ export class WorkflowRunOutput<
    * @internal
    */
   updateResults(results: TResult) {
+    if (results.status === 'success') {
+      this.#finalWorkflowResult = results.result;
+    }
     this.#delayedPromises.result.resolve(results);
   }
 
@@ -311,6 +319,9 @@ export class WorkflowRunOutput<
                 output: {
                   usage: self.#usageCount,
                 },
+                ...(self.#status === 'success' && self.#finalWorkflowResult !== undefined
+                  ? { finalWorkflowResult: self.#finalWorkflowResult }
+                  : {}),
                 // Include tripwire data when status is 'tripwire'
                 ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
               },

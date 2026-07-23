@@ -3748,17 +3748,18 @@ export class Run<
         try {
           executionResults = await executionResultsPromise;
 
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(
+              executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>,
+            );
+          }
+
           if (closeOnSuspend) {
             // always close stream, even if the workflow is suspended
             // this will trigger a finish event with workflow status set to suspended
             self.closeStreamAction?.().catch(() => {});
           } else if (executionResults.status !== 'suspended') {
             self.closeStreamAction?.().catch(() => {});
-          }
-          if (self.streamOutput) {
-            self.streamOutput.updateResults(
-              executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>,
-            );
           }
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
@@ -3876,11 +3877,11 @@ export class Run<
         let executionResults;
         try {
           executionResults = await executionResultsPromise;
-          self.closeStreamAction?.().catch(() => {});
-
           if (self.streamOutput) {
             self.streamOutput.updateResults(executionResults);
           }
+
+          self.closeStreamAction?.().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
           self.closeStreamAction?.().catch(() => {});
@@ -4609,11 +4610,11 @@ export class Run<
         let executionResults;
         try {
           executionResults = await executionResultsPromise;
-          self.closeStreamAction?.().catch(() => {});
-
           if (self.streamOutput) {
             self.streamOutput.updateResults(executionResults);
           }
+
+          self.closeStreamAction?.().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
           self.closeStreamAction?.().catch(() => {});

@@ -34,6 +34,36 @@ function createWorkflowStepOutput(usage: Record<string, unknown>): WorkflowStrea
 }
 
 describe('WorkflowRunOutput', () => {
+  it('includes the canonical workflow result in the terminal event', async () => {
+    let controller: ReadableStreamDefaultController<WorkflowStreamEvent>;
+    const output = new WorkflowRunOutput({
+      runId: 'run-1',
+      workflowId: 'workflow-1',
+      stream: new ReadableStream<WorkflowStreamEvent>({
+        start(streamController) {
+          controller = streamController;
+        },
+      }),
+    });
+    const chunksPromise = (async () => {
+      const chunks: WorkflowStreamEvent[] = [];
+      for await (const chunk of output.fullStream) chunks.push(chunk);
+      return chunks;
+    })();
+
+    output.updateResults({ status: 'success', result: { total: 5 } } as any);
+    controller!.close();
+
+    const chunks = await chunksPromise;
+    expect(chunks.at(-1)).toMatchObject({
+      type: 'workflow-finish',
+      payload: {
+        workflowStatus: 'success',
+        finalWorkflowResult: { total: 5 },
+      },
+    });
+  });
+
   it('should sum cacheCreationInputTokens across workflow step outputs', async () => {
     const output = new WorkflowRunOutput({
       runId: 'run-1',

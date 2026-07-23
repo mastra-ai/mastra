@@ -234,6 +234,39 @@ describe('workflow draft', () => {
     });
   });
 
+  describe('when Core preflight proves the final mapped output is incompatible', () => {
+    it('rejects the definition before finalization', () => {
+      const draft = createValidDraft();
+      draft.outputSchema = {
+        type: 'object',
+        properties: { result: { type: 'number' } },
+        required: ['result'],
+      };
+      draft.graph = [
+        { type: 'tool', id: 'lookup', toolId: 'customer-lookup' },
+        { type: 'mapping', id: 'shape-output', mapConfig: '{"result":{"path":"name","step":"lookup"}}' },
+      ];
+
+      const result = validateWorkflowDraft(draft, {
+        tools: {
+          'customer-lookup': {
+            outputSchema: {
+              type: 'object',
+              properties: { name: { type: 'string' } },
+              required: ['name'],
+            },
+          },
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: 'incompatible-schema', path: 'outputSchema' })]),
+      );
+    });
+  });
+
   describe('when a workflow input cannot satisfy its first dependency', () => {
     it('rejects the definition before finalization', () => {
       const draft = createValidDraft();
