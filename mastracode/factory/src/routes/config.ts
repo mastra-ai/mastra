@@ -479,6 +479,22 @@ export interface OMConfigInfo {
   observeAttachments: 'auto' | boolean;
 }
 
+export interface ProviderOMDefaultsResponse {
+  ok: true;
+  config: OMConfigInfo;
+}
+
+function providerOMModelId(providerId: string, factoryModelId: string): string {
+  switch (providerId) {
+    case 'anthropic':
+      return 'anthropic/claude-haiku-4-5';
+    case 'openai':
+      return 'openai/gpt-5.4-mini';
+    default:
+      return factoryModelId || DEFAULT_OM_MODEL_ID;
+  }
+}
+
 export function readOMConfig(session: OMSession): OMConfigInfo {
   const state = session.state.get() ?? {};
   const observeAttachments = state.observeAttachments;
@@ -1002,6 +1018,54 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             if (!pack) return c.json({ error: `Unknown pack "${id}"` }, 404);
             await applyPackToSession({ controller, session, pack });
             return c.json({ ok: true, activePackId: pack.id });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      registerApiRoute('/web/config/om/provider-defaults', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          let body: { providerId?: unknown; factoryModelId?: unknown };
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const providerId = typeof body.providerId === 'string' ? body.providerId.trim() : '';
+          const factoryModelId = typeof body.factoryModelId === 'string' ? body.factoryModelId.trim() : '';
+          if (!providerId) return c.json({ error: 'Missing required field: providerId' }, 400);
+
+          const context = await resolveMemorySettingsContext({
+            c: loose(c),
+            auth,
+            memorySettings: options.memorySettings,
+          });
+          if ('response' in context) return context.response;
+
+          try {
+            const tenantCredentials = await listTenantCredentialsForRequest({
+              c: loose(c),
+              auth,
+              credentials: options.modelCredentials,
+            });
+            const access = await buildProviderAccess({
+              controller,
+              authStorage: tenantCredentials ? undefined : authStorage,
+              tenantCredentials,
+            });
+            if (!access[providerId]) return c.json({ error: `Provider "${providerId}" is not configured` }, 400);
+
+            const modelId = providerOMModelId(providerId, factoryModelId);
+            const record = await context.storage.patch({
+              orgId: context.orgId,
+              userId: context.userId,
+              patch: {},
+              fillIfUnset: { observerModelId: modelId, reflectorModelId: modelId },
+            });
+            return c.json({ ok: true, config: readStoredOMConfig(record) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
