@@ -3,6 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraFactory } from '../../../factory.js';
+import { FactoryGithubEventService } from '../../../rules/github-service.js';
 import { subscribeToPullRequest } from '../../github/subscriptions.js';
 
 import { PlatformGithubIntegration } from './integration.js';
@@ -80,9 +81,12 @@ afterEach(() => {
 });
 
 describe('Platform GitHub event worker factory lifecycle', () => {
-  it('prepares, starts, delivers once, and releases its timer and lease on stop', async () => {
+  it('prepares, starts, ingests and delivers once, and releases its timer and lease on stop', async () => {
     const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'platform-worker-lifecycle' });
     const pubsub = new EventEmitterPubSub();
+    const ingestFactoryEvent = vi.spyOn(FactoryGithubEventService.prototype, 'ingest').mockResolvedValue({
+      status: 'committed',
+    });
     const releaseLease = vi.spyOn(pubsub, 'releaseLease');
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = new URL(String(input));
@@ -101,7 +105,7 @@ describe('Platform GitHub event worker factory lifecycle', () => {
                 deliveryId: 'delivery-1',
                 event: 'pull_request',
                 payload: {
-                  action: 'synchronize',
+                  action: 'closed',
                   installation: { id: 7 },
                   repository: { id: 99, full_name: 'octo/hello' },
                   sender: { login: 'ada' },
@@ -152,6 +156,14 @@ describe('Platform GitHub event worker factory lifecycle', () => {
       expect(worker?.isRunning).toBe(true);
 
       await vi.waitFor(() => expect(harness.sendNotificationSignal).toHaveBeenCalledOnce());
+      expect(ingestFactoryEvent).toHaveBeenCalledOnce();
+      expect(ingestFactoryEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'pull_request',
+          deliveryId: 'delivery-1',
+          payload: expect.objectContaining({ action: 'closed' }),
+        }),
+      );
       expect(await pubsub.getLeaseOwner('platform-github-events:github')).toEqual(expect.any(String));
 
       await mastra.stopWorkers();

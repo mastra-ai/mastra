@@ -10,7 +10,7 @@ import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import { ensureFactoryRuleSession } from '../integrations/github/factory-session.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
-import { FactoryGithubEventService } from '../rules/github-service.js';
+import type { FactoryGithubEventService } from '../rules/github-service.js';
 import { FactoryLinearIssueService } from '../rules/linear-service.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -77,6 +77,7 @@ export interface FactoryApiRoutesDeps {
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
+  ingestGithubEvent?: FactoryGithubEventService['ingest'];
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -205,6 +206,7 @@ export function buildIntegrationContext(
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
+    ingestGithubEvent?: FactoryGithubEventService['ingest'];
     domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake'>;
   },
   integrationId: string,
@@ -222,7 +224,14 @@ export function buildIntegrationContext(
       projects: deps.domains.projects,
       intake: deps.domains.intake,
     },
-    ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
+    ...(deps.emitAudit || deps.ingestGithubEvent
+      ? {
+          hooks: {
+            ...(deps.emitAudit ? { emitAudit: deps.emitAudit } : {}),
+            ...(deps.ingestGithubEvent ? { ingestGithubEvent: deps.ingestGithubEvent } : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -293,17 +302,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
   const workItems = deps.factoryReady ? deps.domains.workItems : undefined;
-  const githubEventService =
-    githubIntegration && githubStorage && workItems
-      ? new FactoryGithubEventService({
-          github: githubIntegration,
-          sourceControl: githubStorage,
-          integrationStorage: deps.integrationStorage.forIntegration('github'),
-          projects: deps.domains.projects,
-          storage: workItems,
-          rules: deps.rules,
-        })
-      : undefined;
   const linearIssueService =
     linearRegistration && workItems
       ? new FactoryLinearIssueService({
@@ -316,13 +314,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(deps, integration.id, true);
-    const context = buildIntegrationContext({ ...deps, stateSigner: deps.stateSigner, emitAudit }, integration.id);
-    if (integration.id === 'github') {
-      context.hooks = {
-        ...context.hooks,
-        ...(githubEventService ? { ingestGithubEvent: event => githubEventService.ingest(event) } : {}),
-      };
-    }
+    const context = buildIntegrationContext(
+      {
+        ...deps,
+        stateSigner: deps.stateSigner,
+        emitAudit,
+        ...(integration.id === 'github' && deps.ingestGithubEvent ? { ingestGithubEvent: deps.ingestGithubEvent } : {}),
+      },
+      integration.id,
+    );
     if (integration.id === 'linear' && linearIssueService) {
       context.hooks = { ...context.hooks, ingestLinearIssues: input => linearIssueService.ingest(input) };
     }
