@@ -175,9 +175,8 @@ function SupervisorStateSummary({
         {state.pendingApprovalCount} {state.pendingApprovalCount === 1 ? 'pending approval' : 'pending approvals'}
       </Badge>
       {state.workers ? (
-        <Badge size="sm" variant={state.workers.offline > 0 ? 'warning' : 'default'}>
+        <Badge size="sm" variant="default">
           workers: {state.workers.running} running · {state.workers.idle} idle
-          {state.workers.offline > 0 ? ` · ${state.workers.offline} offline` : ''}
         </Badge>
       ) : null}
       {stages.map(([stage, count]) => (

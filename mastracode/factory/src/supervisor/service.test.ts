@@ -171,8 +171,7 @@ describe('FactorySupervisorService', () => {
       pendingApprovals: [],
       workers: {
         running: 1,
-        idle: 1,
-        offline: 1,
+        idle: 2,
         bindings: [
           {
             workItemId: 'item-1',
@@ -194,7 +193,7 @@ describe('FactorySupervisorService', () => {
             workItemId: 'item-3',
             role: 'review',
             bindingId: 'binding-3',
-            activity: 'offline',
+            activity: 'idle',
             workItemTitle: null,
             stage: null,
           },

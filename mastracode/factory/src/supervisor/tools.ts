@@ -110,7 +110,7 @@ export async function createFactorySupervisorTools(options: {
     factory_get_state: createTool({
       id: 'factory_get_state',
       description:
-        'Get bounded live counts by board and stage, per-binding worker activity (running/idle/offline), and pending transition approvals for this Factory.',
+        'Get bounded live counts by board and stage, per-binding worker activity (running/idle), and pending transition approvals for this Factory.',
       inputSchema: z.object({}).strict(),
       execute: async (_input, execution) => {
         const current = resolveSupervisorContext(execution.requestContext);

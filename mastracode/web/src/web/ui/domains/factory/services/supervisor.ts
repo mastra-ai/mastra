@@ -43,7 +43,7 @@ export interface FactorySupervisorWorker {
   stage: string | null;
   role: string;
   bindingId: string;
-  activity: 'running' | 'idle' | 'offline';
+  activity: 'running' | 'idle';
 }
 
 export interface FactorySupervisorState {
@@ -58,7 +58,6 @@ export interface FactorySupervisorState {
   workers: {
     running: number;
     idle: number;
-    offline: number;
     bindings: FactorySupervisorWorker[];
   };
   snapshotAt: string;
