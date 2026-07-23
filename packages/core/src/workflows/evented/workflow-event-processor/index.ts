@@ -643,6 +643,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         type: 'workflow-finish',
         payload: {
           runId,
+          workflowStatus: normalizedPrevResult.status,
+          ...(normalizedPrevResult.status === 'success' ? { finalWorkflowResult: normalizedPrevResult.output } : {}),
         },
       },
     });

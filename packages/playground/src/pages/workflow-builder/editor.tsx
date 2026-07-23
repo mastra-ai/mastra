@@ -21,7 +21,11 @@ import {
   WorkflowConversationPanel,
   WorkflowDefinitionGraphView,
 } from '@/domains/workflows/builder';
-import type { WorkflowDraftStepSchema, WorkflowDraftValidationContext } from '@/domains/workflows/builder';
+import type {
+  WorkflowDraftStepSchema,
+  WorkflowDraftValidationContext,
+  WorkflowGenerationFailure,
+} from '@/domains/workflows/builder';
 import {
   getWorkflowConversationThreadId,
   rememberWorkflowConversationThread,
@@ -57,6 +61,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   );
   const navigate = useNavigate();
   const access = useWorkflowBuilderAccess();
+  const [generationFailure, setGenerationFailure] = useState<WorkflowGenerationFailure | null>(null);
   const workflowQuery = useStoredWorkflow(create ? undefined : routeWorkflowId);
   const agentsQuery = useAgents();
   const toolsQuery = useTools();
@@ -102,7 +107,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
       </div>
     );
   }
-  if ((!create && workflowQuery.isLoading) || conversationQuery.isLoading) {
+  if ((!create && workflowQuery.isLoading) || conversationQuery.isPending) {
     return <div className="grid h-full place-items-center text-ui-sm text-neutral3">Loading workflow…</div>;
   }
   if (!create && workflowQuery.error) {
@@ -154,6 +159,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
       validationContext={validationContext}
       initialMessages={initialMessages}
       createTools={workflowDraft.createTools}
+      onGenerationFailure={setGenerationFailure}
     >
       <PageLayout className="h-full px-4 md:px-8">
         <PageLayout.TopArea>
@@ -256,6 +262,9 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               </Badge>
               <span className="text-ui-xs text-neutral3">{workflowDraft.draft.graph.length} top-level entries</span>
             </div>
+            {generationFailure ? (
+              <ErrorState title="Workflow generation stopped" message={generationFailure.message} />
+            ) : null}
             {workflowDraft.saveError ? (
               <ErrorState title="Workflow save failed" message={workflowDraft.saveError.message} />
             ) : null}

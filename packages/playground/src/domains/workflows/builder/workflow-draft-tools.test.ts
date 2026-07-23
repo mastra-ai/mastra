@@ -11,6 +11,7 @@ import {
 } from './workflow-draft';
 import type { WorkflowDraftAuthoringState } from './workflow-draft';
 import { createWorkflowDraftTools, parseWorkflowDefinitionInput } from './workflow-draft-tools';
+import type { WorkflowDraftToolResult } from './workflow-draft-tools';
 
 const canonicalFixtures = JSON.parse(
   readFileSync(resolve(process.cwd(), '../../test-fixtures/workflow-builder-canonical/definitions.json'), 'utf8'),
@@ -23,7 +24,11 @@ const executeTool = async (tool: unknown, input: unknown) => {
   return tool.execute(input, { toolCallId: 'test-call', messages: [] });
 };
 
-function createStore(id = 'new-workflow', isCurrentGeneration?: () => boolean) {
+function createStore(
+  id = 'new-workflow',
+  isCurrentGeneration?: () => boolean,
+  onResult?: (event: WorkflowDraftToolResult) => void,
+) {
   let state = createWorkflowDraftAuthoringState(id);
   const apply = (result: ReturnType<typeof checkpointWorkflowDraft>) => {
     state = result.state;
@@ -40,6 +45,7 @@ function createStore(id = 'new-workflow', isCurrentGeneration?: () => boolean) {
       mutate: (expectedRevision, mutation) =>
         apply(mutateWorkflowDraftAuthoringState(state, expectedRevision, mutation)),
       isCurrentGeneration,
+      onResult,
     }),
   };
 }
@@ -74,6 +80,27 @@ describe('workflow draft client tools', () => {
         'update-workflow-step',
         'remove-workflow-step',
       ]);
+    });
+  });
+
+  describe('when a draft tool returns structured repair feedback', () => {
+    it('reports the tool id and result to the generation controller', async () => {
+      const results: WorkflowDraftToolResult[] = [];
+      const { tools } = createStore('new-workflow', undefined, event => results.push(event));
+
+      await executeTool(tools['checkpoint-workflow-draft'], {
+        id: 'new-workflow',
+        inputSchema: { type: 'object', properties: {} },
+        outputSchema: { type: 'object', properties: {} },
+        graph: [
+          { type: 'tool', id: 'duplicate', toolId: 'report-data' },
+          { type: 'tool', id: 'duplicate', toolId: 'report-data' },
+        ],
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.toolId).toBe('checkpoint-workflow-draft');
+      expect(results[0]?.result.success).toBe(false);
     });
   });
 

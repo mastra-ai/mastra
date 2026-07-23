@@ -44,6 +44,10 @@ export interface StreamChatProviderProps {
   streamPath?: string;
   enableThreadSignals?: boolean;
   debounceTime?: number;
+  maxSteps?: number;
+  onSendStart?: () => void;
+  onSendComplete?: () => void;
+  onSendError?: (error: Error) => void;
   children: ReactNode;
 }
 
@@ -58,6 +62,10 @@ export const StreamChatProvider = ({
   streamPath,
   enableThreadSignals,
   debounceTime = 0,
+  maxSteps = 100,
+  onSendStart,
+  onSendComplete,
+  onSendError,
   children,
 }: StreamChatProviderProps) => {
   const threadSignalsEnabled = enableThreadSignals ?? window.MASTRA_AGENT_SIGNALS !== 'false';
@@ -91,7 +99,7 @@ export const StreamChatProvider = ({
         threadId: threadIdRef.current,
         modelSettings: {
           maxRetries: 3,
-          maxSteps: 100,
+          maxSteps,
           // Sized to fit one `set-agent-instructions` tool call carrying up to
           // ~3,000 chars of generated instructions plus the JSON envelope and
           // any hidden reasoning tokens emitted by the builder model. Below
@@ -115,9 +123,12 @@ export const StreamChatProvider = ({
         payload.modelSettings = { ...payload.modelSettings, instructions };
       }
 
-      void sendMessage(payload);
+      onSendStart?.();
+      void sendMessage(payload)
+        .then(() => onSendComplete?.())
+        .catch(error => onSendError?.(error instanceof Error ? error : new Error(String(error))));
     },
-    [sendMessage, currentUser, createClientTools],
+    [sendMessage, currentUser, createClientTools, maxSteps, onSendStart, onSendComplete, onSendError],
   );
 
   const hasDispatchedStarterRef = useRef(false);

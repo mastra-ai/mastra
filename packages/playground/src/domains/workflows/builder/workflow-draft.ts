@@ -518,7 +518,7 @@ export function validateWorkflowDraft(
     issues.push(
       ...preflight.issues.filter(
         issue =>
-          ['invalid-map-config', 'invalid-map-reference', 'invalid-map-placement'].includes(issue.code) &&
+          (issue.code !== 'incompatible-schema' || context !== undefined) &&
           !existingPaths.some(path => issue.path === path || issue.path.startsWith(`${path}.`)),
       ),
     );

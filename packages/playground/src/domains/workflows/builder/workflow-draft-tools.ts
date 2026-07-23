@@ -234,12 +234,18 @@ function parseWorkflowStep(step: unknown) {
   return workflowStepSchema.safeParse(normalizeWorkflowStep(step));
 }
 
+export interface WorkflowDraftToolResult {
+  toolId: string;
+  result: ReturnType<typeof toToolResult>;
+}
+
 export interface WorkflowDraftToolStore {
   getState: () => WorkflowDraftAuthoringState;
   checkpoint: (expectedRevision: number, draft: WorkflowDraft) => WorkflowDraftAuthoringResult;
   finalize: (expectedRevision: number) => WorkflowDraftAuthoringResult;
   mutate: (expectedRevision: number, mutation: WorkflowDraftMutation) => WorkflowDraftAuthoringResult;
   isCurrentGeneration?: () => boolean;
+  onResult?: (event: WorkflowDraftToolResult) => void;
 }
 
 const supersededResult = { success: false as const, error: 'Submission was superseded.' };
@@ -256,12 +262,18 @@ function toToolResult(result: WorkflowDraftAuthoringResult) {
   };
 }
 
+function reportResult(store: WorkflowDraftToolStore, toolId: string, result: WorkflowDraftAuthoringResult) {
+  const toolResult = toToolResult(result);
+  store.onResult?.({ toolId, result: toolResult });
+  return toolResult;
+}
+
 function createMutationExecutor(store: WorkflowDraftToolStore) {
-  return async (mutation: WorkflowDraftMutation) => {
+  return async (toolId: string, mutation: WorkflowDraftMutation) => {
     if (store.isCurrentGeneration?.() === false) return supersededResult;
     const result = store.mutate(store.getState().revision, mutation);
     if (store.isCurrentGeneration?.() === false) return supersededResult;
-    return toToolResult(result);
+    return reportResult(store, toolId, result);
   };
 }
 
@@ -280,7 +292,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
         const draft = parseWorkflowDraftInput(input);
         const result = store.checkpoint(store.getState().revision, draft);
         if (store.isCurrentGeneration?.() === false) return supersededResult;
-        return toToolResult(result);
+        return reportResult(store, 'checkpoint-workflow-draft', result);
       },
     }),
     'finalize-workflow-draft': createTool({
@@ -293,7 +305,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
         if (store.isCurrentGeneration?.() === false) return supersededResult;
         const result = store.finalize(expectedRevision);
         if (store.isCurrentGeneration?.() === false) return supersededResult;
-        return toToolResult(result);
+        return reportResult(store, 'finalize-workflow-draft', result);
       },
     }),
     'add-workflow-step': createTool({
@@ -305,7 +317,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
       execute: async ({ step, index }) => {
         const parsedStep = parseWorkflowStep(step);
         if (!parsedStep.success) return { success: false, error: z.prettifyError(parsedStep.error) };
-        return executeMutation({ type: 'add-step', step: parsedStep.data, index });
+        return executeMutation('add-workflow-step', { type: 'add-step', step: parsedStep.data, index });
       },
     }),
     'update-workflow-step': createTool({
@@ -317,7 +329,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
       execute: async ({ stepId, step }) => {
         const parsedStep = parseWorkflowStep(step);
         if (!parsedStep.success) return { success: false, error: z.prettifyError(parsedStep.error) };
-        return executeMutation({ type: 'update-step', stepId, step: parsedStep.data });
+        return executeMutation('update-workflow-step', { type: 'update-step', stepId, step: parsedStep.data });
       },
     }),
     'remove-workflow-step': createTool({
@@ -326,7 +338,8 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
         'Remove one step from a checkpointed unsaved draft. This targeted edit demotes a ready draft to constructing until it is finalized again.',
       inputSchema: z.object({ stepId: z.string().min(1) }),
       outputSchema: resultSchema,
-      execute: async ({ stepId }: { stepId: string }) => executeMutation({ type: 'remove-step', stepId }),
+      execute: async ({ stepId }: { stepId: string }) =>
+        executeMutation('remove-workflow-step', { type: 'remove-step', stepId }),
     }),
   };
 }

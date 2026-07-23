@@ -581,6 +581,10 @@ describe('Workflow (Evented Engine Specific)', () => {
       ]);
       // Result verification covered by shared suite
       expect(executionResult.status).toBe('success');
+      expect(watchData.at(-1)?.payload).toMatchObject({
+        workflowStatus: 'success',
+        finalWorkflowResult: executionResult.result,
+      });
 
       await mastra.stopWorkers();
     });

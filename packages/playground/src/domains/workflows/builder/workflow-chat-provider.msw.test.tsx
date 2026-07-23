@@ -1,6 +1,7 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
@@ -14,7 +15,8 @@ import {
   mutateWorkflowDraftAuthoringState,
 } from './workflow-draft';
 import { createWorkflowDraftTools } from './workflow-draft-tools';
-import { useStreamSend } from '@/domains/agent-builder/contexts/stream-chat-context';
+import type { WorkflowDraftToolResult } from './workflow-draft-tools';
+import { useStreamMessages, useStreamSend } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -28,6 +30,11 @@ function Composer({ message }: { message: string }) {
     send(message);
   }, [message, send]);
   return null;
+}
+
+function MessageCount() {
+  const messages = useStreamMessages();
+  return <div>{messages.length} messages</div>;
 }
 
 function Providers({ children }: { children: ReactNode }) {
@@ -48,6 +55,102 @@ describe('WorkflowChatProvider', () => {
   afterEach(() => {
     delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
     cleanup();
+  });
+
+  describe('when persisted history arrives after the provider first renders', () => {
+    it('hydrates the conversation without replacing later live messages', async () => {
+      server.use(http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })));
+      const authoringState = createWorkflowDraftAuthoringState('support-workflow');
+      const createTools = () => ({});
+      const persistedMessage = {
+        id: 'persisted-user-message',
+        role: 'user',
+        createdAt: new Date('2026-07-23T12:00:00.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text: 'Build the saved workflow' }] },
+      } satisfies MastraDBMessage;
+
+      const view = render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-project-support-workflow"
+            authoringState={authoringState}
+            initialMessages={[]}
+            createTools={createTools}
+          >
+            <MessageCount />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      expect(screen.getByText('0 messages')).not.toBeNull();
+
+      view.rerender(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-project-support-workflow"
+            authoringState={authoringState}
+            initialMessages={[persistedMessage]}
+            createTools={createTools}
+          >
+            <MessageCount />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      expect(await screen.findByText('1 messages')).not.toBeNull();
+    });
+  });
+
+  describe('when the builder exhausts its structured repair budget', () => {
+    it('stops the generation after three rejected checkpoints', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+        http.post(
+          `${BASE_URL}/api/editor/workflow-builder/stream`,
+          () =>
+            new HttpResponse(new ReadableStream({ start: () => {} }), {
+              headers: { 'content-type': 'text/event-stream' },
+            }),
+        ),
+      );
+      let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
+      let failureCode: string | undefined;
+
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-repair-budget"
+            authoringState={createWorkflowDraftAuthoringState('repair-budget')}
+            initialMessages={[]}
+            createTools={(_, onResult) => {
+              reportResult = onResult;
+              return {};
+            }}
+            onGenerationFailure={failure => {
+              failureCode = failure?.code;
+            }}
+          >
+            <Composer message="Build a workflow" />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      const rejectedCheckpoint: WorkflowDraftToolResult = {
+        toolId: 'checkpoint-workflow-draft',
+        result: { success: false, error: 'Invalid draft' },
+      };
+
+      act(() => {
+        reportResult?.(rejectedCheckpoint);
+        reportResult?.(rejectedCheckpoint);
+        reportResult?.(rejectedCheckpoint);
+      });
+
+      expect(failureCode).toBe('repair-budget-exhausted');
+    });
   });
 
   describe('when a workflow author sends a message', () => {

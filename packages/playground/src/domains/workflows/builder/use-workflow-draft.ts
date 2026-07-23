@@ -20,6 +20,7 @@ import type {
   WorkflowDraftValidationIssue,
 } from './workflow-draft';
 import { createWorkflowDraftTools } from './workflow-draft-tools';
+import type { WorkflowDraftToolResult } from './workflow-draft-tools';
 import { useUpsertStoredWorkflow } from '@/domains/workflows/hooks/use-stored-workflows';
 
 export class WorkflowDraftValidationError extends Error {
@@ -135,7 +136,7 @@ export function useWorkflowDraft(
   );
 
   const createTools = useCallback(
-    (isCurrentGeneration?: () => boolean) =>
+    (isCurrentGeneration?: () => boolean, onResult?: (event: WorkflowDraftToolResult) => void) =>
       createWorkflowDraftTools({
         getState: () => stateRef.current,
         checkpoint: (expectedRevision, draft) =>
@@ -147,6 +148,7 @@ export function useWorkflowDraft(
             mutateWorkflowDraftAuthoringState(stateRef.current, expectedRevision, mutation, validationContext),
           ),
         isCurrentGeneration,
+        onResult,
       }),
     [applyResult, validationContext],
   );
