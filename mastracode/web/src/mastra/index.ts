@@ -33,6 +33,7 @@ import {
   ChannelIdentityStorage,
   createChannelLinkStateSigner,
   createFactoryRouteAuth,
+  createStateSigner,
 } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
@@ -266,10 +267,30 @@ if (mcAgentController) {
 // route a no-op RouteAuth whose `ensureUser` never resolves anyone, sending
 // every visitor into a login loop.
 const resolvedAuth = (preparedArgs.server as { auth?: IMastraAuthProvider } | undefined)?.auth;
+
+// Web-initiated "Sign in with Slack" (OIDC) connect flow — enabled when the
+// env Slack app's OAuth client credentials are present. The redirect_uri must
+// be HTTPS (Slack requirement), so it's built from the channels public URL
+// (the tunnel locally); the post-connect redirect returns to the SPA origin.
+const slackClientId = process.env.SLACK_APP_CLIENT_ID?.trim();
+const slackClientSecret = process.env.SLACK_APP_CLIENT_SECRET?.trim();
+const oidcRedirectBase = process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL;
+const slackOidc =
+  slackClientId && slackClientSecret && oidcRedirectBase
+    ? {
+        clientId: slackClientId,
+        clientSecret: slackClientSecret,
+        redirectBaseUrl: oidcRedirectBase,
+        uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
+      }
+    : undefined;
+
 const slackConnectRoutes = createSlackConnectRoutes({
   auth: createFactoryRouteAuth(resolvedAuth),
   accountLinks,
   channelLinkStateSigner,
+  tenantStateSigner: createStateSigner(stateSecret),
+  oidc: slackOidc,
 });
 preparedArgs.server = {
   ...preparedArgs.server,

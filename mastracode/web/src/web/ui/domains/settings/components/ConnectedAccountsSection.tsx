@@ -4,10 +4,12 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useApiConfig } from '../../../../../shared/api/config';
 import {
   useChannelAccountsQuery,
   useDisconnectChannelAccountMutation,
 } from '../../../../../shared/hooks/useChannelAccounts';
+import { connectSlackUrl } from '../services/channelAccounts';
 import type { ConnectedChannelAccount } from '../services/channelAccounts';
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -26,10 +28,18 @@ function accountLabel(account: ConnectedChannelAccount): string {
  * and offers self-service disconnect.
  */
 export function ConnectedAccountsSection() {
+  const { baseUrl } = useApiConfig();
   const accountsQuery = useChannelAccountsQuery();
   const disconnectMutation = useDisconnectChannelAccountMutation();
 
-  const accounts = accountsQuery.data ?? [];
+  const accounts = accountsQuery.data?.accounts ?? [];
+  const canConnect = accountsQuery.data?.canConnect ?? false;
+
+  // Full-page navigation: the server route redirects out to Slack's consent
+  // screen and back, so this can't be an XHR.
+  const connectSlack = () => {
+    window.location.assign(connectSlackUrl(baseUrl));
+  };
 
   const disconnect = (account: ConnectedChannelAccount) => {
     disconnectMutation.mutate(
@@ -43,8 +53,7 @@ export function ConnectedAccountsSection() {
           if (deleted) toast.success(`Disconnected ${PLATFORM_LABEL[account.platform] ?? account.platform} account`);
           else toast.error('Account was already disconnected');
         },
-        onError: error =>
-          toast.error(error instanceof Error ? error.message : 'Failed to disconnect account'),
+        onError: error => toast.error(error instanceof Error ? error.message : 'Failed to disconnect account'),
       },
     );
   };
@@ -69,35 +78,51 @@ export function ConnectedAccountsSection() {
 
   if (accounts.length === 0) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-icon3">
-        No connected accounts. Message the bot in Slack and follow its Connect link to link your Slack account.
-      </Txt>
+      <div className="flex flex-col items-start gap-3">
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          {canConnect
+            ? 'No connected accounts. Connect your Slack account so messages you send the bot in Slack run with your credentials.'
+            : 'No connected accounts. Message the bot in Slack and follow its Connect link to link your Slack account.'}
+        </Txt>
+        {canConnect && (
+          <Button variant="outline" size="sm" onClick={connectSlack}>
+            Connect Slack
+          </Button>
+        )}
+      </div>
     );
   }
 
   return (
-    <DataList aria-label="Connected accounts" variant="lined" columns="minmax(0,1fr) auto auto">
-      {accounts.map(account => (
-        <DataList.RowStatic key={`${account.platform}:${account.externalTeamId}:${account.externalUserId}`}>
-          <DataList.NameCell>{accountLabel(account)}</DataList.NameCell>
-          <DataList.Cell>
-            <Txt as="span" variant="ui-xs" className="text-icon3">
-              Linked {new Date(account.linkedAt).toLocaleDateString()}
-            </Txt>
-          </DataList.Cell>
-          <DataList.Cell className="justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label={`Disconnect ${accountLabel(account)}`}
-              disabled={isDisconnecting(account)}
-              onClick={() => disconnect(account)}
-            >
-              {isDisconnecting(account) ? 'Disconnecting…' : 'Disconnect'}
-            </Button>
-          </DataList.Cell>
-        </DataList.RowStatic>
-      ))}
-    </DataList>
+    <div className="flex flex-col items-start gap-3">
+      <DataList aria-label="Connected accounts" variant="lined" columns="minmax(0,1fr) auto auto">
+        {accounts.map(account => (
+          <DataList.RowStatic key={`${account.platform}:${account.externalTeamId}:${account.externalUserId}`}>
+            <DataList.NameCell>{accountLabel(account)}</DataList.NameCell>
+            <DataList.Cell>
+              <Txt as="span" variant="ui-xs" className="text-icon3">
+                Linked {new Date(account.linkedAt).toLocaleDateString()}
+              </Txt>
+            </DataList.Cell>
+            <DataList.Cell className="justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label={`Disconnect ${accountLabel(account)}`}
+                disabled={isDisconnecting(account)}
+                onClick={() => disconnect(account)}
+              >
+                {isDisconnecting(account) ? 'Disconnecting…' : 'Disconnect'}
+              </Button>
+            </DataList.Cell>
+          </DataList.RowStatic>
+        ))}
+      </DataList>
+      {canConnect && (
+        <Button variant="outline" size="sm" onClick={connectSlack}>
+          Connect another Slack account
+        </Button>
+      )}
+    </div>
   );
 }

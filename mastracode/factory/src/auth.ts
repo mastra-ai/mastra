@@ -691,9 +691,11 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'POST' && path === '/api/agent-controllers/mastra-code/channels/slack/webhook') {
       return next();
     }
-    // The Slack account-linking deep link does its own auth (friendly
-    // login-redirect for signed-out visitors) — see connect-route.ts.
-    if (c.req.method === 'GET' && path === '/connect/slack') {
+    // The Slack account-linking deep link and the Sign-in-with-Slack OIDC
+    // start/callback do their own auth (friendly login-redirect for signed-out
+    // visitors; the OIDC callback authenticates via its signed `state`) — see
+    // connect-route.ts.
+    if (c.req.method === 'GET' && (path === '/connect/slack' || path.startsWith('/connect/slack/'))) {
       return next();
     }
     // The SPA sign-in page and the static bundle it needs must be reachable

@@ -2,13 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import {
-  disconnectChannelAccount,
-  listChannelAccounts,
-} from '../../web/ui/domains/settings/services/channelAccounts';
+import { disconnectChannelAccount, listChannelAccounts } from '../../web/ui/domains/settings/services/channelAccounts';
 import type { ConnectedChannelAccount } from '../../web/ui/domains/settings/services/channelAccounts';
 
-/** The caller's linked channel accounts (Settings › Connected accounts). */
+/**
+ * The caller's linked channel accounts (Settings › Connected accounts), plus
+ * whether the web-initiated Slack connect flow is available.
+ */
 export function useChannelAccountsQuery() {
   const { baseUrl } = useApiConfig();
   return useQuery({

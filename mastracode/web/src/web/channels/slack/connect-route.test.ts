@@ -1,5 +1,5 @@
-import { createChannelLinkStateSigner } from '@mastra/factory';
-import { describe, expect, it, vi } from 'vitest';
+import { createChannelLinkStateSigner, createStateSigner } from '@mastra/factory';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createSlackConnectRoutes } from './connect-route.js';
 
@@ -25,11 +25,13 @@ function fakeStore() {
 }
 
 // Minimal Hono-ish context: query() + json body + redirect() + json().
-function fakeCtx(state?: string, body?: unknown) {
+function fakeCtx(state?: string, body?: unknown, extraQuery?: Record<string, string>) {
   return {
     req: {
-      query: (k: string) => (k === 'state' ? state : undefined),
-      json: vi.fn().mockImplementation(() => (body === undefined ? Promise.reject(new Error('no body')) : Promise.resolve(body))),
+      query: (k: string) => (k === 'state' ? state : extraQuery?.[k]),
+      json: vi
+        .fn()
+        .mockImplementation(() => (body === undefined ? Promise.reject(new Error('no body')) : Promise.resolve(body))),
     },
     redirect: vi.fn((url: string) => ({ redirectedTo: url })),
     json: vi.fn((payload: unknown, status?: number) => ({ payload, status: status ?? 200 })),
@@ -150,6 +152,7 @@ describe('/web/channel-accounts routes', () => {
           linkedAt: '2026-07-23T17:57:43.368Z',
         },
       ],
+      canConnect: false,
     });
   });
 
@@ -162,9 +165,11 @@ describe('/web/channel-accounts routes', () => {
     });
 
     const listResult = await getHandler(routes, 'GET', '/web/channel-accounts')(fakeCtx());
-    const deleteResult = await getHandler(routes, 'DELETE', '/web/channel-accounts')(
-      fakeCtx(undefined, { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1' }),
-    );
+    const deleteResult = await getHandler(
+      routes,
+      'DELETE',
+      '/web/channel-accounts',
+    )(fakeCtx(undefined, { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1' }));
 
     expect(listResult.status).toBe(401);
     expect(deleteResult.status).toBe(401);
@@ -205,5 +210,159 @@ describe('/web/channel-accounts routes', () => {
 
     expect(result.status).toBe(400);
     expect(deleteAccountLinkForUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('/connect/slack/oidc (Sign in with Slack)', () => {
+  const linkSigner = createChannelLinkStateSigner('secret');
+  const tenantSigner = createStateSigner('secret');
+  const oidc = {
+    clientId: 'client-1',
+    clientSecret: 'shh',
+    redirectBaseUrl: 'https://tunnel.example',
+    uiOrigin: 'http://localhost:5173',
+  };
+
+  function oidcRoutes(overrides?: Partial<Parameters<typeof createSlackConnectRoutes>[0]>) {
+    const { store, saveAccountLink } = fakeStore();
+    const routes = createSlackConnectRoutes({
+      auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
+      accountLinks: store,
+      channelLinkStateSigner: linkSigner,
+      tenantStateSigner: tenantSigner,
+      oidc,
+      ...overrides,
+    });
+    return { routes, saveAccountLink };
+  }
+
+  /** Unsigned JWT with the given payload — claims validation only, no signature. */
+  function makeIdToken(claims: Record<string, unknown>): string {
+    return `x.${Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url')}.y`;
+  }
+
+  const validClaims = {
+    iss: 'https://slack.com',
+    aud: 'client-1',
+    'https://slack.com/team_id': 'T-77',
+    'https://slack.com/user_id': 'U-77',
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('start redirects to Slack authorize with a tenant-bound signed state', async () => {
+    const { routes } = oidcRoutes();
+    const c = fakeCtx();
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/start')(c);
+
+    const target = new URL(c.redirect.mock.calls[0][0]);
+    expect(target.origin + target.pathname).toBe('https://slack.com/openid/connect/authorize');
+    expect(target.searchParams.get('response_type')).toBe('code');
+    expect(target.searchParams.get('scope')).toBe('openid');
+    expect(target.searchParams.get('client_id')).toBe('client-1');
+    expect(target.searchParams.get('redirect_uri')).toBe('https://tunnel.example/connect/slack/oidc/callback');
+    // The state round-trips the initiating tenant.
+    expect(tenantSigner.verify(target.searchParams.get('state') ?? undefined)).toEqual({
+      orgId: 'org-9',
+      userId: 'user-9',
+    });
+  });
+
+  it('start sends signed-out visitors through login', async () => {
+    const { routes } = oidcRoutes({ auth: fakeAuth(undefined) });
+    const c = fakeCtx();
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/start')(c);
+
+    const target = c.redirect.mock.calls[0][0];
+    expect(target.startsWith('/auth/login?returnTo=')).toBe(true);
+    expect(decodeURIComponent(target)).toContain('/connect/slack/oidc/start');
+  });
+
+  it('start errors out when OIDC is not configured', async () => {
+    const { routes } = oidcRoutes({ oidc: undefined });
+    const c = fakeCtx();
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/start')(c);
+
+    expect(c.redirect).toHaveBeenCalledWith('/?slack=error');
+  });
+
+  it('callback exchanges the code and writes the link for the state tenant', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { routes, saveAccountLink } = oidcRoutes();
+    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(fetchMock).toHaveBeenCalledWith('https://slack.com/api/openid.connect.token', expect.anything());
+    const body = fetchMock.mock.calls[0][1].body as URLSearchParams;
+    expect(body.get('code')).toBe('code-1');
+    expect(body.get('client_id')).toBe('client-1');
+    expect(body.get('redirect_uri')).toBe('https://tunnel.example/connect/slack/oidc/callback');
+    expect(saveAccountLink).toHaveBeenCalledWith({
+      platform: 'slack',
+      externalTeamId: 'T-77',
+      externalUserId: 'U-77',
+      orgId: 'org-9',
+      userId: 'user-9',
+    });
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=connected');
+  });
+
+  it('callback rejects a forged state without calling Slack or writing', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { routes, saveAccountLink } = oidcRoutes();
+    const c = fakeCtx('tampered.state', undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(saveAccountLink).not.toHaveBeenCalled();
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+  });
+
+  it('callback rejects an id_token minted for a different client (aud mismatch)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, id_token: makeIdToken({ ...validClaims, aud: 'someone-else' }) }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { routes, saveAccountLink } = oidcRoutes();
+    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(saveAccountLink).not.toHaveBeenCalled();
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+  });
+
+  it('callback surfaces a failed token exchange as an error redirect', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: false, error: 'invalid_code' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { routes, saveAccountLink } = oidcRoutes();
+    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'bad' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(saveAccountLink).not.toHaveBeenCalled();
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+  });
+
+  it('list reports canConnect when OIDC is configured', async () => {
+    const { routes } = oidcRoutes();
+    const result = await getHandler(routes, 'GET', '/web/channel-accounts')(fakeCtx());
+    expect(result.payload).toEqual({ accounts: [], canConnect: true });
   });
 });

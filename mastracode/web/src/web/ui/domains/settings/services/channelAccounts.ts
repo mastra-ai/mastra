@@ -24,15 +24,32 @@ async function parseError(res: Response): Promise<Error> {
   return new Error(message);
 }
 
+export interface ChannelAccountsPayload {
+  accounts: ConnectedChannelAccount[];
+  /** Whether the server has the "Sign in with Slack" (OIDC) connect flow configured. */
+  canConnect: boolean;
+}
+
 /** List the caller's own linked channel accounts. */
-export async function listChannelAccounts(baseUrl: string): Promise<ConnectedChannelAccount[]> {
+export async function listChannelAccounts(baseUrl: string): Promise<ChannelAccountsPayload> {
   const res = await fetch(`${baseUrl}/web/channel-accounts`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
   if (!res.ok) throw await parseError(res);
-  const { accounts } = (await res.json()) as { accounts: ConnectedChannelAccount[] };
-  return accounts;
+  const { accounts, canConnect } = (await res.json()) as {
+    accounts: ConnectedChannelAccount[];
+    canConnect?: boolean;
+  };
+  return { accounts, canConnect: canConnect === true };
+}
+
+/**
+ * The "Sign in with Slack" entry point. A full-page navigation (not fetch):
+ * the route replies with a redirect chain out to Slack's consent screen.
+ */
+export function connectSlackUrl(baseUrl: string): string {
+  return `${baseUrl}/connect/slack/oidc/start`;
 }
 
 /** Sever one of the caller's own links, addressed by its platform sender key. */
