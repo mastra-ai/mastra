@@ -240,6 +240,50 @@ describe('MastraModelOutput', () => {
       expect(customIndex).toBeLessThan(finishIndex);
     });
 
+    it('should keep step text when the response was already empty before output processing', async () => {
+      const processor: Processor = {
+        id: 'no-op-processor',
+        name: 'No-op Processor',
+        processOutputResult: async ({ messages }) => messages,
+      };
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      messageList.add(
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: '' }] },
+          createdAt: new Date(),
+        },
+        'response',
+      );
+
+      const stream = createChunkStream([
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: 'retry response' },
+        } as ChunkType,
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId, outputProcessors: [processor] },
+      });
+
+      const result = await output.getFullOutput();
+
+      expect(await output.text).toBe('retry response');
+      expect(result.text).toBe('retry response');
+      expect(result.steps.at(-1)?.text).toBe('retry response');
+    });
+
     it('should include traceId and spanId in the final stream result when tracing context exists', async () => {
       const runId = 'test-run';
       const messageList = new MessageList({ threadId: 'test-thread' });

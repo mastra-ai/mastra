@@ -918,6 +918,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // Capture original text before processing for comparison
                   const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
                   const originalText = lastStep?.text || '';
+                  const responseMessagesBeforeProcessing = self.messageList.get.response.aiV4.core();
+                  const lastResponseMessageBeforeProcessing =
+                    responseMessagesBeforeProcessing[responseMessagesBeforeProcessing.length - 1];
+                  const responseTextBeforeProcessing = lastResponseMessageBeforeProcessing
+                    ? coreContentToString(lastResponseMessageBeforeProcessing.content)
+                    : undefined;
 
                   // Create a writer from the controller so processOutputResult can emit custom chunks.
                   // Must use both #emitChunk (for fullStream/EventEmitter consumers) and
@@ -948,17 +954,26 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // Get text from the latest response message (the last assistant message)
                   const responseMessages = self.messageList.get.response.aiV4.core();
                   const lastResponseMessage = responseMessages[responseMessages.length - 1];
-                  const outputText = lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
+                  const processedResponseText = lastResponseMessage
+                    ? coreContentToString(lastResponseMessage.content)
+                    : undefined;
+
+                  // An empty processed message is a valid result when a processor changed the text (for example,
+                  // when a guardrail removes it). Preserve the existing step fallback when the response was already
+                  // empty before processing, as can happen after a retry, or no response message remains.
+                  const shouldUseProcessedText =
+                    processedResponseText !== undefined &&
+                    (processedResponseText !== '' || processedResponseText !== responseTextBeforeProcessing);
+                  const outputText = shouldUseProcessedText ? processedResponseText : originalText;
 
                   // Only update the last step's text if output processors actually modified it
                   // This preserves text from retry scenarios where step.text is already correct
-                  if (lastStep && outputText && outputText !== originalText) {
+                  if (lastStep && outputText !== originalText) {
                     lastStep.text = outputText;
                   }
 
-                  // Use the processed text if available, otherwise keep original
                   this.resolvePromises({
-                    text: outputText || originalText,
+                    text: outputText,
                     finishReason: self.#finishReason,
                   });
 
