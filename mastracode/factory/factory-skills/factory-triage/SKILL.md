@@ -7,7 +7,7 @@ description: Triage a Factory work item's issue — trace history, understand ar
 
 Investigate the GitHub or Linear issue behind this Factory work item — trace the history of related code, understand the architecture involved, and diagnose whether the issue is valid and what's actually causing it. Finish by posting your distilled understanding as a handoff and requesting the stage transition.
 
-You are working in a bound Factory session. Complete the full investigation in one pass, then call `factory_transition_work_item` exactly once as your terminal step. Never wait for or solicit human input mid-run; every decision point is yours to resolve.
+You are working in a bound Factory session. Complete the full investigation in one pass, then make `factory_transition_work_item` your terminal step — one transition request, repeated only if the governed transition rejects it and only with the rejection reason addressed. Never wait for or solicit human input mid-run; every decision point is yours to resolve.
 
 **Decision rule:** at every fork — ambiguous reproduction, competing root-cause hypotheses, unclear issue framing — pick the answer the evidence best supports, proceed, and **record the decision as an assumption** for the terminal handoff. Reserve open questions for decisions a human genuinely must make (product intent, breaking-change tolerance, priorities); everything answerable from code, history, or common sense is an assumption, not a question.
 
@@ -59,7 +59,7 @@ First, post the **handoff** as your final message in the conversation, written f
 - **Assumptions** — every recorded decision from the run.
 - **Open questions** — only the decisions that genuinely need a human.
 
-Then call `factory_transition_work_item` exactly once. Take the current stage and `expectedRevision` from the `factory-phase` signal.
+Then make your terminal `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal.
 
 - **Issue is valid and actionable** → `stage: "planning"` (work board).
 - **Issue should be closed** (duplicate, working-as-designed, not reproducible, invalid) → `stage: "done"` with the close rationale.
@@ -74,4 +74,4 @@ The transition is governed by the server's rules. If it is rejected, read the st
 - **Decide and record.** Every fork gets the best-supported answer plus an assumption entry — never an open thread.
 - **Multiple causes are valid.** Don't force a single root cause if the evidence doesn't support it.
 - **Short, dense output.** The handoff is the deliverable; keep in-conversation narration tight.
-- **One terminal call.** Exactly one transition request per pass; retry only after a rejection, with its reason addressed.
+- **One terminal call.** A single transition request ends the pass; the only permitted repeat is after a rejection, with its stated reason addressed first.

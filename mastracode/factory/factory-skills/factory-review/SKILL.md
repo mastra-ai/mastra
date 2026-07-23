@@ -7,7 +7,7 @@ description: Review a pull request for a Factory work item — history and conte
 
 Review the pull request behind this Factory work item — build its history and context first, then judge correctness, tests, scope, and pattern-consistency — and finish by posting a verdict handoff and requesting the stage transition.
 
-You are working in a bound Factory session. Complete the full review in one pass, then call `factory_transition_work_item` exactly once as your terminal step. Never wait for or solicit human input mid-run; every judgment call is yours to resolve.
+You are working in a bound Factory session. Complete the full review in one pass, then make `factory_transition_work_item` your terminal step — one transition request, repeated only if the governed transition rejects it and only with the rejection reason addressed. Never wait for or solicit human input mid-run; every judgment call is yours to resolve.
 
 **Decision rule:** at every fork — is this pattern deviation deliberate, is this test gap acceptable, is this scope creep — pick the answer the history and codebase conventions best support, proceed, and **record the decision as an assumption** for the terminal handoff. Requested changes and decisions a human must make go in the handoff's open questions.
 
@@ -58,7 +58,7 @@ First, post the **review handoff** as your final message in the conversation. It
 - **Assumptions** — every recorded judgment call from the run.
 - **Open questions** — any decision that genuinely needs a human.
 
-Then call `factory_transition_work_item` exactly once. Take the current stage and `expectedRevision` from the `factory-phase` signal. Request `stage: "done"` (review board) **for both verdicts** — the transition marks the review pass complete; what to do about requested changes is the human's call from the handoff.
+Then make your terminal `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal. Request `stage: "done"` (review board) **for both verdicts** — the transition marks the review pass complete; what to do about requested changes is the human's call from the handoff.
 
 `rationale` (max 1000 chars) — one or two sentences: review complete, verdict, and the headline reason.
 
@@ -70,4 +70,4 @@ The transition is governed by the server's rules. If it is rejected, read the st
 - **Be skeptical, not hostile.** Flag what's suspicious with evidence; don't pad approvals with praise.
 - **Decide and record.** Every judgment fork gets the best-supported answer plus an assumption entry — never an open thread.
 - **Changes requested are discrete.** Each requested change is its own actionable handoff entry.
-- **One terminal call.** Exactly one transition request per pass; retry only after a rejection, with its reason addressed.
+- **One terminal call.** A single transition request ends the pass; the only permitted repeat is after a rejection, with its stated reason addressed first.

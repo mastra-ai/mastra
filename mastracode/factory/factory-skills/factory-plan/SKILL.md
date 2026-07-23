@@ -7,7 +7,7 @@ description: Produce a phased implementation plan for a Factory work item, then 
 
 Produce a phased, verifiable implementation plan for this Factory work item, then advance it to the `execute` stage with the plan as the handoff.
 
-You are working in a bound Factory session. Complete the full planning pass in one run, then call `factory_transition_work_item` exactly once as your terminal step. Never wait for or solicit human input mid-run; every design decision is yours to resolve.
+You are working in a bound Factory session. Complete the full planning pass in one run, then make `factory_transition_work_item` your terminal step — one transition request, repeated only if the governed transition rejects it and only with the rejection reason addressed. Never wait for or solicit human input mid-run; every design decision is yours to resolve.
 
 **Continuity:** if this conversation already contains a triage/understanding pass for this work item, build on it — verify its key claims against the current code rather than re-deriving them. If not (fresh thread), first perform the understanding pass yourself before planning: trace the issue's history, architecture, contributing areas, and root cause as `factory-triage` does. Never plan against an understanding you haven't verified.
 
@@ -58,4 +58,4 @@ The transition is governed by the server's rules. If it is rejected, read the st
 - **Decide and record.** Every design fork gets the best-supported choice plus an assumption entry — never an open thread.
 - **Follow the codebase's grain.** History and existing patterns outrank novel design.
 - **Plans are handoffs.** Write for an executor who has only the plan message — concrete files, tests, and verification commands.
-- **One terminal call.** Exactly one transition request per pass; retry only after a rejection, with its reason addressed.
+- **One terminal call.** A single transition request ends the pass; the only permitted repeat is after a rejection, with its stated reason addressed first.
