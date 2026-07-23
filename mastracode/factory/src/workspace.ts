@@ -43,7 +43,7 @@ const FACTORY_SKILLS_SOURCE_PATH =
     join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
   ].find(existsSync) ?? bundledFactorySkillsPath;
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
-const FACTORY_SKILL_NAMES = new Set(['configure-factory-rules', 'understand-issue', 'understand-pr']);
+const FACTORY_SKILL_NAMES = new Set(['configure-factory-rules', 'factory-plan', 'factory-review', 'factory-triage']);
 
 class FactorySkillSource implements SkillSource {
   readonly #factorySource = new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH });
