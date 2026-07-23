@@ -57,7 +57,7 @@ async function fixture() {
       getId: vi.fn(() => 'worker-thread'),
       switch: vi.fn(async () => undefined),
     },
-    sendSignal: vi.fn(() => ({ accepted })),
+    sendSignal: vi.fn((_signal: unknown, _options: { requestContext?: RequestContext }) => ({ accepted })),
   };
   const controller = { getSessionByResource: vi.fn(async (_resourceId: string) => workerSession) };
   const approvals = {
@@ -74,11 +74,17 @@ async function fixture() {
   const describeWorkerBindings = vi.fn(async () => [
     { workItemId: prepared.item.id, role: 'work', bindingId: prepared.binding.id, activity: 'idle' as const },
   ]);
-  const resolveWorkerSession = vi.fn(async (input: { binding: { resourceId: string } }) => {
-    const session = await controller.getSessionByResource(input.binding.resourceId);
-    if (!session) throw new Error('Bound Factory session is unavailable.');
-    return session;
-  });
+  const resolveWorkerSession = vi.fn(
+    async (input: { binding: { resourceId: string }; requestContext?: RequestContext }) => {
+      const session = await controller.getSessionByResource(input.binding.resourceId);
+      if (!session) throw new Error('Bound Factory session is unavailable.');
+      // The real controller writes the target session's identity into the
+      // context it's handed — simulate that so the regression test below can
+      // prove the supervisor's own context is never the one being written to.
+      input.requestContext?.set('controller', { resourceId: input.binding.resourceId, threadId: 'worker-thread' });
+      return session;
+    },
+  );
   const service = {
     requireProject: vi.fn(async ({ orgId }: { orgId: string }) => {
       if (orgId !== ORG_ID) throw new Error('Factory project not found.');
@@ -165,14 +171,47 @@ describe('Factory supervisor tools', () => {
         ifActive: { attributes: { delivery: 'while-active' } },
         ifIdle: { attributes: { delivery: 'message' } },
       }),
-      { requestContext: context },
+      { requestContext: expect.any(RequestContext) },
     );
+    // Worker operations must never share the supervisor's live run context —
+    // the controller writes the target session's identity into it.
+    const signalContext = built.workerSession.sendSignal.mock.calls[0]?.[1]?.requestContext as RequestContext;
+    expect(signalContext).not.toBe(context);
+    expect(signalContext.get('user')).toEqual(context.get('user'));
+    // The worker identity lands on the isolated context, not the supervisor's.
+    expect(signalContext.get('controller')).toMatchObject({ resourceId: 'worker-resource' });
+    expect((context.get('controller') as { resourceId: string }).resourceId).toBe(
+      factorySupervisorResourceId(PROJECT_ID),
+    );
+    const resolveContext = built.service.resolveWorkerSession.mock.calls[0]?.[0]?.requestContext;
+    expect(resolveContext).toBe(signalContext);
     const auditInput = built.audit.emitAgent.mock.calls[0]?.[0];
     expect(auditInput?.input).toMatchObject({
       action: 'factory.supervisor.message_sent',
       metadata: { bindingId: built.prepared.binding.id, role: 'work', runId: 'run-1' },
     });
     expect(JSON.stringify(auditInput)).not.toContain('Please summarize');
+  });
+
+  it('stays canonical after signaling: reopening a worker never clobbers the supervisor context', async () => {
+    const built = await fixture();
+    const context = supervisorContext();
+    const tools = await toolsFor(context, built);
+    const controllerEntry = context.get('controller');
+
+    await execute(tools.factory_signal_work_item as ExecutableTool, context, {
+      workItemId: built.prepared.item.id,
+      role: 'work',
+      message: 'Status check.',
+    });
+
+    // The fixture's resolveWorkerSession writes the worker identity into the
+    // context it receives (like the real controller). The supervisor's own
+    // context must be untouched, and follow-up tools must still resolve.
+    expect(context.get('controller')).toBe(controllerEntry);
+    await expect(execute(tools.factory_get_state as ExecutableTool, context, {})).resolves.toMatchObject({
+      factoryProjectId: PROJECT_ID,
+    });
   });
 
   it('resolves only pending approvals through the approval service', async () => {

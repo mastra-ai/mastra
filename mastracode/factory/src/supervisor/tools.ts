@@ -11,7 +11,7 @@ import { getFactoryAuthOrgId, getFactoryAuthUserId } from '../auth.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
-import { factorySupervisorResourceId, factorySupervisorThreadId } from './service.js';
+import { factorySupervisorResourceId, factorySupervisorThreadId, isolatedWorkerRequestContext } from './service.js';
 import type { FactorySupervisorService } from './service.js';
 import { supervisorApprovalSummary } from './state.js';
 
@@ -180,11 +180,16 @@ export async function createFactorySupervisorTools(options: {
         );
         if (!binding)
           throw new Error(role ? `No active Factory binding for role '${role}'.` : 'No active Factory binding found.');
+        // The controller writes the target session's identity into the request
+        // context it's handed — worker operations must run on an isolated
+        // context or they clobber the supervisor's own `controller` entry and
+        // de-canonicalize this session mid-run.
+        const workerContext = isolatedWorkerRequestContext(execution.requestContext);
         const session = await options.service.resolveWorkerSession({
           orgId: current.orgId,
           factoryProjectId: current.factoryProjectId,
           binding: { resourceId: binding.resourceId, threadId: binding.threadId },
-          requestContext: execution.requestContext,
+          requestContext: workerContext,
         });
         const signalId = randomUUID();
         const accepted = await session.sendSignal(
@@ -204,7 +209,7 @@ export async function createFactorySupervisorTools(options: {
             ifActive: { attributes: { delivery: 'while-active' } },
             ifIdle: { attributes: { delivery: 'message' } },
           },
-          { requestContext: execution.requestContext },
+          { requestContext: workerContext },
         ).accepted;
         await options.audit.emitAgent({
           requestContext: execution.requestContext,

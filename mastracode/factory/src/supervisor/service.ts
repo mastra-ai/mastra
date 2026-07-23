@@ -1,6 +1,6 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 
 import type { FactoryTransitionApprovalService } from '../rules/approval-service.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -24,6 +24,19 @@ export function factorySupervisorThreadId(factoryProjectId: string): string {
  */
 export function factorySupervisorResourceId(factoryProjectId: string): string {
   return `${factoryProjectId}${FACTORY_SUPERVISOR_SESSION_SUFFIX}`;
+}
+
+/**
+ * Build a fresh request context for acting on a worker session, carrying only
+ * the caller's `user` identity. The controller mutates the context it's given
+ * (it writes the target session's `controller` entry into it), so worker
+ * operations must never share the supervisor's live run context.
+ */
+export function isolatedWorkerRequestContext(source: RequestContext | undefined): RequestContext {
+  const context = new RequestContext();
+  const user = source?.get('user');
+  if (user) context.set('user', user);
+  return context;
 }
 
 export interface FactorySupervisorAddress {
@@ -218,6 +231,12 @@ export class FactorySupervisorService {
    * (repository, sandbox) into session state. A binding with no stored
    * session record simply reopens without workspace state, exactly like a
    * user opening a session with no repository.
+   *
+   * `requestContext` here must be an isolated worker context (see
+   * {@link isolatedWorkerRequestContext}) — the controller writes the target
+   * session's identity into the context it's given, so passing the
+   * supervisor's live run context would clobber the supervisor's own
+   * `controller` key and de-canonicalize its session mid-run.
    */
   async resolveWorkerSession(input: {
     orgId: string;
