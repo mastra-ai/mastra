@@ -520,8 +520,19 @@ export class ObservabilityHANA extends ObservabilityStorage {
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-      const sortField = orderBy?.field ?? 'startedAt';
-      const sortDirection = orderBy?.direction ?? 'DESC';
+      const ALLOWED_SORT_FIELDS = new Set(['startedAt', 'endedAt', 'createdAt', 'updatedAt', 'name', 'traceId']);
+      const rawSortField = orderBy?.field ?? 'startedAt';
+      if (!ALLOWED_SORT_FIELDS.has(rawSortField)) {
+        throw new MastraError({
+          id: createStorageErrorId('HANA', 'LIST_TRACES', 'INVALID_SORT_FIELD'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Invalid orderBy.field "${rawSortField}". Allowed values: ${[...ALLOWED_SORT_FIELDS].join(', ')}.`,
+          details: { field: rawSortField },
+        });
+      }
+      const sortField = rawSortField;
+      const sortDirection = orderBy?.direction === 'ASC' ? 'ASC' : 'DESC';
       // HANA default: NULLs sort first for ASC, last for DESC — invert that to match expected behavior
       const nullsClause = sortDirection === 'ASC' ? ' NULLS LAST' : ' NULLS FIRST';
 

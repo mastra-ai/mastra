@@ -28,7 +28,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@sap/hana-client": "^2.21.31"
+    "@sap/hana-client": "2.29.25"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

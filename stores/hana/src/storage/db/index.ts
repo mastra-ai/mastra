@@ -636,6 +636,16 @@ export class HANAClient extends MastraBase {
   async createIndex(options: CreateIndexOptions): Promise<void> {
     try {
       const { name, table, columns, unique = false, where } = options;
+
+      if (where) {
+        throw new MastraError({
+          id: createStorageErrorId('HANA', 'INDEX_CREATE', 'WHERE_NOT_SUPPORTED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'SAP HANA does not support partial indexes (WHERE clause). Remove the where option.',
+        });
+      }
+
       const indexNameSafe = parseSqlIdentifier(name, 'index name');
       const schemaParam = this.schemaName || null;
 
@@ -656,6 +666,7 @@ export class HANAClient extends MastraBase {
       });
 
       const uniqueStr = unique ? 'UNIQUE ' : '';
+
       const columnsStr = columns
         .map((col: string) => {
           if (col.includes(' DESC') || col.includes(' ASC')) {
@@ -668,8 +679,7 @@ export class HANAClient extends MastraBase {
         })
         .join(', ');
 
-      const whereStr = where ? ` WHERE ${where}` : '';
-      const createSql = `CREATE ${uniqueStr}INDEX "${indexNameSafe}" ON ${fullTableName} (${columnsStr})${whereStr}`;
+      const createSql = `CREATE ${uniqueStr}INDEX "${indexNameSafe}" ON ${fullTableName} (${columnsStr})`;
       await this.pool.withConnection(conn => conn.execPromise(createSql, []));
     } catch (error) {
       throw new MastraError(

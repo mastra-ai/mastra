@@ -295,6 +295,27 @@ describe('HANAStore SQL injection prevention', () => {
   });
 });
 
+describe('HANAStore index security', () => {
+  it('should reject a where clause in createIndex (HANA does not support partial indexes)', async () => {
+    const store = new HANAStore({
+      id: 'test-store',
+      host: 'myhost.hanacloud.ondemand.com',
+      port: 443,
+      uid: 'USER',
+      pwd: 'Password1',
+      disableInit: true,
+    });
+    await expect(
+      (store['stores'].memory as any)['db'].createIndex({
+        name: 'idx_test',
+        table: 'mastra_threads',
+        columns: ['id'],
+        where: 'id IS NOT NULL; DROP TABLE mastra_threads; --',
+      }),
+    ).rejects.toThrow(/WHERE clause/i);
+  });
+});
+
 if (process.env.ENABLE_TESTS === 'true') {
   // Helper to check if a HANA index exists (case-insensitive name match)
   const hanaIndexExists = async (store: HANAStore, namePattern: string): Promise<boolean> => {
