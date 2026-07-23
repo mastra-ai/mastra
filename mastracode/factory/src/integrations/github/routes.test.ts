@@ -376,7 +376,12 @@ const stateSigner = {
 };
 
 const ensureProjectSandbox = vi.fn(
-  async (opts: { row: any; storage: SourceControlStorageInMemory['sandboxes']; onProgress?: (e: any) => void }) => {
+  async (opts: {
+    row: any;
+    storage: SourceControlStorageInMemory['sandboxes'];
+    token: string;
+    onProgress?: (e: any) => void;
+  }) => {
     await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
     opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
     return { id: 'sb' };
@@ -942,6 +947,19 @@ describe('repos route', () => {
     vi.mocked(listInstallationRepos).mockImplementation(defaultImpl);
   });
 
+  it('lists a repository once when multiple installations return it', async () => {
+    install(7, 'octo');
+    install(8, 'octo-duplicate');
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.repos).toHaveLength(1);
+    expect(json.repos[0].fullName).toBe('octo/hello');
+    expect(tables.repositories).toHaveLength(1);
+  });
+
   it('prunes installations GitHub no longer knows (404) and keeps listing the rest', async () => {
     install(7, 'octo');
     install(8, 'stale');
@@ -1163,6 +1181,9 @@ describe('ensure (materialize)', () => {
       projectRepositoryId: 'p1',
     });
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
+    expect(ensureProjectSandbox).toHaveBeenCalledWith(
+      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
+    );
     expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
       orgId: 'org1',
       repositoryId: 'repository-octo/hello',
@@ -1723,6 +1744,7 @@ describe('pr route', () => {
       headBranch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
+      actingUserId: 'u1',
     });
   });
 

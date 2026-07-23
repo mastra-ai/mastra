@@ -20,6 +20,7 @@ export const queryKeys = {
   factories: () => ['factories'] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
   factoryOnboarding: () => ['factories', 'onboarding'] as const,
+  factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
@@ -35,8 +36,8 @@ export const queryKeys = {
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  factoryMetrics: (githubProjectId: string | undefined, days: number) =>
-    ['factory', 'metrics', githubProjectId ?? null, days] as const,
+  factoryMetrics: (githubProjectId: string | undefined, from: string, to: string) =>
+    ['factory', 'metrics', githubProjectId ?? null, from, to] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
     ['factory', 'health-thresholds', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
@@ -44,8 +45,12 @@ export const queryKeys = {
   factoryAudit: (githubProjectId: string | undefined, group: string) =>
     ['factory', 'audit', githubProjectId ?? null, group] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
-  workspaces: (factoryId: string | undefined) => ['workspaces', factoryId ?? null] as const,
-  userSessions: (factoryId: string | undefined) => ['user-sessions', factoryId ?? null] as const,
+  sessions: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
+  workspaces: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
+  userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
+  ensureSandbox: (projectRepositoryId: string | undefined) => ['ensure-sandbox', projectRepositoryId ?? null] as const,
+  ensureSandboxProgress: (projectRepositoryId: string | undefined) =>
+    ['ensure-sandbox-progress', projectRepositoryId ?? null] as const,
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,

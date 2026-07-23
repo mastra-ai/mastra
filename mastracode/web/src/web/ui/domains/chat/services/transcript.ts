@@ -564,7 +564,40 @@ export function createInitialTranscript({
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  return messages.map(message => toMessageEntry(message, { streaming: false }));
+  return messages.flatMap(message => [
+    toMessageEntry(message, { streaming: false }),
+    ...persistedSuspensionPrompts(message),
+  ]);
+}
+
+function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[] {
+  const suspendedTools = message.content.metadata?.suspendedTools;
+  if (!suspendedTools || typeof suspendedTools !== 'object' || Array.isArray(suspendedTools)) return [];
+
+  return Object.values(suspendedTools).flatMap(suspension => {
+    if (
+      !suspension ||
+      typeof suspension !== 'object' ||
+      Array.isArray(suspension) ||
+      !('toolCallId' in suspension) ||
+      !('toolName' in suspension) ||
+      typeof suspension.toolCallId !== 'string' ||
+      typeof suspension.toolName !== 'string'
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        kind: 'suspension' as const,
+        id: `suspension-${suspension.toolCallId}`,
+        toolCallId: suspension.toolCallId,
+        toolName: suspension.toolName,
+        args: 'args' in suspension ? suspension.args : undefined,
+        suspendPayload: 'suspendPayload' in suspension ? suspension.suspendPayload : undefined,
+      },
+    ];
+  });
 }
 
 /**

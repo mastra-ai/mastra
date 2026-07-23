@@ -1,5 +1,34 @@
 # mastracode
 
+## 0.32.0-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [[`eec6a54`](https://github.com/mastra-ai/mastra/commit/eec6a54c64cd365c9b75c14a02e32122ad5f657c), [`90ed0d0`](https://github.com/mastra-ai/mastra/commit/90ed0d0ca8fce0e1fc751fba16b30a5c00bb3fd1), [`eec6a54`](https://github.com/mastra-ai/mastra/commit/eec6a54c64cd365c9b75c14a02e32122ad5f657c)]:
+  - @mastra/code-sdk@1.0.0-alpha.16
+  - @mastra/libsql@1.17.0-alpha.4
+  - @mastra/pg@1.17.0-alpha.4
+  - @mastra/core@1.52.0-alpha.13
+
+## 0.32.0-alpha.14
+
+### Patch Changes
+
+- Added a session notification when a GitHub plugin is automatically updated to its latest version ([#19943](https://github.com/mastra-ai/mastra/pull/19943))
+
+  ```ts
+  const unsubscribe = pluginManager.onGithubPluginsUpdated(pluginNames => {
+    console.log(`Updated plugins: ${pluginNames.join(', ')}`);
+  });
+
+  // Call during shutdown.
+  unsubscribe();
+  ```
+
+- Updated dependencies [[`d7385ad`](https://github.com/mastra-ai/mastra/commit/d7385ad9e88f9e4f33d15c0ec0bfebedde0cbc2e), [`3d6e539`](https://github.com/mastra-ai/mastra/commit/3d6e539272eb2ea0407034605ee1906b3be06b39), [`35865a5`](https://github.com/mastra-ai/mastra/commit/35865a53e194aa9634d6a70a97010e7a6b9d58b1), [`70687f7`](https://github.com/mastra-ai/mastra/commit/70687f7e495a322a02070b4a67cb0c77a5ca91ec), [`9bffb73`](https://github.com/mastra-ai/mastra/commit/9bffb73e9ea46f48b53205b35a69a57f70912c78), [`3d6e539`](https://github.com/mastra-ai/mastra/commit/3d6e539272eb2ea0407034605ee1906b3be06b39)]:
+  - @mastra/core@1.52.0-alpha.12
+  - @mastra/code-sdk@1.0.0-alpha.14
+
 ## 0.32.0-alpha.13
 
 ### Patch Changes

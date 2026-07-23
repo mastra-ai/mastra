@@ -91,7 +91,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
     mutationFn: ({ item, board, stage }: TransitionWorkItemVariables) =>
       transitionWorkItem(baseUrl, factoryProjectId!, item.id, {
         board,
-        stage: stage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+        stage: stage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled',
         expectedRevision: item.revision,
         requestId: crypto.randomUUID(),
         cause: 'board_drag',

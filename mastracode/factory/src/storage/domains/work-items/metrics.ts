@@ -7,27 +7,36 @@
  * testable and lets the route stay a thin shell.
  */
 
+import { isAutomationActor } from './base.js';
 import type { WorkItemRow, WorkItemStageEntry } from './base.js';
 
-/** Windows the metrics endpoint accepts; anything else clamps to the default. */
-export const METRICS_WINDOWS = [7, 30, 90] as const;
+/** Default window span (days) when the request omits or malforms the range. */
 export const DEFAULT_METRICS_WINDOW = 30;
+/** Hard cap on the range span (days) — bounds the gap-filled throughput array. */
+export const MAX_METRICS_WINDOW = 366;
+
+const DAY_MS = 86_400_000;
 
 /** Terminal stage — items here count as completed, not in-flight. */
 const DONE_STAGE = 'done';
 
+/** Terminal stage for tracked non-completions — never a completion. */
+const CANCELED_STAGE = 'canceled';
+
 /**
- * Sentinel actor ids for server/automation-driven transitions. Today every
- * stage move is stamped with the acting user's WorkOS id, so `human === total`;
- * if server-side automation ever moves cards under one of these actors the
- * split starts diverging without a schema change.
+ * Terminal stages — items holding only these are not in-flight. `done` is a
+ * completion (feeds throughput/cycle time); `canceled` is a tracked
+ * non-completion outcome and feeds neither.
  */
-const FACTORY_ACTORS = new Set(['factory', 'system', 'automation']);
+const TERMINAL_STAGES = new Set([DONE_STAGE, CANCELED_STAGE]);
 
 const AGING_WIP_LIMIT = 10;
 
 export interface FactoryMetrics {
   windowDays: number;
+  /** Earliest work-item creation time (ISO, window-independent) — the natural
+   * lower bound for a date-range control. `null` when the board is empty. */
+  earliestItemAt: string | null;
   /** Items reaching `done` per UTC day, gap-filled across the window. */
   throughput: { date: string; count: number }[];
   /** Card creation → `done` duration for items completed in the window. */
@@ -36,7 +45,7 @@ export interface FactoryMetrics {
   stageDurations: { stage: string; medianMs: number; samples: number }[];
   /** Current cards per stage (window-independent). */
   wip: { stage: string; count: number }[];
-  /** Distinct in-flight cards (at least one non-done stage). */
+  /** Distinct in-flight cards (at least one non-terminal stage). */
   wipTotal: number;
   /** Oldest in-flight cards by time in their current stage. */
   agingWip: { id: string; title: string; stage: string; enteredAt: string; url: string | null }[];
@@ -44,12 +53,69 @@ export interface FactoryMetrics {
   sourceMix: { source: string; count: number }[];
   /** Stage moves in the window: human-performed vs total. */
   transitions: { human: number; total: number };
+  /** Per-stage automation over completed visits that exited in the window. */
+  stageAutomation: {
+    stage: string;
+    /** Completed visits (entered+exited) to this stage that exited in the window. */
+    exits: number;
+    /**
+     * Of those: clean automated passes — the item's first visit to the stage,
+     * entered *and* exited by an automation actor. Missing `exitedBy` (entries
+     * written before exit stamping) counts as human.
+     */
+    automated: number;
+    /**
+     * Outcomes of the automated passes' items, mutually exclusive, first match
+     * wins: `reworked` (a later visit to the same stage exists — deliberately
+     * outranks `done`: an automated pass that needed a redo is an automation
+     * failure even if the item eventually merged), then `done`, then
+     * `canceled`, then `inFlight`.
+     */
+    outcomes: { done: number; canceled: number; reworked: number; inFlight: number };
+  }[];
 }
 
-/** Clamp an untrusted `days` param to a supported window. */
-export function clampMetricsWindow(value: unknown): number {
-  const parsed = typeof value === 'string' ? Number(value) : value;
-  return METRICS_WINDOWS.find(w => w === parsed) ?? DEFAULT_METRICS_WINDOW;
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Datetime carrying an explicit `Z` or `±HH:MM` offset. */
+const ZONED_DATETIME_RE = /(?:[Zz]|[+-]\d{2}:?\d{2})$/;
+
+function parseRangeParam(value: unknown, boundary: 'from' | 'to'): number | undefined {
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+  const dateOnly = DATE_ONLY_RE.test(value);
+  // Timezone-less datetimes are parsed as server-local by Date.parse, so the
+  // window would shift by deployment region — reject them as invalid.
+  if (!dateOnly && !ZONED_DATETIME_RE.test(value)) return undefined;
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) return undefined;
+  return boundary === 'to' && dateOnly ? time + DAY_MS : time;
+}
+
+function utcDayStart(time: number): number {
+  return Date.parse(`${utcDay(time)}T00:00:00Z`);
+}
+
+/**
+ * Resolve untrusted `from`/`to` into a bounded half-open UTC window. A date-only
+ * `to` covers the whole day; an open/future end resolves to the end of the
+ * current UTC day (not `now`) so an event at this instant stays inside the
+ * window instead of on its excluded edge.
+ */
+export function parseMetricsRange(
+  fromParam: unknown,
+  toParam: unknown,
+  now: Date,
+): { windowStart: number; windowEnd: number } {
+  const nowMs = now.getTime();
+  const endOfToday = utcDayStart(nowMs) + DAY_MS;
+  const requestedEnd = parseRangeParam(toParam, 'to') ?? endOfToday;
+  const windowEnd = Math.min(requestedEnd, endOfToday);
+  const lastIncludedDay = utcDayStart(windowEnd - 1);
+  const defaultStart = lastIncludedDay - (DEFAULT_METRICS_WINDOW - 1) * DAY_MS;
+  const parsedFrom = parseRangeParam(fromParam, 'from');
+  let windowStart = parsedFrom !== undefined && parsedFrom < windowEnd ? parsedFrom : defaultStart;
+  const earliestStart = lastIncludedDay - (MAX_METRICS_WINDOW - 1) * DAY_MS;
+  if (windowStart < earliestStart) windowStart = earliestStart;
+  return { windowStart, windowEnd };
 }
 
 function parseTime(iso: string): number {
@@ -84,34 +150,35 @@ function completedAt(item: WorkItemRow): number | undefined {
   return undefined;
 }
 
-/** Open (no `exitedAt`) history entry for a currently-held non-done stage. */
+/** Open (no `exitedAt`) history entry for a currently-held non-terminal stage. */
 function openEntries(item: WorkItemRow): WorkItemStageEntry[] {
   return item.stageHistory.filter(
-    entry => entry.exitedAt === undefined && entry.stage !== DONE_STAGE && item.stages.includes(entry.stage),
+    entry => entry.exitedAt === undefined && !TERMINAL_STAGES.has(entry.stage) && item.stages.includes(entry.stage),
   );
 }
 
-export function computeFactoryMetrics({
-  items,
-  days,
-  now,
-}: {
-  items: WorkItemRow[];
-  days: number;
-  now: Date;
-}): FactoryMetrics {
-  const nowMs = now.getTime();
-  const windowStart = nowMs - days * 86_400_000;
+export function computeFactoryMetrics(
+  items: WorkItemRow[],
+  opts: { windowStart: number; windowEnd: number },
+): FactoryMetrics {
+  const { windowStart, windowEnd } = opts;
+
+  // Earliest creation across all items (window-independent) — the range lower bound.
+  let earliest = Infinity;
+  for (const item of items) earliest = Math.min(earliest, item.createdAt.getTime());
+  const earliestItemAt = Number.isFinite(earliest) ? new Date(earliest).toISOString() : null;
 
   // ── Throughput + cycle time (completed in window) ─────────────────────────
+  // Gap-fill every UTC calendar date intersecting the half-open window.
   const throughputByDay = new Map<string, number>();
-  for (let i = days - 1; i >= 0; i--) {
-    throughputByDay.set(utcDay(nowMs - i * 86_400_000), 0);
+  const firstDay = utcDayStart(windowStart);
+  for (let day = firstDay; day < windowEnd; day += DAY_MS) {
+    throughputByDay.set(utcDay(day), 0);
   }
   const cycleSamples: number[] = [];
   for (const item of items) {
     const doneAt = completedAt(item);
-    if (doneAt === undefined || doneAt < windowStart || doneAt > nowMs) continue;
+    if (doneAt === undefined || doneAt < windowStart || doneAt >= windowEnd) continue;
     const day = utcDay(doneAt);
     throughputByDay.set(day, (throughputByDay.get(day) ?? 0) + 1);
     cycleSamples.push(Math.max(0, doneAt - item.createdAt.getTime()));
@@ -121,9 +188,9 @@ export function computeFactoryMetrics({
   const durationsByStage = new Map<string, number[]>();
   for (const item of items) {
     for (const entry of item.stageHistory) {
-      if (entry.exitedAt === undefined || entry.stage === DONE_STAGE) continue;
+      if (entry.exitedAt === undefined || TERMINAL_STAGES.has(entry.stage)) continue;
       const exited = parseTime(entry.exitedAt);
-      if (exited < windowStart || exited > nowMs) continue;
+      if (exited < windowStart || exited >= windowEnd) continue;
       const duration = Math.max(0, exited - parseTime(entry.enteredAt));
       const samples = durationsByStage.get(entry.stage) ?? [];
       samples.push(duration);
@@ -139,7 +206,7 @@ export function computeFactoryMetrics({
     for (const stage of item.stages) {
       wipByStage.set(stage, (wipByStage.get(stage) ?? 0) + 1);
     }
-    const inFlightStages = item.stages.filter(stage => stage !== DONE_STAGE);
+    const inFlightStages = item.stages.filter(stage => !TERMINAL_STAGES.has(stage));
     if (inFlightStages.length === 0) continue;
     wipTotal += 1;
     // Age the card by its longest-held current stage; fall back to creation
@@ -165,7 +232,7 @@ export function computeFactoryMetrics({
   let transitionsTotal = 0;
   let transitionsHuman = 0;
   for (const item of items) {
-    if (item.createdAt.getTime() >= windowStart) {
+    if (item.createdAt.getTime() >= windowStart && item.createdAt.getTime() < windowEnd) {
       const source = item.externalSource
         ? `${item.externalSource.integrationId}:${item.externalSource.type}`
         : 'manual';
@@ -173,15 +240,55 @@ export function computeFactoryMetrics({
     }
     for (const entry of item.stageHistory) {
       const entered = parseTime(entry.enteredAt);
-      if (entered < windowStart || entered > nowMs) continue;
+      if (entered < windowStart || entered >= windowEnd) continue;
       transitionsTotal += 1;
-      if (!FACTORY_ACTORS.has(entry.by)) transitionsHuman += 1;
+      if (!isAutomationActor(entry.by)) transitionsHuman += 1;
+    }
+  }
+
+  // ── Per-stage automation (completed visits that exited in window) ─────────
+  // Rows appear in insertion order of each stage's first counted exit;
+  // terminal stages never get rows (they have no meaningful "pass through").
+  const automationByStage = new Map<string, FactoryMetrics['stageAutomation'][number]>();
+  for (const item of items) {
+    const itemDone = completedAt(item) !== undefined;
+    const itemCanceled = item.stages.includes(CANCELED_STAGE);
+    for (let i = 0; i < item.stageHistory.length; i++) {
+      const entry = item.stageHistory[i]!;
+      if (entry.exitedAt === undefined || TERMINAL_STAGES.has(entry.stage)) continue;
+      const exited = parseTime(entry.exitedAt);
+      if (exited < windowStart || exited >= windowEnd) continue;
+      let row = automationByStage.get(entry.stage);
+      if (!row) {
+        row = {
+          stage: entry.stage,
+          exits: 0,
+          automated: 0,
+          outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 },
+        };
+        automationByStage.set(entry.stage, row);
+      }
+      row.exits += 1;
+      // A clean automated pass: automation entered AND exited it, and this is
+      // the item's first visit to the stage (a re-run is rework, not clean
+      // automation). Missing `exitedBy` → human-exited → not automated.
+      const firstVisitIndex = item.stageHistory.findIndex(e => e.stage === entry.stage);
+      if (firstVisitIndex !== i || !isAutomationActor(entry.by) || !isAutomationActor(entry.exitedBy)) continue;
+      row.automated += 1;
+      const reworked = item.stageHistory.some((e, j) => j > i && e.stage === entry.stage);
+      if (reworked) row.outcomes.reworked += 1;
+      else if (itemDone) row.outcomes.done += 1;
+      else if (itemCanceled) row.outcomes.canceled += 1;
+      else row.outcomes.inFlight += 1;
     }
   }
 
   return {
-    windowDays: days,
-    throughput: [...throughputByDay.entries()].map(([date, count]) => ({ date, count })),
+    windowDays: throughputByDay.size,
+    earliestItemAt,
+    throughput: [...throughputByDay.entries()]
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date)),
     cycleTime: {
       medianMs: percentile(cycleSamples, 0.5),
       p90Ms: percentile(cycleSamples, 0.9),
@@ -199,5 +306,6 @@ export function computeFactoryMetrics({
       .map(([source, count]) => ({ source, count }))
       .sort((a, b) => b.count - a.count),
     transitions: { human: transitionsHuman, total: transitionsTotal },
+    stageAutomation: [...automationByStage.values()],
   };
 }

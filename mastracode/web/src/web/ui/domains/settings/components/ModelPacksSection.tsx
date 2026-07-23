@@ -133,17 +133,6 @@ export function ModelPacksSection({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <Txt as="p" variant="ui-sm" className="text-icon3">
-          A pack sets a model for each mode (build / plan / fast). Mirrors the TUI <code>/models-pack</code> command.
-        </Txt>
-        {!draft && (
-          <Button size="sm" onClick={() => setDraft({ ...EMPTY_DRAFT })} disabled={busy}>
-            <Plus size={13} /> New pack
-          </Button>
-        )}
-      </div>
-
       {!resourceId && (
         <Txt as="p" variant="ui-sm" className="text-icon3">
           Open a factory to activate a pack on its session.
@@ -257,6 +246,14 @@ export function ModelPacksSection({
             </li>
           ))}
         </ul>
+      )}
+
+      {!draft && !loading && (
+        <div>
+          <Button variant="outline" size="sm" onClick={() => setDraft({ ...EMPTY_DRAFT })} disabled={busy}>
+            <Plus size={13} /> New pack
+          </Button>
+        </div>
       )}
     </div>
   );

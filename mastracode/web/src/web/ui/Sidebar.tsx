@@ -1,43 +1,69 @@
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../shared/api/config';
 import { clearMastraCodeStorage, redirectToLogout, useFactoryAuth } from './domains/auth';
-import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
-import { useSetSettingsSection } from './domains/settings/context/SettingsNavigationProvider';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
-import {
-  isServerFactory,
-  FactorySwitcher,
-  useActiveFactoryContext,
-  UserSessionsSection,
-  WorkspacesSection,
-} from './domains/workspaces';
-import { useOverlays } from './lib/overlays';
+import { settingsSectionPath } from './domains/settings/settingsSections';
+import { FactorySwitcher, UserSessionsSection, WorkspacesSection } from './domains/workspaces';
+
+function useSettingsOpen() {
+  const { pathname } = useLocation();
+  return /^\/factories\/[^/]+\/settings(?:\/|$)/.test(pathname);
+}
 
 /**
- * Composition shell: each section owns its data through the domain contexts
- * (`useActiveFactoryContext`, focused chat hooks, `useOverlays`), so nothing is
- * wired through props here.
- *
- * Everything runs in a worktree branched from the repo's HEAD. Server-backed
- * factories show the Factory menu (Board + org-level factory Sessions) and the
- * current user's personal User Sessions; each worktree holds a single
- * conversation, so there is no nested thread list. Local factories (no
- * worktrees) keep the flat thread list.
+ * Alpha status tag rendered as a dashed-outline chip (Clerk-style), so it reads
+ * as a subtle stage marker rather than a solid pill competing with the nav items.
+ * Tinted with the Mastra brand green (#7aff78, `--color-ds-green` on the website).
+ */
+function AlphaBadge() {
+  return (
+    <span className="relative bg-[#7aff78]/10 px-[0.1875rem] font-medium text-[0.625rem]/[0.875rem] text-[#7aff78] uppercase tracking-wide">
+      Alpha
+      <span className="-top-px absolute inset-x-[-0.1875rem] block transform-gpu text-[#7aff78]/40">
+        <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
+          <line x1="0" x2="100%" y1="0.5" y2="0.5" />
+        </svg>
+      </span>
+      <span className="-bottom-px absolute inset-x-[-0.1875rem] block transform-gpu text-[#7aff78]/40">
+        <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
+          <line x1="0" x2="100%" y1="0.5" y2="0.5" />
+        </svg>
+      </span>
+      <span className="-left-px absolute inset-y-[-0.1875rem] block transform-gpu text-[#7aff78]/40">
+        <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
+          <line x1="0.5" x2="0.5" y1="0" y2="100%" />
+        </svg>
+      </span>
+      <span className="-right-px absolute inset-y-[-0.1875rem] block transform-gpu text-[#7aff78]/40">
+        <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
+          <line x1="0.5" x2="0.5" y1="0" y2="100%" />
+        </svg>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Composition shell: each section owns its data through local query hooks,
+ * focused chat hooks, or the router location, so nothing is wired through props here.
  */
 export function Sidebar() {
-  const { activeFactory } = useActiveFactoryContext();
-  const overlays = useOverlays();
-  const isServerBacked = activeFactory ? isServerFactory(activeFactory) : false;
-  const settingsOpen = overlays.isOpen('settings');
+  const settingsOpen = useSettingsOpen();
 
   return (
-    <MainSidebar className="bg-transparent h-full">
+    <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
+        <div className="mt-1 mb-2 flex items-center justify-between gap-2 px-3 pt-1">
+          <LogoWithoutText aria-label="Mastra" role="img" className="h-4 w-auto text-icon6" />
+          <AlphaBadge />
+        </div>
         {settingsOpen ? (
           <SettingsNavigation />
         ) : (
@@ -46,16 +72,10 @@ export function Sidebar() {
               <FactorySwitcher />
             </section>
             <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
-              {isServerBacked ? (
-                <>
-                  <FactorySection>
-                    <WorkspacesSection />
-                  </FactorySection>
-                  <UserSessionsSection />
-                </>
-              ) : (
-                <ThreadList />
-              )}
+              <FactorySection>
+                <WorkspacesSection />
+              </FactorySection>
+              <UserSessionsSection />
             </section>
           </div>
         )}
@@ -68,18 +88,20 @@ export function Sidebar() {
 }
 
 function SidebarFooter() {
-  const overlays = useOverlays();
-  const settingsOpen = overlays.isOpen('settings');
-  const setSettingsSection = useSetSettingsSection();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const settingsOpen = useSettingsOpen();
   const closeSettings = useCloseSettings();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const toggleSettings = () => {
     if (settingsOpen) {
       closeSettings();
       return;
     }
-    setSettingsSection('general');
-    overlays.open('settings');
+    if (factoryId) {
+      void navigate(settingsSectionPath(factoryId, 'general'), { state: { from: location } });
+    }
   };
 
   return (

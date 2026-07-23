@@ -58,6 +58,15 @@ if (!window.matchMedia) {
     }) as MediaQueryList;
 }
 
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class ResizeObserver {
+    constructor(_callback: ResizeObserverCallback) {}
+    disconnect() {}
+    observe(_target: Element) {}
+    unobserve(_target: Element) {}
+  };
+}
+
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }

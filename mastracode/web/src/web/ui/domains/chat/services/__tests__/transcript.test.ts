@@ -103,6 +103,44 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('restores suspended tool prompts from persisted assistant metadata', () => {
+    const message = dbMessage('assistant-ask', 'assistant', [
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: { question: 'Which database?' },
+        },
+      },
+    ]);
+    message.content.metadata = {
+      suspendedTools: {
+        'ask-1': {
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: { question: 'Which database?' },
+          suspendPayload: { question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
+        },
+      },
+    };
+
+    const state = createInitialTranscript({ messages: [message] });
+
+    expect(state.entries).toEqual([
+      expect.objectContaining({ kind: 'message', id: 'assistant-ask' }),
+      {
+        kind: 'suspension',
+        id: 'suspension-ask-1',
+        toolCallId: 'ask-1',
+        toolName: 'ask_user',
+        args: { question: 'Which database?' },
+        suspendPayload: { question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
+      },
+    ]);
+  });
+
   it('projects persisted and live user signals to user messages without changing canonical content', () => {
     const persisted = signalMessage({
       id: 'user-signal-1',

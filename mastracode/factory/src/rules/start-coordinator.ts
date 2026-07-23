@@ -1,6 +1,6 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -123,12 +123,16 @@ export class FactoryStartCoordinator {
     const storage = this.#storage;
     if (!this.#sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(this.#sourceControl, request);
+    const requestContext = request.requestContext ?? new RequestContext();
+    if (!request.requestContext) {
+      requestContext.set('user', { workosId: request.userId, organizationId: request.orgId });
+    }
     const session = await this.#controller.createSession({
       id: sourceSession.sessionId,
       ownerId: request.userId,
       resourceId: sourceSession.sessionId,
       threadId: sourceSession.sessionId,
-      requestContext: request.requestContext,
+      requestContext,
     });
     const threadId = await configureThread(session, request);
     const kickoffMessage = await resolveKickoffMessage(session, request.invocation);

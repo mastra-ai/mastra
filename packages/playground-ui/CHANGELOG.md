@@ -1,5 +1,103 @@
 # @mastra/playground-ui
 
+## 42.0.0-alpha.19
+
+### Minor Changes
+
+- Added a `revealScrollbarOnHover` prop to `ScrollArea`. Set it to `false` to keep the overlay scrollbar hidden until the user actively scrolls, instead of also revealing it when the pointer hovers the area. Defaults to `true`, so existing usage is unchanged. ([#20037](https://github.com/mastra-ai/mastra/pull/20037))
+
+  ```tsx
+  <ScrollArea revealScrollbarOnHover={false}>{content}</ScrollArea>
+  ```
+
+### Patch Changes
+
+- Added a disabled prop to DataList.SelectCell so rows can block checkbox toggling while an async selection save is pending. ([#20038](https://github.com/mastra-ai/mastra/pull/20038))
+
+## 42.0.0-alpha.18
+
+### Patch Changes
+
+- Improved sidebar density and prevented date range timelines from clipping edge labels. ([#19972](https://github.com/mastra-ai/mastra/pull/19972))
+
+## 42.0.0-alpha.17
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.52.0-alpha.13
+  - @mastra/client-js@1.33.0-alpha.14
+  - @mastra/react@1.3.0-alpha.14
+
+## 42.0.0-alpha.16
+
+### Patch Changes
+
+- Removed interaction hints from the date range timeline. ([#19987](https://github.com/mastra-ai/mastra/pull/19987))
+
+## 42.0.0-alpha.15
+
+### Minor Changes
+
+- Added separate Sankey node identity, display label, display value, and layout weight accessors, plus constrained labels with full hover text. Stable layout weights can now keep node positions fixed while current record weights animate bar and ribbon sizes. ([#19871](https://github.com/mastra-ai/mastra/pull/19871))
+
+  ```tsx
+  <Sankey
+    data={records}
+    columns={columns}
+    getRecordNodeId={(record, column) => String(record[`${column.id}Id`])}
+    getRecordNodeLabel={(record, column) => String(record[`${column.id}Label`])}
+    getRecordNodeValue={(record, column) => Number(record[`${column.id}Count`])}
+    getRecordWeight={record => Number(record.count)}
+    getRecordLayoutWeight={record => Number(record.windowMaxCount)}
+  >
+    <SankeyChart />
+  </Sankey>
+  ```
+
+- Added optional Sankey node activation with mouse and keyboard support, including per-node eligibility. ([#19896](https://github.com/mastra-ai/mastra/pull/19896))
+
+  ```tsx
+  <SankeyChart
+    onNodeClick={({ column, value }) => openDrilldown(column.id, value)}
+    isNodeClickable={({ value }) => drillableNodeIds.has(value)}
+  />
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`f901b73`](https://github.com/mastra-ai/mastra/commit/f901b7363b8d21849b98c167bae168fa11d3edcf)]:
+  - @mastra/client-js@1.33.0-alpha.13
+  - @mastra/react@1.3.0-alpha.13
+
+## 42.0.0-alpha.14
+
+### Minor Changes
+
+- Added compact sizing, custom interactive elements, and trailing actions to sidebar navigation items. ([#19959](https://github.com/mastra-ai/mastra/pull/19959))
+
+  ```tsx
+  <MainSidebar.NavLink
+    // Compact density for dense lists
+    size="sm"
+    // Bring your own interactive element (e.g. a router Link or button)
+    render={<Link to="/sessions/feature-work">Feature work</Link>}
+    // Trailing control rendered beside the row, independently clickable
+    action={
+      <Button size="icon-sm" variant="ghost" onClick={onDelete}>
+        <TrashIcon />
+      </Button>
+    }
+  />
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`d7385ad`](https://github.com/mastra-ai/mastra/commit/d7385ad9e88f9e4f33d15c0ec0bfebedde0cbc2e), [`3d6e539`](https://github.com/mastra-ai/mastra/commit/3d6e539272eb2ea0407034605ee1906b3be06b39), [`35865a5`](https://github.com/mastra-ai/mastra/commit/35865a53e194aa9634d6a70a97010e7a6b9d58b1), [`70687f7`](https://github.com/mastra-ai/mastra/commit/70687f7e495a322a02070b4a67cb0c77a5ca91ec), [`3d6e539`](https://github.com/mastra-ai/mastra/commit/3d6e539272eb2ea0407034605ee1906b3be06b39)]:
+  - @mastra/core@1.52.0-alpha.12
+  - @mastra/client-js@1.33.0-alpha.12
+  - @mastra/react@1.3.0-alpha.12
+
 ## 42.0.0-alpha.13
 
 ### Minor Changes
