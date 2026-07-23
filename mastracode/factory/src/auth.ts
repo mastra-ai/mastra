@@ -637,7 +637,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'POST' && path === '/web/github/webhook') {
       return next();
     }
-    if (c.req.method === 'POST' && path === '/api/agent-controllers/code/channels/slack/webhook') {
+    if (c.req.method === 'POST' && path === '/api/agent-controllers/mastra-code/channels/slack/webhook') {
       return next();
     }
     // The SPA sign-in page and the static bundle it needs must be reachable
