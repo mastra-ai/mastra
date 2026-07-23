@@ -11,6 +11,7 @@ import type {
   ChannelIdentityStorage,
   ChannelLinkStateSigner,
   FactoryProjectsStorage,
+  WorkItemsStorage,
 } from '@mastra/factory';
 import { createSlackAdapter, SlackProvider } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
@@ -55,6 +56,13 @@ interface SlackChannelDeps {
    * before).
    */
   projects?: FactoryProjectsStorage;
+  /**
+   * Factory work-items domain. When provided, every dispatched run upserts a
+   * Work-board card keyed on the Slack thread (so repeat messages reuse the
+   * same card) with the channel session bound to it. Requires factory routing
+   * to have resolved — unlinked senders and unrouted runs never create cards.
+   */
+  workItems?: WorkItemsStorage;
 }
 
 /**
@@ -264,28 +272,133 @@ function createAccountLinkResolver(accountLinks: ChannelIdentityStorage): Channe
 }
 
 /**
+ * The internal Mastra thread the framework created for a channel conversation.
+ * The handler's `thread.id` is the platform thread id (e.g. `slack:C123:ts`),
+ * NOT the internal UUID — the mapping lives in the stored thread's channel
+ * metadata.
+ */
+async function findInternalThread(getMastra: () => Mastra | undefined, thread: HandlerThread) {
+  const store = await getMastra()?.getStorage()?.getStore('memory');
+  const { threads } = (await store?.listThreads({
+    filter: {
+      metadata: {
+        channel_platform: thread.adapter.name,
+        channel_externalThreadId: thread.id,
+        channel_externalChannelId: thread.channelId,
+      },
+    },
+    perPage: 1,
+  })) ?? { threads: [] };
+  return threads[0];
+}
+
+/**
+ * Upsert the Work-board card for a dispatched Slack-thread run, binding the
+ * channel session to it. Keyed on the thread via `externalSource` — the
+ * work-items domain's unique `(factory_project_id, source_key)` index makes
+ * repeat messages reuse the same card, and `reuseMode: 'preserve'` keeps a
+ * card a human already moved across stages untouched. Best-effort: the run is
+ * already dispatched, so intake failures log instead of throwing.
+ */
+export async function upsertThreadWorkItem({
+  getMastra,
+  workItems,
+  thread,
+  message,
+  link,
+  factoryProjectId,
+}: {
+  getMastra: () => Mastra | undefined;
+  workItems: WorkItemsStorage;
+  thread: HandlerThread;
+  message: HandlerMessage;
+  link: ChannelAccountLink;
+  factoryProjectId: string;
+}): Promise<void> {
+  try {
+    const platform = thread.adapter.name;
+    const teamId = slackTeamId(message);
+    // Without a team id there's no stable cross-workspace thread key.
+    if (!teamId) return;
+
+    // `slack:{channelId}:{threadTs}` → `{teamId}:{channelId}:{threadTs}`.
+    const bareThreadId = thread.id.startsWith(`${platform}:`) ? thread.id.slice(platform.length + 1) : thread.id;
+    const title = message.text.length > 80 ? `${message.text.slice(0, 79)}…` : message.text;
+
+    // The channel session id is deterministic: the controller keys sessions on
+    // the channel resource id `channel:{platformThreadId}`. The internal
+    // Mastra thread needs a metadata lookup; when it isn't there (yet) the
+    // card is still created, just without a session binding.
+    const internalThread = await findInternalThread(getMastra, thread);
+
+    await workItems.upsert({
+      orgId: link.orgId ?? '',
+      userId: link.userId,
+      factoryProjectId,
+      reuseMode: 'preserve',
+      input: {
+        title: title || 'Slack thread',
+        externalSource: {
+          integrationId: platform,
+          type: 'thread',
+          externalId: `${teamId}:${bareThreadId}`,
+        },
+        ...(internalThread
+          ? {
+              sessions: {
+                slack: {
+                  sessionId: `channel:${thread.id}`,
+                  threadId: internalThread.id,
+                  branch: '',
+                },
+              },
+            }
+          : {}),
+      },
+    });
+  } catch (error) {
+    console.warn('[slack] work-item intake failed for thread', thread.id, error);
+  }
+}
+
+/**
  * Build the "new session" handler for mention / direct-message events. A mention or
  * DM on a not-yet-subscribed thread starts a NEW session; once subscribed, later
  * events are follow-ups and don't re-announce.
  */
-function createNewSessionChatHandler({
-  getMastra,
-  accountLinks,
-  channelLinkStateSigner,
-  projects,
-}: SlackChannelDeps): ChannelHandler {
+/**
+ * Run the account-link + factory-routing gates for one inbound message.
+ * Returns `null` when the run must not dispatch (a prompt card was posted
+ * where possible); otherwise the dispatch context — with `intake` present
+ * only when a linked sender resolved to a factory (the work-item condition).
+ */
+async function gateDispatch(
+  thread: HandlerThread,
+  message: HandlerMessage,
+  { accountLinks, channelLinkStateSigner, projects }: SlackChannelDeps,
+): Promise<{ intake?: { link: ChannelAccountLink; factoryProjectId: string } } | null> {
+  const sender = await resolveLinkedSender({ thread, message, accountLinks, channelLinkStateSigner });
+  if (sender.status === 'blocked') return null;
+  // Linked senders must also route to a Factory project before a run starts.
+  if (sender.status === 'linked' && accountLinks) {
+    const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
+    if (route.status === 'blocked') return null;
+    if (route.status === 'resolved') {
+      return { intake: { link: sender.link, factoryProjectId: route.factoryProjectId } };
+    }
+  }
+  return {};
+}
+
+function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
+  const { getMastra, workItems } = deps;
   return async (thread, message, defaultHandler) => {
     // Gate on the sender having linked their Slack account to a Mastra tenant.
     // Unlinked → post the ephemeral Connect card and stop; no session/run is
     // created (which would otherwise be tenant-less and fail credential
     // resolution). The core dispatch seam enforces the same gate as a backstop.
-    const sender = await resolveLinkedSender({ thread, message, accountLinks, channelLinkStateSigner });
-    if (sender.status === 'blocked') return;
-    // Linked senders must also route to a Factory project before a run starts.
-    if (sender.status === 'linked' && accountLinks) {
-      const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
-      if (route.status === 'blocked') return;
-    }
+    const gate = await gateDispatch(thread, message, deps);
+    if (!gate) return;
 
     // A mention on a not-yet-subscribed thread is a NEW session. The
     // default handler auto-subscribes, so once subscribed this is a
@@ -296,6 +409,12 @@ function createNewSessionChatHandler({
     // controller session are created before we build the deep link.
     await defaultHandler(thread, message);
 
+    // The run dispatched for a routed sender → this thread is (or already
+    // was) a card on that factory's Work board.
+    if (workItems && gate.intake) {
+      await upsertThreadWorkItem({ getMastra, workItems, thread, message, ...gate.intake });
+    }
+
     if (!isNewSession) return;
 
     // The announcement card is only useful with a public origin to deep-link
@@ -305,24 +424,7 @@ function createNewSessionChatHandler({
 
     if (!process.env.MASTRACODE_PUBLIC_URL) return;
 
-    // The handler's `thread` is the Slack chat thread — its `.id` is the
-    // platform thread id (e.g. `slack:C0BG...`), NOT the internal Mastra
-    // thread UUID the web UI routes on. Look up the internal thread that
-    // the framework created for this channel conversation via the stored
-    // channel metadata, then build the link from its real id + resourceId.
-    const store = await getMastra()?.getStorage()?.getStore('memory');
-    const { threads } = (await store?.listThreads({
-      filter: {
-        metadata: {
-          channel_platform: thread.adapter.name,
-          channel_externalThreadId: thread.id,
-          channel_externalChannelId: thread.channelId,
-        },
-      },
-      perPage: 1,
-    })) ?? { threads: [] };
-
-    const internalThread = threads[0];
+    const internalThread = await findInternalThread(getMastra, thread);
     if (!internalThread) {
       console.warn('[onMention] no internal thread found for', thread.id);
       return;
@@ -348,7 +450,7 @@ function createNewSessionChatHandler({
 }
 export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
   const newSessionChatHandler = createNewSessionChatHandler(deps);
-  const { accountLinks, channelLinkStateSigner, projects } = deps;
+  const { getMastra, workItems } = deps;
 
   return {
     onSubscribedMessage: async (thread, message, defaultHandler) => {
@@ -360,13 +462,14 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // (e.g. the link was removed mid-conversation), and it must still
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation).
-      const sender = await resolveLinkedSender({ thread, message, accountLinks, channelLinkStateSigner });
-      if (sender.status === 'blocked') return;
-      if (sender.status === 'linked' && accountLinks) {
-        const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
-        if (route.status === 'blocked') return;
+      const gate = await gateDispatch(thread, message, deps);
+      if (!gate) return;
+      await defaultHandler(thread, message);
+      // `reuseMode: 'preserve'` makes this a no-op when the card exists, and
+      // backfills a card for threads that predate work-item intake.
+      if (workItems && gate.intake) {
+        await upsertThreadWorkItem({ getMastra, workItems, thread, message, ...gate.intake });
       }
-      return defaultHandler(thread, message);
     },
     onMention: newSessionChatHandler,
     onDirectMessage: newSessionChatHandler,

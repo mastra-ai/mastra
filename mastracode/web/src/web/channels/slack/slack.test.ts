@@ -14,6 +14,7 @@ function makeThread() {
 function makeMessage(teamId?: string) {
   return {
     author: { userId: 'U-sender', userName: 'caleb' },
+    text: 'hello bot',
     raw: teamId ? { team_id: teamId } : {},
   } as any;
 }
@@ -343,5 +344,150 @@ describe('handler dispatch gating', () => {
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler);
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('work-item intake on dispatch', () => {
+  function makeIntakeDeps({
+    link = { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' },
+    internalThread = { id: 'uuid-thread-1', resourceId: 'channel:slack:C-1:1700.42' },
+  }: {
+    link?: { orgId?: string; userId: string; defaultFactoryProjectId?: string } | null;
+    internalThread?: { id: string; resourceId: string } | null;
+  } = {}) {
+    const accountLinks = {
+      getAccountLink: vi.fn().mockResolvedValue(link),
+      setDefaultFactory: vi.fn().mockResolvedValue(true),
+    } as any;
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const workItems = { upsert: vi.fn().mockResolvedValue({ created: true }) } as any;
+    const store = {
+      listThreads: vi.fn().mockResolvedValue({ threads: internalThread ? [internalThread] : [] }),
+    };
+    const getMastra = (() => ({ getStorage: () => ({ getStore: () => Promise.resolve(store) }) })) as any;
+    return { accountLinks, projects, workItems, getMastra, store };
+  }
+
+  function makeIntakeThread() {
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.isSubscribed = vi.fn().mockResolvedValue(true);
+    thread.post = vi.fn();
+    return thread;
+  }
+
+  it('a dispatched run upserts a card keyed on the thread with the session bound', async () => {
+    const { accountLinks, projects, workItems, getMastra } = makeIntakeDeps();
+    const handlers = createHandlers({ getMastra, accountLinks, projects, workItems });
+    const thread = makeIntakeThread();
+    const defaultHandler = vi.fn();
+    const message = makeMessage('T-1');
+    message.text = 'fix the login bug';
+
+    await handlers.onSubscribedMessage!(thread, message, defaultHandler);
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(workItems.upsert).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: 'fp-1',
+      reuseMode: 'preserve',
+      input: {
+        title: 'fix the login bug',
+        externalSource: {
+          integrationId: 'slack',
+          type: 'thread',
+          externalId: 'T-1:C-1:1700.42',
+        },
+        sessions: {
+          slack: {
+            sessionId: 'channel:slack:C-1:1700.42',
+            threadId: 'uuid-thread-1',
+            branch: '',
+          },
+        },
+      },
+    });
+  });
+
+  it('mention/DM handler upserts after dispatch too', async () => {
+    const { accountLinks, projects, workItems, getMastra } = makeIntakeDeps();
+    const handlers = createHandlers({ getMastra, accountLinks, projects, workItems });
+    const thread = makeIntakeThread();
+    const defaultHandler = vi.fn();
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), defaultHandler);
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(workItems.upsert).toHaveBeenCalledTimes(1);
+    expect(workItems.upsert.mock.calls[0][0].reuseMode).toBe('preserve');
+  });
+
+  it('an unlinked sender creates nothing', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const { projects, workItems, getMastra } = makeIntakeDeps();
+    const accountLinks = {
+      getAccountLink: vi.fn().mockResolvedValue(null),
+      setDefaultFactory: vi.fn(),
+    } as any;
+    const handlers = createHandlers({ getMastra, accountLinks, projects, workItems });
+    const thread = makeIntakeThread();
+    const defaultHandler = vi.fn();
+
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler);
+
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(workItems.upsert).not.toHaveBeenCalled();
+  });
+
+  it('an ungated run (no projects domain) creates nothing', async () => {
+    const { accountLinks, workItems, getMastra } = makeIntakeDeps();
+    const handlers = createHandlers({ getMastra, accountLinks, workItems });
+    const thread = makeIntakeThread();
+    const defaultHandler = vi.fn();
+
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler);
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(workItems.upsert).not.toHaveBeenCalled();
+  });
+
+  it('a missing internal thread still creates the card, without a session binding', async () => {
+    const { accountLinks, projects, workItems, getMastra } = makeIntakeDeps({ internalThread: null });
+    const handlers = createHandlers({ getMastra, accountLinks, projects, workItems });
+    const thread = makeIntakeThread();
+
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), vi.fn());
+
+    expect(workItems.upsert).toHaveBeenCalledTimes(1);
+    expect(workItems.upsert.mock.calls[0][0].input.sessions).toBeUndefined();
+  });
+
+  it('an intake failure never breaks the dispatched run', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { accountLinks, projects, workItems, getMastra } = makeIntakeDeps();
+    workItems.upsert.mockRejectedValue(new Error('db down'));
+    const handlers = createHandlers({ getMastra, accountLinks, projects, workItems });
+    const thread = makeIntakeThread();
+    const defaultHandler = vi.fn();
+
+    await expect(handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler)).resolves.toBeUndefined();
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('long titles truncate to ~80 chars', async () => {
+    const { accountLinks, projects, workItems, getMastra } = makeIntakeDeps();
+    const handlers = createHandlers({ getMastra, accountLinks, projects, workItems });
+    const thread = makeIntakeThread();
+    const message = makeMessage('T-1');
+    message.text = 'x'.repeat(200);
+
+    await handlers.onSubscribedMessage!(thread, message, vi.fn());
+
+    const title = workItems.upsert.mock.calls[0][0].input.title;
+    expect(title.length).toBe(80);
+    expect(title.endsWith('…')).toBe(true);
   });
 });

@@ -32,6 +32,7 @@ import {
   MastraFactory,
   ChannelIdentityStorage,
   FactoryProjectsStorage,
+  WorkItemsStorage,
   createChannelLinkStateSigner,
   createFactoryRouteAuth,
   createStateSigner,
@@ -248,6 +249,7 @@ export const channelLinkStateSigner = createChannelLinkStateSigner(stateSecret);
 // the time we get here.
 const accountLinks = storage.getDomain<ChannelIdentityStorage>('channel-identity');
 const factoryProjects = storage.getDomain<FactoryProjectsStorage>('projects');
+const factoryWorkItems = storage.getDomain<WorkItemsStorage>('work-items');
 
 const mcAgentController = preparedArgs.agentControllers?.['code'];
 if (mcAgentController) {
@@ -257,6 +259,7 @@ if (mcAgentController) {
       accountLinks,
       channelLinkStateSigner,
       projects: factoryProjects,
+      workItems: factoryWorkItems,
     }),
   );
 }

@@ -9,6 +9,8 @@ export type {
 } from './storage/domains/channel-identity/base.js';
 export { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 export type { FactoryProject } from './storage/domains/projects/base.js';
+export { WorkItemsStorage } from './storage/domains/work-items/base.js';
+export type { CreateWorkItemInput, WorkItemRow } from './storage/domains/work-items/base.js';
 export { createChannelLinkStateSigner, createStateSigner } from './state-signing.js';
 export type { ChannelLinkState, ChannelLinkStateSigner, StateSigner, StateTenant } from './state-signing.js';
 export { createFactoryRouteAuth } from './auth.js';
