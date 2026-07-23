@@ -5,9 +5,17 @@ import {
   type ChannelHandlers,
 } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
-import type { ChannelIdentityStorage } from '@mastra/factory';
+import type { ChannelIdentityStorage, ChannelLinkStateSigner } from '@mastra/factory';
 import { createSlackAdapter, SlackProvider } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
+
+// Derive the thread/message types from the core handler signature rather than
+// importing them from `chat` directly: mc-web can resolve a different `chat`
+// version than @mastra/core, and the two `Thread`/`Message` declarations are
+// structurally incompatible (private fields). Using the handler's own types
+// keeps everything on one version.
+type HandlerThread = Parameters<ChannelHandler>[0];
+type HandlerMessage = Parameters<ChannelHandler>[1];
 
 /** Dependencies the Slack channel handlers close over, injected from the web entry. */
 interface SlackChannelDeps {
@@ -22,9 +30,96 @@ interface SlackChannelDeps {
    * The factory's reverse-index store mapping a Slack sender to a Mastra
    * tenant. When provided, inbound messages from an unlinked sender are not
    * dispatched — the run only proceeds (with the sender's tenant stamped on
-   * the request context) once they've linked their account.
+   * the request context) once they've linked their account. Unlinked senders
+   * get an ephemeral "connect your account" card instead.
    */
   accountLinks?: ChannelIdentityStorage;
+  /**
+   * Signs the account-linking deep-link `state` so a forged `?teamId=&userId=`
+   * can't hijack a link. Required to render the Connect card; without it the
+   * unlinked path silently skips (defense-in-depth still blocks the run).
+   */
+  channelLinkStateSigner?: ChannelLinkStateSigner;
+}
+
+/**
+ * The Slack team id survives onto a normalized chat Message only on
+ * `message.raw` (the Slack Events API envelope). Read it duck-typed to build
+ * the workspace-scoped account-link key.
+ */
+function slackTeamId(message: HandlerMessage): string | undefined {
+  const raw = message.raw as { team_id?: unknown; team?: unknown } | undefined;
+  if (!raw || typeof raw !== 'object') return undefined;
+  if (typeof raw.team_id === 'string' && raw.team_id) return raw.team_id;
+  if (typeof raw.team === 'string' && raw.team) return raw.team;
+  if (raw.team && typeof raw.team === 'object') {
+    const id = (raw.team as { id?: unknown }).id;
+    if (typeof id === 'string' && id) return id;
+  }
+  return undefined;
+}
+
+/** Resolve the web origin the Connect deep link points at. */
+function channelsPublicUrl(): string | undefined {
+  return process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL;
+}
+
+/**
+ * Post an ephemeral "connect your account" card (visible only to the sender)
+ * with a signed deep link into the web UI's Slack-connect flow. Returns `true`
+ * when the sender is unlinked (caller must not dispatch a run), `false` when
+ * they're linked or when the check is not configured (dispatch as usual).
+ */
+export async function promptIfUnlinked({
+  thread,
+  message,
+  accountLinks,
+  channelLinkStateSigner,
+}: {
+  thread: HandlerThread;
+  message: HandlerMessage;
+  accountLinks?: ChannelIdentityStorage;
+  channelLinkStateSigner?: ChannelLinkStateSigner;
+}): Promise<boolean> {
+  if (!accountLinks) return false;
+  const platform = thread.adapter.name;
+  const externalUserId = message.author.userId;
+  const externalTeamId = slackTeamId(message);
+  // Without a team id we can't identify the workspace-scoped link; treat as
+  // unlinked so a run never proceeds tenant-less.
+  const link = externalTeamId
+    ? await accountLinks.getAccountLink({ platform, externalTeamId, externalUserId })
+    : null;
+  if (link) return false;
+
+  const publicUrl = channelsPublicUrl();
+  // Need both a signer (anti-spoofing) and a public origin to build a usable
+  // Connect link. Missing either → still block the run, just no card.
+  if (channelLinkStateSigner && publicUrl && externalTeamId) {
+    const state = channelLinkStateSigner.sign({
+      platform,
+      externalTeamId,
+      externalUserId,
+      channelId: thread.channelId,
+    });
+    await thread.postEphemeral(
+      message.author,
+      Card({
+        title: 'Connect your account',
+        children: [
+          CardText('Connect your account to use this agent.'),
+          Actions([
+            LinkButton({
+              url: `${publicUrl}/connect/slack?state=${encodeURIComponent(state)}`,
+              label: 'Connect account',
+            }),
+          ]),
+        ],
+      }),
+      { fallbackToDM: true },
+    );
+  }
+  return true;
 }
 
 /**
@@ -50,10 +145,17 @@ function createAccountLinkResolver(accountLinks: ChannelIdentityStorage): Channe
  * DM on a not-yet-subscribed thread starts a NEW session; once subscribed, later
  * events are follow-ups and don't re-announce.
  */
-function createNewSessionChatHandler({ getMastra }: SlackChannelDeps): ChannelHandler {
+function createNewSessionChatHandler({
+  getMastra,
+  accountLinks,
+  channelLinkStateSigner,
+}: SlackChannelDeps): ChannelHandler {
   return async (thread, message, defaultHandler) => {
-    // TODO: Check if the slack user id maps to a Mastra user, if not send a message to that user saying to auth with a link
-    // TODO: if they do have a connected slack account, hydrate the req context with that Mastra user
+    // Gate on the sender having linked their Slack account to a Mastra tenant.
+    // Unlinked → post the ephemeral Connect card and stop; no session/run is
+    // created (which would otherwise be tenant-less and fail credential
+    // resolution). The core dispatch seam enforces the same gate as a backstop.
+    if (await promptIfUnlinked({ thread, message, accountLinks, channelLinkStateSigner })) return;
 
     // A mention on a not-yet-subscribed thread is a NEW session. The
     // default handler auto-subscribes, so once subscribed this is a
@@ -114,8 +216,9 @@ function createNewSessionChatHandler({ getMastra }: SlackChannelDeps): ChannelHa
     );
   };
 }
-const createHandlers = (getMastra: () => Mastra | undefined): ChannelHandlers => {
-  const newSessionChatHandler = createNewSessionChatHandler({ getMastra });
+const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
+  const newSessionChatHandler = createNewSessionChatHandler(deps);
+  const { accountLinks, channelLinkStateSigner } = deps;
 
   return {
     onSubscribedMessage: async (thread, message, defaultHandler) => {
@@ -123,6 +226,9 @@ const createHandlers = (getMastra: () => Mastra | undefined): ChannelHandlers =>
       // thread without the bot replying. Word boundary so messages that
       // merely start with "aside..." (e.g. "asides can wait") still route.
       if (/^aside\b/i.test(message.text)) return;
+      // A subscribed follow-up from an unlinked sender must not run either
+      // (e.g. the link was removed mid-conversation).
+      if (await promptIfUnlinked({ thread, message, accountLinks, channelLinkStateSigner })) return;
       return defaultHandler(thread, message);
     },
     onMention: newSessionChatHandler,
@@ -131,18 +237,16 @@ const createHandlers = (getMastra: () => Mastra | undefined): ChannelHandlers =>
 };
 
 /** Construct the Slack channel provider wired to the server-owned Mastra instance. */
-export function createSlackChannelProvider({ getMastra }: SlackChannelDeps): SlackProvider {
+export function createSlackChannelProvider(deps: SlackChannelDeps): SlackProvider {
   return new SlackProvider({
     refreshToken: process.env.SLACK_APP_REFRESH_TOKEN,
-    baseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
-    handlers: createHandlers(getMastra),
+    baseUrl: channelsPublicUrl(),
+    handlers: createHandlers(deps),
   });
 }
 
-export function createAgentControllerSlackChannels({
-  getMastra,
-  accountLinks,
-}: SlackChannelDeps): AgentControllerChannels {
+export function createAgentControllerSlackChannels(deps: SlackChannelDeps): AgentControllerChannels {
+  const { accountLinks } = deps;
   const channels = new AgentControllerChannels({
     adapters: {
       slack: {
@@ -154,12 +258,13 @@ export function createAgentControllerSlackChannels({
         }),
       },
     },
-    handlers: createHandlers(getMastra),
+    handlers: createHandlers(deps),
   });
 
   // Gate dispatch on the sender having linked their Slack account to a Mastra
   // tenant, so the run resolves that user's model credentials. Unset store →
-  // no gating (pre-account-linking behavior).
+  // no gating (pre-account-linking behavior). This is the backstop behind the
+  // handler-level Connect card — it enforces the gate on every dispatch path.
   if (accountLinks) {
     channels.setAccountLinkResolver(createAccountLinkResolver(accountLinks));
   }

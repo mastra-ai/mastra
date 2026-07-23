@@ -100,3 +100,82 @@ export function createStateSigner(secret?: string): StateSigner {
     },
   };
 }
+
+/** The Slack identity a channel-account-link deep link is bound to. */
+export interface ChannelLinkState {
+  platform: string;
+  externalTeamId: string;
+  externalUserId: string;
+  /** The channel the prompt was sent in — for an optional post-link reply. */
+  channelId?: string;
+}
+
+/** Signs and verifies channel-account-link deep-link `state` values. */
+export interface ChannelLinkStateSigner {
+  /** Build a signed `state` bound to a Slack identity. */
+  sign(state: ChannelLinkState): string;
+  /** Verify a signed `state`; returns the bound Slack identity, or `null`. */
+  verify(state: string | undefined): ChannelLinkState | null;
+  /** See {@link StateSigner.stable}. */
+  readonly stable: boolean;
+}
+
+interface ChannelLinkStatePayload extends ChannelLinkState {
+  nonce: string;
+  issuedAt: number;
+}
+
+/**
+ * Create a signer for the account-linking deep link. Unlike {@link StateSigner}
+ * (which binds a known tenant round-tripping through a third party), this binds
+ * the inbound Slack *identity* so the authed `/connect/slack` route knows which
+ * sender to link to the current tenant. Same HMAC wire format + expiry window;
+ * spoofing a `?teamId=&userId=` is rejected because the signature won't match.
+ */
+export function createChannelLinkStateSigner(secret?: string): ChannelLinkStateSigner {
+  const stable = typeof secret === 'string' && secret.length > 0;
+  const key = stable ? secret : randomBytes(32).toString('hex');
+  return {
+    stable,
+    sign(state: ChannelLinkState): string {
+      const payload: ChannelLinkStatePayload = {
+        ...state,
+        nonce: randomBytes(8).toString('hex'),
+        issuedAt: Date.now(),
+      };
+      const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+      const sig = createHmac('sha256', key).update(body).digest('base64url');
+      return `${body}.${sig}`;
+    },
+    verify(state: string | undefined): ChannelLinkState | null {
+      if (!state) return null;
+      const dot = state.lastIndexOf('.');
+      if (dot <= 0) return null;
+      const body = state.slice(0, dot);
+      const sig = state.slice(dot + 1);
+      const expected = createHmac('sha256', key).update(body).digest('base64url');
+      const sigBuf = Buffer.from(sig);
+      const expectedBuf = Buffer.from(expected);
+      if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+        return null;
+      }
+      try {
+        const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as ChannelLinkStatePayload;
+        if (typeof parsed.platform !== 'string' || !parsed.platform) return null;
+        if (typeof parsed.externalTeamId !== 'string' || !parsed.externalTeamId) return null;
+        if (typeof parsed.externalUserId !== 'string' || !parsed.externalUserId) return null;
+        if (typeof parsed.issuedAt !== 'number' || !Number.isFinite(parsed.issuedAt)) return null;
+        const age = Date.now() - parsed.issuedAt;
+        if (age < 0 || age > STATE_MAX_AGE_MS) return null;
+        return {
+          platform: parsed.platform,
+          externalTeamId: parsed.externalTeamId,
+          externalUserId: parsed.externalUserId,
+          ...(typeof parsed.channelId === 'string' && parsed.channelId ? { channelId: parsed.channelId } : {}),
+        };
+      } catch {
+        return null;
+      }
+    },
+  };
+}

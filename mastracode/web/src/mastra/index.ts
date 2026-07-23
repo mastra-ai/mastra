@@ -28,7 +28,7 @@ import { PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { MastraFactory, ChannelIdentityStorage } from '@mastra/factory';
+import { MastraFactory, ChannelIdentityStorage, createChannelLinkStateSigner } from '@mastra/factory';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { createAgentControllerSlackChannels } from '../web/channels/slack/slack.js';
 
@@ -151,6 +151,12 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+// Deployment-stable secret for OAuth/link `state` signing. Shared by the
+// factory's integration signer and the channel-account-link deep link so both
+// sign/verify with the same key: webhook secret first, then the WorkOS cookie
+// password. Unset → per-process random secret (single-process local dev only).
+const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined;
+
 export const factory = new MastraFactory({
   auth,
   sandbox: {
@@ -178,13 +184,15 @@ export const factory = new MastraFactory({
     .map(o => o.trim())
     .filter(Boolean),
   // Deployment-stable secret for OAuth `state` signing (GitHub/Linear connect
-  // flows). Same resolution the state signer used before it moved into the
-  // factory: webhook secret first, then the WorkOS cookie password. Unset →
-  // per-process random secret (single-process local dev only).
-  stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
+  // flows). See `stateSecret` above.
+  stateSecret,
 });
 
 const preparedArgs = await factory.prepare();
+
+// Signs the account-linking deep link so a forged sender identity can't hijack
+// a link. Same secret as the factory's integration signer.
+export const channelLinkStateSigner = createChannelLinkStateSigner(stateSecret);
 
 const mcAgentController = preparedArgs.agentControllers?.['code'];
 if (mcAgentController) {
@@ -192,7 +200,11 @@ if (mcAgentController) {
   // it's resolvable off the shared FactoryStorage by the time we get here.
   const accountLinks = storage.getDomain<ChannelIdentityStorage>('channel-identity');
   mcAgentController.setChannels(
-    createAgentControllerSlackChannels({ getMastra: () => mcAgentController.getMastra(), accountLinks }),
+    createAgentControllerSlackChannels({
+      getMastra: () => mcAgentController.getMastra(),
+      accountLinks,
+      channelLinkStateSigner,
+    }),
   );
 }
 
