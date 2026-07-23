@@ -639,7 +639,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             // reflects reality and the UI prompts a reconnect, then keep
             // listing the remaining installations.
             if ((err as { status?: number }).status !== 404) throw err;
-            console.error(`[MastraCode Web] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
+            console.error(`[Mastra Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
             await github.sourceControlStorage.installations.delete({ orgId: resolved.tenant.orgId, id: inst.id });
             continue;
           }
