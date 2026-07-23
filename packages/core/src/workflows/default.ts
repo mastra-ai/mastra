@@ -28,6 +28,7 @@ import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepU
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
+import { createMappingStep, createStepFromAgent, createStepFromTool } from './step-factories';
 import type {
   FormattedWorkflowResult,
   DefaultEngineType,
@@ -46,12 +47,9 @@ import type {
   TimeTravelExecutionParams,
   WorkflowRunStatus,
 } from './types';
+// Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
+// to build a runnable step from a declarative entry.
 import { getSingleStepEntryId } from './utils';
-// Imported so the per-type execute methods (executeAgent/executeTool/executeMapping)
-// can build a runnable step from a declarative entry. This creates a
-// workflow<->default module cycle, but these are only invoked at execution time
-// (well after module init), so the bindings are always resolved when called.
-import { createMappingStep, createStepFromAgent, createStepFromTool } from './workflow';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
