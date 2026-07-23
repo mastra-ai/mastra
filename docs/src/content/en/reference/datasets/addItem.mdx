@@ -23,6 +23,7 @@ const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 const item = await dataset.addItem({
   input: { question: 'What is TypeScript?' },
   groundTruth: { answer: 'A typed superset of JavaScript' },
+  timeout: 15_000,
   metadata: { source: 'manual' },
 })
 
@@ -43,6 +44,13 @@ console.log(item.id)
     type: 'unknown',
     isOptional: true,
     description: 'Expected output or ground truth for scoring.',
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    isOptional: true,
+    description:
+      "Execution timeout override in milliseconds. This value takes precedence over the experiment's `itemTimeout` fallback.",
   },
   {
     name: 'metadata',
@@ -90,6 +98,12 @@ console.log(item.id)
             type: 'unknown',
             isOptional: true,
             description: 'Ground truth data.',
+          },
+          {
+            name: 'timeout',
+            type: 'number',
+            isOptional: true,
+            description: 'Execution timeout override in milliseconds.',
           },
           {
             name: 'metadata',

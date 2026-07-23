@@ -2613,6 +2613,7 @@ type Shared_Type_116 = {
   expectedTrajectory?: unknown | undefined;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  timeout?: number | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -17007,6 +17008,8 @@ export type PostDatasetsDatasetIdItems_Body = {
   expectedTrajectory?: (Shared_Type_131 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  /** Execution timeout override in milliseconds */
+  timeout?: number | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17058,6 +17061,8 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     expectedTrajectory?: (Shared_Type_131 | undefined) | null;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: Shared_Type_114[] | undefined;
+    /** Execution timeout override in milliseconds */
+    timeout?: number | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -17177,6 +17182,8 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   expectedTrajectory?: (Shared_Type_131 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  /** Execution timeout override in milliseconds */
+  timeout?: number | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17296,6 +17303,7 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     expectedTrajectory?: unknown | undefined;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: Shared_Type_114[] | undefined;
+    timeout?: number | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -17466,6 +17474,8 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   agentVersion?: string | undefined;
   /** Maximum concurrent executions */
   maxConcurrency?: number | undefined;
+  /** Fallback execution timeout per item in milliseconds */
+  itemTimeout?: number | undefined;
   /** Global request context passed to the target */
   requestContext?:
     | {

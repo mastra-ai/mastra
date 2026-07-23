@@ -121,7 +121,7 @@ console.log(`Status: ${summary2.status}`)
     name: 'itemTimeout',
     type: 'number',
     isOptional: true,
-    description: 'Per-item execution timeout in milliseconds.',
+    description: 'Fallback execution timeout per item in milliseconds. An item-level `timeout` overrides this value.',
   },
   {
     name: 'maxRetries',
@@ -131,6 +131,12 @@ console.log(`Status: ${summary2.status}`)
   },
 ]}
 />
+
+## Timeout behavior
+
+For each item, `timeout` takes precedence over `itemTimeout`. An item without `timeout` inherits `itemTimeout`. If neither value is set, the item has no execution deadline.
+
+The effective timeout is one budget that covers execution attempts and retry backoff rather than restarting for each attempt. Cancelling the experiment through `signal` takes precedence over item deadlines and isn't retried.
 
 ## Returns
 

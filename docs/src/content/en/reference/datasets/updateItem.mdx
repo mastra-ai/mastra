@@ -24,6 +24,7 @@ const updated = await dataset.updateItem({
   itemId: 'item-id',
   input: { question: 'What is TypeScript?' },
   groundTruth: { answer: 'A typed superset of JavaScript' },
+  timeout: 20_000,
   metadata: { reviewed: true },
 })
 ```
@@ -48,6 +49,13 @@ const updated = await dataset.updateItem({
     type: 'unknown',
     isOptional: true,
     description: 'Updated ground truth.',
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    isOptional: true,
+    description:
+      "Updated execution timeout override in milliseconds. This value takes precedence over the experiment's `itemTimeout` fallback.",
   },
   {
     name: 'metadata',
