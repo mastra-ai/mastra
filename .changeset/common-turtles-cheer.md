@@ -2,4 +2,4 @@
 '@mastra/platform-workspace': patch
 ---
 
-Fixed PlatformSandbox exec requests so reattached sandboxes include environment details needed for automatic sandbox recovery.
+Fixed PlatformSandbox reattach so stale sandbox IDs are recreated before commands run.
