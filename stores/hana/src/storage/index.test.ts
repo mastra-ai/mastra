@@ -251,7 +251,50 @@ describe('HANAStore Pool Exposure', () => {
   });
 });
 
-// Index configuration tests (only run when ENABLE_TESTS=true)
+describe('HANAStore SQL injection prevention', () => {
+  it('should reject a schemaName containing SQL metacharacters', () => {
+    expect(
+      () =>
+        new HANAStore({
+          id: 'test-store',
+          host: 'myhost.hanacloud.ondemand.com',
+          port: 443,
+          uid: 'USER',
+          pwd: 'Password1',
+          schemaName: 'VALID_SCHEMA"; DROP TABLE mastra_threads; --',
+        }),
+    ).toThrow(/Invalid schema name/i);
+  });
+
+  it('should reject a schemaName containing a double-quote character', () => {
+    expect(
+      () =>
+        new HANAStore({
+          id: 'test-store',
+          host: 'myhost.hanacloud.ondemand.com',
+          port: 443,
+          uid: 'USER',
+          pwd: 'Password1',
+          schemaName: 'SCHEMA"INJECTED',
+        }),
+    ).toThrow(/Invalid schema name/i);
+  });
+
+  it('should accept a valid schemaName', () => {
+    expect(
+      () =>
+        new HANAStore({
+          id: 'test-store',
+          host: 'myhost.hanacloud.ondemand.com',
+          port: 443,
+          uid: 'USER',
+          pwd: 'Password1',
+          schemaName: 'MASTRA_APP',
+        }),
+    ).not.toThrow();
+  });
+});
+
 if (process.env.ENABLE_TESTS === 'true') {
   // Helper to check if a HANA index exists (case-insensitive name match)
   const hanaIndexExists = async (store: HANAStore, namePattern: string): Promise<boolean> => {

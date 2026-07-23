@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 
 import { HANAPool } from './db/pool';
 import { AgentsHANA } from './domains/agents';
@@ -105,6 +106,9 @@ export class HANAStore extends MastraCompositeStore {
   constructor(config: HANAConfigType) {
     if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
       throw new Error('HANAStore: id must be provided and cannot be empty.');
+    }
+    if (config.schemaName !== undefined) {
+      parseSqlIdentifier(config.schemaName, 'schema name');
     }
     if (!isPoolConfig(config)) {
       const serverConfig = config as { host?: string; uid?: string; pwd?: string };

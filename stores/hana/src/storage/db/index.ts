@@ -227,7 +227,9 @@ export class HANAClient extends MastraBase {
 
           if (!exists) {
             try {
-              await this.pool.withConnection(conn => conn.execPromise(`CREATE SCHEMA "${this.schemaName}"`, []));
+              await this.pool.withConnection(conn =>
+                conn.execPromise(`CREATE SCHEMA "${parseSqlIdentifier(this.schemaName!, 'schema name')}"`, []),
+              );
               this.logger?.info?.(`Schema "${this.schemaName}" created`);
             } catch {
               // Schema creation may fail if the user lacks CREATE SCHEMA privilege.
@@ -686,6 +688,7 @@ export class HANAClient extends MastraBase {
   async dropIndex(indexName: string): Promise<void> {
     try {
       const schema = this.schemaName ?? '';
+      const schemaSafe = parseSqlIdentifier(schema, 'schema name');
       const indexNameSafe = parseSqlIdentifier(indexName, 'index name');
 
       const rows = await this.pool.withConnection(conn =>
@@ -707,7 +710,7 @@ export class HANAClient extends MastraBase {
         });
       }
 
-      await this.pool.withConnection(conn => conn.execPromise(`DROP INDEX "${schema}"."${indexNameSafe}"`, []));
+      await this.pool.withConnection(conn => conn.execPromise(`DROP INDEX "${schemaSafe}"."${indexNameSafe}"`, []));
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
