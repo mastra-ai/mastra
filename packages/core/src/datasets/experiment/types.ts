@@ -1,9 +1,26 @@
 import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer } from '../../evals/base';
+import type { ScorerEntry } from '../../evals/thresholds';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
-import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
+import type {
+  DatasetTenancyFilters,
+  ExperimentStatus,
+  ExperimentThreshold,
+  ScorerExecutionStatusCounts,
+  TargetExecutionStatus,
+  TargetExecutionStatusCounts,
+  TargetType,
+} from '../../storage/types';
 import type { ItemToolMock, ToolMockReport } from './tool-mocks';
+
+export type {
+  ExperimentThreshold,
+  ScorerExecutionStatus,
+  ScorerExecutionStatusCounts,
+  TargetExecutionStatus,
+  TargetExecutionStatusCounts,
+} from '../../storage/types';
 
 /**
  * A single data item for inline experiment data.
@@ -50,6 +67,11 @@ export interface DataItem<I = unknown, E = unknown> {
   toolMocks?: ItemToolMock[];
 }
 
+export type ExperimentScorerReference = MastraScorer<any, any, any, any> | string;
+export type ExperimentScorerEntry = ScorerEntry<ExperimentScorerReference>;
+export type ExperimentAgentScorerConfig = AgentScorerConfig<ExperimentScorerEntry>;
+export type ExperimentWorkflowScorerConfig = WorkflowScorerConfig<ExperimentScorerEntry>;
+
 /**
  * Internal configuration for running a dataset experiment.
  * Not publicly exported — users interact via Dataset.startExperiment().
@@ -81,7 +103,7 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   // === Scoring ===
 
   /** Scorers — flat array, or the same categorised shape accepted by runEvals */
-  scorers?: (MastraScorer<any, any, any, any> | string)[] | AgentScorerConfig | WorkflowScorerConfig;
+  scorers?: ExperimentScorerEntry[] | ExperimentAgentScorerConfig | ExperimentWorkflowScorerConfig;
 
   // === Options ===
 
@@ -144,6 +166,8 @@ export interface ItemResult {
   groundTruth: unknown | null;
   /** Structured error if execution failed */
   error: { message: string; stack?: string; code?: string } | null;
+  /** Explicit target execution outcome for this item. */
+  executionStatus: TargetExecutionStatus;
   /** When execution started */
   startedAt: Date;
   /** When execution completed */
@@ -217,11 +241,17 @@ export interface ExperimentSummary {
   status: ExperimentStatus;
   /** Total number of items in the dataset */
   totalItems: number;
-  /** Number of items that succeeded */
+  /** Target item counts by explicit execution outcome. */
+  executionStatusCounts: TargetExecutionStatusCounts;
+  /** Scorer invocation counts by explicit execution outcome. */
+  scorerStatusCounts: ScorerExecutionStatusCounts;
+  /** Immutable effective threshold bindings for this run. */
+  thresholds: ExperimentThreshold[];
+  /** @deprecated Use `executionStatusCounts.completed`. */
   succeededCount: number;
-  /** Number of items that failed */
+  /** @deprecated Use `executionStatusCounts.error + executionStatusCounts.cancelled`. */
   failedCount: number;
-  /** Number of items skipped (e.g. due to abort) */
+  /** @deprecated Use `executionStatusCounts.skipped`. */
   skippedCount: number;
   /**
    * Number of item results whose target run completed but which failed to

@@ -1,13 +1,21 @@
 import { MastraError } from '../../error/index.js';
-import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
-import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
+import { normalizeExperimentScorers, runScorersForItem, runStepScorersForItem } from './scorer';
 import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED } from './tool-mocks';
 import type { ItemToolMock } from './tool-mocks';
-import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
+import type {
+  ExperimentConfig,
+  ExperimentSummary,
+  ItemResult,
+  ItemWithScores,
+  ScorerExecutionStatusCounts,
+  ScorerResult,
+  TargetExecutionStatus,
+  TargetExecutionStatusCounts,
+} from './types';
 
 /** Unified item shape used within experiment execution (bridges inline + versioned data) */
 type ExperimentItem = {
@@ -25,18 +33,51 @@ type ExperimentItem = {
   toolMocks?: ItemToolMock[];
 };
 
+function createExecutionStatusCounts(): TargetExecutionStatusCounts {
+  return { completed: 0, skipped: 0, error: 0, cancelled: 0 };
+}
+
+function createScorerStatusCounts(): ScorerExecutionStatusCounts {
+  return { completed: 0, error: 0 };
+}
+
+function getLegacyCounts(executionStatusCounts: TargetExecutionStatusCounts) {
+  return {
+    succeededCount: executionStatusCounts.completed,
+    failedCount: executionStatusCounts.error + executionStatusCounts.cancelled,
+    skippedCount: executionStatusCounts.skipped,
+  };
+}
+
+function classifyExecutionStatus(
+  execResult: ExecutionResult,
+  runSignal: AbortSignal | undefined,
+): TargetExecutionStatus {
+  if (!execResult.error) return 'completed';
+  return runSignal?.aborted ? 'cancelled' : 'error';
+}
+
 // Re-export types and helpers
 export type {
   DataItem,
+  ExperimentAgentScorerConfig,
   ExperimentConfig,
+  ExperimentScorerEntry,
+  ExperimentScorerReference,
   ExperimentSummary,
+  ExperimentThreshold,
+  ExperimentWorkflowScorerConfig,
   ItemWithScores,
   ItemResult,
+  ScorerExecutionStatus,
+  ScorerExecutionStatusCounts,
   ScorerResult,
   StartExperimentConfig,
+  TargetExecutionStatus,
+  TargetExecutionStatusCounts,
 } from './types';
 export { executeTarget, type Target, type ExecutionResult } from './executor';
-export { resolveScorers, runScorersForItem } from './scorer';
+export { normalizeExperimentScorers, resolveScorers, runScorersForItem } from './scorer';
 export {
   ToolMockMatcher,
   TOOL_MOCK_MISMATCH,
@@ -260,49 +301,13 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       );
   }
 
-  // Normalize categorized scorer config (AgentScorerConfig | WorkflowScorerConfig) to a flat
-  // array so the existing merge/dedup/resolve logic below is unchanged.
-  // Trajectory dispatch is handled per-scorer in runScorerSafe based on scorer.type.
-  // Step scorers are kept separate (keyed by step ID) and dispatched per-step
-  // after the flat scorers run, mirroring runEvals.
-  let stepsConfigInput: Record<string, (MastraScorer<any, any, any, any> | string)[]> | undefined;
-  const flatScorerInput: (MastraScorer<any, any, any, any> | string)[] | undefined = (() => {
-    if (!scorerInput) return undefined;
-    if (Array.isArray(scorerInput)) return scorerInput;
-    // Categorized shape — flatten flat-style buckets into one array, keep steps separate
-    const flat: (MastraScorer<any, any, any, any> | string)[] = [];
-    if ('agent' in scorerInput && scorerInput.agent) flat.push(...scorerInput.agent);
-    if ('workflow' in scorerInput && scorerInput.workflow) flat.push(...scorerInput.workflow);
-    if ('trajectory' in scorerInput && scorerInput.trajectory) flat.push(...scorerInput.trajectory);
-    if ('steps' in scorerInput && scorerInput.steps) {
-      stepsConfigInput = scorerInput.steps;
-    }
-    return flat;
-  })();
-
-  // Merge dataset-attached scorers with explicitly provided scorers, then deduplicate
-  let mergedScorerInput = flatScorerInput;
-  const datasetScorerIds = datasetRecord?.scorerIds ?? [];
-  if (datasetScorerIds.length > 0) {
-    mergedScorerInput = [...(flatScorerInput ?? []), ...datasetScorerIds];
-  }
-  if (mergedScorerInput && mergedScorerInput.length > 0) {
-    const seen = new Set<string>();
-    mergedScorerInput = mergedScorerInput.filter(entry => {
-      if (typeof entry === 'string') {
-        if (seen.has(entry)) return false;
-        seen.add(entry);
-        return true;
-      }
-      // Keep all scorer instances — they are resolved by reference, not by ID
-      return true;
-    });
-  }
-
-  // Resolve scorers
-  const scorers = resolveScorers(mastra, mergedScorerInput);
-  // Resolve per-step scorers (keyed by step ID) for workflow targets
-  const stepScorers = resolveStepScorers(mastra, stepsConfigInput);
+  const normalizedScorers = normalizeExperimentScorers(mastra, scorerInput, datasetRecord?.scorerIds ?? []);
+  const { scorers, stepScorers } = normalizedScorers;
+  const precreatedExperiment =
+    providedExperimentId && experimentsStore
+      ? await experimentsStore.getExperimentById({ id: providedExperimentId })
+      : null;
+  const thresholds = precreatedExperiment?.thresholds ?? normalizedScorers.thresholds;
 
   // 5. Create experiment record (if storage available and not pre-created)
   if (experimentsStore) {
@@ -318,6 +323,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         targetType: targetType ?? 'agent',
         targetId: targetId ?? 'inline',
         totalItems: items.length,
+        thresholds,
         agentVersion,
         organizationId: datasetRecord?.organizationId ?? null,
         projectId: datasetRecord?.projectId ?? null,
@@ -335,8 +341,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   }
 
   // 6. Execute items with p-map
-  let succeededCount = 0;
-  let failedCount = 0;
+  const executionStatusCounts = createExecutionStatusCounts();
+  const scorerStatusCounts = createScorerStatusCounts();
   // Rows whose target run completed but whose persistence to
   // `mastra_experiment_results` failed. Surfaced on the summary so callers
   // can detect the DB being out of sync with the returned results.
@@ -354,10 +360,9 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     await pMap(
       items.map((item, idx) => ({ item, idx })),
       async ({ item, idx }) => {
-        // Check for cancellation
-        if (signal?.aborted) {
-          throw new DOMException('Aborted', 'AbortError');
-        }
+        // Leave undispatched items without synthetic rows. They are represented
+        // by the skipped count once all already-running work settles.
+        if (signal?.aborted) return;
 
         const itemStartedAt = new Date();
         // Compose per-item signal (timeout + run-level abort)
@@ -372,8 +377,9 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         let execResult = await execFn(item, itemSignal);
 
         while (execResult.error && retryCount < maxRetries) {
-          // Don't retry abort errors
-          if (execResult.error.message.toLowerCase().includes('abort')) break;
+          // A structured signal abort or explicit AbortError is terminal. Ordinary
+          // errors containing abort-like text remain retryable.
+          if (itemSignal?.aborted || execResult.error.code === 'AbortError') break;
 
           // Don't retry deterministic tool-mock failures — the matcher state cannot
           // change between attempts, so retrying would always fail identically.
@@ -396,12 +402,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
         const itemCompletedAt = new Date();
 
-        // Track success/failure
-        if (execResult.error) {
-          failedCount++;
-        } else {
-          succeededCount++;
-        }
+        const executionStatus = classifyExecutionStatus(execResult, signal);
+        executionStatusCounts[executionStatus]++;
 
         // Build item result. `persistenceError` starts null and is set below
         // if `addExperimentResult` throws so callers can detect rows that
@@ -413,6 +415,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           output: execResult.output,
           groundTruth: item.groundTruth ?? null,
           error: execResult.error,
+          executionStatus,
           startedAt: itemStartedAt,
           completedAt: itemCompletedAt,
           retryCount,
@@ -420,46 +423,51 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
         };
 
-        // Run scorers (inline, after target completes)
-        const workflowData =
-          execResult.stepResults || execResult.stepExecutionPath
-            ? {
-                stepResults: execResult.stepResults,
-                stepExecutionPath: execResult.stepExecutionPath,
-                spanId: execResult.spanId,
-              }
-            : undefined;
+        const itemScores: ScorerResult[] = [];
+        if (executionStatus === 'completed') {
+          const workflowData =
+            execResult.stepResults || execResult.stepExecutionPath
+              ? {
+                  stepResults: execResult.stepResults,
+                  stepExecutionPath: execResult.stepExecutionPath,
+                  spanId: execResult.spanId,
+                }
+              : undefined;
 
-        const flatScores = await runScorersForItem(
-          scorers,
-          item,
-          execResult.output,
-          storage ?? null,
-          experimentId,
-          targetType ?? 'agent',
-          targetId ?? 'inline',
-          item.id,
-          execResult.scorerInput,
-          execResult.scorerOutput,
-          execResult.traceId ?? undefined,
-          workflowData,
-        );
+          const flatScores = await runScorersForItem(
+            scorers,
+            item,
+            execResult.output,
+            storage ?? null,
+            experimentId,
+            targetType ?? 'agent',
+            targetId ?? 'inline',
+            item.id,
+            execResult.scorerInput,
+            execResult.scorerOutput,
+            execResult.traceId ?? undefined,
+            workflowData,
+          );
 
-        // Per-step scorer dispatch (mirrors runEvals). Only meaningful for workflow
-        // targets; for non-workflow targets stepScorers will be empty.
-        const stepScores = await runStepScorersForItem(
-          stepScorers,
-          item,
-          workflowData,
-          storage ?? null,
-          experimentId,
-          targetType ?? 'agent',
-          targetId ?? 'inline',
-          item.id,
-          execResult.traceId ?? undefined,
-        );
+          // Per-step scorer dispatch (mirrors runEvals). Only meaningful for workflow
+          // targets; for non-workflow targets stepScorers will be empty.
+          const stepScores = await runStepScorersForItem(
+            stepScorers,
+            item,
+            workflowData,
+            storage ?? null,
+            experimentId,
+            targetType ?? 'agent',
+            targetId ?? 'inline',
+            item.id,
+            execResult.traceId ?? undefined,
+          );
 
-        const itemScores = [...flatScores, ...stepScores];
+          itemScores.push(...flatScores, ...stepScores);
+          for (const score of itemScores) {
+            scorerStatusCounts[score.error ? 'error' : 'completed']++;
+          }
+        }
 
         // Persist result with scores (if storage available). A throw here does
         // NOT abort the run — persistence is best-effort and the target run's
@@ -477,6 +485,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               output: execResult.output,
               groundTruth: item.groundTruth ?? null,
               error: execResult.error,
+              executionStatus,
               startedAt: itemStartedAt,
               completedAt: itemCompletedAt,
               retryCount,
@@ -508,8 +517,9 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             try {
               await experimentsStore.updateExperiment({
                 id: experimentId,
-                succeededCount,
-                failedCount,
+                executionStatusCounts: { ...executionStatusCounts },
+                scorerStatusCounts: { ...scorerStatusCounts },
+                ...getLegacyCounts(executionStatusCounts),
               });
             } catch {
               // Non-fatal — progress updates are best-effort
@@ -528,15 +538,17 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   } catch {
     // Handle abort or other fatal errors — return partial summary instead of throwing
     const completedAt = new Date();
-    const skippedCount = items.length - succeededCount - failedCount;
+    executionStatusCounts.skipped =
+      items.length - executionStatusCounts.completed - executionStatusCounts.error - executionStatusCounts.cancelled;
+    const legacyCounts = getLegacyCounts(executionStatusCounts);
 
     if (experimentsStore) {
       await experimentsStore.updateExperiment({
         id: experimentId,
         status: 'failed',
-        succeededCount,
-        failedCount,
-        skippedCount,
+        executionStatusCounts,
+        scorerStatusCounts,
+        ...legacyCounts,
         completedAt,
       });
     }
@@ -545,9 +557,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       experimentId,
       status: 'failed' as const,
       totalItems: items.length,
-      succeededCount,
-      failedCount,
-      skippedCount,
+      executionStatusCounts,
+      scorerStatusCounts,
+      thresholds,
+      ...legacyCounts,
       persistenceFailures,
       completedWithErrors: false,
       startedAt,
@@ -558,17 +571,21 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
   // 7. Finalize experiment record
   const completedAt = new Date();
-  const status = failedCount === items.length ? 'failed' : 'completed';
-  const completedWithErrors = status === 'completed' && failedCount > 0;
+  executionStatusCounts.skipped =
+    items.length - executionStatusCounts.completed - executionStatusCounts.error - executionStatusCounts.cancelled;
+  const legacyCounts = getLegacyCounts(executionStatusCounts);
+  const interruptedByCancellation =
+    executionStatusCounts.cancelled > 0 || (signal?.aborted === true && executionStatusCounts.skipped > 0);
+  const status = interruptedByCancellation || legacyCounts.failedCount === items.length ? 'failed' : 'completed';
+  const completedWithErrors = status === 'completed' && legacyCounts.failedCount > 0;
 
-  const skippedCount = items.length - succeededCount - failedCount;
   if (experimentsStore) {
     await experimentsStore.updateExperiment({
       id: experimentId,
       status,
-      succeededCount,
-      failedCount,
-      skippedCount,
+      executionStatusCounts,
+      scorerStatusCounts,
+      ...legacyCounts,
       completedAt,
     });
   }
@@ -577,14 +594,15 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     experimentId,
     status,
     totalItems: items.length,
-    succeededCount,
-    failedCount,
-    skippedCount,
+    executionStatusCounts,
+    scorerStatusCounts,
+    thresholds,
+    ...legacyCounts,
     persistenceFailures,
     completedWithErrors,
     startedAt,
     completedAt,
-    results,
+    results: results.filter(Boolean),
   };
 }
 

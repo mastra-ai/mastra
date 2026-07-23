@@ -212,6 +212,33 @@ describe('P1 Regression', () => {
       expect(result.results[0]!.retryCount).toBe(0);
     });
 
+    it('retries ordinary errors with abort-like text', async () => {
+      await setupDataset(1);
+
+      const agent = {
+        id: 'abort-text-agent',
+        name: 'Abort Text Agent',
+        getModel: vi.fn().mockResolvedValue({ specificationVersion: 'v2' }),
+        generate: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('Upstream aborted the request unexpectedly'))
+          .mockResolvedValueOnce({ text: 'recovered' }),
+      } as unknown as Agent;
+
+      setupMastra(agent);
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'abort-text-agent',
+        maxRetries: 1,
+      });
+
+      expect(agent.generate).toHaveBeenCalledTimes(2);
+      expect(result.results[0]!.executionStatus).toBe('completed');
+      expect(result.results[0]!.retryCount).toBe(1);
+    });
+
     // T-2d: retryCount reflected in result
     it('reflects retryCount in persisted result', async () => {
       await setupDataset(1);
