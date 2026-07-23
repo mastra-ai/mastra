@@ -692,6 +692,7 @@ export class MastraFactory {
             workItems: workItemsStorage,
             approvals: approvalService,
             primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+            storedSessions: sourceControlStorage.forIntegration('github').sessions,
           });
           if (!supervisorSignals) {
             const signals = new FactorySupervisorSignalService(supervisorService);

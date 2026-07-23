@@ -33,12 +33,22 @@ export interface FactorySupervisorAddress {
   threadId: string;
 }
 
+/** The stored workspace coordinates a session record re-supplies on reopen. */
+export interface FactoryStoredWorkerSession {
+  orgId: string;
+  projectRepositoryId: string;
+  sandboxId: string | null;
+  sandboxWorkdir: string | null;
+}
+
 export interface FactorySupervisorServiceOptions {
   controller: AgentController<MastraCodeState>;
   projects: FactoryProjectsStorage;
   workItems: WorkItemsStorage;
   approvals: Pick<FactoryTransitionApprovalService, 'list' | 'get' | 'resolve'>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  /** Stored session lookup used to restore worker workspace state on reopen. */
+  storedSessions?: { getBySessionId(sessionId: string): Promise<FactoryStoredWorkerSession | null> };
 }
 
 export class FactorySupervisorService {
@@ -47,6 +57,7 @@ export class FactorySupervisorService {
   readonly #workItems: WorkItemsStorage;
   readonly #approvals: Pick<FactoryTransitionApprovalService, 'list' | 'get' | 'resolve'>;
   readonly #primeCredentials?: FactorySupervisorServiceOptions['primeCredentials'];
+  readonly #storedSessions?: FactorySupervisorServiceOptions['storedSessions'];
   readonly #pending = new Map<string, Promise<FactorySupervisorAddress>>();
 
   constructor(options: FactorySupervisorServiceOptions) {
@@ -55,6 +66,7 @@ export class FactorySupervisorService {
     this.#workItems = options.workItems;
     this.#approvals = options.approvals;
     this.#primeCredentials = options.primeCredentials;
+    this.#storedSessions = options.storedSessions;
   }
 
   get controller(): AgentController<MastraCodeState> {
@@ -196,6 +208,46 @@ export class FactorySupervisorService {
       this.describeWorkerBindings(input),
     ]);
     return buildFactorySupervisorState(input.factoryProjectId, items, approvals, workers);
+  }
+
+  /**
+   * Resolve the controller session for a worker binding, reopening it when no
+   * in-process session exists — the same recipe the browser uses to reopen a
+   * stored session after a server restart: get-or-create by resourceId, bind
+   * the binding's thread, then re-supply the stored workspace coordinates
+   * (repository, sandbox) into session state. A binding with no stored
+   * session record simply reopens without workspace state, exactly like a
+   * user opening a session with no repository.
+   */
+  async resolveWorkerSession(input: {
+    orgId: string;
+    factoryProjectId: string;
+    binding: { resourceId: string; threadId: string };
+    requestContext?: RequestContext;
+  }) {
+    const live = await this.#controller.getSessionByResource(input.binding.resourceId);
+    if (live) {
+      if (live.thread.getId() !== input.binding.threadId) {
+        await live.thread.switch({ threadId: input.binding.threadId, emitEvent: false });
+      }
+      return live;
+    }
+    const stored = await this.#storedSessions?.getBySessionId(input.binding.resourceId);
+    if (stored && stored.orgId !== input.orgId) {
+      throw new Error('Factory session is not available to this tenant.');
+    }
+    const session = await this.#controller.createSession({
+      resourceId: input.binding.resourceId,
+      threadId: input.binding.threadId,
+      requestContext: input.requestContext,
+    });
+    await session.state.set({
+      factoryProjectId: input.factoryProjectId,
+      ...(stored?.projectRepositoryId ? { projectRepositoryId: stored.projectRepositoryId } : {}),
+      ...(stored?.sandboxId ? { sandboxId: stored.sandboxId } : {}),
+      ...(stored?.sandboxWorkdir ? { sandboxWorkdir: stored.sandboxWorkdir } : {}),
+    });
+    return session;
   }
 
   /**
