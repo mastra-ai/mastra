@@ -28,12 +28,12 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   const error = setDefaultModel.error ?? projectQuery.error;
 
   return (
-    <div className="flex items-center justify-between gap-4 py-3 not-last:border-b not-last:border-border1/40">
-      <div className="flex flex-col">
-        <Txt as="span" variant="ui-md">
+    <div className="flex items-center justify-between gap-4 py-3">
+      <div className="flex flex-col gap-0.5">
+        <Txt as="span" variant="ui-md" className="text-icon5">
           Factory default model
         </Txt>
-        <Txt as="span" variant="ui-xs" className="text-icon3">
+        <Txt as="span" variant="ui-sm" className="text-icon3">
           Factory runs (triage, board work items) start on this model
         </Txt>
         {error && (
