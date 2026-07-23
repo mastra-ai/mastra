@@ -566,7 +566,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
   });
 });
 
-// ── S2: concurrent push serialisation (per-project mutex) ─────────────────
+// ── S2: concurrent push serialisation (per-session mutex) ─────────────────
 describe('S2: concurrent pushes', () => {
   function seed(id: string, userId = 'u1', orgId = 'org1') {
     tables.projectRepositories.push(
@@ -606,7 +606,7 @@ describe('S2: concurrent pushes', () => {
     });
   }
 
-  it('allows pushes for the same project session to overlap', async () => {
+  it('serializes pushes for the same project session', async () => {
     seed('p1');
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
@@ -624,13 +624,15 @@ describe('S2: concurrent pushes', () => {
     const second = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/b', sessionId: 'session-p1' });
 
     await new Promise(r => setTimeout(r, 10));
-    expect(pushBranch).toHaveBeenCalledTimes(2);
-    expect(maxConcurrent).toBe(2);
+    expect(pushBranch).toHaveBeenCalledTimes(1);
+    expect(maxConcurrent).toBe(1);
 
     gate.resolve();
     const [r1, r2] = await Promise.all([first, second]);
     expect(r1.status).toBe(200);
     expect(r2.status).toBe(200);
+    expect(pushBranch).toHaveBeenCalledTimes(2);
+    expect(maxConcurrent).toBe(1);
   });
 
   it('allows pushes for different projects to overlap', async () => {
