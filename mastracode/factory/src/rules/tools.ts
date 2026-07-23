@@ -13,7 +13,14 @@ const transitionInputSchema = z
   .object({
     stage: z.enum(FACTORY_RULE_STAGES),
     expectedRevision: z.number().int().positive(),
-    rationale: z.string().trim().min(1).max(1_000),
+    update: z
+      .string()
+      .trim()
+      .min(1)
+      .max(1_000)
+      .describe(
+        'A concise external-facing update explaining what was completed or planned, why the item is moving stages, and what should happen next.',
+      ),
   })
   .strict();
 
@@ -35,9 +42,9 @@ export async function createFactoryTransitionTools(options: {
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description:
-        'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
+        'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal. Write an external-facing update that summarizes what was completed or planned, explains the move, and states what should happen next; this update will be posted to the linked issue or pull request.',
       inputSchema: transitionInputSchema,
-      execute: async ({ stage, expectedRevision, rationale }, execution) => {
+      execute: async ({ stage, expectedRevision, update }, execution) => {
         const currentAddress = getFactorySessionAddress(execution.requestContext);
         const toolCallId = execution.agent?.toolCallId;
         if (!currentAddress || !toolCallId) {
@@ -59,7 +66,7 @@ export async function createFactoryTransitionTools(options: {
           expectedRevision,
           actor: { type: 'agent', bindingId: binding.id, role: binding.role },
           ingress: { type: 'agent', identity: `${binding.id}:${toolCallId}` },
-          cause: rationale,
+          cause: update,
         });
       },
     }),

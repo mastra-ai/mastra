@@ -125,7 +125,7 @@ describe('factory_transition_work_item', () => {
     const result = await execute(
       tools.factory_transition_work_item as ExecutableTool,
       context,
-      { stage: 'planning', expectedRevision: 1, rationale: 'The investigation is complete.' },
+      { stage: 'planning', expectedRevision: 1, update: 'The investigation is complete.' },
       'tool-call-9',
     );
 
@@ -153,7 +153,7 @@ describe('factory_transition_work_item', () => {
       execute(tools.factory_transition_work_item as ExecutableTool, requestContext({ threadId: 'other-thread' }), {
         stage: 'planning',
         expectedRevision: 1,
-        rationale: 'Continue.',
+        update: 'Continue.',
       }),
     ).rejects.toThrow(/binding is unavailable, revoked, or no longer matches/);
 
@@ -168,7 +168,7 @@ describe('factory_transition_work_item', () => {
       execute(tools.factory_transition_work_item as ExecutableTool, context, {
         stage: 'planning',
         expectedRevision: 1,
-        rationale: 'Continue.',
+        update: 'Continue.',
       }),
     ).rejects.toThrow(/binding is unavailable, revoked, or no longer matches/);
   });
@@ -194,10 +194,10 @@ describe('factory_transition_work_item', () => {
     const tool = tools.factory_transition_work_item as ExecutableTool;
 
     await expect(
-      execute(tool, context, { stage: 'planning', expectedRevision: 99, rationale: 'Continue.' }, 'stale-call'),
+      execute(tool, context, { stage: 'planning', expectedRevision: 99, update: 'Continue.' }, 'stale-call'),
     ).resolves.toMatchObject({ status: 'rejected', code: 'stale' });
     await expect(
-      execute(tool, context, { stage: 'planning', expectedRevision: 1, rationale: 'Continue.' }, 'rule-call'),
+      execute(tool, context, { stage: 'planning', expectedRevision: 1, update: 'Continue.' }, 'rule-call'),
     ).resolves.toMatchObject({ status: 'rejected', code: 'forbidden', reason: 'Submit a plan first.' });
   });
 
@@ -215,7 +215,7 @@ describe('factory_transition_work_item', () => {
     const context = requestContext();
     const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
     const tool = tools.factory_transition_work_item as ExecutableTool;
-    const input = { stage: 'planning', expectedRevision: 1, rationale: 'Investigation complete.' };
+    const input = { stage: 'planning', expectedRevision: 1, update: 'Investigation complete.' };
 
     const first = await execute(tool, context, input, 'immutable-call');
     const replay = await execute(tool, context, input, 'immutable-call');
@@ -238,7 +238,7 @@ describe('factory_transition_work_item', () => {
     await execute(tools.factory_transition_work_item as ExecutableTool, context, {
       stage: 'review',
       expectedRevision: review.item.revision,
-      rationale: 'Review started.',
+      update: 'Review started.',
     });
     expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'review', workItemId: review.item.id }));
   });
@@ -254,14 +254,12 @@ describe('factory_transition_work_item', () => {
     });
     const schema = (tools.factory_transition_work_item as ExecutableTool).inputSchema;
 
-    expect(schema.safeParse({ stage: 'planning', expectedRevision: 1, rationale: 'Ready.' }).success).toBe(true);
-    expect(schema.safeParse({ stage: 'unknown', expectedRevision: 1, rationale: 'Ready.' }).success).toBe(false);
-    expect(schema.safeParse({ stage: 'planning', expectedRevision: 0, rationale: 'Ready.' }).success).toBe(false);
+    expect(schema.safeParse({ stage: 'planning', expectedRevision: 1, update: 'Ready.' }).success).toBe(true);
+    expect(schema.safeParse({ stage: 'unknown', expectedRevision: 1, update: 'Ready.' }).success).toBe(false);
+    expect(schema.safeParse({ stage: 'planning', expectedRevision: 0, update: 'Ready.' }).success).toBe(false);
     expect(
-      schema.safeParse({ stage: 'planning', expectedRevision: 1, rationale: 'Ready.', workItemId: 'forged' }).success,
+      schema.safeParse({ stage: 'planning', expectedRevision: 1, update: 'Ready.', workItemId: 'forged' }).success,
     ).toBe(false);
-    expect(schema.safeParse({ stage: 'planning', expectedRevision: 1, rationale: 'x'.repeat(1_001) }).success).toBe(
-      false,
-    );
+    expect(schema.safeParse({ stage: 'planning', expectedRevision: 1, update: 'x'.repeat(1_001) }).success).toBe(false);
   });
 });

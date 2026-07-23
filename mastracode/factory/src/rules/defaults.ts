@@ -71,22 +71,13 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
   } as const;
 }
 
-const STAGE_COMMENTS: Record<Exclude<FactoryRuleStage, 'intake'>, string> = {
-  triage: 'Factory picked this up and is triaging it.',
-  planning: 'Factory is planning the work.',
-  execute: 'Factory is working on this.',
-  review: 'Factory has moved this to review.',
-  done: 'Factory completed this work.',
-  canceled: 'Factory canceled this work.',
-};
-
 function externalSyncDecisions(context: FactoryStageRuleContext): FactoryRuleDecision[] {
   if (context.item.source === 'manual' || context.stage === 'intake') return [];
   const decisions: FactoryRuleDecision[] = [
     {
       type: 'commentExternalSource',
       idempotencyKey: `${context.ingress.id}:external-comment:${context.stage}`,
-      body: STAGE_COMMENTS[context.stage],
+      body: context.cause,
     } as const,
   ];
   if (context.item.source === 'github-pr') return decisions;

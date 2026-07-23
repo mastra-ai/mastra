@@ -199,7 +199,7 @@ describe('defaultFactoryRules', () => {
           skillName: 'factory-triage',
           arguments: 'Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)',
         }),
-        expect.objectContaining({ type: 'commentExternalSource' }),
+        expect.objectContaining({ type: 'commentExternalSource', body: 'test' }),
         expect.objectContaining({ type: 'updateExternalSource', state: { kind: 'byType', stateType: 'started' } }),
       ]),
     );
@@ -221,7 +221,7 @@ describe('defaultFactoryRules', () => {
           skillName: 'factory-triage',
           arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
         }),
-        expect.objectContaining({ type: 'commentExternalSource' }),
+        expect.objectContaining({ type: 'commentExternalSource', body: 'test' }),
       ]),
     );
   });
@@ -242,7 +242,7 @@ describe('defaultFactoryRules', () => {
           skillName: 'factory-review',
           arguments: 'GitHub pull request (https://github.test/acme/repo/issues/42)',
         }),
-        expect.objectContaining({ type: 'commentExternalSource' }),
+        expect.objectContaining({ type: 'commentExternalSource', body: 'test' }),
       ]),
     );
   });
@@ -307,7 +307,7 @@ describe('defaultFactoryRules', () => {
       }),
     );
 
-    expect(result).toContainEqual(expect.objectContaining({ type: 'commentExternalSource' }));
+    expect(result).toContainEqual(expect.objectContaining({ type: 'commentExternalSource', body: 'test' }));
     expect(result).toContainEqual(
       expect.objectContaining({ type: 'updateExternalSource', state: { kind: 'byType', stateType } }),
     );
