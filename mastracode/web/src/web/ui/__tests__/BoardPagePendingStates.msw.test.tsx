@@ -205,6 +205,59 @@ describe('Board card pending states', () => {
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
   });
 
+  it('opens GitHub and Linear intake issues in their external provider', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem,
+              id: 'github-item',
+              factoryProjectId: FACTORY_ID,
+              title: 'GitHub intake issue',
+              stages: ['intake'],
+              sessions: {},
+              externalSource: {
+                integrationId: 'github',
+                type: 'issue',
+                externalId: '42',
+                url: 'https://github.com/acme/app/issues/42',
+              },
+            },
+            {
+              ...workItem,
+              id: 'linear-item',
+              factoryProjectId: FACTORY_ID,
+              title: 'Linear intake issue',
+              stages: ['intake'],
+              sessions: {},
+              externalSource: {
+                integrationId: 'linear',
+                type: 'issue',
+                externalId: 'ENG-42',
+                url: 'https://linear.app/acme/issue/ENG-42/linear-intake-issue',
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for GitHub intake issue' }));
+    const githubLink = await screen.findByRole('menuitem', { name: 'Open in GitHub' });
+    expect(githubLink).toHaveAttribute('href', 'https://github.com/acme/app/issues/42');
+    expect(githubLink).toHaveAttribute('target', '_blank');
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Linear intake issue' }));
+    const linearLink = await screen.findByRole('menuitem', { name: 'Open in Linear' });
+    expect(linearLink).toHaveAttribute('href', 'https://linear.app/acme/issue/ENG-42/linear-intake-issue');
+    expect(linearLink).toHaveAttribute('target', '_blank');
+  });
+
   it('ignores a card dropped back into its current column', async () => {
     const { transitionRequests } = stubBoardEndpoints();
     renderWorkBoard();
