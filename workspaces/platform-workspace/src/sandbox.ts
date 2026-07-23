@@ -270,6 +270,9 @@ export class PlatformSandbox extends MastraSandbox {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         command: fullCommand,
+        environmentId: this._environmentId,
+        idleTimeoutMinutes: this._idleTimeoutMinutes,
+        networkIsolation: this._networkIsolation,
         timeoutSec,
         cwd: options?.cwd,
         env: options?.env,

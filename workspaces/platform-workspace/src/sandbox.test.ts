@@ -31,6 +31,13 @@ describe('PlatformSandbox', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
     expect(await (fetchMock.mock.calls[0]![1].body as string)).toContain('env_123');
     expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
+    const execBody = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
+    expect(execBody).toMatchObject({
+      command: 'echo ok',
+      environmentId: 'env_123',
+      cwd: '/workspace',
+      env: { A: '1' },
+    });
   });
 
   it('does not send a template field on the create wire body', async () => {
@@ -69,6 +76,7 @@ describe('PlatformSandbox', () => {
   });
 
   it('reattaches when constructed with a sandbox id', async () => {
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'env_from_process');
     const fetchMock = vi.fn().mockResolvedValue(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
@@ -82,6 +90,8 @@ describe('PlatformSandbox', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]![0])).toContain('/sandbox/sbx_existing/exec');
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body).toMatchObject({ command: 'pwd', environmentId: 'env_from_process' });
   });
 
   it('clears sandbox state on destroy so stale IDs cannot leak to later calls', async () => {
