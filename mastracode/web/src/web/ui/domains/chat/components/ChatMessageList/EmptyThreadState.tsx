@@ -21,7 +21,7 @@ function FactoryMetadata({ label, value }: { label: string; value: string }) {
 export function EmptyThreadState() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { data: activeFactory } = useFactoryQuery(factoryId);
-  const { resourceId, factorySessionState } = useChatSessionContext();
+  const { projectPath, resourceId, factorySessionState } = useChatSessionContext();
   const { prefillComposer } = useChatCommands();
   if (!activeFactory) return null;
 
@@ -85,9 +85,7 @@ export function EmptyThreadState() {
           <FactoryMetadata label="Factory" value={activeFactory.name} />
           {resourceId && <FactoryMetadata label="Resource ID" value={resourceId} />}
           {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} />}
-          {factorySessionState?.sandboxWorkdir && (
-            <FactoryMetadata label="Workspace" value={factorySessionState.sandboxWorkdir} />
-          )}
+          {projectPath && <FactoryMetadata label="Workspace" value={projectPath} />}
         </dl>
       </details>
     </section>
