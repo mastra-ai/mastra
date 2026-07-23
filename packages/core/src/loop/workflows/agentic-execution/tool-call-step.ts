@@ -6,6 +6,7 @@ import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
+import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
@@ -898,6 +899,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
             let backgroundChunkTransformQueue: Promise<void> = Promise.resolve();
             const emittedReplayedToolCalls = new Set<string>();
+            let resolveReconciliation!: (outcome: { error?: unknown }) => void;
+            const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
+              resolveReconciliation = resolve;
+            });
 
             // Create a self-contained background task with per-stream hooks
             const bgTask = createBackgroundTask(backgroundTaskManager, {
@@ -928,6 +933,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     // tool pauses the bg-task run instead.
                     return resolvedTool.execute!(bgArgs, {
                       ...toolOptions,
+                      [BACKGROUND_WORK_CONTEXT]: {
+                        originRunId: runId,
+                        originToolCallId: inputData.toolCallId,
+                        taskId: bgTask.task.id,
+                        invocationKind: isAgentTool ? 'agent' : 'tool',
+                        disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                      },
                       ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
                       suspend: async (data?: unknown, options?: SuspendOptions) => {
                         await toolOptions.suspend?.(data, options);
@@ -1044,111 +1056,130 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // the LLM on the next turn would re-dispatch the tool thinking
                 // the research was still running.
                 onResult: async params => {
-                  const result =
-                    params.status === 'failed'
-                      ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
-                      : params.result;
-                  let transformCarrier = withToolPayloadTransformMetadata(
-                    { metadata: {} as Record<string, any> },
-                    await transformToolPayloadForTargets(
-                      {
-                        phase: 'input-available',
-                        toolName: params.toolName,
-                        toolCallId: params.toolCallId,
-                        input: args,
-                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                      },
-                      transformSource,
-                      logger,
-                    ),
-                  );
-                  transformCarrier = withToolPayloadTransformMetadata(
-                    transformCarrier,
-                    await transformToolPayloadForTargets(
-                      {
-                        phase: params.status === 'failed' ? 'error' : 'output-available',
-                        toolName: params.toolName,
-                        toolCallId: params.toolCallId,
-                        input: args,
-                        output: params.status === 'failed' ? undefined : params.result,
-                        error: params.status === 'failed' ? params.error : undefined,
-                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                      },
-                      transformSource,
-                      logger,
-                    ),
-                  );
-                  const transcriptArgsTransform = getTransformedToolPayload(
-                    transformCarrier.metadata,
-                    'transcript',
-                    'input-available',
-                  );
-                  const transcriptResultTransform = getTransformedToolPayload(
-                    transformCarrier.metadata,
-                    'transcript',
-                    params.status === 'failed' ? 'error' : 'output-available',
-                  );
-                  const transcriptArgs = hasTransformedToolPayload(transcriptArgsTransform)
-                    ? transcriptArgsTransform.transformed
-                    : args;
-                  const transcriptResult = hasTransformedToolPayload(transcriptResultTransform)
-                    ? transcriptResultTransform.transformed
-                    : result;
-                  const providerMetadata = withToolPayloadTransformProviderMetadata(
-                    inputData.providerMetadata as ProviderMetadata | undefined,
-                    transformCarrier.metadata,
-                  ) as ProviderMetadata | undefined;
+                  try {
+                    const result =
+                      params.status === 'failed'
+                        ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
+                        : params.result;
+                    let transformCarrier = withToolPayloadTransformMetadata(
+                      { metadata: {} as Record<string, any> },
+                      await transformToolPayloadForTargets(
+                        {
+                          phase: 'input-available',
+                          toolName: params.toolName,
+                          toolCallId: params.toolCallId,
+                          input: args,
+                          providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                        },
+                        transformSource,
+                        logger,
+                      ),
+                    );
+                    transformCarrier = withToolPayloadTransformMetadata(
+                      transformCarrier,
+                      await transformToolPayloadForTargets(
+                        {
+                          phase: params.status === 'failed' ? 'error' : 'output-available',
+                          toolName: params.toolName,
+                          toolCallId: params.toolCallId,
+                          input: args,
+                          output: params.status === 'failed' ? undefined : params.result,
+                          error: params.status === 'failed' ? params.error : undefined,
+                          providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                        },
+                        transformSource,
+                        logger,
+                      ),
+                    );
+                    const transcriptArgsTransform = getTransformedToolPayload(
+                      transformCarrier.metadata,
+                      'transcript',
+                      'input-available',
+                    );
+                    const transcriptResultTransform = getTransformedToolPayload(
+                      transformCarrier.metadata,
+                      'transcript',
+                      params.status === 'failed' ? 'error' : 'output-available',
+                    );
+                    const transcriptArgs = hasTransformedToolPayload(transcriptArgsTransform)
+                      ? transcriptArgsTransform.transformed
+                      : args;
+                    const transcriptResult = hasTransformedToolPayload(transcriptResultTransform)
+                      ? transcriptResultTransform.transformed
+                      : result;
+                    const providerMetadata = withToolPayloadTransformProviderMetadata(
+                      inputData.providerMetadata as ProviderMetadata | undefined,
+                      transformCarrier.metadata,
+                    ) as ProviderMetadata | undefined;
 
-                  const updated = messageList.updateToolInvocation(
-                    {
-                      type: 'tool-invocation',
-                      toolInvocation: {
-                        state: 'result',
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        args,
-                        result,
-                        // Preserve the approval decision for an approved approval-gated tool that
-                        // ran in the background so it round-trips on recall, matching the sync path
-                        // and the "started" placeholder above.
-                        ...(approvalGrant ?? {}),
+                    const updated = messageList.updateToolInvocation(
+                      {
+                        type: 'tool-invocation',
+                        toolInvocation: {
+                          state: 'result',
+                          toolCallId: params.toolCallId,
+                          toolName: params.toolName,
+                          args,
+                          result,
+                          // Preserve the approval decision for an approved approval-gated tool that
+                          // ran in the background so it round-trips on recall, matching the sync path
+                          // and the "started" placeholder above.
+                          ...(approvalGrant ?? {}),
+                        },
+                        ...(providerMetadata ? { providerMetadata } : {}),
                       },
-                      ...(providerMetadata ? { providerMetadata } : {}),
-                    },
-                    {
-                      mode: 'stream',
-                      backgroundTasks: {
-                        [params.toolCallId]: {
-                          startedAt: params.startedAt,
-                          completedAt: params.completedAt,
-                          taskId: params.taskId,
+                      {
+                        mode: 'stream',
+                        backgroundTasks: {
+                          [params.toolCallId]: {
+                            startedAt: params.startedAt,
+                            completedAt: params.completedAt,
+                            taskId: params.taskId,
+                          },
                         },
                       },
-                    },
-                  );
+                    );
 
-                  // Fallback: no matching tool-invocation was found in the
-                  // current message list (can happen if the initial run's
-                  // message list was cleared, e.g. because the task completed
-                  // after the process restarted and hooks were reattached
-                  // without the original call). Append a standalone tool
-                  // message so memory still records the result, even if it
-                  // means a duplicate entry for that toolCallId.
-                  if (!updated) {
-                    if (params.runId !== runId || (params.runId === runId && workflowResumeData)) {
+                    // Fallback: no matching tool-invocation was found in the
+                    // current message list (can happen if the initial run's
+                    // message list was cleared, e.g. because the task completed
+                    // after the process restarted and hooks were reattached
+                    // without the original call). Append a standalone tool
+                    // message so memory still records the result, even if it
+                    // means a duplicate entry for that toolCallId.
+                    if (!updated) {
+                      if (params.runId !== runId || (params.runId === runId && workflowResumeData)) {
+                        messageList.add(
+                          [
+                            {
+                              role: 'tool' as const,
+                              type: 'tool-call',
+                              id: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID(),
+                              createdAt: new Date(),
+                              content: [
+                                {
+                                  type: 'tool-call' as const,
+                                  toolCallId: params.toolCallId,
+                                  toolName: params.toolName,
+                                  args: transcriptArgs,
+                                },
+                              ],
+                            },
+                          ],
+                          'response',
+                        );
+                      }
                       messageList.add(
                         [
                           {
                             role: 'tool' as const,
-                            type: 'tool-call',
-                            id: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID(),
-                            createdAt: new Date(),
                             content: [
                               {
-                                type: 'tool-call' as const,
+                                type: 'tool-result' as const,
                                 toolCallId: params.toolCallId,
                                 toolName: params.toolName,
-                                args: transcriptArgs,
+                                result: transcriptResult,
+                                isError: params.status === 'failed',
                               },
                             ],
                           },
@@ -1156,36 +1187,33 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         'response',
                       );
                     }
-                    messageList.add(
-                      [
-                        {
-                          role: 'tool' as const,
-                          content: [
-                            {
-                              type: 'tool-result' as const,
-                              toolCallId: params.toolCallId,
-                              toolName: params.toolName,
-                              result: transcriptResult,
-                              isError: params.status === 'failed',
-                            },
-                          ],
-                        },
-                      ],
-                      'response',
-                    );
-                  }
 
-                  // Flush to memory if available
-                  {
-                    const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
-                    const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
-                    if (sqm && tid) {
-                      await sqm.flushMessages(
-                        messageList,
-                        tid,
-                        readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig'),
-                      );
+                    // Flush to memory if available
+                    {
+                      const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
+                      const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+                      if (sqm && tid) {
+                        await sqm.flushMessages(
+                          messageList,
+                          tid,
+                          readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig'),
+                        );
+                      }
                     }
+
+                    resolveReconciliation({});
+                    void notifyBackgroundWorkTerminal(mastra, {
+                      originRunId: runId,
+                      originToolCallId: params.toolCallId,
+                      ...(params.runId !== runId ? { executorRunId: params.runId } : {}),
+                      taskId: params.taskId,
+                      invocationKind: isAgentTool ? 'agent' : 'tool',
+                      disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                      status: params.status === 'failed' ? 'failed' : 'completed',
+                    });
+                  } catch (error) {
+                    resolveReconciliation({ error });
+                    throw error;
                   }
                 },
                 // Execution injector — records background task lifecycle metadata on the
@@ -1257,6 +1285,27 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   errorMessage: error instanceof Error ? error.message : undefined,
                   errorStack: error instanceof Error ? error.stack : undefined,
                 });
+              }
+
+              if (bgResolved.disposition === 'awaited') {
+                const completedTask = await bgTask.waitForCompletion();
+                const reconciliation = await reconciliationComplete;
+                if (reconciliation.error) {
+                  throw reconciliation.error;
+                }
+
+                if (completedTask.status !== 'completed') {
+                  throw new Error(
+                    completedTask.error?.message ??
+                      `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
+                  );
+                }
+
+                return {
+                  result: ensureSerializable(completedTask.result),
+                  ...inputData,
+                  ...(approvalGrant ?? {}),
+                };
               }
 
               // Return placeholder result so the LLM can continue

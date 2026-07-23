@@ -69,6 +69,111 @@ describe('UnixSocketPubSub', () => {
     expect(secondCb.mock.calls[0]![0].type).toBe('hello');
   });
 
+  it('round-robins local subscribers in the same group', async () => {
+    const path = await socketPath();
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+
+    const firstCb = vi.fn();
+    const secondCb = vi.fn();
+    await pubsub.subscribe('topic-a', firstCb, { group: 'workers' });
+    await pubsub.subscribe('topic-a', secondCb, { group: 'workers' });
+
+    await pubsub.publish('topic-a', makeEvent({ type: 'first' }));
+    await pubsub.publish('topic-a', makeEvent({ type: 'second' }));
+
+    expect(firstCb).toHaveBeenCalledTimes(1);
+    expect(secondCb).toHaveBeenCalledTimes(1);
+  });
+
+  it('fans out to ungrouped subscribers and selects one process per group', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    const clientB = new UnixSocketPubSub(path);
+    pubsubs.push(broker, clientA, clientB);
+
+    const brokerFanout = vi.fn();
+    const clientFanout = vi.fn();
+    const brokerWorker = vi.fn();
+    const clientAWorker = vi.fn();
+    const clientBWorker = vi.fn();
+    await broker.subscribe('topic-a', brokerFanout);
+    await clientA.subscribe('topic-a', clientFanout);
+    await broker.subscribe('topic-a', brokerWorker, { group: 'workers' });
+    await clientA.subscribe('topic-a', clientAWorker, { group: 'workers' });
+    await clientB.subscribe('topic-a', clientBWorker, { group: 'workers' });
+
+    for (let index = 0; index < 6; index++) {
+      await broker.publish('topic-a', makeEvent({ type: `event-${index}` }));
+    }
+
+    await waitFor(() => {
+      expect(brokerFanout).toHaveBeenCalledTimes(6);
+      expect(clientFanout).toHaveBeenCalledTimes(6);
+      expect(brokerWorker).toHaveBeenCalledTimes(2);
+      expect(clientAWorker).toHaveBeenCalledTimes(2);
+      expect(clientBWorker).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('delivers once to each independent group on a topic', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const workers = vi.fn();
+    const auditors = vi.fn();
+    await broker.subscribe('topic-a', workers, { group: 'workers' });
+    await client.subscribe('topic-a', auditors, { group: 'auditors' });
+
+    await broker.publish('topic-a', makeEvent({ type: 'grouped' }));
+
+    await waitFor(() => {
+      expect(workers).toHaveBeenCalledTimes(1);
+      expect(auditors).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('removes a remote group membership only after its last local subscriber unsubscribes', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const first = vi.fn();
+    const second = vi.fn();
+    await client.subscribe('topic-a', first, { group: 'workers' });
+    await client.subscribe('topic-a', second, { group: 'workers' });
+    await client.unsubscribe('topic-a', first);
+
+    await broker.publish('topic-a', makeEvent({ type: 'still-subscribed' }));
+    await waitFor(() => expect(second).toHaveBeenCalledTimes(1));
+
+    await client.unsubscribe('topic-a', second);
+    await broker.publish('topic-a', makeEvent({ type: 'unsubscribed' }));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps localOnly grouped delivery within the publishing instance', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerWorker = vi.fn();
+    const clientWorker = vi.fn();
+    await broker.subscribe('topic-a', brokerWorker, { group: 'workers' });
+    await client.subscribe('topic-a', clientWorker, { group: 'workers' });
+
+    await client.publish('topic-a', makeEvent({ type: 'local-grouped' }), { localOnly: true });
+
+    expect(clientWorker).toHaveBeenCalledTimes(1);
+    expect(brokerWorker).not.toHaveBeenCalled();
+  });
+
   it('relays client-published events back to the publishing client', async () => {
     const path = await socketPath();
     const broker = new UnixSocketPubSub(path);
@@ -438,6 +543,26 @@ describe('UnixSocketPubSub', () => {
     await waitFor(() => {
       expect(follower.isBroker).toBe(true);
       expect(cb).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('preserves grouped subscriptions when a follower becomes the broker', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const follower = new UnixSocketPubSub(path);
+    pubsubs.push(broker, follower);
+
+    const worker = vi.fn();
+    await broker.subscribe('topic-a', vi.fn(), { group: 'workers' });
+    await follower.subscribe('topic-a', worker, { group: 'workers' });
+
+    await broker.close();
+    pubsubs.splice(pubsubs.indexOf(broker), 1);
+    await follower.publish('topic-a', makeEvent({ type: 'after-grouped-close' }));
+
+    await waitFor(() => {
+      expect(follower.isBroker).toBe(true);
+      expect(worker).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
+import type { BackgroundTaskManagerConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
@@ -226,6 +227,9 @@ export interface AgentControllerConfig<TState = {}> {
 
   /** Storage backend for persistence (threads, messages, state) */
   storage?: MastraCompositeStore;
+
+  /** Background task configuration for the controller's standalone internal Mastra instance. */
+  backgroundTasks?: BackgroundTaskManagerConfig;
 
   /** Schema defining the shape of controller state (Zod, JSON Schema, Standard Schema, etc.) */
   stateSchema?: PublicSchema<TState, any>;

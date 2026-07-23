@@ -57,7 +57,7 @@ Enabling the manager doesn't run anything in the background by itself as every t
 1. **Tool-level config**: the tool itself declares it as background-eligible.
 1. **Agent-level config**: the agent declares which of its tools are background-eligible.
 
-Once a tool has opted in, the LLM can optionally include a `_background` field in the tool arguments to override the resolved config for a specific call (timeout, retries, or to flip the call back to foreground).
+Once a tool has opted in, the LLM can optionally include a `_background` field in the tool arguments to select `foreground`, `deferred`, or `awaited` execution for a specific call and override its timeout or retries.
 
 ### Tool-level
 
@@ -74,6 +74,7 @@ export const researchTool = createTool({
   // highlight-start
   background: {
     enabled: true,
+    disposition: 'deferred',
     timeoutMs: 600_000,
     maxRetries: 1,
   },
@@ -116,11 +117,19 @@ When a tool is registered on an agent that has background tasks enabled, the mod
 ```json
 {
   "topic": "solana",
-  "_background": { "enabled": true, "timeoutMs": 900_000 }
+  "_background": { "disposition": "awaited", "timeoutMs": 900000 }
 }
 ```
 
-The `_background` override is a _modifier_ on tools the developer has already opted in at the tool or agent layer — it's not a standalone opt-in. If a tool hasn't been opted in, `_background.enabled: true` from the model is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
+The available dispositions are:
+
+- `foreground`: Run the tool synchronously without background-work lifecycle signals.
+- `deferred`: Dispatch the tool and let the agent continue. The task remains attached to the run, and streams using `untilIdle` wait for it to reconcile.
+- `awaited`: Dispatch the tool through the background task manager, but hold the current branch until its authoritative result has been reconciled.
+
+For compatibility, `_background.enabled: true` selects `deferred`, and `_background.enabled: false` selects `foreground`. An explicit `disposition` takes precedence over `enabled`.
+
+The `_background` override is a _modifier_ on tools the developer has already opted in at the tool or agent layer — it's not a standalone opt-in. If a tool hasn't been opted in, a model-selected background disposition is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
 
 ### Resolution order
 
@@ -128,7 +137,7 @@ When a tool call is dispatched, the resolved background config is computed in th
 
 1. Agent-level `backgroundTasks.tools` entry for the tool.
 1. Tool-level `background` config.
-1. LLM `_background.enabled` override (only used to enable background dispatch when the tool was opted in at one of the layers above).
+1. LLM `_background.disposition` or `_background.enabled` override (only applied when the tool was opted in at one of the layers above).
 1. Manager defaults (`defaultTimeoutMs`, `defaultRetries`).
 
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
@@ -239,9 +248,11 @@ const researchAgent = new Agent({
 })
 ```
 
-When this `researchAgent` is delegated to from a supervisor that has no backgroundTask configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task, and `deepResearchTool` runs in the foreground inside that invocation, instead of dispatching its own nested background task.
+When this `researchAgent` is delegated to from a supervisor that has no background task configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task.
 
-Use this pattern when you want a subagent to behave consistently in the background regardless of which supervisor invokes it. Use the supervisor-side opt-in (above) when you want to tune background behavior centrally per supervisor.
+Mastra supports one nested background-tool level inside a delegated run: a root agent can delegate to a subagent, and that subagent can dispatch an eligible ordinary tool in the background. A second delegated-agent edge runs in the foreground and doesn't receive nested background guidance. This limit is execution-scoped and doesn't mutate the shared subagent configuration.
+
+Use this pattern when you want a subagent to behave consistently regardless of which supervisor invokes it. Use the supervisor-side opt-in above when you want to tune background behavior centrally per supervisor. Arbitrary-depth delegated background work, workflow integration, and Alexandria integration aren't supported by this boundary.
 
 ## Suspending and resuming
 

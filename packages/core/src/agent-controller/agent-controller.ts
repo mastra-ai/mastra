@@ -733,6 +733,7 @@ export class AgentController<TState = {}> {
       this.#internalMastra = new Mastra({
         logger: false,
         storage: this.config.storage,
+        ...(this.config.backgroundTasks ? { backgroundTasks: this.config.backgroundTasks } : {}),
         ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
         ...(gateways ? { gateways } : {}),
@@ -1494,11 +1495,13 @@ export class AgentController<TState = {}> {
     requestContext: requestContextInput,
     tracingContext,
     tracingOptions,
+    untilIdle,
   }: {
     session: Session<TState>;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
+    untilIdle?: boolean | { maxIdleMs?: number };
   }): Promise<Record<string, unknown>> {
     if (!session.thread.getId()) {
       throw new Error('Cannot build stream options without a current thread');
@@ -1543,6 +1546,7 @@ export class AgentController<TState = {}> {
       },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
+      ...(untilIdle && { untilIdle }),
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);

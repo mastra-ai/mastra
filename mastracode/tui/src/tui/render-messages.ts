@@ -36,6 +36,7 @@ import { ToolExecutionComponentEnhanced } from './components/tool-execution-enha
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import {
   getAssistantRenderParts,
+  getBackgroundWorkLifecycleView,
   getMessageText,
   getNotificationSummaryView,
   getNotificationView,
@@ -47,7 +48,7 @@ import {
   isSignalMessage,
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
-import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
+import { formatToolResult, isBackgroundToolPlaceholder, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 
@@ -530,6 +531,21 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
   }
 
   if (kind === 'notification') {
+    const backgroundWork = getBackgroundWorkLifecycleView(message);
+    if (backgroundWork) {
+      const component = state.pendingTools.get(backgroundWork.originToolCallId);
+      if (backgroundWork.taskId) component?.setBackgroundTaskId?.(backgroundWork.taskId);
+      if (component && (backgroundWork.tagName === 'work-completed' || backgroundWork.tagName === 'work-failed')) {
+        const status =
+          backgroundWork.tagName === 'work-completed'
+            ? 'Completed in background; reconciling result…'
+            : 'Background execution failed; reconciling error…';
+        component.updateResult({ content: [{ type: 'text', text: status }], isError: false }, true);
+        state.ui.requestRender();
+      }
+      return true;
+    }
+
     const notification = getNotificationView(message);
     const component = new NotificationComponent({
       message: notification.message,
@@ -561,8 +577,16 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
   return false;
 }
 
+function isPersistedBackgroundCompletionDirective(message: MastraDBMessage): boolean {
+  if (message.role !== 'user' && message.role !== 'signal') return false;
+  const text = isSignalMessage(message) ? getUserSignalView(message).message : getMessageText(message);
+  return /^IMPORTANT: The following tool-call IDs (?:completed successfully|failed|were cancelled by the user before completion|are suspended):/.test(
+    text.trim(),
+  );
+}
+
 export function addUserMessage(state: TUIState, message: MastraDBMessage, options?: { label?: string }): void {
-  if (state.messageComponentsById.has(message.id)) {
+  if (state.messageComponentsById.has(message.id) || isPersistedBackgroundCompletionDirective(message)) {
     return;
   }
 
@@ -890,6 +914,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           const hasResult = part.hasResult;
           const resultValue = part.result;
           const resultIsError = part.isError;
+          const isBackgroundPlaceholder = hasResult && !resultIsError && isBackgroundToolPlaceholder(resultValue);
 
           // Render subagent tool calls with dedicated component
           if (toolName === 'subagent') {
@@ -993,13 +1018,17 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 content: [
                   {
                     type: 'text',
-                    text: formatToolResult(resultValue),
+                    text: isBackgroundPlaceholder ? 'Running in background…' : formatToolResult(resultValue),
                   },
                 ],
                 isError: resultIsError,
               },
-              false,
+              isBackgroundPlaceholder,
             );
+          }
+
+          if (isBackgroundPlaceholder) {
+            state.pendingTools.set(part.toolCallId, toolComponent);
           }
 
           // Successful task transition tools render through the pinned task UI,

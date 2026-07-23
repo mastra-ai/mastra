@@ -161,6 +161,12 @@ export interface BackgroundTaskManagerConfig {
   /** Cleanup configuration for old task records */
   cleanup?: CleanupConfig;
   /**
+   * Whether to recover running and pending tasks during manager startup.
+   * Disable this when multiple live managers share storage until recovery can
+   * be fenced by persisted worker ownership and leases. Default: true.
+   */
+  recoverStaleTasksOnStart?: boolean;
+  /**
    * Minimum delay between chunk-based progress output events for each task, in ms.
    * Default: undefined (publish every progress chunk).
    */
@@ -179,6 +185,8 @@ export interface BackgroundTaskManagerConfig {
 }
 
 // --- Tool-level and agent-level config ---
+
+export type BackgroundExecutionDisposition = 'foreground' | 'deferred' | 'awaited';
 
 export interface ToolBackgroundConfig {
   /** Whether this tool is eligible for background execution. Default: false */
@@ -207,11 +215,13 @@ export interface AgentBackgroundConfig {
    */
   disabled?: boolean;
   /**
-   * Which tools should run in the background.
-   * - `true`: use the tool's own background config
-   * - `false`: always foreground, even if tool says background
+   * Which tools are eligible for per-call background execution.
+   * Eligibility never changes the default: calls remain foreground unless
+   * `_background` explicitly requests deferred or awaited execution.
+   * - `true`: allow the tool's own background config
+   * - `false`: always foreground, even if the tool is eligible
    * - `{ enabled, timeoutMs }`: override specific settings
-   * - `'all'`: run all background-eligible tools in background
+   * - `'all'`: make all tools eligible for explicit background execution
    */
   tools?: Record<string, AgentBackgroundToolConfig> | 'all';
   /** Per-agent concurrency override */
@@ -229,8 +239,10 @@ export interface AgentBackgroundConfig {
  * to override background behavior per-call.
  */
 export interface LLMBackgroundOverride {
-  /** Force background (true) or foreground (false). Undefined = use default config. */
+  /** Force deferred (true) or foreground (false). Undefined = foreground. */
   enabled?: boolean;
+  /** Choose foreground, deferred, or awaited execution for this call. */
+  disposition?: BackgroundExecutionDisposition;
   /** Override timeout for this specific call */
   timeoutMs?: number;
   /** Override max retries for this specific call */

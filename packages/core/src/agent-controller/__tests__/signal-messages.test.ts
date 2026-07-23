@@ -97,6 +97,30 @@ describe('AgentController signal messages', () => {
     expect(agent.sendSignal).toHaveBeenCalledTimes(1);
   });
 
+  it('forwards untilIdle into idle-run stream options', async () => {
+    const agent = createAgentMock(() => null);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-until-idle',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    const result = session.sendSignal({ content: 'wait for background work', untilIdle: { maxIdleMs: 1_000 } });
+    await expect(result.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+
+    expect(agent.sendSignal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        ifIdle: expect.objectContaining({
+          streamOptions: expect.objectContaining({ untilIdle: { maxIdleMs: 1_000 } }),
+        }),
+      }),
+    );
+  });
+
   it('surfaces idle signal submission failures instead of waiting forever for agent_end', async () => {
     const agent = createAgentMock(() => null);
     agent.sendSignal.mockReturnValue({

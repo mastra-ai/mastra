@@ -208,6 +208,21 @@ function legacyAssistantToolMessage(id: string, tool: ToolPair): MastraDBMessage
 }
 
 describe('addUserMessage', () => {
+  it('suppresses legacy persisted background completion directives', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        'IMPORTANT: The following tool-call IDs completed successfully: call-1 (view). Their results are now in the conversation. Do not call the same tool again — the result is already available.',
+        'legacy-background-directive',
+      ),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(0);
+    expect(state.messageComponentsById.has('legacy-background-directive')).toBe(false);
+  });
+
   it('replaces pending active steering only when the subscription echoes the user message', () => {
     const state = createState();
     addPendingUserMessage(state, 'signal-1', 'steer me', undefined, { isInterjection: true });
@@ -349,6 +364,77 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(true);
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
+  });
+
+  it.each(['work-deferred', 'work-awaited'] as const)(
+    'preserves the background placeholder detail for %s without rendering a notification',
+    tagName => {
+      const state = createState();
+      const updateResult = vi.fn();
+      const setBackgroundTaskId = vi.fn();
+      state.pendingTools.set('call-1', { updateResult, setBackgroundTaskId } as never);
+
+      addUserMessage(
+        state,
+        createSignal({
+          id: `${tagName}-1`,
+          type: 'notification',
+          tagName,
+          contents: `${tagName}: call-1`,
+          attributes: { source: 'background-work', status: 'running' },
+          metadata: { originToolCallId: 'call-1', taskId: 'task-1', status: tagName },
+        }).toDBMessage(),
+      );
+
+      expect(updateResult).not.toHaveBeenCalled();
+      expect(setBackgroundTaskId).toHaveBeenCalledWith('task-1');
+      expect(state.messageComponentsById.has(`${tagName}-1`)).toBe(false);
+      expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
+    },
+  );
+
+  it.each([
+    ['work-completed', 'Completed in background; reconciling result…'],
+    ['work-failed', 'Background execution failed; reconciling error…'],
+  ] as const)('updates the correlated tool row for %s without rendering a notification', (tagName, statusText) => {
+    const state = createState();
+    const updateResult = vi.fn();
+    state.pendingTools.set('call-1', { updateResult } as never);
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: `${tagName}-1`,
+        type: 'notification',
+        tagName,
+        contents: `${tagName}: call-1`,
+        attributes: { source: 'background-work', status: tagName === 'work-failed' ? 'failed' : 'completed' },
+        metadata: { originToolCallId: 'call-1', taskId: 'task-1', status: tagName },
+      }).toDBMessage(),
+    );
+
+    expect(updateResult).toHaveBeenCalledWith({ content: [{ type: 'text', text: statusText }], isError: false }, true);
+    expect(state.messageComponentsById.has(`${tagName}-1`)).toBe(false);
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
+  });
+
+  it('suppresses an uncorrelated background-work lifecycle signal', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: 'work-completed-uncorrelated',
+        type: 'notification',
+        tagName: 'work-completed',
+        contents: 'work-completed: missing-call',
+        attributes: { source: 'background-work', status: 'completed' },
+        metadata: { originToolCallId: 'missing-call', taskId: 'task-1', status: 'completed' },
+      }).toDBMessage(),
+    );
+
+    expect(state.messageComponentsById.has('work-completed-uncorrelated')).toBe(false);
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
   });
 
   it('dedupes echoed slash command messages against the optimistic slash component', () => {
@@ -816,6 +902,34 @@ describe('renderExistingMessages tasks', () => {
     expect(rendered).toContain('Tasks [2/2 completed]');
     expect(rendered).toContain('Loaded history task one');
     expect(rendered).toContain('Loaded history task two');
+  });
+});
+
+describe('renderExistingMessages tools', () => {
+  it('reconstructs deferred background placeholders as pending tool rows', async () => {
+    const message = assistantToolMessage('assistant-background-tool', [
+      {
+        id: 'tool-background-1',
+        name: 'view',
+        args: { path: 'package.json' },
+        result: 'Background task started. Task ID: task-1',
+      },
+    ]);
+    const state = createState();
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    expect(state.pendingTools.has('tool-background-1')).toBe(true);
+    const rendered = state.chatContainer
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('⋯');
+    expect(rendered).not.toContain('Background task started');
   });
 });
 

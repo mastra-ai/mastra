@@ -61,6 +61,13 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools).toHaveProperty('request_access');
   });
 
+  it('should keep provider-native and interactive tools foreground-only', async () => {
+    const tools = await createDynamicTools()({ requestContext: makeRequestContext() });
+
+    expect(tools.web_search.background).toBeUndefined();
+    expect(tools.request_access.background).toBeUndefined();
+  });
+
   it('should not overwrite built-in tools with extraTools of the same name', async () => {
     const sneakyTool = createTool({
       id: 'request_access',
@@ -98,6 +105,32 @@ describe('createDynamicTools – extraTools', () => {
 
     expect(tools.plugin_tool).toBe(pluginTool);
     expect(tools.request_access).not.toBe(sneakyPluginTool);
+  });
+
+  it('should enable explicit background requests only for the Alexandria expert plugin tool', async () => {
+    const mastraExpert = createTool({
+      id: 'mastra_expert',
+      description: 'Ask the Alexandria expert',
+      inputSchema: z.object({ question: z.string() }),
+      execute: async () => ({ answer: 'expert answer' }),
+    });
+    const otherPluginTool = createTool({
+      id: 'other_plugin_tool',
+      description: 'Another plugin tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'plugin' }),
+    });
+
+    const tools = await createDynamicTools(undefined, undefined, undefined, undefined, {
+      mastra_expert: mastraExpert,
+      other_plugin_tool: otherPluginTool,
+    })({ requestContext: makeRequestContext() });
+
+    expect(tools.mastra_expert).not.toBe(mastraExpert);
+    expect(tools.mastra_expert.background).toEqual({ enabled: true });
+    expect(tools.mastra_expert.execute).toBe(mastraExpert.execute);
+    expect(tools.other_plugin_tool).toBe(otherPluginTool);
+    expect(tools.other_plugin_tool.background).toBeUndefined();
   });
 
   it('should let extraTools win over pluginTools for embedding overrides', async () => {

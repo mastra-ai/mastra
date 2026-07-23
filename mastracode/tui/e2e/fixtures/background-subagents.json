@@ -1,0 +1,145 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "sequenceIndex": 0,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_deferred_probe",
+            "name": "background_probe",
+            "arguments": {
+              "label": "deferred",
+              "_background": {
+                "disposition": "deferred"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "sequenceIndex": 1,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "DEFERRED_PARENT_CONTINUED DEFERRED_WORK_COMPLETED",
+        "toolCalls": [
+          {
+            "id": "call_awaited_probe",
+            "name": "background_probe",
+            "arguments": {
+              "label": "awaited",
+              "_background": {
+                "disposition": "awaited"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "sequenceIndex": 2,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "AWAITED_WORK_COMPLETED",
+        "toolCalls": [
+          {
+            "id": "call_failed_probe",
+            "name": "background_probe",
+            "arguments": {
+              "label": "failed",
+              "fail": true,
+              "_background": {
+                "disposition": "awaited"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "sequenceIndex": 3,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "AWAITED_FAILURE_SURFACED",
+        "toolCalls": [
+          {
+            "id": "call_awaited_subagent",
+            "name": "subagent",
+            "arguments": {
+              "agentType": "explore",
+              "task": "Call background_probe with label nested and _background disposition awaited. After it completes, delegate to another explore subagent with task Return the exact marker DEEP_DELEGATION_FOREGROUND. Then return NESTED_BACKGROUND_COMPLETED.",
+              "modelId": "openai/gpt-5.4-mini",
+              "_background": {
+                "disposition": "awaited"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "sequenceIndex": 4,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_nested_probe",
+            "name": "background_probe",
+            "arguments": {
+              "label": "nested",
+              "_background": {
+                "disposition": "awaited"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "sequenceIndex": 5,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_deep_subagent",
+            "name": "subagent",
+            "arguments": {
+              "agentType": "explore",
+              "task": "Return the exact marker DEEP_DELEGATION_FOREGROUND.",
+              "modelId": "openai/gpt-5.4-mini"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "sequenceIndex": 6,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "DEEP_DELEGATION_FOREGROUND NESTED_BACKGROUND_COMPLETED BACKGROUND_SUBAGENTS_COMPLETE"
+      }
+    }
+  ]
+}

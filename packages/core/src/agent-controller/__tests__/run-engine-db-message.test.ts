@@ -79,6 +79,14 @@ function chunk(value: StreamChunk): StreamChunk {
   return value;
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe('SessionRunEngine — MastraDBMessage contract', () => {
   it('Given a text stream, When chunks arrive, Then it emits a MastraDBMessage with a text part', async () => {
     const { engine, events } = createHarness();
@@ -220,6 +228,43 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     if (!callPart || callPart.type !== 'tool-invocation') throw new Error('no tool invocation part in snapshot');
     expect(callPart.toolInvocation.state).toBe('call');
     expect(callPart.toolInvocation).not.toHaveProperty('result');
+  });
+
+  it('keeps a subscribed combined stream active across the initial finish while background work is running', async () => {
+    const { engine, events, session } = createHarness();
+    const initialFinishReached = deferred();
+    const releaseBackgroundTask = deferred();
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'background-task-started', payload: { taskId: 'task-1' } });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } });
+        initialFinishReached.resolve();
+        await releaseBackgroundTask.promise;
+        yield chunk({ type: 'background-task-completed', payload: { taskId: 'task-1' } });
+        yield chunk({ type: 'text-start', payload: { id: 'continuation' } });
+        yield chunk({ type: 'text-delta', payload: { id: 'continuation', text: 'Background result synthesized' } });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } });
+      })(),
+      activeRunId: () => 'run-1',
+      abort: vi.fn(),
+      unsubscribe: vi.fn(),
+    };
+
+    session.stream.attach({ subscription: subscription as any, key: 'agent-1:resource-1:thread-1' });
+    const processing = engine.processSubscribedThreadStream(subscription as any);
+
+    await initialFinishReached.promise;
+    expect(events.some(event => event.type === 'agent_end')).toBe(false);
+
+    releaseBackgroundTask.resolve();
+    await processing;
+
+    expect(events.filter(event => event.type === 'agent_start')).toHaveLength(1);
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'complete' }]);
+    expect(lastMessageEvent(events).content.parts).toContainEqual({
+      type: 'text',
+      text: 'Background result synthesized',
+    });
   });
 
   it('Given a non-success finish reason, When the stream finishes, Then terminal state lives on message metadata', async () => {

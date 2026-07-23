@@ -165,6 +165,7 @@ vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
   },
+  createBackgroundWorkSignalProcessor: () => ({ id: 'background-work-signals' }),
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -864,6 +865,7 @@ describe('createMastraCode', () => {
     expect(processors[0]).toBe(customProcessor);
     expect(processors.map(processor => processor.id)).toEqual([
       'embedding-reconciler',
+      'background-work-signals',
       'plan-rejection-abort',
       'agents-md-injector',
       'provider-history-compat',

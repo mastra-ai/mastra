@@ -22,8 +22,13 @@ const WORKER_GROUP = 'background-task-workers';
 
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
+  private readonly workerId = randomUUID();
+  private readonly processAffineDispatchTopic = `${TOPIC_DISPATCH}:${this.workerId}`;
   config: Required<
-    Pick<BackgroundTaskManagerConfig, 'globalConcurrency' | 'perAgentConcurrency' | 'backpressure' | 'defaultTimeoutMs'>
+    Pick<
+      BackgroundTaskManagerConfig,
+      'globalConcurrency' | 'perAgentConcurrency' | 'backpressure' | 'defaultTimeoutMs' | 'recoverStaleTasksOnStart'
+    >
   > &
     BackgroundTaskManagerConfig;
 
@@ -43,6 +48,17 @@ export class BackgroundTaskManager {
   // Track active AbortControllers for running tasks (for cancellation + timeout)
   /** @internal — read by the workflow-engine step bodies in workflow.ts */
   activeAbortControllers: Map<string, AbortController> = new Map();
+
+  // Process-affine executors are runtime closures and cannot participate in
+  // storage-wide concurrency accounting without persisted ownership/leases.
+  // Keep their admission and queue ownership local to the manager that owns
+  // the closure so abandoned rows from another process cannot block them.
+  // TODO: Replace this POC boundary with persisted ownership, leases,
+  // heartbeats, atomic claims, and fenced terminal writes before treating
+  // process-affine work as recoverable across worker crashes.
+  private localReservations = new Map<string, string>();
+  private localPendingTaskIds = new Set<string>();
+  private drainingPending = false;
 
   // Pubsub callbacks (kept for unsubscribe)
   private workerCallback?: EventCallback;
@@ -67,6 +83,7 @@ export class BackgroundTaskManager {
       perAgentConcurrency: config.perAgentConcurrency ?? 5,
       backpressure: config.backpressure ?? 'queue',
       defaultTimeoutMs: config.defaultTimeoutMs ?? 300_000,
+      recoverStaleTasksOnStart: config.recoverStaleTasksOnStart ?? true,
       ...config,
     };
   }
@@ -143,10 +160,12 @@ export class BackgroundTaskManager {
     }
 
     await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
+    await this.pubsub.subscribe(this.processAffineDispatchTopic, this.workerCallback);
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
 
-    // Recover stale tasks from a previous process
-    await this.recoverStaleTasks();
+    if (this.config.recoverStaleTasksOnStart) {
+      await this.recoverStaleTasks();
+    }
 
     // Start periodic cleanup if configured
     const cleanupConfig = this.config.cleanup;
@@ -247,10 +266,16 @@ export class BackgroundTaskManager {
     const storage = await this.getStorage();
     await storage.createTask(task);
 
-    const canRun = await this.checkConcurrency(task.agentId);
+    const isProcessAffine = Boolean(context);
+    const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
 
     if (canRun) {
-      await this.dispatch(task);
+      try {
+        await this.dispatch(task);
+      } catch (error) {
+        if (isProcessAffine) this.releaseLocalSlot(task.id);
+        throw error;
+      }
       return { task };
     }
 
@@ -268,7 +293,10 @@ export class BackgroundTaskManager {
 
       case 'queue':
       default:
-        // Task stays pending in storage, will be dispatched when a slot opens
+        // Queue ownership stays local. A persisted pending row does not carry
+        // enough information to distinguish an invocation-bound closure from
+        // a portable static executor in another process.
+        this.localPendingTaskIds.add(task.id);
         return { task };
     }
   }
@@ -294,6 +322,8 @@ export class BackgroundTaskManager {
       await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
       const cancelledTask = await storage.getTask(taskId);
       if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+      this.localPendingTaskIds.delete(taskId);
+      this.releaseLocalSlot(taskId);
       this.deregisterTaskContext(taskId);
       return;
     }
@@ -319,6 +349,7 @@ export class BackgroundTaskManager {
     }
 
     if (task.status === 'running') {
+      const isProcessAffine = this.taskContexts.has(taskId);
       await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
 
       // Abort the running tool
@@ -345,10 +376,12 @@ export class BackgroundTaskManager {
 
       const cancelledTask = await storage.getTask(taskId);
       if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+      this.releaseLocalSlot(taskId);
       this.deregisterTaskContext(taskId);
 
-      // Also publish cancel on dispatch topic for distributed worker abort
-      await this.pubsub.publish(TOPIC_DISPATCH, {
+      // Route cancellation to the same process that owns an invocation-bound executor.
+      const dispatchTopic = isProcessAffine ? this.processAffineDispatchTopic : TOPIC_DISPATCH;
+      await this.pubsub.publish(dispatchTopic, {
         type: 'task.cancel',
         data: { taskId },
         runId: taskId,
@@ -381,7 +414,8 @@ export class BackgroundTaskManager {
       throw new Error(`Cannot resume task in status '${task.status}' (expected 'suspended')`);
     }
 
-    const canRun = await this.checkConcurrency(task.agentId);
+    const isProcessAffine = this.taskContexts.has(taskId);
+    const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
     if (!canRun) {
       // Resume sits outside the queue/fallback-sync paths — there's no
       // synchronous caller to fall back to, and silently leaving the task
@@ -394,15 +428,19 @@ export class BackgroundTaskManager {
     // lazy worker start for the library-mode process-restart case.
     await this.#ensureExecutionWorkersStarted();
 
-    // Hand off to the worker subscriber. `task.resume` rides the same
-    // `TOPIC_DISPATCH` + `WORKER_GROUP` exactly-once channel as
-    // `task.dispatch`, so any worker (including a different process from
-    // the one that suspended the task) can pick it up.
-    await this.pubsub.publish(TOPIC_DISPATCH, {
-      type: 'task.resume',
-      data: { taskId, resumeData },
-      runId: taskId,
-    });
+    // Resume invocation-bound executors on their owning manager. A task
+    // without local context remains portable through the shared worker group.
+    const dispatchTopic = isProcessAffine ? this.processAffineDispatchTopic : TOPIC_DISPATCH;
+    try {
+      await this.pubsub.publish(dispatchTopic, {
+        type: 'task.resume',
+        data: { taskId, resumeData },
+        runId: taskId,
+      });
+    } catch (error) {
+      if (isProcessAffine) this.releaseLocalSlot(taskId);
+      throw error;
+    }
 
     return task;
   }
@@ -434,7 +472,8 @@ export class BackgroundTaskManager {
       this.registerTaskContext(task.id, context);
     }
 
-    const canRun = await this.checkConcurrency(task.agentId);
+    const isProcessAffine = this.taskContexts.has(taskId);
+    const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
     if (!canRun) {
       // Restart sits outside the queue/fallback-sync paths — there's no
       // synchronous caller to fall back to, and silently leaving the task
@@ -443,7 +482,12 @@ export class BackgroundTaskManager {
       throw new Error(`Concurrency limit reached, cannot restart task "${taskId}" — retry once a slot is available`);
     }
 
-    await this.dispatch(task, true);
+    try {
+      await this.dispatch(task, true);
+    } catch (error) {
+      if (isProcessAffine) this.releaseLocalSlot(taskId);
+      throw error;
+    }
 
     return task;
   }
@@ -561,10 +605,11 @@ export class BackgroundTaskManager {
     resourceId?: string;
     taskId?: string;
     abortSignal?: AbortSignal;
+    includeExisting?: boolean;
   }): ReadableStream<Record<string, unknown>> {
     const manager = this;
     const pubsub = this.pubsub;
-    const { agentId, runId, threadId, resourceId, abortSignal, taskId } = options ?? {};
+    const { agentId, runId, threadId, resourceId, abortSignal, taskId, includeExisting = true } = options ?? {};
 
     const EVENT_STATUS_MAP: Record<string, BackgroundTaskStatus> = {
       'task.running': 'running',
@@ -648,18 +693,24 @@ export class BackgroundTaskManager {
           }
         };
 
-        void pubsub.subscribe(TOPIC_RESULT, handler);
+        await pubsub.subscribe(TOPIC_RESULT, handler);
 
-        abortSignal?.addEventListener('abort', () => {
+        const close = () => {
           void pubsub.unsubscribe(TOPIC_RESULT, handler);
           try {
             controller.close();
           } catch {
             // Already closed
           }
-        });
+        };
+        if (abortSignal?.aborted) {
+          close();
+          return;
+        }
+        abortSignal?.addEventListener('abort', close, { once: true });
 
         // 2. Emit snapshot of existing in-flight tasks (running + suspended).
+        if (!includeExisting) return;
         try {
           const storage = await manager.getStorage();
           if (taskId) {
@@ -724,12 +775,15 @@ export class BackgroundTaskManager {
 
     if (this.workerCallback) {
       await this.pubsub.unsubscribe(TOPIC_DISPATCH, this.workerCallback);
+      await this.pubsub.unsubscribe(this.processAffineDispatchTopic, this.workerCallback);
     }
     if (this.resultCallback) {
       await this.pubsub.unsubscribe(TOPIC_RESULT, this.resultCallback);
     }
 
     this.taskContexts.clear();
+    this.localReservations.clear();
+    this.localPendingTaskIds.clear();
     await this.pubsub.flush();
   }
 
@@ -760,10 +814,11 @@ export class BackgroundTaskManager {
   private async dispatch(task: BackgroundTask, isRestart?: boolean): Promise<void> {
     await this.#ensureExecutionWorkersStarted();
 
-    // Publish `task.dispatch` on `TOPIC_DISPATCH` with `WORKER_GROUP`, so
-    // exactly one worker handles the task. `handleDispatch` flips the
-    // task to running and starts the per-task workflow run.
-    await this.pubsub.publish(TOPIC_DISPATCH, {
+    // Invocation-bound executors are closures owned by this manager and cannot
+    // run in another process. Static executors remain portable and use the
+    // shared competing-consumer topic.
+    const dispatchTopic = this.taskContexts.has(task.id) ? this.processAffineDispatchTopic : TOPIC_DISPATCH;
+    await this.pubsub.publish(dispatchTopic, {
       type: 'task.dispatch',
       data: {
         taskId: task.id,
@@ -793,6 +848,7 @@ export class BackgroundTaskManager {
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
     if (!task || task.status === 'cancelled') {
+      this.releaseLocalSlot(taskId);
       this.deregisterTaskContext(taskId);
       return;
     }
@@ -813,7 +869,12 @@ export class BackgroundTaskManager {
     // Fire-and-forget the workflow run; the workflow step body owns
     // executor invocation, retries, and suspend/resume. The local
     // execution hook still runs here so callers see `onExecution` fire.
-    if (this.#mastra) {
+    if (!this.#mastra) {
+      this.releaseLocalSlot(taskId);
+      return;
+    }
+
+    try {
       if (runningTask) void this.runLocalExecutionHook(runningTask);
       const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
       const prevWorkflowRun = isRestart ? await workflow.getWorkflowRunById(taskId) : undefined;
@@ -832,9 +893,19 @@ export class BackgroundTaskManager {
             ?.error(`background-task workflow ${shouldRestart ? 'restart' : 'start'} failed for ${taskId}:`, err);
         })
         .finally(() => {
-          // Free the concurrency slot once the run terminates.
+          this.releaseLocalSlot(taskId);
           void this.drainPending();
         });
+    } catch (error) {
+      this.releaseLocalSlot(taskId);
+      await storage.updateTask(taskId, {
+        status: 'failed',
+        error: { message: error instanceof Error ? error.message : String(error) },
+        completedAt: new Date(),
+      });
+      const failedTask = await storage.getTask(taskId);
+      if (failedTask) await this.publishLifecycleEvent('task.failed', failedTask);
+      void this.drainPending();
     }
   }
 
@@ -884,7 +955,7 @@ export class BackgroundTaskManager {
         this.#mastra?.getLogger?.()?.error(`background-task workflow resume failed for ${taskId}:`, err);
       })
       .finally(() => {
-        // Mirror dispatch's drain — resuming frees a slot when it terminates.
+        this.releaseLocalSlot(taskId);
         void this.drainPending();
       });
   }
@@ -1108,8 +1179,11 @@ export class BackgroundTaskManager {
         }
       }
 
-      // Clean up context after terminal result
+      // Clean up context after terminal result and admit the next task owned
+      // by this manager. Portable tasks may have completed on another process,
+      // so the result fan-out is the origin manager's queue-drain signal.
       this.deregisterTaskContext(taskId);
+      void this.drainPending();
     }
   }
 
@@ -1158,6 +1232,24 @@ export class BackgroundTaskManager {
     });
   }
 
+  private reserveLocalSlot(task: Pick<BackgroundTask, 'id' | 'agentId'>): boolean {
+    if (this.localReservations.has(task.id)) return true;
+    if (this.localReservations.size >= this.config.globalConcurrency) return false;
+
+    let agentRunning = 0;
+    for (const agentId of this.localReservations.values()) {
+      if (agentId === task.agentId) agentRunning++;
+    }
+    if (agentRunning >= this.config.perAgentConcurrency) return false;
+
+    this.localReservations.set(task.id, task.agentId);
+    return true;
+  }
+
+  private releaseLocalSlot(taskId: string): void {
+    this.localReservations.delete(taskId);
+  }
+
   private async checkConcurrency(agentId: string): Promise<boolean> {
     const storage = await this.getStorage();
     const globalRunning = await storage.getRunningCount();
@@ -1174,17 +1266,33 @@ export class BackgroundTaskManager {
   }
 
   private async drainPending(): Promise<void> {
-    const storage = await this.getStorage();
-    const { tasks: pending } = await storage.listTasks({
-      status: 'pending',
-      orderBy: 'createdAt',
-      orderDirection: 'asc',
-    });
+    if (this.drainingPending || this.shuttingDown) return;
+    this.drainingPending = true;
 
-    for (const task of pending) {
-      if (await this.checkConcurrency(task.agentId)) {
-        await this.dispatch(task);
+    try {
+      const storage = await this.getStorage();
+      for (const taskId of [...this.localPendingTaskIds]) {
+        const task = await storage.getTask(taskId);
+        if (!task || task.status !== 'pending') {
+          this.localPendingTaskIds.delete(taskId);
+          continue;
+        }
+
+        const isProcessAffine = this.taskContexts.has(taskId);
+        const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
+        if (!canRun) continue;
+
+        this.localPendingTaskIds.delete(taskId);
+        try {
+          await this.dispatch(task);
+        } catch (error) {
+          if (isProcessAffine) this.releaseLocalSlot(taskId);
+          this.localPendingTaskIds.add(taskId);
+          throw error;
+        }
       }
+    } finally {
+      this.drainingPending = false;
     }
   }
 

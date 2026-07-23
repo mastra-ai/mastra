@@ -219,6 +219,7 @@ export function serializeDurableOptions(options: {
   structuredOutput?: SerializableDurableOptions['structuredOutput'];
   skipBgTaskWait?: boolean;
   disableBackgroundTasks?: boolean;
+  backgroundTaskPolicy?: SerializableDurableOptions['backgroundTaskPolicy'];
   tracingOptions?: SerializableDurableOptions['tracingOptions'];
   actor?: SerializableDurableOptions['actor'];
   instructionsOverride?: SerializableDurableOptions['instructionsOverride'];
@@ -257,6 +258,7 @@ export function serializeDurableOptions(options: {
     structuredOutput: options.structuredOutput,
     skipBgTaskWait: options.skipBgTaskWait,
     disableBackgroundTasks: options.disableBackgroundTasks,
+    backgroundTaskPolicy: options.backgroundTaskPolicy,
     tracingOptions: options.tracingOptions,
     actor: options.actor,
     instructionsOverride: options.instructionsOverride,

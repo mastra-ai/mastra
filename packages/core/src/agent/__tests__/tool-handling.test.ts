@@ -445,6 +445,41 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
   });
 
   describe('agents as tools', () => {
+    it('should disable deeper delegated-agent background dispatch without mutating shared agent configuration', async () => {
+      const grandchild = new Agent({
+        id: 'grandchild',
+        name: 'grandchild',
+        instructions: 'You are a grandchild agent.',
+        model: dummyModel,
+        backgroundTasks: { tools: 'all' },
+      });
+      const child = new Agent({
+        id: 'child',
+        name: 'child',
+        instructions: 'You are a child agent.',
+        model: dummyModel,
+        agents: { grandchild },
+      });
+
+      const nestedTools = await child['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'stream',
+        backgroundTaskEnabled: true,
+        backgroundTaskPolicy: {
+          allowToolDispatch: true,
+          allowDelegationDispatch: false,
+        },
+      });
+      expect((nestedTools['agent-grandchild'] as any).backgroundConfig).toBeUndefined();
+
+      const rootTools = await child['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'stream',
+        backgroundTaskEnabled: true,
+      });
+      expect((rootTools['agent-grandchild'] as any).backgroundConfig).toEqual({ enabled: true });
+    });
+
     it('should pass requestContext to sub-agent getModel when determining model version', async () => {
       let receivedRequestContext: RequestContext | undefined;
 

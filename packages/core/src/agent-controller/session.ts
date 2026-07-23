@@ -235,6 +235,7 @@ export interface SessionMachinery {
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
+    untilIdle?: boolean | { maxIdleMs?: number };
   }): Promise<Record<string, unknown>>;
   /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
   buildSharedRunOptions(): Record<string, unknown>;
@@ -3014,11 +3015,13 @@ export class Session<TState = unknown> {
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
+          untilIdle?: boolean | { maxIdleMs?: number };
         },
     options?: {
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       requestContext?: RequestContext;
+      untilIdle?: boolean | { maxIdleMs?: number };
     },
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId?: string }> } {
     const settleRunId = async <T>(result: {
@@ -3034,6 +3037,7 @@ export class Session<TState = unknown> {
     const tracingContext = options?.tracingContext ?? contentOptions?.tracingContext;
     const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
     const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
+    const untilIdle = options?.untilIdle ?? contentOptions?.untilIdle;
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();
@@ -3094,6 +3098,7 @@ export class Session<TState = unknown> {
         requestContext: requestContextInput,
         tracingContext,
         tracingOptions,
+        untilIdle,
       });
 
       const result = agent.sendSignal(signal, {
@@ -3167,12 +3172,14 @@ export class Session<TState = unknown> {
     tracingContext,
     tracingOptions,
     requestContext: requestContextInput,
+    untilIdle,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
+    untilIdle?: boolean | { maxIdleMs?: number };
   }): Promise<void> {
     const messageInput = this.createMessageInput({ content, files });
 
@@ -3193,6 +3200,7 @@ export class Session<TState = unknown> {
       tracingContext,
       tracingOptions,
       requestContext: requestContextInput,
+      untilIdle,
     });
     if (wasActive) {
       await signal.accepted;

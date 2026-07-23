@@ -200,6 +200,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private isPartial = true;
   private ui: TUI;
   private result?: ToolResult;
+  private backgroundTaskId?: string;
   private options: ToolExecutionOptions;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
@@ -247,7 +248,14 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   updateResult(result: ToolResult, isPartial = false): void {
     this.result = result;
     this.isPartial = isPartial;
+    const backgroundTaskId = this.getFormattedOutput().match(/^Background task started\. Task ID: ([^.]+)\./)?.[1];
+    if (backgroundTaskId) this.backgroundTaskId = backgroundTaskId;
     // Keep streaming output for colored display in final result
+    this.rebuild();
+  }
+
+  setBackgroundTaskId(taskId: string): void {
+    this.backgroundTaskId = taskId;
     this.rebuild();
   }
 
@@ -679,6 +687,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private getCompactStatusIndicator(): string {
+    const backgroundStatus = this.getBackgroundStatusIndicator();
+    if (backgroundStatus) return backgroundStatus;
     return this.isErrorResult() ? theme.fg('error', ' ✗') : '';
   }
 
@@ -2583,7 +2593,17 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return ' ' + theme.fg('toolArgs', parts.join(', '));
   }
 
+  private getBackgroundStatusIndicator(): string {
+    if (!this.backgroundTaskId) return '';
+    if (this.isPartial) return theme.fg('warning', ` ◌ background · ${this.backgroundTaskId}`);
+    return this.isErrorResult()
+      ? theme.fg('error', ` ✗ background · ${this.backgroundTaskId}`)
+      : theme.fg('success', ` ✓ background · ${this.backgroundTaskId}`);
+  }
+
   private getStatusIndicator(): string {
+    const backgroundStatus = this.getBackgroundStatusIndicator();
+    if (backgroundStatus) return backgroundStatus;
     return this.isPartial
       ? theme.fg('muted', ' ⋯')
       : this.isErrorResult()

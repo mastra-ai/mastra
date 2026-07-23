@@ -7,6 +7,7 @@
  * and do not import any Node.js dependencies.
  */
 
+import type { ToolBackgroundConfig } from '../../background-tasks/types';
 import type { WorkspaceToolName, WORKSPACE_TOOLS } from '../constants';
 
 // =============================================================================
@@ -105,6 +106,9 @@ export interface WorkspaceToolConfig {
    * When a function, evaluated at execution time with requestContext, workspace, and args.
    */
   requireApproval?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
+
+  /** Background execution eligibility and defaults for this tool. */
+  background?: ToolBackgroundConfig;
 
   /**
    * Custom name to expose this tool as to the LLM.
