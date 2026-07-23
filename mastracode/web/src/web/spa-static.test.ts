@@ -67,6 +67,18 @@ describe('createSpaStaticMiddleware – path traversal', () => {
     expect(c._resHeaders['Content-Type']).toBe('text/javascript; charset=utf-8');
   });
 
+  it('serves the PWA manifest with the manifest content type', async () => {
+    vi.mocked(readFile).mockResolvedValue(Buffer.from('{}'));
+    vi.mocked(stat).mockResolvedValue({ isFile: () => true } as any);
+
+    const middleware = createSpaStaticMiddleware('/app/ui');
+    const c = mockContext('GET', '/manifest.webmanifest');
+    await middleware(c, async () => {});
+
+    expect(readFile).toHaveBeenCalledWith('/app/ui/manifest.webmanifest');
+    expect(c._resHeaders['Content-Type']).toBe('application/manifest+json');
+  });
+
   it('sets immutable cache for hashed assets', async () => {
     vi.mocked(readFile).mockResolvedValue(Buffer.from('js'));
     vi.mocked(stat).mockResolvedValue({ isFile: () => true } as any);
