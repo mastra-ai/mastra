@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { ChevronDown, ClipboardCheck, Eye, Hammer, PencilLine, Play, Search } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
@@ -82,7 +83,14 @@ export function FactoryItemActions({
           onClick={onAction}
           className="min-w-0 flex-1 justify-start"
         >
-          {starting ? 'Starting…' : actionLabel}
+          {starting ? (
+            <>
+              <Spinner size="sm" aria-hidden className="size-3" />
+              Starting…
+            </>
+          ) : (
+            actionLabel
+          )}
         </Button>
         <DropdownMenu>
           <DropdownMenu.Trigger
