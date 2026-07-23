@@ -1,11 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ResizeHandleIndicator } from '@mastra/playground-ui/primitives/resize-handle-indicator';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
-import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
-import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { Panel, usePanelRef } from 'react-resizable-panels';
 import { PanelRightIcon } from 'lucide-react';
 
 import { ViewportLayout } from './PageLayout';
@@ -98,56 +96,106 @@ function DesktopRightPanelFrame({
   children: ReactNode;
   onRightPanelClose?: () => void;
 }) {
-  const rightPanelRef = usePanelRef();
+  const frameRef = useRef<HTMLDivElement>(null);
+  const rightPanelSlotRef = useRef<HTMLDivElement>(null);
+  const resizeCleanupRef = useRef<(() => void) | undefined>(undefined);
   const hasRightPanel = rightPanel !== undefined;
-  const previousInitialWidthRef = useRef(initialWidth);
-  const previousHasRightPanelRef = useRef(hasRightPanel);
 
   useEffect(() => {
-    const previousInitialWidth = previousInitialWidthRef.current;
-    const previouslyHadRightPanel = previousHasRightPanelRef.current;
-    previousInitialWidthRef.current = initialWidth;
-    previousHasRightPanelRef.current = hasRightPanel;
-    if (hasRightPanel && previouslyHadRightPanel && previousInitialWidth !== initialWidth) {
-      rightPanelRef.current?.resize(initialWidth);
+    frameRef.current?.style.setProperty('--chat-right-panel-width', `${initialWidth}px`);
+    return () => resizeCleanupRef.current?.();
+  }, [initialWidth]);
+
+  const setPanelWidth = (requestedWidth: number) => {
+    const frame = frameRef.current;
+    if (!frame) return;
+
+    const maximumWidth = Math.max(MIN_RIGHT_PANEL_WIDTH, frame.getBoundingClientRect().width - MIN_CHAT_WIDTH);
+    const nextWidth = Math.min(maximumWidth, Math.max(MIN_RIGHT_PANEL_WIDTH, requestedWidth));
+    frame.style.setProperty('--chat-right-panel-width', `${nextWidth}px`);
+  };
+
+  const startResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const panelSlot = rightPanelSlotRef.current;
+    if (!panelSlot) return;
+
+    event.preventDefault();
+    resizeCleanupRef.current?.();
+    frameRef.current?.setAttribute('data-panel-gesture', 'active');
+    const startX = event.clientX;
+    const startWidth = panelSlot.getBoundingClientRect().width || initialWidth;
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      setPanelWidth(startWidth - (moveEvent.clientX - startX));
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', cleanup);
+      window.removeEventListener('pointercancel', cleanup);
+      frameRef.current?.removeAttribute('data-panel-gesture');
+      resizeCleanupRef.current = undefined;
+    };
+
+    resizeCleanupRef.current = cleanup;
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', cleanup);
+    window.addEventListener('pointercancel', cleanup);
+  };
+
+  const resizeWithKeyboard = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const currentWidth = rightPanelSlotRef.current?.getBoundingClientRect().width || initialWidth;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setPanelWidth(currentWidth + 24);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setPanelWidth(currentWidth - 24);
     }
-  }, [hasRightPanel, initialWidth, rightPanelRef]);
+  };
 
   return (
-    <PanelGroup className="h-full min-h-0 w-full min-w-0">
-      <Panel id="chat-main-slot" minSize={MIN_CHAT_WIDTH} className="min-w-0">
+    <div
+      ref={frameRef}
+      data-expanded={initialWidth === EXPANDED_RIGHT_PANEL_WIDTH}
+      className={
+        hasRightPanel
+          ? 'relative grid h-full min-h-0 w-full min-w-0 flex-1 grid-cols-[minmax(var(--chat-main-min-width),1fr)_var(--chat-right-panel-width)] [--chat-main-min-width:420px] [--chat-right-panel-width:320px] data-[expanded=true]:[--chat-right-panel-width:720px]'
+          : 'relative grid h-full min-h-0 w-full min-w-0 flex-1 grid-cols-1 [--chat-main-min-width:420px] [--chat-right-panel-width:320px]'
+      }
+    >
+      <div id="chat-main-slot" className="h-full min-h-0 min-w-0">
         {children}
-      </Panel>
+      </div>
       {hasRightPanel ? (
-        <>
-          <PanelSeparator />
-          <Panel
-            id="chat-right-slot"
-            panelRef={rightPanelRef}
-            minSize={MIN_RIGHT_PANEL_WIDTH}
-            defaultSize={initialWidth}
-            groupResizeBehavior="preserve-pixel-size"
-            className="min-w-0"
+        <div ref={rightPanelSlotRef} id="chat-right-slot" className="relative h-full min-h-0 min-w-0 p-2">
+          <button
+            type="button"
+            className="group absolute top-0 left-1 z-20 flex h-full w-2 -translate-x-1/2 cursor-col-resize touch-none items-center justify-center focus-visible:outline-hidden"
+            onPointerDown={startResize}
+            onKeyDown={resizeWithKeyboard}
+            aria-label="Resize workspace files"
           >
-            <div className="relative h-full min-w-0">
-              {rightPanel}
-              {onRightPanelClose ? (
-                <Button
-                  size="icon-md"
-                  variant="ghost"
-                  tooltip="Close workspace files"
-                  className="absolute right-2 top-2 z-10 rounded-md"
-                  onClick={onRightPanelClose}
-                  aria-label="Close workspace files"
-                  aria-expanded="true"
-                >
-                  <PanelRightIcon />
-                </Button>
-              ) : null}
-            </div>
-          </Panel>
-        </>
+            <ResizeHandleIndicator
+              className="group-hover:opacity-100 group-focus-visible:via-accent1 group-focus-visible:opacity-100 in-data-[panel-gesture=active]:via-neutral6/45 in-data-[panel-gesture=active]:opacity-100"
+            />
+          </button>
+          <div className="relative h-full min-w-0 rounded-xl border border-border1/40 bg-surface3 shadow-main-frame">
+            {rightPanel}
+            {onRightPanelClose ? (
+              <Button
+                size="icon-md"
+                variant="ghost"
+                tooltip="Close workspace files"
+                className="absolute right-2 top-2 z-10 rounded-md"
+                onClick={onRightPanelClose}
+                aria-label="Close workspace files"
+                aria-expanded="true"
+              >
+                <PanelRightIcon />
+              </Button>
+            ) : null}
+          </div>
+        </div>
       ) : null}
-    </PanelGroup>
+    </div>
   );
 }

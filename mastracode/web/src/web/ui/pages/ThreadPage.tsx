@@ -17,6 +17,7 @@ import { useRouteThreadSync } from '../../../shared/hooks/useRouteThreadSync';
 import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
 import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useUserSessionQuery } from '../../../shared/hooks/useWorkspaces';
+import { useWorkspaceRenderedListing } from '../../../shared/hooks/use-fs';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
@@ -28,13 +29,16 @@ export function ThreadPage() {
   const isMobile = useIsMobile();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
-  const factoryQuery = useFactoryQuery(factoryId);
-  const userSessionQuery = useUserSessionQuery(userThreadMatch ? threadId : undefined);
   const isUserThreadRoute = Boolean(userThreadMatch);
+  const routeSessionId = isUserThreadRoute ? threadId : sessionId;
+  const factoryQuery = useFactoryQuery(factoryId);
+  const userSessionQuery = useUserSessionQuery(routeSessionId);
   const workspaceFactory = factoryQuery.data;
-  const workspacePath = isUserThreadRoute ? userSessionQuery.data?.sessionId : sessionId;
+  const workspacePath = userSessionQuery.data?.sandboxWorkdir ?? undefined;
+  const artifactsListing = useWorkspaceRenderedListing(workspacePath, renderedPaths[0]?.root);
+  const hasWorkspaceFiles = (artifactsListing.data?.entries.length ?? 0) > 0;
 
-  if (factoryQuery.isPending || (isUserThreadRoute && userSessionQuery.isPending)) {
+  if (factoryQuery.isPending || (Boolean(routeSessionId) && userSessionQuery.isPending)) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner />
@@ -46,11 +50,11 @@ export function ThreadPage() {
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       rightPanelExpanded={workspaceViewerExpanded}
-      rightPanelAvailable={Boolean(workspacePath)}
+      rightPanelAvailable={Boolean(workspacePath && hasWorkspaceFiles)}
       onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
       onRightPanelClose={() => setWorkspaceViewerVisible(false)}
       rightPanel={
-        workspacePath && (workspaceViewerVisible || isMobile) ? (
+        workspacePath && hasWorkspaceFiles && (workspaceViewerVisible || isMobile) ? (
           <WorkspaceViewerPanel
             workspacePath={workspacePath}
             renderedPaths={renderedPaths}

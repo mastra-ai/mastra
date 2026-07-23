@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, NotepadText, RefreshCw } from 'lucide-react';
+import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -183,14 +183,8 @@ export function WorkspaceFileBrowser({
   };
 
   return (
-    <aside className="flex h-full w-full min-w-0 flex-col bg-surface1" aria-label="Workspace files">
-      <div className="flex items-center justify-between gap-2 px-3 py-2 pl-4 lg:pr-12">
-        <div className="flex min-w-0 items-center gap-2">
-          <NotepadText size={15} className="shrink-0 text-icon4" />
-          <Txt variant="ui-sm" className="truncate font-medium text-icon6">
-            Files
-          </Txt>
-        </div>
+    <aside className="flex h-full w-full min-w-0 flex-col rounded-xl bg-surface3" aria-label="Workspace files">
+      <div className="flex items-center justify-end gap-2 px-3 py-2 lg:pr-12">
         <Button size="sm" variant="ghost" onClick={onRefresh} aria-label="Refresh workspace files">
           <RefreshCw size={14} />
         </Button>

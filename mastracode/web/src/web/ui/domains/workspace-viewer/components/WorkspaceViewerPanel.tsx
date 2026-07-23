@@ -71,7 +71,7 @@ function WorkspaceViewerPanelInner({
   };
 
   return (
-    <div className="relative flex h-full w-full min-w-0 bg-surface1" data-testid="workspace-viewer-panel">
+    <div className="relative flex h-full w-full min-w-0 rounded-xl bg-surface3" data-testid="workspace-viewer-panel">
       {viewerOpen ? (
         <div className="relative h-full min-w-0 flex-1 overflow-hidden">
           <Button

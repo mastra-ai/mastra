@@ -31,7 +31,7 @@ export function WorkspaceFileViewer({ filePath, file, isLoading, error }: Worksp
 
   return (
     <section
-      className="flex h-full min-w-0 flex-col border-l border-border1 bg-surface1"
+      className="flex h-full min-w-0 flex-col rounded-xl border-l border-border1 bg-surface3"
       aria-label="Workspace file viewer"
     >
       <div className="flex items-center justify-between gap-2 border-b border-border1 px-3 py-2 pl-10 lg:pl-3">

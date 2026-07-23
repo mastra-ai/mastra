@@ -82,7 +82,7 @@ describe('WorkspaceViewerPanel', () => {
 
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
-    expect(await screen.findByText('Files')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Workspace files')).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: 'Artifacts' }));
     expect(await screen.findByText('No artifacts yet. Session files created will appear here.')).toBeInTheDocument();
   });
