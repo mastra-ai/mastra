@@ -185,7 +185,7 @@ describe('Create Factory wizard', () => {
 
     // Picking a connected provider suggests its model; Finish setup saves it
     // and completes the wizard.
-    await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
+    await user.click(await screen.findByRole('button', { name: 'Anthropic connected' }));
     await user.click(await screen.findByRole('button', { name: 'Finish setup' }));
 
     await waitFor(() => expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]));

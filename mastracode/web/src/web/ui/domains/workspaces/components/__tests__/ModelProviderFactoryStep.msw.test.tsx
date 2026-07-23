@@ -56,8 +56,8 @@ describe('Model provider onboarding', () => {
     });
   });
 
-  describe('when the provider catalog contains recommended and additional providers', () => {
-    it('shows recommended providers first and finds additional providers through search', async () => {
+  describe('when the provider catalog contains sign-in and API-key providers', () => {
+    it('keeps sign-in providers on top and finds API-key providers through search', async () => {
       const providers: ProviderInfo[] = [
         { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: [] } },
         { provider: 'amazon-bedrock', source: 'none' },
@@ -71,12 +71,46 @@ describe('Model provider onboarding', () => {
 
       renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
 
-      expect(await screen.findByRole('button', { name: 'Anthropic' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Continue with Anthropic' })).toBeInTheDocument();
+      // Unconnected API-key providers stay hidden until searched for.
       expect(screen.queryByRole('button', { name: 'Amazon Bedrock' })).not.toBeInTheDocument();
       await user.type(screen.getByRole('searchbox', { name: 'Search model providers' }), 'bedrock');
 
       expect(await screen.findByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Anthropic' })).not.toBeInTheDocument();
+      // The sign-in section is a fixed top-level section — search never hides it.
+      expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeInTheDocument();
+    });
+  });
+
+  describe('when a provider supports browser sign-in', () => {
+    it('starts the OAuth flow directly from its sign-in button', async () => {
+      const providers: ProviderInfo[] = [
+        { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
+      ];
+      const onStart = vi.fn<(body: unknown) => void>();
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers })),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })),
+        http.post(`${TEST_BASE_URL}/web/config/providers/anthropic/oauth/start`, async ({ request }) => {
+          onStart(await request.json());
+          return HttpResponse.json({
+            sessionId: 'session-1',
+            kind: 'paste-code',
+            url: 'https://claude.ai/oauth/authorize',
+            instructions: 'Open the link, authorize, then paste the code shown on the final page.',
+            expiresAt: Date.now() + 600_000,
+          });
+        }),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+
+      await user.click(await screen.findByRole('button', { name: 'Continue with Anthropic' }));
+
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+      expect(onStart).toHaveBeenCalledWith({ mode: 'paste-code' });
     });
   });
 
@@ -153,8 +187,10 @@ describe('Model provider onboarding', () => {
 
       renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={onComplete} />);
 
+      // The unconnected provider only appears through search; picking its
+      // badge opens the API key dialog directly.
+      await user.type(await screen.findByRole('searchbox', { name: 'Search model providers' }), 'openai');
       await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-      await user.click(screen.getByRole('button', { name: 'Use API key' }));
       const dialog = within(screen.getByRole('dialog'));
       await user.type(dialog.getByLabelText('API key for OpenAI'), 'sk-test');
       await user.click(dialog.getByRole('button', { name: 'Save' }));
