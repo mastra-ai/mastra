@@ -29,6 +29,7 @@ import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
@@ -92,6 +93,19 @@ const github =
         clientSecret: githubClientSecret,
         slug: githubAppSlug,
         webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim() || undefined,
+      })
+    : undefined;
+
+// Direct Linear OAuth fallback for self-hosted / local deploys. As with the
+// GitHub fallback, only a complete credential group enables the integration;
+// partial configuration remains available to the diagnostics routes.
+const linearClientId = process.env.LINEAR_CLIENT_ID?.trim();
+const linearClientSecret = process.env.LINEAR_CLIENT_SECRET?.trim();
+const linear =
+  linearClientId && linearClientSecret
+    ? new LinearIntegration({
+        clientId: linearClientId,
+        clientSecret: linearClientSecret,
       })
     : undefined;
 
@@ -173,9 +187,11 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+const integrations = [...(github ? [github] : []), ...(linear ? [linear] : [])];
+
 export const factory = new MastraFactory({
   auth,
-  integrations: github ? [github] : undefined,
+  integrations,
   sandbox: {
     machine: sandbox,
     // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
