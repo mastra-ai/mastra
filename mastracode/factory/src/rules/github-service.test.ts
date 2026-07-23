@@ -191,6 +191,7 @@ describe('FactoryGithubEventService', () => {
             return { accepted: Promise.resolve({ accepted: true }) };
           },
         ),
+        state: { set: vi.fn(async () => {}) },
         sendMessage: vi.fn(async () => {}),
         sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
       };
@@ -252,7 +253,7 @@ describe('FactoryGithubEventService', () => {
     expect(deliveredSignals).toEqual([
       expect.objectContaining({
         threadId: 'session-issue-42',
-        contents: expect.stringContaining('<skill name="understand-issue">'),
+        contents: expect.stringContaining('<skill name="factory-triage">'),
         user: { workosId: 'user-1', organizationId: 'org-1' },
       }),
     ]);

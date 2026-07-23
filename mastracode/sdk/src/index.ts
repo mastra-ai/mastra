@@ -297,13 +297,40 @@ function resolveCloudObservabilityConfig(
  *
  * See {@link bootLocalAgentController} (Case 3) and `mountAgentControllerOnMastra` (Cases 1 & 2).
  */
+/**
+ * `instanceof` checks against Mastra classes are unreliable here: published
+ * packages pin exact `@mastra/core` versions, so a user's dependency graph can
+ * contain multiple copies of core (and peer-keyed copies of `@mastra/libsql` /
+ * `@mastra/pg`). A store built against one copy fails `instanceof` against
+ * another — the injected instance then silently fell through to the
+ * StorageConfig path and crashed on `config.url`. These structural checks work
+ * across duplicated copies.
+ */
+function isInjectedStorageInstance(storage: MastraCodeConfig['storage']): storage is MastraCompositeStore {
+  if (!storage) return false;
+  if (storage instanceof MastraCompositeStore) return true;
+  // A StorageConfig is a plain data object with a string `backend`
+  // discriminant; a store instance carries the MastraCompositeStore method
+  // surface.
+  const candidate = storage as Partial<MastraCompositeStore>;
+  return typeof candidate.init === 'function' && typeof candidate.__registerMastra === 'function';
+}
+
+/** Cross-copy-safe class check: walks the prototype chain by constructor name. */
+function hasAncestorClassNamed(value: object, className: string): boolean {
+  for (let proto = Object.getPrototypeOf(value); proto; proto = Object.getPrototypeOf(proto)) {
+    if (proto.constructor?.name === className) return true;
+  }
+  return false;
+}
+
 function resolveInjectedStorageBackend(
   storage: MastraCompositeStore,
   configuredBackend?: 'libsql' | 'pg',
 ): 'libsql' | 'pg' {
   if (configuredBackend) return configuredBackend;
-  if (storage instanceof LibSQLStore) return 'libsql';
-  if (storage instanceof PostgresStore) return 'pg';
+  if (storage instanceof LibSQLStore || hasAncestorClassNamed(storage, 'LibSQLStore')) return 'libsql';
+  if (storage instanceof PostgresStore || hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
   throw new Error('storageBackend is required when injecting a custom storage instance.');
 }
 
@@ -410,7 +437,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   // Storage. An injected instance is used as-is — no connection test, no
   // LibSQL fallback: if the injected store fails, that's a hard error.
-  const injectedStorage = config?.storage instanceof MastraCompositeStore ? config.storage : undefined;
+  const injectedStorage = isInjectedStorageInstance(config?.storage) ? config.storage : undefined;
   const storageConfig = injectedStorage
     ? undefined
     : ((config?.storage as StorageConfig | undefined) ??

@@ -63,10 +63,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
             Linked repositories
           </Txt>
           {linked.map(repo => (
-            <div
-              key={repo.projectRepositoryId}
-              className="flex items-center gap-3 rounded-xl border border-border1 bg-surface2 px-3 py-2"
-            >
+            <div key={repo.projectRepositoryId} className="flex items-center gap-3 rounded-xl bg-surface3 px-3 py-2">
               <GithubIcon size={16} className="shrink-0 text-icon3" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-ui-sm font-medium text-icon6">{repo.slug}</span>
@@ -108,7 +105,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         )
       ) : (
         <>
-          <div className="flex items-center gap-2 rounded-lg border border-border1 bg-surface2 px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg border border-border1 bg-surface1 px-3 py-2">
             <SearchIcon size={15} className="shrink-0 text-icon2" />
             <input
               className="min-w-0 flex-1 bg-transparent text-ui-sm text-icon6 placeholder:text-icon2 focus:outline-none"
@@ -137,7 +134,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 <button
                   type="button"
                   key={repo.id}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex w-full items-center gap-3 rounded-xl bg-surface3 px-3 py-2 text-left hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-50"
                   title={repo.fullName}
                   disabled={busyRepoId !== null}
                   onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
@@ -168,7 +165,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
  * booleans, and public URLs.
  */
 function StatusCallout({ status, connected, empty }: { status: GithubStatus; connected: boolean; empty: boolean }) {
-  const calloutClass = 'rounded-lg border border-border1 bg-surface2 px-3 py-2 text-ui-sm leading-relaxed text-icon3';
+  const calloutClass = 'rounded-lg border border-border1 bg-surface3 px-3 py-2 text-ui-sm leading-relaxed text-icon3';
 
   // Auth required: the session expired or was never established.
   if (status.authRequired) {

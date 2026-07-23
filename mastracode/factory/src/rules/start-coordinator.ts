@@ -127,13 +127,25 @@ export class FactoryStartCoordinator {
     if (!request.requestContext) {
       requestContext.set('user', { workosId: request.userId, organizationId: request.orgId });
     }
+    const sessionState = {
+      factoryProjectId: request.factoryProjectId,
+      projectRepositoryId: sourceSession.projectRepositoryId,
+    };
     const session = await this.#controller.createSession({
       id: sourceSession.sessionId,
       ownerId: request.userId,
       resourceId: sourceSession.sessionId,
       threadId: sourceSession.sessionId,
       requestContext,
+      tags: sessionState,
     });
+    // Bound-agent authority gates (the transition tool, the factory-phase
+    // processor, workspace token selection) resolve the session address from
+    // controller state. Seed it server-side — `tags` covers fresh creation,
+    // the explicit setState covers get-or-create returning a session another
+    // caller created without them — so autonomous runs never depend on a
+    // browser connecting to populate the state.
+    await session.state.set(sessionState);
     const threadId = await configureThread(session, request);
     const kickoffMessage = await resolveKickoffMessage(session, request.invocation);
     const prepared = await storage.prepareRunStart({

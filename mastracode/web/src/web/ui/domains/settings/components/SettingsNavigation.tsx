@@ -1,7 +1,7 @@
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft, Brain, GitBranch, Key, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, GitBranch, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
@@ -31,25 +31,14 @@ const SETTINGS_SECTIONS: {
     id: 'model',
     label: SETTINGS_SECTION_LABELS.model,
     icon: Search,
-    searchText: 'model thinking level factory default model packs packs',
-  },
-  {
-    id: 'memory',
-    label: SETTINGS_SECTION_LABELS.memory,
-    icon: Brain,
-    searchText: 'memory observational recall working memory',
+    searchText:
+      'model thinking level factory default model packs packs api keys providers credentials sign in oauth memory observational recall',
   },
   {
     id: 'behavior',
     label: SETTINGS_SECTION_LABELS.behavior,
     icon: SlidersHorizontal,
     searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
-  },
-  {
-    id: 'providers',
-    label: SETTINGS_SECTION_LABELS.providers,
-    icon: Key,
-    searchText: 'api keys providers credentials',
   },
   {
     id: 'custom-providers',

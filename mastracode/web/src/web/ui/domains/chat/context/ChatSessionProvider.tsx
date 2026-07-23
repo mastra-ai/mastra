@@ -9,8 +9,6 @@ import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/us
 import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { useEnsureMaterializedSandbox } from '../../../../../shared/hooks/useEnsureMaterializedSandbox';
 import { useUserSessionQuery } from '../../../../../shared/hooks/useWorkspaces';
-import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
-import { userSessionResourceId } from '../../auth/services/auth';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
@@ -42,7 +40,6 @@ export function ChatSessionConfigProvider({
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
   const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
-  const authQuery = useFactoryAuth();
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
   const repository = storedSession
@@ -52,12 +49,16 @@ export function ChatSessionConfigProvider({
     : factory?.repositories[0];
   const ensureQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
   const resolvingSession = Boolean(userScoped ? threadId : sessionId) && sessionQuery.isPending;
-  const resourceId =
-    userScoped && authQuery.data ? userSessionResourceId(authQuery.data) : ensureQuery.data?.resourceId;
-  const projectPath = userScoped ? undefined : storedSession?.sessionId;
+  // Sessions and their threads are provisioned with the session's own id as the
+  // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
+  // UserSessionsSection), so the chat surface must address the same
+  // (resourceId, no scope) session to read threads and share the live run.
+  // On user routes the :threadId param IS the sessionId.
+  const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId);
+  const projectPath = undefined;
   const sessionEnabled = userScoped
     ? Boolean(storedSession) && !resolvingSession
-    : ensureQuery.isSuccess && Boolean(projectPath);
+    : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
   const value = {
     resourceId: resourceId ?? '',
     sessionEnabled,

@@ -1,6 +1,6 @@
 {
   "name": "@internal/voice",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "Internal Mastra voice primitives and utilities",
   "private": true,
   "type": "module",

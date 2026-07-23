@@ -63,14 +63,7 @@ const EM_DASH = '—';
  * activity dots.
  */
 export function MetricsPage() {
-  return (
-    <FactoryPageShell
-      title="Metrics"
-      description="Flow health for this project's factory: throughput, where work stalls, and what's aging."
-    >
-      {project => <MetricsContent factoryProjectId={project.id} />}
-    </FactoryPageShell>
-  );
+  return <FactoryPageShell>{project => <MetricsContent factoryProjectId={project.id} />}</FactoryPageShell>;
 }
 
 function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {

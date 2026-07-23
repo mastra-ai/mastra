@@ -4979,7 +4979,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.2-free',
     'z-ai/glm-5v-turbo',
   ];
-  readonly poolside: readonly ['poolside/laguna-m.1', 'poolside/laguna-xs-2.1', 'poolside/laguna-xs.2'];
+  readonly poolside: readonly ['poolside/laguna-m.1', 'poolside/laguna-s-2.1', 'poolside/laguna-xs-2.1'];
   readonly 'stepfun-ai-step-plan': readonly ['step-3.5-flash', 'step-3.5-flash-2603', 'step-3.7-flash'];
   readonly inceptron: readonly [
     'MiniMaxAI/MiniMax-M2.5',

@@ -19,9 +19,10 @@ export const queryKeys = {
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
-  factoryOnboarding: () => ['factories', 'onboarding'] as const,
+  factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
+  githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (githubProjectId: string | undefined, label?: string) =>
     ['github', 'issues', githubProjectId ?? null, label ?? null] as const,

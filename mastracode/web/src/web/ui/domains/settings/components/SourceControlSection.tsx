@@ -6,6 +6,8 @@ import { useParams } from 'react-router';
 
 import { useFactoryQuery, useRemoveFactoryMutation } from '../../../../../shared/hooks/useFactories';
 import { ConnectRepositoriesPanel } from '../../workspaces';
+import { GithubPatBlock } from './GithubPatBlock';
+import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 
 /**
  * Settings › Source Control. Scoped to the factory the user is actively in:
@@ -30,6 +32,9 @@ export function SourceControlSection() {
       </Txt>
 
       <ConnectRepositoriesPanel factory={activeFactory} />
+      <UserGithubConnectionRow />
+
+      <GithubPatBlock />
 
       <div className="flex items-center justify-between gap-4 border-t border-border1 pt-4">
         <div className="min-w-0 flex flex-col">

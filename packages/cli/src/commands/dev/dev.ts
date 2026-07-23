@@ -22,6 +22,7 @@ import { createLogger } from '../../utils/logger.js';
 import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
 import { loadAndValidatePresets } from '../../utils/validate-presets.js';
+import { resolveFactoryUIDevDist } from '../build/factory-ui-build.js';
 
 import { acquireDevLock, releaseDevLock, updateDevLock } from './dev-lock';
 import { DevBundler } from './DevBundler';
@@ -142,6 +143,15 @@ const startServer = async (
     }
 
     await mkdir(publicDir, { recursive: true });
+
+    // Factory dev: the SPA is not copied into public/ (that only happens during
+    // `mastra build`), so point the server at the UI bundled with the CLI unless
+    // the user has an explicit override or a locally built UI at public/factory.
+    const factoryUiDist =
+      startOptions.factory && !process.env.MASTRACODE_UI_DIST && !env.has('MASTRACODE_UI_DIST')
+        ? resolveFactoryUIDevDist(publicDir)
+        : undefined;
+
     currentServerProcess = execa(process.execPath, commands, {
       cwd: publicDir,
       env: {
@@ -160,6 +170,7 @@ const startServer = async (
             }
           : {}),
         ...(startOptions.factory ? { MASTRA_FACTORY_DEV: 'true' } : {}),
+        ...(factoryUiDist ? { MASTRACODE_UI_DIST: factoryUiDist } : {}),
       },
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,

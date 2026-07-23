@@ -61,6 +61,7 @@ function createSession(accepted?: Promise<unknown>) {
         get: vi.fn(async (name: string) => ({ name, instructions: 'Follow the skill.' })),
       },
     }),
+    state: { set: vi.fn(async () => {}) },
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
       deliveredSignals.add(input.id);

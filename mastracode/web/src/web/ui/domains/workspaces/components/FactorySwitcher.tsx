@@ -4,9 +4,9 @@ import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, ChevronsUpDown, Factory as FactoryIcon, Plus } from 'lucide-react';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../../shared/hooks/useFactories';
-import { factoryHomePath, sourceFactoryPath } from '../services/factoryPaths';
+import { factoryHomePath } from '../services/factoryPaths';
 
 /** Inline factory selection with a single Create Factory action. */
 export function FactorySwitcher() {
@@ -16,12 +16,10 @@ export function FactorySwitcher() {
   const factories = factoriesQuery.data ?? [];
   const activeFactory = activeFactoryQuery.data;
   const navigate = useNavigate();
-  const location = useLocation();
   const { setOpenMobile } = useMainSidebar();
 
   const openFactories = () => {
-    const from = location.pathname === '/factories/create' ? sourceFactoryPath(location.state) : location.pathname;
-    void navigate('/factories/create', { state: { from: from ?? '/' } });
+    void navigate('/factories/create');
     setOpenMobile(false);
   };
 
@@ -31,7 +29,10 @@ export function FactorySwitcher() {
         id="factory-switcher-trigger"
         type="button"
         aria-label="Select factory"
-        className={cn(buttonVariants({ variant: 'ghost' }), 'w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0')}
+        className={cn(
+          buttonVariants({ variant: 'default' }),
+          'mt-1 w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0',
+        )}
       >
         <FactoryIcon size={16} className="shrink-0 text-icon3" />
         <Txt as="span" variant="ui-sm" className="min-w-0 flex-1 truncate text-icon6">

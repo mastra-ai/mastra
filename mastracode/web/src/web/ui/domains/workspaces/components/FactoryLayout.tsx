@@ -3,6 +3,7 @@ import { Navigate, Outlet, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
 import { AuthPendingSkeleton } from '../../auth/components/RootGuards';
+import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
 
 /**
  * Route element for `factories/:factoryId`. Validates the route param against
@@ -28,5 +29,10 @@ export function FactoryLayout() {
     return <Navigate to="/" replace state={{ routeErrorNotice: 'Factory not found' }} />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <GitHubAppCallbackHandler />
+      <Outlet />
+    </>
+  );
 }

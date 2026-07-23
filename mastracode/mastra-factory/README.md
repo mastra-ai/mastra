@@ -22,7 +22,7 @@ Options:
   --template <template-name>  Create a project from a template (public GitHub URL) (default: "https://github.com/mastra-ai/softwarefactory-template")
   --no-platform               Skip Mastra platform sign-in, project, and Neon provisioning
   --org <org>                 Mastra organization id or name — skips the interactive org picker
-  --region <region>           Neon region id (passed to the platform verbatim)
+  --region <region>           Platform project region (eu or us); prompts when omitted
   -v, --version               output the version number
   -h, --help                  display help for command
 ```

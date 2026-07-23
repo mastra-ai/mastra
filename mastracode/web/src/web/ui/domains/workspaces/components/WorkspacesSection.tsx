@@ -102,29 +102,26 @@ export function WorkspacesSection() {
   const openWorkspaceThread = async (workspace: FactoryUserSession) => {
     clearAttention(workspace.sessionId);
     try {
+      // Workspace sessions (and their threads) live under the session's own id
+      // as the memory resourceId with no scope — see FactoryStartCoordinator.
       const { session: targetSession } = createAgentControllerClient({
         agentControllerId: AGENT_CONTROLLER_ID,
-        resourceId,
-        scope: workspace.sessionId,
+        resourceId: workspace.sessionId,
         baseUrl,
         enabled: sessionEnabled,
       });
       const chatSession = requireAgentControllerSession(targetSession);
-      await chatSession.create({ tags: { projectPath: workspace.sessionId } });
-      const threadsKey = queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, workspace.sessionId);
+      await chatSession.create({});
+      const threadsKey = queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, workspace.sessionId, undefined);
       const threads = await queryClient.fetchQuery({
         queryKey: threadsKey,
-        queryFn: () =>
-          chatSession.listThreads({
-            limit: AGENT_CONTROLLER_THREAD_PAGE_SIZE,
-            tags: { projectPath: workspace.sessionId },
-          }),
+        queryFn: () => chatSession.listThreads({ limit: AGENT_CONTROLLER_THREAD_PAGE_SIZE }),
       });
       const thread = conversationThread(threads)?.id;
       if (thread) {
         const messagesKey = queryKeys.agentControllerThreadMessages(
           AGENT_CONTROLLER_ID,
-          resourceId,
+          workspace.sessionId,
           thread,
           INITIAL_THREAD_MESSAGE_LIMIT,
         );

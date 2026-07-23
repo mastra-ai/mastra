@@ -4,13 +4,13 @@ import * as p from '@clack/prompts';
 // `mastra/internal/auth` is the CLI's internal barrel — drives the browser-auth
 // flow and reuses persisted credentials + org resolution rather than duplicating
 // them here.
-import { fetchOrgs, getToken, resolveCurrentOrg } from 'mastra/internal/auth';
+import { fetchOrgs, getToken, loadCredentials, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
 import { x } from 'tinyexec';
 
 import type { Analytics } from './analytics.js';
 import { upsertEnvFile } from './env.js';
-import type { PlatformProject } from './platform.js';
+import type { PlatformProject, ProjectRegion } from './platform.js';
 import {
   attachNeonDatabase,
   createServerProject,
@@ -31,7 +31,7 @@ export interface CreateArgs {
    * `.env.example`.
    */
   noPlatform?: boolean;
-  /** Optional Neon region id (passed to the attach endpoint verbatim). */
+  /** Optional platform project region. Accepted values are `eu` and `us`. */
   region?: string;
   /**
    * Optional org identifier (id or name) to skip the interactive org picker.
@@ -50,9 +50,25 @@ interface PlatformProvisionResult {
   databaseUrl: string;
 }
 
+const PROJECT_REGION_OPTIONS = [
+  { value: 'eu', label: '🇪🇺 eu' },
+  { value: 'us', label: '🇺🇸 us' },
+] as const satisfies ReadonlyArray<{ value: ProjectRegion; label: string }>;
+
+const NEON_REGION_BY_PROJECT_REGION = {
+  eu: 'aws-eu-central-1',
+  us: 'aws-us-west-2',
+} as const satisfies Record<ProjectRegion, string>;
+
+function parseProjectRegion(region: string): ProjectRegion {
+  if (region === 'eu' || region === 'us') return region;
+  throw new Error(`Invalid --region "${region}". Expected one of: eu, us.`);
+}
+
 export async function create(args: CreateArgs): Promise<void> {
   p.intro(color.inverse(' Mastra Factory '));
 
+  const requestedRegion = args.region ? parseProjectRegion(args.region) : undefined;
   const projectName =
     args.projectName ??
     (await p.text({
@@ -125,7 +141,7 @@ export async function create(args: CreateArgs): Promise<void> {
       platformResult = await runPlatformProvisioning({
         projectName,
         projectPath,
-        region: args.region,
+        region: requestedRegion,
         org: args.org,
       });
     } catch (err) {
@@ -179,14 +195,17 @@ export async function create(args: CreateArgs): Promise<void> {
     `${color.cyan('cd')} ${projectName}`,
     color.cyan(`${packageManager} run dev`),
     '',
-    `Factory UI     ${color.underline('http://localhost:5173')}`,
-    `Mastra Studio  ${color.underline('http://localhost:4111')}`,
+    `Factory UI     ${color.underline('http://localhost:4111')}`,
     '',
   ];
   if (platformResult) {
     lines.push(
-      `${color.green('Platform connected.')} Project ${color.cyan(platformResult.project.name)} in ${color.cyan(platformResult.orgName)}.`,
-      `Wrote ${color.cyan('MASTRA_PROJECT_ID')}, ${color.cyan('MASTRA_PLATFORM_SECRET_KEY')}, and ${color.cyan('DATABASE_URL')} to ${color.cyan('.env')}.`,
+      `${color.green('Provisioned on Mastra platform')} in ${color.cyan(platformResult.orgName)}:`,
+      `  - Project ${color.cyan(platformResult.project.name)}`,
+      `  - Postgres database (credentials written to ${color.cyan('.env')})`,
+      `  - Sandboxes (code agent sessions run here)`,
+      '',
+      `Manage your project at ${color.underline('https://projects.mastra.ai')}`,
     );
   } else if (args.noPlatform) {
     lines.push(
@@ -211,7 +230,7 @@ async function runPlatformProvisioning({
 }: {
   projectName: string;
   projectPath: string;
-  region?: string;
+  region?: ProjectRegion;
   org?: string;
 }): Promise<PlatformProvisionResult> {
   // Accumulator: whatever we successfully mint gets flushed to .env in a
@@ -229,6 +248,18 @@ async function runPlatformProvisioning({
 
   try {
     // 1. Auth — triggers the browser-auth flow if no cached credential.
+    //    When that flow is about to open (no env token, no cached credential),
+    //    pause first so the browser doesn't pop open unannounced.
+    const willOpenAuthFlow = !process.env.MASTRA_API_TOKEN && !(await loadCredentials());
+    if (willOpenAuthFlow) {
+      const proceed = await p.text({
+        message: 'Mastra account is required, press enter to continue...',
+        defaultValue: '',
+      });
+      if (p.isCancel(proceed)) {
+        throw new Error('Sign-in cancelled.');
+      }
+    }
     p.log.info('Signing in to Mastra…');
     const token = await getToken();
 
@@ -241,12 +272,23 @@ async function runPlatformProvisioning({
     p.log.info(`Using organization ${color.cyan(orgName)}.`);
     envAccumulator.MASTRA_ORGANIZATION_ID = orgId;
 
+    const projectRegion =
+      region ??
+      (await p.select({
+        message: 'Where should your Factory project run?',
+        options: [...PROJECT_REGION_OPTIONS],
+      }));
+    if (p.isCancel(projectRegion)) {
+      p.cancel('Operation cancelled');
+      process.exit(0);
+    }
+
     // 3. Project — session-auth POST /v1/server/projects.
     const projectSpinner = p.spinner();
     projectSpinner.start(`Creating platform project "${projectName}"…`);
     let project: PlatformProject;
     try {
-      project = await createServerProject({ token, orgId, name: projectName });
+      project = await createServerProject({ token, orgId, name: projectName, region: projectRegion });
       projectSpinner.stop(`Created platform project ${color.cyan(project.slug)}.`);
     } catch (err) {
       projectSpinner.stop('Project creation failed.');
@@ -283,7 +325,7 @@ async function runPlatformProvisioning({
         orgId,
         projectId: project.id,
         name: sanitizeDatabaseName(projectName),
-        regionId: region,
+        regionId: NEON_REGION_BY_PROJECT_REGION[projectRegion],
       });
       const ready = await waitForDatabaseReady({
         token,

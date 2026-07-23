@@ -18,7 +18,6 @@ import Chat from './domains/chat/Chat';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { AuditPage } from './pages/AuditPage';
 import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
-import { CreateFactoryLayout } from './pages/CreateFactoryLayout';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { MetricsPage } from './pages/MetricsPage';
 import { NewPage } from './pages/NewPage';
@@ -30,18 +29,29 @@ import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../../shared/hooks/useFactories';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
+import { hasPendingCreateFlow } from './domains/workspaces/hooks/useCreateFactoryFlow';
+import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
 function RootLanding() {
   const { data: factories, isPending } = useFactoriesQuery();
   // Preserve `routeErrorNotice`-style state through the redirect chain (e.g.
   // FactoryLayout bouncing an unknown factoryId here).
-  const { state } = useLocation();
+  const { state, search } = useLocation();
 
-  if (isPending) return null;
+  // OAuth callbacks land on `/?github=connected` etc. When a create-factory
+  // flow is mid-way, resume the wizard (with the search intact) instead of
+  // landing on the first factory's home.
+  if (hasPendingCreateFlow()) return <Navigate to={`/factories/create${search}`} replace />;
 
-  const firstFactory = factories?.[0];
+  if (isPending || !factories) return null;
+
+  const firstFactory = factories[0];
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
+
+  // Same for onboarding once its factory exists (created on repo pick): the
+  // GitHub/Linear round-trips must resume the wizard, not land on the factory.
+  if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
 
   return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
 }
@@ -61,16 +71,9 @@ export function createAppRoutes(): RouteObject[] {
       children: [
         { index: true, element: <RootLanding /> },
         { path: 'onboarding', element: <OnboardingPage /> },
-        {
-          path: 'factories/create',
-          element: <CreateFactoryLayout />,
-          children: [
-            {
-              element: <Chat />,
-              children: [{ index: true, element: <CreateFactoryPage /> }],
-            },
-          ],
-        },
+        // Full-screen wizard, outside the factory shell — no factory context
+        // or Chat session needed.
+        { path: 'factories/create', element: <CreateFactoryPage /> },
         {
           path: 'factories/:factoryId',
           element: <FactoryLayout />,

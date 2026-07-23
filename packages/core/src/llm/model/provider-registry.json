@@ -6643,7 +6643,7 @@
       "apiKeyEnvVar": "POOLSIDE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Poolside",
-      "models": ["poolside/laguna-m.1", "poolside/laguna-xs-2.1", "poolside/laguna-xs.2"],
+      "models": ["poolside/laguna-m.1", "poolside/laguna-s-2.1", "poolside/laguna-xs-2.1"],
       "docUrl": "https://platform.poolside.ai",
       "gateway": "models.dev"
     },
@@ -11707,7 +11707,7 @@
       "z-ai/glm-5.2-free",
       "z-ai/glm-5v-turbo"
     ],
-    "poolside": ["poolside/laguna-m.1", "poolside/laguna-xs-2.1", "poolside/laguna-xs.2"],
+    "poolside": ["poolside/laguna-m.1", "poolside/laguna-s-2.1", "poolside/laguna-xs-2.1"],
     "stepfun-ai-step-plan": ["step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash"],
     "inceptron": [
       "MiniMaxAI/MiniMax-M2.5",

@@ -35,7 +35,10 @@ export function VcsFactoryStep({
   const repos = useGithubReposQuery(query || undefined, connected);
 
   return (
-    <section aria-label="GitHub repository" className="mx-auto max-w-2xl text-left">
+    <section
+      aria-label="GitHub repository"
+      className="mx-auto max-w-2xl rounded-2xl border border-border1 bg-surface2/80 p-5 text-left"
+    >
       {githubStatus.isPending ? (
         <SkeletonRows label="Loading GitHub status" rows={3} rowClassName="h-12 w-full rounded-xl" />
       ) : !connected ? (
@@ -71,7 +74,7 @@ export function VcsFactoryStep({
                 return (
                   <button
                     key={repo.id}
-                    className="group flex cursor-pointer items-center gap-3 rounded-xl px-4 py-3 text-left hover:bg-neutral6/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="group flex cursor-pointer items-center gap-3 rounded-xl bg-surface3 px-4 py-3 text-left hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={mutationPending}
                     onClick={() => onSelectRepository(repo)}
                   >
@@ -125,6 +128,10 @@ function GithubConnection({
         : status?.reason === 'auth_required'
           ? 'Sign in again to connect GitHub.'
           : 'Connect GitHub to choose a repository.';
+  // Non-secret env var names reported by the server; a "sync" button can't
+  // exist without server-side GitHub App credentials, so the only honest
+  // affordance here is telling the operator exactly what to configure.
+  const missingEnvVars = status?.reason === 'missing_config' ? (status.diagnostics?.missingGithubAppEnvVars ?? []) : [];
 
   return (
     <EmptyState
@@ -138,6 +145,19 @@ function GithubConnection({
             {isConnecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon />}
             Connect GitHub
           </Button>
+        ) : missingEnvVars.length > 0 ? (
+          <div className="flex max-w-md flex-col items-center gap-2">
+            <Txt as="p" variant="ui-sm" className="m-0 text-center text-icon3">
+              To enable it, set the GitHub App environment variables on the server and restart:
+            </Txt>
+            <ul className="m-0 flex list-none flex-wrap justify-center gap-1.5 p-0">
+              {missingEnvVars.map(name => (
+                <li key={name}>
+                  <code className="rounded bg-surface4 px-1.5 py-0.5 font-mono text-ui-xs text-icon5">{name}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : undefined
       }
     />

@@ -3,6 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
@@ -16,20 +17,20 @@ import {
   GitPullRequest,
   Link2,
   Plus,
-  SquareKanban,
   Stethoscope,
+  Trash2,
 } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../shared/api/config';
 import { relativeTime } from '../../../shared/lib/date/relativeTime';
 import { useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
 import { SkeletonRows } from '../ui/SkeletonRows';
-import { ConnectRepositoriesPanel } from '../domains/workspaces/components/ConnectRepositoriesPanel';
+import { GithubIcon } from '../ui/icons';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
-import { FactoryItemActions } from '../domains/factory/components/FactoryItemActions';
+import { FactoryItemActions, actionIcon } from '../domains/factory/components/FactoryItemActions';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import {
@@ -41,7 +42,7 @@ import { useIntakeConfigQuery } from '../../../shared/hooks/useIntakeConfig';
 import { useFactoryDecisionStatus, useRetryFactoryDecision } from '../../../shared/hooks/useFactoryDecisions';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../shared/hooks/useLinearData';
 import { useStartFactoryRun } from '../../../shared/hooks/useStartFactoryRun';
-import type { FactoryRunInvocation } from '../../../shared/hooks/useStartFactoryRun';
+import type { FactoryRunInvocation, FactoryRunPhase } from '../../../shared/hooks/useStartFactoryRun';
 import {
   useDeleteWorkItemMutation,
   useTransitionWorkItemMutation,
@@ -62,6 +63,7 @@ import {
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from '../domains/factory/services/workItems';
 import { BOARD_STAGES, stageLabel } from '../domains/factory/stages';
 import type { BoardStageId } from '../domains/factory/stages';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
 const NEEDS_APPROVAL_LABEL = 'needs-approval';
@@ -116,7 +118,13 @@ const INTAKE_SOURCES = [
   { id: 'github-prs', label: 'PRs' },
   { id: 'linear', label: 'Linear' },
 ] as const;
-const EMPTY_PENDING_RUN_ROLES = new Set<string>();
+const EMPTY_PENDING_RUN_ROLES = new Map<string, FactoryRunPhase | undefined>();
+
+const RUN_PHASE_LABELS: Record<FactoryRunPhase, string> = {
+  workspace: 'preparing workspace…',
+  kickoff: 'starting agent…',
+  opening: 'opening thread…',
+};
 
 type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
 type BoardKind = 'work' | 'review';
@@ -237,7 +245,7 @@ function issueRunActions(ref: string, extra?: { context?: string }): RunAction[]
       stage: 'planning',
       invocation: {
         type: 'skill',
-        skillName: 'understand-issue',
+        skillName: 'factory-triage',
         arguments: `${ref}${context}`,
       },
     },
@@ -311,7 +319,7 @@ function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
         stage: 'review',
         invocation: {
           type: 'skill',
-          skillName: 'understand-pr',
+          skillName: 'factory-review',
           arguments: `${ref}\n\n${checkout}`,
         },
       },
@@ -408,7 +416,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
           stage: 'review',
           invocation: {
             type: 'skill',
-            skillName: 'understand-pr',
+            skillName: 'factory-review',
             arguments: `${ref}\n\n${checkout}${headBranch}`,
           },
         },
@@ -490,18 +498,7 @@ export function BoardPage() {
 
 function FactoryBoardPage({ kind }: { kind: BoardKind }) {
   const review = kind === 'review';
-  return (
-    <FactoryPageShell
-      title={review ? 'Review' : 'Work'}
-      description={
-        review
-          ? 'Pull requests moving through review intake, active review, and completion.'
-          : 'Issues moving through intake, planning, building, receiving review, and completion.'
-      }
-    >
-      {factory => <Board factory={factory} kind={kind} />}
-    </FactoryPageShell>
-  );
+  return <FactoryPageShell>{factory => <Board factory={factory} kind={kind} />}</FactoryPageShell>;
 }
 
 function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) {
@@ -509,28 +506,26 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
   const review = kind === 'review';
 
   if (!repository) {
-    const EmptyIcon = review ? GitPullRequest : SquareKanban;
-
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center-safe overflow-y-auto py-8">
-        <section
-          aria-label="Connect a repository"
-          className="w-full max-w-2xl rounded-xl border border-border1 bg-surface1"
-        >
-          <EmptyState
-            as="h2"
-            iconSlot={<EmptyIcon className="size-10 text-icon3" />}
-            titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
-            descriptionSlot={
-              review
-                ? 'Choose a GitHub repository below. Its pull requests will appear in Intake, ready to move through review.'
-                : 'Choose a GitHub repository below. Its issues will appear in Intake, ready to move through planning and build.'
-            }
-          />
-          <div className="border-t border-border1 px-6 pt-5 pb-6">
-            <ConnectRepositoriesPanel factory={factory} />
-          </div>
-        </section>
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto py-8">
+        <EmptyState
+          as="h2"
+          iconSlot={<GithubIcon size={40} className="text-icon3" />}
+          titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
+          descriptionSlot={
+            review
+              ? 'Link a GitHub repository in Source Control settings. Its pull requests will appear in Intake, ready to move through review.'
+              : 'Link a GitHub repository in Source Control settings. Its issues will appear in Intake, ready to move through planning and build.'
+          }
+          actionSlot={
+            <Link
+              to={`/factories/${factory.id}/settings/source-control`}
+              className={buttonVariants({ variant: 'primary' })}
+            >
+              Open Source Control settings
+            </Link>
+          }
+        />
       </div>
     );
   }
@@ -794,7 +789,6 @@ function BoardContent({
     })();
   };
 
-  if (items.isPending) return <SkeletonRows label="Loading board" rows={4} rowClassName="h-24 w-full" />;
   if (items.isError) {
     return (
       <Notice variant="destructive">
@@ -804,20 +798,20 @@ function BoardContent({
   }
 
   const mutationError = [start, triage, upsert, transition, update, remove].find(m => m.isError)?.error;
-  const evaluatingItemIds = new Set(transition.pendingItemIds);
+  const evaluatingStages = new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage]));
   const triagingIssueNumbers = new Set(pendingIssueNumbers);
-  const pendingRunRolesByItem = new Map<string, Set<string>>();
-  const pendingRunRolesBySource = new Map<string, Set<string>>();
+  const pendingRunRolesByItem = new Map<string, Map<string, FactoryRunPhase | undefined>>();
+  const pendingRunRolesBySource = new Map<string, Map<string, FactoryRunPhase | undefined>>();
   for (const run of pendingRuns) {
     if (run.id !== undefined) {
       const roles = pendingRunRolesByItem.get(run.id);
-      if (roles) roles.add(run.role);
-      else pendingRunRolesByItem.set(run.id, new Set([run.role]));
+      if (roles) roles.set(run.role, run.phase);
+      else pendingRunRolesByItem.set(run.id, new Map([[run.role, run.phase]]));
     }
     if (run.sourceKey !== null) {
       const roles = pendingRunRolesBySource.get(run.sourceKey);
-      if (roles) roles.add(run.role);
-      else pendingRunRolesBySource.set(run.sourceKey, new Set([run.role]));
+      if (roles) roles.set(run.role, run.phase);
+      else pendingRunRolesBySource.set(run.sourceKey, new Map([[run.role, run.phase]]));
     }
   }
   const totalTaskCount = workItems.length + candidates.length;
@@ -850,6 +844,7 @@ function BoardContent({
               label={stage.label}
               taskCount={stageContentCount(stage.id, stages, workItems, candidates)}
               totalTaskCount={totalTaskCount}
+              loading={loadingStages.has(stage.id)}
               laneRef={element => {
                 if (element) laneRefs.current.set(stage.id, element);
                 else laneRefs.current.delete(stage.id);
@@ -907,7 +902,7 @@ function BoardContent({
                     // for a perfectly live thread. Hold run/create actions until
                     // liveness is known.
                     runDisabled={!runEnabled || !workspaces.isSuccess}
-                    evaluating={evaluatingItemIds.has(item.id)}
+                    evaluatingStage={evaluatingStages.get(item.id)}
                     transitionReason={transitionReasons[item.id]}
                     decision={decisionByItem.get(item.id)}
                     retryingDecisionId={retryDecision.isPending ? retryDecision.variables : undefined}
@@ -1143,6 +1138,7 @@ function BoardColumn({
   label,
   taskCount,
   totalTaskCount,
+  loading = false,
   laneRef,
   onDrop,
   headerAction,
@@ -1153,6 +1149,8 @@ function BoardColumn({
   label: string;
   taskCount: number;
   totalTaskCount: number;
+  /** While loading, the task badge is hidden so a false "0/0" never flashes. */
+  loading?: boolean;
   laneRef: (element: HTMLElement | null) => void;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   headerAction?: React.ReactNode;
@@ -1195,7 +1193,11 @@ function BoardColumn({
           <Txt as="h2" variant="ui-smd" className="m-0 truncate font-semibold text-icon3">
             {label}
           </Txt>
-          <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
+          {loading ? (
+            <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
+          ) : (
+            <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
+          )}
         </div>
         {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
       </div>
@@ -1344,7 +1346,7 @@ function WorkItemCard({
   allItems,
   liveWorktreePaths,
   runDisabled,
-  evaluating,
+  evaluatingStage,
   transitionReason,
   decision,
   retryingDecisionId,
@@ -1362,12 +1364,13 @@ function WorkItemCard({
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
-  evaluating: boolean;
+  /** Destination stage of an in-flight transition; undefined = not moving. */
+  evaluatingStage?: string;
   transitionReason?: string;
   decision?: FactoryDecisionSummary;
   retryingDecisionId?: string;
   onRetryDecision: (decisionId: string) => void;
-  pendingRunRoles: ReadonlySet<string>;
+  pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   onOpenThread: (session: WorkItemSessionRef) => void;
   /** Title click when the card has no live session: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
@@ -1380,6 +1383,8 @@ function WorkItemCard({
     icon: CircleDot,
     className: 'text-icon3',
   };
+  const evaluating = evaluatingStage !== undefined;
+  const runPending = pendingRunRoles.size > 0;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   // Session refs whose worktree was deleted are stale: their threads went with
@@ -1397,7 +1402,7 @@ function WorkItemCard({
     <article
       draggable={!evaluating}
       aria-label={item.title}
-      aria-busy={evaluating || undefined}
+      aria-busy={evaluating || runPending || undefined}
       data-testid="work-item-card"
       data-related={relatedItems.length > 0 ? 'true' : undefined}
       onDragStart={event => {
@@ -1406,6 +1411,7 @@ function WorkItemCard({
       className={cn(
         'group flex flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 outline-none transition-colors hover:bg-surface3',
         evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
+        runPending && 'opacity-70',
       )}
     >
       <div className="flex min-w-0 flex-col gap-1.5">
@@ -1469,7 +1475,8 @@ function WorkItemCard({
                       disabled={runDisabled || starting}
                       onClick={() => onStartRun(runSpec, action)}
                     >
-                      {starting ? 'Starting…' : action.label}
+                      {actionIcon(action.label)}
+                      <span>{starting ? 'Starting…' : action.label}</span>
                     </DropdownMenu.Item>
                   );
                 })}
@@ -1477,10 +1484,14 @@ function WorkItemCard({
                 .filter(stage => stage.id !== columnStage)
                 .map(stage => (
                   <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
-                    {stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}
+                    <BoardStageIcon stage={stage.id} />
+                    <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
                   </DropdownMenu.Item>
                 ))}
-              <DropdownMenu.Item onClick={onRemove}>Remove</DropdownMenu.Item>
+              <DropdownMenu.Item onClick={onRemove}>
+                <Trash2 aria-hidden />
+                <span>Remove</span>
+              </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
         </div>
@@ -1522,11 +1533,19 @@ function WorkItemCard({
           ))}
         </div>
       )}
-      {evaluating && (
-        <span role="status" aria-live="polite" className="text-ui-xs text-icon4">
-          Evaluating…
+      {evaluatingStage !== undefined && (
+        <span role="status" aria-live="polite" className="flex items-center gap-1.5 text-ui-xs text-icon4">
+          <Spinner size="sm" aria-hidden className="size-3" />
+          {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
         </span>
       )}
+      {[...pendingRunRoles].map(([role, phase]) => (
+        <span key={role} role="status" aria-live="polite" className="flex items-center gap-1.5 text-ui-xs text-icon4">
+          <Spinner size="sm" aria-hidden className="size-3" />
+          {runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run'} —{' '}
+          {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
+        </span>
+      ))}
       {!evaluating && decision !== undefined && (
         <div className="flex items-center justify-between gap-2">
           <span
@@ -1568,7 +1587,7 @@ function CandidateCard({
   onTriage,
 }: {
   candidate: BoardCandidate;
-  pendingRunRoles: ReadonlySet<string>;
+  pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   triageStarting: boolean;
   disabled: boolean;
   /** Start a run; `prompt` undefined = the action's default prompt. */
