@@ -60,6 +60,20 @@ function request(
 }
 
 describe('FactoryTransitionService', () => {
+  it('replays concurrent transitions with the same ingress identity', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const [first, second] = await Promise.all([service.transition(request(item)), service.transition(request(item))]);
+
+    expect(second).toEqual(first);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.revision).toBe(item.revision + 1);
+  });
+
   it('queues an urgent wake-up when a board drag has no skill follow-up', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'] });

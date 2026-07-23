@@ -385,13 +385,12 @@ export class MastraFactory {
       },
     });
 
-    // Multi-replica deployments (distributed pubsub configured) need
-    // cross-replica serialization; warn loud when the storage backend can't
-    // provide it so the operator knows locks are per-replica only.
+    // Parent/child work-item mutations still require cross-replica
+    // serialization until their relationship invariants move into the database.
     if (pubsub && typeof storage.withDistributedLock !== 'function') {
       process.stderr.write(
         'MastraCode Web: pubsub is configured (multi-replica?) but the storage backend has no ' +
-          'withDistributedLock capability — project locks serialize per replica only. ' +
+          'withDistributedLock capability — parent/child work-item mutations serialize per replica only. ' +
           'Use PgFactoryStorage for multi-replica deployments.\n',
       );
     }

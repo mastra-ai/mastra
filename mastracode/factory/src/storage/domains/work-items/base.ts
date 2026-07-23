@@ -746,24 +746,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await this.ops.deleteMany('work_items', {});
   }
 
-  #leaseQueue: Promise<void> = Promise.resolve();
-
   get #db(): FactoryStorageOps {
     return this.ops;
-  }
-
-  async #withLocalLeaseLock<T>(fn: () => Promise<T>): Promise<T> {
-    const prior = this.#leaseQueue;
-    let release!: () => void;
-    this.#leaseQueue = new Promise<void>(resolve => {
-      release = resolve;
-    });
-    await prior;
-    try {
-      return await fn();
-    } finally {
-      release();
-    }
   }
 
   async #withProjectRelationLock<T>(orgId: string, factoryProjectId: string, fn: () => Promise<T>): Promise<T> {
@@ -815,9 +799,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         }
         return claimed;
       });
-    return this.storage.withDistributedLock
-      ? this.storage.withDistributedLock(`factory-lease:${table}`, claim)
-      : this.#withLocalLeaseLock(claim);
+    return claim();
   }
 
   async #renewLease(
@@ -1046,12 +1028,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         }
         return { status: 'committed', item, result };
       });
-    return this.storage.withDistributedLock
-      ? this.storage.withDistributedLock(
-          `factory-ingress:${input.orgId}:${input.factoryProjectId}:${input.ingress.identity}`,
-          commit,
-        )
-      : commit();
+    try {
+      return await commit();
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      return commit();
+    }
   }
 
   async commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult> {
@@ -1178,12 +1160,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         }
         return { status: 'committed' as const, result };
       });
-    return this.storage.withDistributedLock
-      ? this.storage.withDistributedLock(
-          `factory-ingress:${input.orgId}:${input.factoryProjectId}:${input.ingress.identity}`,
-          commit,
-        )
-      : commit();
+    try {
+      return await commit();
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      return commit();
+    }
   }
 
   async getToolResultCursor(
@@ -1523,12 +1505,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         });
         return { item, binding: toBinding(bindingRow), pendingStart: toPendingStart(pendingRow), replayed: false };
       });
-    return this.storage.withDistributedLock
-      ? this.storage.withDistributedLock(
-          `factory-start:${input.orgId}:${input.factoryProjectId}:${input.kickoffKey}`,
-          prepare,
-        )
-      : prepare();
+    try {
+      return await prepare();
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      return prepare();
+    }
   }
 
   async markPendingStart(
