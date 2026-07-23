@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
+import { MockMemory } from '../memory/mock';
 import { createTool } from '../tools';
-import type { Processor } from './index';
+import type { Processor, ProcessOutputResultArgs, ProcessOutputStreamArgs } from './index';
 
 /**
  * Creates a mock model that calls `toolName` on the first turn,
@@ -61,6 +62,154 @@ function createToolCallingModel(toolName: string) {
 }
 
 describe('Output Processor Data Chunks (#13341)', () => {
+  it('persists custom chunks emitted by output processors to memory', async () => {
+    const memory = new MockMemory();
+    const threadId = 'processor-custom-chunks-thread';
+    const resourceId = 'processor-custom-chunks-resource';
+    let emittedStreamChunk = false;
+
+    class CustomChunkEmitter {
+      readonly id = 'custom-chunk-emitter';
+      readonly name = 'Custom Chunk Emitter';
+
+      async processOutputStream({ part, writer }: ProcessOutputStreamArgs) {
+        if (part.type === 'text-delta' && !emittedStreamChunk) {
+          emittedStreamChunk = true;
+          await writer?.custom({ type: 'data-stream-reference', data: { source: 'stream' } });
+          await writer?.custom({
+            type: 'data-stream-transient',
+            data: { status: 'streaming' },
+            transient: true,
+          });
+        }
+        return part;
+      }
+
+      async processOutputResult({ messages, writer }: ProcessOutputResultArgs) {
+        await writer?.custom({ type: 'data-result-reference', data: { source: 'result' } });
+        await writer?.custom({ type: 'data-transient-status', data: { status: 'done' }, transient: true });
+        return messages;
+      }
+    }
+
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Done!' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          },
+        ]),
+        rawCall: { rawPrompt: [], rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent',
+      model: model as any,
+      memory,
+      outputProcessors: [new CustomChunkEmitter()],
+    });
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+    const streamedTypes: string[] = [];
+    for await (const chunk of stream.fullStream) {
+      streamedTypes.push(chunk.type);
+    }
+
+    const recalled = await memory.recall({ threadId, resourceId });
+    const persistedParts = recalled.messages.flatMap(message => message.content.parts);
+
+    expect(streamedTypes).toContain('data-stream-reference');
+    expect(streamedTypes).toContain('data-stream-transient');
+    expect(streamedTypes).toContain('data-result-reference');
+    expect(streamedTypes).toContain('data-transient-status');
+    expect(persistedParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'data-stream-reference', data: { source: 'stream' } }),
+        expect.objectContaining({ type: 'data-result-reference', data: { source: 'result' } }),
+      ]),
+    );
+    const persistedTypes = persistedParts.map(part => part.type);
+    expect(persistedTypes).not.toContain('data-stream-transient');
+    expect(persistedTypes).not.toContain('data-transient-status');
+  });
+
+  it('persists custom chunks emitted while processing tool data chunks', async () => {
+    const memory = new MockMemory();
+    const threadId = 'processor-derived-chunk-thread';
+    const resourceId = 'processor-derived-chunk-resource';
+
+    class DerivedChunkEmitter implements Processor {
+      readonly id = 'derived-chunk-emitter';
+      readonly name = 'Derived Chunk Emitter';
+      readonly processDataParts = true;
+
+      async processOutputStream({ part, writer }: ProcessOutputStreamArgs) {
+        if (part.type === 'data-tool-status') {
+          await writer?.custom({ type: 'data-processor-status', data: { source: 'processor' } });
+          await writer?.custom({
+            type: 'data-processor-transient',
+            data: { source: 'processor' },
+            transient: true,
+          });
+        }
+        return part;
+      }
+    }
+
+    const tool = createTool({
+      id: 'customDataTool',
+      description: 'Emits custom data',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async (inputData, { writer }) => {
+        await writer?.custom({ type: 'data-tool-status', data: { source: 'tool' } });
+        return `Processed: ${inputData.text}`;
+      },
+    });
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent',
+      model: createToolCallingModel('customDataTool') as any,
+      tools: { customDataTool: tool },
+      memory,
+      outputProcessors: [new DerivedChunkEmitter()],
+    });
+
+    const stream = await agent.stream('Call the tool', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+    });
+    const streamedTypes: string[] = [];
+    for await (const chunk of stream.fullStream) {
+      streamedTypes.push(chunk.type);
+    }
+
+    const recalled = await memory.recall({ threadId, resourceId });
+    const persistedParts = recalled.messages.flatMap(message => message.content.parts);
+
+    expect(streamedTypes).toContain('data-processor-status');
+    expect(streamedTypes).toContain('data-processor-transient');
+    expect(persistedParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'data-processor-status', data: { source: 'processor' } }),
+      ]),
+    );
+    expect(persistedParts.map(part => part.type)).not.toContain('data-processor-transient');
+  });
+
   it('should receive data-* chunks from tool execute in processOutputStream', async () => {
     const capturedChunkTypes: string[] = [];
     const capturedDataChunks: any[] = [];

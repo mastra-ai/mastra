@@ -56,14 +56,34 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           })
         : undefined;
 
-      // Create a ProcessorStreamWriter so output processors can emit custom chunks back to the stream
-      const dataChunkStreamWriter = {
-        custom: async (data: { type: string }) => {
-          safeEnqueue(controller, data as ChunkType<OUTPUT>);
-        },
-      };
-
       const outputWriter = async (chunk: ChunkType<OUTPUT>, options?: { messageId?: string }) => {
+        const responseMessageId = options?.messageId ?? messageId;
+        const dataChunkStreamWriter = {
+          custom: async (
+            data: { type: string; data?: unknown; transient?: boolean },
+            writerOptions?: { messageId?: string },
+          ) => {
+            const emittedMessageId = writerOptions?.messageId ?? responseMessageId;
+            if (data.type.startsWith('data-') && emittedMessageId && !data.transient) {
+              messageList.add(
+                {
+                  id: emittedMessageId,
+                  role: 'assistant',
+                  content: {
+                    format: 2,
+                    parts: [{ type: data.type as `data-${string}`, data: data.data }],
+                  },
+                  createdAt: new Date(),
+                  threadId: _internal?.threadId,
+                  resourceId: _internal?.resourceId,
+                },
+                'response',
+              );
+            }
+            safeEnqueue(controller, data as ChunkType<OUTPUT>);
+          },
+        };
+
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
         // Transient chunks are streamed to the client but not saved to the DB
@@ -110,7 +130,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           // If a processor rewrote the chunk to a non-data type, skip persistence
-          const responseMessageId = options?.messageId ?? messageId;
           if (
             typeof processedChunk.type === 'string' &&
             processedChunk.type.startsWith('data-') &&

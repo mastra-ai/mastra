@@ -54,6 +54,25 @@ export function createDestructurableOutput<OUTPUT = undefined>(
   }) as MastraModelOutput<OUTPUT>;
 }
 
+function persistProcessorDataChunk(
+  messageList: MessageList,
+  messageId: string,
+  chunk: { type: string; data?: unknown; transient?: boolean },
+): void {
+  if (!chunk.type.startsWith('data-') || chunk.transient) return;
+
+  const message: MastraDBMessage = {
+    id: messageId,
+    role: 'assistant',
+    content: {
+      format: 2,
+      parts: [{ type: chunk.type as `data-${string}`, data: chunk.data }],
+    },
+    createdAt: new Date(),
+  };
+  messageList.add(message, 'response');
+}
+
 type PromiseResults<OUTPUT = undefined> = Pick<
   LLMStepResult<OUTPUT>,
   | 'text'
@@ -391,7 +410,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
               // Create a ProcessorStreamWriter from the controller so processOutputStream can emit custom chunks
               const streamWriter = {
-                custom: async (data: { type: string }) => controller.enqueue(data as ChunkType<OUTPUT>),
+                custom: async (
+                  data: { type: string; data?: unknown; transient?: boolean },
+                  writerOptions?: { messageId?: string },
+                ) => {
+                  persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
+                  controller.enqueue(data as ChunkType<OUTPUT>);
+                },
               };
 
               const {
@@ -923,7 +948,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // Must use both #emitChunk (for fullStream/EventEmitter consumers) and
                   // controller.enqueue (for raw stream consumers) to ensure visibility.
                   const outputResultWriter = {
-                    custom: async (data: { type: string }) => {
+                    custom: async (
+                      data: { type: string; data?: unknown; transient?: boolean },
+                      writerOptions?: { messageId?: string },
+                    ) => {
+                      persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
                       self.#emitChunk(data as ChunkType<OUTPUT>);
                       controller.enqueue(data as ChunkType<OUTPUT>);
                     },
