@@ -1,3 +1,4 @@
+import type { IntegrationConnection } from './capabilities/connection.js';
 import { isTaskContextProviderRequestError } from './capabilities/task-context.js';
 import type { TaskContextDetail } from './capabilities/task-context.js';
 import type { FactoryIntegration } from './integrations/base.js';
@@ -41,12 +42,14 @@ export interface FactoryThreadTaskContext {
 
 type StoredReason = NonNullable<FactoryThreadTaskContext['resolution']['reason']>;
 export type LinearTaskContextIntegration = FactoryIntegration &
-  Pick<LinearIntegration, 'loadConnection' | 'getFreshAccessToken'>;
+  Partial<Pick<LinearIntegration, 'loadConnection' | 'getFreshAccessToken'>> & {
+    getTaskContextConnection?: (orgId: string) => Promise<IntegrationConnection | null>;
+  };
 
 type ParsedSource =
   | { source: 'github-issue'; identifier: string; number: number; repositoryExternalId: string }
   | { source: 'github-pr'; identifier: string; number: number; repositoryExternalId: string }
-  | { source: 'linear-issue'; identifier: string };
+  | { source: 'linear-issue'; identifier: string; issueId: string; sourceId?: string };
 
 export interface LoadFactoryThreadTaskContextDeps {
   orgId: string;
@@ -156,7 +159,12 @@ function parseSource(workItem: WorkItemRow): ParsedSource | null {
       : source.externalId;
     const identifier = metadataIdentifier === undefined ? externalIdentifier : metadataIdentifier;
     if (typeof identifier !== 'string' || !validLinearIssueIdentifier(identifier)) return null;
-    return { source: 'linear-issue', identifier };
+    const metadataIssueId = metadataString(workItem.metadata, 'linearIssueId');
+    const issueId = metadataIssueId && validLinearIssueIdentifier(metadataIssueId) ? metadataIssueId : identifier;
+    const metadataSourceId = metadataString(workItem.metadata, 'linearIssueSourceId');
+    const sourceId = source.sourceId ?? metadataSourceId ?? undefined;
+    if (sourceId && sourceId.length > 512) return null;
+    return { source: 'linear-issue', identifier, issueId, ...(sourceId ? { sourceId } : {}) };
   }
 
   return null;
@@ -284,24 +292,39 @@ export async function loadFactoryThreadTaskContext(
 
   const linear = deps.linearIntegration;
   if (!linear?.taskContext?.getIssue) return storedContext(workItem, 'provider-unavailable');
+  if (linear.getTaskContextConnection && !parsed.sourceId) {
+    return storedContext(workItem, 'provider-unavailable');
+  }
   await deps.ensureLinearReady?.();
-  const connection = await linear.loadConnection(deps.orgId);
-  if (!connection) return storedContext(workItem, 'not-connected');
 
-  let accessToken: string;
+  let taskContextConnection: IntegrationConnection | null;
   try {
-    accessToken = await linear.getFreshAccessToken(connection);
+    if (linear.getTaskContextConnection) {
+      taskContextConnection = await linear.getTaskContextConnection(deps.orgId);
+    } else {
+      if (!linear.loadConnection || !linear.getFreshAccessToken) {
+        return storedContext(workItem, 'provider-unavailable');
+      }
+      const connection = await linear.loadConnection(deps.orgId);
+      if (!connection) return storedContext(workItem, 'not-connected');
+      const accessToken = await linear.getFreshAccessToken(connection);
+      taskContextConnection = { type: 'oauth', accessToken };
+    }
   } catch (error) {
     if (error instanceof LinearReauthRequiredError) return storedContext(workItem, 'reauth-required');
-    if (error instanceof LinearProviderUnavailableError) return storedContext(workItem, 'provider-unavailable');
+    if (error instanceof LinearProviderUnavailableError || isTaskContextProviderRequestError(error)) {
+      return storedContext(workItem, 'provider-unavailable');
+    }
     throw error;
   }
+  if (!taskContextConnection) return storedContext(workItem, 'not-connected');
 
   let detail: TaskContextDetail | null;
   try {
     detail = await linear.taskContext.getIssue({
-      connection: { type: 'oauth', accessToken },
-      issueId: parsed.identifier,
+      connection: taskContextConnection,
+      ...(parsed.sourceId ? { sourceId: parsed.sourceId } : {}),
+      issueId: parsed.issueId,
     });
   } catch (error) {
     if (isTaskContextProviderRequestError(error)) return storedContext(workItem, 'provider-unavailable');

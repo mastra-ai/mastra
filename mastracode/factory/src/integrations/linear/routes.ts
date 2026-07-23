@@ -315,6 +315,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           });
           const issuePayload = issues.map(issue => ({
             id: issue.id,
+            sourceId: issue.sourceId,
             identifier: issue.identifier,
             title: issue.title,
             url: issue.url,

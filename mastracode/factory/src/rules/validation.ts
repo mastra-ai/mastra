@@ -231,7 +231,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'upsertLinkedWorkItem': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'board', 'source', 'sourceKey', 'title', 'url', 'stage', 'metadata'],
+        ['type', 'idempotencyKey', 'board', 'source', 'sourceId', 'sourceKey', 'title', 'url', 'stage', 'metadata'],
         'Factory linked work item decision',
       );
       const url = value.url;
@@ -239,11 +239,17 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         throw new FactoryRuleValidationError('Factory linked work item URL is invalid.');
       }
       const metadata = sanitizeMetadata(value.metadata);
+      const sourceId = optionalBoundedString(
+        value.sourceId,
+        'Factory linked work item sourceId',
+        MAX_SOURCE_KEY_LENGTH,
+      );
       return {
         type,
         ...commonCommitFields(value),
         board: enumValue(value.board, FACTORY_RULE_BOARDS, 'Factory linked work item board'),
         source: enumValue(value.source, WORK_ITEM_SOURCES, 'Factory linked work item source'),
+        ...(sourceId ? { sourceId } : {}),
         sourceKey: boundedString(value.sourceKey, 'Factory linked work item sourceKey', MAX_SOURCE_KEY_LENGTH),
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
         url,

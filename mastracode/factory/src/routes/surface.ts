@@ -45,15 +45,25 @@ export interface IntegrationRegistration {
   ensureReady: () => Promise<void>;
 }
 
+function providesTaskContextConnection(integration: FactoryIntegration): integration is LinearTaskContextIntegration {
+  return 'getTaskContextConnection' in integration && typeof integration.getTaskContextConnection === 'function';
+}
+
+function providesLinearOAuthConnection(integration: FactoryIntegration): integration is LinearTaskContextIntegration {
+  return (
+    'loadConnection' in integration &&
+    typeof integration.loadConnection === 'function' &&
+    'getFreshAccessToken' in integration &&
+    typeof integration.getFreshAccessToken === 'function'
+  );
+}
+
 export function linearTaskContextIntegration(
   integration: FactoryIntegration | undefined,
 ): LinearTaskContextIntegration | undefined {
   if (!integration?.taskContext?.getIssue) return undefined;
-  return 'loadConnection' in integration &&
-    typeof integration.loadConnection === 'function' &&
-    'getFreshAccessToken' in integration &&
-    typeof integration.getFreshAccessToken === 'function'
-    ? (integration as LinearTaskContextIntegration)
+  return providesTaskContextConnection(integration) || providesLinearOAuthConnection(integration)
+    ? integration
     : undefined;
 }
 

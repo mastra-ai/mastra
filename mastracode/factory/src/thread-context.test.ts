@@ -59,6 +59,21 @@ function githubIntegration(taskContext: TaskContext): FactoryIntegration {
   } as FactoryIntegration;
 }
 
+function linearTaskContextIntegration(
+  taskContext: TaskContext,
+  methods: Partial<
+    Pick<LinearTaskContextIntegration, 'getTaskContextConnection' | 'loadConnection' | 'getFreshAccessToken'>
+  > = {},
+): LinearTaskContextIntegration {
+  return {
+    id: 'linear',
+    taskContext,
+    routes: () => [],
+    diagnostics: () => ({}),
+    ...methods,
+  };
+}
+
 describe('loadFactoryThreadTaskContext', () => {
   it('returns stored manual context without contacting a provider', async () => {
     const context = await loadFactoryThreadTaskContext({
@@ -123,6 +138,97 @@ describe('loadFactoryThreadTaskContext', () => {
       expect(context.resolution).toEqual({ mode: 'stored', reason: 'invalid-source' });
     }
     expect(ensureLinearReady).not.toHaveBeenCalled();
+    expect(getIssue).not.toHaveBeenCalled();
+  });
+
+  it('uses a task-specific Linear connection without loading or refreshing an OAuth row', async () => {
+    const getIssue = vi.fn().mockResolvedValue({
+      identifier: 'ENG-42',
+      title: 'Live Linear title',
+      description: 'Live Linear description',
+      state: 'In Progress',
+      labels: ['factory'],
+      assignees: ['Ada'],
+      url: 'https://linear.app/acme/issue/ENG-42',
+    });
+    const getTaskContextConnection = vi
+      .fn()
+      .mockResolvedValue({ type: 'oauth', accessToken: 'platform-managed' } as const);
+    const loadConnection = vi.fn();
+    const getFreshAccessToken = vi.fn();
+    const linearIntegration = linearTaskContextIntegration(
+      { getIssue },
+      { getTaskContextConnection, loadConnection, getFreshAccessToken },
+    );
+
+    const context = await loadFactoryThreadTaskContext({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      workItem: workItem({
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          sourceId: 'linear-project:workspace-project',
+          externalId: 'linear:linear-project:workspace-project:11111111-1111-4111-8111-111111111111',
+          url: 'https://linear.app/acme/issue/ENG-42',
+        },
+        metadata: {
+          linearIssueId: '11111111-1111-4111-8111-111111111111',
+          linearIssueIdentifier: 'ENG-42',
+          linearIssueSourceId: 'linear-project:workspace-project',
+        },
+      }),
+      linearIntegration,
+    });
+
+    expect(context).toEqual({
+      task: {
+        source: 'linear-issue',
+        identifier: 'ENG-42',
+        title: 'Live Linear title',
+        description: 'Live Linear description',
+        state: 'In Progress',
+        labels: ['factory'],
+        assignees: ['Ada'],
+        url: 'https://linear.app/acme/issue/ENG-42',
+      },
+      resolution: { mode: 'live' },
+    });
+    expect(getTaskContextConnection).toHaveBeenCalledWith('org-1');
+    expect(loadConnection).not.toHaveBeenCalled();
+    expect(getFreshAccessToken).not.toHaveBeenCalled();
+    expect(getIssue).toHaveBeenCalledWith({
+      connection: { type: 'oauth', accessToken: 'platform-managed' },
+      sourceId: 'linear-project:workspace-project',
+      issueId: '11111111-1111-4111-8111-111111111111',
+    });
+  });
+
+  it('uses stored context for legacy Platform Linear rows without an exact source id', async () => {
+    const getIssue = vi.fn();
+    const getTaskContextConnection = vi.fn();
+    const linearIntegration = linearTaskContextIntegration({ getIssue }, { getTaskContextConnection });
+
+    const context = await loadFactoryThreadTaskContext({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      workItem: workItem({
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: 'linear:ENG-42',
+          url: 'https://linear.app/acme/issue/ENG-42',
+        },
+        metadata: { linearIssueIdentifier: 'ENG-42' },
+      }),
+      linearIntegration,
+    });
+
+    expect(context).toMatchObject({
+      task: { source: 'linear-issue' },
+      resolution: { mode: 'stored', reason: 'provider-unavailable' },
+    });
+    expect(getTaskContextConnection).not.toHaveBeenCalled();
     expect(getIssue).not.toHaveBeenCalled();
   });
 

@@ -39,6 +39,7 @@ import type { ParsedGithubWebhook } from './github/webhook.js';
 
 export interface LinearIssueIngress {
   id: string;
+  sourceId: string;
   identifier: string;
   title: string;
   url: string;

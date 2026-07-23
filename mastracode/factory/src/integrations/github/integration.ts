@@ -502,6 +502,7 @@ export class GithubIntegration implements FactoryIntegration {
     return {
       issues: result.issues.map(issue => ({
         id: String(issue.number),
+        sourceId: repoFullName,
         identifier: `#${issue.number}`,
         title: issue.title,
         url: issue.url,
@@ -546,6 +547,7 @@ export class GithubIntegration implements FactoryIntegration {
     if (issue.pull_request) return null;
     return {
       id: String(issue.number),
+      sourceId: repoFullName,
       identifier: `#${issue.number}`,
       title: issue.title,
       url: issue.html_url,

@@ -74,7 +74,13 @@ function externalSourceForDecision(decision: Extract<FactoryCommitDecision, { ty
         : decision.source === 'linear-issue'
           ? ['linear', 'issue']
           : ['factory', 'manual'];
-  return { integrationId, type, externalId: decision.sourceKey, url: decision.url ?? undefined };
+  return {
+    integrationId,
+    type,
+    ...(decision.sourceId ? { sourceId: decision.sourceId } : {}),
+    externalId: decision.sourceKey,
+    url: decision.url ?? undefined,
+  };
 }
 
 function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor {

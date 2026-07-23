@@ -41,6 +41,7 @@ export interface ListIntakeItemsInput extends ListIntakeSourcesInput {
 /** Provider-neutral issue returned by every Intake integration. */
 export interface IntakeIssue {
   id: string;
+  sourceId: string;
   identifier: string;
   title: string;
   url: string;

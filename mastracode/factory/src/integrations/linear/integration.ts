@@ -1048,6 +1048,7 @@ function getLinearAccessToken(connection: IntegrationConnection): string {
 function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
   return {
     id: issue.id,
+    sourceId: issue.projectId,
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,

@@ -33,6 +33,7 @@ export function factoryDecisionHash(decision: Record<string, unknown>): string {
 export interface ExternalWorkItemSource {
   integrationId: string;
   type: string;
+  sourceId?: string;
   externalId: string;
   url?: string;
 }

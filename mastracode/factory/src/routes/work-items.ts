@@ -106,12 +106,21 @@ function validMetadata(value: unknown): value is Record<string, unknown> | null 
 function parseExternalSource(value: unknown): ExternalWorkItemSource | null | undefined {
   if (value === undefined || value === null) return value;
   if (!isRecord(value)) return undefined;
-  const { integrationId, type, externalId, url } = value;
+  const { integrationId, type, sourceId, externalId, url } = value;
   if (typeof integrationId !== 'string' || integrationId.length === 0 || integrationId.length > 128) return undefined;
   if (typeof type !== 'string' || type.length === 0 || type.length > 128) return undefined;
+  if (sourceId !== undefined && (typeof sourceId !== 'string' || sourceId.length === 0 || sourceId.length > 512)) {
+    return undefined;
+  }
   if (typeof externalId !== 'string' || externalId.length === 0 || externalId.length > 512) return undefined;
   if (url !== undefined && (typeof url !== 'string' || url.length > 2048)) return undefined;
-  return { integrationId, type, externalId, ...(url !== undefined ? { url } : {}) };
+  return {
+    integrationId,
+    type,
+    ...(sourceId !== undefined ? { sourceId } : {}),
+    externalId,
+    ...(url !== undefined ? { url } : {}),
+  };
 }
 
 function parseParentWorkItemId(value: unknown): string | null | undefined {

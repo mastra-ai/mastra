@@ -11,6 +11,7 @@ import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { ChatMessageList } from '../domains/chat/components/ChatMessageList';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
+import { ChatComposerStateProvider } from '../domains/chat/context/ChatCommandsProvider';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatSessionContext } from '../domains/chat/context/useChatSessionContext';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
@@ -60,10 +61,12 @@ export function ThreadPage() {
   const panelLifecycleKey = factoryTaskAddress
     ? `task:${factoryProjectId}:${threadId}:${resourceId}:${sessionId}`
     : `files:${workspacePath ?? 'none'}:${isMobile ? 'mobile' : 'desktop'}`;
+  const composerLifecycleKey = `${resourceId}:${sessionId ?? 'user'}:${threadId ?? 'draft'}`;
 
   return (
     <ThreadPageLayout
-      key={panelLifecycleKey}
+      panelLifecycleKey={panelLifecycleKey}
+      composerLifecycleKey={composerLifecycleKey}
       workspacePath={workspacePath}
       workspaceFactoryName={factoryQuery.data?.name}
       factoryTaskAddress={factoryTaskAddress}
@@ -73,19 +76,36 @@ export function ThreadPage() {
   );
 }
 
-function ThreadPageLayout({
-  workspacePath,
-  workspaceFactoryName,
-  factoryTaskAddress,
-  isMobile,
-  threadId,
-}: {
+interface ThreadPagePanelLayoutProps {
   workspacePath: string | undefined;
   workspaceFactoryName: string | undefined;
   factoryTaskAddress: FactoryTaskPanelAddress | undefined;
   isMobile: boolean;
   threadId: string | undefined;
+}
+
+function ThreadPageLayout({
+  panelLifecycleKey,
+  composerLifecycleKey,
+  ...panelProps
+}: ThreadPagePanelLayoutProps & {
+  panelLifecycleKey: string;
+  composerLifecycleKey: string;
 }) {
+  return (
+    <ChatComposerStateProvider key={composerLifecycleKey}>
+      <ThreadPagePanelLayout key={panelLifecycleKey} {...panelProps} />
+    </ChatComposerStateProvider>
+  );
+}
+
+function ThreadPagePanelLayout({
+  workspacePath,
+  workspaceFactoryName,
+  factoryTaskAddress,
+  isMobile,
+  threadId,
+}: ThreadPagePanelLayoutProps) {
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
   const [activeFactoryTab, setActiveFactoryTab] = useState<FactorySessionContextTab>('task');

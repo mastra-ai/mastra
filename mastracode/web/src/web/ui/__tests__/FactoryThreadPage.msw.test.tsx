@@ -1,9 +1,9 @@
 import type { AgentControllerSessionState } from '@mastra/client-js';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
@@ -58,6 +58,44 @@ function emptySse(): Response {
     }),
     { headers: { 'content-type': 'text/event-stream' } },
   );
+}
+
+function installMobileViewport(initialMobile = false) {
+  let mobile = initialMobile;
+  const listeners = new Map<string, Set<EventListener>>();
+  vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+    get matches() {
+      return query.includes('max-width') ? mobile : false;
+    },
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+      if (typeof listener !== 'function') return;
+      const queryListeners = listeners.get(query) ?? new Set();
+      queryListeners.add(listener);
+      listeners.set(query, queryListeners);
+    },
+    removeEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+      if (typeof listener === 'function') listeners.get(query)?.delete(listener);
+    },
+    dispatchEvent: vi.fn(() => true),
+  }));
+
+  return {
+    setMobile(nextMobile: boolean) {
+      mobile = nextMobile;
+      for (const [media, queryListeners] of listeners) {
+        const event = new Event('change');
+        Object.defineProperties(event, {
+          matches: { value: media.includes('max-width') ? mobile : false },
+          media: { value: media },
+        });
+        for (const listener of queryListeners) listener(event);
+      }
+    },
+  };
 }
 
 function installRouteHandlers(contextRequests: ContextRequest[]) {
@@ -213,9 +251,15 @@ describe('Factory thread task context', () => {
   it('resets to Task and uses a new query identity when workspace and thread route params change', async () => {
     const contextRequests: ContextRequest[] = [];
     installRouteHandlers(contextRequests);
+    const user = userEvent.setup();
     const router = renderRoute(`/factories/${FACTORY_ID}/workspaces/session-one/threads/thread-one`);
 
     expect(await screen.findByRole('heading', { name: 'Factory task one' })).toBeInTheDocument();
+    const composer = screen.getByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(composer).toBeEnabled());
+    fireEvent.change(composer, { target: { value: 'Thread one draft' } });
+    await user.click(screen.getByRole('tab', { name: 'Files' }));
+    expect(screen.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
 
     await act(async () => {
       await router.navigate(`/factories/${FACTORY_ID}/workspaces/session-two/threads/thread-two`);
@@ -239,6 +283,36 @@ describe('Factory thread task context', () => {
     );
     expect(await screen.findByRole('heading', { name: 'Factory task two' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Task' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+  });
+
+  it('preserves the composer draft while breakpoint changes reset only panel state', async () => {
+    const contextRequests: ContextRequest[] = [];
+    const viewport = installMobileViewport();
+    installRouteHandlers(contextRequests);
+
+    renderRoute(`/factories/${FACTORY_ID}/workspaces/session-one/threads/thread-one`);
+
+    expect(await screen.findByRole('heading', { name: 'Factory task one' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'What can I help you build?' })).toBeInTheDocument();
+    const composer = screen.getByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(composer).toBeEnabled());
+    fireEvent.change(composer, { target: { value: 'Draft survives the breakpoint' } });
+    expect(composer).toHaveValue('Draft survives the breakpoint');
+    fireEvent.change(screen.getByLabelText('Attach images'), {
+      target: { files: [new File(['proof'], 'proof.png', { type: 'image/png' })] },
+    });
+    expect(await screen.findByRole('img', { name: 'proof.png' })).toBeInTheDocument();
+
+    act(() => viewport.setMobile(true));
+    await waitFor(() => expect(screen.queryByRole('tab', { name: 'Task' })).not.toBeInTheDocument());
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Draft survives the breakpoint');
+    expect(screen.getByRole('img', { name: 'proof.png' })).toBeInTheDocument();
+
+    act(() => viewport.setMobile(false));
+    expect(await screen.findByRole('tab', { name: 'Task' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Draft survives the breakpoint');
+    expect(screen.getByRole('img', { name: 'proof.png' })).toBeInTheDocument();
   });
 
   it('keeps personal sessions Files-only and makes no task-context request', async () => {

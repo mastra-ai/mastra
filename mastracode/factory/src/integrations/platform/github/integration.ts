@@ -1072,6 +1072,7 @@ function splitRepository(sourceId: string): { owner: string; repo: string } {
 function parseIntakeIssue(sourceId: string, issue: GithubIssue): IntakeIssue {
   return {
     id: String(issue.number),
+    sourceId,
     identifier: `#${issue.number}`,
     title: issue.title,
     url: issue.htmlUrl,

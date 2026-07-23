@@ -111,6 +111,7 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
   event: FactoryLinearEventName;
   issue: {
     id: string;
+    sourceId: string;
     identifier: string;
     title: string;
     url: string;
@@ -197,6 +198,7 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   type: 'upsertLinkedWorkItem';
   board: FactoryRuleBoard;
   source: WorkItemSource;
+  sourceId?: string;
   sourceKey: string;
   title: string;
   url: string | null;

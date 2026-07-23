@@ -49,13 +49,14 @@ describe('assembleFactoryApiRoutes task context', () => {
     expect(routes.some(route => route.path === '/web/factory/projects/:id/threads/:threadId/context')).toBe(true);
   });
 
-  it('does not treat the concrete Platform Linear integration as live task context', () => {
+  it('recognizes the concrete Platform Linear integration without making a provider request', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.example.com/v1');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'platform-token');
     const fetchImpl = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchImpl);
+    const integration = new PlatformLinearIntegration();
 
-    expect(linearTaskContextIntegration(new PlatformLinearIntegration())).toBeUndefined();
+    expect(linearTaskContextIntegration(integration)).toBe(integration);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
