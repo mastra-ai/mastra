@@ -111,12 +111,14 @@ describe('FactoryDefaultModelSection', () => {
     fireEvent.pointerDown(option, { pointerType: 'mouse' });
     fireEvent.click(option, { detail: 1 });
 
+    // While the popup is closing its search input (also role=combobox) may
+    // still be mounted, so assert on the trigger element directly.
     expect(await screen.findByLabelText('Saving default model')).toBeInTheDocument();
-    expect(screen.getByRole('combobox')).toBeDisabled();
+    expect(combobox).toBeDisabled();
 
     releasePatch();
 
     await waitFor(() => expect(screen.queryByLabelText('Saving default model')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByRole('combobox')).toHaveTextContent('openai/gpt-5'));
+    await waitFor(() => expect(combobox).toHaveTextContent('openai/gpt-5'));
   });
 });
