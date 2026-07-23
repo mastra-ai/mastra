@@ -1406,7 +1406,7 @@ function WorkItemCard({
         if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
       }}
       className={cn(
-        'group relative flex flex-col gap-3 rounded-xl border border-border1 bg-neutral1/5 p-3 outline-none transition-colors hover:bg-surface3',
+        'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
         evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
         runPending && 'opacity-70',
       )}
@@ -1490,17 +1490,6 @@ function WorkItemCard({
           <span className="min-w-0 flex-1 truncate text-ui-smd font-semibold text-icon6">
             <SourceTitle source={item.source} title={item.title} />
           </span>
-          {item.url !== null && (
-            <a
-              href={item.url}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={externalLinkLabel(item.source)}
-              className="shrink-0 text-icon3 transition-[opacity,translate] hover:text-icon5 focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100 motion-reduce:transition-none"
-            >
-              <ArrowUpRight size={12} aria-hidden />
-            </a>
-          )}
         </div>
       </div>
       <CardLabels labels={labels} />
@@ -1622,7 +1611,7 @@ function CandidateCard({
           },
         })
       }
-      className="group flex cursor-grab flex-col gap-3 rounded-xl border border-border1 bg-neutral1/5 p-3 outline-none transition-colors hover:bg-surface3 active:cursor-grabbing"
+      className="group flex cursor-grab flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3 active:cursor-grabbing"
     >
       <div className="flex min-w-0 flex-col gap-1.5">
         <span className="block truncate text-ui-xs text-icon2">{candidate.meta}</span>
