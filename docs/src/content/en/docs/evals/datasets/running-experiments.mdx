@@ -264,18 +264,34 @@ const summary = await dataset.startExperiment({
 
 ### Timeouts and retries
 
-Set a per-item timeout (in milliseconds) and retry count:
+Set timeout overrides on individual items and use `itemTimeout` as the fallback for other items:
 
-```typescript
+```typescript title="src/mastra/experiments/timeouts.ts"
+await dataset.addItem({
+  input: 'Summarize this short article',
+  timeout: 5_000,
+})
+
+await dataset.addItem({
+  input: 'Analyze this long report',
+  timeout: 60_000,
+})
+
+await dataset.addItem({
+  input: 'Translate this paragraph',
+})
+
 const summary = await dataset.startExperiment({
   targetType: 'agent',
   targetId: 'translation-agent',
-  itemTimeout: 30_000, // 30 seconds per item
-  maxRetries: 2, // retry failed items up to 2 times
+  itemTimeout: 30_000,
+  maxRetries: 2,
 })
 ```
 
-Retries use exponential backoff. Abort errors are never retried.
+The first two items use their `timeout` values. The third item inherits the 30-second `itemTimeout`. When neither value is set, an item has no execution deadline.
+
+Each timeout is one budget for the initial attempt, exponential retry backoff, and all retry attempts. It doesn't restart for each attempt. A timeout stops further retries. Cancelling the experiment through `signal` takes precedence and isn't retried.
 
 ### Aborting an experiment
 
