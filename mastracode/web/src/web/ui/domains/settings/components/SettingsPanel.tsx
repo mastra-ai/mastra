@@ -21,6 +21,7 @@ import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { FactorySetupSection } from './FactorySetupSection';
 import { SourceControlSection } from './SourceControlSection';
+import { OMSection } from './OMSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
@@ -135,6 +136,12 @@ export function SettingsPanel() {
                 description="A pack sets a model for each mode (build / plan / fast)."
               >
                 <ModelPacksSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+              </SettingsSubsection>
+              <SettingsSubsection
+                title="Observational memory"
+                description="Choose the models and token thresholds used to summarize and retain conversation context."
+              >
+                <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
               </SettingsSubsection>
             </div>
           )}
