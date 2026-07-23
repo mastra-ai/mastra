@@ -172,11 +172,7 @@ function useAgentsRunningCount(): number {
 
 function MetricsLoading() {
   return (
-    <div className="grid gap-5 border-t border-border1 pt-7" aria-label="Loading Factory metrics">
-      <div className="flex items-center justify-between gap-4">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-6 w-16 rounded-full" />
-      </div>
+    <div className="grid gap-5" aria-label="Loading Factory metrics">
       <Skeleton className="h-64 w-full" />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Skeleton className="h-16 w-full" />
@@ -204,19 +200,7 @@ function FlowOverview({
     metrics.transitions.total === 0 ? EM_DASH : `${Math.round((automatedMoves / metrics.transitions.total) * 100)}%`;
 
   return (
-    <section className="flex flex-col gap-5 border-t border-border1 pt-7">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <Txt as="h2" variant="ui-md" className="m-0 font-medium text-icon6">
-            Delivery flow
-          </Txt>
-          <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
-            Completed work over time, with the Factory's current operating state.
-          </Txt>
-        </div>
-        <Badge size="sm">{windowDays}-day view</Badge>
-      </div>
-
+    <section className="flex flex-col gap-5">
       <div className="min-w-0">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
           <div>
