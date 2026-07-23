@@ -99,6 +99,37 @@ Two behaviors follow from routing approvals through the session:
 
 See [Tool approvals and permissions](/docs/agent-controller/tool-approvals) for policies, categories, and session grants.
 
+## Account linking
+
+Model credentials resolve per tenant. A message from a web UI carries the signed-in user, so the run loads that user's stored credentials. An inbound chat message doesn't, so a channel run has no tenant and can't resolve credentials unless you tell it which tenant the sender belongs to.
+
+Register an account-link resolver to map a platform sender to a Mastra tenant. When you set one, the resolver runs before every dispatch. A linked sender's run proceeds with their tenant stamped on it, so their credentials resolve. An unlinked sender's run is skipped.
+
+```typescript {5-9} filename="channels.ts"
+import { AgentControllerChannels } from '@mastra/core/channels'
+
+const channels = new AgentControllerChannels({ adapters, handlers })
+
+channels.setAccountLinkResolver(async ({ platform, teamId, userId }) => {
+  const link = await lookupLink(platform, teamId, userId)
+  return link ? { orgId: link.orgId, userId: link.userId } : null
+})
+```
+
+The resolver receives the sender's `platform`, `teamId` (the workspace ID, such as a Slack team ID), and `userId` (the platform user ID). Return the Mastra tenant `{ orgId, userId }`, or `null` when the sender hasn't linked their account. `orgId` is optional for personal accounts.
+
+To prompt an unlinked sender to connect, register an unlinked-sender handler. It runs when the resolver returns `null`, and the run is still skipped.
+
+```typescript filename="channels.ts"
+channels.setUnlinkedSenderHandler(async ({ platform, teamId, userId }) => {
+  await sendConnectPrompt({ platform, teamId, userId })
+})
+```
+
+Populate the reverse lookup from your own connect flow: when a signed-in user links their platform identity, store the `(platform, teamId, userId) -> (orgId, userId)` mapping the resolver reads. Sign any deep link that carries the sender identity so a forged identity can't bind to the wrong tenant.
+
+Channels with no resolver set dispatch as before, with no tenant stamped.
+
 ## Limits
 
 - Adapters can be constructed manually as shown above. The managed connect flow (`mastra.channels.slack.connect(...)`) also supports controller-owned installations — call it with an options object (`connect({ id, name })`) to connect a controller that has no registered agent. Adapters without controller support must still be constructed manually.
