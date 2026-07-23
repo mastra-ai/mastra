@@ -172,5 +172,24 @@
     "@mastra/s3": "0.6.0",
     "@mastra/vercel": "1.3.0"
   },
-  "changesets": []
+  "changesets": [
+    "board-card-thread-actions",
+    "common-turtles-cheer",
+    "cyan-aliens-care",
+    "eager-walls-sneeze",
+    "factory-github-uninstall-hydration",
+    "factory-lock-timeout",
+    "fix-subagent-approval-parent-run",
+    "frank-olives-pick",
+    "green-birds-knock",
+    "hot-melons-wave",
+    "libsql-om-write-lock",
+    "light-bottles-tan",
+    "mastracode-model-provider-signin-step",
+    "mastracode-storage-shutdown",
+    "neat-signs-tan",
+    "petite-sites-wish",
+    "sdk-anthropic-oauth-timeout",
+    "silly-boxes-film"
+  ]
 }

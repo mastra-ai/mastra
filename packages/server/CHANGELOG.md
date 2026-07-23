@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.52.2-alpha.0
+
+### Patch Changes
+
+- Fixed stored agent draft saves to preserve the published version unless automatic publication is requested. ([#19794](https://github.com/mastra-ai/mastra/pull/19794))
+
+- Updated dependencies [[`df6a9ce`](https://github.com/mastra-ai/mastra/commit/df6a9ce87214f7aadb2edfe62f67605fe998a0a4)]:
+  - @mastra/core@1.52.2-alpha.0
+
 ## 1.52.1
 
 ### Patch Changes
