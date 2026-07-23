@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ChangeEvent, PropsWithChildren } from 'react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AddItemDialog } from '../add-item-dialog';
@@ -21,7 +22,19 @@ const BASE_URL = 'http://localhost:4111';
 
 // Thin stub for the heavy Dialog atom so this test focuses on the real client + mutation behavior.
 vi.mock('@mastra/playground-ui/components/Dialog', () => {
-  const Dialog = ({ open, children }: PropsWithChildren<{ open: boolean }>) => (open ? <div>{children}</div> : null);
+  const Dialog = ({
+    open,
+    onOpenChange,
+    children,
+  }: PropsWithChildren<{ open: boolean; onOpenChange: (open: boolean) => void }>) =>
+    open ? (
+      <div>
+        {children}
+        <button type="button" onClick={() => onOpenChange(false)}>
+          Dismiss dialog
+        </button>
+      </div>
+    ) : null;
 
   return {
     Dialog,
@@ -59,6 +72,33 @@ function renderDialog() {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <AddItemDialog datasetId="dataset-1" open onOpenChange={vi.fn()} />
+      </QueryClientProvider>
+    </MastraReactProvider>,
+  );
+}
+
+function ReopenableDialog() {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Reopen dialog
+      </button>
+      <AddItemDialog datasetId="dataset-1" open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+function renderReopenableDialog() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+
+  return render(
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <ReopenableDialog />
       </QueryClientProvider>
     </MastraReactProvider>,
   );
@@ -259,6 +299,23 @@ describe('AddItemDialog', () => {
       fireEvent.click(screen.getByRole('switch', { name: 'Override dataset scorers' }));
       await selectScorer('Quality scorer');
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.getByRole('switch', { name: 'Override dataset scorers' }).getAttribute('aria-checked')).toBe(
+        'false',
+      );
+      expect(screen.queryByRole('combobox')).toBeNull();
+    });
+  });
+
+  describe('when the dialog is dismissed with a scorer override', () => {
+    it('restores dataset scorer inheritance when reopened', async () => {
+      useScorerHandler();
+      renderReopenableDialog();
+
+      fireEvent.click(screen.getByRole('switch', { name: 'Override dataset scorers' }));
+      await selectScorer('Quality scorer');
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss dialog' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Reopen dialog' }));
 
       expect(screen.getByRole('switch', { name: 'Override dataset scorers' }).getAttribute('aria-checked')).toBe(
         'false',

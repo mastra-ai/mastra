@@ -72,6 +72,24 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
   const { addItem } = useDatasetMutations();
 
+  const resetForm = () => {
+    setInput('{}');
+    setGroundTruth('');
+    setExpectedTrajectory('');
+    setToolMocks('');
+    setScorerOverrideEnabled(false);
+    setSelectedScorerIds([]);
+    setRequestContext('');
+    setValidationErrors(null);
+  };
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetForm();
+    }
+    onOpenChange(nextOpen);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -144,18 +162,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       });
 
       toast.success('Item added successfully');
-      setValidationErrors(null);
-
-      // Reset form
-      setInput('{}');
-      setGroundTruth('');
-      setExpectedTrajectory('');
-      setToolMocks('');
-      setScorerOverrideEnabled(false);
-      setSelectedScorerIds([]);
-      setRequestContext('');
-      onOpenChange(false);
-
+      handleDialogOpenChange(false);
       onSuccess?.();
     } catch (error) {
       // Check for schema validation error from API
@@ -193,19 +200,11 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
   };
 
   const handleCancel = () => {
-    setInput('{}');
-    setGroundTruth('');
-    setExpectedTrajectory('');
-    setToolMocks('');
-    setScorerOverrideEnabled(false);
-    setSelectedScorerIds([]);
-    setRequestContext('');
-    setValidationErrors(null);
-    onOpenChange(false);
+    handleDialogOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Add Item</DialogTitle>
