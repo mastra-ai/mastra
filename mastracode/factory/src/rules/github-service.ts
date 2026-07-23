@@ -8,6 +8,7 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryGithubRule } from './resolve.js';
+import { githubIssueSourceKey, githubPullRequestSourceKey } from './source-keys.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -62,12 +63,26 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   return undefined;
 }
 
-function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number): string {
+function scopedSourceKey(repositoryId: number, kind: 'issue' | 'pull-request', itemNumber: number): string {
+  return kind === 'issue'
+    ? githubIssueSourceKey(repositoryId, itemNumber)
+    : githubPullRequestSourceKey(repositoryId, itemNumber);
+}
+
+function unscopedSourceKey(kind: 'issue' | 'pull-request', itemNumber: number): string {
   return kind === 'issue' ? `github-issue:${itemNumber}` : `github-pr:${itemNumber}`;
 }
 
 function legacySourceKey(repositoryId: number, kind: 'issue' | 'pull-request', itemNumber: number): string {
   return `github:${repositoryId}:${kind}:${itemNumber}`;
+}
+
+function matchesLegacyUnscopedItem(item: WorkItemRow, repositoryId: number, sourceUrl: string): boolean {
+  const metadataRepositoryId = item.metadata?.githubRepositoryId;
+  return (
+    (metadataRepositoryId !== undefined && String(metadataRepositoryId) === String(repositoryId)) ||
+    item.externalSource?.url === sourceUrl
+  );
 }
 
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
@@ -179,6 +194,7 @@ export class FactoryGithubEventService {
       repositoryId,
       issueNumber,
       pullRequestNumber,
+      issueNumber ? string(issue?.html_url) : string(pullRequest?.html_url),
       string(object(pullRequest?.head)?.ref),
       provenance,
     );
@@ -295,6 +311,7 @@ export class FactoryGithubEventService {
     repositoryId: number,
     issueNumber: number | undefined,
     pullRequestNumber: number | undefined,
+    sourceUrl: string | undefined,
     pullRequestHeadBranch: string | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
   ): Promise<WorkItemRow | undefined> {
@@ -302,13 +319,25 @@ export class FactoryGithubEventService {
     if (provenance) return items.find(item => item.id === provenance.workItemId);
     if (issueNumber) {
       return (
-        items.find(item => item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber)) ??
+        items.find(item => item.externalSource?.externalId === scopedSourceKey(repositoryId, 'issue', issueNumber)) ??
+        items.find(
+          item =>
+            item.externalSource?.externalId === unscopedSourceKey('issue', issueNumber) &&
+            matchesLegacyUnscopedItem(item, repositoryId, sourceUrl ?? ''),
+        ) ??
         items.find(item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'issue', issueNumber))
       );
     }
     if (pullRequestNumber) {
       return (
-        items.find(item => item.externalSource?.externalId === canonicalSourceKey('pull-request', pullRequestNumber)) ??
+        items.find(
+          item => item.externalSource?.externalId === scopedSourceKey(repositoryId, 'pull-request', pullRequestNumber),
+        ) ??
+        items.find(
+          item =>
+            item.externalSource?.externalId === unscopedSourceKey('pull-request', pullRequestNumber) &&
+            matchesLegacyUnscopedItem(item, repositoryId, sourceUrl ?? ''),
+        ) ??
         items.find(
           item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'pull-request', pullRequestNumber),
         ) ??

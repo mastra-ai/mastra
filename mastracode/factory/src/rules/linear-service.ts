@@ -2,6 +2,7 @@ import type { LinearIssueIngress } from '../integrations/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryLinearRule } from './resolve.js';
+import { linearIssueSourceKey } from './source-keys.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision, FactoryRules } from './types.js';
 import { validateFactoryRuleDecisions } from './validation.js';
 
@@ -36,6 +37,16 @@ export interface FactoryLinearIssueIngress {
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
 
+function relatedLinearItem(items: WorkItemRow[], issue: LinearIssueIngress): WorkItemRow | undefined {
+  const scopedKey = linearIssueSourceKey(issue.id);
+  const legacyKey = `linear:${issue.identifier}`;
+  return (
+    items.find(item => item.externalSource?.externalId === scopedKey) ??
+    items.find(item => item.externalSource?.integrationId === 'linear' && item.metadata?.linearIssueId === issue.id) ??
+    items.find(item => item.externalSource?.externalId === legacyKey && item.externalSource.url === issue.url)
+  );
+}
+
 export class FactoryLinearIssueService {
   constructor(private readonly options: FactoryLinearIssueServiceOptions) {}
 
@@ -44,10 +55,9 @@ export class FactoryLinearIssueService {
     if (!project) return { status: 'missing', ingested: 0 };
 
     const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(`linear:${issue.identifier}`)));
+      statuses.push(await this.#ingestIssue(input, issue, relatedLinearItem(items, issue)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };

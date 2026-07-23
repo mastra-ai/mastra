@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Improved Platform GitHub event intake latency, restored closed issue and pull request ingestion for Factory rules, and added background ingestion for selected Platform Linear projects.
+Improved Platform event intake workers, restored closed GitHub issue and pull request ingestion, added background ingestion for selected Linear projects, and prevented unrelated GitHub or Linear issues from sharing Factory work items.
