@@ -127,6 +127,12 @@ export function execute<OUTPUT = undefined>({
     toolChoice,
     activeTools,
     targetVersion,
+    model: {
+      provider: model.provider,
+      modelId: model.modelId,
+      supportsStructuredOutputs:
+        'supportsStructuredOutputs' in model ? Boolean(model.supportsStructuredOutputs) : false,
+    },
   });
 
   const structuredOutputMode = structuredOutput?.schema
