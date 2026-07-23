@@ -11,9 +11,9 @@
  *   - .env.schema            -> also emitted as .env.example (decorators stripped)
  *
  * Versions: every `link:` dep is resolved from npm and written as an exact
- * version. Packages on the local alpha release train resolve from the `alpha`
- * tag; stable packages resolve from `latest`. This keeps the generated source
- * aligned with its published package release channel.
+ * version. The sync selects `latest` or `alpha`, whichever has the same base
+ * version as the local source package, so release transitions cannot pair new
+ * source with an older stable package.
  *
  * Usage:
  *   node scripts/sync-template.mjs [--out <dir>]
@@ -171,6 +171,28 @@ function resolveTaggedVersion(name, tag) {
   }
 }
 
+function baseVersion(version) {
+  return version.split('-')[0];
+}
+
+function resolveLinkedVersion(name, localVersion) {
+  const localBase = baseVersion(localVersion);
+
+  if (!localVersion.includes('-alpha.')) {
+    const latestVersion = resolveTaggedVersion(name, 'latest');
+    if (baseVersion(latestVersion) === localBase) {
+      return { version: latestVersion, tag: 'latest' };
+    }
+  }
+
+  const alphaVersion = resolveTaggedVersion(name, 'alpha');
+  if (baseVersion(alphaVersion) === localBase) {
+    return { version: alphaVersion, tag: 'alpha' };
+  }
+
+  throw new Error(`sync-template: no published ${name} version matches local release ${localBase}.`);
+}
+
 function transformPackageJson() {
   const manifest = JSON.parse(fs.readFileSync(path.join(webRoot, 'package.json'), 'utf8'));
 
@@ -193,9 +215,10 @@ function transformPackageJson() {
     deploy: 'mastra deploy',
   };
 
-  // Resolve each linked package from the release channel used by its local
-  // source version. Current alpha sources need alpha packages; resolving their
-  // stable `latest` tags can select packages that predate required exports.
+  // Resolve each linked package from a published release with the same base
+  // version as its local source. Immediately after exiting prerelease mode,
+  // `latest` can still point at the previous stable release while `alpha`
+  // contains the package matching the newly-stable local source version.
   console.log('sync-template: resolving published versions for link: deps...');
   for (const section of ['dependencies', 'devDependencies']) {
     const deps = manifest[section];
@@ -203,8 +226,7 @@ function transformPackageJson() {
     for (const [name, spec] of Object.entries(deps)) {
       if (!spec.startsWith('link:')) continue;
       const localVersion = linkedPackageVersion(name, linkSpecToRelPath(spec));
-      const tag = localVersion.includes('-alpha.') ? 'alpha' : 'latest';
-      const version = resolveTaggedVersion(name, tag);
+      const { version, tag } = resolveLinkedVersion(name, localVersion);
       deps[name] = version;
       console.log(`  ✓ ${name}@${version} (${tag})`);
     }

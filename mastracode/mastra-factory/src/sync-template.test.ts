@@ -15,11 +15,22 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const pkgRoot = path.resolve(here, '..');
 const webRoot = path.resolve(pkgRoot, '../web');
 const script = path.join(pkgRoot, 'scripts', 'sync-template.mjs');
+const ALPHA_FALLBACK_PACKAGES = new Set([
+  '@mastra/client-js',
+  '@mastra/code-sdk',
+  '@mastra/core',
+  '@mastra/factory',
+  '@mastra/hono',
+  '@mastra/playground-ui',
+  '@mastra/react',
+  'mastra',
+]);
 
 let workDir: string;
 let outDir: string;
 let fakeBinDir: string;
 let sentinel: string;
+let linkedLocalVersions: Record<string, string>;
 
 function runSync(args: string[]): { status: number; stderr: string } {
   try {
@@ -38,12 +49,43 @@ beforeAll(() => {
   workDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sf-sync-test-')));
   outDir = path.join(workDir, 'out');
 
-  // Fake npm: resolves stable and alpha dist-tags to deterministic versions.
+  // Fake npm: model stable packages whose latest tag matches local source and
+  // release-train packages whose matching base version is still on alpha.
+  const webManifest = JSON.parse(fs.readFileSync(path.join(webRoot, 'package.json'), 'utf8'));
+  linkedLocalVersions = {};
+  const registryVersions: Record<string, Record<string, string>> = {};
+  for (const [name, spec] of Object.entries<string>({
+    ...webManifest.dependencies,
+    ...webManifest.devDependencies,
+  })) {
+    if (!spec.startsWith('link:')) continue;
+    const linkedManifest = JSON.parse(
+      fs.readFileSync(path.resolve(webRoot, spec.slice('link:'.length), 'package.json'), 'utf8'),
+    );
+    const localVersion = linkedManifest.version as string;
+    const baseVersion = localVersion.split('-')[0]!;
+    linkedLocalVersions[name] = localVersion;
+    registryVersions[name] = {
+      latest: ALPHA_FALLBACK_PACKAGES.has(name) ? '0.0.1' : baseVersion,
+      alpha: `${baseVersion}-alpha.0`,
+    };
+  }
+  registryVersions['@mastra/memory'] = { latest: '9.9.9', alpha: '9.9.9-alpha.0' };
+
   fakeBinDir = path.join(workDir, 'bin');
   fs.mkdirSync(fakeBinDir);
+  const registryVersionsPath = path.join(workDir, 'registry-versions.json');
+  fs.writeFileSync(registryVersionsPath, JSON.stringify(registryVersions));
   fs.writeFileSync(
     path.join(fakeBinDir, 'npm'),
-    '#!/bin/sh\ncase "$3" in\n  dist-tags.alpha) echo "9.9.9-alpha.0" ;;\n  dist-tags.latest) echo "9.9.9" ;;\n  *) exit 1 ;;\nesac\n',
+    `#!/usr/bin/env node
+const versions = require(${JSON.stringify(registryVersionsPath)});
+const [, , command, name, field] = process.argv;
+const tag = field?.replace('dist-tags.', '');
+const version = command === 'view' ? versions[name]?.[tag] : undefined;
+if (!version) process.exit(1);
+console.log(version);
+`,
     { mode: 0o755 },
   );
 
@@ -108,12 +150,12 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
         expect(spec, `${name} must use an exact resolved version`).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
       }
     }
-    expect(pkg.dependencies['@mastra/factory']).toBe('9.9.9-alpha.0');
-    expect(pkg.dependencies['@mastra/code-sdk']).toBe('9.9.9-alpha.0');
-    expect(pkg.dependencies['@mastra/core']).toBe('9.9.9-alpha.0');
-    expect(pkg.dependencies['@mastra/playground-ui']).toBe('9.9.9-alpha.0');
-    expect(pkg.dependencies['@mastra/auth-studio']).toBe('9.9.9');
-    expect(pkg.dependencies['@mastra/libsql']).toBe('9.9.9');
+    for (const [name, localVersion] of Object.entries(linkedLocalVersions)) {
+      const baseVersion = localVersion.split('-')[0]!;
+      const expectedVersion =
+        localVersion.includes('-alpha.') || ALPHA_FALLBACK_PACKAGES.has(name) ? `${baseVersion}-alpha.0` : baseVersion;
+      expect(allDeps[name], `${name} must match its local source release`).toBe(expectedVersion);
+    }
     expect(pkg.dependencies['@mastra/memory']).toBe('9.9.9');
     // npm needs relaxed peer resolution for prerelease packages because its
     // semver matching excludes prereleases from otherwise compatible ranges.
