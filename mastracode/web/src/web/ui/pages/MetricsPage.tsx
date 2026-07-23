@@ -14,7 +14,7 @@ import { useWorkspaceActivity } from '../../../shared/hooks/useWorkspaceActivity
 import { useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
 import { formatDuration, relativeTime } from '../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { QueueHealthSection } from '../domains/factory/components/QueueHealthSection';
 import type { FactoryMetrics } from '../domains/factory/services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
@@ -63,7 +63,9 @@ const EM_DASH = '—';
  * activity dots.
  */
 export function MetricsPage() {
-  return <FactoryPageShell>{project => <MetricsContent factoryProjectId={project.id} />}</FactoryPageShell>;
+  return (
+    <DocumentFactoryPageShell>{project => <MetricsContent factoryProjectId={project.id} />}</DocumentFactoryPageShell>
+  );
 }
 
 function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
@@ -88,7 +90,7 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
   const bounds = getDateRangeBounds(earliestDay < range.from ? earliestDay : range.from, today);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+    <div className="flex flex-col gap-4">
       <DateRangeTimeline
         key={`${bounds.min}:${bounds.max}`}
         value={range}

@@ -5,7 +5,7 @@ import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { Sidebar } from '../../../Sidebar';
-import { PageLayout } from '../../../ui/PageLayout';
+import { DocumentPageLayout, ViewportPageLayout } from '../../../ui/PageLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
 import type { FactoryProject } from '../../workspaces/services/github';
 
@@ -22,7 +22,12 @@ interface FactoryPageShellProps {
  * explanatory notice; when a factory links multiple repositories a picker in
  * the header scopes repository-based intake.
  */
-export function FactoryPageShell({ children }: FactoryPageShellProps) {
+function FactoryPageShellFrame({
+  children,
+  Layout,
+}: FactoryPageShellProps & {
+  Layout: typeof DocumentPageLayout;
+}) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
 
@@ -37,8 +42,22 @@ export function FactoryPageShell({ children }: FactoryPageShellProps) {
   const factory = factoryQuery.data;
 
   return (
-    <PageLayout sidebar={<Sidebar />} header={<ChatHeader />}>
+    <Layout sidebar={<Sidebar />} header={<ChatHeader />}>
       {factory ? children(factory) : <Notice variant="destructive">Factory not found.</Notice>}
-    </PageLayout>
+    </Layout>
+  );
+}
+
+/** Factory page whose content participates in native document scrolling. */
+export function DocumentFactoryPageShell(props: FactoryPageShellProps) {
+  return <FactoryPageShellFrame {...props} Layout={DocumentPageLayout} />;
+}
+
+/** Factory page with nested scroll regions constrained to the viewport. */
+export function FactoryPageShell({ children }: FactoryPageShellProps) {
+  return (
+    <FactoryPageShellFrame Layout={ViewportPageLayout}>
+      {factory => <div className="flex min-h-0 flex-1 flex-col p-5">{children(factory)}</div>}
+    </FactoryPageShellFrame>
   );
 }
