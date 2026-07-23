@@ -54,14 +54,7 @@ function actionLabel(action: string): string {
  * button (shown when WorkOS is configured) opens the enterprise viewer.
  */
 export function AuditPage() {
-  return (
-    <FactoryPageShell
-      title="Audit log"
-      description="Who did what, when — every board change, run start, worktree change, and git action."
-    >
-      {project => <AuditContent factoryProjectId={project.id} />}
-    </FactoryPageShell>
-  );
+  return <FactoryPageShell>{project => <AuditContent factoryProjectId={project.id} />}</FactoryPageShell>;
 }
 
 function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {

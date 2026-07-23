@@ -9,8 +9,6 @@ import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/us
 import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { useEnsureMaterializedSandbox } from '../../../../../shared/hooks/useEnsureMaterializedSandbox';
 import { useUserSessionQuery } from '../../../../../shared/hooks/useWorkspaces';
-import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
-import { userSessionResourceId } from '../../auth/services/auth';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
@@ -42,7 +40,6 @@ export function ChatSessionConfigProvider({
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
   const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
-  const authQuery = useFactoryAuth();
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
   const repository = storedSession
@@ -52,16 +49,18 @@ export function ChatSessionConfigProvider({
     : factory?.repositories[0];
   const ensureQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
   const resolvingSession = Boolean(userScoped ? threadId : sessionId) && sessionQuery.isPending;
-  const resourceId =
-    userScoped && authQuery.data ? userSessionResourceId(authQuery.data) : ensureQuery.data?.resourceId;
+  // Sessions and their threads are provisioned with the session's own id as the
+  // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
+  // UserSessionsSection), so the chat surface must address the same
+  // (resourceId, no scope) session to read threads and share the live run.
+  // On user routes the :threadId param IS the sessionId.
+  const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId);
 
   // A `?resourceId=` query param overrides the resolved factory resource so the
   // whole chat session (transcript, messages, connection, thread switch) binds
   // to a thread that lives under a different resource — e.g. a Slack channel
-  // session keyed `channel:slack:...`. Channel threads are not partitioned by
-  // worktree, so drop `projectPath` when the override is present. This only
-  // applies to the non-user-scoped branch; user-scoped sessions derive identity
-  // from their stored session.
+  // session keyed `channel:slack:...`. This only applies to the non-user-scoped
+  // branch; user-scoped sessions derive identity from their stored session.
   //
   // Read once from the entry URL rather than via the router's `useSearchParams`:
   // this is a deep-link entry param that the session binds to at mount and does
@@ -70,17 +69,15 @@ export function ChatSessionConfigProvider({
   const resourceOverride = userScoped
     ? null
     : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
-  const projectPath = resourceOverride ? undefined : userScoped ? undefined : storedSession?.sessionId;
   const sessionEnabled = userScoped
     ? Boolean(storedSession) && !resolvingSession
     : resourceOverride
       ? Boolean(resourceOverride)
-      : ensureQuery.isSuccess && Boolean(projectPath);
+      : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
   const value = {
     resourceId: resourceOverride ?? resourceId ?? '',
     sessionEnabled,
     resourceEnabled: userScoped ? Boolean(resourceId) : resourceOverride ? true : ensureQuery.isSuccess,
-    projectPath,
     factorySessionState:
       factory && repository
         ? {
@@ -111,11 +108,10 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
     threadId,
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),

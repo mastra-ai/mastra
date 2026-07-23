@@ -1,5 +1,25 @@
 # @mastra/playground-ui
 
+## 42.0.0-alpha.19
+
+### Minor Changes
+
+- Added a `revealScrollbarOnHover` prop to `ScrollArea`. Set it to `false` to keep the overlay scrollbar hidden until the user actively scrolls, instead of also revealing it when the pointer hovers the area. Defaults to `true`, so existing usage is unchanged. ([#20037](https://github.com/mastra-ai/mastra/pull/20037))
+
+  ```tsx
+  <ScrollArea revealScrollbarOnHover={false}>{content}</ScrollArea>
+  ```
+
+### Patch Changes
+
+- Added a disabled prop to DataList.SelectCell so rows can block checkbox toggling while an async selection save is pending. ([#20038](https://github.com/mastra-ai/mastra/pull/20038))
+
+## 42.0.0-alpha.18
+
+### Patch Changes
+
+- Improved sidebar density and prevented date range timelines from clipping edge labels. ([#19972](https://github.com/mastra-ai/mastra/pull/19972))
+
 ## 42.0.0-alpha.17
 
 ### Patch Changes

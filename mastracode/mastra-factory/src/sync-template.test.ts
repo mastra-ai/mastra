@@ -109,6 +109,13 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     // expose. Remove once the deployer supports tsgo.
     expect(pkg.devDependencies.typescript).toMatch(/^\^5\./);
 
+    // Package-manager coupling never ships: the web project's pnpm workspace
+    // marker and lockfiles stay behind (a stale npm lock would pin the
+    // floating `alpha` dist-tag at sync time).
+    expect(fs.existsSync(path.join(outDir, 'pnpm-workspace.yaml'))).toBe(false);
+    expect(fs.existsSync(path.join(outDir, 'pnpm-lock.yaml'))).toBe(false);
+    expect(fs.existsSync(path.join(outDir, 'package-lock.json'))).toBe(false);
+
     // Tests and their dependencies are stripped.
     expect(allDeps.vitest).toBeUndefined();
     expect(fs.existsSync(path.join(outDir, 'e2e'))).toBe(false);
@@ -117,20 +124,17 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(fs.existsSync(path.join(outDir, 'src/web/test-utils.ts'))).toBe(false);
     expect(fs.existsSync(path.join(outDir, 'src/web/storage/test-utils.ts'))).toBe(false);
 
-    // Scripts map the web project's own flow, minus monorepo-only bits.
-    expect(pkg.scripts.dev).toContain('concurrently');
-    expect(pkg.scripts.dev).toContain('mastra factory dev');
-    expect(pkg.scripts.dev).toContain('vite');
-    expect(pkg.scripts['dev:prod']).toBe(
-      'npm run build:ui && PORT=5173 MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra factory dev --dir src/mastra',
-    );
-    expect(pkg.scripts['dev:prod']).not.toContain('concurrently');
+    // The Factory server serves the UI and API through one process.
+    expect(pkg.scripts.dev).toBe('mastra factory dev --dir src/mastra');
+    expect(pkg.scripts['dev:prod']).toBeUndefined();
     expect(pkg.scripts.prebuild).toBeUndefined();
     expect(JSON.stringify(pkg.scripts)).not.toContain('monorepo-deps');
-    // Production builds use the prebuilt Factory UI bundled with the Mastra CLI.
+    expect(pkg.scripts.check).toBe('tsc --noEmit && tsc --noEmit -p src/web/ui/tsconfig.json');
     expect(pkg.scripts.build).toBe('mastra build --dir src/mastra');
-    expect(pkg.scripts['build:ui']).toBe('vite --config src/web/vite.config.ts build');
+    expect(pkg.scripts['build:ui']).toBeUndefined();
     expect(pkg.scripts['build:server']).toBeUndefined();
+    expect(pkg.scripts.deploy).toBe('mastra deploy');
+    expect(pkg.devDependencies.concurrently).toBeUndefined();
     // The generated .gitignore ignores the Vite output directory.
     const gitignore = fs.readFileSync(path.join(outDir, '.gitignore'), 'utf8');
     expect(gitignore).toContain('src/mastra/public/factory/');

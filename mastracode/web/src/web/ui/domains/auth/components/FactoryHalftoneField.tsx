@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 
+import './sign-in-page.css';
+
 const BAYER_8 = [
   [0, 48, 12, 60, 3, 51, 15, 63],
   [32, 16, 44, 28, 35, 19, 47, 31],
@@ -57,8 +59,18 @@ function densityAt(lane: number, laneProgress: number, verticalProgress: number,
   return density;
 }
 
-/** Decorative halftone board for the Factory sign-in welcome screen. */
-export function FactoryHalftoneField() {
+/**
+ * Decorative halftone board that animates work flowing through the four Factory
+ * lanes (Intake → Build → Review → Ship).
+ *
+ * - `panel` (default): the full sign-in visual — a bordered side panel with
+ *   stage labels, a hover spotlight and the "move across the factory" hint.
+ * - `backdrop`: the same animated field with the chrome stripped, sized to fill
+ *   its positioned parent and faded toward the center so foreground content
+ *   stays legible. Used behind the Factory onboarding flow.
+ */
+export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' | 'backdrop' }) {
+  const backdrop = variant === 'backdrop';
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -190,9 +202,15 @@ export function FactoryHalftoneField() {
     const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(resize);
     resizeObserver?.observe(container);
     if (!resizeObserver) window.addEventListener('resize', resize, { passive: true });
-    container.addEventListener('pointermove', handlePointer, { passive: true });
-    container.addEventListener('pointerdown', handlePointer, { passive: true });
-    container.addEventListener('pointerleave', handlePointerLeave);
+    // The backdrop is pointer-events-none (never steals events from the form on
+    // top), so its spotlight tracks the cursor from the window instead.
+    if (backdrop) {
+      window.addEventListener('pointermove', handlePointer, { passive: true });
+    } else {
+      container.addEventListener('pointermove', handlePointer, { passive: true });
+      container.addEventListener('pointerdown', handlePointer, { passive: true });
+      container.addEventListener('pointerleave', handlePointerLeave);
+    }
     reducedMotion.addEventListener('change', handleReducedMotionChange);
 
     resize();
@@ -202,12 +220,25 @@ export function FactoryHalftoneField() {
       if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame);
       resizeObserver?.disconnect();
       window.removeEventListener('resize', resize);
+      window.removeEventListener('pointermove', handlePointer);
       container.removeEventListener('pointermove', handlePointer);
       container.removeEventListener('pointerdown', handlePointer);
       container.removeEventListener('pointerleave', handlePointerLeave);
       reducedMotion.removeEventListener('change', handleReducedMotionChange);
     };
-  }, []);
+  }, [backdrop]);
+
+  if (backdrop) {
+    return (
+      <div
+        ref={containerRef}
+        aria-hidden="true"
+        className="factory-halftone-field pointer-events-none absolute inset-0 overflow-hidden opacity-70 [mask-image:radial-gradient(135%_135%_at_50%_42%,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.25)_30%,rgba(0,0,0,0.55)_48%,black_64%)]"
+      >
+        <canvas ref={canvasRef} className="absolute inset-0 size-full" aria-hidden="true" />
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="factory-halftone-field relative min-h-96 min-w-0 overflow-hidden lg:min-h-150">

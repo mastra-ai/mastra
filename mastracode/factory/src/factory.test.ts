@@ -285,6 +285,18 @@ describe('MastraFactory.prepare', () => {
     expect(config.vector).toBe(vector);
   });
 
+  it('tells the SDK which backend the Mastra store uses (instanceof breaks across duplicate package copies)', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    expect(config.storageBackend).toBe('libsql');
+  });
+
+  it('resolves the pg backend from the FactoryStorage class name', async () => {
+    class PgFactoryStorage extends LibSQLFactoryStorage {}
+    const storage = new PgFactoryStorage({ url: ':memory:', id: 'factory-test-pg-named' });
+    const config = await prepareFactory({ storage });
+    expect(config.storageBackend).toBe('pg');
+  });
+
   it('installs a Web Factory session workspace resolver instead of changing the SDK default', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));
@@ -319,13 +331,13 @@ describe('MastraFactory.prepare', () => {
     } satisfies AuthInitContext);
   });
 
-  it('defaults publicUrl to the local Factory UI origin', async () => {
+  it('defaults publicUrl to the local Factory server origin (single server serves UI and API)', async () => {
     const auth = fakeProvider();
     const storage = fakeStorage();
     await prepareFactory({ auth, storage });
     expect(auth.init).toHaveBeenCalledExactlyOnceWith({
       database: storage.authDatabase(),
-      publicUrl: 'http://localhost:5173',
+      publicUrl: 'http://localhost:4111',
       allowedOrigins: [],
     } satisfies AuthInitContext);
   });

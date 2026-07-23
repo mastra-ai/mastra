@@ -15,6 +15,7 @@ import { useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
 import { formatDuration, relativeTime } from '../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { QueueHealthSection } from '../domains/factory/components/QueueHealthSection';
 import type { FactoryMetrics } from '../domains/factory/services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
 
@@ -55,20 +56,14 @@ const TERMINAL_STAGE_IDS = new Set(['done', 'canceled']);
 const EM_DASH = '—';
 
 /**
- * Factory flow metrics: throughput, cycle time, stage breakdown, aging WIP,
- * and demand mix — aggregated server-side from the board's stage history.
- * "Agents running" is live, from the same thread-state source as the sidebar
+ * Factory flow metrics: throughput, cycle time, live queue health, aging WIP,
+ * and demand mix — aggregated server-side from the board's stage history
+ * (queue health aggregates client-side in `QueueHealthSection`). "Agents
+ * running" is live, from the same thread-state source as the sidebar
  * activity dots.
  */
 export function MetricsPage() {
-  return (
-    <FactoryPageShell
-      title="Metrics"
-      description="Flow health for this project's factory: throughput, where work stalls, and what's aging."
-    >
-      {project => <MetricsContent factoryProjectId={project.id} />}
-    </FactoryPageShell>
-  );
+  return <FactoryPageShell>{project => <MetricsContent factoryProjectId={project.id} />}</FactoryPageShell>;
 }
 
 function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
@@ -137,9 +132,7 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
             />
           </Section>
 
-          <Section title="Stages">
-            <StageBreakdown metrics={metrics} />
-          </Section>
+          <QueueHealthSection factoryProjectId={factoryProjectId} />
 
           <Section title="Automation by stage">
             <StageAutomation metrics={metrics} />
@@ -201,48 +194,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="m-0 text-ui-md font-medium text-icon5">{title}</h2>
       {children}
     </section>
-  );
-}
-
-/** Median time-in-stage bars plus each column's current card count. */
-function StageBreakdown({ metrics }: { metrics: FactoryMetrics }) {
-  const wipByStage = new Map(metrics.wip.map(entry => [entry.stage, entry.count]));
-  const durationByStage = new Map(metrics.stageDurations.map(entry => [entry.stage, entry]));
-  const stages = [
-    ...new Set([
-      ...BOARD_STAGES.map(stage => stage.id as string),
-      ...metrics.wip.map(entry => entry.stage),
-      ...metrics.stageDurations.map(entry => entry.stage),
-    ]),
-  ].sort((a, b) => stageOrder(a) - stageOrder(b));
-  const maxMedian = Math.max(1, ...metrics.stageDurations.map(entry => entry.medianMs));
-
-  return (
-    <ul className="m-0 flex list-none flex-col gap-2 p-0">
-      {stages.map(stage => {
-        const duration = durationByStage.get(stage);
-        const wip = wipByStage.get(stage) ?? 0;
-        return (
-          <li key={stage} className="grid grid-cols-[7rem_1fr_auto] items-center gap-3">
-            <Txt as="span" variant="ui-sm" className="text-icon4">
-              {stageLabel(stage)}
-            </Txt>
-            <div className="h-2 overflow-hidden rounded-full bg-surface4">
-              {duration ? (
-                <div
-                  className="h-full rounded-full bg-accent1"
-                  style={{ width: `${Math.max(2, Math.round((duration.medianMs / maxMedian) * 100))}%` }}
-                />
-              ) : null}
-            </div>
-            <Txt as="span" variant="ui-xs" className="text-right text-icon3">
-              {duration ? `median ${formatDuration(duration.medianMs)} · ` : ''}
-              {wip} in column
-            </Txt>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 

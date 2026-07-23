@@ -1,5 +1,34 @@
 # create-factory
 
+## 0.1.0-alpha.7
+
+### Minor Changes
+
+- Added EU and US region selection when creating Factory platform projects, with a --region flag for non-interactive setup. ([#20040](https://github.com/mastra-ai/mastra/pull/20040))
+
+### Patch Changes
+
+- Updated the generated project README for the single-server setup: the Factory UI and API are both served from `http://localhost:4111`, OAuth callback instructions use the server origin, and the removed `dev:prod` / `build:ui` scripts are no longer documented. ([#20036](https://github.com/mastra-ai/mastra/pull/20036))
+
+- Stop shipping `pnpm-workspace.yaml` and `package-lock.json` in projects scaffolded by `npm create factory`. The template generator now excludes the web project's pnpm workspace marker and lockfiles, and the sync workflow validates the template in a throwaway copy so `npm install` artifacts can no longer leak into the published template repository. ([#20041](https://github.com/mastra-ai/mastra/pull/20041))
+
+## 0.1.0-alpha.6
+
+### Patch Changes
+
+- Improved the create-factory sign-in and success experience: ([#20024](https://github.com/mastra-ai/mastra/pull/20024))
+
+  - When no Mastra platform session exists, the CLI now pauses with "Mastra account is required, press enter to continue..." before opening the browser auth flow instead of opening it unannounced.
+  - The success message now summarizes the infrastructure provisioned on Mastra platform (project, Postgres database, credentials in .env), notes that deployed code agent sessions run inside Mastra platform sandboxes, and links to https://projects.mastra.ai for managing the project.
+
+- Fixed generated Factory projects to serve the UI and API from a single Mastra development server. ([#20019](https://github.com/mastra-ai/mastra/pull/20019))
+
+## 0.1.0-alpha.5
+
+### Patch Changes
+
+- Stopped writing MASTRA_SHARED_API_URL to the scaffolded project's .env during platform provisioning. Platform consumers now use their built-in default platform URL, so scaffolded factories no longer pin the API endpoint at create time. ([#20021](https://github.com/mastra-ai/mastra/pull/20021))
+
 ## 0.1.0-alpha.4
 
 ### Minor Changes
