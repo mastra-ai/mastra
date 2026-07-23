@@ -138,6 +138,12 @@ describe('Model provider onboarding', () => {
       renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={onComplete} />);
 
       await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
+
+      // Once the provider is set, the picker gives way to a focused model
+      // selection view: provider name, model field, and a Change escape hatch.
+      expect(screen.getByText('OpenAI')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Change provider' })).toBeInTheDocument();
+      expect(screen.queryByRole('searchbox', { name: 'Search model providers' })).not.toBeInTheDocument();
       expect(screen.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Finish setup' }));
 

@@ -103,6 +103,7 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
     : keyProviders.filter(isConfigured);
   const selectedProvider = providers.find(provider => provider.provider === providerId);
   const providerConfigured = selectedProvider ? isConfigured(selectedProvider) : false;
+  const SelectedProviderIcon = selectedProvider ? PROVIDER_ICONS[selectedProvider.provider] : undefined;
   const providerModels = (modelsQuery.data ?? []).filter(model => model.provider === providerId);
   const preferredModelId = providerId ? preferredFactoryModel(providerId) : undefined;
   const modelId =
@@ -170,6 +171,44 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
           <Txt as="p" variant="ui-sm" className="m-0 text-notice-destructive-fg" role="alert">
             {catalogError.message}
           </Txt>
+        ) : selectedProvider && providerConfigured ? (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {SelectedProviderIcon && <SelectedProviderIcon aria-hidden="true" className="size-4" />}
+                <Txt as="span" variant="ui-md" className="text-icon6">
+                  {providerDisplayName(selectedProvider.provider)}
+                </Txt>
+              </div>
+              <Button
+                variant="outline"
+                disabled={saving}
+                onClick={() => {
+                  setProviderId(undefined);
+                  setSelectedModelId('');
+                  setError(undefined);
+                }}
+              >
+                Change provider
+              </Button>
+            </div>
+            <label className="flex flex-col gap-2">
+              <Txt as="span" variant="ui-sm" className="text-icon5">
+                Factory default model
+              </Txt>
+              <ModelCombobox
+                models={providerModels}
+                value={modelId}
+                onValueChange={setSelectedModelId}
+                placeholder="Select a default model…"
+                disabled={saving}
+              />
+            </label>
+            <Button variant="primary" className="w-full" disabled={!modelId || saving} onClick={() => void finish()}>
+              {saving && <Spinner size="sm" aria-label="Saving model defaults" />}
+              Finish setup
+            </Button>
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             {signInProviders.length > 0 && (
@@ -242,34 +281,10 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
           </div>
         )}
 
-        {selectedProvider && providerConfigured && (
-          <label className="flex flex-col gap-2">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
-              Factory default model
-            </Txt>
-            <ModelCombobox
-              models={providerModels}
-              value={modelId}
-              onValueChange={setSelectedModelId}
-              placeholder="Select a default model…"
-              disabled={saving}
-            />
-          </label>
-        )}
-
         {(error ?? completionError) && (
           <Txt as="p" variant="ui-sm" className="m-0 text-notice-destructive-fg" role="alert">
             {error ?? completionError}
           </Txt>
-        )}
-
-        {selectedProvider && providerConfigured && (
-          <div>
-            <Button variant="primary" disabled={!modelId || saving} onClick={() => void finish()}>
-              {saving && <Spinner size="sm" aria-label="Saving model defaults" />}
-              Finish setup
-            </Button>
-          </div>
         )}
       </div>
 
