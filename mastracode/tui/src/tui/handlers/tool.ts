@@ -305,6 +305,10 @@ function isToolResultError(result: unknown): boolean {
   return typeof result === 'object' && result !== null && (result as Record<string, unknown>).isError === true;
 }
 
+export function isBackgroundToolPlaceholder(result: unknown): boolean {
+  return formatToolResult(result).startsWith('Background task started. Task ID:');
+}
+
 export function formatToolResult(result: unknown): string {
   if (result === null || result === undefined) {
     return '';
@@ -789,15 +793,19 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
       state.allToolComponents.push(component);
     }
 
+    const resultText = formatToolResult(result);
+    const isBackgroundPlaceholder = !effectiveIsError && isBackgroundToolPlaceholder(result);
     const toolResult: ToolResult = {
-      content: [{ type: 'text', text: formatToolResult(result) }],
+      content: [{ type: 'text', text: isBackgroundPlaceholder ? 'Running in background…' : resultText }],
       isError: effectiveIsError,
     };
-    component.updateResult(toolResult, false);
+    component.updateResult(toolResult, isBackgroundPlaceholder);
     reconcileToolBoundaries(ctx);
 
-    state.pendingTools.delete(toolCallId);
-    state.pendingTaskToolIds?.delete(toolCallId);
+    if (!isBackgroundPlaceholder) {
+      state.pendingTools.delete(toolCallId);
+      state.pendingTaskToolIds?.delete(toolCallId);
+    }
     flushRender(state);
   }
 }

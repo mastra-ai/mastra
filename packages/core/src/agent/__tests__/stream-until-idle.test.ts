@@ -239,10 +239,10 @@ describe('Agent.streamUntilIdle', () => {
     await new Promise(r => setTimeout(r, 50));
     expect(getCallCount()).toBe(1);
 
-    // Fire two completions while the initial turn is still running.
+    // Track two concurrent background tasks while the initial turn is still running.
     const bgManager = mastra.backgroundTaskManager!;
-    const publishCompleted = (taskId: string) =>
-      (bgManager as any).publishLifecycleEvent('task.completed', {
+    const publishLifecycle = (event: 'task.running' | 'task.completed', taskId: string) =>
+      (bgManager as any).publishLifecycleEvent(event, {
         id: taskId,
         toolName: 'dummy',
         toolCallId: taskId,
@@ -250,27 +250,31 @@ describe('Agent.streamUntilIdle', () => {
         agentId: 'a3',
         threadId: 'thread-3',
         resourceId: 'user-1',
-        status: 'completed',
-        result: {},
+        status: event === 'task.running' ? 'running' : 'completed',
+        result: event === 'task.completed' ? {} : undefined,
         retryCount: 0,
         maxRetries: 0,
         timeoutMs: 1000,
         createdAt: new Date(),
         args: {},
       });
-    await publishCompleted('t-a');
-    await publishCompleted('t-b');
+    await publishLifecycle('task.running', 't-a');
+    await publishLifecycle('task.running', 't-b');
+    await publishLifecycle('task.completed', 't-a');
     await new Promise(r => setTimeout(r, 50));
 
-    // Both completions queued but no second inner turn yet — still 1 call.
+    // One completion is queued, but the other task is still running.
     expect(getCallCount()).toBe(1);
 
-    // Let the initial turn finish.
+    // Let the initial turn finish. The remaining running task still prevents
+    // a fragmented completion-triggered continuation.
     resolver1();
     await new Promise(r => setTimeout(r, 50));
+    expect(getCallCount()).toBe(1);
 
-    // After initial ends, processIfIdle should kick off ONE continuation
-    // that drains all queued completions together. Call count is 2.
+    // Once all tracked work settles, both completions are synthesized together.
+    await publishLifecycle('task.completed', 't-b');
+    await new Promise(r => setTimeout(r, 50));
     expect(getCallCount()).toBe(2);
 
     // Let continuation 2 finish. No more pending → outer closes.

@@ -319,6 +319,33 @@ export function getReactiveSignalView(message: MastraDBMessage): ReactiveSignalV
   };
 }
 
+export interface BackgroundWorkLifecycleView {
+  tagName: 'work-deferred' | 'work-awaited' | 'work-completed' | 'work-failed';
+  originToolCallId: string;
+  taskId?: string;
+  status?: string;
+}
+
+const BACKGROUND_WORK_TAGS = new Set(['work-deferred', 'work-awaited', 'work-completed', 'work-failed']);
+
+/** Correlation fields for a background-work lifecycle signal. */
+export function getBackgroundWorkLifecycleView(message: MastraDBMessage): BackgroundWorkLifecycleView | undefined {
+  const signal = getSignalView(message);
+  const tagName = asString(signal.tagName);
+  if (!tagName || !BACKGROUND_WORK_TAGS.has(tagName)) return undefined;
+
+  const metadata = asRecord(signal.metadata) ?? {};
+  const originToolCallId = asString(metadata.originToolCallId);
+  if (!originToolCallId) return undefined;
+
+  return {
+    tagName: tagName as BackgroundWorkLifecycleView['tagName'],
+    originToolCallId,
+    taskId: asString(metadata.taskId),
+    status: asString(metadata.status),
+  };
+}
+
 export interface NotificationView {
   message: string;
   source?: string;

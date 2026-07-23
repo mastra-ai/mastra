@@ -388,7 +388,7 @@ export async function runIdleLoop<
   };
 
   const processIfIdle = async () => {
-    if (isProcessing || closed || pendingCompletions.length === 0) return;
+    if (isProcessing || closed || runningTaskIds.size > 0 || pendingCompletions.length === 0) return;
     isProcessing = true;
     try {
       const batch = pendingCompletions.splice(0, pendingCompletions.length);
@@ -411,7 +411,7 @@ export async function runIdleLoop<
       return;
     } finally {
       isProcessing = false;
-      if (pendingCompletions.length > 0) {
+      if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
         void processIfIdle();
       } else {
         tryClose();
@@ -472,7 +472,7 @@ export async function runIdleLoop<
         } else if (TERMINAL_BG_CHUNKS.has(chunk.type)) {
           runningTaskIds.delete(taskId);
           pendingCompletions.push(chunk);
-          void processIfIdle();
+          if (runningTaskIds.size === 0) void processIfIdle();
         }
       }
     } catch {
@@ -505,7 +505,7 @@ export async function runIdleLoop<
       }
     }
     isProcessing = false;
-    if (pendingCompletions.length > 0) {
+    if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
       void processIfIdle();
     } else {
       tryClose();

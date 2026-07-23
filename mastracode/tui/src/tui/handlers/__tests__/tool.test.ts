@@ -108,7 +108,33 @@ describe('tool event handlers', () => {
 
     expect(appendStreamingOutput).toHaveBeenCalledWith('hello world');
     expect(updateResult).toHaveBeenCalled();
+    expect(ctx.state.pendingTools.has('call-1')).toBe(false);
     expect(requestRender).toHaveBeenCalled();
+  });
+
+  it('keeps a deferred background tool row pending until its authoritative result arrives', () => {
+    const { ctx, updateResult } = createShellOutputContext();
+
+    handleToolEnd(
+      ctx,
+      'call-1',
+      'Background task started. Task ID: task-1. The tool "view" is running in the background.',
+      false,
+    );
+
+    expect(updateResult).toHaveBeenCalledWith(
+      { content: [{ type: 'text', text: 'Running in background…' }], isError: false },
+      true,
+    );
+    expect(ctx.state.pendingTools.has('call-1')).toBe(true);
+
+    handleToolEnd(ctx, 'call-1', { content: 'package contents' }, false);
+
+    expect(updateResult).toHaveBeenLastCalledWith(
+      { content: [{ type: 'text', text: 'package contents' }], isError: false },
+      false,
+    );
+    expect(ctx.state.pendingTools.has('call-1')).toBe(false);
   });
 
   it('does not append cleared shell output after abort/error lifecycle cleanup', () => {

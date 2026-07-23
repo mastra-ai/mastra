@@ -51,6 +51,7 @@ vi.mock('@mastra/core/agent-controller', () => ({
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
+  createBackgroundWorkSignalProcessor: () => ({}),
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&

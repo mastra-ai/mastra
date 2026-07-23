@@ -351,25 +351,51 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
   });
 
-  it.each(['work-deferred', 'work-awaited', 'work-completed', 'work-failed'] as const)(
-    'renders the custom %s notification tag as an inline notification component',
-    tagName => {
-      const state = createState();
+  it.each([
+    ['work-deferred', 'Running in background…'],
+    ['work-awaited', 'Running in background…'],
+    ['work-completed', 'Completed in background; reconciling result…'],
+    ['work-failed', 'Background execution failed; reconciling error…'],
+  ] as const)('updates the correlated tool row for %s without rendering a notification', (tagName, statusText) => {
+    const state = createState();
+    const updateResult = vi.fn();
+    state.pendingTools.set('call-1', { updateResult } as never);
 
-      addUserMessage(
-        state,
-        createSignal({
-          id: `${tagName}-1`,
-          type: 'notification',
-          tagName,
-          contents: `${tagName}: call-1`,
-          attributes: { source: 'background-work', status: tagName === 'work-failed' ? 'failed' : 'running' },
-        }).toDBMessage(),
-      );
+    addUserMessage(
+      state,
+      createSignal({
+        id: `${tagName}-1`,
+        type: 'notification',
+        tagName,
+        contents: `${tagName}: call-1`,
+        attributes: { source: 'background-work', status: tagName === 'work-failed' ? 'failed' : 'running' },
+        metadata: { originToolCallId: 'call-1', taskId: 'task-1', status: tagName },
+      }).toDBMessage(),
+    );
 
-      expect(state.messageComponentsById.get(`${tagName}-1`)).toBeInstanceOf(NotificationComponent);
-    },
-  );
+    expect(updateResult).toHaveBeenCalledWith({ content: [{ type: 'text', text: statusText }], isError: false }, true);
+    expect(state.messageComponentsById.has(`${tagName}-1`)).toBe(false);
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
+  });
+
+  it('suppresses an uncorrelated background-work lifecycle signal', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: 'work-completed-uncorrelated',
+        type: 'notification',
+        tagName: 'work-completed',
+        contents: 'work-completed: missing-call',
+        attributes: { source: 'background-work', status: 'completed' },
+        metadata: { originToolCallId: 'missing-call', taskId: 'task-1', status: 'completed' },
+      }).toDBMessage(),
+    );
+
+    expect(state.messageComponentsById.has('work-completed-uncorrelated')).toBe(false);
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
+  });
 
   it('dedupes echoed slash command messages against the optimistic slash component', () => {
     const state = createState();
@@ -836,6 +862,34 @@ describe('renderExistingMessages tasks', () => {
     expect(rendered).toContain('Tasks [2/2 completed]');
     expect(rendered).toContain('Loaded history task one');
     expect(rendered).toContain('Loaded history task two');
+  });
+});
+
+describe('renderExistingMessages tools', () => {
+  it('reconstructs deferred background placeholders as pending tool rows', async () => {
+    const message = assistantToolMessage('assistant-background-tool', [
+      {
+        id: 'tool-background-1',
+        name: 'view',
+        args: { path: 'package.json' },
+        result: 'Background task started. Task ID: task-1',
+      },
+    ]);
+    const state = createState();
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    expect(state.pendingTools.has('tool-background-1')).toBe(true);
+    const rendered = state.chatContainer
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('⋯');
+    expect(rendered).not.toContain('Background task started');
   });
 });
 
