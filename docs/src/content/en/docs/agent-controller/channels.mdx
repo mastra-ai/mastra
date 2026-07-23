@@ -130,6 +130,8 @@ Populate the reverse lookup from your own connect flow: when a signed-in user li
 
 Channels with no resolver set dispatch as before, with no tenant stamped.
 
+Once senders are linked, the `resolveResourceId` config hook can key new channel threads to tenant-owned resources. For example, return a workspace session ID owned by the linked user so the channel conversation runs in that user's session instead of a per-thread default.
+
 ## Custom Chat SDK handlers
 
 The Chat SDK instance is constructed lazily during channel initialization, after the server boots. To register extra Chat SDK handlers — for example a custom slash command — use `onSdkReady`. The callback runs with the SDK instance as soon as it exists, or immediately when it already does.

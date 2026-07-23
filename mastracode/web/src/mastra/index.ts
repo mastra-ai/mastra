@@ -32,7 +32,6 @@ import {
   MastraFactory,
   ChannelIdentityStorage,
   FactoryProjectsStorage,
-  WorkItemsStorage,
   createChannelLinkStateSigner,
   createFactoryRouteAuth,
   createStateSigner,
@@ -40,7 +39,7 @@ import {
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { createAgentControllerSlackChannels } from '../web/channels/slack/slack.js';
+import { createAgentControllerSlackChannels, createGithubSourceControl } from '../web/channels/slack/slack.js';
 import { createSlackConnectRoutes } from '../web/channels/slack/connect-route.js';
 
 /**
@@ -249,7 +248,6 @@ export const channelLinkStateSigner = createChannelLinkStateSigner(stateSecret);
 // the time we get here.
 const accountLinks = storage.getDomain<ChannelIdentityStorage>('channel-identity');
 const factoryProjects = storage.getDomain<FactoryProjectsStorage>('projects');
-const factoryWorkItems = storage.getDomain<WorkItemsStorage>('work-items');
 
 const mcAgentController = preparedArgs.agentControllers?.['code'];
 if (mcAgentController) {
@@ -259,7 +257,10 @@ if (mcAgentController) {
       accountLinks,
       channelLinkStateSigner,
       projects: factoryProjects,
-      workItems: factoryWorkItems,
+      // Repo-backed Slack threads: linked senders with a repo-connected
+      // factory get a Factory user-session (repo sandbox) per thread. Only
+      // available with the direct GitHub App wiring.
+      sourceControl: github ? createGithubSourceControl(github) : undefined,
     }),
   );
 }
