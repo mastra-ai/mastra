@@ -1,5 +1,5 @@
 /**
- * Round-trip tests for the serialize/rehydrate pipeline in `load-from-storage`:
+ * Round-trip tests for the serialize/rehydrate pipeline in `workflows/stored`:
  * live workflow → toStorableGraph → JSON → rehydrateWorkflow → run.
  *
  * Covers the storable static subset (tool/agent/mapping/parallel/foreach/
@@ -17,7 +17,7 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../create';
-import { rehydrateWorkflow, toStorableGraph } from '../load-from-storage';
+import { rehydrateWorkflow, toStorableGraph } from '../stored';
 import type { SerializedStepFlowEntry } from '../types';
 import { createStepFromTool } from '../workflow';
 
@@ -1343,7 +1343,7 @@ describe('inner-entry options + re-serialize idempotency', () => {
       options: { retries: 4, metadata: { flaky: true } },
     });
 
-    // Re-serialize: nothing was dropped (resolveSingle used to lose all of this).
+    // Re-serialize: nothing was dropped (a prior resolver implementation lost all of this).
     const [reserialized] = JSON.parse(JSON.stringify(toStorableGraph(workflow.stepGraph)));
     expect(reserialized.steps[0]).toMatchObject({
       type: 'agent',

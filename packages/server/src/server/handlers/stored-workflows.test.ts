@@ -488,13 +488,14 @@ describe('Stored Workflows handlers', () => {
         inputSchema: objectWith({ value: stringSchema }, ['value']),
         outputSchema: objectWith({ wrapped: stringSchema }, ['wrapped']),
         graph: [
-          { type: 'workflow', id: 'call-child', workflowId: 'wf-child' },
+          // Nested workflow entries must use the referenced workflowId as
+          // their step id (enforced by preflight/ref validation).
+          { type: 'workflow', id: 'wf-child', workflowId: 'wf-child' },
           {
             type: 'mapping',
             id: 'wrap',
             // Nested-workflow results are keyed by the child workflow's own id
-            // (same convention as foreach keying by the inner step id), not by
-            // the outer `id` in the parent graph.
+            // (same convention as foreach keying by the inner step id).
             mapConfig: JSON.stringify({
               wrapped: { template: '[${stepResults.wf-child.value}]' },
             }),

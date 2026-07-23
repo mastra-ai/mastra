@@ -99,8 +99,22 @@ export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
   tags: ['Stored Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:write',
-  handler: async ({ mastra, ...def }) => {
+  handler: async ({
+    mastra,
+    id,
+    description,
+    metadata,
+    inputSchema,
+    outputSchema,
+    stateSchema,
+    requestContextSchema,
+    graph,
+  }) => {
     try {
+      // Pick the body fields explicitly — handler args also carry server
+      // context (requestContext, abortSignal, ...) which must not leak into
+      // the stored definition.
+      const def = { id, description, metadata, inputSchema, outputSchema, stateSchema, requestContextSchema, graph };
       // The Zod schema output is structurally compatible with
       // StoredWorkflowGraph but TS can't prove every arm:
       //   - sleepUntil.date is an ISO string on the wire, Date on the

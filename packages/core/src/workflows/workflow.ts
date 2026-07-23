@@ -167,7 +167,7 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  * existing execution engine (which only knows how to call `condition(params)`)
  * can execute stored / declarative predicates unchanged.
  *
- * Exported for the rehydration path (load-from-storage), which rebuilds
+ * Exported for the rehydration path (workflows/stored), which rebuilds
  * conditional/loop entries from stored predicates.
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
@@ -1746,7 +1746,7 @@ export class Workflow<
   }
 
   /**
-   * @internal Rehydration-only (load-from-storage). Appends a fully-built
+   * @internal Rehydration-only (workflows/stored). Appends a fully-built
    * graph entry without laundering it through the live-`Step` builder
    * overloads: rehydration already holds the declarative entry it parsed from
    * storage, so wrapping it in a fake `Step` just so the builder can sniff it

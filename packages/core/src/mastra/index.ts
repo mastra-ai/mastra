@@ -72,10 +72,15 @@ import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { normalizeWorkflowBuilderDefinition, preflightWorkflowDefinition } from '../workflows/builder';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { StoredWorkflowGraph } from '../workflows/load-from-storage';
-import { rehydrateWorkflow, validateStorableJsonSchema } from '../workflows/load-from-storage';
 import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
+import type { StoredWorkflowGraph } from '../workflows/stored';
+import {
+  collectNestedWorkflowIds,
+  rehydrateWorkflow,
+  validateStoredWorkflowRefs,
+  validateStoredWorkflowSchemas,
+} from '../workflows/stored';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 import { __registerMastraCtor } from './mastra-ctor-holder';
@@ -4495,8 +4500,15 @@ export class Mastra<
    * ```
    */
   public async addStoredWorkflow(def: StoredWorkflowGraph): Promise<void> {
-    this.#validateStoredWorkflowRefs(def);
-    this.#validateStoredWorkflowSchemas(def);
+    // Save-path is strict (boot-time load is lenient — see #loadStoredWorkflows).
+    // The validators are pure; only flattening the registries into id sets
+    // needs `this`.
+    validateStoredWorkflowRefs(def, {
+      agentIds: new Set(Object.entries(this.listAgents() ?? {}).flatMap(([key, agent]) => [key, agent.id])),
+      toolIds: new Set(Object.entries(this.listTools() ?? {}).flatMap(([key, tool]) => [key, tool.id])),
+      workflowIds: new Set(Object.keys(this.#workflows as Record<string, AnyWorkflow>)),
+    });
+    validateStoredWorkflowSchemas(def);
 
     const preflight = preflightWorkflowDefinition(normalizeWorkflowBuilderDefinition(def));
     if (!preflight.ok) {
@@ -4526,171 +4538,6 @@ export class Mastra<
   }
 
   /**
-   * Walk a stored workflow definition and throw a targeted error if any JSON
-   * Schema uses a keyword `jsonSchemaToZod` cannot convert
-   * (oneOf/anyOf/allOf/not/$ref/patternProperties/discriminator). Covers the
-   * four top-level schemas plus each `agent.outputSchema` reachable through
-   * `parallel`/`foreach`/`conditional`/`loop`.
-   *
-   * Save-path is strict: the author is right there and can simplify the
-   * schema before it hits storage. Boot-time load is intentionally lenient
-   * (see `#loadStoredWorkflows`) so one bad pre-existing row can't take
-   * down startup for every other workflow.
-   * @internal
-   */
-  #validateStoredWorkflowSchemas(def: StoredWorkflowGraph): void {
-    const offenses: string[] = [];
-    const check = (schema: unknown, label: string): void => {
-      const result = validateStorableJsonSchema(schema as Record<string, unknown> | undefined);
-      if (result.ok) return;
-      offenses.push(`${label}: ${result.unsupported.join(', ')}`);
-    };
-    check(def.inputSchema, 'inputSchema');
-    check(def.outputSchema, 'outputSchema');
-    if (def.stateSchema) check(def.stateSchema, 'stateSchema');
-    if (def.requestContextSchema) check(def.requestContextSchema, 'requestContextSchema');
-    const visit = (entry: unknown): void => {
-      if (!entry || typeof entry !== 'object') return;
-      const e = entry as { type?: string; id?: string; outputSchema?: unknown; step?: unknown; steps?: unknown };
-      switch (e.type) {
-        case 'agent':
-          if (e.outputSchema) check(e.outputSchema, `step "${e.id}" outputSchema`);
-          return;
-        case 'parallel':
-        case 'conditional':
-          if (Array.isArray(e.steps)) e.steps.forEach(visit);
-          return;
-        case 'foreach':
-        case 'loop':
-          visit(e.step);
-          return;
-        default:
-          return;
-      }
-    };
-    def.graph.forEach(visit);
-    if (offenses.length > 0) {
-      throw new Error(
-        `addStoredWorkflow refused: stored workflow "${def.id}" uses JSON Schema keyword(s) jsonSchemaToZod cannot convert. Simplify the schema (or extend the converter) before saving.\n- ${offenses.join('\n- ')}`,
-      );
-    }
-  }
-
-  /**
-   * Walk a stored workflow graph and verify every referenced agent/tool id
-   * exists in the correct registry. Throws with an actionable message listing
-   * every offending id when references are unregistered or mis-classified.
-   * @internal
-   */
-  #validateStoredWorkflowRefs(def: StoredWorkflowGraph, opts?: { allowPendingWorkflowIds?: Set<string> }): void {
-    type RefEntry =
-      | { type: 'agent'; id: string; agentId: string }
-      | { type: 'tool'; id: string; toolId: string }
-      | { type: 'workflow'; id: string; workflowId: string }
-      | { type: 'parallel'; steps: readonly unknown[] }
-      | { type: 'foreach'; step: unknown }
-      | { type: 'conditional'; steps: readonly unknown[] }
-      | { type: 'loop'; step: unknown };
-
-    const agents: Array<{ stepId: string; agentId: string }> = [];
-    const tools: Array<{ stepId: string; toolId: string }> = [];
-    const workflows: Array<{ stepId: string; workflowId: string }> = [];
-    const visit = (entry: unknown): void => {
-      if (!entry || typeof entry !== 'object') return;
-      const e = entry as Partial<RefEntry> & { type?: unknown };
-      switch (e.type) {
-        case 'agent': {
-          const a = e as Extract<RefEntry, { type: 'agent' }>;
-          agents.push({ stepId: a.id, agentId: a.agentId });
-          return;
-        }
-        case 'tool': {
-          const t = e as Extract<RefEntry, { type: 'tool' }>;
-          tools.push({ stepId: t.id, toolId: t.toolId });
-          return;
-        }
-        case 'workflow': {
-          const w = e as Extract<RefEntry, { type: 'workflow' }>;
-          if (w.id !== w.workflowId) {
-            throw new Error(
-              `Nested workflow step id "${w.id}" must match workflowId "${w.workflowId}". Use "${w.workflowId}" for both fields.`,
-            );
-          }
-          workflows.push({ stepId: w.id, workflowId: w.workflowId });
-          return;
-        }
-        case 'parallel': {
-          const p = e as Extract<RefEntry, { type: 'parallel' }>;
-          p.steps.forEach(visit);
-          return;
-        }
-        case 'foreach': {
-          const f = e as Extract<RefEntry, { type: 'foreach' }>;
-          visit(f.step);
-          return;
-        }
-        case 'conditional': {
-          const c = e as Extract<RefEntry, { type: 'conditional' }>;
-          c.steps.forEach(visit);
-          return;
-        }
-        case 'loop': {
-          const l = e as Extract<RefEntry, { type: 'loop' }>;
-          visit(l.step);
-          return;
-        }
-        default:
-          return;
-      }
-    };
-    def.graph.forEach(visit);
-
-    const registeredAgents = new Set(
-      Object.entries(this.listAgents() ?? {}).flatMap(([key, agent]) => [key, agent.id]),
-    );
-    const registeredTools = new Set(Object.entries(this.listTools() ?? {}).flatMap(([key, tool]) => [key, tool.id]));
-    const registeredWorkflows = new Set(Object.keys(this.#workflows as Record<string, AnyWorkflow>));
-    const pendingWorkflows = opts?.allowPendingWorkflowIds ?? new Set<string>();
-    const errors: string[] = [];
-    for (const ref of agents) {
-      if (registeredAgents.has(ref.agentId)) continue;
-      if (registeredTools.has(ref.agentId)) {
-        errors.push(
-          `Step "${ref.stepId}" declares { type: "agent", agentId: "${ref.agentId}" } but "${ref.agentId}" is a registered TOOL, not an agent. Change this entry to { type: "tool", toolId: "${ref.agentId}" }.`,
-        );
-      } else {
-        errors.push(`Step "${ref.stepId}" declares agentId "${ref.agentId}" which is not a registered agent.`);
-      }
-    }
-    for (const ref of tools) {
-      if (registeredTools.has(ref.toolId)) continue;
-      if (registeredAgents.has(ref.toolId)) {
-        errors.push(
-          `Step "${ref.stepId}" declares { type: "tool", toolId: "${ref.toolId}" } but "${ref.toolId}" is a registered AGENT, not a tool. Change this entry to { type: "agent", agentId: "${ref.toolId}" }.`,
-        );
-      } else {
-        errors.push(`Step "${ref.stepId}" declares toolId "${ref.toolId}" which is not a registered tool.`);
-      }
-    }
-    for (const ref of workflows) {
-      if (ref.workflowId === def.id) {
-        errors.push(
-          `Step "${ref.stepId}" declares { type: "workflow", workflowId: "${ref.workflowId}" } which refers to itself. Nested workflow cycles are not allowed.`,
-        );
-        continue;
-      }
-      if (registeredWorkflows.has(ref.workflowId)) continue;
-      if (pendingWorkflows.has(ref.workflowId)) continue;
-      errors.push(`Step "${ref.stepId}" declares workflowId "${ref.workflowId}" which is not a registered workflow.`);
-    }
-    if (errors.length > 0) {
-      throw new Error(
-        `addStoredWorkflow refused: ${errors.length} unresolved reference(s) in the graph.\n- ${errors.join('\n- ')}`,
-      );
-    }
-  }
-
-  /**
    * Load any previously persisted workflow definitions from storage and
    * live-register each one. Called by `startWorkers()` after storage init.
    * Bad rows are logged and skipped — one corrupt definition shouldn't sink
@@ -4706,32 +4553,10 @@ export class Mastra<
     // Code-registered workflows win; storage is additive.
     const pending = definitions.filter(d => !(this.#workflows as Record<string, AnyWorkflow>)[d.id]);
 
-    const collectNestedWorkflowIds = (graph: readonly unknown[]): Set<string> => {
-      const out = new Set<string>();
-      const visit = (entry: unknown): void => {
-        if (!entry || typeof entry !== 'object') return;
-        const e = entry as { type?: unknown; workflowId?: unknown; steps?: unknown; step?: unknown };
-        if (e.type === 'workflow' && typeof e.workflowId === 'string') {
-          out.add(e.workflowId);
-          return;
-        }
-        if ((e.type === 'parallel' || e.type === 'conditional') && Array.isArray(e.steps)) {
-          e.steps.forEach(visit);
-          return;
-        }
-        if ((e.type === 'foreach' || e.type === 'loop') && e.step) {
-          visit(e.step);
-          return;
-        }
-      };
-      graph.forEach(visit);
-      return out;
-    };
-
     const pendingIds = new Set(pending.map(d => d.id));
     const deps = new Map<string, Set<string>>();
     for (const def of pending) {
-      const all = collectNestedWorkflowIds(def.graph as readonly unknown[]);
+      const all = collectNestedWorkflowIds(def.graph);
       const pendingDeps = new Set<string>();
       for (const id of all) if (pendingIds.has(id) && id !== def.id) pendingDeps.add(id);
       deps.set(def.id, pendingDeps);

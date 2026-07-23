@@ -4,21 +4,21 @@
  * are resolved against the live Mastra instance; throws if a reference is
  * missing — better to surface the failure at load time than at run time.
  */
-import type { Mastra } from '../mastra';
-import { createWorkflow } from './create';
-import type { JsonSchema, JsonSchemaToZodOptions } from './json-schema-to-zod';
-import { jsonSchemaToZod } from './json-schema-to-zod';
-import { derivePredicateLabel } from './predicate';
-import type { Step } from './step';
+import type { Mastra } from '../../mastra';
+import { createWorkflow } from '../create';
+import { derivePredicateLabel } from '../predicate';
+import type { Step } from '../step';
 import type {
   SerializedSingleStepEntry,
   SerializedStepFlowEntry,
   SerializedStepOptions,
   SingleStepEntry,
   StepFlowEntry,
-} from './types';
-import { getSingleStepEntryId } from './utils';
-import { mapVariable, predicateToCondition } from './workflow';
+} from '../types';
+import { getSingleStepEntryId } from '../utils';
+import { mapVariable, predicateToCondition } from '../workflow';
+import { jsonSchemaToZod } from './json-schema-to-zod';
+import type { JsonSchema, JsonSchemaToZodOptions } from './json-schema-to-zod';
 
 /** JSON shape persisted to WorkflowDefinitionsStorage. */
 export interface StoredWorkflowGraph {

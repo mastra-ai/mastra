@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createWorkflow } from '../workflows/create';
-import { toStorableGraph } from '../workflows/load-from-storage';
+import { toStorableGraph } from '../workflows/stored';
 import { Mastra } from './index';
 
 const doubleTool = createTool({

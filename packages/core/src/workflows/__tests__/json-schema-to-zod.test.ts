@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import type { z } from 'zod';
 
-import { jsonSchemaToZod, validateStorableJsonSchema } from '../load-from-storage';
+import { jsonSchemaToZod, validateStorableJsonSchema } from '../stored';
 
 describe('jsonSchemaToZod', () => {
   it('round-trips supported primitive + object shapes', () => {

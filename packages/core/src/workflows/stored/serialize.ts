@@ -17,15 +17,15 @@
  * Anything outside the subset throws at `toStorableGraph` time: silent loss
  * would ship broken workflows unnoticed.
  */
-import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
+import { standardSchemaToJSONSchema, toStandardSchema } from '../../schema';
 import type {
   SerializedSingleStepEntry,
   SerializedStepFlowEntry,
   SerializedStepOptions,
   SingleStepEntry,
   StepFlowEntry,
-} from './types';
-import { getSingleStepEntryId } from './utils';
+} from '../types';
+import { getSingleStepEntryId } from '../utils';
 
 /**
  * Walk a live `stepFlow` and emit a JSON-safe `SerializedStepFlowEntry[]` with

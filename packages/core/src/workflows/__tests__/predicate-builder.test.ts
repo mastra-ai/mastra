@@ -14,8 +14,8 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../create';
-import { toStorableGraph } from '../load-from-storage';
 import type { Predicate } from '../predicate';
+import { toStorableGraph } from '../stored';
 import { createStepFromTool } from '../workflow';
 
 const shoutTool = createTool({
