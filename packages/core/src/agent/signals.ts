@@ -116,17 +116,7 @@ export type AgentSignalDataPart = {
   transient: true;
 };
 
-/**
- * A signal created (and thereby validated) by `createSignal`. Note this stays a flat type
- * rather than the `AgentSignalInput` discriminated union: `createSignal` normalizes legacy
- * types away and rejects `state` + `transient`, but that invariant can't be re-derived from
- * the normalized shape without casts at every internal rebuild site.
- *
- * @experimental Agent signals are experimental and may change in a future release.
- */
-export type CreatedAgentSignal = AgentSignalInputBase & {
-  type: AgentSignalType;
-  transient?: boolean;
+type CreatedAgentSignalBase = Omit<AgentSignalInputBase, 'id' | 'createdAt' | 'acceptedAt'> & {
   __isCreatedSignal: true;
   id: string;
   createdAt: Date;
@@ -135,6 +125,18 @@ export type CreatedAgentSignal = AgentSignalInputBase & {
   toLLMMessage: () => UserModelMessage;
   toDataPart: () => AgentSignalDataPart;
 };
+
+/**
+ * A signal created and validated by `createSignal`.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type CreatedStateAgentSignal = CreatedAgentSignalBase & { type: 'state'; transient?: never };
+export type CreatedNonStateAgentSignal = CreatedAgentSignalBase & {
+  type: Exclude<AgentSignalCategory, 'state'>;
+  transient?: boolean;
+};
+export type CreatedAgentSignal = CreatedStateAgentSignal | CreatedNonStateAgentSignal;
 
 export function isMastraSignalMessage(message: MastraDBMessage): message is MastraDBMessage & { role: 'signal' } {
   return message.role === 'signal';
@@ -560,9 +562,19 @@ export function isCreatedAgentSignal(input: unknown): input is CreatedAgentSigna
   if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
 
   const candidate = input as Partial<CreatedAgentSignal>;
-  return candidate.__isCreatedSignal === true;
+  return (
+    candidate.__isCreatedSignal === true &&
+    typeof candidate.toDBMessage === 'function' &&
+    typeof candidate.toLLMMessage === 'function' &&
+    typeof candidate.toDataPart === 'function'
+  );
 }
 
+export function createSignal(input: Extract<AgentSignalInput, { type: 'state' }>): CreatedStateAgentSignal;
+export function createSignal(
+  input: Extract<AgentSignalInput, { type: Exclude<AgentSignalType, 'state'> }>,
+): CreatedNonStateAgentSignal;
+export function createSignal(input: AgentSignalInput): CreatedAgentSignal;
 export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   if (input.type === 'state' && input.transient === true) {
     // State signals maintain cross-turn tracking (version/cacheKey/activeCopies) that is
@@ -573,27 +585,20 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   const signal = normalizeSignal(input);
   const parts = contentsToSignalParts(signal.contents);
 
-  return {
+  const created = {
     ...signal,
     __isCreatedSignal: true as const,
-    toDBMessage: options => signalToDBMessage(signal, parts, options),
+    toDBMessage: (options?: { threadId?: string; resourceId?: string }) => signalToDBMessage(signal, parts, options),
     toLLMMessage: () => signalToLLMMessage(signal, parts),
     toDataPart: () => signalToDataPart(signal, parts),
   };
-}
 
-/**
- * Re-pipe an existing signal through `createSignal`. Internal rebuild sites hold signals with a
- * widened `type` (e.g. `CreatedAgentSignal`), which no longer satisfies the `AgentSignalInput`
- * discriminated union — this narrows on `state` so those sites don't need casts. The state +
- * transient invariant itself is enforced inside `createSignal`.
- */
-export function recreateSignal(signal: AgentSignalInput | CreatedAgentSignal): CreatedAgentSignal {
-  if (signal.type === 'state') {
-    const { transient: _transient, ...rest } = signal;
-    return createSignal({ ...rest, type: signal.type });
+  if (created.type === 'state') {
+    const { transient: _transient, ...stateSignal } = created;
+    return { ...stateSignal, type: created.type };
   }
-  return createSignal({ ...signal, type: signal.type });
+
+  return { ...created, type: created.type };
 }
 
 /**
@@ -609,25 +614,26 @@ export function resolveDeliveryAttributes(
 ): CreatedAgentSignal {
   if (!attributes || Object.keys(attributes).length === 0) return signal;
 
-  return recreateSignal({
+  const input = {
     ...signal,
     attributes: { ...signal.attributes, ...attributes },
-  });
+  };
+  return createSignal(input);
 }
 
 export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): UserModelMessage {
-  return recreateSignal(signal).toLLMMessage();
+  return isCreatedAgentSignal(signal) ? signal.toLLMMessage() : createSignal(signal).toLLMMessage();
 }
 
 export function signalToMastraDBMessage(
   signal: AgentSignalInput | CreatedAgentSignal,
   options?: { threadId?: string; resourceId?: string },
 ): MastraDBMessage {
-  return recreateSignal(signal).toDBMessage(options);
+  return isCreatedAgentSignal(signal) ? signal.toDBMessage(options) : createSignal(signal).toDBMessage(options);
 }
 
 export function signalToDataPartFormat(signal: AgentSignalInput | CreatedAgentSignal): AgentSignalDataPart {
-  return recreateSignal(signal).toDataPart();
+  return isCreatedAgentSignal(signal) ? signal.toDataPart() : createSignal(signal).toDataPart();
 }
 
 export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentSignal {
@@ -670,8 +676,10 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
         : undefined,
   };
 
-  // A persisted state signal is never transient (transient signals are dropped before storage),
-  // so only restore the flag for non-state types — this also satisfies the AgentSignalInput union.
+  if (type === 'state' && signalMetadata?.transient === true) {
+    throw new Error('state signals cannot be transient');
+  }
+
   return type === 'state'
     ? createSignal({ ...base, type, tagName, contents })
     : createSignal({

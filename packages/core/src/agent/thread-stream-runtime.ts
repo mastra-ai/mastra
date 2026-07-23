@@ -12,7 +12,7 @@ import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
-import { createMessageSignal, recreateSignal, resolveDeliveryAttributes } from './signals';
+import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import type {
@@ -1422,7 +1422,7 @@ export class AgentThreadStreamRuntime {
         if (data.sourceId === this.#id) return;
         const signalsByThread = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
         const queue = signalsByThread.get(key) ?? [];
-        queue.push(recreateSignal(data.signal));
+        queue.push(createSignal(data.signal));
         signalsByThread.set(key, queue);
         return;
       }
@@ -1737,7 +1737,8 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
   ): SendAgentSignalResult<OUTPUT> {
     const state = this.#getState(pubsub);
-    let signal = recreateSignal({ ...signalInput, acceptedAt: new Date() });
+    const input = { ...signalInput, acceptedAt: new Date() };
+    let signal = createSignal(input);
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';

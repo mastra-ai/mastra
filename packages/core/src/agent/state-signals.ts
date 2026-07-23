@@ -2,8 +2,8 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { MessageList } from './message-list';
 import type { MastraDBMessage } from './message-list/state/types';
-import { createSignal, mastraDBMessageToSignal, recreateSignal } from './signals';
-import type { AgentStateSignalInput, CreatedAgentSignal } from './signals';
+import { createSignal, mastraDBMessageToSignal } from './signals';
+import type { AgentStateSignalInput, CreatedAgentSignal, CreatedStateAgentSignal } from './signals';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -193,7 +193,7 @@ export async function resolveStateSignalHistory({
 export function createStateSignalInput(
   input: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
   options?: { defaultId?: string; acceptedAt?: Date },
-): { stateId: string; signal: CreatedAgentSignal; mode: 'snapshot' | 'delta'; cacheKey: string } {
+): { stateId: string; signal: CreatedStateAgentSignal; mode: 'snapshot' | 'delta'; cacheKey: string } {
   const stateId = input.id ?? options?.defaultId;
   if (!stateId) {
     throw new Error('state signal id is required');
@@ -270,8 +270,9 @@ export async function applyStateSignal({
 
   const previousVersion = typeof tracking?.version === 'number' ? tracking.version : 0;
   const version = matchesCurrentState ? previousVersion || 1 : previousVersion + 1;
-  const updatedSignal = recreateSignal({
+  const updatedSignal = createSignal({
     ...signal,
+    type: 'state',
     metadata: {
       ...signal.metadata,
       state: {

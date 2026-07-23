@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { createSignal, isTransientSignalMessage, mastraDBMessageToSignal } from './signals';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { CreatedNonStateAgentSignal, CreatedStateAgentSignal } from './signals';
+import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from './signals';
 
 describe('transient signals (transient: true)', () => {
   it('marks the DB message with content.metadata.signal.transient when transient is true', () => {
@@ -53,6 +54,16 @@ describe('transient signals (transient: true)', () => {
     ).toBe(false);
   });
 
+  it('preserves the state/non-state invariant on created signals', () => {
+    const stateSignal = createSignal({ type: 'state', contents: 'state' });
+    const legacySignal = createSignal({ type: 'system-reminder', contents: 'reminder' });
+
+    expectTypeOf(stateSignal).toEqualTypeOf<CreatedStateAgentSignal>();
+    expectTypeOf(legacySignal).toEqualTypeOf<CreatedNonStateAgentSignal>();
+    expect(legacySignal.type).toBe('reactive');
+    expect(isCreatedAgentSignal({ ...legacySignal, toLLMMessage: undefined })).toBe(false);
+  });
+
   it('rejects transient state signals (state tracking is rebuilt from persisted history)', () => {
     expect(() =>
       // @ts-expect-error — the union forbids transient on state signals; verify the runtime guard too
@@ -63,6 +74,12 @@ describe('transient signals (transient: true)', () => {
       }),
     ).toThrow('state signals cannot be transient');
 
-    expect(() => createSignal({ type: 'state', contents: 'full state snapshot' })).not.toThrow();
+    const stateSignal = createSignal({ type: 'state', contents: 'full state snapshot' });
+    expect(stateSignal.transient).toBeUndefined();
+
+    const corruptPersistedMessage = stateSignal.toDBMessage();
+    const signalMetadata = corruptPersistedMessage.content.metadata?.signal as Record<string, unknown>;
+    signalMetadata.transient = true;
+    expect(() => mastraDBMessageToSignal(corruptPersistedMessage)).toThrow('state signals cannot be transient');
   });
 });
