@@ -186,13 +186,17 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
 
-  it('shows a dedicated thread link while keeping the work item title static', async () => {
+  it('uses the whole card as the thread link without rendering a separate thread action', async () => {
     stubBoardEndpoints();
     renderWorkBoard();
 
     const titleText = await screen.findByText('Fix login bug');
+    const card = titleText.closest<HTMLElement>('[data-testid="work-item-card"]');
+    if (!card) throw new Error('Expected the title inside its work item card');
     expect(titleText.closest('a, button')).toBeNull();
-    const threadLink = screen.getByRole('link', { name: 'Open thread for Fix login bug' });
+
+    const threadLink = within(card).getByRole('link', { name: 'Open thread for Fix login bug' });
+    expect(within(card).queryByText('Open thread')).not.toBeInTheDocument();
     expect(threadLink).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
