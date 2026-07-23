@@ -32,6 +32,16 @@ async function prepareBinding(storage: WorkItemsStorage) {
 }
 
 describe('Factory run binding authority', () => {
+  it('replays concurrent preparation for the same kickoff', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+
+    const [first, second] = await Promise.all([prepareBinding(storage), prepareBinding(storage)]);
+
+    expect([first.replayed, second.replayed].sort()).toEqual([false, true]);
+    expect(second.binding.id).toBe(first.binding.id);
+    expect(second.pendingStart.id).toBe(first.pendingStart.id);
+  });
+
   it('requires the complete tenant, project, thread, resource, and session tuple', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBinding(storage);

@@ -15,8 +15,7 @@
  * App-table domains are written once against `ops`; backends implement the
  * small query surface once (M + N, not M × N). Nothing outside a backend
  * implementation may branch on the database dialect — optional capabilities
- * ({@link FactoryStorage.withDistributedLock},
- * {@link FactoryStorage.authDatabase}) are feature-gated on presence.
+ * such as {@link FactoryStorage.authDatabase} are feature-gated on presence.
  *
  * Contract discipline: the ops surface is deliberately small — equality-filter
  * CRUD, conflict-key upsert, ordered/limit/keyset-cursor lists, and atomic
@@ -338,20 +337,18 @@ export abstract class FactoryStorage {
   /**
    * Run a group of app-table operations atomically. The callback receives an
    * ops instance bound to the transaction; callers must not use `this.ops`
-   * inside it.
+   * inside it. Serializable callbacks may be retried after a serialization
+   * failure and therefore must contain database operations only.
    */
-  abstract withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T>;
+  abstract withTransaction<T>(
+    fn: (ops: FactoryStorageOps) => Promise<T>,
+    options?: { isolationLevel?: 'serializable' },
+  ): Promise<T>;
 
   /** Release the backend's connections (tests, shutdown). */
   abstract close(): Promise<void>;
 
   // ---- optional capabilities (feature-gate on presence, never on dialect) ----
-
-  /**
-   * Cross-replica serialization (pg: advisory locks). Absent → the backend
-   * has no multi-replica story and in-process locking is sufficient.
-   */
-  withDistributedLock?<T>(key: string, fn: () => Promise<T>): Promise<T>;
 
   /**
    * A tagged database handle auth libraries can consume (see

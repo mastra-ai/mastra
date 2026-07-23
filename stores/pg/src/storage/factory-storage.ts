@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 import { FactoryStorage, UniqueViolationError } from '@mastra/core/storage';
 import type {
@@ -89,16 +89,6 @@ function assertUpsertConflict(schema: CollectionSchema, conflictKeys: string[], 
 function serializeDefault(value: string | number | boolean): string {
   if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
   return String(value);
-}
-
-/**
- * Hash a lock key into the two signed int4 values `pg_advisory_xact_lock(int4, int4)`
- * expects. Two int4 args keep factory locks in their own namespace, away from
- * single-int8 advisory locks other tooling might take.
- */
-export function hashAdvisoryLockKey(key: string): [number, number] {
-  const digest = createHash('sha256').update(key).digest();
-  return [digest.readInt32BE(0), digest.readInt32BE(4)];
 }
 
 type Queryable = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
@@ -437,8 +427,8 @@ class PgFactoryStorageOps implements FactoryStorageOps {
  * (via a wrapped {@link PostgresStore}) and app-owned collections (via
  * {@link FactoryStorageOps}), sharing a single pool.
  *
- * Provides `withDistributedLock` (transaction-scoped advisory locks) for
- * cross-replica serialization and `authDatabase()` exposing the shared pool.
+ * Supports serializable app-table transactions for cross-replica invariant
+ * enforcement and `authDatabase()` exposing the shared pool.
  */
 export class PgFactoryStorage extends FactoryStorage {
   readonly ops: FactoryStorageOps;
@@ -479,21 +469,40 @@ export class PgFactoryStorage extends FactoryStorage {
     await this.#pool.query('SELECT 1');
   }
 
-  async withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> {
-    const client = await this.#pool.connect();
-    try {
-      await client.query('BEGIN');
+  async withTransaction<T>(
+    fn: (ops: FactoryStorageOps) => Promise<T>,
+    options?: { isolationLevel?: 'serializable' },
+  ): Promise<T> {
+    const maxAttempts = options?.isolationLevel === 'serializable' ? 3 : 1;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const client = await this.#pool.connect();
+      let transactionOpen = false;
+      let releaseError: Error | undefined;
       try {
+        await client.query(options?.isolationLevel === 'serializable' ? 'BEGIN ISOLATION LEVEL SERIALIZABLE' : 'BEGIN');
+        transactionOpen = true;
         const result = await fn(new PgFactoryStorageOps(client, this.#schemas, client));
         await client.query('COMMIT');
+        transactionOpen = false;
         return result;
       } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
+        if (transactionOpen) {
+          try {
+            await client.query('ROLLBACK');
+            transactionOpen = false;
+          } catch (rollbackError) {
+            releaseError = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+            throw new AggregateError([error, rollbackError], 'Factory transaction and rollback both failed');
+          }
+        }
+        const serializationFailure =
+          typeof error === 'object' && error !== null && (error as { code?: string }).code === '40001';
+        if (!serializationFailure || attempt === maxAttempts) throw error;
+      } finally {
+        client.release(releaseError);
       }
-    } finally {
-      client.release();
     }
+    throw new Error('PgFactoryStorage: serializable transaction retry limit exceeded');
   }
 
   async ensureCollections(schemas: CollectionSchema[]): Promise<void> {
@@ -513,42 +522,6 @@ export class PgFactoryStorage extends FactoryStorage {
 
   authDatabase(): FactoryAuthDatabase {
     return { dialect: 'postgres', pool: this.#pool };
-  }
-
-  /**
-   * Run `fn` while holding a Postgres transaction-scoped advisory lock for
-   * `key`, serializing callers across replicas. The lock releases when the
-   * transaction ends (commit, rollback, or connection loss), so a crashed
-   * replica can never hold it forever.
-   */
-  async withDistributedLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    const [k1, k2] = hashAdvisoryLockKey(key);
-    const client = await this.#pool.connect();
-    let transactionOpen = false;
-    let releaseError: Error | undefined;
-    try {
-      await client.query('BEGIN');
-      transactionOpen = true;
-      // Blocks until no other transaction holds this advisory key.
-      await client.query('SELECT pg_advisory_xact_lock($1, $2)', [k1, k2]);
-      const result = await fn();
-      await client.query('COMMIT');
-      transactionOpen = false;
-      return result;
-    } catch (error) {
-      if (transactionOpen) {
-        try {
-          await client.query('ROLLBACK');
-          transactionOpen = false;
-        } catch (rollbackError) {
-          releaseError = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
-          throw new AggregateError([error, rollbackError], 'Distributed lock operation and rollback both failed');
-        }
-      }
-      throw error;
-    } finally {
-      client.release(releaseError);
-    }
   }
 
   #columnDdl(name: string, spec: CollectionColumnSpec): string {
