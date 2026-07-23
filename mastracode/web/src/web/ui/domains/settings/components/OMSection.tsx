@@ -58,11 +58,11 @@ function ThresholdInput({
 
   const commit = () => {
     const parsed = Number(draft);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    const rounded = Number.isFinite(parsed) ? Math.round(parsed) : NaN;
+    if (!Number.isFinite(rounded) || rounded <= 0) {
       setDraft(String(value));
       return;
     }
-    const rounded = Math.round(parsed);
     setDraft(String(rounded));
     if (rounded !== value) onCommit(rounded);
   };
