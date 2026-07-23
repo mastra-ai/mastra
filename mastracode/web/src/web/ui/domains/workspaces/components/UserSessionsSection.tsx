@@ -5,20 +5,21 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { GitBranch, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
+import { useWorkspacesQuery } from '../../../../../shared/hooks/useWorkspaces';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
-import { isServerFactory, selectedRepository, USER_SESSION_BRANCH_PREFIX } from '../services/factories';
+import { USER_SESSION_BRANCH_PREFIX } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
-import { createUserSession, deleteUserSession, listUserSessions } from '../services/github';
+import { createUserSession, deleteUserSession } from '../services/github';
 
 function sessionLabel(session: FactoryUserSession): string {
   return session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)
@@ -29,7 +30,8 @@ function sessionLabel(session: FactoryUserSession): string {
 /** Personal sessions whose isolated repository workspace is prepared lazily by AgentController. */
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
-  const { activeFactory } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -37,20 +39,13 @@ export function UserSessionsSection() {
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
 
-  const repository = activeFactory && isServerFactory(activeFactory) ? selectedRepository(activeFactory) : undefined;
+  const repository = factoryQuery.data?.repositories[0];
   const sessionsEnabled = Boolean(repository);
-  const sessionsQuery = useQuery({
-    queryKey: queryKeys.userSessions(activeFactory?.id),
-    queryFn: async () => {
-      if (!repository) throw new Error('User sessions require a linked repository');
-      return listUserSessions(baseUrl, repository.projectRepositoryId);
-    },
-    enabled: sessionsEnabled,
-  });
-  const sessions = sessionsQuery.data ?? [];
+  const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
+  const sessions = sessionsQuery.data?.userSessions ?? [];
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.userSessions(activeFactory?.id) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
 
   const controllerSession = (sessionId: string) => {
@@ -90,7 +85,7 @@ export function UserSessionsSection() {
       setCreating(false);
       setName('');
       invalidate();
-      void navigate(`/user/threads/${session.sessionId}`);
+      void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
     },
   });
 
@@ -108,8 +103,8 @@ export function UserSessionsSection() {
       setConfirmDelete(null);
       invalidate();
       toast('Session deleted');
-      if (location.pathname === `/user/threads/${session.sessionId}`) {
-        void navigate('/new', { replace: true });
+      if (location.pathname === `/factories/${factoryId}/user/threads/${session.sessionId}`) {
+        void navigate(`/factories/${factoryId}`, { replace: true });
       }
     },
     onError: error => {
@@ -124,7 +119,7 @@ export function UserSessionsSection() {
   const openSession = async (session: FactoryUserSession) => {
     try {
       await controllerSession(session.sessionId).create({ threadId: session.sessionId });
-      void navigate(`/user/threads/${session.sessionId}`);
+      void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to open session');
     }
@@ -167,7 +162,7 @@ export function UserSessionsSection() {
         <MainSidebar.NavList>
           {sessions.map(session => {
             const name = sessionLabel(session);
-            const url = `/user/threads/${session.sessionId}`;
+            const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
             const active = location.pathname === url;
 
             return (
@@ -175,7 +170,6 @@ export function UserSessionsSection() {
                 key={session.sessionId}
                 link={{ name, url }}
                 isActive={active}
-                size="sm"
                 className="group/session"
                 render={
                   <button

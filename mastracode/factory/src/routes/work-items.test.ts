@@ -390,7 +390,12 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     },
   });
 
-  it('passes authenticated tenant identity to the coordinator and audits the prepared binding', async () => {
+  it('passes authenticated tenant identity and the Factory default model to the coordinator', async () => {
+    await seed.projects.update({
+      orgId: 'org1',
+      id: PROJECT_ID,
+      input: { defaultModelId: 'anthropic/claude-fable-5' },
+    });
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();
     auditRecorded = [];
@@ -421,6 +426,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         orgId: 'org1',
         userId: 'u1',
         factoryProjectId: PROJECT_ID,
+        defaultModelId: 'anthropic/claude-fable-5',
         requestContext,
       }),
     );
@@ -612,10 +618,10 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     // No params → default 30-day window.
     expect((await bodyFor('')).windowDays).toBe(30);
 
-    // Explicit 7-day window.
-    const to = new Date();
-    const from = new Date(to.getTime() - 7 * 86_400_000);
-    expect((await bodyFor(`?from=${from.toISOString()}&to=${to.toISOString()}`)).windowDays).toBe(7);
+    // Explicit inclusive 7-calendar-day window.
+    const to = new Date().toISOString().slice(0, 10);
+    const from = new Date(Date.parse(`${to}T00:00:00.000Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
+    expect((await bodyFor(`?from=${from}&to=${to}`)).windowDays).toBe(7);
 
     // Malformed params fall back to the default.
     expect((await bodyFor('?from=evil&to=evil')).windowDays).toBe(30);
@@ -638,12 +644,9 @@ describe('GET /web/factory/projects/:id/metrics', () => {
       createBody({ externalSource: null, title: 'Manual card' }),
     );
 
-    const to = new Date();
-    const from = new Date(to.getTime() - 7 * 86_400_000);
-    const res = await json(
-      'GET',
-      `/web/factory/projects/${PROJECT_ID}/metrics?from=${from.toISOString()}&to=${to.toISOString()}`,
-    );
+    const to = new Date().toISOString().slice(0, 10);
+    const from = new Date(Date.parse(`${to}T00:00:00.000Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?from=${from}&to=${to}`);
     expect(res.status).toBe(200);
     const { metrics } = await res.json();
 

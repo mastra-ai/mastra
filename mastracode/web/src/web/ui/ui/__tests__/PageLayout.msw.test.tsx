@@ -5,36 +5,20 @@ import { PageLayout } from '../PageLayout';
 
 describe('PageLayout', () => {
   describe('given page slots are provided', () => {
-    it('renders the sidebar, mobile header, ReactNode heading, description, and content', () => {
+    it('renders the sidebar, mobile header, and content inside the main surface', () => {
       render(
-        <PageLayout
-          sidebar={<div>sidebar-slot</div>}
-          header={<div>header-slot</div>}
-          title={
-            <>
-              Factory <strong>Board</strong>
-            </>
-          }
-          description={<span>Project work in progress</span>}
-        >
+        <PageLayout sidebar={<div>sidebar-slot</div>} header={<div>header-slot</div>}>
           <div>content-slot</div>
         </PageLayout>,
       );
 
       expect(screen.getByText('sidebar-slot')).toBeInTheDocument();
       expect(screen.getByText('header-slot')).toBeInTheDocument();
-      const heading = screen.getByRole('heading', { name: 'Factory Board' });
-      const content = screen.getByText('content-slot');
-
-      expect(heading).toBeInTheDocument();
-      expect(screen.getByText('Project work in progress')).toBeInTheDocument();
-      expect(content).toBeInTheDocument();
-      // The heading row and page content share the same column container.
-      expect(heading.closest('header')?.parentElement).toContainElement(content);
+      expect(screen.getByRole('main')).toHaveTextContent('content-slot');
     });
   });
 
-  describe('given heading slots are omitted', () => {
+  describe('given the header slot is omitted', () => {
     it('renders an unlabelled full-height content surface', () => {
       render(
         <PageLayout sidebar={<div>sidebar-slot</div>}>

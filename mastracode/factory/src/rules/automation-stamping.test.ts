@@ -66,7 +66,10 @@ describe('governed automation moves', () => {
 
     // Metrics split human vs total accordingly: intake entered by a human,
     // triage entered by the rules engine → 1 human of 2 total.
-    const metrics = computeFactoryMetrics({ items: [moved!], days: 30, now: new Date() });
+    const metrics = computeFactoryMetrics([moved!], {
+      windowStart: Date.now() - 60_000,
+      windowEnd: Date.now() + 60_000,
+    });
     expect(metrics.transitions).toEqual({ human: 1, total: 2 });
   });
 

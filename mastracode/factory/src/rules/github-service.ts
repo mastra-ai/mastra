@@ -1,6 +1,7 @@
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import type { ParsedGithubWebhook } from '../integrations/github/webhook.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ExternalRepositoryProjectTarget,
   SourceControlStorageHandle,
@@ -113,6 +114,7 @@ export interface FactoryGithubEventServiceOptions {
     Record<string, unknown>,
     FactoryPullRequestProvenanceData
   >;
+  projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
   rules: FactoryRules;
 }
@@ -154,6 +156,11 @@ export class FactoryGithubEventService {
     login: string,
     project: ExternalRepositoryProjectTarget,
   ): Promise<{ status: 'committed' | 'replayed' | 'missing' }> {
+    const factoryProject = await this.options.projects.get({
+      orgId: project.orgId,
+      id: project.factoryProjectId,
+    });
+    if (!factoryProject) return { status: 'missing' };
     const issue = object(parsed.payload.issue);
     const pullRequest = object(parsed.payload.pull_request);
     const issueNumber = number(issue?.number);
@@ -172,6 +179,7 @@ export class FactoryGithubEventService {
       repositoryId,
       issueNumber,
       pullRequestNumber,
+      string(object(pullRequest?.head)?.ref),
       provenance,
     );
     const actor = await githubActor(this.options.github, {
@@ -204,9 +212,17 @@ export class FactoryGithubEventService {
         : {}),
       event,
       deliveryId: parsed.deliveryId,
+      factory: { createdAt: factoryProject.createdAt.toISOString() },
       repository: { id: repositoryId, fullName: repositoryName },
       ...(issueNumber && string(issue?.title) && string(issue?.html_url)
-        ? { issue: { number: issueNumber, title: string(issue?.title)!, url: string(issue?.html_url)! } }
+        ? {
+            issue: {
+              number: issueNumber,
+              title: string(issue?.title)!,
+              url: string(issue?.html_url)!,
+              ...(string(issue?.created_at) ? { createdAt: string(issue?.created_at) } : {}),
+            },
+          }
         : {}),
       ...(pullRequestNumber && string(pullRequest?.title) && string(pullRequest?.html_url)
         ? {
@@ -214,6 +230,7 @@ export class FactoryGithubEventService {
               number: pullRequestNumber,
               title: string(pullRequest?.title)!,
               url: string(pullRequest?.html_url)!,
+              ...(string(pullRequest?.created_at) ? { createdAt: string(pullRequest?.created_at) } : {}),
               state: string(pullRequest?.state) === 'closed' ? ('closed' as const) : ('open' as const),
               merged: boolean(pullRequest?.merged) ?? false,
               headBranch: string(object(pullRequest?.head)?.ref) ?? '',
@@ -278,6 +295,7 @@ export class FactoryGithubEventService {
     repositoryId: number,
     issueNumber: number | undefined,
     pullRequestNumber: number | undefined,
+    pullRequestHeadBranch: string | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
   ): Promise<WorkItemRow | undefined> {
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
@@ -293,7 +311,19 @@ export class FactoryGithubEventService {
         items.find(item => item.externalSource?.externalId === canonicalSourceKey('pull-request', pullRequestNumber)) ??
         items.find(
           item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'pull-request', pullRequestNumber),
-        )
+        ) ??
+        // Provenance fallback: a PR pushed from a work item's session branch
+        // belongs to that item even when no gh-pr-create provenance was
+        // recorded (session predating state seeding, or the PR was opened
+        // outside the tracked tool call). Session branches are per-item
+        // (`factory/issue-N`), so a head-branch match is unambiguous.
+        (pullRequestHeadBranch
+          ? items.find(
+              item =>
+                item.externalSource?.type !== 'pull-request' &&
+                Object.values(item.sessions).some(session => session.branch === pullRequestHeadBranch),
+            )
+          : undefined)
       );
     }
     return undefined;

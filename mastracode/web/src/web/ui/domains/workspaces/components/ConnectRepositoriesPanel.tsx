@@ -8,8 +8,7 @@ import { useGithubStatusQuery } from '../../../../../shared/hooks/useGithubStatu
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../../shared/hooks/useFactories';
 import { FolderIcon, GithubIcon, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import type { ServerFactory } from '../services/factories';
-import type { GithubStatus } from '../services/github';
+import type { FactoryProject, GithubStatus } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 
 /**
@@ -20,7 +19,7 @@ import { connectGithub, manageGithubConnection } from '../services/github';
  *
  * Embedded in the Board's no-repository empty state and in Factory settings.
  */
-export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }) {
+export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
   const { baseUrl } = useApiConfig();
   const statusQuery = useGithubStatusQuery();
   const status = statusQuery.data;
@@ -30,8 +29,8 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
   const linkRepository = useLinkRepositoryMutation();
   const unlinkRepository = useUnlinkRepositoryMutation();
 
-  const factoryProjectId = factory.binding.factoryProjectId;
-  const linked = factory.binding.repositories;
+  const factoryProjectId = factory.id;
+  const linked = factory.repositories;
   const linkedSlugs = new Set(linked.map(repo => repo.slug));
   const repos = reposQuery.data ?? [];
   const available = repos.filter(repo => !linkedSlugs.has(repo.fullName));
@@ -64,10 +63,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
             Linked repositories
           </Txt>
           {linked.map(repo => (
-            <div
-              key={repo.projectRepositoryId}
-              className="flex items-center gap-3 rounded-xl border border-border1 bg-surface2 px-3 py-2"
-            >
+            <div key={repo.projectRepositoryId} className="flex items-center gap-3 rounded-xl bg-surface3 px-3 py-2">
               <GithubIcon size={16} className="shrink-0 text-icon3" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-ui-sm font-medium text-icon6">{repo.slug}</span>
@@ -109,7 +105,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
         )
       ) : (
         <>
-          <div className="flex items-center gap-2 rounded-lg border border-border1 bg-surface2 px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg border border-border1 bg-surface1 px-3 py-2">
             <SearchIcon size={15} className="shrink-0 text-icon2" />
             <input
               className="min-w-0 flex-1 bg-transparent text-ui-sm text-icon6 placeholder:text-icon2 focus:outline-none"
@@ -135,10 +131,13 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
               </Txt>
             ) : (
               available.map(repo => (
-                <div
+                <button
+                  type="button"
                   key={repo.id}
-                  className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-surface4"
+                  className="flex w-full items-center gap-3 rounded-xl bg-surface3 px-3 py-2 text-left hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-50"
                   title={repo.fullName}
+                  disabled={busyRepoId !== null}
+                  onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
                 >
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5 text-ui-sm font-medium text-icon6">
@@ -149,15 +148,8 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
                       {repo.private ? 'private' : 'public'} · {repo.defaultBranch}
                     </span>
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busyRepoId !== null}
-                    onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
-                  >
-                    {busyRepoId === repo.id ? 'Linking…' : 'Link'}
-                  </Button>
-                </div>
+                  {busyRepoId === repo.id && <span className="text-ui-sm text-icon3">Linking…</span>}
+                </button>
               ))
             )}
           </div>
@@ -173,7 +165,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: ServerFactory }
  * booleans, and public URLs.
  */
 function StatusCallout({ status, connected, empty }: { status: GithubStatus; connected: boolean; empty: boolean }) {
-  const calloutClass = 'rounded-lg border border-border1 bg-surface2 px-3 py-2 text-ui-sm leading-relaxed text-icon3';
+  const calloutClass = 'rounded-lg border border-border1 bg-surface3 px-3 py-2 text-ui-sm leading-relaxed text-icon3';
 
   // Auth required: the session expired or was never established.
   if (status.authRequired) {
@@ -196,7 +188,10 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
           </p>
         )}
         <p className="m-0">
-          Edit <code className="text-icon4">src/web/.env</code> and restart <code className="text-icon4">web:dev</code>.
+          Set them in <code className="text-icon4">mastracode/web/.env</code>, register{' '}
+          <code className="text-icon4">http://localhost:5173/auth/github/callback</code> as the GitHub App callback URL,
+          then restart <code className="text-icon4">pnpm web:dev</code> from{' '}
+          <code className="text-icon4">mastracode/web</code>.
         </p>
       </div>
     );

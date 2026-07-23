@@ -1,4 +1,4 @@
-# Mastra Software Factory
+# Mastra Factory
 
 An open source, agent-powered software delivery environment built on [Mastra](https://mastra.ai). Connect GitHub and Linear, pull issues into an intake board, hand them to coding agents, and ship pull requests — from a web app you own and can deploy anywhere.
 
@@ -15,15 +15,16 @@ npm run db:up
 npm run dev
 ```
 
-- **Factory UI** → http://localhost:5173
-- **Mastra Studio** → http://localhost:4111
+- **Factory UI** → http://localhost:4111
 - **API** → http://localhost:4111/api
+
+One server serves both the UI and the API.
 
 With zero configuration the app runs in local, auth-less mode (agents + local storage, no integrations). Open the Factory UI to finish setup — model provider keys are added there (Settings › Models). Deployment-level features enable themselves as you add environment variables — see below.
 
 ### Ports
 
-The UI port is **strict**: if 5173 is taken, `npm run dev` fails instead of moving to a free port, because OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the configured origin and would silently break. To run on a different port, change both together — run with `MASTRACODE_UI_PORT=<port>` and set `MASTRACODE_PUBLIC_URL=http://localhost:<port>` in `.env` (then update the callback URLs on your OAuth apps). The API server port is overridable with `PORT`.
+The server port is overridable with `PORT`. OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the configured origin, so if you change the port, also set `MASTRACODE_PUBLIC_URL=http://localhost:<port>` in `.env` (then update the callback URLs on your OAuth apps).
 
 ## Configuration
 
@@ -52,7 +53,7 @@ Without `APP_DATABASE_URL`, agent state falls back to a local libSQL file and in
 Integrations are per-organization, so they require sign-in, powered by [WorkOS](https://workos.com) (free tier is fine):
 
 1. Create a WorkOS project → copy the **API key** and **Client ID** into `.env`.
-2. In WorkOS → Redirects, add `http://localhost:5173/auth/callback`.
+2. In WorkOS → Redirects, add `http://localhost:4111/auth/callback`.
 3. Set `WORKOS_COOKIE_PASSWORD` to a random 32+ character string.
 
 ### GitHub
@@ -69,14 +70,16 @@ Create a Linear OAuth app (Linear → Settings → API → OAuth applications �
 
 ## Scripts
 
-| Script                      | What it does                                                                                   |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| `npm run dev`               | API server (:4111) + Factory UI (:5173) with live reload                                       |
-| `npm run db:up` / `db:down` | Start/stop local Postgres + Redis (Docker)                                                     |
-| `npm run build`             | Build the SPA and bundle the server to `.mastra/output`                                        |
-| `npm run start`             | Run the production build                                                                       |
-| `npm run deploy`            | Build, validate, and deploy to [Mastra Cloud](https://mastra.ai/docs/mastra-platform/overview) |
-| `npm run check`             | Typecheck server and UI                                                                        |
+| Script                      | What it does                                                                        |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `npm run dev`               | Factory server (:4111) serving the UI and the API                                   |
+| `npm run db:up` / `db:down` | Start/stop local Postgres + Redis (Docker)                                          |
+| `npm run build`             | Build the SPA and bundle the server to `.mastra/output`                             |
+| `npm run start`             | Run the production build                                                            |
+| `npm run deploy`            | Build and deploy to [Mastra Cloud](https://mastra.ai/docs/mastra-platform/overview) |
+| `npm run check`             | Typecheck server and UI                                                             |
+
+`mastra build` and `mastra deploy` detect the Factory entry automatically and build the SPA (Vite) before bundling. The SPA is copied to `.mastra/output/factory/` and a `mastra-project.json` manifest is emitted alongside it.
 
 ## Requirements
 
@@ -86,7 +89,7 @@ Create a Linear OAuth app (Linear → Settings → API → OAuth applications �
 
 ## Versions
 
-The Mastra packages use caret ranges (currently anchored on `@mastra/core@{{@mastra/core}}` and `@mastra/code-sdk@{{@mastra/code-sdk}}`). Upgrade them together when updating.
+The Mastra packages are pinned to `latest`, so `npm install` pulls the current published set. Upgrade them together by re-running `npm install` (or by rescaffolding).
 
 ## License
 

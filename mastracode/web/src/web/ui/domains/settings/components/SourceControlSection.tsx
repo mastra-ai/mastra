@@ -2,10 +2,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Trash2 } from 'lucide-react';
+import { useParams } from 'react-router';
 
-import { useRemoveFactoryMutation } from '../../../../../shared/hooks/useFactories';
-import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
-import { ConnectRepositoriesPanel, isServerFactory, useActiveFactoryContext } from '../../workspaces';
+import { useFactoryQuery, useRemoveFactoryMutation } from '../../../../../shared/hooks/useFactories';
+import { ConnectRepositoriesPanel } from '../../workspaces';
+import { GithubPatBlock } from './GithubPatBlock';
+import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 
 /**
  * Settings › Source Control. Scoped to the factory the user is actively in:
@@ -14,41 +16,32 @@ import { ConnectRepositoriesPanel, isServerFactory, useActiveFactoryContext } fr
  * they only get the binding detail and remove action.
  */
 export function SourceControlSection() {
-  const { activeFactory } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
+  const activeFactory = factoryQuery.data;
   const removeMutation = useRemoveFactoryMutation();
 
   if (!activeFactory) {
     return <Notice variant="info">Select a factory to manage its source control.</Notice>;
   }
 
-  const serverFactory = isServerFactory(activeFactory) ? activeFactory : undefined;
-
   return (
     <div className="flex flex-col gap-4">
       <Txt variant="ui-sm">
-        {serverFactory
-          ? `Link the repositories ${activeFactory.name} works on. Intake, sessions, and worktrees are scoped per repository.`
-          : `${activeFactory.name} is bound to a local folder — repository linking is available for server-backed Factories.`}
+        {`Link the repositories ${activeFactory.name} works on. Intake, sessions, and workspaces are scoped per repository.`}
       </Txt>
 
-      {serverFactory ? (
-        <ConnectRepositoriesPanel factory={serverFactory} />
-      ) : (
-        <Txt variant="ui-sm" className="truncate text-icon3">
-          {deriveProjectPath(activeFactory)}
-        </Txt>
-      )}
+      <ConnectRepositoriesPanel factory={activeFactory} />
+      <UserGithubConnectionRow />
+
+      <GithubPatBlock />
 
       <div className="flex items-center justify-between gap-4 border-t border-border1 pt-4">
         <div className="min-w-0 flex flex-col">
           <Txt variant="ui-md" className="truncate font-medium">
             Remove {activeFactory.name}
           </Txt>
-          <Txt variant="ui-xs">
-            {serverFactory
-              ? 'Deletes this Factory from the organization, including its repository links.'
-              : 'Removes this factory from this browser. The local folder is untouched.'}
-          </Txt>
+          <Txt variant="ui-xs">Deletes this Factory from the organization, including its repository links.</Txt>
         </div>
         <Button
           size="xs"

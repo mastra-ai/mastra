@@ -120,7 +120,7 @@ function ensureProjectSandbox(
   row: ProjectRepositorySandbox,
   onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[0]['onProgress'],
 ) {
-  return ensureProjectSandboxWithStorage({ fleet, row, storage, onProgress });
+  return ensureProjectSandboxWithStorage({ fleet, row, storage, token: 'install-token', onProgress });
 }
 
 function materializeRepo(
@@ -161,6 +161,25 @@ describe('ensureProjectSandbox', () => {
 
     expect(factoryArgs?.providerSandboxId).toBe('railway-vm-existing');
     expect(dbUpdates).toEqual([]);
+  });
+
+  it('authenticates the GitHub CLI in provisioned and reattached sandboxes', async () => {
+    const calls: Parameters<SandboxFactory>[0][] = [];
+    setSandboxFactory(opts => {
+      calls.push(opts);
+      return new FakeSandbox();
+    });
+
+    await ensureProjectSandbox(makeRow({ sandboxId: null }));
+    await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
+
+    expect(calls).toEqual([
+      expect.objectContaining({ env: { GH_TOKEN: 'install-token' } }),
+      expect.objectContaining({
+        providerSandboxId: 'railway-vm-existing',
+        env: { GH_TOKEN: 'install-token' },
+      }),
+    ]);
   });
 
   it('passes the template-configured idle timeout on provision', async () => {
