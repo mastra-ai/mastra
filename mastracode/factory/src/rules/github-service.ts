@@ -8,7 +8,13 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryGithubRule } from './resolve.js';
-import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleActor, FactoryRules } from './types.js';
+import type {
+  FactoryGithubEventName,
+  FactoryGithubRuleContext,
+  FactoryRuleActor,
+  FactoryRuleDecision,
+  FactoryRules,
+} from './types.js';
 import { validateFactoryRuleDecisions } from './validation.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
@@ -244,16 +250,15 @@ export class FactoryGithubEventService {
     };
 
     const rule = resolveFactoryGithubRule(this.options.rules, event);
+    let decision: FactoryRuleDecision | void;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
-      const result = rule ? await withRuleTimeout(Promise.resolve(rule(Object.freeze(context)))) : undefined;
-      const entries = result === undefined ? [] : Array.isArray(result) ? result : [result];
-      const rejection = entries.find(entry => entry.type === 'reject');
-      if (rejection?.type === 'reject') {
-        outcome = { status: 'rejected', code: rejection.code, reason: rejection.reason };
-      } else {
-        decisions = validateFactoryRuleDecisions(entries).map(entry => ({ ...entry }));
+      decision = rule ? await withRuleTimeout(Promise.resolve(rule(Object.freeze(context)))) : undefined;
+      if (decision?.type === 'reject') {
+        outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
+      } else if (decision) {
+        decisions = validateFactoryRuleDecisions([decision]).map(entry => ({ ...entry }));
       }
     } catch (error) {
       const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';

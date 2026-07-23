@@ -125,15 +125,21 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
   };
 }
 
-export type FactoryRuleHandlerResult = FactoryRuleDecision | readonly FactoryRuleDecision[] | void;
-
 export type FactoryRuleHandler<TContext> = (
   context: Readonly<TContext>,
-) => FactoryRuleHandlerResult | Promise<FactoryRuleHandlerResult>;
+) => FactoryRuleDecision | void | Promise<FactoryRuleDecision | void>;
+
+export type FactoryStageRuleHandler = (
+  context: Readonly<FactoryStageRuleContext>,
+) =>
+  | FactoryRuleDecision
+  | readonly FactoryRuleDecision[]
+  | void
+  | Promise<FactoryRuleDecision | readonly FactoryRuleDecision[] | void>;
 
 export interface FactoryBoardRuleLeaf {
-  onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
-  onExit?: FactoryRuleHandler<FactoryStageRuleContext>;
+  onEnter?: FactoryStageRuleHandler;
+  onExit?: FactoryStageRuleHandler;
 }
 
 export interface FactoryToolRuleLeaf {

@@ -2,7 +2,7 @@ import type { LinearIssueIngress } from '../integrations/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryLinearRule } from './resolve.js';
-import type { FactoryLinearRuleContext, FactoryRules } from './types.js';
+import type { FactoryLinearRuleContext, FactoryRuleDecision, FactoryRules } from './types.js';
 import { validateFactoryRuleDecisions } from './validation.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -88,16 +88,15 @@ export class FactoryLinearIssueService {
     };
 
     const rule = resolveFactoryLinearRule(this.options.rules, context.event);
+    let decision: FactoryRuleDecision | void;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
-      const result = rule ? await withRuleTimeout(Promise.resolve(rule(Object.freeze(context)))) : undefined;
-      const entries = result === undefined ? [] : Array.isArray(result) ? result : [result];
-      const rejection = entries.find(entry => entry.type === 'reject');
-      if (rejection?.type === 'reject') {
-        outcome = { status: 'rejected', code: rejection.code, reason: rejection.reason };
-      } else {
-        decisions = validateFactoryRuleDecisions(entries).map(entry => ({ ...entry }));
+      decision = rule ? await withRuleTimeout(Promise.resolve(rule(Object.freeze(context)))) : undefined;
+      if (decision?.type === 'reject') {
+        outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
+      } else if (decision) {
+        decisions = validateFactoryRuleDecisions([decision]).map(entry => ({ ...entry }));
       }
     } catch (error) {
       const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
