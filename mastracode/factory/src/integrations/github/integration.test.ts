@@ -181,6 +181,100 @@ describe('GithubIntegration capability surface', () => {
     ).resolves.toEqual({ id: '99', url: 'https://github.com/acme/app/issues/12#issuecomment-99' });
   });
 
+  it('maps byType stateTypes to open/closed and updates the GitHub issue', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn(async () => ({ data: { number: 12, pull_request: null } }));
+    const update = vi.fn(async () => ({
+      data: {
+        number: 12,
+        title: 'Fix intake',
+        html_url: 'https://github.com/acme/app/issues/12',
+        user: { login: 'ada' },
+        state: 'closed',
+        assignee: null,
+        labels: [] as string[],
+        comments: 0,
+        created_at: '2026-07-01T00:00:00Z',
+        updated_at: '2026-07-02T00:00:00Z',
+      },
+    }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { get, update } } as any);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+
+    await expect(
+      github.intake.updateIssue({
+        connection,
+        sourceId: 'acme/app',
+        issueId: '12',
+        state: { kind: 'byType', stateType: 'completed' },
+      }),
+    ).resolves.toMatchObject({ id: '12', state: 'closed' });
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'closed', state_reason: 'completed', issue_number: 12 }),
+    );
+  });
+
+  it('sets state_reason=not_planned when the target is canceled', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn(async () => ({ data: { number: 12, pull_request: null } }));
+    const update = vi.fn(async () => ({
+      data: {
+        number: 12,
+        title: 'x',
+        html_url: 'u',
+        user: null,
+        state: 'closed',
+        assignee: null,
+        labels: [] as string[],
+        comments: 0,
+        created_at: 'a',
+        updated_at: 'b',
+      },
+    }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { get, update } } as any);
+
+    await github.intake.updateIssue({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'acme/app',
+      issueId: '12',
+      state: { kind: 'byType', stateType: 'canceled' },
+    });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ state: 'closed', state_reason: 'not_planned' }));
+  });
+
+  it('refuses to close a pull request through updateIssue', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn(async () => ({ data: { number: 34, pull_request: { url: 'x' } } }));
+    const update = vi.fn();
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { get, update } } as any);
+
+    await expect(
+      github.intake.updateIssue({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        issueId: '34',
+        state: { kind: 'byType', stateType: 'completed' },
+      }),
+    ).resolves.toBeNull();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('ignores byName targets (GitHub has no custom states)', async () => {
+    const github = new GithubIntegration(validConfig());
+    const update = vi.fn();
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { get: vi.fn(), update } } as any);
+
+    await expect(
+      github.intake.updateIssue({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        issueId: '12',
+        state: { kind: 'byName', name: 'In Review' },
+      }),
+    ).resolves.toBeNull();
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('normalizes pull requests through the shared VersionControl contract', async () => {
     const github = new GithubIntegration(validConfig());
     const list = vi.fn(async () => ({ data: [pullRequestData()] }));
@@ -400,5 +494,88 @@ describe('GithubIntegration FactoryIntegration surface', () => {
   it('diagnostics() exposes only non-secret config', () => {
     const github = new GithubIntegration(validConfig());
     expect(github.diagnostics()).toEqual({ slug: 'test-app', webhookSecretConfigured: true });
+  });
+
+  describe('resolveIntakeDispatch', () => {
+    async function createGithubWithRepo() {
+      const { sourceControl } = await createFactoryStorageForTests();
+      const github = new GithubIntegration(validConfig());
+      github.versionControl.initialize({ storage: sourceControl.forIntegration(github.id) });
+      const installation = await github.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: { externalId: '42', accountName: 'octo', accountType: 'Organization' },
+      });
+      await github.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '101', slug: 'octo/widgets', defaultBranch: 'main' }],
+      });
+      return github;
+    }
+
+    it('derives the target from canonical externalIds plus the repository-id metadata', async () => {
+      const github = await createGithubWithRepo();
+      await expect(
+        github.resolveIntakeDispatch({
+          orgId: 'org-1',
+          externalSource: { type: 'issue', externalId: 'github-issue:7' },
+          metadata: { githubRepositoryId: 101 },
+        }),
+      ).resolves.toEqual({
+        connection: { type: 'app-installation', installationId: 42 },
+        sourceId: 'octo/widgets',
+        issueId: '7',
+      });
+    });
+
+    it('prefers repository slug and issue number from metadata', async () => {
+      const github = await createGithubWithRepo();
+      await expect(
+        github.resolveIntakeDispatch({
+          orgId: 'org-1',
+          externalSource: { type: 'pull-request', externalId: 'github-pr:3' },
+          metadata: { repository: 'octo/widgets', githubPullRequestNumber: 9 },
+        }),
+      ).resolves.toEqual({
+        connection: { type: 'app-installation', installationId: 42 },
+        sourceId: 'octo/widgets',
+        issueId: '9',
+      });
+    });
+
+    it('derives the target from legacy and intake externalId formats', async () => {
+      const github = await createGithubWithRepo();
+      await expect(
+        github.resolveIntakeDispatch({
+          orgId: 'org-1',
+          externalSource: { type: 'issue', externalId: 'github:101:issue:11' },
+        }),
+      ).resolves.toMatchObject({ sourceId: 'octo/widgets', issueId: '11' });
+      await expect(
+        github.resolveIntakeDispatch({
+          orgId: 'org-1',
+          externalSource: { type: 'issue', externalId: '101:13' },
+        }),
+      ).resolves.toMatchObject({ sourceId: 'octo/widgets', issueId: '13' });
+    });
+
+    it('returns null when the repository or issue number cannot be derived', async () => {
+      const github = await createGithubWithRepo();
+      await expect(
+        github.resolveIntakeDispatch({
+          orgId: 'org-1',
+          externalSource: { type: 'issue', externalId: 'github-issue:7' },
+          metadata: { githubRepositoryId: 999 },
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        github.resolveIntakeDispatch({
+          orgId: 'org-1',
+          externalSource: { type: 'issue', externalId: 'not-a-known-format' },
+          metadata: { repository: 'octo/widgets' },
+        }),
+      ).resolves.toBeNull();
+    });
   });
 });

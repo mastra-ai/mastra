@@ -4,7 +4,13 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
-import type { CreateIntakeCommentInput, Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
+import type {
+  CreateIntakeCommentInput,
+  Intake,
+  IntakeIssue,
+  IntakeIssueDetail,
+  UpdateIntakeIssueInput,
+} from '../../../capabilities/intake.js';
 import type {
   CreatePullRequestCommentInput,
   CreatePullRequestInput,
@@ -268,6 +274,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     },
     getIssue: input => this.#getIssue(input.connection, input.sourceId, input.issueId),
     createComment: input => this.#createIssueComment(input),
+    updateIssue: input => this.#updateIntakeIssue(input),
   };
 
   readonly versionControl: VersionControl = {
@@ -365,6 +372,76 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       throw new Error('PlatformGithubIntegration generic storage has not been initialized.');
     }
     return this.#integrationStorage;
+  }
+
+  /**
+   * Background-dispatch context for a work item's external source: derive the
+   * repository full name + issue/PR number from the item's metadata or stored
+   * `externalId`. The platform client authenticates via the platform API, so
+   * the connection carries a nominal installation id (mirrors `listItems`).
+   */
+  async resolveIntakeDispatch({
+    orgId,
+    externalSource,
+    metadata = {},
+  }: {
+    orgId: string;
+    externalSource: { type: string; externalId: string };
+    metadata?: Record<string, unknown>;
+  }): Promise<{ connection: IntegrationConnection; sourceId: string; issueId: string } | null> {
+    const externalId = externalSource.externalId;
+    let issueNumber: number | null = null;
+    for (const key of ['githubIssueNumber', 'githubPullRequestNumber', 'number'] as const) {
+      const value = metadata[key];
+      if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) {
+        issueNumber = value;
+        break;
+      }
+    }
+    let repository =
+      typeof metadata.repository === 'string' && metadata.repository.length > 0 ? metadata.repository : null;
+    // Intake-format key: `<owner/name>:<number>` — split on the last colon.
+    const intakeMatch = externalId.match(/^(.+):(\d+)$/);
+    if (intakeMatch?.[1]?.includes('/')) {
+      repository ??= intakeMatch[1];
+      issueNumber ??= Number.parseInt(intakeMatch[2]!, 10);
+    }
+    if (issueNumber === null) {
+      const match =
+        externalId.match(/^github-(?:issue|pr):(\d+)$/) ??
+        externalId.match(/^github:\d+:(?:issue|pull-request):(\d+)$/);
+      issueNumber = match?.[1] ? Number.parseInt(match[1], 10) : null;
+    }
+    if (repository === null) {
+      // Fall back to the numeric repository id recorded by webhook rules.
+      const repositoryIdValue = metadata.githubRepositoryId;
+      const repositoryId =
+        typeof repositoryIdValue === 'number' && Number.isSafeInteger(repositoryIdValue)
+          ? repositoryIdValue
+          : (() => {
+              const match = externalId.match(/^github:(\d+):/);
+              return match?.[1] ? Number.parseInt(match[1], 10) : null;
+            })();
+      if (repositoryId !== null) {
+        const installations = await this.storage.installations.list({ orgId });
+        for (const installation of installations) {
+          const repositories = await this.storage.repositories.list({ orgId, installationId: installation.id });
+          const row = repositories.find(candidate => candidate.externalId === String(repositoryId));
+          if (row) {
+            repository = row.slug;
+            break;
+          }
+        }
+      }
+    }
+    if (repository === null || issueNumber === null || !Number.isSafeInteger(issueNumber) || issueNumber <= 0) {
+      return null;
+    }
+    return {
+      connection: { type: 'app-installation', installationId: 1 },
+      sourceId: repository,
+      issueId: String(issueNumber),
+    };
   }
 
   initialize({ storage }: { storage: IntegrationStorageHandle }): void {
@@ -702,6 +779,46 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         ),
       ]);
       return parseIntakeIssueDetail(repository, issue, comments.comments);
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  }
+
+  async #updateIntakeIssue(input: UpdateIntakeIssueInput): Promise<IntakeIssue | null> {
+    requireGithubConnection(input.connection);
+    const repository = requireSource(input.sourceId, 'GitHub Intake requires a repository source.');
+    const issueNumber = requirePositiveId(input.issueId, 'issue');
+    if (input.state.kind === 'byName') {
+      logPlatformWarn(`Platform GitHub: updateIssue byName is not supported (name=${input.state.name}); ignoring.`);
+      return null;
+    }
+    const targetState: 'open' | 'closed' =
+      input.state.stateType === 'unstarted' || input.state.stateType === 'started' ? 'open' : 'closed';
+    const stateReason: 'completed' | 'not_planned' | null =
+      targetState === 'closed' ? (input.state.stateType === 'canceled' ? 'not_planned' : 'completed') : null;
+    // Reject PR targets: probe the pulls endpoint. A 200 means the number is a
+    // pull request, not an issue. Factory does not close PRs via updateIssue —
+    // PR merges/closes go through the version-control pipeline.
+    try {
+      await this.#client.request<GithubPullRequest>('GET', repositoryPath(repository, `pulls/${issueNumber}`));
+      logPlatformWarn(`Platform GitHub: updateIssue rejected — target ${repository}#${issueNumber} is a pull request.`);
+      return null;
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+      // 404 on pulls means it's an issue (or nothing) — fall through to PATCH.
+    }
+    try {
+      const issue = await this.#client.request<GithubIssue>(
+        'PATCH',
+        repositoryPath(repository, `issues/${issueNumber}`),
+        {
+          state: targetState,
+          ...(stateReason ? { state_reason: stateReason } : {}),
+        },
+        { actingUserId: input.actingUserId },
+      );
+      return parseIntakeIssue(repository, issue);
     } catch (error) {
       if (isNotFound(error)) return null;
       throw error;
