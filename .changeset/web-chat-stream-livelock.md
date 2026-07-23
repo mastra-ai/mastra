@@ -1,4 +1,5 @@
 ---
+'@mastra/factory': patch
 'mastra': patch
 ---
 
