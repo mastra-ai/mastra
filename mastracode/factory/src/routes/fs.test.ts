@@ -2,9 +2,17 @@ import { mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { listArtifacts, listWorkspaceRenderedPath, readWorkspaceFile } from './fs.js';
+import type { SandboxFleet } from '../sandbox/fleet.js';
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
+import {
+  listArtifacts,
+  listSessionRenderedPath,
+  listWorkspaceRenderedPath,
+  readSessionWorkspaceFile,
+  readWorkspaceFile,
+} from './fs.js';
 
 describe('listArtifacts', () => {
   it('returns an empty list when .artifacts does not exist', async () => {
@@ -186,5 +194,176 @@ describe('readWorkspaceFile', () => {
     await expect(readWorkspaceFile(root, join(root, 'workspace'), '.artifacts/secret.md')).rejects.toThrow(
       'Path is outside the workspace',
     );
+  });
+});
+
+// ── Session-backed (sandbox) workspace access ────────────────────────────────
+
+const WORKDIR = '/workspaces/acme/repo';
+
+function makeSession(overrides: Partial<SourceControlSession> = {}): SourceControlSession {
+  return {
+    id: 'row-1',
+    sessionId: '0919fb96-a387-4407-bbf8-ccc563ef1391',
+    projectRepositoryId: 'pr-1',
+    orgId: 'org-1',
+    userId: 'user-1',
+    branch: 'main',
+    baseBranch: 'main',
+    sandboxId: 'sbx-1',
+    sandboxWorkdir: WORKDIR,
+    materializedAt: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+/**
+ * Fake fleet whose sandbox answers the exact shell scripts the session-backed
+ * helpers issue (find listing, readlink/stat confinement checks, base64 read).
+ */
+function makeFleet(respond: (script: string) => { exitCode: number; stdout: string; stderr?: string }) {
+  const executeCommand = vi.fn(async (_cmd: string, args?: string[]) => {
+    const script = args?.[1] ?? '';
+    const result = respond(script);
+    return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
+  });
+  const fleet = {
+    enabled: true,
+    reattachSandbox: vi.fn(async () => ({ id: 'sbx-1', executeCommand })),
+  } as unknown as SandboxFleet;
+  return { fleet, executeCommand };
+}
+
+describe('listSessionRenderedPath', () => {
+  it('lists rendered entries from the session sandbox in one command', async () => {
+    const { fleet, executeCommand } = makeFleet(script => {
+      expect(script).toContain(`'${WORKDIR}/.artifacts'`);
+      return {
+        exitCode: 0,
+        stdout: [
+          `d\t0\t1700000000.0\t${WORKDIR}/.artifacts/understand-pr`,
+          `f\t5\t1700000100.5\t${WORKDIR}/.artifacts/understand-pr/HISTORY.md`,
+          '',
+        ].join('\n'),
+      };
+    });
+
+    const session = makeSession();
+    const listing = await listSessionRenderedPath(fleet, session, '.artifacts');
+
+    expect(listing.workspacePath).toBe(session.sessionId);
+    expect(listing.root).toBe('.artifacts');
+    expect(listing.rootPath).toBe(`${WORKDIR}/.artifacts`);
+    expect(listing.entries).toEqual([
+      expect.objectContaining({ name: 'understand-pr', path: 'understand-pr', type: 'directory', size: 0 }),
+      expect.objectContaining({ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5 }),
+    ]);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an empty listing when the session has no sandbox binding', async () => {
+    const { fleet, executeCommand } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
+
+    const listing = await listSessionRenderedPath(fleet, makeSession({ sandboxId: null }), '.artifacts');
+
+    expect(listing.entries).toEqual([]);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('returns an empty listing when the rendered root does not exist', async () => {
+    const { fleet } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
+
+    const listing = await listSessionRenderedPath(fleet, makeSession(), '.artifacts');
+
+    expect(listing.entries).toEqual([]);
+  });
+
+  it('rejects roots outside the approved allowlist without touching the sandbox', async () => {
+    const { fleet, executeCommand } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
+
+    await expect(listSessionRenderedPath(fleet, makeSession(), '.ssh')).rejects.toThrow(
+      'Root is not approved for rendered workspace access',
+    );
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('ignores find output outside the rendered root', async () => {
+    const { fleet } = makeFleet(() => ({
+      exitCode: 0,
+      stdout: `f\t5\t1700000000.0\t/etc/passwd\n`,
+    }));
+
+    const listing = await listSessionRenderedPath(fleet, makeSession(), '.artifacts');
+
+    expect(listing.entries).toEqual([]);
+  });
+});
+
+describe('readSessionWorkspaceFile', () => {
+  function respondForFile(content: string) {
+    const abs = `${WORKDIR}/.artifacts/understand-pr/HISTORY.md`;
+    return (script: string) => {
+      if (script.startsWith('readlink -f')) return { exitCode: 0, stdout: `${abs}\n` };
+      if (script.startsWith('stat -c'))
+        return { exitCode: 0, stdout: `regular file\t${content.length}\t1700000000\t0\n` };
+      if (script.startsWith('base64 <'))
+        return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
+      return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
+    };
+  }
+
+  it('reads text content through the session sandbox', async () => {
+    const { fleet } = makeFleet(respondForFile('# History'));
+
+    const session = makeSession();
+    const file = await readSessionWorkspaceFile(fleet, session, '.artifacts/understand-pr/HISTORY.md');
+
+    expect(file).toEqual(
+      expect.objectContaining({
+        workspacePath: session.sessionId,
+        path: '.artifacts/understand-pr/HISTORY.md',
+        name: 'HISTORY.md',
+        contentType: 'text',
+        content: '# History',
+        truncated: false,
+      }),
+    );
+  });
+
+  it('rejects reads outside approved rendered roots', async () => {
+    const { fleet, executeCommand } = makeFleet(respondForFile('secret'));
+
+    await expect(readSessionWorkspaceFile(fleet, makeSession(), '.ssh/config')).rejects.toThrow(
+      'Root is not approved for rendered workspace access',
+    );
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('rejects traversal outside the workspace', async () => {
+    const { fleet } = makeFleet(respondForFile('secret'));
+
+    await expect(readSessionWorkspaceFile(fleet, makeSession(), '../secret.md')).rejects.toThrow(
+      'path escapes workspace',
+    );
+  });
+
+  it('rejects directories', async () => {
+    const { fleet } = makeFleet(script => {
+      if (script.startsWith('readlink -f')) return { exitCode: 0, stdout: `${WORKDIR}/.artifacts\n` };
+      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory\t0\t1700000000\t0\n` };
+      return { exitCode: 1, stdout: '' };
+    });
+
+    await expect(readSessionWorkspaceFile(fleet, makeSession(), '.artifacts')).rejects.toThrow('Path is a directory');
+  });
+
+  it('errors when the session workspace is not materialized', async () => {
+    const { fleet } = makeFleet(respondForFile('x'));
+
+    await expect(
+      readSessionWorkspaceFile(fleet, makeSession({ sandboxWorkdir: null }), '.artifacts/a.md'),
+    ).rejects.toThrow('Session workspace is not materialized');
   });
 });

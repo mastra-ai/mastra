@@ -1,10 +1,16 @@
 import { lstat, open, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve, sep } from 'node:path';
+import { isAbsolute, join, posix as posixPath, resolve, sep } from 'node:path';
 
+import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { detectProject, getResourceIdOverride } from '@mastra/code-sdk/utils/project';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
+import type { Context } from 'hono';
+
+import type { SandboxFleet } from '../sandbox/fleet.js';
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
+import type { RouteAuth } from './route.js';
 
 /**
  * Server-side directory browser for the web project picker.
@@ -81,6 +87,11 @@ export interface ArtifactListing {
 const MAX_TEXT_FILE_BYTES = 512 * 1024;
 const TEXT_DECODER = new TextDecoder('utf-8', { fatal: true });
 const APPROVED_RENDERED_ROOTS = new Set(['.artifacts']);
+
+/** Erase a route handler's path-parameterized context to a plain `Context`. */
+function loose(c: unknown): Context {
+  return c as Context;
+}
 
 /** Resolve the browsable root, defaulting to the user's home directory. */
 export function resolveFsRoot(root?: string): string {
@@ -319,6 +330,147 @@ export async function listArtifacts(root: string, workspacePath: string): Promis
   };
 }
 
+// ── Session-backed workspace access ──────────────────────────────────────────
+//
+// The web UI identifies a Factory session workspace by its session id (a UUID),
+// not by a server-local filesystem path — the session's files live inside the
+// session's sandbox (a remote VM on deployed factories). These helpers resolve
+// the session, enforce that the caller owns it, reattach to its sandbox, and
+// serve the approved rendered roots through `SandboxFilesystem`.
+
+/** Dependencies for resolving a `workspacePath` that is a Factory session id. */
+export interface SessionFsDeps {
+  auth: RouteAuth;
+  fleet: SandboxFleet;
+  sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
+}
+
+/**
+ * Resolve a `workspacePath` query param as a Factory session id. Returns the
+ * session when one exists and the caller owns it, `null` when no session
+ * matches (the caller should fall back to local-path handling), and throws
+ * when a session exists but belongs to another tenant.
+ */
+async function resolveAuthorizedSession(
+  c: Context,
+  deps: SessionFsDeps | undefined,
+  workspacePath: string,
+): Promise<SourceControlSession | null> {
+  if (!deps) return null;
+  const session = await deps.sessions.getBySessionId(workspacePath);
+  if (!session) return null;
+  if (deps.auth.enabled()) {
+    await deps.auth.ensureUser(c);
+    const tenant = deps.auth.tenant(c);
+    if (!tenant || tenant.orgId !== session.orgId || tenant.userId !== session.userId) {
+      throw new Error('Session is not available to the current user');
+    }
+  }
+  return session;
+}
+
+interface SessionSandboxHandle {
+  sandbox: { executeCommand(command: string, args?: string[], options?: { timeout?: number }): Promise<unknown> };
+  filesystem: SandboxFilesystem;
+  workdir: string;
+}
+
+/**
+ * Reattach to the session's sandbox and wrap its workdir in a
+ * `SandboxFilesystem`. Returns `null` when the session has no provisioned
+ * sandbox yet (nothing materialized → nothing to list).
+ */
+async function sessionSandbox(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+): Promise<SessionSandboxHandle | null> {
+  if (!fleet.enabled || !session.sandboxId || !session.sandboxWorkdir) return null;
+  const sandbox = await fleet.reattachSandbox(session.sandboxId, { workingDirectory: session.sandboxWorkdir });
+  return {
+    sandbox,
+    filesystem: new SandboxFilesystem({ sandbox, workdir: session.sandboxWorkdir }),
+    workdir: session.sandboxWorkdir,
+  };
+}
+
+/** List an approved rendered root inside a Factory session's sandbox workdir. */
+export async function listSessionRenderedPath(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+  renderedRoot: string,
+): Promise<WorkspaceRenderedListing> {
+  const safeRoot = assertApprovedRenderedRoot(renderedRoot);
+  const rootPath = posixPath.join(session.sandboxWorkdir ?? '', safeRoot);
+  const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
+
+  const handle = await sessionSandbox(fleet, session);
+  if (!handle) return empty;
+
+  // One round trip: emit "type\tsize\tmtime\tpath" per entry. `safeRoot` comes
+  // from a fixed allowlist so interpolating it (quoted) is safe.
+  const quotedRoot = `'${rootPath.replace(/'/g, `'\\''`)}'`;
+  const result = (await handle.sandbox.executeCommand(
+    'sh',
+    [
+      '-c',
+      `test -d ${quotedRoot} && find ${quotedRoot} -mindepth 1 -printf '%y\\t%s\\t%T@\\t%p\\n' 2>/dev/null || true`,
+    ],
+    { timeout: 30_000 },
+  )) as { exitCode: number; stdout: string };
+  if (result.exitCode !== 0) return empty;
+
+  const entries: WorkspaceRenderedEntry[] = [];
+  for (const line of result.stdout.split('\n')) {
+    if (!line) continue;
+    const [type, sizeStr, mtimeStr, ...pathParts] = line.split('\t');
+    const fullPath = pathParts.join('\t');
+    if (!fullPath || !fullPath.startsWith(`${rootPath}/`)) continue;
+    const relativePath = fullPath.slice(rootPath.length + 1);
+    entries.push({
+      name: posixPath.basename(relativePath),
+      path: relativePath,
+      type: type === 'd' ? 'directory' : 'file',
+      size: type === 'd' ? 0 : Number(sizeStr) || 0,
+      updatedAt: new Date((Number(mtimeStr) || 0) * 1000).toISOString(),
+    });
+  }
+  entries.sort((a, b) => a.path.localeCompare(b.path));
+
+  return { workspacePath: session.sessionId, root: safeRoot, rootPath, entries };
+}
+
+/** Read a file under an approved rendered root inside a session's sandbox. */
+export async function readSessionWorkspaceFile(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+  path: string,
+): Promise<WorkspaceFile> {
+  const safePath = assertRelativePath(path, 'path');
+  assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
+
+  const handle = await sessionSandbox(fleet, session);
+  if (!handle) throw new Error('Session workspace is not materialized');
+  const { filesystem } = handle;
+  const info = await filesystem.stat(safePath);
+  if (info.type === 'directory') throw new Error('Path is a directory');
+
+  const buffer = (await filesystem.readFile(safePath)) as Buffer;
+  const truncated = buffer.length > MAX_TEXT_FILE_BYTES;
+  const base = {
+    workspacePath: session.sessionId,
+    path: safePath,
+    name: posixPath.basename(safePath),
+    size: buffer.length,
+    updatedAt: info.modifiedAt.toISOString(),
+  };
+  try {
+    const content = TEXT_DECODER.decode(truncated ? buffer.subarray(0, MAX_TEXT_FILE_BYTES) : buffer);
+    return { ...base, contentType: 'text', content, truncated };
+  } catch {
+    return { ...base, contentType: 'unsupported' };
+  }
+}
+
 export interface ResolvedCodebase {
   /**
    * The resourceId the TUI would use for this path — derived identically so a
@@ -356,8 +508,9 @@ export function resolveCodebase(projectPath: string): ResolvedCodebase {
  *   - `GET /web/fs/list?path=...`        — browse directories (confined to root)
  *   - `GET /web/codebase/resolve?path=...` — TUI-compatible codebase resourceId
  */
-export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
+export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDeps } = {}): ApiRoute[] {
   const root = resolveFsRoot(options.root);
+  const sessionFs = options.sessionFs;
 
   return [
     registerApiRoute('/web/fs/list', {
@@ -398,6 +551,10 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         if (!renderedRoot) return c.json({ error: 'Missing required query param: root' }, 400);
         try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (session && sessionFs) {
+            return c.json(await listSessionRenderedPath(sessionFs.fleet, session, renderedRoot));
+          }
           return c.json(await listWorkspaceRenderedPath(root, workspacePath, renderedRoot));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -405,7 +562,8 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
             message.includes('outside') ||
             message.includes('relative') ||
             message.includes('escapes') ||
-            message.includes('not approved')
+            message.includes('not approved') ||
+            message.includes('not available')
               ? 403
               : 500;
           return c.json({ error: message }, status);
@@ -421,6 +579,10 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
         try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (session && sessionFs) {
+            return c.json(await readSessionWorkspaceFile(sessionFs.fleet, session, path));
+          }
           return c.json(await readWorkspaceFile(root, workspacePath, path));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -428,11 +590,14 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
             message.includes('outside') ||
             message.includes('relative') ||
             message.includes('escapes') ||
-            message.includes('not approved')
+            message.includes('not approved') ||
+            message.includes('not available')
               ? 403
               : message.includes('directory')
                 ? 400
-                : 500;
+                : message.includes('not found')
+                  ? 404
+                  : 500;
           return c.json({ error: message }, status);
         }
       },
