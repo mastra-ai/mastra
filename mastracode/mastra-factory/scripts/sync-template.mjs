@@ -392,6 +392,9 @@ function writePnpmWorkspace() {
 # Prevents ERR_PNPM_IGNORED_BUILDS on pnpm v10+ by explicitly approving
 # (or declining) build scripts for dependencies that have them.
 # npm ignores this file entirely; it only affects pnpm installs.
+minimumReleaseAgeExclude:
+  - '@mastra/*'
+  - mastra
 allowBuilds:
   '@google/genai': true
   agent-browser: true
