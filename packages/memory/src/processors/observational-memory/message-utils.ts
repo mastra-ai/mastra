@@ -83,6 +83,25 @@ export function isMessageAtOrBeforeCursor(msg: MastraDBMessage, cursor: { create
 }
 
 /**
+ * Get the messages Observational Memory is allowed to work with.
+ *
+ * Messages supplied through the `context` option are per-run ephemeral input. Core's
+ * persistence contract already treats them as never-persist: `MessageStateManager` routes
+ * them into `userContextMessages`, and `drainUnsavedMessages` only drains input/response.
+ *
+ * OM builds its windows from `get.all.db()`, which includes context messages, and then
+ * seals and persists candidates directly — turning ephemeral context into durable user
+ * messages. Excluding them here keeps OM's window, sealing, persistence and token
+ * accounting consistent with that contract.
+ */
+export function getObservableMessages(messageList: MessageList): MastraDBMessage[] {
+  const allMessages = messageList.get.all.db();
+  const contextMessageIds = messageList.makeMessageSourceChecker().context;
+  if (contextMessageIds.size === 0) return allMessages;
+  return allMessages.filter(message => !contextMessageIds.has(message.id));
+}
+
+/**
  * Safely extract buffered observation chunks from a record.
  * Handles both array and JSON-string formats, returning empty array if malformed.
  */
@@ -101,7 +120,7 @@ export function filterObservedMessages(opts: {
   preserveMessageIds?: Set<string>;
 }): void {
   const { messageList, record } = opts;
-  const allMessages = messageList.get.all.db();
+  const allMessages = getObservableMessages(messageList);
   const useMarkerBoundaryPruning = opts.useMarkerBoundaryPruning ?? true;
   const preserveMessageIds = opts.preserveMessageIds ?? new Set<string>();
 

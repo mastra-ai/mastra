@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ProcessInputStepArgs } from '@mastra/core/processors';
 
 import { formatTemporalGap, formatTemporalTimestamp, getMessagePartTimestamp, isTemporalGapMarker } from './date-utils';
+import { getObservableMessages } from './message-utils';
 
 export const TEMPORAL_GAP_REMINDER_TYPE = 'temporal-gap';
 
@@ -75,7 +76,9 @@ export async function insertTemporalGapMarkers({
     return;
   }
 
-  const allMessages = messageList.get.all.db().filter((message): message is MastraDBMessage => Boolean(message));
+  const allMessages = getObservableMessages(messageList).filter((message): message is MastraDBMessage =>
+    Boolean(message),
+  );
   const latestInputIndex = allMessages.findIndex(message => message.id === latestInputMessage.id);
 
   if (latestInputIndex <= 0) {

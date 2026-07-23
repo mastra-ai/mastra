@@ -5,7 +5,7 @@ import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
-import { stripThreadTags } from '../message-utils';
+import { getObservableMessages, stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
@@ -379,7 +379,7 @@ export abstract class ObservationStrategy {
     resourceId?: string,
   ): Promise<void> {
     if (!messageList) return;
-    const allMsgs = messageList.get.all.db();
+    const allMsgs = getObservableMessages(messageList);
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
       if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
