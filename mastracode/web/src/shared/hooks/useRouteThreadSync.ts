@@ -8,7 +8,7 @@ import { useChatSessionContext } from '../../web/ui/domains/chat/context/useChat
 import { useChatTranscript } from '../../web/ui/domains/chat/context/useChatTranscript';
 import { createAgentControllerClient } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
-import { agentControllerSessionMutationKey } from './agentControllerMutationArgs';
+import { agentControllerSwitchThreadMutationKey } from './agentControllerMutationArgs';
 import { useSwitchAgentControllerThreadMutation } from './useAgentControllerThreadMutations';
 import { useAgentControllerThreads } from './useAgentControllerThreads';
 
@@ -41,21 +41,24 @@ export function useRouteThreadSync() {
   });
   const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
   const latestRouteThreadId = useRef<string | undefined>(undefined);
-  const requestedRouteThreadId = useRef<string | undefined>(undefined);
   const previousSessionKey = useRef<string | undefined>(undefined);
   const sessionKey = `${resourceId}:${projectPath ?? ''}`;
 
   const switchToRouteThread = useEffectEvent((targetThreadId: string, fallbackForScopeChange: boolean) => {
-    const threadSwitchMutationKey = agentControllerSessionMutationKey(
-      { agentControllerId: AGENT_CONTROLLER_ID, resourceId, scope: projectPath, baseUrl },
-      'thread',
-    );
+    // `mutateAsync` registers its mutation in the cache synchronously, so the
+    // cache alone answers "is this exact switch already in flight?" — across
+    // every hook instance, no local bookkeeping needed.
     const alreadyPending =
-      requestedRouteThreadId.current === targetThreadId ||
-      queryClient
-        .getMutationCache()
-        .findAll({ mutationKey: threadSwitchMutationKey, exact: true, status: 'pending' })
-        .some(mutation => mutation.state.variables === targetThreadId);
+      queryClient.isMutating({
+        mutationKey: agentControllerSwitchThreadMutationKey({
+          agentControllerId: AGENT_CONTROLLER_ID,
+          resourceId,
+          scope: projectPath,
+          baseUrl,
+        }),
+        exact: true,
+        predicate: mutation => mutation.state.variables === targetThreadId,
+      }) > 0;
     if (alreadyPending) return;
     latestRouteThreadId.current = targetThreadId;
     const isLatestRequest = () => latestRouteThreadId.current === targetThreadId;
@@ -91,20 +94,12 @@ export function useRouteThreadSync() {
       return;
     }
 
-    requestedRouteThreadId.current = targetThreadId;
-    void switchThreadMutation
-      .mutateAsync(targetThreadId)
-      .catch(err => {
-        if (!isLatestRequest()) return;
-        const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
-        pushNotice(message, 'error');
-        void navigate(`/factories/${factoryId}/new`, { replace: true, state: { routeErrorNotice: message } });
-      })
-      .finally(() => {
-        if (requestedRouteThreadId.current === targetThreadId) {
-          requestedRouteThreadId.current = undefined;
-        }
-      });
+    void switchThreadMutation.mutateAsync(targetThreadId).catch(err => {
+      if (!isLatestRequest()) return;
+      const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
+      pushNotice(message, 'error');
+      void navigate(`/factories/${factoryId}/new`, { replace: true, state: { routeErrorNotice: message } });
+    });
   });
 
   useEffect(() => {

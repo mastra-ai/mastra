@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
-import { agentControllerSessionMutationKey, agentControllerSessionMutationScope } from './agentControllerMutationArgs';
+import { agentControllerSessionMutationScope, agentControllerSwitchThreadMutationKey } from './agentControllerMutationArgs';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,
@@ -40,7 +40,7 @@ export function useSwitchAgentControllerThreadMutation(args: AgentControllerThre
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
-    mutationKey: agentControllerSessionMutationKey(args, 'thread'),
+    mutationKey: agentControllerSwitchThreadMutationKey(args),
     scope: agentControllerSessionMutationScope(args),
     mutationFn: async (threadId: string) => {
       await requireAgentControllerSession(session).switchThread(threadId);
