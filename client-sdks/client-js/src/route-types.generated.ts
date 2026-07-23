@@ -301,7 +301,11 @@ type Shared_Type_16 = {
   };
   /** Which processor phases to enable */
   enabledPhases: (
-    'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
+    | 'processInput'
+    | 'processInputStep'
+    | 'processOutputStream'
+    | 'processOutputResult'
+    | 'processOutputStep'
   )[];
 };
 
@@ -1117,6 +1121,7 @@ type Shared_Type_54 = {
         };
       }
     | undefined;
+  transient?: boolean | undefined;
 };
 
 type Shared_Type_55 = {
@@ -1348,7 +1353,6 @@ type Shared_Type_69 =
   | 'processor_run'
   | 'tool_call'
   | 'client_tool_call'
-  | 'provider_tool_call'
   | 'workflow_run'
   | 'workflow_step'
   | 'workflow_conditional'
@@ -4696,7 +4700,7 @@ export type PostAgentsAgentIdVoiceSpeak_Body = {
   speakerId?: string | undefined;
 };
 
-export type PostAgentsAgentIdVoiceSpeak_Response = PostAgentsAgentIdGenerate_Response;
+export type PostAgentsAgentIdVoiceSpeak_Response = any;
 
 export type PostAgentsAgentIdVoiceSpeak_Request = Simplify<
   (PostAgentsAgentIdVoiceSpeak_PathParams extends never ? {} : { params: PostAgentsAgentIdVoiceSpeak_PathParams }) &
@@ -4727,7 +4731,7 @@ export type PostAgentsAgentIdSpeak_PathParams = GetAgentsAgentIdVoiceSpeakers_Pa
 export type PostAgentsAgentIdSpeak_Body = PostAgentsAgentIdVoiceSpeak_Body;
 
 /** @deprecated */
-export type PostAgentsAgentIdSpeak_Response = PostAgentsAgentIdGenerate_Response;
+export type PostAgentsAgentIdSpeak_Response = PostAgentsAgentIdVoiceSpeak_Response;
 
 /** @deprecated */
 export type PostAgentsAgentIdSpeak_Request = Simplify<
@@ -4756,10 +4760,10 @@ export interface PostAgentsAgentIdSpeak_RouteContract {
 export type PostAgentsAgentIdVoiceListen_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
 export type PostAgentsAgentIdVoiceListen_Body = {
-  audio: unknown;
+  audio: any;
   options?:
     | {
-        [key: string]: unknown;
+        [key: string]: any;
       }
     | undefined;
 };
@@ -4825,7 +4829,7 @@ export interface PostAgentsAgentIdListen_RouteContract {
 // ============================================================================
 export type GetAgentsAgentIdVoiceListener_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
-export type GetAgentsAgentIdVoiceListener_Response = PostAgentsAgentIdGenerate_Response;
+export type GetAgentsAgentIdVoiceListener_Response = PostAgentsAgentIdVoiceSpeak_Response;
 
 export type GetAgentsAgentIdVoiceListener_Request = Simplify<
   (GetAgentsAgentIdVoiceListener_PathParams extends never ? {} : { params: GetAgentsAgentIdVoiceListener_PathParams }) &
@@ -8494,7 +8498,6 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'processor_run'
           | 'tool_call'
           | 'client_tool_call'
-          | 'provider_tool_call'
           | 'workflow_run'
           | 'workflow_step'
           | 'workflow_conditional'
@@ -16560,7 +16563,11 @@ export type GetProcessorProviders_Response = {
     name: string;
     description?: string | undefined;
     availablePhases: (
-      'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
+      | 'processInput'
+      | 'processInputStep'
+      | 'processOutputStream'
+      | 'processOutputResult'
+      | 'processOutputStep'
     )[];
   }[];
 };
@@ -16593,7 +16600,11 @@ export type GetProcessorProvidersProviderId_Response = {
   name: string;
   description?: string | undefined;
   availablePhases: (
-    'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
+    | 'processInput'
+    | 'processInputStep'
+    | 'processOutputStream'
+    | 'processOutputResult'
+    | 'processOutputStep'
   )[];
   configSchema: {
     [key: string]: unknown;

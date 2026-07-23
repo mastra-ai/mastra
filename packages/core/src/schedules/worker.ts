@@ -382,14 +382,16 @@ export async function executeAgentSchedule(
 
     let signalResult;
     try {
+      const signalType = effective.signalType ?? 'notification';
+      const signalBase = {
+        tagName: effective.tagName ?? 'schedule',
+        contents: effective.prompt,
+        ...(effective.attributes ? { attributes: effective.attributes } : {}),
+        providerOptions: mergeProviderOptions(effective.providerOptions, scheduleRunMeta),
+      };
       signalResult = agent.sendSignal(
-        {
-          type: effective.signalType ?? 'notification',
-          tagName: effective.tagName ?? 'schedule',
-          contents: effective.prompt,
-          ...(effective.attributes ? { attributes: effective.attributes } : {}),
-          providerOptions: mergeProviderOptions(effective.providerOptions, scheduleRunMeta),
-        },
+        // Branched so `type` narrows into the AgentSignalInput union (state signals forbid transient).
+        signalType === 'state' ? { ...signalBase, type: signalType } : { ...signalBase, type: signalType },
         {
           resourceId: effective.resourceId,
           threadId: effective.threadId,

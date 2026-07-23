@@ -2,7 +2,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { MessageList } from './message-list';
 import type { MastraDBMessage } from './message-list/state/types';
-import { createSignal, mastraDBMessageToSignal } from './signals';
+import { createSignal, mastraDBMessageToSignal, recreateSignal } from './signals';
 import type { AgentStateSignalInput, CreatedAgentSignal } from './signals';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -270,7 +270,7 @@ export async function applyStateSignal({
 
   const previousVersion = typeof tracking?.version === 'number' ? tracking.version : 0;
   const version = matchesCurrentState ? previousVersion || 1 : previousVersion + 1;
-  const updatedSignal = createSignal({
+  const updatedSignal = recreateSignal({
     ...signal,
     metadata: {
       ...signal.metadata,

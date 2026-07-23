@@ -8047,7 +8047,7 @@ export class Agent<
    * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal<OUTPUT = TOutput>(
-    signal: AgentSignal,
+    signal: AgentSignal | CreatedAgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
   ): SendAgentSignalResult<OUTPUT> {
     return agentThreadStreamRuntime.sendSignal<OUTPUT>(

@@ -1796,6 +1796,35 @@ describe('Agent Routes Authorization', () => {
       ).toBe(true);
     });
 
+    it('should preserve transient on non-state signals', () => {
+      const result = sendAgentSignalBodySchema.safeParse({
+        signal: { type: 'system-reminder', contents: 'steer once, do not retain', transient: true },
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.success && result.data.signal.transient).toBe(true);
+    });
+
+    it('should reject transient state signals', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'state', contents: 'full state snapshot', transient: true },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'state', contents: 'full state snapshot' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+    });
+
     it('should reject idle behavior when targeting a run', () => {
       expect(
         sendAgentSignalBodySchema.safeParse({

@@ -52,4 +52,17 @@ describe('transient signals (transient: true)', () => {
       }),
     ).toBe(false);
   });
+
+  it('rejects transient state signals (state tracking is rebuilt from persisted history)', () => {
+    expect(() =>
+      // @ts-expect-error — the union forbids transient on state signals; verify the runtime guard too
+      createSignal({
+        type: 'state',
+        contents: 'full state snapshot',
+        transient: true,
+      }),
+    ).toThrow('state signals cannot be transient');
+
+    expect(() => createSignal({ type: 'state', contents: 'full state snapshot' })).not.toThrow();
+  });
 });

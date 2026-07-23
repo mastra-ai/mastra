@@ -12,7 +12,7 @@ import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
-import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
+import { createMessageSignal, recreateSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import type {
@@ -145,7 +145,7 @@ type AgentThreadRuntimeState = {
 
 export type AgentThreadState = 'active' | 'idle';
 
-type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
+type SerializableAgentSignal = (AgentSignal | CreatedAgentSignal) & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
 
 type AgentThreadStreamRuntimeEvent =
   | { type: 'run-registered'; runId: string; streamId: string; streamSeq: number }
@@ -1422,7 +1422,7 @@ export class AgentThreadStreamRuntime {
         if (data.sourceId === this.#id) return;
         const signalsByThread = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
         const queue = signalsByThread.get(key) ?? [];
-        queue.push(createSignal(data.signal));
+        queue.push(recreateSignal(data.signal));
         signalsByThread.set(key, queue);
         return;
       }
@@ -1732,12 +1732,12 @@ export class AgentThreadStreamRuntime {
    */
   sendSignal<OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
-    signalInput: AgentSignal,
+    signalInput: AgentSignal | CreatedAgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
     pubsub?: PubSub,
   ): SendAgentSignalResult<OUTPUT> {
     const state = this.#getState(pubsub);
-    let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
+    let signal = recreateSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';

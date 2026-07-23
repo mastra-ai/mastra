@@ -7,7 +7,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
-import { createSignal, isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
+import { isCreatedAgentSignal, mastraDBMessageToSignal, recreateSignal } from '../signals';
 import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
@@ -242,15 +242,8 @@ export class MessageList {
     const source = options?.source ?? 'input';
     const createdAt = this.generateCreatedAt(source, new Date());
     const acceptedAt = signal.acceptedAt ?? signal.createdAt;
-    const signalForTranscript = createSignal({
-      id: signal.id,
-      type: signal.type,
-      tagName: signal.tagName,
-      contents: signal.contents,
-      attributes: signal.attributes,
-      metadata: signal.metadata,
-      providerOptions: signal.providerOptions,
-      transient: signal.transient,
+    const signalForTranscript = recreateSignal({
+      ...signal,
       createdAt,
       acceptedAt,
     });
