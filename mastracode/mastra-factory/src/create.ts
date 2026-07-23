@@ -203,8 +203,8 @@ export async function create(args: CreateArgs): Promise<void> {
       `${color.green('Provisioned on Mastra platform')} in ${color.cyan(platformResult.orgName)}:`,
       `  - Project ${color.cyan(platformResult.project.name)}`,
       `  - Postgres database (credentials written to ${color.cyan('.env')})`,
+      `  - Sandboxes (code agent sessions run here)`,
       '',
-      'When deployed, code agent sessions run inside Mastra platform sandboxes.',
       `Manage your project at ${color.underline('https://projects.mastra.ai')}`,
     );
   } else if (args.noPlatform) {
