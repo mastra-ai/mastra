@@ -534,13 +534,12 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
     const backgroundWork = getBackgroundWorkLifecycleView(message);
     if (backgroundWork) {
       const component = state.pendingTools.get(backgroundWork.originToolCallId);
-      if (component) {
+      if (backgroundWork.taskId) component?.setBackgroundTaskId?.(backgroundWork.taskId);
+      if (component && (backgroundWork.tagName === 'work-completed' || backgroundWork.tagName === 'work-failed')) {
         const status =
           backgroundWork.tagName === 'work-completed'
             ? 'Completed in background; reconciling result…'
-            : backgroundWork.tagName === 'work-failed'
-              ? 'Background execution failed; reconciling error…'
-              : 'Running in background…';
+            : 'Background execution failed; reconciling error…';
         component.updateResult({ content: [{ type: 'text', text: status }], isError: false }, true);
         state.ui.requestRender();
       }
@@ -578,8 +577,16 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
   return false;
 }
 
+function isPersistedBackgroundCompletionDirective(message: MastraDBMessage): boolean {
+  if (message.role !== 'user' && message.role !== 'signal') return false;
+  const text = isSignalMessage(message) ? getUserSignalView(message).message : getMessageText(message);
+  return /^IMPORTANT: The following tool-call IDs (?:completed successfully|failed|were cancelled by the user before completion|are suspended):/.test(
+    text.trim(),
+  );
+}
+
 export function addUserMessage(state: TUIState, message: MastraDBMessage, options?: { label?: string }): void {
-  if (state.messageComponentsById.has(message.id)) {
+  if (state.messageComponentsById.has(message.id) || isPersistedBackgroundCompletionDirective(message)) {
     return;
   }
 

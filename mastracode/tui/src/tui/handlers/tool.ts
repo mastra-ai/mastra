@@ -796,7 +796,7 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
     const resultText = formatToolResult(result);
     const isBackgroundPlaceholder = !effectiveIsError && isBackgroundToolPlaceholder(result);
     const toolResult: ToolResult = {
-      content: [{ type: 'text', text: isBackgroundPlaceholder ? 'Running in background…' : resultText }],
+      content: [{ type: 'text', text: resultText }],
       isError: effectiveIsError,
     };
     component.updateResult(toolResult, isBackgroundPlaceholder);

@@ -367,7 +367,7 @@ export class MastraTUI {
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
     this.clearStatusTimingTicker();
     const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
-    this.state.session.sendMessage({ content, files }).catch(error => {
+    this.state.session.sendMessage({ content, files, untilIdle: true }).catch(error => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
   }

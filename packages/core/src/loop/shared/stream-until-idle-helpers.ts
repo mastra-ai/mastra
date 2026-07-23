@@ -75,7 +75,7 @@ export async function resolveScope(
 // ---------------------------------------------------------------------------
 
 /**
- * Build the ephemeral user-prompt text that tells the LLM which tool-call
+ * Build the ephemeral system-context text that tells the LLM which tool-call
  * IDs just completed / failed / canceled. The directive stops the LLM from (a) re-processing
  * results already handled on a prior continuation and (b) mimicking the
  * prior assistant ack text ("I'm running it in the background") and
@@ -165,7 +165,7 @@ export function buildContinuationOpts(
   const directive = buildContinuationDirective(batch);
   return {
     ...baseContinuationOpts,
-    context: [...(callerContext ?? []), { role: 'user' as const, content: directive }],
+    context: [...(callerContext ?? []), { role: 'system' as const, content: directive }],
   };
 }
 
@@ -379,7 +379,9 @@ export async function runIdleLoop<
         }
         if (value && typeof value === 'object' && (value as any).type === 'background-task-started') {
           const taskId = (value as any).payload?.taskId;
-          if (taskId) runningTaskIds.add(taskId);
+          if (taskId) {
+            runningTaskIds.add(taskId);
+          }
         }
       }
     } finally {
@@ -440,6 +442,7 @@ export async function runIdleLoop<
     threadId,
     resourceId,
     abortSignal: outerAbort.signal,
+    includeExisting: false,
   });
   const bgReader = bgStream.getReader();
   void (async () => {

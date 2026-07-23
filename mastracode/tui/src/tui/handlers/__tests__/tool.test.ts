@@ -123,7 +123,15 @@ describe('tool event handlers', () => {
     );
 
     expect(updateResult).toHaveBeenCalledWith(
-      { content: [{ type: 'text', text: 'Running in background…' }], isError: false },
+      {
+        content: [
+          {
+            type: 'text',
+            text: 'Background task started. Task ID: task-1. The tool "view" is running in the background.',
+          },
+        ],
+        isError: false,
+      },
       true,
     );
     expect(ctx.state.pendingTools.has('call-1')).toBe(true);

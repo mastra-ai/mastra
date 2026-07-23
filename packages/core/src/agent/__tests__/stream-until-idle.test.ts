@@ -1,5 +1,6 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { buildContinuationOpts } from '../../loop/shared/stream-until-idle-helpers';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
 import { MockStore } from '../../storage';
@@ -53,6 +54,23 @@ async function drain(stream: ReadableStream<any>): Promise<any[]> {
 
 describe('Agent.streamUntilIdle', () => {
   const storage = new MockStore();
+
+  it('passes completion directives as execution-only system context', () => {
+    const options = buildContinuationOpts({}, undefined, [
+      {
+        type: 'background-task-completed',
+        payload: { toolCallId: 'call-1', toolName: 'view' },
+      },
+    ]);
+
+    expect(options.context).toEqual([
+      {
+        role: 'system',
+        content:
+          'IMPORTANT: The following tool-call IDs completed successfully: call-1 (view). Their results are now in the conversation. Do not call the same tool again — the result is already available.',
+      },
+    ]);
+  });
 
   let mastra: Mastra;
 

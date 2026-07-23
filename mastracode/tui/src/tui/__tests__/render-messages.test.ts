@@ -208,6 +208,21 @@ function legacyAssistantToolMessage(id: string, tool: ToolPair): MastraDBMessage
 }
 
 describe('addUserMessage', () => {
+  it('suppresses legacy persisted background completion directives', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        'IMPORTANT: The following tool-call IDs completed successfully: call-1 (view). Their results are now in the conversation. Do not call the same tool again — the result is already available.',
+        'legacy-background-directive',
+      ),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(0);
+    expect(state.messageComponentsById.has('legacy-background-directive')).toBe(false);
+  });
+
   it('replaces pending active steering only when the subscription echoes the user message', () => {
     const state = createState();
     addPendingUserMessage(state, 'signal-1', 'steer me', undefined, { isInterjection: true });
@@ -351,9 +366,34 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
   });
 
+  it.each(['work-deferred', 'work-awaited'] as const)(
+    'preserves the background placeholder detail for %s without rendering a notification',
+    tagName => {
+      const state = createState();
+      const updateResult = vi.fn();
+      const setBackgroundTaskId = vi.fn();
+      state.pendingTools.set('call-1', { updateResult, setBackgroundTaskId } as never);
+
+      addUserMessage(
+        state,
+        createSignal({
+          id: `${tagName}-1`,
+          type: 'notification',
+          tagName,
+          contents: `${tagName}: call-1`,
+          attributes: { source: 'background-work', status: 'running' },
+          metadata: { originToolCallId: 'call-1', taskId: 'task-1', status: tagName },
+        }).toDBMessage(),
+      );
+
+      expect(updateResult).not.toHaveBeenCalled();
+      expect(setBackgroundTaskId).toHaveBeenCalledWith('task-1');
+      expect(state.messageComponentsById.has(`${tagName}-1`)).toBe(false);
+      expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
+    },
+  );
+
   it.each([
-    ['work-deferred', 'Running in background…'],
-    ['work-awaited', 'Running in background…'],
     ['work-completed', 'Completed in background; reconciling result…'],
     ['work-failed', 'Background execution failed; reconciling error…'],
   ] as const)('updates the correlated tool row for %s without rendering a notification', (tagName, statusText) => {
@@ -368,7 +408,7 @@ describe('addUserMessage', () => {
         type: 'notification',
         tagName,
         contents: `${tagName}: call-1`,
-        attributes: { source: 'background-work', status: tagName === 'work-failed' ? 'failed' : 'running' },
+        attributes: { source: 'background-work', status: tagName === 'work-failed' ? 'failed' : 'completed' },
         metadata: { originToolCallId: 'call-1', taskId: 'task-1', status: tagName },
       }).toDBMessage(),
     );

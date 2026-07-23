@@ -290,6 +290,67 @@ describe('BackgroundTaskManager', () => {
       resolvers.forEach(r => r());
     });
 
+    it('does not let abandoned shared running rows block process-affine tasks', async () => {
+      const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
+      for (let i = 0; i < 3; i++) {
+        await backgroundTasksStore!.createTask({
+          id: `abandoned-${i}`,
+          status: 'running',
+          toolName: 'remote-tool',
+          toolCallId: `remote-call-${i}`,
+          args: {},
+          agentId: 'remote-agent',
+          runId: `remote-run-${i}`,
+          retryCount: 0,
+          maxRetries: 0,
+          timeoutMs: 5000,
+          createdAt: new Date(),
+          startedAt: new Date(),
+        });
+      }
+
+      const executeFn = vi.fn().mockResolvedValue('local-result');
+      const { task } = await manager.enqueue(
+        { toolName: 'local-tool', toolCallId: 'local-call', args: {}, agentId: 'local-agent', runId: 'local-run' },
+        ctx(executeFn),
+      );
+
+      await tick();
+      expect((await manager.getTask(task.id))?.status).toBe('completed');
+      expect(executeFn).toHaveBeenCalledOnce();
+    });
+
+    it('continues to apply persisted concurrency limits to portable tasks', async () => {
+      const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
+      for (let i = 0; i < 3; i++) {
+        await backgroundTasksStore!.createTask({
+          id: `portable-blocker-${i}`,
+          status: 'running',
+          toolName: 'remote-tool',
+          toolCallId: `remote-call-${i}`,
+          args: {},
+          agentId: 'remote-agent',
+          runId: `remote-run-${i}`,
+          retryCount: 0,
+          maxRetries: 0,
+          timeoutMs: 5000,
+          createdAt: new Date(),
+          startedAt: new Date(),
+        });
+      }
+
+      const { task } = await manager.enqueue({
+        toolName: 'portable-tool',
+        toolCallId: 'portable-call',
+        args: {},
+        agentId: 'portable-agent',
+        runId: 'portable-run',
+      });
+
+      await tick();
+      expect((await manager.getTask(task.id))?.status).toBe('pending');
+    });
+
     it('backpressure reject throws on limit', async () => {
       const { mgr: rejectManager, cleanup } = await makeLocalManager({
         enabled: true,
@@ -1423,6 +1484,37 @@ describe('BackgroundTaskManager', () => {
       });
 
       // Complete the task — should get live completion event
+      resolver('late-result');
+      await tick();
+
+      const live = await reader.read();
+      expect(live.value).toMatchObject({
+        type: 'background-task-completed',
+        payload: { toolName: 'tool', result: 'late-result' },
+      });
+
+      abortController.abort();
+    });
+
+    it('can subscribe to live events without importing existing running tasks', async () => {
+      let resolver!: (val: string) => void;
+      await manager.enqueue(
+        { toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+        ctx(
+          vi.fn().mockImplementation(
+            () =>
+              new Promise<string>(resolve => {
+                resolver = resolve;
+              }),
+          ),
+        ),
+      );
+      await tick();
+
+      const abortController = new AbortController();
+      const stream = manager.stream({ abortSignal: abortController.signal, includeExisting: false });
+      const reader = stream.getReader();
+
       resolver('late-result');
       await tick();
 
