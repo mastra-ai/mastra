@@ -4,6 +4,7 @@ import type { DatasetItemToolMock } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
@@ -65,6 +66,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
   const [groundTruth, setGroundTruth] = useState('');
   const [expectedTrajectory, setExpectedTrajectory] = useState('');
   const [toolMocks, setToolMocks] = useState('');
+  const [timeout, setTimeout] = useState('');
   const [requestContext, setRequestContext] = useState('');
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
   const { addItem } = useDatasetMutations();
@@ -118,6 +120,16 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       }
     }
 
+    let parsedTimeout: number | undefined;
+    if (timeout.trim()) {
+      const timeoutValue = Number(timeout);
+      if (!Number.isFinite(timeoutValue) || !Number.isInteger(timeoutValue) || timeoutValue <= 0) {
+        toast.error('Item timeout must be a positive whole number');
+        return;
+      }
+      parsedTimeout = timeoutValue;
+    }
+
     // Parse requestContext if provided
     let parsedRequestContext: Record<string, unknown> | undefined;
     if (requestContext.trim()) {
@@ -136,6 +148,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
         groundTruth: parsedGroundTruth,
         expectedTrajectory: parsedTrajectory,
         toolMocks: parsedToolMocks,
+        timeout: parsedTimeout,
         requestContext: parsedRequestContext,
       });
 
@@ -147,6 +160,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       setGroundTruth('');
       setExpectedTrajectory('');
       setToolMocks('');
+      setTimeout('');
       setRequestContext('');
       onOpenChange(false);
 
@@ -191,6 +205,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
     setGroundTruth('');
     setExpectedTrajectory('');
     setToolMocks('');
+    setTimeout('');
     setRequestContext('');
     setValidationErrors(null);
     onOpenChange(false);
@@ -246,6 +261,21 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
               {validationErrors?.field === 'toolMocks' && (
                 <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="item-timeout">Item timeout (ms, optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                Overrides the experiment-level item timeout. Enter a positive whole number of milliseconds.
+              </p>
+              <Input
+                id="item-timeout"
+                type="number"
+                min={1}
+                step={1}
+                value={timeout}
+                onChange={event => setTimeout(event.target.value)}
+              />
             </div>
 
             <div className="space-y-2">

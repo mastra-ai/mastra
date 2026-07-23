@@ -8,7 +8,7 @@ import type { ChangeEvent, PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AddItemDialog } from '../add-item-dialog';
-import { createdDatasetItem, createdDatasetItemWithoutMocks } from './fixtures/add-item';
+import { createdDatasetItem, createdDatasetItemWithoutMocks, createdDatasetItemWithTimeout } from './fixtures/add-item';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -60,101 +60,178 @@ function renderDialog() {
 
 /** The form has a known order of CodeEditors: input, groundTruth, expectedTrajectory, toolMocks, requestContext. */
 function getEditors() {
-  return screen.getAllByRole('textbox') as HTMLTextAreaElement[];
+  return screen.getAllByRole<HTMLTextAreaElement>('textbox');
+}
+
+function submitDialog() {
+  const form = screen.getByRole('button', { name: /add item/i }).closest('form');
+  if (!form) throw new Error('Add item form not found');
+  fireEvent.submit(form);
 }
 
 describe('AddItemDialog', () => {
-  it('posts parsed Tool Mocks JSON when creating a dataset item', async () => {
-    const capture = vi.fn();
-    server.use(
-      http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
-        capture(await request.json());
-        return HttpResponse.json(createdDatasetItem);
-      }),
-    );
+  describe('when valid Tool Mocks JSON is provided', () => {
+    it('posts the parsed mocks when creating a dataset item', async () => {
+      const capture = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
+          capture(await request.json());
+          return HttpResponse.json(createdDatasetItem);
+        }),
+      );
 
-    renderDialog();
+      renderDialog();
 
-    const [input, , , toolMocks] = getEditors();
-    fireEvent.change(input, { target: { value: '{"city":"Seattle"}' } });
-    fireEvent.change(toolMocks, {
-      target: {
-        value: JSON.stringify([{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }]),
-      },
+      const [input, , , toolMocks] = getEditors();
+      fireEvent.change(input, { target: { value: '{"city":"Seattle"}' } });
+      fireEvent.change(toolMocks, {
+        target: {
+          value: JSON.stringify([{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }]),
+        },
+      });
+
+      submitDialog();
+
+      await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+      expect(capture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: { city: 'Seattle' },
+          toolMocks: [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }],
+        }),
+      );
     });
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: /add item/i }));
+  describe('when Tool Mocks is left empty', () => {
+    it('omits toolMocks from the request', async () => {
+      const capture = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
+          capture(await request.json());
+          return HttpResponse.json(createdDatasetItemWithoutMocks);
+        }),
+      );
 
-    await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
-    expect(capture.mock.calls[0][0]).toMatchObject({
-      input: { city: 'Seattle' },
-      toolMocks: [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }],
+      renderDialog();
+
+      const [input] = getEditors();
+      fireEvent.change(input, { target: { value: '{"city":"Seattle"}' } });
+
+      submitDialog();
+
+      await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+      expect(capture).toHaveBeenCalledWith(expect.not.objectContaining({ toolMocks: expect.anything() }));
     });
   });
 
-  it('omits toolMocks when the field is left empty', async () => {
-    const capture = vi.fn();
-    server.use(
-      http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
-        capture(await request.json());
-        return HttpResponse.json(createdDatasetItemWithoutMocks);
-      }),
-    );
+  describe('when Tool Mocks JSON is not an array', () => {
+    it('rejects the value before making a request', async () => {
+      const capture = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
+          capture(await request.json());
+          return HttpResponse.json(createdDatasetItem);
+        }),
+      );
 
-    renderDialog();
+      renderDialog();
 
-    const [input] = getEditors();
-    fireEvent.change(input, { target: { value: '{"city":"Seattle"}' } });
+      const [input, , , toolMocks] = getEditors();
+      fireEvent.change(input, { target: { value: '{"city":"Seattle"}' } });
+      fireEvent.change(toolMocks, { target: { value: '{"toolName":"getWeather"}' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /add item/i }));
+      submitDialog();
 
-    await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
-    expect(capture.mock.calls[0][0].toolMocks).toBeUndefined();
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Tool Mocks must be a JSON array'));
+      expect(capture).not.toHaveBeenCalled();
+    });
   });
 
-  it('rejects non-array Tool Mocks JSON before making a request', async () => {
-    const capture = vi.fn();
-    server.use(
-      http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
-        capture(await request.json());
-        return HttpResponse.json(createdDatasetItem);
-      }),
-    );
-
-    renderDialog();
-
-    const [input, , , toolMocks] = getEditors();
-    fireEvent.change(input, { target: { value: '{"city":"Seattle"}' } });
-    fireEvent.change(toolMocks, { target: { value: '{"toolName":"getWeather"}' } });
-
-    fireEvent.click(screen.getByRole('button', { name: /add item/i }));
-
-    // The non-array guard surfaces an error toast and short-circuits before any request.
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Tool Mocks must be a JSON array'));
-    expect(capture).not.toHaveBeenCalled();
-  });
-
-  it('renders server-side Tool Mocks validation errors inline', async () => {
-    server.use(
-      http.post(`${BASE_URL}/api/datasets/dataset-1/items`, () =>
-        HttpResponse.json(
-          { error: 'Validation failed', field: 'toolMocks', errors: [{ path: '0.output', message: 'Required' }] },
-          { status: 400 },
+  describe('when the server rejects Tool Mocks', () => {
+    it('renders the field validation error', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, () =>
+          HttpResponse.json(
+            { error: 'Validation failed', field: 'toolMocks', errors: [{ path: '0.output', message: 'Required' }] },
+            { status: 400 },
+          ),
         ),
-      ),
-    );
+      );
 
-    renderDialog();
+      renderDialog();
 
-    const [input, , , toolMocks] = getEditors();
-    fireEvent.change(input, { target: { value: '{"city":"Seattle"}' } });
-    fireEvent.change(toolMocks, {
-      target: { value: JSON.stringify([{ toolName: 'getWeather', args: {} }]) },
+      const [input, , , toolMocks] = getEditors();
+      fireEvent.change(input, { target: { value: '{"city":"Seattle"}' } });
+      fireEvent.change(toolMocks, {
+        target: { value: JSON.stringify([{ toolName: 'getWeather', args: {} }]) },
+      });
+
+      submitDialog();
+
+      expect(await screen.findByText(/0\.output/)).not.toBeNull();
+      expect(screen.getByText(/Required/)).not.toBeNull();
     });
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: /add item/i }));
+  describe('when a valid item timeout is provided', () => {
+    it('posts the timeout in milliseconds', async () => {
+      const capture = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
+          capture(await request.json());
+          return HttpResponse.json(createdDatasetItemWithTimeout);
+        }),
+      );
 
-    expect(await screen.findByText(/0\.output/)).not.toBeNull();
-    expect(screen.getByText(/Required/)).not.toBeNull();
+      renderDialog();
+
+      fireEvent.change(screen.getByRole<HTMLInputElement>('spinbutton', { name: /item timeout/i }), {
+        target: { value: '15000' },
+      });
+      submitDialog();
+
+      await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+      expect(capture).toHaveBeenCalledWith(expect.objectContaining({ timeout: 15_000 }));
+    });
+  });
+
+  describe('when the item timeout is left empty', () => {
+    it('omits timeout from the request', async () => {
+      const capture = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
+          capture(await request.json());
+          return HttpResponse.json(createdDatasetItemWithoutMocks);
+        }),
+      );
+
+      renderDialog();
+      submitDialog();
+
+      await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+      expect(capture).toHaveBeenCalledWith(expect.not.objectContaining({ timeout: expect.anything() }));
+    });
+  });
+
+  describe('when the item timeout is not a positive whole number', () => {
+    it.each(['0', '-1', '1.5'])('rejects %s before making a request', async timeout => {
+      const capture = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
+          capture(await request.json());
+          return HttpResponse.json(createdDatasetItem);
+        }),
+      );
+
+      renderDialog();
+
+      fireEvent.change(screen.getByRole<HTMLInputElement>('spinbutton', { name: /item timeout/i }), {
+        target: { value: timeout },
+      });
+      submitDialog();
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Item timeout must be a positive whole number'));
+      expect(capture).not.toHaveBeenCalled();
+    });
   });
 });
