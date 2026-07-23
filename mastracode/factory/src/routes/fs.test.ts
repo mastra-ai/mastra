@@ -272,6 +272,16 @@ describe('listSessionRenderedPath', () => {
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
+  it('returns an empty listing when the sandbox can no longer be reattached', async () => {
+    const { fleet, executeCommand } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
+    (fleet.reattachSandbox as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('sandbox gone'));
+
+    const listing = await listSessionRenderedPath(fleet, makeSession(), '.artifacts');
+
+    expect(listing.entries).toEqual([]);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
   it('returns an empty listing when the rendered root does not exist', async () => {
     const { fleet } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
 
@@ -364,6 +374,15 @@ describe('readSessionWorkspaceFile', () => {
 
     await expect(
       readSessionWorkspaceFile(fleet, makeSession({ sandboxWorkdir: null }), '.artifacts/a.md'),
-    ).rejects.toThrow('Session workspace is not materialized');
+    ).rejects.toThrow('Session workspace is not available');
+  });
+
+  it('errors without re-provisioning when the sandbox can no longer be reattached', async () => {
+    const { fleet } = makeFleet(respondForFile('x'));
+    (fleet.reattachSandbox as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('sandbox gone'));
+
+    await expect(readSessionWorkspaceFile(fleet, makeSession(), '.artifacts/a.md')).rejects.toThrow(
+      'Session workspace is not available',
+    );
   });
 });

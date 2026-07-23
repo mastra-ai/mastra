@@ -378,14 +378,25 @@ interface SessionSandboxHandle {
 /**
  * Reattach to the session's sandbox and wrap its workdir in a
  * `SandboxFilesystem`. Returns `null` when the session has no provisioned
- * sandbox yet (nothing materialized → nothing to list).
+ * sandbox yet (nothing materialized → nothing to list), or when the sandbox
+ * can no longer be reattached (e.g. torn down by the provider's idle GC).
+ * This is a passive read path, so it never re-provisions: the session's
+ * filesystem is preserved in its provider checkpoint and comes back the next
+ * time the workspace is actually opened (e.g. by sending a message).
  */
 async function sessionSandbox(
   fleet: SandboxFleet,
   session: SourceControlSession,
 ): Promise<SessionSandboxHandle | null> {
   if (!fleet.enabled || !session.sandboxId || !session.sandboxWorkdir) return null;
-  const sandbox = await fleet.reattachSandbox(session.sandboxId, { workingDirectory: session.sandboxWorkdir });
+  let sandbox: Awaited<ReturnType<SandboxFleet['reattachSandbox']>>;
+  try {
+    sandbox = await fleet.reattachSandbox(session.sandboxId, { workingDirectory: session.sandboxWorkdir });
+  } catch {
+    // Sandbox is gone (idle GC) or unreachable. Degrade to an empty view
+    // rather than surfacing a 500 from a file-viewer panel.
+    return null;
+  }
   return {
     sandbox,
     filesystem: new SandboxFilesystem({ sandbox, workdir: session.sandboxWorkdir }),
@@ -449,7 +460,7 @@ export async function readSessionWorkspaceFile(
   assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
 
   const handle = await sessionSandbox(fleet, session);
-  if (!handle) throw new Error('Session workspace is not materialized');
+  if (!handle) throw new Error('Session workspace is not available');
   const { filesystem } = handle;
   const info = await filesystem.stat(safePath);
   if (info.type === 'directory') throw new Error('Path is a directory');
