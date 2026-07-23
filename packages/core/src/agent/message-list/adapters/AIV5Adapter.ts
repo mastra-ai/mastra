@@ -892,16 +892,30 @@ export class AIV5Adapter {
 
         // When the matching tool-call isn't in this same model message (e.g. the
         // server resume path or an AG-UI host replaying a tool-result on its own),
-        // recover the original args from prior persisted messages before falling
-        // back to the tool-result's own `input` field, then finally to `{}`.
-        // Persisting `args: {}` poisons the LLM via in-context learning (issue #16017).
+        // recover the original args so we never persist `args: {}`, which poisons the
+        // LLM via in-context learning (issue #16017).
+        //
+        // `findToolCallArgs` only works when the originating tool-call is present in
+        // `dbMessages`. On the client-tool recursion path the persisted tool-result is
+        // replayed without its call in the converted window (and `dbMessages` isn't
+        // wired), so recovery returns `{}`. Honor args carried directly on the
+        // tool-result (set by @mastra/client-js) next, then the standard `input`
+        // field, then `{}`. An empty object counts as "absent" so a persisted
+        // `args: {}` can't win over a usable source.
+        const directToolResult = toolResultPart as AIV5Type.ToolResultPart & {
+          args?: Record<string, unknown>;
+          input?: Record<string, unknown>;
+        };
+        const hasArgs = (a?: Record<string, unknown>): a is Record<string, unknown> =>
+          !!a && typeof a === 'object' && Object.keys(a).length > 0;
         const recoveredArgs = context.dbMessages
           ? findToolCallArgs(context.dbMessages, toolResultPart.toolCallId)
           : undefined;
-        const fallbackArgs =
-          recoveredArgs && Object.keys(recoveredArgs).length > 0
-            ? recoveredArgs
-            : ((toolResultPart as AIV5Type.ToolResultPart & { input?: Record<string, unknown> }).input ?? {});
+        const fallbackArgs = hasArgs(recoveredArgs)
+          ? recoveredArgs
+          : hasArgs(directToolResult.args)
+            ? directToolResult.args
+            : (directToolResult.input ?? {});
 
         if (matchingCall) {
           updateMatchingCallInvocationResult(toolResultPart, matchingCall);
