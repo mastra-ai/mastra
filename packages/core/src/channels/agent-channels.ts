@@ -20,7 +20,7 @@ import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
 
 import { chatModule, getChatModule } from './chat-lazy';
-import { resolveSlackTopLevelThreadId } from './compat/slack';
+import { resolveSlackTeamId, resolveSlackTopLevelThreadId } from './compat/slack';
 
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
 import {
@@ -923,12 +923,14 @@ export class AgentChannels {
     eventType: string;
     messageId: string | undefined;
     actor: { userId: string; userName?: string; fullName?: string; isBot?: boolean | 'unknown' };
+    /** Platform team/workspace ID (Slack team id, ...), when known for this event. */
+    teamId?: string;
   }): {
     channelContext: ChannelContext;
     attributes: Record<string, string | undefined>;
     providerOptions: MastraProviderMetadata;
   } {
-    const { chatThread, platform, eventType, messageId, actor } = params;
+    const { chatThread, platform, eventType, messageId, actor, teamId } = params;
     const adapter = this.adapters[platform]!;
     const botUserId = adapter.botUserId;
     const botMention = botUserId ? chatThread.mentionUser(botUserId) : undefined;
@@ -941,6 +943,7 @@ export class AgentChannels {
       isDM: chatThread.isDM,
       threadId: chatThread.id,
       channelId: chatThread.channelId,
+      teamId,
       messageId,
       userId: actor.userId,
       userName: actorName,
@@ -1185,6 +1188,7 @@ export class AgentChannels {
       eventType: chatThread.isDM ? 'message' : 'mention',
       messageId: message.id,
       actor: message.author,
+      teamId: resolveSlackTeamId({ platform, message }) ?? undefined,
     });
 
     const requestContext = new RequestContext();

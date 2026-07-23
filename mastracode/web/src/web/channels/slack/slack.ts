@@ -1,5 +1,11 @@
-import { AgentControllerChannels, type ChannelHandler, type ChannelHandlers } from '@mastra/core/channels';
+import {
+  AgentControllerChannels,
+  type ChannelAccountLinkResolver,
+  type ChannelHandler,
+  type ChannelHandlers,
+} from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
+import type { ChannelIdentityStorage } from '@mastra/factory';
 import { createSlackAdapter, SlackProvider } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
@@ -12,6 +18,31 @@ interface SlackChannelDeps {
    * a handler actually fires.
    */
   getMastra: () => Mastra | undefined;
+  /**
+   * The factory's reverse-index store mapping a Slack sender to a Mastra
+   * tenant. When provided, inbound messages from an unlinked sender are not
+   * dispatched — the run only proceeds (with the sender's tenant stamped on
+   * the request context) once they've linked their account.
+   */
+  accountLinks?: ChannelIdentityStorage;
+}
+
+/**
+ * Adapt the factory account-link store into the core resolver shape: map the
+ * platform sender ids (`teamId`/`userId`) to the store's `external_*` key. A
+ * missing `teamId` can't identify a workspace-scoped link, so treat it as
+ * unlinked rather than matching across workspaces.
+ */
+function createAccountLinkResolver(accountLinks: ChannelIdentityStorage): ChannelAccountLinkResolver {
+  return async ({ platform, teamId, userId }) => {
+    if (!teamId) return null;
+    const link = await accountLinks.getAccountLink({
+      platform,
+      externalTeamId: teamId,
+      externalUserId: userId,
+    });
+    return link ? { orgId: link.orgId, userId: link.userId } : null;
+  };
 }
 
 /**
@@ -108,8 +139,11 @@ export function createSlackChannelProvider({ getMastra }: SlackChannelDeps): Sla
   });
 }
 
-export function createAgentControllerSlackChannels({ getMastra }: SlackChannelDeps): AgentControllerChannels {
-  return new AgentControllerChannels({
+export function createAgentControllerSlackChannels({
+  getMastra,
+  accountLinks,
+}: SlackChannelDeps): AgentControllerChannels {
+  const channels = new AgentControllerChannels({
     adapters: {
       slack: {
         adapter: createSlackAdapter({
@@ -122,4 +156,13 @@ export function createAgentControllerSlackChannels({ getMastra }: SlackChannelDe
     },
     handlers: createHandlers(getMastra),
   });
+
+  // Gate dispatch on the sender having linked their Slack account to a Mastra
+  // tenant, so the run resolves that user's model credentials. Unset store →
+  // no gating (pre-account-linking behavior).
+  if (accountLinks) {
+    channels.setAccountLinkResolver(createAccountLinkResolver(accountLinks));
+  }
+
+  return channels;
 }

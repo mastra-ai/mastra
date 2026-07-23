@@ -28,7 +28,7 @@ import { PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { MastraFactory } from '@mastra/factory';
+import { MastraFactory, ChannelIdentityStorage } from '@mastra/factory';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { createAgentControllerSlackChannels } from '../web/channels/slack/slack.js';
 
@@ -188,7 +188,12 @@ const preparedArgs = await factory.prepare();
 
 const mcAgentController = preparedArgs.agentControllers?.['code'];
 if (mcAgentController) {
-  mcAgentController.setChannels(createAgentControllerSlackChannels({ getMastra: () => mcAgentController.getMastra() }));
+  // The channel-identity domain is registered during `factory.prepare()`, so
+  // it's resolvable off the shared FactoryStorage by the time we get here.
+  const accountLinks = storage.getDomain<ChannelIdentityStorage>('channel-identity');
+  mcAgentController.setChannels(
+    createAgentControllerSlackChannels({ getMastra: () => mcAgentController.getMastra(), accountLinks }),
+  );
 }
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
