@@ -1,0 +1,374 @@
+---
+title: "Reference: SAP HANA storage | Storage"
+description: Documentation for the SAP HANA storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/hana"
+---
+
+# SAP HANA storage
+
+**Added in:** `@mastra/hana@0.1.0`
+
+The SAP HANA storage adapter connects Mastra to [SAP HANA Cloud](https://www.sap.com/products/technology-platform/hana.html) and on-premise SAP HANA databases. It implements all storage domains: `memory`, `workflows`, `observability`, `scores`, `backgroundTasks`, and `agents`.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/hana@latest
+```
+
+## Usage
+
+```typescript
+import { HANAStore } from '@mastra/hana'
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  storage: new HANAStore({
+    id: 'hana-storage',
+    host: process.env.HANA_HOST,
+    port: 443,
+    uid: process.env.HANA_USER,
+    pwd: process.env.HANA_PASSWORD,
+  }),
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'schemaName',
+    type: 'string',
+    description:
+      "Database schema to use. Defaults to the connecting user's default schema (CURRENT_USER) when omitted or when CREATE SCHEMA is not permitted.",
+    isOptional: true,
+  },
+  {
+    name: 'disableInit',
+    type: 'boolean',
+    description:
+      'When true, automatic table creation and migrations are disabled. Useful for CI/CD pipelines where migrations run separately.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'skipDefaultIndexes',
+    type: 'boolean',
+    description: 'When true, default indexes are not created during initialization.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'indexes',
+    type: 'CreateIndexOptions[]',
+    description: 'Custom indexes to create during initialization.',
+    isOptional: true,
+  },
+]}
+/>
+
+The connection itself is specified via one of two mutually exclusive shapes:
+
+### Connection parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'host',
+    type: 'string',
+    description: 'HANA server hostname (e.g. abc123.hanacloud.ondemand.com).',
+    isOptional: false,
+  },
+  {
+    name: 'port',
+    type: 'number',
+    description: 'HANA server port. Typically 443 for HANA Cloud.',
+    isOptional: false,
+  },
+  {
+    name: 'uid',
+    type: 'string',
+    description: 'Database user name.',
+    isOptional: false,
+  },
+  {
+    name: 'pwd',
+    type: 'string',
+    description: 'Database user password.',
+    isOptional: false,
+  },
+  {
+    name: 'databaseName',
+    type: 'string',
+    description: 'Optional target database name (for multi-database containers).',
+    isOptional: true,
+  },
+  {
+    name: 'encrypt',
+    type: 'boolean',
+    description: 'Enable TLS encryption.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'sslValidateCertificate',
+    type: 'boolean',
+    description: 'Validate the server TLS certificate.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'minConnections',
+    type: 'number',
+    description: 'Minimum number of connections kept in the pool.',
+    isOptional: true,
+    defaultValue: '1',
+  },
+  {
+    name: 'maxConnections',
+    type: 'number',
+    description: 'Maximum number of connections in the pool.',
+    isOptional: true,
+    defaultValue: '10',
+  },
+]}
+/>
+
+### Pre-configured pool
+
+```typescript
+import { HANAPool } from '@mastra/hana'
+
+const pool = new HANAPool({
+  host: process.env.HANA_HOST,
+  port: 443,
+  uid: process.env.HANA_USER,
+  pwd: process.env.HANA_PASSWORD,
+})
+
+const store = new HANAStore({
+  id: 'hana-storage',
+  pool,
+})
+```
+
+Use a pre-configured pool when you need to share an existing connection pool or configure pool settings before initialization. When you provide a pool, `HANAStore` uses it but does not close it when `store.close()` is called — you own the pool lifecycle.
+
+## Constructor examples
+
+```typescript
+import { HANAStore } from '@mastra/hana'
+
+// Connection parameters (most common for HANA Cloud)
+const store1 = new HANAStore({
+  id: 'hana-1',
+  host: 'abc123.hanacloud.ondemand.com',
+  port: 443,
+  uid: process.env.HANA_USER,
+  pwd: process.env.HANA_PASSWORD,
+})
+
+// Custom schema and pool size
+const store2 = new HANAStore({
+  id: 'hana-2',
+  host: 'abc123.hanacloud.ondemand.com',
+  port: 443,
+  uid: process.env.HANA_USER,
+  pwd: process.env.HANA_PASSWORD,
+  schemaName: 'MASTRA_APP',
+  maxConnections: 20,
+})
+```
+
+## Schema management
+
+`HANAStore` creates and manages the following tables on first use:
+
+| Table | Domain | Description |
+| - | - | - |
+| `mastra_threads` | `memory` | Conversation threads |
+| `mastra_messages` | `memory` | Individual messages |
+| `mastra_resources` | `memory` | Resource working memory |
+| `mastra_workflow_snapshot` | `workflows` | Workflow suspend/resume state |
+| `mastra_ai_spans` | `observability` | Traces and spans |
+| `mastra_scorers` | `scores` | Evaluation scores |
+| `mastra_background_tasks` | `backgroundTasks` | Background task records |
+| `mastra_agents` | `agents` | Agent state |
+
+When `schemaName` is provided, `HANAStore` attempts to create the schema via `CREATE SCHEMA`. If the database user does not have `CREATE SCHEMA` privileges (common with HANA Cloud trial users), the adapter silently falls back to the user's default schema (`CURRENT_USER`).
+
+## Initialization
+
+When passed to `Mastra`, `init()` is called automatically:
+
+```typescript
+import { Mastra } from '@mastra/core'
+import { HANAStore } from '@mastra/hana'
+
+const mastra = new Mastra({
+  storage: new HANAStore({
+    id: 'hana-storage',
+    host: process.env.HANA_HOST,
+    port: 443,
+    uid: process.env.HANA_USER,
+    pwd: process.env.HANA_PASSWORD,
+  }),
+})
+```
+
+When using `HANAStore` directly, call `init()` explicitly before any storage operations:
+
+```typescript
+const store = new HANAStore({
+  id: 'hana-storage',
+  host: process.env.HANA_HOST,
+  port: 443,
+  uid: process.env.HANA_USER,
+  pwd: process.env.HANA_PASSWORD,
+})
+await store.init()
+
+const memoryStore = await store.getStore('memory')
+const thread = await memoryStore?.getThreadById({ threadId: '...' })
+```
+
+:::warning
+If `init()` is not called, tables will not be created and storage operations will fail.
+:::
+
+## Index management
+
+### Default indexes
+
+`HANAStore` creates the following indexes during initialization:
+
+- `mastra_threads_resourceid_seqid_idx`: (`resourceId`, `seqId`)
+- `mastra_messages_thread_id_seqid_idx`: (`thread_id`, `seqId`)
+
+These cover the most common query patterns for memory retrieval.
+
+### Custom indexes
+
+```typescript
+const store = new HANAStore({
+  id: 'hana-storage',
+  host: process.env.HANA_HOST,
+  port: 443,
+  uid: process.env.HANA_USER,
+  pwd: process.env.HANA_PASSWORD,
+  indexes: [
+    {
+      name: 'idx_threads_status',
+      table: 'mastra_threads',
+      columns: ['status'],
+    },
+  ],
+})
+```
+
+### Skipping default indexes
+
+```typescript
+const store = new HANAStore({
+  id: 'hana-storage',
+  host: process.env.HANA_HOST,
+  port: 443,
+  uid: process.env.HANA_USER,
+  pwd: process.env.HANA_PASSWORD,
+  skipDefaultIndexes: true,
+})
+```
+
+### Index options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Unique name for the index.',
+    isOptional: false,
+  },
+  {
+    name: 'table',
+    type: 'string',
+    description: "Table name (e.g. 'mastra_threads').",
+    isOptional: false,
+  },
+  {
+    name: 'columns',
+    type: 'string[]',
+    description: 'Array of column names to include in the index.',
+    isOptional: false,
+  },
+  {
+    name: 'unique',
+    type: 'boolean',
+    description: 'Creates a unique constraint index.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+## Usage with Memory
+
+```typescript
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { HANAStore } from '@mastra/hana'
+
+export const hanaAgent = new Agent({
+  id: 'hana-agent',
+  name: 'HANA Agent',
+  instructions: 'You are an assistant with persistent memory backed by SAP HANA.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new HANAStore({
+      id: 'hana-agent-storage',
+      host: process.env.HANA_HOST,
+      port: 443,
+      uid: process.env.HANA_USER,
+      pwd: process.env.HANA_PASSWORD,
+    }),
+  }),
+})
+```
+
+## Domain classes
+
+Individual domain classes are exported for use with [`MastraCompositeStore`](/reference/storage/composite):
+
+```typescript
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { LibSQLStore } from '@mastra/libsql'
+import { HANAPool, MemoryHANA, WorkflowsHANA } from '@mastra/hana'
+
+const pool = new HANAPool({
+  host: process.env.HANA_HOST,
+  port: 443,
+  uid: process.env.HANA_USER,
+  pwd: process.env.HANA_PASSWORD,
+})
+
+const storage = new MastraCompositeStore({
+  id: 'composite-storage',
+  default: new LibSQLStore({ id: 'default', url: 'file:./mastra.db' }),
+  domains: {
+    memory: new MemoryHANA({ pool, schemaName: 'MASTRA' }),
+    workflows: new WorkflowsHANA({ pool, schemaName: 'MASTRA' }),
+  },
+})
+```
+
+Available domain classes: `MemoryHANA`, `WorkflowsHANA`, `ObservabilityHANA`, `ScoresHANA`, `BackgroundTasksHANA`, `AgentsHANA`.
