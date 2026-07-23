@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.0-alpha.10
+
+### Patch Changes
+
+- Changed the create-factory template sync to pin every Mastra dep to `"latest"` instead of `"alpha"`. Scaffolded projects now install the same set of Mastra packages as every other create-mastra template, and no longer ship a `.npmrc` with `legacy-peer-deps=true` (that flag only existed to accommodate the prerelease peer graph). ([#20052](https://github.com/mastra-ai/mastra/pull/20052))
+
+- Updated dependencies [[`91930d6`](https://github.com/mastra-ai/mastra/commit/91930d69ae8146ded10c792387848970f1ca4b59)]:
+  - mastra@1.20.0-alpha.16
+
 ## 0.1.0-alpha.9
 
 ### Patch Changes
