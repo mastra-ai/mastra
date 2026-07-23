@@ -20,26 +20,30 @@ const objectSchema = {
   additionalProperties: false,
 } as const;
 
+// Valid under the same schema-flow analysis the server runs at save time:
+// the workflow input satisfies the first agent's `{ prompt }` contract, the
+// foreach consumes an unknown (tool) output, and the mapping reshapes the
+// flow into `{ prompt }` before the parallel agent consumes it.
 const createValidDraft = (): UpsertStoredWorkflowParams => ({
   id: 'support-triage',
   description: 'Triages support requests',
-  inputSchema: objectSchema,
+  inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
   outputSchema: objectSchema,
   graph: [
     { type: 'agent', id: 'classify', agentId: 'classifier', outputSchema: objectSchema },
     { type: 'tool', id: 'lookup', toolId: 'customer-lookup' },
-    { type: 'mapping', id: 'shape-output', mapConfig: '{"result":{"path":"result","step":"lookup"}}' },
+    {
+      type: 'foreach',
+      step: { type: 'tool', id: 'enrich-item', toolId: 'enrichment-tool' },
+      opts: { concurrency: 2 },
+    },
+    { type: 'mapping', id: 'shape-output', mapConfig: '{"prompt":{"path":"result","step":"lookup"}}' },
     {
       type: 'parallel',
       steps: [
         { type: 'agent', id: 'summarize', agentId: 'summarizer', outputSchema: objectSchema },
         { type: 'tool', id: 'notify', toolId: 'notification-tool' },
       ],
-    },
-    {
-      type: 'foreach',
-      step: { type: 'tool', id: 'enrich-item', toolId: 'enrichment-tool' },
-      opts: { concurrency: 2 },
     },
     { type: 'sleep', id: 'wait', duration: 1000 },
     { type: 'sleepUntil', id: 'wait-until', date: '2030-01-01T00:00:00.000Z' },
@@ -158,10 +162,9 @@ describe('workflow draft', () => {
         ok: false,
         issues: [
           {
-            code: 'invalid-map-config',
-            path: 'graph.0.mapConfig.result',
-            message:
-              'Mapping entries must use value, template, requestContextPath, or a step/initData source with a path. Expressions are not supported.',
+            code: 'invalid-map-reference',
+            path: 'graph.0.mapConfig.result.template',
+            message: expect.stringContaining('unknown namespace "steps"'),
           },
         ],
       });
@@ -330,7 +333,7 @@ describe('workflow draft', () => {
       if (result.ok) return;
       expect(result.issues).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ code: 'invalid-map-config', message: expect.stringContaining('top-level') }),
+          expect.objectContaining({ code: 'invalid-map-placement', message: expect.stringContaining('top-level') }),
         ]),
       );
     });

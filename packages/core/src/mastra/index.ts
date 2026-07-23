@@ -70,16 +70,16 @@ import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
-import { normalizeWorkflowBuilderDefinition, preflightWorkflowDefinition } from '../workflows/builder';
+import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
-import type { StoredWorkflowGraph } from '../workflows/stored';
+import type { StoredWorkflowGraph, WorkflowRegistryIndex, WorkflowRegistrySchemas } from '../workflows/stored';
 import {
+  assertValidStoredWorkflow,
   collectNestedWorkflowIds,
   rehydrateWorkflow,
-  validateStoredWorkflowRefs,
-  validateStoredWorkflowSchemas,
+  toJsonSchemaOrUndefined,
 } from '../workflows/stored';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
@@ -4481,6 +4481,39 @@ export class Mastra<
   }
 
   /**
+   * Flattens this instance's registries into the index the stored-workflow
+   * validation core resolves references and schemas against. Registered keys
+   * and canonical ids both count as valid references. Schemas are converted
+   * best-effort — an unconvertible schema degrades to "unknown", never to a
+   * false incompatibility. Agents stay presence-only: their `{ prompt }`
+   * input default lives in schema-flow itself.
+   */
+  #buildWorkflowRegistryIndex(): WorkflowRegistryIndex {
+    const agents: Record<string, WorkflowRegistrySchemas> = {};
+    for (const [key, agent] of Object.entries(this.listAgents() ?? {})) {
+      agents[key] = {};
+      agents[agent.id] = {};
+    }
+    const tools: Record<string, WorkflowRegistrySchemas> = {};
+    for (const [key, tool] of Object.entries(this.listTools() ?? {})) {
+      const schemas: WorkflowRegistrySchemas = {
+        inputSchema: toJsonSchemaOrUndefined(tool.inputSchema),
+        outputSchema: toJsonSchemaOrUndefined(tool.outputSchema),
+      };
+      tools[key] = schemas;
+      tools[tool.id] = schemas;
+    }
+    const workflows: Record<string, WorkflowRegistrySchemas> = {};
+    for (const [key, workflow] of Object.entries(this.#workflows as Record<string, AnyWorkflow>)) {
+      workflows[key] = {
+        inputSchema: toJsonSchemaOrUndefined(workflow.inputSchema),
+        outputSchema: toJsonSchemaOrUndefined(workflow.outputSchema),
+      };
+    }
+    return { agents, tools, workflows };
+  }
+
+  /**
    * Persist a static workflow definition to storage and live-register it on
    * this Mastra instance so it becomes immediately runnable. The same path is
    * used by `loadStoredWorkflows()` at boot to re-materialize previously saved
@@ -4501,16 +4534,10 @@ export class Mastra<
    */
   public async addStoredWorkflow(def: StoredWorkflowGraph): Promise<void> {
     // Save-path is strict (boot-time load is lenient — see #loadStoredWorkflows).
-    // The validators are pure; only flattening the registries into id sets
-    // needs `this`.
-    validateStoredWorkflowRefs(def, {
-      agentIds: new Set(Object.entries(this.listAgents() ?? {}).flatMap(([key, agent]) => [key, agent.id])),
-      toolIds: new Set(Object.entries(this.listTools() ?? {}).flatMap(([key, tool]) => [key, tool.id])),
-      workflowIds: new Set(Object.keys(this.#workflows as Record<string, AnyWorkflow>)),
-    });
-    validateStoredWorkflowSchemas(def);
-
-    const preflightDefinition = normalizeWorkflowBuilderDefinition({
+    // Normalization coerces the wire shape; one validation call covers
+    // structure, JSON-Schema keywords, references, and schema-flow analysis
+    // against this instance's registries.
+    const normalized = normalizeWorkflowBuilderDefinition({
       id: def.id,
       description: def.description,
       inputSchema: def.inputSchema,
@@ -4519,14 +4546,7 @@ export class Mastra<
       requestContextSchema: def.requestContextSchema,
       graph: def.graph,
     });
-    const preflight = preflightWorkflowDefinition(preflightDefinition);
-    if (!preflight.ok) {
-      throw new Error(
-        `addStoredWorkflow refused workflow "${def.id}" because it is not executable:\n${preflight.issues
-          .map(issue => `${issue.path}: ${issue.message}`)
-          .join('\n')}`,
-      );
-    }
+    assertValidStoredWorkflow(normalized, this.#buildWorkflowRegistryIndex());
 
     const { workflow } = await rehydrateWorkflow(def, this);
     const store = await this.#storage?.getStore('workflowDefinitions');

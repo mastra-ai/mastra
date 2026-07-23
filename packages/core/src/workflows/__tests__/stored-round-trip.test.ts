@@ -254,21 +254,20 @@ describe('storage round-trip', () => {
       storage: new InMemoryStore({ id: 'nested-call-site-identity' }),
     });
 
+    // The rule is enforced by validation on the strict save path (rehydration
+    // itself no longer re-validates).
     await expect(
-      rehydrateWorkflow(
-        {
-          id: 'outer-wf',
-          inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
-          outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
-          graph: [
-            {
-              type: 'parallel',
-              steps: [{ type: 'workflow', id: 'local-inner', workflowId: 'inner-wf' }],
-            },
-          ],
-        },
-        mastra,
-      ),
+      mastra.addStoredWorkflow({
+        id: 'outer-wf',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        graph: [
+          {
+            type: 'parallel',
+            steps: [{ type: 'workflow', id: 'local-inner', workflowId: 'inner-wf' }],
+          },
+        ],
+      }),
     ).rejects.toThrow(/id "local-inner" must match workflowId "inner-wf"/);
   });
 

@@ -560,6 +560,26 @@ describe('Stored Workflows handlers', () => {
       ).rejects.toThrow(/is a registered TOOL/);
     });
 
+    it('rejects a schema-incompatible graph at save time (schema-flow runs on POST)', async () => {
+      await expect(
+        UPSERT_STORED_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra),
+          id: 'wf-schema-clash',
+          description: undefined,
+          metadata: undefined,
+          stateSchema: undefined,
+          requestContextSchema: undefined,
+          // echo-tool requires { value: string }; the workflow only provides { count: number }.
+          inputSchema: objectWith({ count: { type: 'number' } }, ['count']),
+          outputSchema: objectWith({ value: stringSchema }, ['value']),
+          graph: toolOnlyGraph(),
+        }),
+      ).rejects.toThrow(/incompatible/i);
+
+      // Rejected before registration and persistence.
+      expect(() => mastra.getWorkflow('wf-schema-clash')).toThrow();
+    });
+
     it('re-POST with the same id replaces the live registration', async () => {
       await UPSERT_STORED_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
