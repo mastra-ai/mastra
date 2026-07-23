@@ -86,6 +86,8 @@ import type { Context } from '../types';
 
 import { toSlug } from '../utils';
 
+import { resolveAuthorFilter, matchesAuthorFilter } from './authorship';
+import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
 import {
   sanitizeBody,
@@ -1185,6 +1187,13 @@ export const LIST_AGENTS_ROUTE = createRoute({
           if (agent?.id) codeAgentIds.add(agent.id);
         }
 
+        // Resolve the caller's ownership/visibility scope once. This mirrors
+        // GET /stored/agents: a normal caller sees their own rows plus public
+        // and legacy-unowned rows; admin bypass / auth-off resolves to
+        // `unrestricted`. Without this, another author's private stored agents
+        // would leak into the agents-as-tools picker and other /agents consumers.
+        const authorFilter = resolveAuthorFilter({ requestContext, resource: 'stored-agents' });
+
         if (storedAgentsResult?.agents) {
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
@@ -1192,6 +1201,9 @@ export const LIST_AGENTS_ROUTE = createRoute({
             // Those are overrides (no standalone model), not standalone stored agents,
             // and trying to hydrate them as standalone would fail model validation.
             if (codeAgentIds.has(storedAgentConfig.id)) continue;
+
+            // Skip stored agents the caller is not authorized to see.
+            if (!matchesAuthorFilter(storedAgentConfig as OwnedRecord, authorFilter)) continue;
             try {
               const agent = await editor?.agent.getById(storedAgentConfig.id, { status: 'draft' });
               if (!agent) continue;

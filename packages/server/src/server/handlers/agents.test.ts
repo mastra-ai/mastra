@@ -13,6 +13,7 @@ import {
 } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
@@ -671,6 +672,95 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result.metadata).toEqual({ type: 'support' });
+    });
+  });
+
+  describe('LIST_AGENTS_ROUTE stored-agent ownership filtering', () => {
+    // Stored-agent list rows. `authorId` / `visibility` drive the ownership
+    // filter; these are read off the list row, not the hydrated agent.
+    const storedRows = [
+      { id: 'a-own-private', authorId: 'author-a', visibility: 'private' as const },
+      { id: 'b-public', authorId: 'author-b', visibility: 'public' as const },
+      { id: 'b-private', authorId: 'author-b', visibility: 'private' as const },
+      { id: 'legacy-unowned', authorId: null, visibility: undefined },
+    ];
+
+    function buildMastraWithStoredAgents() {
+      const codeAgent = new Agent({
+        id: 'code-agent',
+        name: 'code-agent',
+        instructions: 'code',
+        model: {} as any,
+      });
+
+      const mastraInstance = new Mastra({
+        agents: { 'code-agent': codeAgent },
+        logger: false,
+      });
+
+      const editor = {
+        agent: {
+          list: vi.fn().mockResolvedValue({ agents: storedRows }),
+          getById: vi.fn(async (id: string) => {
+            // Hydrate stored rows into a serializable Agent (model getters in
+            // formatAgentList are wrapped in try/catch, so a bare model is fine).
+            return new Agent({ id, name: id, instructions: id, model: {} as any });
+          }),
+          applyStoredOverrides: vi.fn(async (agent: Agent) => agent),
+        },
+      };
+      vi.spyOn(mastraInstance, 'getEditor').mockReturnValue(editor as any);
+
+      return { mastra: mastraInstance };
+    }
+
+    it('excludes other authors private stored agents for a normal caller', async () => {
+      const { mastra: m } = buildMastraWithStoredAgents();
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'author-a');
+
+      const result = await LIST_AGENTS_ROUTE.handler({ mastra: m, requestContext } as any);
+      const ids = Object.keys(result);
+
+      // Caller's own private agent, others' public, legacy-unowned, and code agents are visible.
+      expect(ids).toContain('a-own-private');
+      expect(ids).toContain('b-public');
+      expect(ids).toContain('legacy-unowned');
+      expect(ids).toContain('code-agent');
+      // Another author's private agent is excluded.
+      expect(ids).not.toContain('b-private');
+    });
+
+    it('returns all stored agents for an admin caller (unrestricted)', async () => {
+      const { mastra: m } = buildMastraWithStoredAgents();
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'author-a');
+      requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['stored-agents:*']);
+
+      const result = await LIST_AGENTS_ROUTE.handler({ mastra: m, requestContext } as any);
+      const ids = Object.keys(result);
+
+      expect(ids).toContain('a-own-private');
+      expect(ids).toContain('b-public');
+      expect(ids).toContain('b-private');
+      expect(ids).toContain('legacy-unowned');
+      expect(ids).toContain('code-agent');
+    });
+
+    it('returns all stored agents when auth is off (no caller identity)', async () => {
+      const { mastra: m } = buildMastraWithStoredAgents();
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        mastra: m,
+        requestContext: new RequestContext(),
+      } as any);
+      const ids = Object.keys(result);
+
+      expect(ids).toContain('a-own-private');
+      expect(ids).toContain('b-public');
+      expect(ids).toContain('b-private');
+      expect(ids).toContain('legacy-unowned');
+      expect(ids).toContain('code-agent');
     });
   });
 
