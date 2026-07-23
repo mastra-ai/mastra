@@ -719,6 +719,45 @@ describe('OM routes with a tenant', () => {
     expect(stored?.observeAttachments).toBe(false);
   });
 
+  it('reads and updates persisted settings without an active session', async () => {
+    const app = buildApp(makeOmSession());
+
+    const initial = await app.request('/web/config/om');
+    expect(initial.status).toBe(200);
+    expect((await initial.json()).config).toMatchObject({
+      observerModelId: DEFAULT_OM_MODEL_ID,
+      reflectorModelId: DEFAULT_OM_MODEL_ID,
+      observationThreshold: 30000,
+      reflectionThreshold: 40000,
+      observeAttachments: 'auto',
+    });
+
+    expect(
+      (
+        await putJson(app, '/web/config/om/observer/model', {
+          modelId: 'anthropic/claude-fable-5',
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await putJson(app, '/web/config/om/thresholds', {
+          observationThreshold: 25000,
+          reflectionThreshold: 45000,
+        })
+      ).status,
+    ).toBe(200);
+    expect((await putJson(app, '/web/config/om/observe-attachments', { value: false })).status).toBe(200);
+
+    const persisted = await app.request('/web/config/om');
+    expect((await persisted.json()).config).toMatchObject({
+      observerModelId: 'anthropic/claude-fable-5',
+      observationThreshold: 25000,
+      reflectionThreshold: 45000,
+      observeAttachments: false,
+    });
+  });
+
   it('returns 503 when tenant mode has no memory-settings storage', async () => {
     const res = await putJson(buildApp(makeOmSession(), { withStorage: false }), '/web/config/om/thresholds', {
       resourceId: 'r1',

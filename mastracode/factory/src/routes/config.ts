@@ -462,11 +462,9 @@ async function applyPackToSession({
 }
 
 // ── Observational memory ────────────────────────────────────────────────────
-// Mirrors the TUI `/om` command. Observer/reflector model + threshold reads come
-// from the session (state, falling back to omConfig defaults); writes go to both
-// the session (state + thread setting, via the same session methods the TUI uses)
-// and GlobalSettings (settings.json), so the choice survives restarts and stays
-// in sync with the terminal.
+// Mirrors the TUI `/om` command. Settings are persisted per organization and
+// user in the Factory app database. Requests with an active session also apply
+// changes immediately to that session's state and thread settings.
 
 /** Default thresholds mirror the TUI `/om` fallbacks. */
 const DEFAULT_OBSERVATION_THRESHOLD = 30_000;
@@ -490,6 +488,16 @@ export function readOMConfig(session: OMSession): OMConfigInfo {
     observationThreshold: session.om.observer.threshold() ?? DEFAULT_OBSERVATION_THRESHOLD,
     reflectionThreshold: session.om.reflector.threshold() ?? DEFAULT_REFLECTION_THRESHOLD,
     observeAttachments: observeAttachments === true || observeAttachments === false ? observeAttachments : 'auto',
+  };
+}
+
+function readStoredOMConfig(record: MemorySettingsRecord | null): OMConfigInfo {
+  return {
+    observerModelId: record?.observerModelId ?? DEFAULT_OM_MODEL_ID,
+    reflectorModelId: record?.reflectorModelId ?? DEFAULT_OM_MODEL_ID,
+    observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
+    reflectionThreshold: record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD,
+    observeAttachments: record?.observeAttachments ?? 'auto',
   };
 }
 
@@ -1001,11 +1009,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       }),
 
       // ── Observational memory ──────────────────────────────────────────────────
-      // Mirrors the TUI's /om command. All five knobs are session-scoped (resolved
-      // from the session, persisted to its state + thread setting) and durably
-      // stored in the per-(org, user) `memory-settings` app table — never
-      // settings.json. GET hydrates the session from the stored row first so the
-      // DB, not the SDK's boot-time seed, is the source of truth.
+      // Mirrors the TUI's /om command. All five knobs are durably stored in the
+      // per-(org, user) `memory-settings` app table — never settings.json. When a
+      // session is supplied, changes are also applied to its state and thread.
 
       registerApiRoute('/web/config/om', {
         method: 'GET',
@@ -1013,7 +1019,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         handler: async c => {
           const resourceId = c.req.query('resourceId');
           const scope = c.req.query('scope') || undefined;
-          if (!resourceId) return c.json({ error: 'Missing required query param: resourceId' }, 400);
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
@@ -1021,9 +1026,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
+            const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
+            if (!resourceId) return c.json({ config: readStoredOMConfig(record) });
+
             const session = await controller.getSessionByResource?.(resourceId, scope);
             if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-            const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             await hydrateSessionMemorySettings(session, record);
             return c.json({ config: readOMConfig(session) });
           } catch (error) {
@@ -1049,7 +1056,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
           const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
-          if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
           if (!modelId) return c.json({ error: 'Missing required field: modelId' }, 400);
           const context = await resolveMemorySettingsContext({
             c: loose(c),
@@ -1058,11 +1064,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
-            const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-            const otherRole = role === 'observer' ? session.om.reflector : session.om.observer;
-            const otherRoleCurrentModelId = otherRole.modelId() ?? null;
-            await session.om[role].switchModel({ modelId });
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            if (resourceId && !session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+            const otherRole = session ? (role === 'observer' ? session.om.reflector : session.om.observer) : undefined;
+            const otherRoleCurrentModelId = otherRole?.modelId() ?? null;
+            await session?.om[role].switchModel({ modelId });
             // Pin the other role's current model too, so a later restart
             // doesn't drift it once this role is explicitly overridden. The
             // "only if still unset" check runs inside the storage layer's
@@ -1074,7 +1080,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               { [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: modelId },
               otherRoleCurrentModelId ? { [otherKey]: otherRoleCurrentModelId } : undefined,
             );
-            return c.json({ ok: true, config: readOMConfig(session) });
+            const config = session
+              ? readOMConfig(session)
+              : readStoredOMConfig(await context.storage.get({ orgId: context.orgId, userId: context.userId }));
+            return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1098,7 +1107,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
-          if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
           const observation =
             typeof body.observationThreshold === 'number' && body.observationThreshold > 0
               ? Math.round(body.observationThreshold)
@@ -1117,13 +1125,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
-            const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-            if (observation !== undefined) {
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            if (resourceId && !session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+            if (observation !== undefined && session) {
               await session.state.set({ observationThreshold: observation });
               await session.thread.setSetting({ key: 'observationThreshold', value: observation });
             }
-            if (reflection !== undefined) {
+            if (reflection !== undefined && session) {
               await session.state.set({ reflectionThreshold: reflection });
               await session.thread.setSetting({ key: 'reflectionThreshold', value: reflection });
             }
@@ -1131,7 +1139,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               ...(observation !== undefined ? { observationThreshold: observation } : {}),
               ...(reflection !== undefined ? { reflectionThreshold: reflection } : {}),
             });
-            return c.json({ ok: true, config: readOMConfig(session) });
+            const config = session
+              ? readOMConfig(session)
+              : readStoredOMConfig(await context.storage.get({ orgId: context.orgId, userId: context.userId }));
+            return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1150,7 +1161,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
-          if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
           const raw = body.value;
           const value: 'auto' | boolean = raw === 'auto' || raw === true || raw === false ? raw : 'auto';
           if (raw !== 'auto' && raw !== true && raw !== false) {
@@ -1163,12 +1173,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
-            const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-            await session.state.set({ observeAttachments: value });
-            await session.thread.setSetting({ key: 'observeAttachments', value });
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            if (resourceId && !session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+            if (session) {
+              await session.state.set({ observeAttachments: value });
+              await session.thread.setSetting({ key: 'observeAttachments', value });
+            }
             await persistMemorySettings(context, { observeAttachments: value });
-            return c.json({ ok: true, config: readOMConfig(session) });
+            const config = session
+              ? readOMConfig(session)
+              : readStoredOMConfig(await context.storage.get({ orgId: context.orgId, userId: context.userId }));
+            return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
