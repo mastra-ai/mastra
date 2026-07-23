@@ -146,7 +146,13 @@ export function UserSessionsSection() {
         <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
           User Sessions
         </Txt>
-        <Button variant="ghost" size="icon-sm" aria-label="New user session" onClick={() => setCreating(true)} disabled={pending}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="New user session"
+          onClick={() => setCreating(true)}
+          disabled={pending}
+        >
           <Plus size={15} />
         </Button>
       </div>

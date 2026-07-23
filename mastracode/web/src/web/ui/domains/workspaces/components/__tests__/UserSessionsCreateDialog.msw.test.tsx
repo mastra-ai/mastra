@@ -111,13 +111,10 @@ describe('User sessions create dialog', () => {
         controllerCreateBody = await request.json();
         return HttpResponse.json({ controllerId: 'code', resourceId: 'sess-1', threadId: 'sess-1' });
       }),
-      http.put(
-        `${TEST_BASE_URL}/api/agent-controller/code/sessions/sess-1/threads/sess-1`,
-        async ({ request }) => {
-          renamedTitle = ((await request.json()) as { title: string }).title;
-          return HttpResponse.json({});
-        },
-      ),
+      http.put(`${TEST_BASE_URL}/api/agent-controller/code/sessions/sess-1/threads/sess-1`, async ({ request }) => {
+        renamedTitle = ((await request.json()) as { title: string }).title;
+        return HttpResponse.json({});
+      }),
     );
     const user = userEvent.setup();
 
