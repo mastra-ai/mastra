@@ -636,14 +636,16 @@ export class HANAClient extends MastraBase {
   async createIndex(options: CreateIndexOptions): Promise<void> {
     try {
       const { name, table, columns, unique = false, where } = options;
-      const schema = this.schemaName ?? '';
       const indexNameSafe = parseSqlIdentifier(name, 'index name');
+      const schemaParam = this.schemaName || null;
 
       // Check existence
       const existRows = await this.pool.withConnection(conn =>
         conn.execPromise(
-          `SELECT COUNT(*) AS CNT FROM SYS.INDEXES WHERE SCHEMA_NAME = ? AND TABLE_NAME = ? AND INDEX_NAME = ?`,
-          [schema, table, indexNameSafe],
+          schemaParam
+            ? `SELECT COUNT(*) AS CNT FROM SYS.INDEXES WHERE SCHEMA_NAME = ? AND TABLE_NAME = ? AND INDEX_NAME = ?`
+            : `SELECT COUNT(*) AS CNT FROM SYS.INDEXES WHERE SCHEMA_NAME = CURRENT_USER AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+          schemaParam ? [schemaParam, table, indexNameSafe] : [table, indexNameSafe],
         ),
       );
       if (Number((existRows as Array<{ CNT: number }>)[0]?.CNT) > 0) return;
@@ -687,15 +689,17 @@ export class HANAClient extends MastraBase {
    */
   async dropIndex(indexName: string): Promise<void> {
     try {
-      const schema = this.schemaName ?? '';
-      const schemaSafe = parseSqlIdentifier(schema, 'schema name');
+      const schemaParam = this.schemaName || null;
+      const schemaSafe = schemaParam ? parseSqlIdentifier(schemaParam, 'schema name') : null;
       const indexNameSafe = parseSqlIdentifier(indexName, 'index name');
 
       const rows = await this.pool.withConnection(conn =>
-        conn.execPromise(`SELECT TABLE_NAME FROM SYS.INDEXES WHERE SCHEMA_NAME = ? AND INDEX_NAME = ?`, [
-          schema,
-          indexNameSafe,
-        ]),
+        conn.execPromise(
+          schemaParam
+            ? `SELECT TABLE_NAME FROM SYS.INDEXES WHERE SCHEMA_NAME = ? AND INDEX_NAME = ?`
+            : `SELECT TABLE_NAME FROM SYS.INDEXES WHERE SCHEMA_NAME = CURRENT_USER AND INDEX_NAME = ?`,
+          schemaParam ? [schemaParam, indexNameSafe] : [indexNameSafe],
+        ),
       );
 
       if (!rows || (rows as unknown[]).length === 0) return;
@@ -710,7 +714,8 @@ export class HANAClient extends MastraBase {
         });
       }
 
-      await this.pool.withConnection(conn => conn.execPromise(`DROP INDEX "${schemaSafe}"."${indexNameSafe}"`, []));
+      const dropSql = schemaSafe ? `DROP INDEX "${schemaSafe}"."${indexNameSafe}"` : `DROP INDEX "${indexNameSafe}"`;
+      await this.pool.withConnection(conn => conn.execPromise(dropSql, []));
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -730,21 +735,26 @@ export class HANAClient extends MastraBase {
    */
   async listIndexes(tableName?: string): Promise<IndexInfo[]> {
     try {
-      const schema = this.schemaName ?? '';
+      const schemaParam = this.schemaName || null;
       let rows: unknown[];
 
       if (tableName) {
         rows = await this.pool.withConnection(conn =>
           conn.execPromise(
-            `SELECT INDEX_NAME, TABLE_NAME, CONSTRAINT FROM SYS.INDEXES WHERE SCHEMA_NAME = ? AND TABLE_NAME = ?`,
-            [schema, tableName],
+            schemaParam
+              ? `SELECT INDEX_NAME, TABLE_NAME, CONSTRAINT FROM SYS.INDEXES WHERE SCHEMA_NAME = ? AND TABLE_NAME = ?`
+              : `SELECT INDEX_NAME, TABLE_NAME, CONSTRAINT FROM SYS.INDEXES WHERE SCHEMA_NAME = CURRENT_USER AND TABLE_NAME = ?`,
+            schemaParam ? [schemaParam, tableName] : [tableName],
           ),
         );
       } else {
         rows = await this.pool.withConnection(conn =>
-          conn.execPromise(`SELECT INDEX_NAME, TABLE_NAME, CONSTRAINT FROM SYS.INDEXES WHERE SCHEMA_NAME = ?`, [
-            schema,
-          ]),
+          conn.execPromise(
+            schemaParam
+              ? `SELECT INDEX_NAME, TABLE_NAME, CONSTRAINT FROM SYS.INDEXES WHERE SCHEMA_NAME = ?`
+              : `SELECT INDEX_NAME, TABLE_NAME, CONSTRAINT FROM SYS.INDEXES WHERE SCHEMA_NAME = CURRENT_USER`,
+            schemaParam ? [schemaParam] : [],
+          ),
         );
       }
 
@@ -752,8 +762,10 @@ export class HANAClient extends MastraBase {
       for (const row of rows as Array<{ INDEX_NAME: string; TABLE_NAME: string; CONSTRAINT: string }>) {
         const colRows = await this.pool.withConnection(conn =>
           conn.execPromise(
-            `SELECT COLUMN_NAME FROM SYS.INDEX_COLUMNS WHERE SCHEMA_NAME = ? AND INDEX_NAME = ? ORDER BY POSITION`,
-            [schema, row.INDEX_NAME],
+            schemaParam
+              ? `SELECT COLUMN_NAME FROM SYS.INDEX_COLUMNS WHERE SCHEMA_NAME = ? AND INDEX_NAME = ? ORDER BY POSITION`
+              : `SELECT COLUMN_NAME FROM SYS.INDEX_COLUMNS WHERE SCHEMA_NAME = CURRENT_USER AND INDEX_NAME = ? ORDER BY POSITION`,
+            schemaParam ? [schemaParam, row.INDEX_NAME] : [row.INDEX_NAME],
           ),
         );
         indexes.push({
@@ -784,13 +796,15 @@ export class HANAClient extends MastraBase {
    */
   async describeIndex(indexName: string): Promise<StorageIndexStats> {
     try {
-      const schema = this.schemaName ?? '';
+      const schemaParam = this.schemaName || null;
       const indexNameSafe = parseSqlIdentifier(indexName, 'index name');
 
       const rows = await this.pool.withConnection(conn =>
         conn.execPromise(
-          `SELECT INDEX_NAME, TABLE_NAME, CONSTRAINT, INDEX_TYPE FROM SYS.INDEXES WHERE SCHEMA_NAME = ? AND INDEX_NAME = ?`,
-          [schema, indexNameSafe],
+          schemaParam
+            ? `SELECT INDEX_NAME, TABLE_NAME, CONSTRAINT, INDEX_TYPE FROM SYS.INDEXES WHERE SCHEMA_NAME = ? AND INDEX_NAME = ?`
+            : `SELECT INDEX_NAME, TABLE_NAME, CONSTRAINT, INDEX_TYPE FROM SYS.INDEXES WHERE SCHEMA_NAME = CURRENT_USER AND INDEX_NAME = ?`,
+          schemaParam ? [schemaParam, indexNameSafe] : [indexNameSafe],
         ),
       );
 
@@ -799,7 +813,7 @@ export class HANAClient extends MastraBase {
           id: createStorageErrorId('HANA', 'DESCRIBE_INDEX', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          text: `Index "${indexNameSafe}" not found in schema "${schema}"`,
+          text: `Index "${indexNameSafe}" not found in schema "${schemaParam ?? 'CURRENT_USER'}"`,
           details: { indexName },
         });
       }
@@ -809,8 +823,10 @@ export class HANAClient extends MastraBase {
       )[0];
       const colRows = await this.pool.withConnection(conn =>
         conn.execPromise(
-          `SELECT COLUMN_NAME FROM SYS.INDEX_COLUMNS WHERE SCHEMA_NAME = ? AND INDEX_NAME = ? ORDER BY POSITION`,
-          [schema, indexNameSafe],
+          schemaParam
+            ? `SELECT COLUMN_NAME FROM SYS.INDEX_COLUMNS WHERE SCHEMA_NAME = ? AND INDEX_NAME = ? ORDER BY POSITION`
+            : `SELECT COLUMN_NAME FROM SYS.INDEX_COLUMNS WHERE SCHEMA_NAME = CURRENT_USER AND INDEX_NAME = ? ORDER BY POSITION`,
+          schemaParam ? [schemaParam, indexNameSafe] : [indexNameSafe],
         ),
       );
 
