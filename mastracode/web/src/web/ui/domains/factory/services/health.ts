@@ -2,7 +2,7 @@
  * Browser-side helper for the Factory queue-health threshold endpoint.
  *
  * The thresholds are server-side, project-scoped config (seconds) read by the
- * Overview page to bucket work-item ages; the chart's aggregation itself runs
+ * Metrics page's queue-health section to bucket work-item ages; the chart's aggregation itself runs
  * client-side (its active-work input is browser-only). Mirrors the thin
  * `services/metrics.ts` fetcher shape.
  */

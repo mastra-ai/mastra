@@ -254,25 +254,49 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'invokeSkill': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'role', 'skillName', 'arguments'],
+        ['type', 'idempotencyKey', 'role', 'skillName', 'arguments', 'precedingMessage'],
         'Factory invoke skill decision',
       );
       const args = optionalBoundedString(value.arguments, 'Factory skill arguments', MAX_ARGUMENTS_LENGTH);
+      const precedingMessage = optionalBoundedString(
+        value.precedingMessage,
+        'Factory skill preceding message',
+        MAX_MESSAGE_LENGTH,
+      );
       return {
         type,
         ...commonCommitFields(value),
         role: boundedString(value.role, 'Factory skill role', MAX_ROLE_LENGTH, IDENTIFIER_RE),
         skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE),
         ...(args ? { arguments: args } : {}),
+        ...(precedingMessage ? { precedingMessage } : {}),
       };
     }
     case 'sendMessage': {
-      assertExactKeys(value, ['type', 'idempotencyKey', 'role', 'message'], 'Factory send message decision');
+      assertExactKeys(
+        value,
+        ['type', 'idempotencyKey', 'role', 'message', 'priority', 'idleBehavior', 'prepareBinding'],
+        'Factory send message decision',
+      );
+      const priority =
+        value.priority === undefined
+          ? undefined
+          : enumValue(value.priority, ['medium', 'high', 'urgent'] as const, 'Factory message priority');
+      const idleBehavior =
+        value.idleBehavior === undefined
+          ? undefined
+          : enumValue(value.idleBehavior, ['persist', 'wake'] as const, 'Factory message idle behavior');
+      if (value.prepareBinding !== undefined && typeof value.prepareBinding !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory message prepareBinding must be a boolean.');
+      }
       return {
         type,
         ...commonCommitFields(value),
         role: boundedString(value.role, 'Factory message role', MAX_ROLE_LENGTH, IDENTIFIER_RE),
         message: boundedString(value.message, 'Factory message', MAX_MESSAGE_LENGTH),
+        ...(priority ? { priority } : {}),
+        ...(idleBehavior ? { idleBehavior } : {}),
+        ...(value.prepareBinding === true ? { prepareBinding: true } : {}),
       };
     }
     case 'notify': {

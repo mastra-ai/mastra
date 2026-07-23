@@ -1,47 +1,73 @@
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound, Settings } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../shared/api/config';
 import { clearMastraCodeStorage, redirectToLogout, useFactoryAuth } from './domains/auth';
-import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
-import { DEFAULT_SETTINGS_PATH } from './domains/settings/settingsSections';
-import {
-  isServerFactory,
-  FactorySwitcher,
-  useActiveFactoryContext,
-  UserSessionsSection,
-  WorkspacesSection,
-} from './domains/workspaces';
+import { settingsSectionPath } from './domains/settings/settingsSections';
+import { FactorySwitcher, UserSessionsSection, WorkspacesSection } from './domains/workspaces';
 
 function useSettingsOpen() {
   const { pathname } = useLocation();
-  return pathname.startsWith('/settings');
+  return /^\/factories\/[^/]+\/settings(?:\/|$)/.test(pathname);
 }
 
 /**
- * Composition shell: each section owns its data through the domain contexts
- * (`useActiveFactoryContext`, focused chat hooks) or the router location, so
- * nothing is wired through props here.
+ * Alpha status tag rendered as a dashed-outline chip (Clerk-style), so it reads
+ * as a subtle stage marker rather than a solid pill competing with the nav items.
+ * Tinted with the Mastra brand green (#7aff78, `--color-ds-green` on the website).
  *
- * Everything runs in a worktree branched from the repo's HEAD. Server-backed
- * factories show the Factory menu (Board + org-level factory Sessions) and the
- * current user's personal User Sessions; each worktree holds a single
- * conversation, so there is no nested thread list. Local factories (no
- * worktrees) keep the flat thread list.
+ * The tint is centralised in the `--alpha-green` custom property so it can flip
+ * per theme: the neon brand green only reads on dark surfaces, so light mode uses
+ * a darker brand-green shade that keeps enough contrast against the pale sidebar.
+ */
+function AlphaBadge() {
+  return (
+    <span className="relative bg-[var(--alpha-green)]/10 px-[0.1875rem] font-medium text-[0.625rem]/[0.875rem] text-[var(--alpha-green)] uppercase tracking-wide [--alpha-green:oklch(48%_0.17_142)] dark:[--alpha-green:#7aff78]">
+      Alpha
+      <span className="-top-px absolute inset-x-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
+        <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
+          <line x1="0" x2="100%" y1="0.5" y2="0.5" />
+        </svg>
+      </span>
+      <span className="-bottom-px absolute inset-x-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
+        <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
+          <line x1="0" x2="100%" y1="0.5" y2="0.5" />
+        </svg>
+      </span>
+      <span className="-left-px absolute inset-y-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
+        <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
+          <line x1="0.5" x2="0.5" y1="0" y2="100%" />
+        </svg>
+      </span>
+      <span className="-right-px absolute inset-y-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
+        <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
+          <line x1="0.5" x2="0.5" y1="0" y2="100%" />
+        </svg>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Composition shell: each section owns its data through local query hooks,
+ * focused chat hooks, or the router location, so nothing is wired through props here.
  */
 export function Sidebar() {
-  const { activeFactory } = useActiveFactoryContext();
-  const isServerBacked = activeFactory ? isServerFactory(activeFactory) : false;
   const settingsOpen = useSettingsOpen();
 
   return (
-    <MainSidebar className="bg-transparent h-full">
+    <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
+        <div className="mt-1 mb-2 flex items-center justify-between gap-2 px-3 pt-1">
+          <LogoWithoutText aria-label="Mastra" role="img" className="h-4 w-auto text-icon6" />
+          <AlphaBadge />
+        </div>
         {settingsOpen ? (
           <SettingsNavigation />
         ) : (
@@ -50,16 +76,10 @@ export function Sidebar() {
               <FactorySwitcher />
             </section>
             <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
-              {isServerBacked ? (
-                <>
-                  <FactorySection>
-                    <WorkspacesSection />
-                  </FactorySection>
-                  <UserSessionsSection />
-                </>
-              ) : (
-                <ThreadList />
-              )}
+              <FactorySection>
+                <WorkspacesSection />
+              </FactorySection>
+              <UserSessionsSection />
             </section>
           </div>
         )}
@@ -72,6 +92,7 @@ export function Sidebar() {
 }
 
 function SidebarFooter() {
+  const { factoryId } = useParams<{ factoryId: string }>();
   const settingsOpen = useSettingsOpen();
   const closeSettings = useCloseSettings();
   const navigate = useNavigate();
@@ -82,7 +103,9 @@ function SidebarFooter() {
       closeSettings();
       return;
     }
-    void navigate(DEFAULT_SETTINGS_PATH, { state: { from: location } });
+    if (factoryId) {
+      void navigate(settingsSectionPath(factoryId, 'general'), { state: { from: location } });
+    }
   };
 
   return (

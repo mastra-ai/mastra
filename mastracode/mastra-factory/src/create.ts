@@ -4,12 +4,13 @@ import * as p from '@clack/prompts';
 // `mastra/internal/auth` is the CLI's internal barrel — drives the browser-auth
 // flow and reuses persisted credentials + org resolution rather than duplicating
 // them here.
-import { fetchOrgs, getToken, MASTRA_PLATFORM_API_URL, resolveCurrentOrg } from 'mastra/internal/auth';
+import { fetchOrgs, getToken, loadCredentials, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
+import { x } from 'tinyexec';
 
 import type { Analytics } from './analytics.js';
 import { upsertEnvFile } from './env.js';
-import type { PlatformProject } from './platform.js';
+import type { PlatformProject, ProjectRegion } from './platform.js';
 import {
   attachNeonDatabase,
   createServerProject,
@@ -18,23 +19,19 @@ import {
   PlatformApiError,
   waitForDatabaseReady,
 } from './platform.js';
-import { cloneTemplate, renameProject, DEFAULT_TEMPLATE_REPO } from './utils/clone.js';
-import { runInherit } from './utils/exec.js';
-import { detectPackageManager } from './utils/pm.js';
+import { cloneTemplate, renameProject } from './utils/clone.js';
+import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
 export interface CreateArgs {
   projectName?: string;
-  useDefaults?: boolean;
-  templateRef?: string;
-  templateDir?: string;
-  timeout?: number;
+  template: string;
   /**
    * Skip the platform round-trip (auth, project, sk_ key, Neon). Useful for
    * offline scaffold testing. `.env` is left as-is from the template's
    * `.env.example`.
    */
   noPlatform?: boolean;
-  /** Optional Neon region id (passed to the attach endpoint verbatim). */
+  /** Optional platform project region. Accepted values are `eu` and `us`. */
   region?: string;
   /**
    * Optional org identifier (id or name) to skip the interactive org picker.
@@ -53,26 +50,40 @@ interface PlatformProvisionResult {
   databaseUrl: string;
 }
 
-export async function create(args: CreateArgs): Promise<void> {
-  p.intro(color.inverse(' Mastra Software Factory '));
+const PROJECT_REGION_OPTIONS = [
+  { value: 'eu', label: '🇪🇺 eu' },
+  { value: 'us', label: '🇺🇸 us' },
+] as const satisfies ReadonlyArray<{ value: ProjectRegion; label: string }>;
 
-  // ── Project name ─────────────────────────────────────────────────────────
-  let projectName = args.projectName;
-  if (!projectName && args.useDefaults) {
-    projectName = 'my-software-factory';
-  }
-  if (!projectName) {
-    const entered = await p.text({
-      message: 'What is your project named?',
-      initialValue: 'my-software-factory',
+const NEON_REGION_BY_PROJECT_REGION = {
+  eu: 'aws-eu-central-1',
+  us: 'aws-us-west-2',
+} as const satisfies Record<ProjectRegion, string>;
+
+function parseProjectRegion(region: string): ProjectRegion {
+  if (region === 'eu' || region === 'us') return region;
+  throw new Error(`Invalid --region "${region}". Expected one of: eu, us.`);
+}
+
+export async function create(args: CreateArgs): Promise<void> {
+  p.intro(color.inverse(' Mastra Factory '));
+
+  const requestedRegion = args.region ? parseProjectRegion(args.region) : undefined;
+  const projectName =
+    args.projectName ??
+    (await p.text({
+      message: 'What do you want to name your project?',
+      placeholder: 'my-mastra-factory',
       validate: value => {
-        if (!value?.trim()) return 'Required';
+        if (!value?.trim()) return `Project name can't be empty`;
         if (fs.existsSync(path.resolve(value.trim()))) return `Directory ${value.trim()} already exists`;
         return undefined;
       },
-    });
-    if (p.isCancel(entered)) return cancel();
-    projectName = entered.trim();
+    }));
+
+  if (p.isCancel(projectName)) {
+    p.cancel('Operation cancelled');
+    process.exit(0);
   }
 
   const projectPath = path.resolve(projectName);
@@ -80,21 +91,15 @@ export async function create(args: CreateArgs): Promise<void> {
 
   args.analytics.trackEvent('sf_create_started', {
     package_manager: packageManager,
-    non_interactive: Boolean(args.useDefaults),
     no_platform: Boolean(args.noPlatform),
   });
 
   // ── Clone template ───────────────────────────────────────────────────────
   const spinner = p.spinner();
-  spinner.start('Downloading the Software Factory template...');
+  spinner.start('Downloading the Mastra Factory template...');
   try {
-    await cloneTemplate({
-      repoUrl: DEFAULT_TEMPLATE_REPO,
-      projectPath,
-      ref: args.templateRef,
-      localDir: args.templateDir,
-    });
-    renameProject(projectPath, projectName);
+    await cloneTemplate(args.template, projectPath);
+    await renameProject(projectPath, projectName);
     // Seed .env from the example. Platform-provisioning below rewrites the
     // handful of platform keys idempotently; other keys stay as-is so the
     // user can configure them from the web UI.
@@ -114,11 +119,11 @@ export async function create(args: CreateArgs): Promise<void> {
 
   // ── Install dependencies ─────────────────────────────────────────────────
   const installSpinner = p.spinner();
-  installSpinner.start(`Installing dependencies with ${packageManager} (this can take a few minutes)...`);
+  installSpinner.start(`Installing dependencies...`);
   try {
-    await runInherit(packageManager, ['install'], {
-      cwd: projectPath,
-      timeoutMs: args.timeout,
+    await x(packageManager, getInstallArgs(packageManager), {
+      throwOnError: true,
+      nodeOptions: { cwd: projectPath },
     });
     installSpinner.stop('Dependencies installed.');
   } catch (err) {
@@ -136,7 +141,7 @@ export async function create(args: CreateArgs): Promise<void> {
       platformResult = await runPlatformProvisioning({
         projectName,
         projectPath,
-        region: args.region,
+        region: requestedRegion,
         org: args.org,
       });
     } catch (err) {
@@ -166,10 +171,11 @@ export async function create(args: CreateArgs): Promise<void> {
   }
   if (gitignoreOk) {
     try {
-      await runInherit('git', ['init', '-q'], { cwd: projectPath });
-      await runInherit('git', ['add', '-A'], { cwd: projectPath });
-      await runInherit('git', ['commit', '-q', '-m', 'Initial commit from create-factory'], {
-        cwd: projectPath,
+      await x('git', ['init', '-q'], { throwOnError: true, nodeOptions: { cwd: projectPath } });
+      await x('git', ['add', '-A'], { throwOnError: true, nodeOptions: { cwd: projectPath } });
+      await x('git', ['commit', '-q', '-m', 'Initial commit from create-factory'], {
+        throwOnError: true,
+        nodeOptions: { cwd: projectPath },
       });
     } catch {
       p.log.warn('git init failed — you can initialize the repository yourself later.');
@@ -178,26 +184,28 @@ export async function create(args: CreateArgs): Promise<void> {
 
   args.analytics.trackEvent('sf_create_completed', {
     package_manager: packageManager,
-    non_interactive: Boolean(args.useDefaults),
     no_platform: Boolean(args.noPlatform),
     platform_provisioned: platformResult !== null,
   });
 
   // ── Outro ────────────────────────────────────────────────────────────────
   const lines: string[] = [
-    color.green('Your Software Factory is ready!'),
+    color.green('Your Mastra Factory is ready!'),
     '',
     `${color.cyan('cd')} ${projectName}`,
     color.cyan(`${packageManager} run dev`),
     '',
-    `Factory UI     ${color.underline('http://localhost:5173')}`,
-    `Mastra Studio  ${color.underline('http://localhost:4111')}`,
+    `Factory UI     ${color.underline('http://localhost:4111')}`,
     '',
   ];
   if (platformResult) {
     lines.push(
-      `${color.green('Platform connected.')} Project ${color.cyan(platformResult.project.name)} in ${color.cyan(platformResult.orgName)}.`,
-      `Wrote ${color.cyan('MASTRA_PROJECT_ID')}, ${color.cyan('MASTRA_PLATFORM_SECRET_KEY')}, and ${color.cyan('DATABASE_URL')} to ${color.cyan('.env')}.`,
+      `${color.green('Provisioned on Mastra platform')} in ${color.cyan(platformResult.orgName)}:`,
+      `  - Project ${color.cyan(platformResult.project.name)}`,
+      `  - Postgres database (credentials written to ${color.cyan('.env')})`,
+      `  - Sandboxes (code agent sessions run here)`,
+      '',
+      `Manage your project at ${color.underline('https://projects.mastra.ai')}`,
     );
   } else if (args.noPlatform) {
     lines.push(
@@ -212,7 +220,6 @@ export async function create(args: CreateArgs): Promise<void> {
     lines.push('Open the Factory UI to finish setup (models, integrations, database).');
   }
   p.note(lines.join('\n'), 'Next steps');
-  p.outro(`Problems or feedback? ${color.underline('https://github.com/mastra-ai/mastra/issues')}`);
 }
 
 async function runPlatformProvisioning({
@@ -223,7 +230,7 @@ async function runPlatformProvisioning({
 }: {
   projectName: string;
   projectPath: string;
-  region?: string;
+  region?: ProjectRegion;
   org?: string;
 }): Promise<PlatformProvisionResult> {
   // Accumulator: whatever we successfully mint gets flushed to .env in a
@@ -241,6 +248,18 @@ async function runPlatformProvisioning({
 
   try {
     // 1. Auth — triggers the browser-auth flow if no cached credential.
+    //    When that flow is about to open (no env token, no cached credential),
+    //    pause first so the browser doesn't pop open unannounced.
+    const willOpenAuthFlow = !process.env.MASTRA_API_TOKEN && !(await loadCredentials());
+    if (willOpenAuthFlow) {
+      const proceed = await p.text({
+        message: 'Mastra account is required, press enter to continue...',
+        defaultValue: '',
+      });
+      if (p.isCancel(proceed)) {
+        throw new Error('Sign-in cancelled.');
+      }
+    }
     p.log.info('Signing in to Mastra…');
     const token = await getToken();
 
@@ -251,15 +270,25 @@ async function runPlatformProvisioning({
       ? await resolveOrgFromFlag(token, org)
       : await resolveCurrentOrg(token, { forcePrompt: true });
     p.log.info(`Using organization ${color.cyan(orgName)}.`);
-    envAccumulator.MASTRA_SHARED_API_URL = MASTRA_PLATFORM_API_URL;
     envAccumulator.MASTRA_ORGANIZATION_ID = orgId;
+
+    const projectRegion =
+      region ??
+      (await p.select({
+        message: 'Where should your Factory project run?',
+        options: [...PROJECT_REGION_OPTIONS],
+      }));
+    if (p.isCancel(projectRegion)) {
+      p.cancel('Operation cancelled');
+      process.exit(0);
+    }
 
     // 3. Project — session-auth POST /v1/server/projects.
     const projectSpinner = p.spinner();
     projectSpinner.start(`Creating platform project "${projectName}"…`);
     let project: PlatformProject;
     try {
-      project = await createServerProject({ token, orgId, name: projectName });
+      project = await createServerProject({ token, orgId, name: projectName, region: projectRegion });
       projectSpinner.stop(`Created platform project ${color.cyan(project.slug)}.`);
     } catch (err) {
       projectSpinner.stop('Project creation failed.');
@@ -296,7 +325,7 @@ async function runPlatformProvisioning({
         orgId,
         projectId: project.id,
         name: sanitizeDatabaseName(projectName),
-        regionId: region,
+        regionId: NEON_REGION_BY_PROJECT_REGION[projectRegion],
       });
       const ready = await waitForDatabaseReady({
         token,
@@ -359,11 +388,6 @@ function sanitizeDatabaseName(projectName: string): string {
   const cleaned = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
   const truncated = (cleaned || 'factory').slice(0, 64);
   return truncated;
-}
-
-function cancel(): void {
-  p.cancel('Cancelled.');
-  process.exitCode = 1;
 }
 
 /**

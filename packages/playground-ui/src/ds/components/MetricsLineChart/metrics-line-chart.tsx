@@ -18,12 +18,19 @@ export function MetricsLineChart({
   height = 210,
   yDomain,
   onPointClick,
+  xAxisInterval = 5,
+  xAxisMinTickGap,
 }: {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
   height?: number;
   yDomain?: [number, number];
   onPointClick?: MetricsLineChartPointClickHandler;
+  /** X-axis tick density. Default `5` (every 6th point). Pass
+   * `"preserveStartEnd"` with `xAxisMinTickGap` for a width-responsive axis. */
+  xAxisInterval?: number | 'preserveStart' | 'preserveEnd' | 'preserveStartEnd';
+  /** Minimum px gap between rendered ticks; recharts drops labels to honor it. */
+  xAxisMinTickGap?: number;
 }) {
   const isClickable = typeof onPointClick === 'function';
 
@@ -60,7 +67,8 @@ export function MetricsLineChart({
               tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
-              interval={5}
+              interval={xAxisInterval}
+              minTickGap={xAxisMinTickGap}
             />
             <YAxis
               tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}

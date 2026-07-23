@@ -1,4 +1,5 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -397,6 +398,42 @@ describe('GET /web/config/models', () => {
       models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
     });
   });
+
+  it('appends the caller org custom provider models from the DB', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.customProviders.upsert({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk', models: ['fast-1'] },
+    });
+    // Another org's providers must never leak into the caller's catalog.
+    await seed.customProviders.upsert({
+      orgId: 'org2',
+      userId: 'user-b',
+      input: { providerId: 'other', name: 'Other', url: 'https://other.dev/v1', models: ['m-1'] },
+    });
+    const controller = { listAvailableModels: async () => [] };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        customProviders: seed.customProviders,
+      }).routes(),
+    );
+
+    const res = await app.request('/web/config/models');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      models: [{ id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true }],
+    });
+  });
 });
 
 describe('model pack routes with a tenant', () => {
@@ -525,5 +562,418 @@ describe('model pack routes with a tenant', () => {
   it('validates the pack payload', async () => {
     expect((await postPack(buildApp(userA), { models: packBody.models })).status).toBe(400);
     expect((await postPack(buildApp(userA), { name: 'x', models: { build: 'a/b' } })).status).toBe(400);
+  });
+
+  it('uses a sentinel local row when auth is disabled — never settings.json', async () => {
+    const app = new Hono();
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({ auth: fakeRouteAuth({ enabled: false }), controller, modelPacks: seed.modelPacks }).routes(),
+    );
+
+    const created = await postPack(app, packBody);
+    expect(created.status).toBe(200);
+    const { pack } = await created.json();
+
+    const stored = await seed.modelPacks.list({ orgId: 'local' });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ createdBy: 'local', name: 'Team pack' });
+
+    const listed = await app.request('/web/config/model-packs');
+    const { packs } = await listed.json();
+    expect(packs.find((p: { id: string }) => p.id === pack.id)).toMatchObject({ custom: true });
+
+    const deleted = await app.request(`/web/config/model-packs/${encodeURIComponent(pack.id)}`, { method: 'DELETE' });
+    expect(deleted.status).toBe(200);
+    expect(await seed.modelPacks.list({ orgId: 'local' })).toEqual([]);
+  });
+
+  it('returns 503 when pack storage is unavailable', async () => {
+    const app = new Hono();
+    mountApiRoutes(app as any, new ConfigRoutes({ auth: fakeRouteAuth({ enabled: false }), controller }).routes());
+    const res = await app.request('/web/config/model-packs');
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: 'model_packs_unavailable' });
+  });
+});
+
+describe('OM routes with a tenant', () => {
+  let seed: FactoryStorageTestSeed;
+
+  /** A minimal OM session whose role models live in a mutable map. */
+  function makeOmSession() {
+    const roleModels: Record<'observer' | 'reflector', string> = {
+      observer: 'google/gemini-3-flash',
+      reflector: 'anthropic/claude-haiku-4-5',
+    };
+    const state: Record<string, unknown> = {};
+    const role = (name: 'observer' | 'reflector') => ({
+      modelId: () => roleModels[name],
+      threshold: () => undefined,
+      switchModel: async ({ modelId }: { modelId: string }) => {
+        roleModels[name] = modelId;
+      },
+    });
+    return {
+      mode: { get: () => 'build' },
+      model: { switch: async () => {} },
+      subagents: { model: { set: async () => {} } },
+      thread: { getId: () => null, setSetting: async () => {}, list: async () => [] },
+      state: {
+        get: () => state,
+        set: (updates: Record<string, unknown>) => {
+          Object.assign(state, updates);
+        },
+      },
+      om: { observer: role('observer'), reflector: role('reflector') },
+    };
+  }
+
+  function buildApp(
+    session: ReturnType<typeof makeOmSession>,
+    opts: { withStorage?: boolean; authEnabled?: boolean } = {},
+  ) {
+    const controller = {
+      ...makeAgentController([{ provider: 'anthropic', hasApiKey: true }]),
+      getSessionByResource: async () => session,
+    };
+    const app = new Hono();
+    if (opts.authEnabled !== false) {
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+        await next();
+      });
+    }
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth({ enabled: opts.authEnabled !== false }),
+        controller,
+        modelCredentials: seed.credentials,
+        ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings }),
+      }).routes(),
+    );
+    return app;
+  }
+
+  const putJson = (app: Hono, path: string, body: unknown) =>
+    app.request(path, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  const postJson = (app: Hono, path: string, body: unknown) =>
+    app.request(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(async () => {
+    seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'api_key',
+      key: 'sk-anthropic',
+    });
+  });
+
+  it('seeds provider-specific OM defaults without an active session', async () => {
+    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
+      providerId: 'anthropic',
+      factoryModelId: 'anthropic/claude-fable-5',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('does not overwrite OM models that the user already selected', async () => {
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observerModelId: 'anthropic/claude-fable-5' },
+    });
+
+    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
+      providerId: 'anthropic',
+      factoryModelId: 'anthropic/claude-fable-5',
+    });
+
+    expect(res.status).toBe(200);
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-fable-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('persists a role model switch to the memory-settings domain, snapshotting the other role', async () => {
+    const session = makeOmSession();
+    const res = await putJson(buildApp(session), '/web/config/om/observer/model', {
+      resourceId: 'r1',
+      modelId: 'anthropic/claude-fable-5',
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).config.observerModelId).toBe('anthropic/claude-fable-5');
+
+    const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
+    expect(stored).toMatchObject({
+      observerModelId: 'anthropic/claude-fable-5',
+      // The reflector's current model is pinned so a restart doesn't drift it.
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('does not overwrite an explicitly stored other-role model on later switches', async () => {
+    const session = makeOmSession();
+    const app = buildApp(session);
+    await putJson(app, '/web/config/om/reflector/model', { resourceId: 'r1', modelId: 'openai/gpt-5.6' });
+    await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', modelId: 'anthropic/claude-fable-5' });
+
+    const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
+    expect(stored).toMatchObject({
+      observerModelId: 'anthropic/claude-fable-5',
+      reflectorModelId: 'openai/gpt-5.6',
+    });
+  });
+
+  it('persists thresholds to the memory-settings domain', async () => {
+    const res = await putJson(buildApp(makeOmSession()), '/web/config/om/thresholds', {
+      resourceId: 'r1',
+      observationThreshold: 25000,
+      reflectionThreshold: 45000,
+    });
+    expect(res.status).toBe(200);
+
+    const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
+    expect(stored).toMatchObject({ observationThreshold: 25000, reflectionThreshold: 45000 });
+  });
+
+  it('persists observe-attachments to the memory-settings domain', async () => {
+    const res = await putJson(buildApp(makeOmSession()), '/web/config/om/observe-attachments', {
+      resourceId: 'r1',
+      value: false,
+    });
+    expect(res.status).toBe(200);
+
+    const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
+    expect(stored?.observeAttachments).toBe(false);
+  });
+
+  it('reads and updates persisted settings without an active session', async () => {
+    const app = buildApp(makeOmSession());
+
+    const initial = await app.request('/web/config/om');
+    expect(initial.status).toBe(200);
+    expect((await initial.json()).config).toMatchObject({
+      observerModelId: DEFAULT_OM_MODEL_ID,
+      reflectorModelId: DEFAULT_OM_MODEL_ID,
+      observationThreshold: 30000,
+      reflectionThreshold: 40000,
+      observeAttachments: 'auto',
+    });
+
+    expect(
+      (
+        await putJson(app, '/web/config/om/observer/model', {
+          modelId: 'anthropic/claude-fable-5',
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await putJson(app, '/web/config/om/thresholds', {
+          observationThreshold: 25000,
+          reflectionThreshold: 45000,
+        })
+      ).status,
+    ).toBe(200);
+    expect((await putJson(app, '/web/config/om/observe-attachments', { value: false })).status).toBe(200);
+
+    const persisted = await app.request('/web/config/om');
+    expect((await persisted.json()).config).toMatchObject({
+      observerModelId: 'anthropic/claude-fable-5',
+      observationThreshold: 25000,
+      reflectionThreshold: 45000,
+      observeAttachments: false,
+    });
+  });
+
+  it('returns 503 when tenant mode has no memory-settings storage', async () => {
+    const res = await putJson(buildApp(makeOmSession(), { withStorage: false }), '/web/config/om/thresholds', {
+      resourceId: 'r1',
+      observationThreshold: 25000,
+    });
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe('memory_settings_unavailable');
+  });
+
+  it('GET hydrates the session from the stored memory-settings row', async () => {
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observerModelId: 'openai/gpt-5.6', observationThreshold: 12000, observeAttachments: false },
+    });
+
+    const session = makeOmSession();
+    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    expect(res.status).toBe(200);
+    const { config } = await res.json();
+    // The stored row wins over the session's boot-time values.
+    expect(config.observerModelId).toBe('openai/gpt-5.6');
+    expect(config.observeAttachments).toBe(false);
+    expect(session.state.get().observationThreshold).toBe(12000);
+    // Knobs never explicitly stored reset to the built-in default — whatever
+    // the session booted with is not authoritative.
+    expect(config.reflectorModelId).toBe(DEFAULT_OM_MODEL_ID);
+  });
+
+  it('GET resets stale session values to defaults when no row is stored', async () => {
+    // Simulates a session whose state still carries a pre-DB settings.json
+    // seed (e.g. a custom-provider model from the host machine's TUI config).
+    const session = makeOmSession();
+    await session.om.observer.switchModel({ modelId: 'alibaba-token-plan/deepseek-v4-flash' });
+    session.state.set({ observationThreshold: 99000 });
+
+    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    expect(res.status).toBe(200);
+    const { config } = await res.json();
+    expect(config.observerModelId).toBe(DEFAULT_OM_MODEL_ID);
+    expect(config.reflectorModelId).toBe(DEFAULT_OM_MODEL_ID);
+    expect(config.observationThreshold).toBe(30000);
+  });
+
+  it('uses a sentinel local row when auth is disabled — never settings.json', async () => {
+    const session = makeOmSession();
+    const app = buildApp(session, { authEnabled: false });
+    const res = await putJson(app, '/web/config/om/thresholds', { resourceId: 'r1', observationThreshold: 7000 });
+    expect(res.status).toBe(200);
+
+    const stored = await seed.memorySettings.get({ orgId: 'local', userId: 'local' });
+    expect(stored?.observationThreshold).toBe(7000);
+  });
+});
+
+describe('custom provider routes', () => {
+  let seed: FactoryStorageTestSeed;
+  const controller = makeAgentController([{ provider: 'anthropic', hasApiKey: true }]);
+  const onCustomProvidersChanged = vi.fn();
+
+  function buildApp(
+    user: { workosId: string; organizationId?: string } | null,
+    opts: { withStorage?: boolean; authEnabled?: boolean } = {},
+  ) {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      if (user) c.set('factoryAuthUser' as never, user as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth({ enabled: opts.authEnabled !== false }),
+        controller,
+        ...(opts.withStorage === false ? {} : { customProviders: seed.customProviders }),
+        onCustomProvidersChanged,
+      }).routes(),
+    );
+    return app;
+  }
+
+  const userA = { workosId: 'user-a', organizationId: 'org1' };
+  const userOtherOrg = { workosId: 'user-c', organizationId: 'org2' };
+  const providerBody = { name: 'My LLM', url: 'https://llm.example.com/v1', apiKey: 'sk-x', models: ['m1', 'm2'] };
+
+  const postProvider = (app: Hono, body: unknown) =>
+    app.request('/web/config/custom-providers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(async () => {
+    seed = await createFactoryStorageForTests();
+    onCustomProvidersChanged.mockClear();
+  });
+
+  it('rejects unauthenticated access when web auth is enabled', async () => {
+    expect((await buildApp(null).request('/web/config/custom-providers')).status).toBe(401);
+  });
+
+  it('persists providers in the org-scoped domain with keys redacted', async () => {
+    const created = await postProvider(buildApp(userA), providerBody);
+    expect(created.status).toBe(200);
+    const { provider } = await created.json();
+    expect(provider).toMatchObject({ name: 'My LLM', hasApiKey: true, models: ['m1', 'm2'] });
+    expect(JSON.stringify(provider)).not.toContain('sk-x');
+
+    const stored = await seed.customProviders.list({ orgId: 'org1' });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ createdBy: 'user-a', apiKey: 'sk-x' });
+    expect(onCustomProvidersChanged).toHaveBeenCalledWith({ orgId: 'org1' });
+
+    const listed = await buildApp(userA).request('/web/config/custom-providers');
+    const { providers } = await listed.json();
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toMatchObject({ id: provider.id, hasApiKey: true });
+  });
+
+  it('renames via previousId without leaving the old row behind', async () => {
+    const created = await postProvider(buildApp(userA), providerBody);
+    const { provider } = await created.json();
+
+    const renamed = await postProvider(buildApp(userA), { ...providerBody, name: 'New Name', previousId: provider.id });
+    expect(renamed.status).toBe(200);
+
+    const stored = await seed.customProviders.list({ orgId: 'org1' });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.name).toBe('New Name');
+  });
+
+  it('keeps providers invisible across organizations', async () => {
+    await postProvider(buildApp(userA), providerBody);
+
+    const { providers } = await (await buildApp(userOtherOrg).request('/web/config/custom-providers')).json();
+    expect(providers).toEqual([]);
+  });
+
+  it('deletes within the caller org only', async () => {
+    const created = await postProvider(buildApp(userA), providerBody);
+    const { provider } = await created.json();
+
+    await buildApp(userOtherOrg).request(`/web/config/custom-providers/${provider.id}`, { method: 'DELETE' });
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toHaveLength(1);
+
+    const res = await buildApp(userA).request(`/web/config/custom-providers/${provider.id}`, { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toEqual([]);
+  });
+
+  it('uses a sentinel local org when auth is disabled — never settings.json', async () => {
+    const app = buildApp(null, { authEnabled: false });
+    const created = await postProvider(app, providerBody);
+    expect(created.status).toBe(200);
+
+    const stored = await seed.customProviders.list({ orgId: 'local' });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ createdBy: 'local', name: 'My LLM' });
+  });
+
+  it('returns 503 when storage is unavailable', async () => {
+    const res = await buildApp(userA, { withStorage: false }).request('/web/config/custom-providers');
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe('custom_providers_unavailable');
+  });
+
+  it('validates the payload', async () => {
+    expect((await postProvider(buildApp(userA), { url: 'https://x.example' })).status).toBe(400);
+    expect((await postProvider(buildApp(userA), { name: 'x', url: 'ftp://bad' })).status).toBe(400);
   });
 });

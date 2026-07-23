@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
       start: vi.fn(async () => {}),
       getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'sandbox-1' } })),
       executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      setEnvironmentVariable: mocks.setEnvironmentVariable,
     };
   }),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
@@ -29,6 +30,15 @@ const mocks = vi.hoisted(() => ({
     authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
   })),
   mintInstallationToken: vi.fn(async () => 'gh-token'),
+  setEnvironmentVariable: vi.fn(),
+  /** Org GitHub PATs surfaced via integration settings; null = not configured. */
+  githubPat: null as string | null,
+  githubReviewerPat: null as string | null,
+  /** Run-binding role resolved for the session; null = no binding found. */
+  runBindingRole: null as string | null,
+  findRunBindingBySession: vi.fn(async () =>
+    mocks.runBindingRole ? { role: mocks.runBindingRole, orgId: 'org-1' } : null,
+  ),
 }));
 
 vi.mock('./integrations/github/sandbox', () => ({
@@ -37,6 +47,7 @@ vi.mock('./integrations/github/sandbox', () => ({
   runWorktreeSetup: (...args: unknown[]) => (mocks.runWorktreeSetup as any)(...args),
 }));
 
+import { injectGithubToken } from './integrations/github/token-refresh.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { checkpointNameForSession, createWorkspaceFactory, getFactoryWorkspace } from './workspace.js';
 
@@ -53,6 +64,11 @@ afterEach(async () => {
   mocks.runWorktreeSetup.mockClear();
   mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
+  mocks.setEnvironmentVariable.mockClear();
+  mocks.githubPat = null;
+  mocks.githubReviewerPat = null;
+  mocks.runBindingRole = null;
+  mocks.findRunBindingBySession.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -71,7 +87,7 @@ function createRequestContext(projectPath: string) {
 }
 
 function createGithubRequestContext(
-  _projectId: string,
+  projectId: string,
   sessionId: string,
   user: Record<string, unknown> = { organizationId: 'org-1', workosId: 'user-1' },
 ) {
@@ -79,6 +95,8 @@ function createGithubRequestContext(
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: sessionId,
+    threadId: sessionId,
+    getState: () => ({ factoryProjectId: projectId }),
     session: { id: sessionId },
   });
   requestContext.set('user', user);
@@ -154,6 +172,18 @@ function fakeGithubIntegration() {
     },
     mintInstallationToken: (...args: unknown[]) => mocks.mintInstallationToken(...(args as [])),
     getInstallationOctokit: vi.fn(),
+    integrationStorage: {
+      settings: {
+        get: vi.fn(async () =>
+          mocks.githubPat || mocks.githubReviewerPat
+            ? {
+                ...(mocks.githubPat ? { pat: mocks.githubPat } : {}),
+                ...(mocks.githubReviewerPat ? { reviewerPat: mocks.githubReviewerPat } : {}),
+              }
+            : null,
+        ),
+      },
+    },
     sourceControlStorage: {
       sessions: {
         getBySessionId: vi.fn(async (id: string) => mocks.sessions.find(session => session.sessionId === id) ?? null),
@@ -213,37 +243,57 @@ describe('getFactoryWorkspace', () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const assetNames = (await fs.readdir(assetRoot)).sort();
 
-    expect(assetNames).toEqual(['configure-factory-rules', 'understand-issue', 'understand-pr']);
+    expect(assetNames).toEqual(['configure-factory-rules', 'factory-plan', 'factory-review', 'factory-triage']);
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
   });
 
+  it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
+
+    for (const skillName of ['factory-triage', 'factory-plan', 'factory-review']) {
+      const prose = await read(skillName);
+      // Terminal batched handoff + governed transition, never a mid-run human gate.
+      expect(prose).toContain('factory_transition_work_item');
+      expect(prose).toContain('as an assumption');
+      expect(prose).toContain('Never wait for or solicit human input mid-run');
+      expect(prose).not.toContain('ask_user');
+    }
+
+    const plan = await read('factory-plan');
+    expect(plan).toContain('if this conversation already contains a triage/understanding pass');
+    expect(plan).toContain('Do not call `submit_plan`');
+
+    const review = await read('factory-review');
+    expect(review).toContain('Verdict: approve');
+    expect(review).toContain('Verdict: request changes');
+  });
+
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-factory-skills-'));
     tempDirs.push(projectPath);
-    const shadowDir = path.join(projectPath, '.mastracode', 'skills', 'understand-issue');
+    const shadowDir = path.join(projectPath, '.mastracode', 'skills', 'factory-triage');
     await fs.mkdir(shadowDir, { recursive: true });
     await fs.writeFile(
       path.join(shadowDir, 'SKILL.md'),
-      '---\nname: understand-issue\ndescription: Project shadow\n---\n\n# Shadowed Project Skill',
+      '---\nname: factory-triage\ndescription: Project shadow\n---\n\n# Shadowed Project Skill',
     );
 
     const workspace = await getFactoryWorkspace({ requestContext: createRequestContext(projectPath) });
     const configureRules = await workspace.skills?.get('configure-factory-rules');
-    const understandIssue = await workspace.skills?.get('understand-issue');
-    const understandPr = await workspace.skills?.get('understand-pr');
+    const factoryTriage = await workspace.skills?.get('factory-triage');
+    const factoryReview = await workspace.skills?.get('factory-review');
     const filesystem = workspace.filesystem as LocalFilesystem;
 
     expect(workspace.id).toContain('-web-factory');
     expect(configureRules?.instructions).toContain('# Configure Factory Rules');
-    expect(understandIssue?.instructions).toContain('# Understand Issue');
-    expect(understandIssue?.instructions).not.toContain('# Shadowed Project Skill');
-    expect(understandIssue?.metadata).toMatchObject({ goal: true });
-    expect(understandPr?.instructions).toContain('# Understand PR');
-    expect(understandPr?.metadata).toMatchObject({ goal: true });
+    expect(factoryTriage?.instructions).toContain('# Factory Triage');
+    expect(factoryTriage?.instructions).not.toContain('# Shadowed Project Skill');
+    expect(factoryReview?.instructions).toContain('# Factory Review');
     expect(filesystem.allowedPaths).not.toContain('/__mastracode_factory_skills__');
-    await expect(filesystem.writeFile(path.join(understandIssue!.path, 'SKILL.md'), 'mutated')).rejects.toMatchObject({
+    await expect(filesystem.writeFile(path.join(factoryTriage!.path, 'SKILL.md'), 'mutated')).rejects.toMatchObject({
       name: 'PermissionError',
       code: 'EACCES',
     });
@@ -263,6 +313,7 @@ describe('GitHub session workspace preparation', () => {
         sandbox: { machine, workdir: root },
         github: fakeGithubIntegration() as any,
         fleet,
+        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
       }),
     };
   }
@@ -327,6 +378,140 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
     expect(mocks.mintInstallationToken).not.toHaveBeenCalled();
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
+  });
+
+  it('installs a configured org PAT as GH_TOKEN while git keeps the repository-scoped token', async () => {
+    mocks.githubPat = 'ghp_org_pat';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // gh CLI env gets the PAT…
+    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      { GH_TOKEN: 'ghp_org_pat' },
+      undefined,
+      expect.any(Object),
+    );
+    // …but git materialization keeps the installation-scoped token.
+    expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
+  });
+
+  it('installs the reviewer PAT for review-board sessions', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      { GH_TOKEN: 'ghp_reviewer' },
+      undefined,
+      expect.any(Object),
+    );
+  });
+
+  it('falls back to the worker PAT for review sessions without a reviewer token', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      { GH_TOKEN: 'ghp_worker' },
+      undefined,
+      expect.any(Object),
+    );
+  });
+
+  it('keeps the worker PAT for non-review sessions even when a reviewer token exists', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'triage';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      { GH_TOKEN: 'ghp_worker' },
+      undefined,
+      expect.any(Object),
+    );
+  });
+
+  it('registers a runtime injector for refreshing GH_TOKEN in the active sandbox', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext });
+    injectGithubToken(requestContext, 'fresh-token');
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'fresh-token');
+  });
+
+  it('re-registers the token injector when reusing a workspace on a later request', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({
+      requestContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+    injectGithubToken(requestContext, 'later-token');
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'later-token');
+  });
+
+  it('installs a PAT saved after provisioning into the running sandbox on the next reuse', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+
+    // The org pastes a PAT in Settings while the sandbox is already running —
+    // it must take effect without a server restart.
+    mocks.githubPat = 'ghp_saved_later';
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_saved_later');
+  });
+
+  it('does not re-inject an unchanged PAT on workspace reuse', async () => {
+    mocks.githubPat = 'ghp_org_pat';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.setEnvironmentVariable.mockClear();
+
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
   });
 
   it('reuses an already registered workspace for the exact GitHub session', async () => {

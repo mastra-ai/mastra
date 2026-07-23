@@ -10,9 +10,12 @@
 import { isAutomationActor } from './base.js';
 import type { WorkItemRow, WorkItemStageEntry } from './base.js';
 
-/** Windows the metrics endpoint accepts; anything else clamps to the default. */
-export const METRICS_WINDOWS = [7, 30, 90] as const;
+/** Default window span (days) when the request omits or malforms the range. */
 export const DEFAULT_METRICS_WINDOW = 30;
+/** Hard cap on the range span (days) — bounds the gap-filled throughput array. */
+export const MAX_METRICS_WINDOW = 366;
+
+const DAY_MS = 86_400_000;
 
 /** Terminal stage — items here count as completed, not in-flight. */
 const DONE_STAGE = 'done';
@@ -31,6 +34,9 @@ const AGING_WIP_LIMIT = 10;
 
 export interface FactoryMetrics {
   windowDays: number;
+  /** Earliest work-item creation time (ISO, window-independent) — the natural
+   * lower bound for a date-range control. `null` when the board is empty. */
+  earliestItemAt: string | null;
   /** Items reaching `done` per UTC day, gap-filled across the window. */
   throughput: { date: string; count: number }[];
   /** Card creation → `done` duration for items completed in the window. */
@@ -69,10 +75,47 @@ export interface FactoryMetrics {
   }[];
 }
 
-/** Clamp an untrusted `days` param to a supported window. */
-export function clampMetricsWindow(value: unknown): number {
-  const parsed = typeof value === 'string' ? Number(value) : value;
-  return METRICS_WINDOWS.find(w => w === parsed) ?? DEFAULT_METRICS_WINDOW;
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Datetime carrying an explicit `Z` or `±HH:MM` offset. */
+const ZONED_DATETIME_RE = /(?:[Zz]|[+-]\d{2}:?\d{2})$/;
+
+function parseRangeParam(value: unknown, boundary: 'from' | 'to'): number | undefined {
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+  const dateOnly = DATE_ONLY_RE.test(value);
+  // Timezone-less datetimes are parsed as server-local by Date.parse, so the
+  // window would shift by deployment region — reject them as invalid.
+  if (!dateOnly && !ZONED_DATETIME_RE.test(value)) return undefined;
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) return undefined;
+  return boundary === 'to' && dateOnly ? time + DAY_MS : time;
+}
+
+function utcDayStart(time: number): number {
+  return Date.parse(`${utcDay(time)}T00:00:00Z`);
+}
+
+/**
+ * Resolve untrusted `from`/`to` into a bounded half-open UTC window. A date-only
+ * `to` covers the whole day; an open/future end resolves to the end of the
+ * current UTC day (not `now`) so an event at this instant stays inside the
+ * window instead of on its excluded edge.
+ */
+export function parseMetricsRange(
+  fromParam: unknown,
+  toParam: unknown,
+  now: Date,
+): { windowStart: number; windowEnd: number } {
+  const nowMs = now.getTime();
+  const endOfToday = utcDayStart(nowMs) + DAY_MS;
+  const requestedEnd = parseRangeParam(toParam, 'to') ?? endOfToday;
+  const windowEnd = Math.min(requestedEnd, endOfToday);
+  const lastIncludedDay = utcDayStart(windowEnd - 1);
+  const defaultStart = lastIncludedDay - (DEFAULT_METRICS_WINDOW - 1) * DAY_MS;
+  const parsedFrom = parseRangeParam(fromParam, 'from');
+  let windowStart = parsedFrom !== undefined && parsedFrom < windowEnd ? parsedFrom : defaultStart;
+  const earliestStart = lastIncludedDay - (MAX_METRICS_WINDOW - 1) * DAY_MS;
+  if (windowStart < earliestStart) windowStart = earliestStart;
+  return { windowStart, windowEnd };
 }
 
 function parseTime(iso: string): number {
@@ -114,27 +157,28 @@ function openEntries(item: WorkItemRow): WorkItemStageEntry[] {
   );
 }
 
-export function computeFactoryMetrics({
-  items,
-  days,
-  now,
-}: {
-  items: WorkItemRow[];
-  days: number;
-  now: Date;
-}): FactoryMetrics {
-  const nowMs = now.getTime();
-  const windowStart = nowMs - days * 86_400_000;
+export function computeFactoryMetrics(
+  items: WorkItemRow[],
+  opts: { windowStart: number; windowEnd: number },
+): FactoryMetrics {
+  const { windowStart, windowEnd } = opts;
+
+  // Earliest creation across all items (window-independent) — the range lower bound.
+  let earliest = Infinity;
+  for (const item of items) earliest = Math.min(earliest, item.createdAt.getTime());
+  const earliestItemAt = Number.isFinite(earliest) ? new Date(earliest).toISOString() : null;
 
   // ── Throughput + cycle time (completed in window) ─────────────────────────
+  // Gap-fill every UTC calendar date intersecting the half-open window.
   const throughputByDay = new Map<string, number>();
-  for (let i = days - 1; i >= 0; i--) {
-    throughputByDay.set(utcDay(nowMs - i * 86_400_000), 0);
+  const firstDay = utcDayStart(windowStart);
+  for (let day = firstDay; day < windowEnd; day += DAY_MS) {
+    throughputByDay.set(utcDay(day), 0);
   }
   const cycleSamples: number[] = [];
   for (const item of items) {
     const doneAt = completedAt(item);
-    if (doneAt === undefined || doneAt < windowStart || doneAt > nowMs) continue;
+    if (doneAt === undefined || doneAt < windowStart || doneAt >= windowEnd) continue;
     const day = utcDay(doneAt);
     throughputByDay.set(day, (throughputByDay.get(day) ?? 0) + 1);
     cycleSamples.push(Math.max(0, doneAt - item.createdAt.getTime()));
@@ -146,7 +190,7 @@ export function computeFactoryMetrics({
     for (const entry of item.stageHistory) {
       if (entry.exitedAt === undefined || TERMINAL_STAGES.has(entry.stage)) continue;
       const exited = parseTime(entry.exitedAt);
-      if (exited < windowStart || exited > nowMs) continue;
+      if (exited < windowStart || exited >= windowEnd) continue;
       const duration = Math.max(0, exited - parseTime(entry.enteredAt));
       const samples = durationsByStage.get(entry.stage) ?? [];
       samples.push(duration);
@@ -188,7 +232,7 @@ export function computeFactoryMetrics({
   let transitionsTotal = 0;
   let transitionsHuman = 0;
   for (const item of items) {
-    if (item.createdAt.getTime() >= windowStart) {
+    if (item.createdAt.getTime() >= windowStart && item.createdAt.getTime() < windowEnd) {
       const source = item.externalSource
         ? `${item.externalSource.integrationId}:${item.externalSource.type}`
         : 'manual';
@@ -196,7 +240,7 @@ export function computeFactoryMetrics({
     }
     for (const entry of item.stageHistory) {
       const entered = parseTime(entry.enteredAt);
-      if (entered < windowStart || entered > nowMs) continue;
+      if (entered < windowStart || entered >= windowEnd) continue;
       transitionsTotal += 1;
       if (!isAutomationActor(entry.by)) transitionsHuman += 1;
     }
@@ -213,7 +257,7 @@ export function computeFactoryMetrics({
       const entry = item.stageHistory[i]!;
       if (entry.exitedAt === undefined || TERMINAL_STAGES.has(entry.stage)) continue;
       const exited = parseTime(entry.exitedAt);
-      if (exited < windowStart || exited > nowMs) continue;
+      if (exited < windowStart || exited >= windowEnd) continue;
       let row = automationByStage.get(entry.stage);
       if (!row) {
         row = {
@@ -240,8 +284,11 @@ export function computeFactoryMetrics({
   }
 
   return {
-    windowDays: days,
-    throughput: [...throughputByDay.entries()].map(([date, count]) => ({ date, count })),
+    windowDays: throughputByDay.size,
+    earliestItemAt,
+    throughput: [...throughputByDay.entries()]
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date)),
     cycleTime: {
       medianMs: percentile(cycleSamples, 0.5),
       p90Ms: percentile(cycleSamples, 0.9),

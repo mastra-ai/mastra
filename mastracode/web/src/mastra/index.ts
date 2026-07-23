@@ -28,6 +28,7 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraFactory } from '@mastra/factory';
+import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
@@ -63,12 +64,36 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
+// Factory dev is auth-less by default. Production can opt out explicitly;
+// otherwise MastraFactory installs its platform-backed auth provider.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 let auth: IMastraAuthProvider | null | undefined;
 
 if (authDisabled) {
   auth = null;
 }
+
+// Direct GitHub App fallback: when the platform-backed integration isn't in
+// play (self-hosted / local deploys), a complete GITHUB_APP_* env group wires
+// a GithubIntegration so the app still gets a real GitHub connection — Connect
+// GitHub in onboarding, the repo picker, and webhooks. A partial group stays
+// disabled so the status route can report exactly what's missing.
+const githubAppId = process.env.GITHUB_APP_ID?.trim();
+const githubPrivateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
+const githubClientId = process.env.GITHUB_APP_CLIENT_ID?.trim();
+const githubClientSecret = process.env.GITHUB_APP_CLIENT_SECRET?.trim();
+const githubAppSlug = process.env.GITHUB_APP_SLUG?.trim();
+const github =
+  githubAppId && githubPrivateKey && githubClientId && githubClientSecret && githubAppSlug
+    ? new GithubIntegration({
+        appId: githubAppId,
+        privateKey: githubPrivateKey,
+        clientId: githubClientId,
+        clientSecret: githubClientSecret,
+        slug: githubAppSlug,
+        webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim() || undefined,
+      })
+    : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
@@ -99,11 +124,7 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
-const PLATFORM_SANDBOX_ENV_KEYS = [
-  'MASTRA_ENVIRONMENT_ID',
-  'MASTRA_PROJECT_ID',
-  'MASTRA_PLATFORM_SECRET_KEY',
-] as const;
+const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
 const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
 
 // Use PlatformSandbox only when its complete identity is configured. Otherwise
@@ -138,6 +159,7 @@ const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.e
 if (!databaseUrl && !localDevelopmentMode) {
   throw new Error('DATABASE_URL is required outside local development and tests.');
 }
+
 const storage = databaseUrl
   ? new PgFactoryStorage({
       id: 'mastra-code-storage',
@@ -153,6 +175,7 @@ const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectio
 
 export const factory = new MastraFactory({
   auth,
+  integrations: github ? [github] : undefined,
   sandbox: {
     machine: sandbox,
     // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
@@ -191,10 +214,6 @@ export const factory = new MastraFactory({
 const prepared = await factory.prepare();
 export const mastra = new Mastra({
   ...prepared,
-  bundler: {
-    externals: ['@anush008/tokenizers', '@duckdb/node-bindings', '@node-rs/xxhash', 'supports-color'],
-    transpilePackages: ['@mastra/factory'],
-  },
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

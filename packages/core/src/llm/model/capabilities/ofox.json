@@ -1,0 +1,33 @@
+{
+  "attachment": [
+    "anthropic/claude-fable-5",
+    "anthropic/claude-opus-4.8",
+    "anthropic/claude-sonnet-5",
+    "google/gemini-3.1-pro-preview",
+    "moonshotai/kimi-k2.6",
+    "openai/gpt-5.5",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-sol",
+    "openai/gpt-5.6-terra",
+    "x-ai/grok-4.3"
+  ],
+  "temperature": [
+    "bailian/qwen3.7-max",
+    "deepseek/deepseek-v4-pro",
+    "google/gemini-3.1-pro-preview",
+    "moonshotai/kimi-k2.6",
+    "x-ai/grok-4.3",
+    "z-ai/glm-5.2"
+  ],
+  "structuredOutput": [
+    "deepseek/deepseek-v4-pro",
+    "google/gemini-3.1-pro-preview",
+    "moonshotai/kimi-k2.6",
+    "openai/gpt-5.5",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-sol",
+    "openai/gpt-5.6-terra",
+    "x-ai/grok-4.3",
+    "z-ai/glm-5.2"
+  ]
+}

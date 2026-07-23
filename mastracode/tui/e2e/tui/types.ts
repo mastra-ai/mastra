@@ -178,6 +178,12 @@ export type McE2eScenarioRuntime = {
   waitForOutputText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenTextAbsent: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
+  /**
+   * Stop the in-process Mastra Code app (TUI + storage close). Idempotent —
+   * safe to call before the runner's own finally-block stop. Scenarios that
+   * need to inspect on-disk database state after shutdown call this first.
+   */
+  stopApp?: () => Promise<void>;
 };
 
 export type McE2ePrepareContext = {
@@ -226,6 +232,6 @@ export type McE2eScenario = {
   inProcessApp?: (context: McE2eInProcessAppContext) => Promise<McE2eInProcessApp> | McE2eInProcessApp;
   terminalBackend?: 'subprocess';
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
-  run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime }) => Promise<void>;
+  run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime; dbPath: string }) => Promise<void>;
   verifyAimockRequests?: (requests: unknown[]) => void;
 };
