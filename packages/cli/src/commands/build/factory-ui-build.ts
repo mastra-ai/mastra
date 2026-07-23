@@ -12,6 +12,22 @@ function resolveFactoryUISource(): string {
 }
 
 /**
+ * Resolve the Factory SPA dir the dev server should serve (via `MASTRACODE_UI_DIST`).
+ *
+ * Prefers a locally built UI at `<publicDir>/factory` (e.g. `build:ui` output) by
+ * returning `undefined` — the server already picks that up as `cwd/factory`.
+ * Otherwise falls back to the SPA bundled with the CLI, or `undefined` when no
+ * prebuilt UI exists (behavior unchanged: no SPA middleware is mounted).
+ */
+export function resolveFactoryUIDevDist(
+  publicDir: string,
+  factoryUISource = resolveFactoryUISource(),
+): string | undefined {
+  if (existsSync(join(publicDir, 'factory', 'index.html'))) return undefined;
+  return existsSync(join(factoryUISource, 'index.html')) ? factoryUISource : undefined;
+}
+
+/**
  * Copies the Factory SPA bundled with the CLI into the project's public directory
  * so the bundler's `copyPublic()` can include it in the deployment output.
  */
