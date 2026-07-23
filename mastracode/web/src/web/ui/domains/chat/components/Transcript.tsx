@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -28,6 +29,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../ui/highlight';
+import { usePlanFile } from '../../../../../shared/hooks/use-fs';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import {
@@ -414,36 +416,7 @@ function SuspensionCard({
   const payload = suspensionPayloadShape(prompt.suspendPayload);
 
   if (prompt.toolName === 'submit_plan') {
-    return (
-      <div className={promptCardSuspension} role="group" aria-label="Plan approval">
-        <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
-        {payload.plan?.summary && (
-          <div className="whitespace-pre-wrap break-words font-mono text-ui-smd leading-relaxed text-icon5">
-            {payload.plan.summary}
-          </div>
-        )}
-        <div className={promptActions}>
-          <Button
-            variant="primary"
-            size="sm"
-            aria-label="Approve the plan and switch to build"
-            autoFocus
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
-          >
-            Approve &amp; build
-          </Button>
-          <Button
-            size="sm"
-            aria-label="Reject the plan"
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
-          >
-            Reject
-          </Button>
-        </div>
-      </div>
-    );
+    return <SubmitPlanCard prompt={prompt} payload={payload} isSubmitting={isSubmitting} onRespond={onRespond} />;
   }
 
   if (prompt.toolName === 'request_access') {
@@ -476,6 +449,83 @@ function SuspensionCard({
   }
 
   return <AskUserCard prompt={prompt} payload={payload} isSubmitting={isSubmitting} onRespond={onRespond} />;
+}
+
+/** First `# heading` of a markdown document, used as the plan title. */
+function firstMarkdownHeading(markdown: string): string | undefined {
+  const match = markdown.match(/^#\s+(.+)$/m);
+  return match?.[1]?.trim() || undefined;
+}
+
+function SubmitPlanCard({
+  prompt,
+  payload,
+  isSubmitting,
+  onRespond,
+}: {
+  prompt: SuspensionPrompt;
+  payload: SuspendPayloadShape;
+  isSubmitting: boolean;
+  onRespond: (toolCallId: string, resumeData: PlanResume, promptId: string) => void;
+}) {
+  // The suspend payload only carries the plan file's workspace-relative path;
+  // fetch the markdown while the approval window is open. `resourceId` is the
+  // session id, which the plans endpoint resolves as the workspace.
+  const { resourceId } = useChatSessionContext();
+  const planQuery = usePlanFile(resourceId || undefined, payload.requestedPath);
+  const content = planQuery.data?.content;
+  const title =
+    (content ? firstMarkdownHeading(content) : undefined) ?? payload.plan?.title ?? payload.title ?? 'Proposed plan';
+
+  return (
+    <div className={promptCardSuspension} role="group" aria-label="Plan approval">
+      <div className={promptTitle}>Plan: {title}</div>
+      {payload.requestedPath && <div className="mb-1 font-mono text-xs text-icon3">{payload.requestedPath}</div>}
+      {payload.plan?.summary && (
+        <div className="whitespace-pre-wrap break-words font-mono text-ui-smd leading-relaxed text-icon5">
+          {payload.plan.summary}
+        </div>
+      )}
+      {planQuery.isLoading && (
+        <div className="mt-1 flex flex-col gap-1.5" aria-label="Loading plan content">
+          <Skeleton className="h-3.5 w-3/4" />
+          <Skeleton className="h-3.5 w-full" />
+          <Skeleton className="h-3.5 w-5/6" />
+        </div>
+      )}
+      {planQuery.isError && (
+        <div className="mt-1 text-xs text-error" role="alert">
+          Couldn&apos;t load plan content: {planQuery.error instanceof Error ? planQuery.error.message : 'unknown error'}
+        </div>
+      )}
+      {content !== undefined && (
+        <div className="mt-1 max-h-96 overflow-y-auto text-ui-smd leading-relaxed text-icon5">
+          <Markdown>{content}</Markdown>
+          {planQuery.data?.truncated && <div className="mt-1 text-xs text-icon3">Plan content truncated.</div>}
+        </div>
+      )}
+      <div className={promptActions}>
+        <Button
+          variant="primary"
+          size="sm"
+          aria-label="Approve the plan and switch to build"
+          autoFocus
+          disabled={isSubmitting}
+          onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
+        >
+          Approve &amp; build
+        </Button>
+        <Button
+          size="sm"
+          aria-label="Reject the plan"
+          disabled={isSubmitting}
+          onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
+        >
+          Reject
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function AskUserCard({
@@ -903,6 +953,11 @@ function MessageBubble({
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
       if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
+      // While a submit_plan is awaiting approval, render the live card (which
+      // fetches the plan markdown) instead of the generic tool entry.
+      if (tool.toolName === 'submit_plan' && suspension) {
+        return <SuspensionCard prompt={suspension} isSubmitting={isSubmitting} onRespond={onRespond} />;
+      }
       return (
         <ToolFactory
           toolName={tool.toolName}

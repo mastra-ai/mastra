@@ -90,14 +90,17 @@ interface PlanData {
   content: string;
 }
 
-function planData(input: unknown): PlanData {
+function planData(input: unknown, output: unknown): PlanData {
+  // Resolved entries persist the full plan in the tool result (`submittedPlan`);
+  // prefer it so historical transcripts render offline without any fetch.
+  const submitted = record(record(output)?.submittedPlan);
   const payload = record(input);
   const plan = record(payload?.plan) ?? payload;
-  const path = stringValue(plan?.path) ?? stringValue(payload?.path);
+  const path = stringValue(submitted?.path) ?? stringValue(plan?.path) ?? stringValue(payload?.path);
   return {
-    title: stringValue(plan?.title) ?? 'Plan',
+    title: stringValue(submitted?.title) ?? stringValue(plan?.title) ?? 'Plan',
     ...(path ? { path } : {}),
-    content: stringValue(plan?.content) ?? stringValue(plan?.summary) ?? '',
+    content: stringValue(submitted?.plan) ?? stringValue(plan?.content) ?? stringValue(plan?.summary) ?? '',
   };
 }
 
@@ -132,7 +135,7 @@ function ToolFactoryComponent({
   if (!isTranscriptToolVisible(toolName)) return null;
 
   if (toolName === 'submit_plan') {
-    const plan = planData(input);
+    const plan = planData(input, output);
     return (
       <Plan role="group" aria-label="Plan approval">
         <PlanHeader>

@@ -33,6 +33,7 @@ import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js'
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
 import { OAuthRoutes } from './oauth.js';
+import { buildPlanRoutes } from './plans.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
@@ -360,6 +361,14 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
 
   return [
     ...buildFsRoutes({
+      root: deps.fsRoot,
+      sessionFs: {
+        auth: deps.auth,
+        fleet: deps.fleet,
+        sessions: deps.sourceControlStorage.forIntegration('github').sessions,
+      },
+    }),
+    ...buildPlanRoutes({
       root: deps.fsRoot,
       sessionFs: {
         auth: deps.auth,

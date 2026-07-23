@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders } from '../../../../e2e/web-ui/render';
-import { useArtifactListing, useDirectoryListing, useWorkspaceFile, useWorkspaceRenderedListing } from '../use-fs';
+import { useArtifactListing, useDirectoryListing, usePlanFile, useWorkspaceFile, useWorkspaceRenderedListing } from '../use-fs';
 import { listing } from './fixtures/fs';
 
 const URL = `${TEST_BASE_URL}/web/fs/list`;
@@ -219,5 +219,56 @@ describe('useWorkspaceFile', () => {
     expect(seenWorkspacePath).toBe('/home/user/project');
     expect(seenPath).toBe('.artifacts/understand-pr/HISTORY.md');
     expect(result.current.data?.content).toBe('notes');
+  });
+});
+
+const PLAN_FILE_URL = `${TEST_BASE_URL}/web/plans/file`;
+
+describe('usePlanFile', () => {
+  it('does not fetch when disabled', () => {
+    let called = false;
+    server.use(
+      http.post(PLAN_FILE_URL, () => {
+        called = true;
+        return HttpResponse.json({ path: '', content: '', truncated: false, updatedAt: '' });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() =>
+      usePlanFile('/home/user/project', '.mastracode/plans/plan.md', { enabled: false }),
+    );
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(called).toBe(false);
+  });
+
+  it('posts the workspace path and plan path in the request body', async () => {
+    let seenBody: unknown;
+    server.use(
+      http.post(PLAN_FILE_URL, async ({ request }) => {
+        seenBody = await request.json();
+        return HttpResponse.json({
+          path: '.mastracode/plans/plan.md',
+          content: '# My plan\n\nDetails.',
+          truncated: false,
+          updatedAt: '2026-07-23T00:00:00.000Z',
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => usePlanFile('/home/user/project', '.mastracode/plans/plan.md'));
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(seenBody).toEqual({ workspacePath: '/home/user/project', path: '.mastracode/plans/plan.md' });
+    expect(result.current.data?.content).toBe('# My plan\n\nDetails.');
+  });
+
+  it('surfaces read failures as errors', async () => {
+    server.use(http.post(PLAN_FILE_URL, () => HttpResponse.json({ error: 'not found' }, { status: 404 })));
+
+    const { result } = renderHookWithProviders(() => usePlanFile('/home/user/project', '.mastracode/plans/plan.md'));
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBeInstanceOf(Error);
   });
 });

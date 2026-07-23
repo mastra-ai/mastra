@@ -25,6 +25,7 @@ import type {
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
+import type { PlanFile } from '@mastra/factory/routes/plans';
 
 export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
@@ -32,6 +33,7 @@ export type {
   ArtifactListing,
   DirectoryEntry,
   DirectoryListing,
+  PlanFile,
   WorkspaceFile,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,

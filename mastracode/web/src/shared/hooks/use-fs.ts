@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { ArtifactListing, DirectoryListing, WorkspaceFile, WorkspaceRenderedListing } from '../api/types';
+import type { ArtifactListing, DirectoryListing, PlanFile, WorkspaceFile, WorkspaceRenderedListing } from '../api/types';
 
 /**
  * Server-driven directory listing for the project picker (mirrors
@@ -57,5 +57,24 @@ export function useWorkspaceFile(
       client.get<WorkspaceFile>(
         `/web/workspace/file?workspacePath=${encodeURIComponent(workspacePath ?? '')}&path=${encodeURIComponent(filePath ?? '')}`,
       ),
+  });
+}
+
+/**
+ * Read a `submit_plan` markdown file (mirrors `POST /web/plans/file`). The
+ * server only serves relative `.md` paths under `.mastracode/plans/`, so this
+ * is used exclusively by the live plan-approval card to render the plan the
+ * agent just submitted. POST keeps workspace paths out of URL logs.
+ */
+export function usePlanFile(
+  workspacePath: string | undefined,
+  filePath: string | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const { client } = useApiConfig();
+  return useQuery<PlanFile>({
+    queryKey: queryKeys.planFile(workspacePath, filePath),
+    enabled: Boolean(workspacePath && filePath && (options.enabled ?? true)),
+    queryFn: () => client.post<PlanFile>('/web/plans/file', { workspacePath, path: filePath }),
   });
 }
