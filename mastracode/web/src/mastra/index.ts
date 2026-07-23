@@ -217,8 +217,16 @@ if (mcAgentController) {
 
 // The authed `/connect/slack` route (per-user link write). Appended to the
 // factory-assembled apiRoutes so it rides the same server + auth gate.
+//
+// IMPORTANT: use the provider the factory RESOLVED (`preparedArgs.server.auth`),
+// not this entry's `auth` variable — that local is only the explicit
+// enable/disable override and stays `undefined` when the factory falls back to
+// its default MastraAuthStudio provider. Wiring the local here handed the
+// route a no-op RouteAuth whose `ensureUser` never resolves anyone, sending
+// every visitor into a login loop.
+const resolvedAuth = (preparedArgs.server as { auth?: IMastraAuthProvider } | undefined)?.auth;
 const slackConnectRoutes = createSlackConnectRoutes({
-  auth: createFactoryRouteAuth(auth ?? undefined),
+  auth: createFactoryRouteAuth(resolvedAuth),
   accountLinks,
   channelLinkStateSigner,
 });

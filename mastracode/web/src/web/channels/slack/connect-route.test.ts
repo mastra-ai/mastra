@@ -69,7 +69,7 @@ describe('/connect/slack route', () => {
 
     expect(saveAccountLink).not.toHaveBeenCalled();
     const target = c.redirect.mock.calls[0][0];
-    expect(target.startsWith('/auth/login?redirect_uri=')).toBe(true);
+    expect(target.startsWith('/auth/login?returnTo=')).toBe(true);
     expect(decodeURIComponent(target)).toContain('/connect/slack?state=');
   });
 
