@@ -6,10 +6,7 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
-import { parseCreatedPullRequest } from '../integrations/github/session-subscriptions.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { completedToolResults } from './processor.js';
-import type { PersistedMessageReader } from './processor.js';
 import { resolveFactoryGithubRule } from './resolve.js';
 import type {
   FactoryGithubEventName,
@@ -22,7 +19,6 @@ import { validateFactoryRuleDecisions } from './validation.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
 const RULE_TIMEOUT_MS = 5_000;
-const TRANSCRIPT_PAGE_SIZE = 50;
 
 async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -121,12 +117,6 @@ export interface FactoryGithubEventServiceOptions {
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
   rules: FactoryRules;
-  /**
-   * Optional reader over persisted chat transcripts. Enables the last-resort
-   * PR auto-link fallback: matching an unlinked PR's URL against successful
-   * `gh pr create` calls in candidate work items' bound sessions.
-   */
-  messageReader?: PersistedMessageReader;
 }
 
 export class FactoryGithubEventService {
@@ -190,7 +180,6 @@ export class FactoryGithubEventService {
       issueNumber,
       pullRequestNumber,
       string(object(pullRequest?.head)?.ref),
-      string(pullRequest?.html_url),
       provenance,
     );
     const actor = await githubActor(this.options.github, {
@@ -307,7 +296,6 @@ export class FactoryGithubEventService {
     issueNumber: number | undefined,
     pullRequestNumber: number | undefined,
     pullRequestHeadBranch: string | undefined,
-    pullRequestUrl: string | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
   ): Promise<WorkItemRow | undefined> {
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
@@ -335,54 +323,8 @@ export class FactoryGithubEventService {
                 item.externalSource?.type !== 'pull-request' &&
                 Object.values(item.sessions).some(session => session.branch === pullRequestHeadBranch),
             )
-          : undefined) ??
-        // Transcript fallback: the agent pushed its own branch (defeating the
-        // head-branch match) and provenance recording failed (e.g. its PR
-        // verification fetch died on a broken installation token). A
-        // successful `gh pr create` whose stdout carries this exact PR URL in
-        // a candidate item's bound session is a deterministic, DB-local
-        // record that the session opened this PR.
-        (await this.#itemFromTranscripts(items, pullRequestUrl))
+          : undefined)
       );
-    }
-    return undefined;
-  }
-
-  async #itemFromTranscripts(items: WorkItemRow[], pullRequestUrl: string | undefined) {
-    const reader = this.options.messageReader;
-    if (!reader || !pullRequestUrl) return undefined;
-    for (const item of items) {
-      if (item.externalSource?.type === 'pull-request') continue;
-      const sessions = new Map(
-        Object.values(item.sessions)
-          .filter(session => session.threadId)
-          .map(session => [session.threadId, session.sessionId]),
-      );
-      for (const [threadId, sessionId] of sessions) {
-        let page = 0;
-        while (true) {
-          const result = await reader.listMessages({
-            threadId,
-            resourceId: sessionId,
-            page,
-            perPage: TRANSCRIPT_PAGE_SIZE,
-            orderBy: { field: 'createdAt', direction: 'ASC' },
-          });
-          for (const message of result.messages) {
-            for (const toolResult of completedToolResults(message)) {
-              if (toolResult.status !== 'success') continue;
-              const url = parseCreatedPullRequest({
-                toolName: toolResult.toolName,
-                input: toolResult.input,
-                output: toolResult.value,
-              });
-              if (url === pullRequestUrl) return item;
-            }
-          }
-          if (!result.hasMore) break;
-          page += 1;
-        }
-      }
     }
     return undefined;
   }

@@ -3,4 +3,4 @@
 'mastra': patch
 ---
 
-Link opened pull requests to their Factory work item even when the agent pushed its own branch, by matching the PR URL against successful `gh pr create` calls in candidate items' bound-session transcripts; log swallowed PR provenance-recording failures instead of hiding them
+Record Factory PR provenance in real time even when the GitHub verification fetch fails (e.g. a broken installation token), marking the row unverified instead of silently dropping it, so opened pull requests still auto-link to their work item; log provenance-recording failures instead of hiding them

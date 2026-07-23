@@ -11,7 +11,6 @@ import { ensureFactoryRuleSession } from '../integrations/github/factory-session
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryGithubEventService } from '../rules/github-service.js';
-import type { PersistedMessageReader } from '../rules/processor.js';
 import { FactoryLinearIssueService } from '../rules/linear-service.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -303,16 +302,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           storage: workItems,
           rules: deps.rules,
-          ...(deps.factoryStorage
-            ? {
-                messageReader: {
-                  listMessages: async (input: Parameters<PersistedMessageReader['listMessages']>[0]) => {
-                    const memory = await deps.factoryStorage!.getMastraStorage().getStore('memory');
-                    return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
-                  },
-                },
-              }
-            : {}),
         })
       : undefined;
   const linearIssueService =

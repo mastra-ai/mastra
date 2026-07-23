@@ -25,6 +25,15 @@ export interface FactoryPullRequestProvenanceData {
   pullRequestUrl: string;
   assistantMessageId: string;
   toolCallId: string;
+  /**
+   * Whether the PR was confirmed against the GitHub API at record time.
+   * False means the verification fetch itself failed (e.g. a broken
+   * installation token) — the record is still trustworthy for auto-linking
+   * because it is only consumed when a real event for this exact
+   * (repository, PR number) arrives, which proves the PR exists.
+   * Absent on rows written before this field existed (treat as verified).
+   */
+  verified?: boolean;
 }
 
 export async function recordFactoryPullRequestProvenance(
@@ -92,10 +101,26 @@ export async function recordFactoryPullRequestProvenance(
       return;
     }
 
-    const { data } = await github
-      .getInstallationOctokit(installationId)
-      .pulls.get({ owner, repo, pull_number: pullRequestNumber });
-    if (data.base.repo.id !== repositoryId || data.number !== pullRequestNumber || data.html_url !== url) return;
+    // Verification is best-effort: a confirmed mismatch (the API answers and
+    // the PR isn't what the tool output claimed) fails closed, but an
+    // unavailable API (broken installation token, network) must NOT block the
+    // record — this row is the real-time signal the PR auto-link depends on,
+    // and it is only consumed when a genuine event for this exact
+    // (repository, PR number) arrives later.
+    let verified = false;
+    try {
+      const { data } = await github
+        .getInstallationOctokit(installationId)
+        .pulls.get({ owner, repo, pull_number: pullRequestNumber });
+      if (data.base.repo.id !== repositoryId || data.number !== pullRequestNumber || data.html_url !== url) return;
+      verified = true;
+    } catch (error) {
+      console.warn('[Factory] Recording unverified PR provenance; verification fetch failed', {
+        pullRequestUrl: url,
+        workItemId: input.item.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     await integrationStorage.subscriptions.create({
       orgId: input.binding.orgId,
@@ -111,12 +136,12 @@ export async function recordFactoryPullRequestProvenance(
         pullRequestUrl: url,
         assistantMessageId: input.assistantMessageId,
         toolCallId: input.toolCallId,
+        verified,
       },
     });
   } catch (error) {
     // Best-effort by design, but never silently: a swallowed failure here
-    // (e.g. a token mint 404 on a broken installation during the PR
-    // verification fetch) is exactly what breaks the PR auto-link later.
+    // is exactly what breaks the PR auto-link later.
     console.warn('[Factory] Failed to record PR provenance', {
       pullRequestUrl: url,
       workItemId: input.item.id,
