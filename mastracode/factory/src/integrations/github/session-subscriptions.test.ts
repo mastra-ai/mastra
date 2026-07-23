@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(async (_input: { sessionScope: string }) => ({ created: true })),
   unsubscribe: vi.fn(async (_input: { sessionScope: string }) => ({ removed: true })),
   getPullRequest: vi.fn(async () => ({ data: { base: { repo: { id: 99 } } } })),
+  getRepositoryAccess: vi.fn(async () => ({
+    cloneUrl: 'https://github.com/mastra-ai/mastra.git',
+    authorization: { scheme: 'bearer' as const, token: 'fresh-gh-token' },
+  })),
 }));
 
 vi.mock('./subscriptions', () => ({
@@ -14,7 +18,7 @@ vi.mock('./subscriptions', () => ({
 }));
 
 // Stub integration: entry points consume the injected instance for PR verification and persistence.
-const integrationStorage = {};
+const integrationStorage: { settings?: { get: (orgId: string, userId: string) => Promise<unknown> } } = {};
 const githubStub = {
   integrationStorage,
   sourceControlStorage: {
@@ -44,15 +48,20 @@ const githubStub = {
       get: vi.fn(async () => ({ id: 'installation-1', externalId: '7' })),
     },
   },
+  versionControl: {
+    getRepositoryAccess: mocks.getRepositoryAccess,
+  },
   getInstallationOctokit: () => ({ pulls: { get: mocks.getPullRequest } }),
 } as unknown as GithubIntegration;
 
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
+  refreshGithubToken,
   subscribeCurrentSessionToPullRequest,
   unsubscribeCurrentSessionFromPullRequest,
 } from './session-subscriptions.js';
+import { registerGithubPatKind, registerGithubTokenInjector } from './token-refresh.js';
 
 function authenticatedRequestContext(scope = '/worktrees/a') {
   const requestContext = new RequestContext();
@@ -69,6 +78,7 @@ function authenticatedRequestContext(scope = '/worktrees/a') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete integrationStorage.settings;
 });
 
 describe('parseCreatedPullRequest', () => {
@@ -123,6 +133,41 @@ describe('GitHub subscription entry points', () => {
     requestContext.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
 
     expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
+  });
+
+  it('mints repository access and injects the fresh token into the active sandbox', async () => {
+    const requestContext = authenticatedRequestContext();
+    const inject = vi.fn();
+    registerGithubTokenInjector(requestContext, inject);
+
+    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
+
+    expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
+    expect(inject).toHaveBeenCalledWith('fresh-gh-token');
+  });
+
+  it('re-injects a configured org PAT instead of minting an installation token', async () => {
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_org_pat' })) };
+    const requestContext = authenticatedRequestContext();
+    const inject = vi.fn();
+    registerGithubTokenInjector(requestContext, inject);
+
+    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
+
+    expect(inject).toHaveBeenCalledWith('ghp_org_pat');
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+  });
+
+  it('re-injects the reviewer PAT when the sandbox was provisioned as a reviewer', async () => {
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker', reviewerPat: 'ghp_reviewer' })) };
+    const requestContext = authenticatedRequestContext();
+    const inject = vi.fn();
+    registerGithubTokenInjector(requestContext, inject);
+    registerGithubPatKind(requestContext, 'reviewer');
+
+    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
+
+    expect(inject).toHaveBeenCalledWith('ghp_reviewer');
   });
 
   it('silently skips auto-subscription outside repository sessions', async () => {

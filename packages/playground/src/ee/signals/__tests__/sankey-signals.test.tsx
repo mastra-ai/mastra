@@ -1,17 +1,29 @@
 // @vitest-environment jsdom
 import { buildSankeyChartGraph } from '@mastra/playground-ui/components/SankeyChart';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SankeySignals } from '../sankey-signals';
-import { themeFlowToSankeyData } from '../sankey-signals-data';
 import {
+  getSignalRecordNodeId,
+  getSignalRecordNodeLabel,
+  stabilizeThemeFlow,
+  themeFlowToSankeyData,
+} from '../sankey-signals-data';
+import type { ThemeFlowResponse } from '../types';
+import {
+  duplicateLabelThemeFlowResponse,
+  earlierThemeFlowResponse,
   emptyThemeSnapshotsResponse,
   fourStageThemeFlowResponse,
   inconsistentTraceCountThemeFlowResponse,
+  multiThemeSnapshotsResponse,
+  reorderedFourStageThemeFlowResponse,
+  reorderedMultiThemeSnapshotsResponse,
+  sameDayThemeSnapshotsResponse,
   singleStageThemeFlowResponse,
   themeFlowResponse,
   themeSnapshotsResponse,
@@ -51,6 +63,45 @@ function renderSankeySignals() {
   );
 }
 
+function rectangle(left: number, width: number, height: number) {
+  return {
+    x: left,
+    y: 0,
+    top: 0,
+    right: left + width,
+    bottom: height,
+    left,
+    width,
+    height,
+    toJSON: () => ({}),
+  };
+}
+
+async function reorderOutcomeAfterBehavior(beforeDrop?: () => void) {
+  const distributionCards = within(screen.getByRole('region', { name: 'Signal distributions' })).getAllByRole(
+    'article',
+  );
+  distributionCards.forEach((card, index) => {
+    const draggable = card.parentElement;
+    if (!draggable) throw new Error('Signal distribution draggable was not rendered');
+    vi.spyOn(draggable, 'getBoundingClientRect').mockReturnValue(rectangle(index * 250, 240, 300));
+  });
+  vi.spyOn(screen.getByRole('region', { name: 'Signal distributions' }), 'getBoundingClientRect').mockReturnValue(
+    rectangle(0, 990, 300),
+  );
+  const outcomeCard = screen.getByRole('article', { name: 'Outcome distribution' });
+  const outcomeHandle = screen.getByLabelText('Reorder Outcome');
+  expect(outcomeCard.parentElement?.getAttribute('draggable')).not.toBe('true');
+  expect(outcomeHandle.getAttribute('draggable')).not.toBe('true');
+  fireEvent.mouseDown(outcomeHandle, { button: 0, buttons: 1, clientX: 375, clientY: 100 });
+  fireEvent.mouseMove(window, { buttons: 1, clientX: 390, clientY: 100 });
+  await waitFor(() => expect(outcomeCard.parentElement?.style.position).toBe('fixed'));
+  fireEvent.mouseMove(window, { buttons: 1, clientX: 650, clientY: 100 });
+  await waitFor(() => expect(outcomeCard.parentElement?.style.transform).not.toBe(''));
+  beforeDrop?.();
+  fireEvent.mouseUp(window, { button: 0, buttons: 0, clientX: 650, clientY: 100 });
+}
+
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', ChartResizeObserver);
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
@@ -59,7 +110,66 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+describe('stabilizeThemeFlow', () => {
+  describe('when snapshot counts change within one timeline window', () => {
+    it('keeps link layout weights and node ordering fixed while current link and node counts change', () => {
+      const lowerVolumeFlow = {
+        ...fourStageThemeFlowResponse,
+        snapshot: earlierThemeFlowResponse.snapshot,
+        stages: fourStageThemeFlowResponse.stages.map(stage => ({
+          ...stage,
+          nodes: stage.nodes
+            .map(node => ({
+              ...node,
+              traceCount: Math.max(1, Math.floor(node.traceCount / 2)),
+              stageShare: node.stageShare / 2,
+            }))
+            .reverse(),
+        })),
+        links: fourStageThemeFlowResponse.links
+          .map(link => ({
+            ...link,
+            traceCount: Math.max(1, Math.floor(link.traceCount / 2)),
+            sourceShare: link.sourceShare / 2,
+            targetShare: link.targetShare / 2,
+          }))
+          .reverse(),
+      };
+      const windowFlows = [lowerVolumeFlow, fourStageThemeFlowResponse];
+
+      const lowerFrame = stabilizeThemeFlow(lowerVolumeFlow, windowFlows);
+      const higherFrame = stabilizeThemeFlow(fourStageThemeFlowResponse, windowFlows);
+
+      const getNodeOrder = (frame: typeof lowerFrame) =>
+        frame.stages.map(stage => stage.nodes.map(node => node.nodeId));
+      const getNodeCounts = (frame: Pick<ThemeFlowResponse, 'stages'>) =>
+        frame.stages.map(stage => Object.fromEntries(stage.nodes.map(node => [node.nodeId, node.traceCount])));
+      const getLinkCounts = (frame: Pick<ThemeFlowResponse, 'links'>) =>
+        Object.fromEntries(frame.links.map(link => [`${link.sourceNodeId}:${link.targetNodeId}`, link.traceCount]));
+      const getLayoutLinks = (frame: typeof lowerFrame) =>
+        frame.links.map(link => [link.sourceNodeId, link.targetNodeId, link.layoutTraceCount]);
+      const expectedNodeOrder = lowerVolumeFlow.stages.map(stage => stage.nodes.map(node => node.nodeId));
+      const expectedLayoutLinks = lowerVolumeFlow.links.map(link => {
+        const higherLink = fourStageThemeFlowResponse.links.find(
+          candidate => candidate.sourceNodeId === link.sourceNodeId && candidate.targetNodeId === link.targetNodeId,
+        );
+        return [link.sourceNodeId, link.targetNodeId, higherLink?.traceCount];
+      });
+
+      expect(getNodeOrder(lowerFrame)).toEqual(expectedNodeOrder);
+      expect(getNodeOrder(higherFrame)).toEqual(expectedNodeOrder);
+      expect(getLayoutLinks(lowerFrame)).toEqual(expectedLayoutLinks);
+      expect(getLayoutLinks(higherFrame)).toEqual(expectedLayoutLinks);
+      expect(getNodeCounts(lowerFrame)).toEqual(getNodeCounts(lowerVolumeFlow));
+      expect(getNodeCounts(higherFrame)).toEqual(getNodeCounts(fourStageThemeFlowResponse));
+      expect(getLinkCounts(lowerFrame)).toEqual(getLinkCounts(lowerVolumeFlow));
+      expect(getLinkCounts(higherFrame)).toEqual(getLinkCounts(fourStageThemeFlowResponse));
+    });
+  });
 });
 
 describe('SankeySignals', () => {
@@ -93,6 +203,32 @@ describe('SankeySignals', () => {
       renderSankeySignals();
 
       expect(await screen.findByRole('status', { name: 'Loading signal analysis' })).not.toBeNull();
+      expect(screen.getByTestId('signals-loading-skeleton')).not.toBeNull();
+    });
+  });
+
+  describe('when the flow request fails once', () => {
+    it('retries the failed request and renders the analysis', async () => {
+      let attempts = 0;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () => {
+          attempts += 1;
+          return attempts === 1
+            ? HttpResponse.json({ error: 'Flow unavailable' }, { status: 500 })
+            : HttpResponse.json(themeFlowResponse);
+        }),
+      );
+
+      renderSankeySignals();
+
+      expect(await screen.findByText('Unable to load signal flow.')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+      expect(attempts).toBe(2);
     });
   });
 
@@ -157,15 +293,20 @@ describe('SankeySignals', () => {
       );
     });
 
-    it('renders the reference page identity and detached documentation action', async () => {
+    it('renders the page identity without duplicating the shell documentation action', async () => {
       renderSankeySignals();
 
       expect(await screen.findByText('SIGNALS')).not.toBeNull();
       expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
       expect(screen.getByText(/Signals group recurring patterns across traces/)).not.toBeNull();
-      expect(screen.getByRole('link', { name: 'Signals documentation' }).getAttribute('href')).toBe(
-        'https://mastra.ai/en/docs/observability/tracing/overview',
-      );
+      expect(screen.queryByRole('link', { name: 'Signals documentation' })).toBeNull();
+    });
+
+    it('shows entity, snapshot ordinal, and window in the analysis header', async () => {
+      renderSankeySignals();
+
+      const header = await screen.findByTestId('signals-page-header');
+      expect(within(header).getByText('support-agent · Snapshot 4 of 4 · Jul 1–8, 2026')).not.toBeNull();
     });
 
     it('shows exactly three metrics derived from the loaded flow', async () => {
@@ -174,18 +315,29 @@ describe('SankeySignals', () => {
       const metrics = await screen.findByRole('list', { name: 'Signal analysis metrics' });
       expect(within(metrics).getAllByRole('listitem')).toHaveLength(3);
       expect(within(metrics).getByText('50 traces analyzed')).not.toBeNull();
-      expect(within(metrics).getByText('9 clusters')).not.toBeNull();
+      expect(within(metrics).getByText('9 themes')).not.toBeNull();
       expect(within(metrics).getByText('4 signal types')).not.toBeNull();
     });
 
-    it('omits date, period, agent, and processing controls', async () => {
+    it('shows the selected snapshot context without controls for a single snapshot', async () => {
       renderSankeySignals();
 
-      await screen.findByRole('region', { name: 'Signal theme flow' });
-      expect(screen.queryByText('Jul 1–8, 2026')).toBeNull();
-      expect(screen.queryByText(/Snapshot 4 of 4/)).toBeNull();
-      expect(screen.queryByText(/All agents/)).toBeNull();
-      expect(screen.queryByRole('status', { name: 'Signal processing status' })).toBeNull();
+      expect(await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
+      expect(screen.queryByRole('group', { name: 'Snapshot' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Play snapshots' })).toBeNull();
+    });
+
+    it('carries a theme description into the chart node label', () => {
+      const { columns, records } = themeFlowToSankeyData(fourStageThemeFlowResponse);
+
+      const record = records[0];
+      const column = columns[0];
+      expect(record).toBeDefined();
+      expect(column).toBeDefined();
+      if (!record || !column) throw new Error('Expected a signal flow record and column');
+      expect(getSignalRecordNodeLabel(record, column)).toBe(
+        'Resolve support request\nThe user wants help resolving a support issue.',
+      );
     });
 
     it('delegates the signal column headings to the Sankey chart', async () => {
@@ -193,6 +345,8 @@ describe('SankeySignals', () => {
 
       const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
       expect(within(chart).queryByTestId('signal-column-heading')).toBeNull();
+      expect(within(chart).getByText('GOAL')).not.toBeNull();
+      expect(within(chart).queryByText(/GOAL \d+ themes?/)).toBeNull();
       expect(within(chart).getByText('RIBBON WIDTH = TRACE COUNT')).not.toBeNull();
       expect(within(chart).getByText('HOVER OR FOCUS TO ISOLATE FLOW')).not.toBeNull();
     });
@@ -210,6 +364,17 @@ describe('SankeySignals', () => {
           .getAllByRole('listitem')
           .map(item => item.textContent),
       ).toEqual(['Goal', 'Outcome', 'Behavior', 'Sentiment']);
+    });
+
+    it('renders the flow before the timeline and distributions', async () => {
+      renderSankeySignals();
+
+      const flow = await screen.findByRole('region', { name: 'Signal theme flow' });
+      const timeline = screen.getByRole('region', { name: 'Snapshot timeline' });
+      const distributions = screen.getByRole('region', { name: 'Signal distributions' });
+
+      expect(flow.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      expect(timeline.compareDocumentPosition(distributions) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     });
 
     it('summarizes each signal with one stacked bar and compact theme rows', async () => {
@@ -234,13 +399,304 @@ describe('SankeySignals', () => {
       expect(within(sentiment).getByText('29 · 58%')).not.toBeNull();
     });
 
-    it('scopes horizontal overflow to the analytical region', async () => {
+    it('does not force the analysis into a separate horizontal scroll region', async () => {
       renderSankeySignals();
 
-      const analysis = await screen.findByTestId('signals-analysis-scroll');
-      expect(analysis.getAttribute('data-scroll-container')).toBe('horizontal');
-      expect(within(analysis).getByTestId('signals-analysis-canvas').getAttribute('data-min-width')).toBe('920');
-      expect(screen.getByTestId('signals-page-header').closest('[data-scroll-container]')).toBeNull();
+      await screen.findByTestId('signals-page-header');
+      expect(screen.queryByTestId('signals-analysis-scroll')).toBeNull();
+      expect(screen.queryByTestId('signals-analysis-canvas')).toBeNull();
+    });
+  });
+
+  describe('when a signal distribution is reordered', () => {
+    it('requests the new perspective only after the column is dropped', async () => {
+      const snapshotOrders: string[] = [];
+      const flowOrders: string[] = [];
+      const reorderedSnapshot = {
+        ...themeSnapshotsResponse.snapshots[0],
+        snapshotId: 'reordered-snapshot',
+        availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+      };
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames') ?? '';
+          snapshotOrders.push(signalNames);
+          return HttpResponse.json(
+            signalNames === 'goal,behavior,outcome,sentiment'
+              ? { snapshots: [reorderedSnapshot] }
+              : themeSnapshotsResponse,
+          );
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames') ?? '';
+          flowOrders.push(signalNames);
+          const flow =
+            signalNames === 'goal,behavior,outcome,sentiment'
+              ? reorderedFourStageThemeFlowResponse
+              : fourStageThemeFlowResponse;
+          return HttpResponse.json({
+            ...flow,
+            snapshot:
+              signalNames === 'goal,behavior,outcome,sentiment'
+                ? reorderedSnapshot
+                : themeSnapshotsResponse.snapshots[0],
+          });
+        }),
+      );
+      renderSankeySignals();
+
+      await screen.findByLabelText('Reorder Outcome');
+      expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment']);
+      await reorderOutcomeAfterBehavior(() => {
+        expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment']);
+        expect(flowOrders).toEqual(['goal,outcome,behavior,sentiment']);
+      });
+
+      await waitFor(() =>
+        expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment', 'goal,behavior,outcome,sentiment']),
+      );
+      await waitFor(() =>
+        expect(flowOrders).toEqual(['goal,outcome,behavior,sentiment', 'goal,behavior,outcome,sentiment']),
+      );
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole('region', { name: 'Signal distributions' }))
+            .getAllByRole('article')
+            .map(card => card.getAttribute('aria-label')),
+        ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']),
+      );
+      const chart = within(screen.getByRole('region', { name: 'Signal theme flow' }));
+      expect(chart.getByText('GOAL')).not.toBeNull();
+      expect(chart.getByText('BEHAVIOR')).not.toBeNull();
+      expect(chart.getByText('OUTCOME')).not.toBeNull();
+      expect(chart.getByText('SENTIMENT')).not.toBeNull();
+      expect(chart.getByLabelText(/Resolve support request.*22 traces/)).not.toBeNull();
+      expect(chart.getByLabelText(/Frustrated.*29 traces/)).not.toBeNull();
+    });
+
+    it('keeps the current perspective visible while the new perspective loads', async () => {
+      let releaseReorderedSnapshots = () => {};
+      const reorderedSnapshotsPending = new Promise<void>(resolve => {
+        releaseReorderedSnapshots = resolve;
+      });
+      const reorderedSnapshot = {
+        ...themeSnapshotsResponse.snapshots[0],
+        snapshotId: 'reordered-snapshot',
+        availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+      };
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, async ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames');
+          if (signalNames !== 'goal,behavior,outcome,sentiment') {
+            return HttpResponse.json(themeSnapshotsResponse);
+          }
+          await reorderedSnapshotsPending;
+          return HttpResponse.json({ snapshots: [reorderedSnapshot] });
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames');
+          return HttpResponse.json(
+            signalNames === 'goal,behavior,outcome,sentiment'
+              ? { ...reorderedFourStageThemeFlowResponse, snapshot: reorderedSnapshot }
+              : fourStageThemeFlowResponse,
+          );
+        }),
+      );
+      renderSankeySignals();
+      await screen.findByLabelText('Reorder Outcome');
+
+      await reorderOutcomeAfterBehavior();
+
+      expect(await screen.findByText('Reloading snapshots for new signal perspective…')).not.toBeNull();
+      expect(screen.queryByTestId('signals-loading-skeleton')).toBeNull();
+      expect(
+        within(screen.getByRole('region', { name: 'Signal distributions' }))
+          .getAllByRole('article')
+          .map(card => card.getAttribute('aria-label')),
+      ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']);
+
+      releaseReorderedSnapshots();
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole('region', { name: 'Signal distributions' }))
+            .getAllByRole('article')
+            .map(card => card.getAttribute('aria-label')),
+        ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']),
+      );
+    });
+
+    it('keeps the selected snapshot ordinal when the new perspective returns opaque cursors', async () => {
+      const reorderedFlowSnapshots: Array<string> = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames');
+          return HttpResponse.json(
+            signalNames === 'goal,behavior,outcome,sentiment'
+              ? reorderedMultiThemeSnapshotsResponse
+              : multiThemeSnapshotsResponse,
+          );
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const url = new URL(request.url);
+          const signalNames = url.searchParams.get('signalNames')?.split(',') ?? [];
+          const snapshotId = url.searchParams.get('snapshotId');
+          if (!snapshotId) return HttpResponse.json({ error: 'Missing snapshot' }, { status: 400 });
+          const reordered = signalNames.join(',') === 'goal,behavior,outcome,sentiment';
+          const snapshots = reordered
+            ? reorderedMultiThemeSnapshotsResponse.snapshots
+            : multiThemeSnapshotsResponse.snapshots;
+          const snapshot = snapshots.find(candidate => candidate.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          if (snapshotId.startsWith('reordered-')) reorderedFlowSnapshots.push(snapshotId);
+          const sourceFlow = reordered
+            ? reorderedFourStageThemeFlowResponse
+            : snapshot.ordinal === 3
+              ? earlierThemeFlowResponse
+              : fourStageThemeFlowResponse;
+          return HttpResponse.json({ ...sourceFlow, snapshot });
+        }),
+      );
+      const { container } = renderSankeySignals();
+      await screen.findByLabelText('Reorder Outcome');
+      const sliderInput = container.querySelector('input[type="range"]');
+      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
+      fireEvent.change(sliderInput, { target: { value: '0' } });
+      await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces');
+
+      await reorderOutcomeAfterBehavior();
+
+      expect(await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces')).not.toBeNull();
+      await waitFor(() => expect(reorderedFlowSnapshots).toContain('reordered-snapshot-3'));
+    });
+  });
+
+  describe('when a snapshot starts and ends on the same day', () => {
+    it('shows the calendar date once', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(sameDayThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json({ ...themeFlowResponse, snapshot: sameDayThemeSnapshotsResponse.snapshots[0] }),
+        ),
+      );
+
+      renderSankeySignals();
+
+      expect(await screen.findByText('Snapshot 4/4 · Jul 15, 2026 · 50 traces')).not.toBeNull();
+    });
+  });
+
+  describe('when multiple snapshots are available', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(multiThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          const snapshot = multiThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          return HttpResponse.json(snapshotId === 'snapshot-3' ? earlierThemeFlowResponse : fourStageThemeFlowResponse);
+        }),
+      );
+    });
+
+    it('keeps themes from every timeline snapshot visible in the latest Sankey frame', async () => {
+      renderSankeySignals();
+
+      const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
+      expect(within(chart).getByLabelText('Legacy support request: 0 traces (0%)')).not.toBeNull();
+    });
+
+    it('keeps the rendered frame visible while playback advances', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, async ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          if (snapshotId === 'snapshot-3') await new Promise(resolve => window.setTimeout(resolve, 100));
+          return HttpResponse.json(snapshotId === 'snapshot-3' ? earlierThemeFlowResponse : fourStageThemeFlowResponse);
+        }),
+      );
+      renderSankeySignals();
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
+
+      await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces', undefined, { timeout: 2000 });
+      expect(screen.queryByRole('status', { name: 'Loading snapshot flow' })).toBeNull();
+      expect(screen.getByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+    });
+
+    it('selects the latest ordinal and labels it without parsing its cursor', async () => {
+      renderSankeySignals();
+
+      expect(await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
+      expect(screen.getByRole('group', { name: 'Snapshot' })).not.toBeNull();
+    });
+
+    it('scrubs to an earlier snapshot', async () => {
+      const { container } = renderSankeySignals();
+
+      await screen.findByRole('group', { name: 'Snapshot' });
+      const sliderInput = container.querySelector('input[type="range"]');
+      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
+      fireEvent.change(sliderInput, { target: { value: '0' } });
+
+      expect(await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces')).not.toBeNull();
+    });
+
+    it('plays forward through snapshots', async () => {
+      renderSankeySignals();
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
+      expect(screen.getByRole('button', { name: 'Pause snapshots' })).not.toBeNull();
+
+      expect(
+        await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces', undefined, { timeout: 2000 }),
+      ).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Pause snapshots' })).not.toBeNull();
+    });
+
+    it('does not expose playback when a timeline flow fails to preload', async () => {
+      const flowRequests: Array<string> = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          if (!snapshotId) return HttpResponse.json({ error: 'Missing snapshot' }, { status: 400 });
+          flowRequests.push(snapshotId);
+          if (snapshotId === 'snapshot-3') return HttpResponse.json({ error: 'Flow failed' }, { status: 500 });
+          const snapshot = multiThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot });
+        }),
+      );
+      renderSankeySignals();
+
+      expect(await screen.findByRole('button', { name: 'Retry' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Play snapshots' })).toBeNull();
+      expect([...flowRequests].sort()).toEqual(['snapshot-1', 'snapshot-3']);
+    });
+
+    it('waits for every timeline flow before exposing playback', async () => {
+      let releasePendingFlow: (() => void) | undefined;
+      const pendingFlow = new Promise<void>(resolve => {
+        releasePendingFlow = resolve;
+      });
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, async ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          const snapshot = multiThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          if (snapshotId === 'snapshot-3') await pendingFlow;
+          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot });
+        }),
+      );
+      renderSankeySignals();
+
+      expect(await screen.findByRole('status', { name: 'Loading signal analysis' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Play snapshots' })).toBeNull();
+      releasePendingFlow?.();
+      expect(await screen.findByRole('button', { name: 'Play snapshots' })).not.toBeNull();
     });
   });
 
@@ -256,65 +712,88 @@ describe('SankeySignals', () => {
       );
     });
 
-    it('uses the entry-stage graph total in the header badge', async () => {
+    it('uses the authoritative snapshot total in the header badge', async () => {
       renderSankeySignals();
 
       const metrics = await screen.findByRole('list', { name: 'Signal analysis metrics' });
-      expect(within(metrics).getByText('50 traces analyzed')).not.toBeNull();
-      expect(within(metrics).queryByText('80 traces analyzed')).toBeNull();
+      expect(within(metrics).getByText('80 traces analyzed')).not.toBeNull();
+      expect(within(metrics).queryByText('50 traces analyzed')).toBeNull();
     });
 
-    it('uses graph-derived totals for every distribution', async () => {
+    it('uses authoritative stage totals for every distribution', async () => {
       renderSankeySignals();
 
       const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
-      for (const signalName of ['Goal', 'Outcome', 'Behavior', 'Sentiment']) {
+      const expectedTotals = { Goal: 70, Outcome: 80, Behavior: 90, Sentiment: 100 };
+      for (const [signalName, traceCount] of Object.entries(expectedTotals)) {
         const distribution = within(distributions).getByRole('article', { name: `${signalName} distribution` });
-        expect(within(distribution).getByText('50 traces')).not.toBeNull();
+        expect(within(distribution).getByText(`${traceCount} traces`)).not.toBeNull();
       }
     });
 
-    it('uses graph-derived node counts and percentages in every distribution row', async () => {
+    it('uses authoritative API node counts and shares in every distribution row', async () => {
       renderSankeySignals();
 
       const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
       const expectedRows = {
-        Goal: ['22 · 44%', '17 · 34%', '11 · 22%'],
-        Outcome: ['31 · 62%', '19 · 38%'],
-        Behavior: ['34 · 68%', '16 · 32%'],
-        Sentiment: ['29 · 58%', '21 · 42%'],
+        Goal: ['42 · 90%', '38 · 80%', '33 · 70%', '99 · 99%'],
+        Outcome: ['51 · 90%', '40 · 80%'],
+        Behavior: ['54 · 90%', '37 · 80%'],
+        Sentiment: ['49 · 90%', '42 · 80%'],
       };
 
       for (const [signalName, rows] of Object.entries(expectedRows)) {
         const distribution = within(distributions).getByRole('article', { name: `${signalName} distribution` });
         for (const row of rows) expect(within(distribution).getByText(row)).not.toBeNull();
       }
-      expect(within(distributions).queryByText('Metadata only goal')).toBeNull();
+      expect(within(distributions).getByText('Metadata only goal')).not.toBeNull();
     });
 
-    it('shows the same graph-derived counts and percentages on chart nodes', async () => {
+    it('shows authoritative node counts on chart nodes independently of layout weights', async () => {
       renderSankeySignals();
 
       const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
       for (const label of [
-        '22 (44%)',
-        '17 (34%)',
-        '11 (22%)',
-        '31 (62%)',
-        '19 (38%)',
-        '34 (68%)',
-        '16 (32%)',
-        '29 (58%)',
-        '21 (42%)',
+        '42 (37%)',
+        '38 (34%)',
+        '33 (29%)',
+        '51 (45%)',
+        '40 (35%)',
+        '54 (48%)',
+        '37 (33%)',
+        '49 (43%)',
+        '42 (37%)',
       ]) {
-        expect(await within(chart).findByText(label)).not.toBeNull();
+        expect(within(chart).getAllByText(label).length).toBeGreaterThan(0);
       }
       expect(within(chart).queryByText('Metadata only goal')).toBeNull();
     });
   });
 
+  describe('when themes in one signal stage share a display label', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(duplicateLabelThemeFlowResponse),
+        ),
+      );
+    });
+
+    it('renders each API node with its own trace count', async () => {
+      renderSankeySignals();
+
+      const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
+      expect(within(chart).getAllByText('Shared theme label', { selector: 'text' })).toHaveLength(2);
+      expect(within(chart).getByText('20 (40%)')).not.toBeNull();
+      expect(within(chart).getByText('30 (60%)')).not.toBeNull();
+    });
+  });
+
   describe('when a theme snapshot has weighted links', () => {
-    it('renders the flow with the signal and theme labels', async () => {
+    beforeEach(() => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
           HttpResponse.json(themeSnapshotsResponse),
@@ -323,10 +802,23 @@ describe('SankeySignals', () => {
           HttpResponse.json(themeFlowResponse),
         ),
       );
+    });
 
+    it('renders the flow with the signal and theme labels', async () => {
       renderSankeySignals();
 
       expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+    });
+
+    it('limits the legend to stages returned by the flow', async () => {
+      renderSankeySignals();
+
+      const legend = await screen.findByRole('list', { name: 'Signal stage legend' });
+      expect(
+        within(legend)
+          .getAllByRole('listitem')
+          .map(item => item.textContent),
+      ).toEqual(['Goal', 'Outcome']);
     });
 
     it('preserves the API-defined signal order', () => {
@@ -340,9 +832,9 @@ describe('SankeySignals', () => {
 
     it('preserves the API-defined theme labels', () => {
       const { columns, records } = themeFlowToSankeyData(themeFlowResponse);
-      const graph = buildSankeyChartGraph(records, columns);
+      const graph = buildSankeyChartGraph(records, columns, undefined, getSignalRecordNodeId, getSignalRecordNodeLabel);
 
-      expect(graph.nodes.map(node => node.name)).toEqual(['Resolve support request', 'Request resolved']);
+      expect(graph.nodes.map(node => node.label)).toEqual(['Resolve support request', 'Request resolved']);
     });
 
     it('preserves each API link as one chart record', () => {
@@ -353,7 +845,13 @@ describe('SankeySignals', () => {
 
     it('preserves the API link weight in the playground-ui chart graph', () => {
       const { columns, records } = themeFlowToSankeyData(themeFlowResponse);
-      const graph = buildSankeyChartGraph(records, columns, record => Number(record.traceCount));
+      const graph = buildSankeyChartGraph(
+        records,
+        columns,
+        record => Number(record.traceCount),
+        getSignalRecordNodeId,
+        getSignalRecordNodeLabel,
+      );
 
       expect(graph.links[0]?.value).toBe(3);
     });

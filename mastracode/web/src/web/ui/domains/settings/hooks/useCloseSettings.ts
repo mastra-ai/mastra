@@ -1,13 +1,21 @@
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { useLocation, useNavigate, useParams } from 'react-router';
+import type { Location } from 'react-router';
 
-import { useOverlays } from '../../../lib/overlays';
-
+/**
+ * Leaving settings is navigation: return to the page settings was opened from
+ * (carried in `location.state.from`), falling back to the draft composer for
+ * deep links. Focus returns to the trigger that opened settings.
+ */
 export function useCloseSettings() {
-  const overlays = useOverlays();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { factoryId } = useParams<{ factoryId: string }>();
   const { openMobile: mobileDrawerOpen, setOpenMobile } = useMainSidebar();
 
   return function closeSettings() {
-    overlays.close('settings');
+    const from = (location.state as { from?: Location } | null)?.from;
+    void navigate(from ?? (factoryId ? `/factories/${factoryId}` : '/'));
     setOpenMobile(false);
 
     const focusTargetId = mobileDrawerOpen ? 'mobile-navigation-trigger' : 'settings-trigger';

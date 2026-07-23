@@ -1,6 +1,6 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -123,13 +123,29 @@ export class FactoryStartCoordinator {
     const storage = this.#storage;
     if (!this.#sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(this.#sourceControl, request);
+    const requestContext = request.requestContext ?? new RequestContext();
+    if (!request.requestContext) {
+      requestContext.set('user', { workosId: request.userId, organizationId: request.orgId });
+    }
+    const sessionState = {
+      factoryProjectId: request.factoryProjectId,
+      projectRepositoryId: sourceSession.projectRepositoryId,
+    };
     const session = await this.#controller.createSession({
       id: sourceSession.sessionId,
       ownerId: request.userId,
       resourceId: sourceSession.sessionId,
       threadId: sourceSession.sessionId,
-      requestContext: request.requestContext,
+      requestContext,
+      tags: sessionState,
     });
+    // Bound-agent authority gates (the transition tool, the factory-phase
+    // processor, workspace token selection) resolve the session address from
+    // controller state. Seed it server-side — `tags` covers fresh creation,
+    // the explicit setState covers get-or-create returning a session another
+    // caller created without them — so autonomous runs never depend on a
+    // browser connecting to populate the state.
+    await session.state.set(sessionState);
     const threadId = await configureThread(session, request);
     const kickoffMessage = await resolveKickoffMessage(session, request.invocation);
     const prepared = await storage.prepareRunStart({

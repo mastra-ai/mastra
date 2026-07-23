@@ -46,9 +46,12 @@ export function useAgentControllerSessionInit({
     queryFn: async () => {
       const activeSession = requireAgentControllerSession(session);
       const created = await activeSession.create({ tags: scope ? { projectPath: scope } : undefined });
-      if (scope) {
+      // Factory sessions have no scope but still need their state seeded —
+      // server-side gates (the transition tool, factory-phase processor)
+      // resolve the session address from `factoryProjectId` in state.
+      if (scope || factorySessionState) {
         try {
-          await activeSession.setState({ projectPath: scope, ...factorySessionState });
+          await activeSession.setState({ ...(scope ? { projectPath: scope } : {}), ...factorySessionState });
         } catch {
           // Continue connecting; session.state() remains the source of truth.
         }

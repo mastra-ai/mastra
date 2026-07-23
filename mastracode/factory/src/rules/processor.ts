@@ -34,6 +34,7 @@ const PHASE_LABELS: Record<(typeof FACTORY_RULE_STAGES)[number], string> = {
   execute: 'Building',
   review: 'Reviewing',
   done: 'Done',
+  canceled: 'Canceled',
 };
 
 type PersistedMessageReader = {

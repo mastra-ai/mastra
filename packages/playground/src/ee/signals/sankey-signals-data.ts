@@ -1,19 +1,24 @@
-import { buildSankeyChartGraph, getSankeyChartNodeWeights } from '@mastra/playground-ui/components/SankeyChart';
 import type { SankeyChartColumn, SankeyChartRecord } from '@mastra/playground-ui/components/SankeyChart';
 
 import type { ThemeFlowResponse, ThemeNode, TraceSignalName } from './types';
 
-export interface SignalGraphNodeSummary {
-  nodeId: string;
-  label: string;
-  traceCount: number;
-  stageShare: number;
+const MINIMUM_LAYOUT_WEIGHT = 0.01;
+
+type StableThemeFlowLink = ThemeFlowResponse['links'][number] & { layoutTraceCount: number };
+type StableThemeFlowResponse = Omit<ThemeFlowResponse, 'links'> & { links: StableThemeFlowLink[] };
+
+export function getSignalRecordNodeId(record: SankeyChartRecord, column: SankeyChartColumn) {
+  return String(record[column.id]);
 }
 
-export interface SignalGraphStageSummary {
-  signalName: TraceSignalName;
-  traceCount: number;
-  nodes: SignalGraphNodeSummary[];
+export function getSignalRecordNodeLabel(record: SankeyChartRecord, column: SankeyChartColumn) {
+  const label = String(record[`${column.id}Label`]);
+  const description = record[`${column.id}Description`];
+  return typeof description === 'string' && description.trim() ? `${label}\n${description}` : label;
+}
+
+export function getSignalRecordNodeValue(record: SankeyChartRecord, column: SankeyChartColumn) {
+  return Number(record[`${column.id}TraceCount`]);
 }
 
 export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
@@ -37,9 +42,16 @@ export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
     if (!source || !target) continue;
 
     records.push({
-      [source.signalName]: source.node.label,
-      [target.signalName]: target.node.label,
+      [source.signalName]: source.node.nodeId,
+      [`${source.signalName}Label`]: displayNodeLabel(source.node),
+      [`${source.signalName}Description`]: source.node.description,
+      [`${source.signalName}TraceCount`]: source.node.traceCount,
+      [target.signalName]: target.node.nodeId,
+      [`${target.signalName}Label`]: displayNodeLabel(target.node),
+      [`${target.signalName}Description`]: target.node.description,
+      [`${target.signalName}TraceCount`]: target.node.traceCount,
       traceCount: link.traceCount,
+      layoutTraceCount: 'layoutTraceCount' in link ? link.layoutTraceCount : link.traceCount,
     });
   }
 
@@ -49,46 +61,50 @@ export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
 export function buildSignalGraphSummary(flow: ThemeFlowResponse): {
   columns: SankeyChartColumn[];
   records: SankeyChartRecord[];
-  analyzedTraceCount: number;
-  stages: SignalGraphStageSummary[];
 } {
-  const { columns, records } = themeFlowToSankeyData(flow);
-  const graph = buildSankeyChartGraph(records, columns, record => Number(record.traceCount));
-  const nodeWeights = getSankeyChartNodeWeights(graph);
-  const firstColumnId = columns[0]?.id;
-  const analyzedTraceCount = graph.nodes.reduce(
-    (total, node) => (node.column.id === firstColumnId ? total + (nodeWeights.get(node.id) ?? 0) : total),
-    0,
-  );
+  return themeFlowToSankeyData(flow);
+}
 
+export function stabilizeThemeFlow(flow: ThemeFlowResponse, windowFlows: ThemeFlowResponse[]): StableThemeFlowResponse {
   const stages = flow.stages.map(stage => {
-    const graphNodes = new Map(
-      graph.nodes.filter(node => node.column.id === stage.signalName).map(node => [String(node.value), node]),
-    );
-    const seenNodeIds = new Set<string>();
-    const nodes = stage.nodes.flatMap(node => {
-      const graphNode = graphNodes.get(node.label);
-      if (!graphNode || seenNodeIds.has(graphNode.id)) return [];
-      seenNodeIds.add(graphNode.id);
-      const traceCount = nodeWeights.get(graphNode.id) ?? 0;
-      return [
-        {
-          nodeId: graphNode.id,
-          label: node.label,
-          traceCount,
-          stageShare: analyzedTraceCount > 0 ? traceCount / analyzedTraceCount : 0,
-        },
-      ];
-    });
+    const nodes = new Map<string, ThemeNode>();
 
+    for (const windowFlow of windowFlows) {
+      const windowStage = windowFlow.stages.find(candidate => candidate.signalName === stage.signalName);
+      for (const node of windowStage?.nodes ?? []) {
+        nodes.set(node.nodeId, { ...node, traceCount: 0, stageShare: 0 });
+      }
+    }
+    for (const node of stage.nodes) nodes.set(node.nodeId, node);
+
+    return { ...stage, nodes: [...nodes.values()] };
+  });
+
+  const layoutLinks = new Map<string, ThemeFlowResponse['links'][number]>();
+  for (const windowFlow of windowFlows) {
+    for (const link of windowFlow.links) {
+      const key = `${link.sourceNodeId}\u0000${link.targetNodeId}`;
+      const existing = layoutLinks.get(key);
+      if (!existing || link.traceCount > existing.traceCount) layoutLinks.set(key, link);
+    }
+  }
+  const currentLinks = new Map(flow.links.map(link => [`${link.sourceNodeId}\u0000${link.targetNodeId}`, link]));
+  const stableLinks = [...layoutLinks.entries()].map(([key, layoutLink]): StableThemeFlowLink => {
+    const currentLink = currentLinks.get(key);
     return {
-      signalName: stage.signalName,
-      traceCount: nodes.reduce((total, node) => total + node.traceCount, 0),
-      nodes,
+      ...(currentLink ?? layoutLink),
+      traceCount: currentLink?.traceCount ?? 0,
+      sourceShare: currentLink?.sourceShare ?? 0,
+      targetShare: currentLink?.targetShare ?? 0,
+      layoutTraceCount: Math.max(MINIMUM_LAYOUT_WEIGHT, layoutLink.traceCount),
     };
   });
 
-  return { columns, records, analyzedTraceCount, stages };
+  return { ...flow, stages, links: stableLinks };
+}
+
+function displayNodeLabel(node: ThemeNode) {
+  return node.kind === 'noise' ? 'Noise' : node.label;
 }
 
 function formatSignalName(signalName: TraceSignalName) {

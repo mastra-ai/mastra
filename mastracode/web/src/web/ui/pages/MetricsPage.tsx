@@ -1,88 +1,107 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { DateRangeTimeline, getDateRangeBounds } from '@mastra/playground-ui/components/DateRangeTimeline';
+import type { DateRangeValue } from '@mastra/playground-ui/components/DateRangeTimeline';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../shared/api/config';
+import { useEnsureMaterializedSandbox } from '../../../shared/hooks/useEnsureMaterializedSandbox';
+import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useFactoryMetrics } from '../../../shared/hooks/useFactoryMetrics';
 import { useWorkspaceActivity } from '../../../shared/hooks/useWorkspaceActivity';
-import { deriveProjectPath, useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
+import { useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
 import { formatDuration, relativeTime } from '../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
-import { isServerFactory, useActiveFactoryContext } from '../domains/workspaces';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { QueueHealthSection } from '../domains/factory/components/QueueHealthSection';
 import type { FactoryMetrics } from '../domains/factory/services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
 
-const WINDOW_OPTIONS = [
-  { value: 7, label: '7d' },
-  { value: 30, label: '30d' },
-  { value: 90, label: '90d' },
-] as const;
+const DAY_MS = 86_400_000;
+const EMPTY_BOARD_LOOKBACK_DAYS = 90;
+/** Mirrors the server's bounded aggregation window. */
+const MAX_METRICS_WINDOW_DAYS = 366;
 
-type WindowDays = (typeof WINDOW_OPTIONS)[number]['value'];
+function shiftUtcDay(day: string, offset: number): string {
+  return new Date(Date.parse(`${day}T00:00:00.000Z`) + offset * DAY_MS).toISOString().slice(0, 10);
+}
+
+function inclusiveRangeDays(range: DateRangeValue): number {
+  return Math.floor((Date.parse(`${range.to}T00:00:00.000Z`) - Date.parse(`${range.from}T00:00:00.000Z`)) / DAY_MS) + 1;
+}
+
+function clampRangeSpan(range: DateRangeValue, maximumDays: number): DateRangeValue {
+  if (inclusiveRangeDays(range) <= maximumDays) return range;
+  return { from: shiftUtcDay(range.to, -(maximumDays - 1)), to: range.to };
+}
+
+function defaultRange(today: string): DateRangeValue {
+  return { from: shiftUtcDay(today, -29), to: today };
+}
 
 const THROUGHPUT_SERIES = [{ dataKey: 'done', label: 'Done per day', color: '#34d399' }];
 
 const SOURCE_LABELS: Record<string, string> = {
-  'github-issue': 'GitHub issues',
-  'github-pr': 'GitHub PRs',
-  'linear-issue': 'Linear issues',
+  'github:issue': 'GitHub issues',
+  'github:pull-request': 'GitHub PRs',
+  'linear:issue': 'Linear issues',
   manual: 'Manual',
 };
 
+/** Terminal stages have no "pass through", so they never get automation rows. */
+const TERMINAL_STAGE_IDS = new Set(['done', 'canceled']);
+
+const EM_DASH = '—';
+
 /**
- * Factory flow metrics: throughput, cycle time, stage breakdown, aging WIP,
- * and demand mix — aggregated server-side from the board's stage history.
- * "Agents running" is live, from the same thread-state source as the sidebar
+ * Factory flow metrics: throughput, cycle time, live queue health, aging WIP,
+ * and demand mix — aggregated server-side from the board's stage history
+ * (queue health aggregates client-side in `QueueHealthSection`). "Agents
+ * running" is live, from the same thread-state source as the sidebar
  * activity dots.
  */
 export function MetricsPage() {
-  return (
-    <FactoryPageShell
-      title="Metrics"
-      description="Flow health for this project's factory: throughput, where work stalls, and what's aging."
-    >
-      {project => <MetricsContent factoryProjectId={project.binding.factoryProjectId} />}
-    </FactoryPageShell>
-  );
+  return <FactoryPageShell>{project => <MetricsContent factoryProjectId={project.id} />}</FactoryPageShell>;
 }
 
 function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const [days, setDays] = useState<WindowDays>(30);
-  const metricsQuery = useFactoryMetrics(factoryProjectId, days);
+  const [today] = useState(() => new Date().toISOString().slice(0, 10));
+  const [range, setRange] = useState<DateRangeValue>(() => defaultRange(today));
+  const metricsQuery = useFactoryMetrics(factoryProjectId, range);
   const agentsRunning = useAgentsRunningCount();
 
   if (metricsQuery.isError) {
-    return <Notice variant="destructive">{(metricsQuery.error as Error).message}</Notice>;
+    const message = metricsQuery.error instanceof Error ? metricsQuery.error.message : 'Failed to load metrics';
+    return <Notice variant="destructive">{message}</Notice>;
   }
   const metrics = metricsQuery.data;
+  // Prefer the server's count so the label stays paired with the rendered data
+  // (placeholderData keeps the old range's metrics during a refetch).
+  const windowDays = metrics?.windowDays ?? inclusiveRangeDays(range);
+
+  // Keep the selected range inside the domain until the board's earliest item is known.
+  const earliestDay = metrics?.earliestItemAt
+    ? metrics.earliestItemAt.slice(0, 10)
+    : shiftUtcDay(today, -(EMPTY_BOARD_LOOKBACK_DAYS - 1));
+  const bounds = getDateRangeBounds(earliestDay < range.from ? earliestDay : range.from, today);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-      <div className="flex items-center justify-between">
-        <ButtonsGroup spacing="close" role="group" aria-label="Metrics window">
-          {WINDOW_OPTIONS.map(option => (
-            <Button
-              key={option.value}
-              variant={days === option.value ? 'primary' : 'outline'}
-              size="sm"
-              aria-pressed={days === option.value}
-              onClick={() => setDays(option.value)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </ButtonsGroup>
-      </div>
+      <DateRangeTimeline
+        key={`${bounds.min}:${bounds.max}`}
+        value={range}
+        min={bounds.min}
+        max={bounds.max}
+        onCommit={value => setRange(clampRangeSpan(value, MAX_METRICS_WINDOW_DAYS))}
+      />
 
       {!metrics ? null : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <StatCard
-              label={`Completed (${days}d)`}
+              label="Completed"
               value={String(metrics.throughput.reduce((sum, point) => sum + point.count, 0))}
             />
             <StatCard
@@ -92,6 +111,15 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
             />
             <StatCard label="In flight" value={String(metrics.wipTotal)} />
             <StatCard label="Agents running" value={String(agentsRunning)} />
+            <StatCard
+              label={`Automated moves (${windowDays}d)`}
+              value={
+                metrics.transitions.total === 0
+                  ? EM_DASH
+                  : String(metrics.transitions.total - metrics.transitions.human)
+              }
+              hint={metrics.transitions.total === 0 ? undefined : `of ${metrics.transitions.total} stage moves`}
+            />
           </div>
 
           <Section title="Throughput">
@@ -99,11 +127,15 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
               data={metrics.throughput.map(point => ({ time: point.date, done: point.count }))}
               series={THROUGHPUT_SERIES}
               height={180}
+              xAxisInterval="preserveStartEnd"
+              xAxisMinTickGap={40}
             />
           </Section>
 
-          <Section title="Stages">
-            <StageBreakdown metrics={metrics} />
+          <QueueHealthSection factoryProjectId={factoryProjectId} />
+
+          <Section title="Automation by stage">
+            <StageAutomation metrics={metrics} />
           </Section>
 
           <Section title="Oldest in-flight items">
@@ -122,17 +154,20 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
 /** Live count of worktrees with an agent run in flight (sidebar dot source). */
 function useAgentsRunningCount(): number {
   const { baseUrl } = useApiConfig();
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
-  const workspaces = useWorkspacesQuery(activeFactory);
-  const worktrees = workspaces.data?.worktrees ?? [];
-  const projectPath = deriveProjectPath(activeFactory) || undefined;
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
+  const repository = factoryQuery.data?.repositories[0];
+  const materializeQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
+  const workspaces = useWorkspacesQuery(repository?.projectRepositoryId);
+  const workspaceSessions = workspaces.data?.workspaces ?? [];
+  const resourceId = materializeQuery.data?.resourceId;
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
-    worktreePaths: worktrees.map(worktree => worktree.worktreePath),
+    resourceId: resourceId ?? '',
+    scope: repository?.projectRepositoryId,
+    worktreePaths: workspaceSessions.map(workspace => workspace.sessionId),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isServerFactory(activeFactory) && projectPath),
+    enabled: materializeQuery.isSuccess && Boolean(resourceId && repository?.projectRepositoryId),
   });
   return Object.values(runningByPath).filter(Boolean).length;
 }
@@ -162,46 +197,70 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-/** Median time-in-stage bars plus each column's current card count. */
-function StageBreakdown({ metrics }: { metrics: FactoryMetrics }) {
-  const wipByStage = new Map(metrics.wip.map(entry => [entry.stage, entry.count]));
-  const durationByStage = new Map(metrics.stageDurations.map(entry => [entry.stage, entry]));
+/**
+ * Per-stage automation: what share of completed passes through each stage was
+ * fully automated (entered and exited by automation, first visit), and how
+ * the automated passes' items ended up.
+ */
+function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
+  // Rows only exist for stages with ≥1 exit, so an empty list means no stage
+  // had a completed pass in the window.
+  if (metrics.stageAutomation.length === 0) {
+    return (
+      <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+        No completed stage passes in this window yet.
+      </Txt>
+    );
+  }
+
+  const rowsByStage = new Map(metrics.stageAutomation.map(row => [row.stage, row]));
+  // Non-terminal board stages in column order, plus any stages present in the
+  // data but unknown to the board (raw id, sorted last — same rule as
+  // stageLabel/stageOrder).
   const stages = [
     ...new Set([
-      ...BOARD_STAGES.map(stage => stage.id as string),
-      ...metrics.wip.map(entry => entry.stage),
-      ...metrics.stageDurations.map(entry => entry.stage),
+      ...BOARD_STAGES.map(stage => stage.id as string).filter(id => !TERMINAL_STAGE_IDS.has(id)),
+      ...metrics.stageAutomation.map(row => row.stage),
     ]),
   ].sort((a, b) => stageOrder(a) - stageOrder(b));
-  const maxMedian = Math.max(1, ...metrics.stageDurations.map(entry => entry.medianMs));
 
   return (
     <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {stages.map(stage => {
-        const duration = durationByStage.get(stage);
-        const wip = wipByStage.get(stage) ?? 0;
+        const row = rowsByStage.get(stage);
+        const exits = row?.exits ?? 0;
+        const automated = row?.automated ?? 0;
+        const pct = exits === 0 ? null : Math.round((automated / exits) * 100);
         return (
           <li key={stage} className="grid grid-cols-[7rem_1fr_auto] items-center gap-3">
             <Txt as="span" variant="ui-sm" className="text-icon4">
               {stageLabel(stage)}
             </Txt>
             <div className="h-2 overflow-hidden rounded-full bg-surface4">
-              {duration ? (
-                <div
-                  className="h-full rounded-full bg-accent1"
-                  style={{ width: `${Math.max(2, Math.round((duration.medianMs / maxMedian) * 100))}%` }}
-                />
+              {pct !== null && automated > 0 ? (
+                <div className="h-full rounded-full bg-accent1" style={{ width: `${Math.max(2, pct)}%` }} />
               ) : null}
             </div>
             <Txt as="span" variant="ui-xs" className="text-right text-icon3">
-              {duration ? `median ${formatDuration(duration.medianMs)} · ` : ''}
-              {wip} in column
+              {pct === null
+                ? EM_DASH
+                : `${pct}% automated (${automated}/${exits})${row && automated > 0 ? ` · ${outcomeSummary(row.outcomes)}` : ''}`}
             </Txt>
           </li>
         );
       })}
     </ul>
   );
+}
+
+/** Compact split of automated-pass outcomes, omitting zero buckets. */
+function outcomeSummary(outcomes: FactoryMetrics['stageAutomation'][number]['outcomes']): string {
+  const parts: string[] = [];
+  if (outcomes.done > 0) parts.push(`${outcomes.done} done`);
+  if (outcomes.canceled > 0) parts.push(`${outcomes.canceled} canceled`);
+  if (outcomes.reworked > 0) parts.push(`${outcomes.reworked} reworked`);
+  if (outcomes.inFlight > 0) parts.push(`${outcomes.inFlight} in flight`);
+  return parts.join(', ');
 }
 
 function AgingWipTable({ metrics }: { metrics: FactoryMetrics }) {

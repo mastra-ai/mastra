@@ -6,10 +6,7 @@ import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/web-ui/render';
 import { useSetAgentControllerGoalMutation } from '../useAgentControllerGoalMutations';
 import {
-  useCloneAgentControllerThreadMutation,
   useCreateAgentControllerThreadMutation,
-  useDeleteAgentControllerThreadMutation,
-  useRenameAgentControllerThreadMutation,
   useSwitchAgentControllerThreadMutation,
 } from '../useAgentControllerThreadMutations';
 import { useAgentControllerThreads } from '../useAgentControllerThreads';
@@ -49,51 +46,6 @@ describe('agent-controller hook seam forwards session scope on the wire', () => 
     );
     const { result, client } = renderHookWithProviders(() => useCreateAgentControllerThreadMutation(hookArgs));
     await act(async () => result.current.mutateAsync('x'));
-    await waitForMutationsIdle(client);
-    expect(captured).toBe(scope);
-  });
-
-  it('deleteThread', async () => {
-    let captured: string | null | undefined;
-    server.use(
-      http.get(sessionUrl, () => HttpResponse.json({ threadId: null })),
-      http.delete(`${sessionUrl}/threads/thread-one`, ({ request }) => {
-        captured = new URL(request.url).searchParams.get('sessionScope');
-        return HttpResponse.json({ ok: true });
-      }),
-    );
-    const { result, client } = renderHookWithProviders(() => useDeleteAgentControllerThreadMutation(hookArgs));
-    await act(async () => result.current.mutateAsync('thread-one'));
-    await waitForMutationsIdle(client);
-    expect(captured).toBe(scope);
-  });
-
-  it('renameThread', async () => {
-    let captured: string | null | undefined;
-    server.use(
-      http.get(sessionUrl, () => HttpResponse.json({ threadId: null })),
-      http.put(`${sessionUrl}/threads/thread-one`, ({ request }) => {
-        captured = new URL(request.url).searchParams.get('sessionScope');
-        return HttpResponse.json({ ok: true });
-      }),
-    );
-    const { result, client } = renderHookWithProviders(() => useRenameAgentControllerThreadMutation(hookArgs));
-    await act(async () => result.current.mutateAsync({ threadId: 'thread-one', title: 'Renamed' }));
-    await waitForMutationsIdle(client);
-    expect(captured).toBe(scope);
-  });
-
-  it('cloneThread', async () => {
-    let captured: string | null | undefined;
-    server.use(
-      http.get(sessionUrl, () => HttpResponse.json({ threadId: null })),
-      http.post(`${sessionUrl}/threads/clone`, ({ request }) => {
-        captured = new URL(request.url).searchParams.get('sessionScope');
-        return HttpResponse.json({ id: 'tclone', title: 'clone', updatedAt: '2026-07-21T00:00:00.000Z' });
-      }),
-    );
-    const { result, client } = renderHookWithProviders(() => useCloneAgentControllerThreadMutation(hookArgs));
-    await act(async () => result.current.mutateAsync({ sourceThreadId: 'thread-one' }));
     await waitForMutationsIdle(client);
     expect(captured).toBe(scope);
   });

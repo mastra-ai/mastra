@@ -9,7 +9,9 @@ import type {
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
 import type { GithubIntegration } from './integration.js';
+import { getGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
+import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.js';
 
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 
@@ -151,12 +153,46 @@ export async function unsubscribeCurrentSessionFromPullRequest(
   return number;
 }
 
+export async function refreshGithubToken(requestContext: RequestContext, github: GithubIntegration): Promise<void> {
+  const target = await resolveSessionTarget(requestContext, github);
+  // `GH_TOKEN` feeds the `gh` CLI, so a configured org PAT wins over a minted
+  // installation token (which 403s on integration-restricted endpoints). The
+  // workspace records which PAT kind the sandbox was provisioned with, so a
+  // review-board sandbox keeps its reviewer token on refresh.
+  const pat = await getGithubPat(
+    () => github.integrationStorage,
+    target.orgId,
+    getRegisteredGithubPatKind(requestContext),
+  );
+  if (pat) {
+    injectGithubToken(requestContext, pat);
+    return;
+  }
+  const access = await github.versionControl.getRepositoryAccess({
+    orgId: target.orgId,
+    repositoryId: target.repository.id,
+  });
+  const token = access.authorization?.token;
+  if (!token) throw new Error('Repository access did not include a bearer token for the Factory session.');
+  injectGithubToken(requestContext, token);
+}
+
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   const user = requestContext.get('user') as SessionAuthUser | undefined;
   if (!context?.getState().projectRepositoryId || !sessionOrgId(user) || !sessionUserId(user)) return {};
 
   return {
+    github_refresh_token: createTool({
+      id: 'github_refresh_token',
+      description:
+        'Refresh GitHub CLI authentication in the active Factory sandbox. Use this after a gh command fails because authentication is expired, invalid, or missing. It installs a fresh GH_TOKEN for subsequent sandbox commands. After this tool succeeds, retry the failed gh command. Takes no arguments and never returns the token.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        await refreshGithubToken(requestContext, github);
+        return { refreshed: true };
+      },
+    }),
     github_subscribe_pr: createTool({
       id: 'github_subscribe_pr',
       description:
