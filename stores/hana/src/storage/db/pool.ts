@@ -82,8 +82,8 @@ export class HANAPool {
   private connections: HANAConnection[] = [];
   /** Connections currently available for checkout. */
   private idle: HANAConnection[] = [];
-  /** Resolve callbacks waiting for a free connection. */
-  private queue: Array<(conn: HANAConnection) => void> = [];
+  /** Resolve/reject callbacks waiting for a free connection. */
+  private queue: Array<{ resolve: (conn: HANAConnection) => void; reject: (err: Error) => void }> = [];
 
   private initialized = false;
   private destroyed = false;
@@ -136,13 +136,13 @@ export class HANAPool {
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    this.initialized = true;
     const creates: Promise<HANAConnection>[] = [];
     for (let i = 0; i < this.min; i++) {
       creates.push(this.createConnection());
     }
     const conns = await Promise.all(creates);
     this.idle.push(...conns);
+    this.initialized = true;
   }
 
   /**
@@ -165,8 +165,8 @@ export class HANAPool {
     }
 
     // All connections are busy — wait in queue
-    return new Promise<HANAConnection>(resolve => {
-      this.queue.push(resolve);
+    return new Promise<HANAConnection>((resolve, reject) => {
+      this.queue.push({ resolve, reject });
     });
   }
 
@@ -181,7 +181,7 @@ export class HANAPool {
     }
     if (this.queue.length > 0) {
       const next = this.queue.shift()!;
-      next(conn);
+      next.resolve(conn);
     } else {
       this.idle.push(conn);
     }
@@ -234,10 +234,9 @@ export class HANAPool {
     await Promise.all(this.connections.map(c => c.disconnectPromise().catch(() => {})));
     this.connections = [];
     this.idle = [];
-    // Reject any queued waiters
-    for (const resolve of this.queue) {
-      // We can't reject here without callbacks, so just release an error later
-      void resolve;
+    const err = new Error('HANAPool: pool has been destroyed');
+    for (const waiter of this.queue) {
+      waiter.reject(err);
     }
     this.queue = [];
   }

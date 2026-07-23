@@ -33,20 +33,10 @@ const store = new HANAStore({
 });
 ```
 
-**2. JDBC Connection String**
+**2. Bring Your Own Pool**
 
 ```typescript
-const store = new HANAStore({
-  id: 'hana-storage',
-  connectionString: 'jdbc:sap://your-host:443?uid=DBUSER&pwd=yourPassword&encrypt=true',
-});
-```
-
-**3. Bring Your Own Pool**
-
-```typescript
-import { HANAStore } from '@mastra/hana';
-import { HANAPool } from '@mastra/hana/pool';
+import { HANAStore, HANAPool } from '@mastra/hana';
 
 const pool = new HANAPool({
   host: 'your-hana-cloud-host.hanacloud.ondemand.com',
@@ -71,10 +61,10 @@ const store = new HANAStore({
   pwd: 'yourPassword',
   databaseName: 'MYTENANTDB', // For multi-tenant deployments
   encrypt: true, // Default true for port 443
-  sslValidateCertificate: true, // Enable for production
+  sslValidateCertificate: true, // Default true
   schemaName: 'MASTRA', // Custom schema (default: none)
-  poolMin: 2,
-  poolMax: 20,
+  minConnections: 2,
+  maxConnections: 20,
   skipDefaultIndexes: false,
   indexes: [
     // Additional custom indexes
@@ -148,10 +138,10 @@ const store = new HANAStore({
 | `pwd`                    | `string`               | —                 | Database password                               |
 | `databaseName`           | `string`               | —                 | Tenant database name (multi-tenant deployments) |
 | `encrypt`                | `boolean`              | `true` (port 443) | Enable TLS encryption                           |
-| `sslValidateCertificate` | `boolean`              | `false`           | Validate server TLS certificate                 |
+| `sslValidateCertificate` | `boolean`              | `true`            | Validate server TLS certificate                 |
 | `schemaName`             | `string`               | —                 | Custom schema name for table isolation          |
-| `poolMin`                | `number`               | `1`               | Minimum idle connections in the pool            |
-| `poolMax`                | `number`               | `10`              | Maximum connections in the pool                 |
+| `minConnections`         | `number`               | `1`               | Minimum idle connections in the pool            |
+| `maxConnections`         | `number`               | `10`              | Maximum connections in the pool                 |
 | `skipDefaultIndexes`     | `boolean`              | `false`           | Skip creating default indexes                   |
 | `indexes`                | `CreateIndexOptions[]` | —                 | Additional custom indexes to create on `init()` |
 | `disableInit`            | `boolean`              | `false`           | Skip automatic table creation on first use      |

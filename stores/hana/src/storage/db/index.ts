@@ -672,7 +672,15 @@ export class HANAClient extends MastraBase {
           if (col.includes(' DESC') || col.includes(' ASC')) {
             const parts = col.split(' ');
             const colName = parts[0]!;
-            const direction = parts.slice(1).join(' ');
+            const direction = parts[1]?.toUpperCase();
+            if (direction !== 'ASC' && direction !== 'DESC') {
+              throw new MastraError({
+                id: createStorageErrorId('HANA', 'INDEX_CREATE', 'INVALID_SORT_DIRECTION'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Invalid sort direction "${parts[1]}" for column "${colName}". Use ASC or DESC.`,
+              });
+            }
             return `"${parseSqlIdentifier(colName, 'column name')}" ${direction}`;
           }
           return `"${parseSqlIdentifier(col, 'column name')}"`;

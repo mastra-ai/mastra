@@ -199,7 +199,7 @@ export class ObservabilityHANA extends ObservabilityStorage {
         updatedAt: now,
       };
 
-      return this.db.insert({ tableName: TABLE_SPANS, record });
+      return await this.db.insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {

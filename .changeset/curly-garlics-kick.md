@@ -9,6 +9,7 @@ Uses the `@sap/hana-client` native driver with a built-in connection pool. Suppo
 **Usage:**
 
 ```typescript
+import { Mastra } from '@mastra/core';
 import { HANAStore } from '@mastra/hana';
 
 const store = new HANAStore({
@@ -23,7 +24,7 @@ const mastra = new Mastra({ storage: store });
 await mastra.getStorage()?.init();
 ```
 
-- Supports host/port credentials, JDBC connection strings, and bring-your-own-pool
+- Supports host/port credentials and bring-your-own-pool
 - Built-in `HANAPool` manages min/max connections with a queue for backpressure
 - Schema isolation via `schemaName` option (recommended for multi-tenant BTP deployments)
 - HANA SQL dialect: `UPSERT ... WITH PRIMARY KEY`, `LIMIT/OFFSET` pagination, `NCLOB` for JSON, double-quoted identifiers
