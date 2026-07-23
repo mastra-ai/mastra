@@ -26,11 +26,69 @@ describe('Factory rule validation', () => {
       { type: 'invokeSkill', idempotencyKey: 'skill-1', role: 'review', skillName: 'understand-pr' },
       { type: 'sendMessage', idempotencyKey: 'message-1', role: 'work', message: 'Assess completion.' },
       { type: 'notify', idempotencyKey: 'notify-1', title: 'Factory update', level: 'info' },
+      {
+        type: 'updateExternalSource',
+        idempotencyKey: 'ext-state-1',
+        state: { kind: 'byType', stateType: 'started' },
+      },
+      {
+        type: 'updateExternalSource',
+        idempotencyKey: 'ext-state-2',
+        state: { kind: 'byName', name: 'In Review' },
+      },
+      {
+        type: 'commentExternalSource',
+        idempotencyKey: 'ext-comment-1',
+        body: 'Factory picked this up.',
+      },
     ];
 
     const validated = validateFactoryRuleDecisions(decisions);
-    expect(validated).toHaveLength(5);
+    expect(validated).toHaveLength(8);
     expect(JSON.parse(JSON.stringify(validated))).toEqual(validated);
+  });
+
+  it('rejects invalid updateExternalSource + commentExternalSource shapes', () => {
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'updateExternalSource',
+        idempotencyKey: 'ext-state-bad',
+        state: { kind: 'byType', stateType: 'in-review' },
+      }),
+    ).toThrow(/stateType is invalid/i);
+
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'updateExternalSource',
+        idempotencyKey: 'ext-state-bad',
+        state: { kind: 'byOther' },
+      }),
+    ).toThrow(/state kind is invalid/i);
+
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'updateExternalSource',
+        idempotencyKey: 'ext-state-bad',
+        state: { kind: 'byName', name: 'x'.repeat(129) },
+      }),
+    ).toThrow(/state name is invalid/i);
+
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'commentExternalSource',
+        idempotencyKey: 'ext-comment-bad',
+        body: '',
+      }),
+    ).toThrow(/body is invalid/i);
+
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'commentExternalSource',
+        idempotencyKey: 'ext-comment-bad',
+        body: 'ok',
+        extra: true,
+      }),
+    ).toThrow(/unsupported field/i);
   });
 
   it('keeps rejection exclusive from commit-only fields and decisions', () => {

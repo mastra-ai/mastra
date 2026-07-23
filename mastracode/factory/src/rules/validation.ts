@@ -23,6 +23,8 @@ const MAX_REASON_LENGTH = 512;
 const MAX_TITLE_LENGTH = 512;
 const MAX_MESSAGE_LENGTH = 8_192;
 const MAX_ARGUMENTS_LENGTH = 4_096;
+const MAX_EXTERNAL_STATE_NAME_LENGTH = 128;
+const EXTERNAL_STATE_TYPES = ['unstarted', 'started', 'completed', 'canceled'] as const;
 const MAX_ROLE_LENGTH = 32;
 const MAX_SKILL_NAME_LENGTH = 128;
 const MAX_SOURCE_KEY_LENGTH = 256;
@@ -297,6 +299,47 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(priority ? { priority } : {}),
         ...(idleBehavior ? { idleBehavior } : {}),
         ...(value.prepareBinding === true ? { prepareBinding: true } : {}),
+      };
+    }
+    case 'updateExternalSource': {
+      assertExactKeys(value, ['type', 'idempotencyKey', 'state'], 'Factory update external source decision');
+      if (!isPlainObject(value.state)) {
+        throw new FactoryRuleValidationError('Factory update external source state must be an object.');
+      }
+      const kind = value.state.kind;
+      let state:
+        { kind: 'byType'; stateType: (typeof EXTERNAL_STATE_TYPES)[number] } | { kind: 'byName'; name: string };
+      if (kind === 'byType') {
+        assertExactKeys(value.state, ['kind', 'stateType'], 'Factory update external source state');
+        state = {
+          kind: 'byType',
+          stateType: enumValue(value.state.stateType, EXTERNAL_STATE_TYPES, 'Factory update external source stateType'),
+        };
+      } else if (kind === 'byName') {
+        assertExactKeys(value.state, ['kind', 'name'], 'Factory update external source state');
+        state = {
+          kind: 'byName',
+          name: boundedString(
+            value.state.name,
+            'Factory update external source state name',
+            MAX_EXTERNAL_STATE_NAME_LENGTH,
+          ),
+        };
+      } else {
+        throw new FactoryRuleValidationError('Factory update external source state kind is invalid.');
+      }
+      return {
+        type,
+        ...commonCommitFields(value),
+        state,
+      };
+    }
+    case 'commentExternalSource': {
+      assertExactKeys(value, ['type', 'idempotencyKey', 'body'], 'Factory comment external source decision');
+      return {
+        type,
+        ...commonCommitFields(value),
+        body: boundedString(value.body, 'Factory comment external source body', MAX_MESSAGE_LENGTH),
       };
     }
     case 'notify': {

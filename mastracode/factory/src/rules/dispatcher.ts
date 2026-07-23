@@ -4,6 +4,8 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
+import type { IntegrationConnection } from '../capabilities/connection.js';
+import type { Intake } from '../capabilities/intake.js';
 import { resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import type {
@@ -44,6 +46,40 @@ export interface FactoryBindingPreparationInput {
   role: string;
 }
 
+/**
+ * Result of resolving the `Intake` and connection to reach the external source
+ * of a work item, used by the dispatcher when it fans out
+ * `updateExternalSource` and `commentExternalSource` decisions.
+ */
+export interface FactoryIntakeResolution {
+  intake: Intake;
+  connection: IntegrationConnection;
+  /** Provider-defined source id (e.g., GitHub `owner/repo`). Undefined when the provider doesn't need one. */
+  sourceId?: string;
+  /** Provider-defined issue id used by `Intake.getIssue` / `updateIssue` / `createComment`. */
+  issueId: string;
+  /**
+   * End user to attribute the action to when the provider supports it (GitHub
+   * App on-behalf-of, Linear `createAsUser`). Optional.
+   */
+  actingUserId?: string;
+}
+
+export interface FactoryIntakeResolverInput {
+  orgId: string;
+  factoryProjectId: string;
+  workItem: WorkItemRow;
+}
+
+/**
+ * Resolve the external-source dispatch context for a work item, or `null` when
+ * the work item has no external source we can act on (manual items, missing
+ * integration, no connection). `null` is treated as a policy skip — the
+ * decision completes silently. Infrastructure errors propagate so the
+ * dispatcher's retry loop can back off.
+ */
+export type FactoryIntakeResolver = (input: FactoryIntakeResolverInput) => Promise<FactoryIntakeResolution | null>;
+
 export interface FactoryDecisionDispatcherOptions {
   controller: FactoryController;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
@@ -52,6 +88,13 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  /**
+   * Resolves `Intake` + `IntegrationConnection` for external-source decisions
+   * (`updateExternalSource`, `commentExternalSource`). When omitted, those
+   * decisions fail terminally on first attempt — the resolver must be wired
+   * in production to make those decision types functional.
+   */
+  intake?: FactoryIntakeResolver;
 }
 
 function sanitizeDispatchError(error: unknown): string {
@@ -130,6 +173,7 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  readonly #resolveIntake?: FactoryIntakeResolver;
   #timer?: ReturnType<typeof setInterval>;
   #activeRun?: Promise<void>;
 
@@ -141,6 +185,7 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    this.#resolveIntake = options.intake;
   }
 
   start(): void {
@@ -203,7 +248,9 @@ export class FactoryDecisionDispatcher {
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
-      const terminal = record.attempts >= MAX_ATTEMPTS;
+      const flaggedTerminal =
+        typeof error === 'object' && error !== null && (error as { terminal?: boolean }).terminal === true;
+      const terminal = flaggedTerminal || record.attempts >= MAX_ATTEMPTS;
       await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
@@ -337,8 +384,79 @@ export class FactoryDecisionDispatcher {
             dedupeKey: record.idempotencyKey,
           }),
         );
+        return;
+      }
+      case 'updateExternalSource': {
+        await this.#executeUpdateExternalSource(record, decision);
+        return;
+      }
+      case 'commentExternalSource': {
+        await this.#executeCommentExternalSource(record, decision);
+        return;
       }
     }
+  }
+
+  async #resolveExternalIntake(record: FactoryDeferredDecisionRecord): Promise<FactoryIntakeResolution | null> {
+    if (!this.#resolveIntake) {
+      const err = new Error('Factory external-source dispatch is not configured.');
+      (err as Error & { terminal?: boolean }).terminal = true;
+      throw err;
+    }
+    const workItem = await this.#requireItem(record);
+    const resolution = await this.#resolveIntake({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItem,
+    });
+    if (!resolution || resolution.actingUserId) return resolution;
+    const actor = record.actor;
+    return actor?.type === 'human' && typeof actor.id === 'string'
+      ? { ...resolution, actingUserId: actor.id }
+      : resolution;
+  }
+
+  async #executeUpdateExternalSource(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'updateExternalSource' }>,
+  ): Promise<void> {
+    const resolution = await this.#resolveExternalIntake(record);
+    if (!resolution) return;
+    const { intake, connection, sourceId, issueId, actingUserId } = resolution;
+    const current = await intake.getIssue({ connection, ...(sourceId ? { sourceId } : {}), issueId });
+    if (current) {
+      if (decision.state.kind === 'byType' && current.stateType === decision.state.stateType) return;
+      if (
+        decision.state.kind === 'byName' &&
+        current.state !== null &&
+        current.state.toLowerCase() === decision.state.name.toLowerCase()
+      ) {
+        return;
+      }
+    }
+    await intake.updateIssue({
+      connection,
+      ...(sourceId ? { sourceId } : {}),
+      issueId,
+      state: decision.state,
+      ...(actingUserId ? { actingUserId } : {}),
+    });
+  }
+
+  async #executeCommentExternalSource(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'commentExternalSource' }>,
+  ): Promise<void> {
+    const resolution = await this.#resolveExternalIntake(record);
+    if (!resolution) return;
+    const { intake, connection, sourceId, issueId, actingUserId } = resolution;
+    await intake.createComment({
+      connection,
+      ...(sourceId ? { sourceId } : {}),
+      issueId,
+      body: decision.body,
+      ...(actingUserId ? { actingUserId } : {}),
+    });
   }
 
   async #upsertLinkedItem(

@@ -670,6 +670,26 @@ export class MastraFactory {
               reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
               prepareBinding,
               primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+              // External-source fan-out (`updateExternalSource` /
+              // `commentExternalSource`): the owning integration derives the
+              // connection + provider target from the item's external source.
+              intake: async ({ orgId, workItem }) => {
+                const externalSource = workItem.externalSource;
+                if (!externalSource) return null;
+                const registration = integrationRegistrations.find(
+                  candidate => candidate.integration.id === externalSource.integrationId,
+                );
+                const integration = registration?.integration;
+                if (!integration?.intake || !integration.resolveIntakeDispatch) return null;
+                if (registration && !registration.ready) await registration.ensureReady();
+                const resolved = await integration.resolveIntakeDispatch({
+                  orgId,
+                  externalSource,
+                  ...(workItem.metadata ? { metadata: workItem.metadata } : {}),
+                });
+                if (!resolved) return null;
+                return { intake: integration.intake, ...resolved };
+              },
             });
           },
         }),

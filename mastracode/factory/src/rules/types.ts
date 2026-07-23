@@ -125,9 +125,11 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
   };
 }
 
+export type FactoryRuleHandlerResult = FactoryRuleDecision | readonly FactoryRuleDecision[] | void;
+
 export type FactoryRuleHandler<TContext> = (
   context: Readonly<TContext>,
-) => FactoryRuleDecision | void | Promise<FactoryRuleDecision | void>;
+) => FactoryRuleHandlerResult | Promise<FactoryRuleHandlerResult>;
 
 export interface FactoryBoardRuleLeaf {
   onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
@@ -228,12 +230,27 @@ export interface FactoryNotifyDecision extends FactoryCommitDecisionBase {
   level?: 'info' | 'warning' | 'error';
 }
 
+export type FactoryExternalSourceTargetState =
+  { kind: 'byType'; stateType: 'unstarted' | 'started' | 'completed' | 'canceled' } | { kind: 'byName'; name: string };
+
+export interface FactoryUpdateExternalSourceDecision extends FactoryCommitDecisionBase {
+  type: 'updateExternalSource';
+  state: FactoryExternalSourceTargetState;
+}
+
+export interface FactoryCommentExternalSourceDecision extends FactoryCommitDecisionBase {
+  type: 'commentExternalSource';
+  body: string;
+}
+
 export type FactoryCommitDecision =
   | FactoryTransitionDecision
   | FactoryUpsertLinkedWorkItemDecision
   | FactoryInvokeSkillDecision
   | FactorySendMessageDecision
-  | FactoryNotifyDecision;
+  | FactoryNotifyDecision
+  | FactoryUpdateExternalSourceDecision
+  | FactoryCommentExternalSourceDecision;
 
 export type FactoryRuleDecision = FactoryRuleRejectDecision | FactoryCommitDecision;
 

@@ -969,6 +969,179 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
+  it('fans out updateExternalSource decisions through the resolved Intake and skips when already in target state', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueDecision(storage, {
+      type: 'updateExternalSource',
+      idempotencyKey: 'ext-state-1',
+      state: { kind: 'byType', stateType: 'started' },
+    });
+    const { controller } = createSession();
+
+    const getIssue = vi.fn().mockResolvedValueOnce({
+      id: 'issue-1',
+      identifier: 'ORG-1',
+      title: 'Fix issue',
+      url: 'https://example.com',
+      author: null,
+      state: 'Todo',
+      stateType: 'unstarted',
+      priority: null,
+      assignee: null,
+      source: null,
+      labels: [],
+      commentCount: 0,
+      createdAt: '2030-01-01T00:00:00Z',
+      updatedAt: '2030-01-01T00:00:00Z',
+    });
+    const updateIssue = vi.fn().mockResolvedValue(null);
+    const intake = { getIssue, updateIssue };
+
+    const connection = { type: 'oauth' as const, accessToken: 'token-1' };
+    const resolveIntake = vi.fn(async () => ({
+      intake: intake as never,
+      connection,
+      issueId: 'issue-1',
+    }));
+
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-ext',
+      intake: resolveIntake,
+    });
+    await dispatcher.runOnce();
+
+    expect(resolveIntake).toHaveBeenCalledTimes(1);
+    expect(getIssue).toHaveBeenCalledTimes(1);
+    expect(updateIssue).toHaveBeenCalledTimes(1);
+    expect(updateIssue).toHaveBeenCalledWith({
+      connection,
+      issueId: 'issue-1',
+      state: { kind: 'byType', stateType: 'started' },
+      actingUserId: 'user-1',
+    });
+
+    const first = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(first[0]?.status).toBe('succeeded');
+
+    // Idempotency: replay with current state already 'started' skips updateIssue
+    getIssue.mockResolvedValueOnce({
+      id: 'issue-1',
+      identifier: 'ORG-1',
+      title: 'Fix issue',
+      url: 'https://example.com',
+      author: null,
+      state: 'In Progress',
+      stateType: 'started',
+      priority: null,
+      assignee: null,
+      source: null,
+      labels: [],
+      commentCount: 0,
+      createdAt: '2030-01-01T00:00:00Z',
+      updatedAt: '2030-01-01T00:00:00Z',
+    });
+    const { transitionService: transitionService2 } = await queueDecision(storage, {
+      type: 'updateExternalSource',
+      idempotencyKey: 'ext-state-2',
+      state: { kind: 'byType', stateType: 'started' },
+    });
+    const dispatcher2 = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService: transitionService2,
+      storage,
+      ownerId: 'worker-ext-2',
+      intake: resolveIntake,
+    });
+    // reset call counts to isolate the second dispatch
+    updateIssue.mockClear();
+    await dispatcher2.runOnce();
+    expect(updateIssue).not.toHaveBeenCalled();
+  });
+
+  it('fans out commentExternalSource decisions through the resolved Intake', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueDecision(storage, {
+      type: 'commentExternalSource',
+      idempotencyKey: 'ext-comment-1',
+      body: 'Factory picked this up.',
+    });
+    const { controller } = createSession();
+
+    const createComment = vi.fn().mockResolvedValue({ id: 'comment-1', url: 'https://example.com/1' });
+    const intake = { getIssue: vi.fn(), updateIssue: vi.fn(), createComment };
+    const connection = { type: 'oauth' as const, accessToken: 'token-1' };
+    const resolveIntake = vi.fn(async () => ({
+      intake: intake as never,
+      connection,
+      issueId: 'issue-1',
+    }));
+
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-comment',
+      intake: resolveIntake,
+    });
+    await dispatcher.runOnce();
+
+    expect(createComment).toHaveBeenCalledWith({
+      connection,
+      issueId: 'issue-1',
+      body: 'Factory picked this up.',
+      actingUserId: 'user-1',
+    });
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record?.status).toBe('succeeded');
+  });
+
+  it('completes silently when the intake resolver returns null (manual/skip)', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueDecision(storage, {
+      type: 'commentExternalSource',
+      idempotencyKey: 'ext-comment-skip',
+      body: 'Would comment.',
+    });
+    const { controller } = createSession();
+    const resolveIntake = vi.fn(async () => null);
+
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-null',
+      intake: resolveIntake,
+    });
+    await dispatcher.runOnce();
+
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record?.status).toBe('succeeded');
+  });
+
+  it('fails terminally when no intake resolver is configured', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueDecision(storage, {
+      type: 'commentExternalSource',
+      idempotencyKey: 'ext-comment-noresolver',
+      body: 'Would comment.',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-noresolver',
+    });
+    await dispatcher.runOnce();
+
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record?.status).toBe('failed');
+    expect(record?.lastError).toMatch(/external-source dispatch is not configured/i);
+  });
+
   it('starts one polling loop and stops claiming before shutdown returns', async () => {
     vi.useFakeTimers();
     try {
