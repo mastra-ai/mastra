@@ -270,7 +270,7 @@ export function WorkspaceRow({
 }) {
   const name = label ?? workspace.branch;
   return (
-    <div className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
+    <div className={`group relative rounded-md ${active ? 'bg-sidebar-nav-active' : 'hover:bg-sidebar-nav-hover'}`}>
       <button
         type="button"
         aria-current={active ? 'true' : undefined}
@@ -278,7 +278,7 @@ export function WorkspaceRow({
         disabled={disabled}
         onClick={onSelect}
         title={workspace.branch}
-        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
+        className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
       >
         <GitBranch size={13} />
         <span className="min-w-0 flex-1 truncate">{name}</span>
@@ -305,7 +305,7 @@ export function WorkspaceRow({
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-sm"
+                size="icon-xs"
                 aria-label="Workspace actions"
                 disabled={disabled}
                 className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
