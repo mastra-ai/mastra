@@ -111,11 +111,10 @@ function WorkspaceViewerPanelInner({
         }
         style={viewerOpen ? { width: browserWidth } : undefined}
       >
-        <div className="sr-only">
-          {title ?? 'Workspace viewer'} {context ?? ''}
-        </div>
+        {context ? <div className="sr-only">{context}</div> : null}
         <WorkspaceFileBrowser
           renderedPaths={renderedPaths}
+          title={title}
           selectedPath={selectedRenderedPath}
           selectedFilePath={selectedFilePath}
           listing={listing.data}

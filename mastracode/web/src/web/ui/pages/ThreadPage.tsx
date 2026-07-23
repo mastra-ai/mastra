@@ -23,7 +23,8 @@ import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useUserSessionQuery } from '../../../shared/hooks/useWorkspaces';
 import { useWorkspaceRenderedListing } from '../../../shared/hooks/use-fs';
 
-const threadComposerContainerClass = 'w-full p-3 md:p-5';
+const threadComposerContainerClass =
+  'w-full p-3 transition-[padding-right] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)] lg:in-data-[panel-open=true]:pr-[calc(var(--chat-right-panel-width)+0.5rem)] md:p-5 motion-reduce:transition-none in-data-[panel-gesture=active]:transition-none';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
@@ -122,7 +123,7 @@ function ThreadPageMain({
       <FactorySessionHeader actions={workspacePanelAction} />
       <div
         data-panel-open={workspacePanelOpen}
-        className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden transition-[padding-right] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)] lg:data-[panel-open=true]:pr-[calc(var(--chat-right-panel-width)+0.5rem)] motion-reduce:transition-none in-data-[panel-gesture=active]:transition-none"
+        className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden"
       >
         <ChatMessageBoundary>
           <ThreadPageContent />

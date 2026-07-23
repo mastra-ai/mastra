@@ -154,6 +154,7 @@ function WorkspaceTreeItem({
 
 interface WorkspaceFileBrowserProps {
   renderedPaths: RenderedWorkspacePath[];
+  title?: string;
   selectedPath: RenderedWorkspacePath;
   selectedFilePath?: string;
   listing?: WorkspaceRenderedListing;
@@ -166,6 +167,7 @@ interface WorkspaceFileBrowserProps {
 
 export function WorkspaceFileBrowser({
   renderedPaths,
+  title,
   selectedPath,
   selectedFilePath,
   listing,
@@ -177,6 +179,7 @@ export function WorkspaceFileBrowser({
 }: WorkspaceFileBrowserProps) {
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const nodes = buildTree(listing?.entries ?? []);
+  const heading = title ?? 'Workspace files';
 
   const setFolderOpen = (path: string, open: boolean) => {
     setOpenFolders(previous => ({ ...previous, [path]: open }));
@@ -185,7 +188,7 @@ export function WorkspaceFileBrowser({
   return (
     <aside
       className="relative flex max-h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl bg-surface3"
-      aria-label="Workspace files"
+      aria-label={heading}
     >
       <Button
         size="icon-md"
@@ -196,8 +199,13 @@ export function WorkspaceFileBrowser({
       >
         <RefreshCw size={14} />
       </Button>
+      <div className="flex min-h-12 items-center px-3 pr-12">
+        <Txt as="h2" variant="ui-sm" className="m-0 truncate font-medium text-icon5">
+          {heading}
+        </Txt>
+      </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2 pt-12">
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
         <Tree
           selectedId={selectedFilePath ? `${selectedPath.root}/${selectedFilePath}` : undefined}
           onSelect={id => {
