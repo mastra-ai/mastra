@@ -12,6 +12,7 @@ export function createDatasetsTests({
   // Skip tests if storage doesn't have datasets domain
   const describeDatasets = storage.stores?.datasets ? describe : describe.skip;
   const supportsToolMocks = capabilities.toolMocks !== false;
+  const supportsItemTimeout = capabilities.datasetItemTimeout !== false;
   const itItemIdentity = capabilities.datasetItemIdentity === false ? it.skip : it;
 
   let datasetsStorage: DatasetsStorage;
@@ -571,6 +572,77 @@ export function createDatasetsTests({
         await expect(
           datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' }, toolMocks: toolMocksFixture }),
         ).rejects.toThrow();
+      });
+
+      (supportsItemTimeout ? it : it.skip)(
+        'timeout round-trips through add, batch insert, updates, and SCD-2 history',
+        async () => {
+          const ds = await datasetsStorage.createDataset({ name: 'item-timeout' });
+          const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'one' }, timeout: 1_000 });
+
+          expect(item.timeout).toBe(1_000);
+          expect((await datasetsStorage.getItemById({ id: item.id }))?.timeout).toBe(1_000);
+
+          const batch = await datasetsStorage.batchInsertItems({
+            datasetId: ds.id,
+            items: [
+              { input: { q: 'two' }, timeout: 2_000 },
+              { input: { q: 'three' }, timeout: 3_000 },
+            ],
+          });
+          expect(batch.map(batchItem => batchItem.timeout)).toEqual([2_000, 3_000]);
+          expect((await datasetsStorage.getItemById({ id: batch[0]!.id }))?.timeout).toBe(2_000);
+
+          const preserved = await datasetsStorage.updateItem({
+            id: item.id,
+            datasetId: ds.id,
+            input: { q: 'updated' },
+          });
+          expect(preserved.timeout).toBe(1_000);
+
+          const replaced = await datasetsStorage.updateItem({ id: item.id, datasetId: ds.id, timeout: 4_000 });
+          expect(replaced.timeout).toBe(4_000);
+          expect(
+            (await datasetsStorage.getItemsByVersion({ datasetId: ds.id, version: 1 })).find(
+              versionItem => versionItem.id === item.id,
+            )?.timeout,
+          ).toBe(1_000);
+          expect(
+            (await datasetsStorage.getItemsByVersion({ datasetId: ds.id, version: 3 })).find(
+              versionItem => versionItem.id === item.id,
+            )?.timeout,
+          ).toBe(1_000);
+          expect(
+            (await datasetsStorage.getItemsByVersion({ datasetId: ds.id, version: 4 })).find(
+              versionItem => versionItem.id === item.id,
+            )?.timeout,
+          ).toBe(4_000);
+
+          const history = await datasetsStorage.getItemHistory(item.id);
+          expect(history.map(row => row.timeout)).toEqual([4_000, 1_000, 1_000]);
+        },
+      );
+
+      (supportsItemTimeout ? it.skip : it)('rejects timeout writes before mutating the dataset', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-timeout-reject' });
+        const unsupportedError = { id: 'MYSQL_DATASET_ITEM_TIMEOUT_UNSUPPORTED' };
+
+        await expect(
+          datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'rejected' }, timeout: 1_000 }),
+        ).rejects.toMatchObject(unsupportedError);
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))?.version).toBe(0);
+
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'plain' } });
+        await expect(
+          datasetsStorage.updateItem({ id: item.id, datasetId: ds.id, timeout: 2_000 }),
+        ).rejects.toMatchObject(unsupportedError);
+        await expect(
+          datasetsStorage.batchInsertItems({
+            datasetId: ds.id,
+            items: [{ input: { q: 'plain-batch' } }, { input: { q: 'rejected-batch' }, timeout: 3_000 }],
+          }),
+        ).rejects.toMatchObject(unsupportedError);
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))?.version).toBe(1);
       });
 
       it('updateItem creates new version row', async () => {
