@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 /**
  * Validates the output of scripts/sync-template.mjs — the artifact users
  * actually receive. Runs the real script offline: a fake `npm` on PATH
- * answers the latest-version lookups so no network is needed.
+ * answers the dist-tag lookups so no network is needed.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -38,10 +38,14 @@ beforeAll(() => {
   workDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sf-sync-test-')));
   outDir = path.join(workDir, 'out');
 
-  // Fake npm: resolves every `latest` dist-tag to a deterministic version.
+  // Fake npm: resolves stable and alpha dist-tags to deterministic versions.
   fakeBinDir = path.join(workDir, 'bin');
   fs.mkdirSync(fakeBinDir);
-  fs.writeFileSync(path.join(fakeBinDir, 'npm'), '#!/bin/sh\necho "9.9.9"\n', { mode: 0o755 });
+  fs.writeFileSync(
+    path.join(fakeBinDir, 'npm'),
+    '#!/bin/sh\ncase "$3" in\n  dist-tags.alpha) echo "9.9.9-alpha.0" ;;\n  dist-tags.latest) echo "9.9.9" ;;\n  *) exit 1 ;;\nesac\n',
+    { mode: 0o755 },
+  );
 
   // Sentinel env file in the source tree — must never reach the template.
   sentinel = path.join(webRoot, '.env.test-sentinel');
@@ -94,20 +98,26 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     const envExample = fs.readFileSync(path.join(outDir, '.env.example'), 'utf8');
     expect(envExample).not.toMatch(/^[A-Z][A-Z0-9_]*=\s*$/m);
 
-    // package.json: monorepo coupling removed; every Mastra dep uses the exact
-    // version resolved from npm's `latest` dist-tag.
+    // package.json: monorepo coupling removed; every Mastra dep uses an exact
+    // version from the release channel matching its local source package.
     const pkg = JSON.parse(fs.readFileSync(path.join(outDir, 'package.json'), 'utf8'));
     const allDeps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies };
     for (const [name, spec] of Object.entries(allDeps)) {
       expect(spec, `${name} must not use a link:/workspace: spec`).not.toMatch(/^(link|workspace|catalog|file):/);
       if (name === 'mastra' || name.startsWith('@mastra/')) {
-        expect(spec, `${name} must use the resolved latest version`).toBe('9.9.9');
+        expect(spec, `${name} must use an exact resolved version`).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
       }
     }
+    expect(pkg.dependencies['@mastra/factory']).toBe('9.9.9-alpha.0');
+    expect(pkg.dependencies['@mastra/code-sdk']).toBe('9.9.9-alpha.0');
+    expect(pkg.dependencies['@mastra/core']).toBe('9.9.9-alpha.0');
+    expect(pkg.dependencies['@mastra/playground-ui']).toBe('9.9.9-alpha.0');
+    expect(pkg.dependencies['@mastra/auth-studio']).toBe('9.9.9');
+    expect(pkg.dependencies['@mastra/libsql']).toBe('9.9.9');
     expect(pkg.dependencies['@mastra/memory']).toBe('9.9.9');
-    // No `.npmrc` ships — the template installs cleanly on npm with the
-    // published `latest` set, same as every other create-mastra template.
-    expect(fs.existsSync(path.join(outDir, '.npmrc'))).toBe(false);
+    // npm needs relaxed peer resolution for prerelease packages because its
+    // semver matching excludes prereleases from otherwise compatible ranges.
+    expect(fs.readFileSync(path.join(outDir, '.npmrc'), 'utf8')).toBe('legacy-peer-deps=true\n');
 
     // `typescript` is downgraded from tsgo (v7) to the classic compiler (v5)
     // because `mastra build` transitively loads TypeScript via
