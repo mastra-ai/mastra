@@ -196,6 +196,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'LIST_THREADS', 'FAILED'),
@@ -212,13 +216,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       );
       this.logger?.trackException(mastraError);
       this.logger.error(mastraError.toString());
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -832,6 +830,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES', 'FAILED'),
@@ -846,13 +848,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       );
       this.logger.error(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
