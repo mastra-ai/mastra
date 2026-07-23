@@ -342,7 +342,7 @@ Use this tool when:
         streamPrepareStep =
           allowedWs && allWorkspaceToolNames
             ? ({ tools }) => ({
-                activeTools: Object.keys(tools ?? {}).filter(k => !allWorkspaceToolNames.has(k) || allowedWs!.has(k)),
+                activeTools: Object.keys(tools ?? {}).filter(k => !allWorkspaceToolNames.has(k) || allowedWs.has(k)),
               })
             : undefined;
 

@@ -412,7 +412,7 @@ export async function runEvals(config: {
     let allGatesPassed = true;
     if (hasGates) {
       result.gateResults = [];
-      for (const gate of gates!) {
+      for (const gate of gates) {
         const scores = gateScoresByGateId[gate.id]!;
         const avgScore = average(scores);
         const passed = avgScore >= 1.0;

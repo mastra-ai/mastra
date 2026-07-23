@@ -1258,7 +1258,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   messageList,
                   messageId: currentStep.messageId,
                   stepTools: tools,
-                  _internal: _internal!,
+                  _internal: _internal,
                 });
               }
               logger?.error('Error in processInputStep processors:', error);
@@ -1284,7 +1284,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           const runState = new AgenticRunState({
-            _internal: _internal!,
+            _internal: _internal,
             model: currentStep.model,
           });
 
@@ -1359,7 +1359,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 messageList,
                 messageId: currentStep.messageId,
                 stepTools: currentStep.tools,
-                _internal: _internal!,
+                _internal: _internal,
               });
             }
             logger?.error('Error in processLLMRequest processors:', error);
@@ -1602,7 +1602,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     messageList,
                     messageId: currentStep.messageId,
                     stepTools: currentStep.tools,
-                    _internal: _internal!,
+                    _internal: _internal,
                   });
                 }
                 logger?.error('Error in processLLMResponse processors:', responseProcessorError);

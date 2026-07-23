@@ -1056,8 +1056,8 @@ export abstract class MastraBrowser extends MastraBase {
       }
 
       return () => {
-        threadCallbacks!.delete(callback);
-        if (threadCallbacks!.size === 0) {
+        threadCallbacks.delete(callback);
+        if (threadCallbacks.size === 0) {
           this._onThreadReadyCallbacks.delete(threadId);
         }
       };
@@ -1093,8 +1093,8 @@ export abstract class MastraBrowser extends MastraBase {
       }
       threadCallbacks.add(callback);
       return () => {
-        threadCallbacks!.delete(callback);
-        if (threadCallbacks!.size === 0) {
+        threadCallbacks.delete(callback);
+        if (threadCallbacks.size === 0) {
           this._onThreadClosedCallbacks.delete(threadId);
         }
       };

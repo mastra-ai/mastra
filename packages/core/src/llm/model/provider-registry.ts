@@ -281,7 +281,7 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
       const content = fs.readFileSync(jsonPath, 'utf-8');
       const parsed = JSON.parse(content) as RegistryData;
       registryData = sanitizeRegistryDataForRuntime(parsed, enabledGatewayIds);
-      return registryData!;
+      return registryData;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       errors.push(`${jsonPath}: ${errorMessage}`);

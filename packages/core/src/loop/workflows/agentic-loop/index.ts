@@ -47,7 +47,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
   let pendingFeedbackStop = false;
 
   const agenticExecutionWorkflow = createAgenticExecutionWorkflow<Tools, OUTPUT>({
-    messageId: messageId!,
+    messageId: messageId,
     models,
     _internal,
     modelSettings,
