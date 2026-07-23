@@ -48,11 +48,11 @@ vi.mock('tinyexec', () => tinyexec);
 vi.mock('./platform.js', () => platform);
 vi.mock('mastra/internal/auth', () => cliAuth);
 
-import type { Analytics } from './analytics.js';
+import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { create } from './create.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
-const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as Analytics;
+const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as PosthogAnalytics;
 const TEMPLATE_REPO = 'https://github.com/mastra-ai/softwarefactory-template';
 
 const ENV_EXAMPLE = `# Mastra Factory environment.

@@ -44,7 +44,6 @@
     "commander": "^14.0.3",
     "mastra": "workspace:*",
     "picocolors": "^1.1.1",
-    "posthog-node": "^5.37.0",
     "tinyexec": "^1.2.4"
   },
   "devDependencies": {
