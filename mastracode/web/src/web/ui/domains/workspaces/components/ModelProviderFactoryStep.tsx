@@ -219,7 +219,7 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
                 />
               </div>
               {visibleKeyProviders.length > 0 && (
-                <div className="flex flex-wrap gap-2" aria-label="API key providers">
+                <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto" aria-label="API key providers">
                   {visibleKeyProviders.map(provider => (
                     <Button
                       key={provider.provider}
