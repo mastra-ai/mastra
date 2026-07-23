@@ -71,7 +71,11 @@ function resolveSupervisorContext(requestContext: RequestContext | undefined): S
   };
 }
 
-function itemSummary(item: WorkItemRow, approvals: Awaited<ReturnType<FactorySupervisorService['approvals']['list']>>) {
+function itemSummary(
+  item: WorkItemRow,
+  approvals: Awaited<ReturnType<FactorySupervisorService['approvals']['list']>>,
+  workers: Awaited<ReturnType<FactorySupervisorService['describeWorkerBindings']>>,
+) {
   return {
     id: item.id,
     title: item.title,
@@ -81,6 +85,7 @@ function itemSummary(item: WorkItemRow, approvals: Awaited<ReturnType<FactorySup
     revision: item.revision,
     parentWorkItemId: item.parentWorkItemId,
     sessionRoles: Object.keys(item.sessions).sort(),
+    workers,
     approvals: approvals.map(approval => supervisorApprovalSummary(approval)),
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
@@ -104,7 +109,8 @@ export async function createFactorySupervisorTools(options: {
   return {
     factory_get_state: createTool({
       id: 'factory_get_state',
-      description: 'Get bounded live counts by board and stage plus pending transition approvals for this Factory.',
+      description:
+        'Get bounded live counts by board and stage, per-binding worker activity (running/idle/offline), and pending transition approvals for this Factory.',
       inputSchema: z.object({}).strict(),
       execute: async (_input, execution) => {
         const current = resolveSupervisorContext(execution.requestContext);
@@ -125,11 +131,18 @@ export async function createFactorySupervisorTools(options: {
         }
         const item = await options.service.workItems.getForProject(current.orgId, current.factoryProjectId, workItemId);
         if (!item) throw new Error('Factory work item not found.');
-        const approvals = await options.service.approvals.list({
-          orgId: current.orgId,
-          factoryProjectId: current.factoryProjectId,
-        });
-        return itemSummary(item, approvals.filter(approval => approval.workItemId === item.id).slice(0, 50));
+        const [approvals, workers] = await Promise.all([
+          options.service.approvals.list({
+            orgId: current.orgId,
+            factoryProjectId: current.factoryProjectId,
+          }),
+          options.service.describeWorkerBindings({
+            orgId: current.orgId,
+            factoryProjectId: current.factoryProjectId,
+            workItemId,
+          }),
+        ]);
+        return itemSummary(item, approvals.filter(approval => approval.workItemId === item.id).slice(0, 50), workers);
       },
     }),
     factory_list_pending_approvals: createTool({

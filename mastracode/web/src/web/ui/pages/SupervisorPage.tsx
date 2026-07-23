@@ -1,13 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@mastra/playground-ui/components/Card';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Bot, Check, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 
 import { useParams } from 'react-router';
 
@@ -175,6 +174,12 @@ function SupervisorStateSummary({
       <Badge size="sm" variant={state.pendingApprovalCount > 0 ? 'warning' : 'default'}>
         {state.pendingApprovalCount} {state.pendingApprovalCount === 1 ? 'pending approval' : 'pending approvals'}
       </Badge>
+      {state.workers ? (
+        <Badge size="sm" variant={state.workers.offline > 0 ? 'warning' : 'default'}>
+          workers: {state.workers.running} running · {state.workers.idle} idle
+          {state.workers.offline > 0 ? ` · ${state.workers.offline} offline` : ''}
+        </Badge>
+      ) : null}
       {stages.map(([stage, count]) => (
         <Badge key={stage} size="sm">
           {stage}: {count}
@@ -206,9 +211,11 @@ function PendingApprovals({
             <Txt as="h2" variant="ui-md" className="text-neutral6">
               Pending approvals
             </Txt>
-            <Txt as="p" variant="ui-sm" className="text-neutral3">
-              Approved moves apply automatically when the captured revision is current.
-            </Txt>
+            {approvals?.length ? (
+              <Txt as="p" variant="ui-sm" className="text-neutral3">
+                Approved moves apply automatically when the captured revision is current.
+              </Txt>
+            ) : null}
           </div>
           {resolution.error ? (
             <Notice variant="destructive">
@@ -221,11 +228,9 @@ function PendingApprovals({
           {pending ? <Skeleton className="h-28 w-full" /> : null}
           {error ? <Notice variant="destructive">Failed to load pending approvals.</Notice> : null}
           {!pending && !error && approvals?.length === 0 ? (
-            <EmptyState
-              iconSlot={<Bot />}
-              titleSlot="No pending approvals"
-              descriptionSlot="Agent transition requests that require supervision will appear here."
-            />
+            <Txt as="p" variant="ui-sm" className="text-neutral3">
+              No pending approvals. Agent transition requests that require supervision will appear here.
+            </Txt>
           ) : null}
           {approvals?.map(approval => (
             <ApprovalCard

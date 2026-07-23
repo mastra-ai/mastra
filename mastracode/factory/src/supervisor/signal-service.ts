@@ -39,6 +39,7 @@ export class FactorySupervisorSignalService {
       counts: state.counts,
       pendingApprovalCount: state.pendingApprovalCount,
       pendingApprovals: state.pendingApprovals.map(({ ageSeconds: _ageSeconds, ...approval }) => approval),
+      workers: state.workers,
     };
     const stateCacheKey = cacheKey(stableState);
     const snapshot = { ...state, snapshotVersion: stateCacheKey };

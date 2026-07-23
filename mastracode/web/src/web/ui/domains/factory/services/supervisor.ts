@@ -37,6 +37,15 @@ export interface FactorySupervisorApprovalState {
   ageSeconds: number;
 }
 
+export interface FactorySupervisorWorker {
+  workItemId: string;
+  workItemTitle: string | null;
+  stage: string | null;
+  role: string;
+  bindingId: string;
+  activity: 'running' | 'idle' | 'offline';
+}
+
 export interface FactorySupervisorState {
   factoryProjectId: string;
   totalItems: number;
@@ -46,6 +55,12 @@ export interface FactorySupervisorState {
   };
   pendingApprovalCount: number;
   pendingApprovals: FactorySupervisorApprovalState[];
+  workers: {
+    running: number;
+    idle: number;
+    offline: number;
+    bindings: FactorySupervisorWorker[];
+  };
   snapshotAt: string;
 }
 

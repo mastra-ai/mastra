@@ -41,7 +41,15 @@ function fixture(options: { projectExists?: boolean; liveState?: Record<string, 
   const factoryLevelSession = { state: { get: vi.fn(() => ({})) } };
   const controller = {
     getSessionByResource: vi.fn(async (resourceId: string) =>
-      resourceId === `${PROJECT_ID}-supervisor` ? live : resourceId === PROJECT_ID ? factoryLevelSession : undefined,
+      resourceId === `${PROJECT_ID}-supervisor`
+        ? live
+        : resourceId === PROJECT_ID
+          ? factoryLevelSession
+          : resourceId === 'worker-running'
+            ? runningWorkerSession
+            : resourceId === 'worker-idle'
+              ? idleWorkerSession
+              : undefined,
     ),
     createSession: vi.fn(async (_input: Record<string, unknown>) => {
       live = session;
@@ -56,9 +64,17 @@ function fixture(options: { projectExists?: boolean; liveState?: Record<string, 
         : { id, defaultModelId: 'openai/gpt-4.1' },
     ),
   };
+  const runningWorkerSession = { run: { isRunning: () => true } };
+  const idleWorkerSession = { run: { isRunning: () => false } };
   const workItems = {
     ensureReady: vi.fn(async () => undefined),
     list: vi.fn(async () => []),
+    listRunBindings: vi.fn(async () => [
+      { id: 'binding-1', workItemId: 'item-1', role: 'work', resourceId: 'worker-running', status: 'active' },
+      { id: 'binding-2', workItemId: 'item-2', role: 'work', resourceId: 'worker-idle', status: 'active' },
+      { id: 'binding-3', workItemId: 'item-3', role: 'review', resourceId: 'worker-gone', status: 'active' },
+      { id: 'binding-4', workItemId: 'item-4', role: 'work', resourceId: 'worker-revoked', status: 'revoked' },
+    ]),
   };
   const approvals = { list: vi.fn(async () => []), get: vi.fn(), resolve: vi.fn() };
   const primeCredentials = vi.fn(async () => undefined);
@@ -153,6 +169,37 @@ describe('FactorySupervisorService', () => {
       counts: { byBoard: {}, byStage: {} },
       pendingApprovalCount: 0,
       pendingApprovals: [],
+      workers: {
+        running: 1,
+        idle: 1,
+        offline: 1,
+        bindings: [
+          {
+            workItemId: 'item-1',
+            role: 'work',
+            bindingId: 'binding-1',
+            activity: 'running',
+            workItemTitle: null,
+            stage: null,
+          },
+          {
+            workItemId: 'item-2',
+            role: 'work',
+            bindingId: 'binding-2',
+            activity: 'idle',
+            workItemTitle: null,
+            stage: null,
+          },
+          {
+            workItemId: 'item-3',
+            role: 'review',
+            bindingId: 'binding-3',
+            activity: 'offline',
+            workItemTitle: null,
+            stage: null,
+          },
+        ],
+      },
       snapshotAt: expect.any(String),
     });
   });
