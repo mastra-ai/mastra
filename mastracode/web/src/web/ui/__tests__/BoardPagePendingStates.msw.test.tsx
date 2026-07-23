@@ -186,8 +186,9 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
 
-  it('links a live-thread title to its workspace route', async () => {
+  it('links a live-thread title to its workspace route and explains the click outcome', async () => {
     stubBoardEndpoints();
+    const user = userEvent.setup();
     renderWorkBoard();
 
     const titleLink = await screen.findByRole('link', { name: /Fix login bug/ });
@@ -197,6 +198,9 @@ describe('Board card pending states', () => {
     );
     const matches = matchRoutes(createAppRoutes(), titleLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
+
+    await user.hover(titleLink);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Open thread — does not start an agent run');
   });
 
   it('ignores a card dropped back into its current column', async () => {

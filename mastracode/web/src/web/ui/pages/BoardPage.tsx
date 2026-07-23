@@ -5,6 +5,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   ArrowUpRight,
@@ -1405,32 +1406,92 @@ function WorkItemCard({
         if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
       }}
       className={cn(
-        'group flex flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 outline-none transition-colors hover:bg-surface3',
+        'group relative flex flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 outline-none transition-colors hover:bg-surface3',
         evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
         runPending && 'opacity-70',
       )}
     >
-      <div className="flex min-w-0 flex-col gap-1.5">
+      <DropdownMenu>
+        <DropdownMenu.Trigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              disabled={evaluating}
+              aria-label={`Actions for ${item.title}`}
+              className="absolute top-2 right-2"
+            >
+              <EllipsisVertical size={13} aria-hidden />
+            </Button>
+          }
+        />
+        <DropdownMenu.Content align="end" className="min-w-44">
+          {runSpec !== null &&
+            runActions.map(action => {
+              const starting = pendingRunRoles.has(action.role);
+              return (
+                <DropdownMenu.Item
+                  key={action.label}
+                  disabled={runDisabled || starting}
+                  onClick={() => onStartRun(runSpec, action)}
+                >
+                  {actionIcon(action.label)}
+                  <span>{starting ? 'Starting…' : action.label}</span>
+                </DropdownMenu.Item>
+              );
+            })}
+          {itemStageOptions(item)
+            .filter(stage => stage.id !== columnStage)
+            .map(stage => (
+              <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+                <BoardStageIcon stage={stage.id} />
+                <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
+              </DropdownMenu.Item>
+            ))}
+          <DropdownMenu.Item onClick={onRemove}>
+            <Trash2 aria-hidden />
+            <span>Remove</span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+      <div className="flex min-w-0 flex-col gap-1.5 pr-6">
         <span className="truncate text-ui-xs text-icon2">{workItemMeta(item)}</span>
         <div className="flex min-w-0 items-center gap-1.5">
           <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
           {threadSession !== null ? (
-            <Link
-              to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
-              className="min-w-0 flex-1 cursor-pointer truncate text-ui-smd font-semibold text-icon6 no-underline hover:underline"
-            >
-              <SourceTitle source={item.source} title={item.title} />
-            </Link>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Link
+                    to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+                    aria-label={`Open thread for ${item.title}; does not start an agent run`}
+                    className="min-w-0 flex-1 cursor-pointer truncate text-ui-smd font-semibold text-icon6 no-underline hover:underline"
+                  >
+                    <SourceTitle source={item.source} title={item.title} />
+                  </Link>
+                }
+              />
+              <TooltipContent>Open thread — does not start an agent run</TooltipContent>
+            </Tooltip>
           ) : (
-            <button
-              type="button"
-              disabled={runDisabled}
-              aria-busy={pendingRunRoles.size > 0 || undefined}
-              onClick={() => onCreateSession(itemSessionSpec(item))}
-              className="min-w-0 flex-1 cursor-pointer truncate text-left text-ui-smd font-semibold text-icon6 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <SourceTitle source={item.source} title={item.title} />
-            </button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    disabled={runDisabled}
+                    aria-busy={pendingRunRoles.size > 0 || undefined}
+                    aria-label={`Create thread for ${item.title}; does not start an agent run`}
+                    onClick={() => onCreateSession(itemSessionSpec(item))}
+                    className="min-w-0 flex-1 cursor-pointer truncate text-left text-ui-smd font-semibold text-icon6 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <SourceTitle source={item.source} title={item.title} />
+                  </button>
+                }
+              />
+              <TooltipContent>Create thread — does not start an agent run</TooltipContent>
+            </Tooltip>
           )}
           {item.url !== null && (
             <a
@@ -1443,49 +1504,6 @@ function WorkItemCard({
               <ArrowUpRight size={12} aria-hidden />
             </a>
           )}
-          <DropdownMenu>
-            <DropdownMenu.Trigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={evaluating}
-                  aria-label={`Actions for ${item.title}`}
-                >
-                  <EllipsisVertical size={13} aria-hidden />
-                </Button>
-              }
-            />
-            <DropdownMenu.Content align="end" className="min-w-44">
-              {runSpec !== null &&
-                runActions.map(action => {
-                  const starting = pendingRunRoles.has(action.role);
-                  return (
-                    <DropdownMenu.Item
-                      key={action.label}
-                      disabled={runDisabled || starting}
-                      onClick={() => onStartRun(runSpec, action)}
-                    >
-                      {actionIcon(action.label)}
-                      <span>{starting ? 'Starting…' : action.label}</span>
-                    </DropdownMenu.Item>
-                  );
-                })}
-              {itemStageOptions(item)
-                .filter(stage => stage.id !== columnStage)
-                .map(stage => (
-                  <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
-                    <BoardStageIcon stage={stage.id} />
-                    <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
-                  </DropdownMenu.Item>
-                ))}
-              <DropdownMenu.Item onClick={onRemove}>
-                <Trash2 aria-hidden />
-                <span>Remove</span>
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu>
         </div>
       </div>
       <CardLabels labels={labels} />
