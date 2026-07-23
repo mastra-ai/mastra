@@ -70,7 +70,7 @@ import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
-import { preflightWorkflowDefinition } from '../workflows/builder';
+import { normalizeWorkflowBuilderDefinition, preflightWorkflowDefinition } from '../workflows/builder';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { StoredWorkflowGraph } from '../workflows/load-from-storage';
 import { rehydrateWorkflow, validateStorableJsonSchema } from '../workflows/load-from-storage';
@@ -4498,7 +4498,7 @@ export class Mastra<
     this.#validateStoredWorkflowRefs(def);
     this.#validateStoredWorkflowSchemas(def);
 
-    const preflight = preflightWorkflowDefinition(def);
+    const preflight = preflightWorkflowDefinition(normalizeWorkflowBuilderDefinition(def));
     if (!preflight.ok) {
       throw new Error(
         `addStoredWorkflow refused workflow "${def.id}" because it is not executable:\n${preflight.issues
