@@ -9,6 +9,7 @@
  * (`useWorkspaceActivity`); the section merges that polled activity map with
  * the work items + age thresholds it fetches via React Query.
  */
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMemo, useState } from 'react';
@@ -48,10 +49,18 @@ export function QueueHealthSection({ factoryProjectId }: { factoryProjectId: str
   }, [workItemsQuery.data, activePaths, thresholdsQuery.data]);
 
   if (workItemsQuery.isError) {
-    return <Notice variant="destructive">{(workItemsQuery.error as Error).message}</Notice>;
+    return (
+      <Notice variant="destructive">
+        {workItemsQuery.error instanceof Error ? workItemsQuery.error.message : 'Failed to load queue health'}
+      </Notice>
+    );
   }
   if (thresholdsQuery.isError) {
-    return <Notice variant="destructive">{(thresholdsQuery.error as Error).message}</Notice>;
+    return (
+      <Notice variant="destructive">
+        {thresholdsQuery.error instanceof Error ? thresholdsQuery.error.message : 'Failed to load queue thresholds'}
+      </Notice>
+    );
   }
 
   const thresholds = health ? (thresholdsQuery.data?.thresholdsSeconds ?? [14400, 86400, 259200]) : [];
@@ -60,12 +69,19 @@ export function QueueHealthSection({ factoryProjectId }: { factoryProjectId: str
     : null;
 
   return (
-    <section className="flex flex-col gap-3 rounded-lg border border-border1 bg-surface2 p-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="m-0 text-ui-md font-medium text-icon5">Queue health</h2>
-        <Txt as="span" variant="ui-xs" className="text-icon3">
-          Live — not scoped to the date range
-        </Txt>
+    <section className="flex flex-col gap-4 border-t border-border1 pt-7">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <Txt as="h2" variant="ui-md" className="m-0 font-medium text-icon6">
+            Queue health
+          </Txt>
+          <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+            Current work by stage and age. Select a segment to inspect its tasks.
+          </Txt>
+        </div>
+        <Badge size="sm" variant="success">
+          Live
+        </Badge>
       </div>
       {!workItemsQuery.data ? (
         <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
@@ -134,31 +150,33 @@ function DrillDownList({
         {entries.map(entry => (
           <li
             key={`${entry.itemId}:${entry.stage}`}
-            className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 border-b border-border1 py-1.5 last:border-b-0"
+            className="flex min-w-0 flex-col gap-2 border-b border-border1 py-2.5 last:border-b-0 sm:flex-row sm:items-center"
           >
-            {entry.url ? (
-              <a
-                href={entry.url}
-                target="_blank"
-                rel="noreferrer"
-                className="truncate text-ui-sm text-icon5 no-underline hover:text-icon6 hover:underline"
-              >
-                {entry.title}
-              </a>
-            ) : (
-              <span className="truncate text-ui-sm text-icon5">{entry.title}</span>
-            )}
-            <span className="rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-icon4">
-              {stageLabel(entry.stage)}
-            </span>
-            <Txt as="span" variant="ui-xs" className="text-icon3">
-              in stage {formatAgeSeconds(entry.ageSeconds)}
-            </Txt>
-            {entry.active ? (
-              <span className="rounded-full bg-green-500/15 px-1.5 py-0.5 text-ui-xs text-green-500">active</span>
-            ) : (
-              <span />
-            )}
+            <div className="min-w-0 flex-1">
+              {entry.url ? (
+                <a
+                  href={entry.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block truncate text-ui-sm font-medium text-icon5 no-underline hover:text-icon6 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent1"
+                >
+                  {entry.title}
+                </a>
+              ) : (
+                <span className="block truncate text-ui-sm font-medium text-icon5">{entry.title}</span>
+              )}
+              <Txt as="span" variant="ui-xs" className="mt-0.5 block text-icon3">
+                In this stage {formatAgeSeconds(entry.ageSeconds)}
+              </Txt>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge size="xs">{stageLabel(entry.stage)}</Badge>
+              {entry.active ? (
+                <Badge size="xs" variant="success">
+                  Active
+                </Badge>
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>
