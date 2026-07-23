@@ -59,9 +59,19 @@ function slackTeamId(message: HandlerMessage): string | undefined {
   return undefined;
 }
 
-/** Resolve the web origin the Connect deep link points at. */
+/** Resolve the public origin Slack's servers call back on (events/webhooks). */
 function channelsPublicUrl(): string | undefined {
   return process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL;
+}
+
+/**
+ * Resolve the web-UI origin for links humans open in a browser (Connect card,
+ * session deep links). Prefers `MASTRACODE_PUBLIC_URL` — the origin auth
+ * cookies and OAuth redirect allow-lists are registered against — over the
+ * channels tunnel, which only Slack's servers need to reach.
+ */
+function webPublicUrl(): string | undefined {
+  return process.env.MASTRACODE_PUBLIC_URL ?? process.env.MASTRACODE_CHANNELS_PUBLIC_URL;
 }
 
 /**
@@ -92,7 +102,7 @@ export async function promptIfUnlinked({
     : null;
   if (link) return false;
 
-  const publicUrl = channelsPublicUrl();
+  const publicUrl = webPublicUrl();
   // Need both a signer (anti-spoofing) and a public origin to build a usable
   // Connect link. Missing either → still block the run, just no card.
   if (channelLinkStateSigner && publicUrl && externalTeamId) {
