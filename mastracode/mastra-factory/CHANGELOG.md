@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.2-alpha.0
+
+### Patch Changes
+
+- Fixed Factory template generation during release transitions by selecting exact published package versions that match the local source release and configuring npm for compatible prerelease installs. ([#20097](https://github.com/mastra-ai/mastra/pull/20097))
+
+- Updated dependencies:
+  - mastra@1.20.2-alpha.0
+
 ## 0.1.1
 
 ### Patch Changes

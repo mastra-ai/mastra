@@ -1,5 +1,30 @@
 # mastracode
 
+## 0.32.2-alpha.0
+
+### Patch Changes
+
+- Improved Factory board cards with hover-revealed thread actions, top-right action menus, correct workspace links, and impact-free same-column drops. ([#20095](https://github.com/mastra-ai/mastra/pull/20095))
+
+- Fixed settings pages to use native page scrolling while keeping navigation visible. ([#20094](https://github.com/mastra-ai/mastra/pull/20094))
+
+- Fixed Factory page loader hang after uninstalling the GitHub App. The source-control-connections endpoint now skips connections whose installation was pruned instead of 500-ing, so the UI hydrates and the user can re-link their repos through the normal flow. ([#20106](https://github.com/mastra-ai/mastra/pull/20106))
+
+- Redesigned the Factory onboarding LLM step as a sign-in style screen. ([#20089](https://github.com/mastra-ai/mastra/pull/20089))
+
+  - Providers with browser sign-in (Anthropic, OpenAI, GitHub Copilot, xAI) now appear as top-level buttons with their logos; clicking one starts sign-in directly.
+  - An OR divider leads into a searchable API key provider list; results are capped in height and scroll, and picking an unconnected provider opens the API key dialog directly.
+  - Once a provider is connected, the step focuses on choosing the Factory default model, with a full-width finish button and a Change provider option.
+
+- Fixed local database corruption on exit by closing storage connections during TUI shutdown. The signal handler (SIGINT, SIGTERM, SIGHUP) now calls storage close, which checkpoints and truncates WAL files and switches back to DELETE journal mode before the process exits. Previously, abrupt termination left WAL sidecars un-checkpointed, which could corrupt the local SQLite database on the next open. ([#20110](https://github.com/mastra-ai/mastra/pull/20110))
+
+- Improved MastraCode page layouts so reports use native scrolling and chat content fills the viewport without inherited padding. ([#20094](https://github.com/mastra-ai/mastra/pull/20094))
+
+- Updated dependencies [[`df6a9ce`](https://github.com/mastra-ai/mastra/commit/df6a9ce87214f7aadb2edfe62f67605fe998a0a4), [`0f92ed4`](https://github.com/mastra-ai/mastra/commit/0f92ed4173a480f617c6a0af6d51af100b42bdfc), [`cadd3a2`](https://github.com/mastra-ai/mastra/commit/cadd3a276f8e0026e3c84cffe935538419cb890c)]:
+  - @mastra/core@1.52.2-alpha.0
+  - @mastra/libsql@1.17.1-alpha.0
+  - @mastra/code-sdk@1.0.2-alpha.0
+
 ## 0.32.1
 
 ### Patch Changes

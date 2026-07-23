@@ -1,5 +1,15 @@
 # @mastra/code-sdk
 
+## 1.0.2-alpha.0
+
+### Patch Changes
+
+- Added a 15s `AbortSignal` timeout to the Anthropic OAuth token-exchange and refresh fetches so an unresponsive upstream cannot pin the caller indefinitely. ([#20129](https://github.com/mastra-ai/mastra/pull/20129))
+
+- Updated dependencies [[`df6a9ce`](https://github.com/mastra-ai/mastra/commit/df6a9ce87214f7aadb2edfe62f67605fe998a0a4), [`0f92ed4`](https://github.com/mastra-ai/mastra/commit/0f92ed4173a480f617c6a0af6d51af100b42bdfc)]:
+  - @mastra/core@1.52.2-alpha.0
+  - @mastra/libsql@1.17.1-alpha.0
+
 ## 1.0.1
 
 ### Patch Changes
