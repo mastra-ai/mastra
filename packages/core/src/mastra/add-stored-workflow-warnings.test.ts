@@ -115,6 +115,63 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
       }),
     ).rejects.toThrow(/addStoredWorkflow refused.*my-agent-step.*anyOf/s);
   });
+
+  it('preserves the current live registration when durable persistence fails', async () => {
+    const storage = new InMemoryStore({ id: 'atomic-publication' });
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'passthrough-tool': passthroughTool } as any,
+      storage,
+    });
+    const definition = {
+      id: 'atomic-wf',
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      graph: [{ type: 'tool' as const, id: 'passthrough-tool', toolId: 'passthrough-tool' }],
+    };
+
+    await mastra.addStoredWorkflow(definition);
+    const previousWorkflow = mastra.getWorkflow('atomic-wf');
+    const store = await storage.getStore('workflowDefinitions');
+    vi.spyOn(store!, 'upsert').mockRejectedValueOnce(new Error('durable write failed'));
+
+    await expect(mastra.addStoredWorkflow({ ...definition, description: 'replacement' })).rejects.toThrow(
+      'durable write failed',
+    );
+    expect(mastra.getWorkflow('atomic-wf')).toBe(previousWorkflow);
+  });
+
+  it('rejects a structurally valid definition that cannot execute, before registration', async () => {
+    const storage = new InMemoryStore({ id: 'invalid-executable-definition' });
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'passthrough-tool': passthroughTool } as any,
+      storage,
+    });
+
+    await expect(
+      mastra.addStoredWorkflow({
+        id: 'invalid-executable-wf',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object' },
+        graph: [
+          {
+            type: 'parallel',
+            id: 'parallel-1',
+            steps: [
+              {
+                type: 'mapping',
+                id: 'nested-mapping',
+                mapConfig: JSON.stringify({ value: { value: { initData: true, path: 'value' } } }),
+              },
+            ],
+          },
+        ],
+      } as any),
+    ).rejects.toThrow(/addStoredWorkflow refused.*mapping steps must be top-level workflow entries/s);
+
+    expect(() => mastra.getWorkflow('invalid-executable-wf')).toThrow();
+  });
 });
 
 describe('Mastra boot load — lenient on unsupported schema keywords', () => {

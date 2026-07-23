@@ -141,6 +141,7 @@ function applyGraphEntry(
       return;
     }
     case 'workflow': {
+      assertNestedWorkflowIdentity(entry.id, entry.workflowId);
       const nested = assertWorkflowExists(mastra, entry.workflowId);
       wf.then(nested);
       return;
@@ -280,6 +281,7 @@ function rehydrateSingleEntry(
       return { type: 'step', step: resolved as unknown as Step };
     }
     case 'workflow':
+      assertNestedWorkflowIdentity(entry.id, entry.workflowId);
       return { type: 'step', step: assertWorkflowExists(mastra, entry.workflowId) as unknown as Step };
     case 'mapping':
       throw new Error(
@@ -349,6 +351,14 @@ function tryGetWorkflowById(mastra: Mastra, id: string): any | undefined {
     return (mastra as any).getWorkflow(id);
   } catch {
     return undefined;
+  }
+}
+
+function assertNestedWorkflowIdentity(id: string, workflowId: string): void {
+  if (id !== workflowId) {
+    throw new Error(
+      `Stored nested workflow step id "${id}" must match workflowId "${workflowId}" because live workflows do not support a distinct call-site id.`,
+    );
   }
 }
 

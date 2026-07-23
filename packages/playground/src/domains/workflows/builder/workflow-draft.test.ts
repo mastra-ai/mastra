@@ -28,7 +28,7 @@ const createValidDraft = (): UpsertStoredWorkflowParams => ({
   graph: [
     { type: 'agent', id: 'classify', agentId: 'classifier', outputSchema: objectSchema },
     { type: 'tool', id: 'lookup', toolId: 'customer-lookup' },
-    { type: 'mapping', id: 'shape-output', mapConfig: '{"result":{"value":{"path":"lookup.result"}}}' },
+    { type: 'mapping', id: 'shape-output', mapConfig: '{"result":{"path":"result","step":"lookup"}}' },
     {
       type: 'parallel',
       steps: [
@@ -90,6 +90,30 @@ describe('workflow draft', () => {
             path: 'graph.0.steps.0.id',
             message:
               'Nested workflow step id "greeting-step" must match workflowId "greetingWorkflow". Use "greetingWorkflow" for both fields.',
+          },
+        ],
+      });
+    });
+  });
+
+  describe('when a mapping uses a JSONPath-prefixed source path', () => {
+    it('returns the Core preflight issue before the workflow can be finalized', () => {
+      const draft = createValidDraft();
+      draft.graph = [
+        {
+          type: 'mapping',
+          id: 'shape-output',
+          mapConfig: '{"summary":{"path":"$.summary","initData":true}}',
+        },
+      ];
+
+      expect(validateWorkflowDraft(draft)).toEqual({
+        ok: false,
+        issues: [
+          {
+            code: 'invalid-map-config',
+            path: 'graph.0.mapConfig.summary.path',
+            message: 'Mapping paths must use plain dotted segments.',
           },
         ],
       });

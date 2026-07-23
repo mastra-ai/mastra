@@ -1,4 +1,6 @@
 import type { UpsertStoredWorkflowParams } from '@mastra/client-js';
+import { normalizeWorkflowBuilderDefinition, preflightWorkflowDefinition } from '@mastra/core/workflows/builder';
+import type { WorkflowDefinitionPreflightContext } from '@mastra/core/workflows/builder';
 
 export type WorkflowDraft = UpsertStoredWorkflowParams;
 export type WorkflowDraftStep = WorkflowDraft['graph'][number];
@@ -56,6 +58,8 @@ export type WorkflowDraftValidationIssueCode =
   | 'missing-reference'
   | 'invalid-nested-workflow-id'
   | 'invalid-map-config'
+  | 'invalid-map-reference'
+  | 'invalid-map-placement'
   | 'invalid-parallel'
   | 'invalid-foreach'
   | 'invalid-duration'
@@ -470,6 +474,17 @@ export function validateWorkflowDraft(
   context?: WorkflowDraftValidationContext,
 ): WorkflowDraftValidationResult {
   const issues: WorkflowDraftValidationIssue[] = [];
+  const preflightContext: WorkflowDefinitionPreflightContext = {
+    agents: context?.agents,
+    tools: context?.tools,
+    workflows: context?.workflowCatalog === 'unavailable' ? undefined : context?.workflows,
+  };
+  let preflight: ReturnType<typeof preflightWorkflowDefinition> | undefined;
+  try {
+    preflight = preflightWorkflowDefinition(normalizeWorkflowBuilderDefinition(draft), preflightContext);
+  } catch {
+    preflight = undefined;
+  }
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(draft.id)) {
     issues.push({ code: 'invalid-workflow-id', path: 'id', message: 'Workflow id must be descriptive kebab-case.' });
   }
@@ -495,6 +510,17 @@ export function validateWorkflowDraft(
       issues,
       'outputSchema',
       'Workflow output schema is incompatible with the final step output. Add a top-level mapping step or update the output schema.',
+    );
+  }
+
+  if (preflight && !preflight.ok) {
+    const existingPaths = issues.map(issue => issue.path);
+    issues.push(
+      ...preflight.issues.filter(
+        issue =>
+          ['invalid-map-config', 'invalid-map-reference', 'invalid-map-placement'].includes(issue.code) &&
+          !existingPaths.some(path => issue.path === path || issue.path.startsWith(`${path}.`)),
+      ),
     );
   }
 

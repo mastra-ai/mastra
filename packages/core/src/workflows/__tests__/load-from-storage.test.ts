@@ -246,6 +246,32 @@ describe('storage round-trip', () => {
     ).resolves.toBeDefined();
   });
 
+  it('rejects nested workflow call-site ids that cannot be preserved by live rehydration', async () => {
+    const inner = makeInnerWorkflow('inner-wf');
+    const mastra = new Mastra({
+      logger: false,
+      workflows: { 'inner-wf': inner },
+      storage: new InMemoryStore({ id: 'nested-call-site-identity' }),
+    });
+
+    await expect(
+      rehydrateWorkflow(
+        {
+          id: 'outer-wf',
+          inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+          outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+          graph: [
+            {
+              type: 'parallel',
+              steps: [{ type: 'workflow', id: 'local-inner', workflowId: 'inner-wf' }],
+            },
+          ],
+        },
+        mastra,
+      ),
+    ).rejects.toThrow(/id "local-inner" must match workflowId "inner-wf"/);
+  });
+
   it('addStoredWorkflow persists + live-registers; loadStoredWorkflows brings it back on a fresh boot', async () => {
     const storage = new InMemoryStore({ id: 'fresh-store' });
 

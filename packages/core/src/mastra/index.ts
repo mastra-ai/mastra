@@ -70,6 +70,7 @@ import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
+import { preflightWorkflowDefinition } from '../workflows/builder';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { StoredWorkflowGraph } from '../workflows/load-from-storage';
 import { rehydrateWorkflow, validateStorableJsonSchema } from '../workflows/load-from-storage';
@@ -4459,6 +4460,21 @@ export class Mastra<
     }
   }
 
+  #replaceStoredWorkflow(workflow: AnyWorkflow, key: string): void {
+    workflow.__registerMastra(this);
+    workflow.__registerPrimitives({
+      logger: this.getLogger(),
+      storage: this.getStorage(),
+    });
+    if (!workflow.committed) {
+      workflow.commit();
+    }
+
+    (this.#workflows as Record<string, AnyWorkflow>)[key] = workflow;
+    this.#hiddenWorkflowKeys.delete(key);
+    this.registerStaticWorkflowScorers(workflow);
+  }
+
   /**
    * Persist a static workflow definition to storage and live-register it on
    * this Mastra instance so it becomes immediately runnable. The same path is
@@ -4481,11 +4497,17 @@ export class Mastra<
   public async addStoredWorkflow(def: StoredWorkflowGraph): Promise<void> {
     this.#validateStoredWorkflowRefs(def);
     this.#validateStoredWorkflowSchemas(def);
-    const { workflow } = await rehydrateWorkflow(def, this);
-    // Replace any existing registration — addWorkflow is first-write-wins.
-    this.removeWorkflow(def.id);
-    this.addWorkflow(workflow as AnyWorkflow, def.id);
 
+    const preflight = preflightWorkflowDefinition(def);
+    if (!preflight.ok) {
+      throw new Error(
+        `addStoredWorkflow refused workflow "${def.id}" because it is not executable:\n${preflight.issues
+          .map(issue => `${issue.path}: ${issue.message}`)
+          .join('\n')}`,
+      );
+    }
+
+    const { workflow } = await rehydrateWorkflow(def, this);
     const store = await this.#storage?.getStore('workflowDefinitions');
     if (store) {
       await store.upsert({
@@ -4499,6 +4521,8 @@ export class Mastra<
         graph: def.graph,
       });
     }
+
+    this.#replaceStoredWorkflow(workflow as AnyWorkflow, def.id);
   }
 
   /**
