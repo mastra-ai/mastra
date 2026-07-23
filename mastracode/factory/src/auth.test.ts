@@ -222,31 +222,65 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(mockGetLoginUrl).toHaveBeenCalledOnce();
   });
 
+  it('encodes returnTo into pipe-format state (MastraAuthStudio contract)', async () => {
+    const { app } = buildApp();
+    await app.request('/auth/login?returnTo=/dashboard');
+    const state = mockGetLoginUrl.mock.calls[0]![1] as string;
+    const pipeIndex = state.indexOf('|');
+    expect(pipeIndex).toBeGreaterThan(0);
+    expect(decodeURIComponent(state.slice(pipeIndex + 1))).toBe('/dashboard');
+  });
+
+  it('stashes returnTo in a short-lived cookie across the login round-trip', async () => {
+    const { app } = buildApp();
+    const res = await app.request('/auth/login?returnTo=/dashboard');
+    expect(res.headers.get('set-cookie')).toContain('mastra_factory_return_to=%2Fdashboard');
+  });
+
   it('rejects external returnTo in login (open-redirect protection)', async () => {
     const { app } = buildApp();
     await app.request('/auth/login?returnTo=https://evil.com');
     // The encoded state must carry the sanitized "/" path, not the external URL.
     const state = mockGetLoginUrl.mock.calls[0]![1] as string;
-    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
-    expect(decoded.returnTo).toBe('/');
+    expect(decodeURIComponent(state.split('|')[1]!)).toBe('/');
   });
 
   it('rejects protocol-relative returnTo', async () => {
     const { app } = buildApp();
     await app.request('/auth/login?returnTo=//evil.com');
     const state = mockGetLoginUrl.mock.calls[0]![1] as string;
-    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
-    expect(decoded.returnTo).toBe('/');
+    expect(decodeURIComponent(state.split('|')[1]!)).toBe('/');
   });
 
   it('handles the callback, applies cookies, and redirects to decoded returnTo', async () => {
     const { app } = buildApp();
-    const state = Buffer.from(JSON.stringify({ returnTo: '/dashboard' }), 'utf8').toString('base64url');
+    const state = `uuid-1|${encodeURIComponent('/dashboard')}`;
     const res = await app.request(`/auth/callback?code=abc&state=${state}`);
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/dashboard');
     expect(res.headers.get('set-cookie')).toContain('wos_session=sealed');
-    expect(mockHandleCallback).toHaveBeenCalledWith('abc', state);
+    // Hono percent-decodes query values, so the provider sees the raw pipe form.
+    expect(mockHandleCallback).toHaveBeenCalledWith('abc', 'uuid-1|/dashboard');
+  });
+
+  it('falls back to the returnTo cookie when the callback has no state', async () => {
+    const { app } = buildApp();
+    const res = await app.request('/auth/callback?code=abc', {
+      headers: { Cookie: 'mastra_factory_return_to=%2Fconnect%2Fslack%3Fstate%3Dsigned' },
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/connect/slack?state=signed');
+    // The stash cookie must be cleared once consumed.
+    expect(res.headers.get('set-cookie')).toContain('mastra_factory_return_to=;');
+  });
+
+  it('rejects an external URL smuggled into the returnTo cookie', async () => {
+    const { app } = buildApp();
+    const res = await app.request('/auth/callback?code=abc', {
+      headers: { Cookie: `mastra_factory_return_to=${encodeURIComponent('https://evil.com')}` },
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/');
   });
 
   it('redirects callback back to login when code is missing', async () => {
@@ -260,7 +294,7 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
   it('redirects callback back to login when the code exchange fails', async () => {
     mockHandleCallback.mockRejectedValue(new Error('expired code'));
     const { app } = buildApp();
-    const state = Buffer.from(JSON.stringify({ returnTo: '/dashboard' }), 'utf8').toString('base64url');
+    const state = `uuid-1|${encodeURIComponent('/dashboard')}`;
     const res = await app.request(`/auth/callback?code=bad&state=${state}`);
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/auth/login');
