@@ -335,7 +335,7 @@ src/mastra/public/factory/
 }
 
 /**
- * Emit `pnpm-workspace.yaml` with `allowBuilds`.
+ * Emit `pnpm-workspace.yaml` with pnpm-specific install policy.
  *
  * pnpm v10+ blocks install scripts by default and exits with
  * ERR_PNPM_IGNORED_BUILDS if any dependency has a build script that isn't
@@ -352,6 +352,9 @@ function writePnpmWorkspace() {
 # Prevents ERR_PNPM_IGNORED_BUILDS on pnpm v10+ by explicitly approving
 # (or declining) build scripts for dependencies that have them.
 # npm ignores this file entirely; it only affects pnpm installs.
+minimumReleaseAgeExclude:
+  - '@mastra/*'
+  - mastra
 allowBuilds:
   '@google/genai': true
   agent-browser: true
