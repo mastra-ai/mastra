@@ -31,6 +31,14 @@ const mocks = vi.hoisted(() => ({
   })),
   mintInstallationToken: vi.fn(async () => 'gh-token'),
   setEnvironmentVariable: vi.fn(),
+  /** Org GitHub PATs surfaced via integration settings; null = not configured. */
+  githubPat: null as string | null,
+  githubReviewerPat: null as string | null,
+  /** Run-binding role resolved for the session; null = no binding found. */
+  runBindingRole: null as string | null,
+  findRunBindingBySession: vi.fn(async () =>
+    mocks.runBindingRole ? { role: mocks.runBindingRole, orgId: 'org-1' } : null,
+  ),
 }));
 
 vi.mock('./integrations/github/sandbox', () => ({
@@ -57,6 +65,10 @@ afterEach(async () => {
   mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
   mocks.setEnvironmentVariable.mockClear();
+  mocks.githubPat = null;
+  mocks.githubReviewerPat = null;
+  mocks.runBindingRole = null;
+  mocks.findRunBindingBySession.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -75,7 +87,7 @@ function createRequestContext(projectPath: string) {
 }
 
 function createGithubRequestContext(
-  _projectId: string,
+  projectId: string,
   sessionId: string,
   user: Record<string, unknown> = { organizationId: 'org-1', workosId: 'user-1' },
 ) {
@@ -83,6 +95,8 @@ function createGithubRequestContext(
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: sessionId,
+    threadId: sessionId,
+    getState: () => ({ factoryProjectId: projectId }),
     session: { id: sessionId },
   });
   requestContext.set('user', user);
@@ -158,6 +172,18 @@ function fakeGithubIntegration() {
     },
     mintInstallationToken: (...args: unknown[]) => mocks.mintInstallationToken(...(args as [])),
     getInstallationOctokit: vi.fn(),
+    integrationStorage: {
+      settings: {
+        get: vi.fn(async () =>
+          mocks.githubPat || mocks.githubReviewerPat
+            ? {
+                ...(mocks.githubPat ? { pat: mocks.githubPat } : {}),
+                ...(mocks.githubReviewerPat ? { reviewerPat: mocks.githubReviewerPat } : {}),
+              }
+            : null,
+        ),
+      },
+    },
     sourceControlStorage: {
       sessions: {
         getBySessionId: vi.fn(async (id: string) => mocks.sessions.find(session => session.sessionId === id) ?? null),
@@ -267,6 +293,7 @@ describe('GitHub session workspace preparation', () => {
         sandbox: { machine, workdir: root },
         github: fakeGithubIntegration() as any,
         fleet,
+        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
       }),
     };
   }
@@ -331,6 +358,78 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
     expect(mocks.mintInstallationToken).not.toHaveBeenCalled();
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
+  });
+
+  it('installs a configured org PAT as GH_TOKEN while git keeps the repository-scoped token', async () => {
+    mocks.githubPat = 'ghp_org_pat';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // gh CLI env gets the PAT…
+    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      { GH_TOKEN: 'ghp_org_pat' },
+      undefined,
+      expect.any(Object),
+    );
+    // …but git materialization keeps the installation-scoped token.
+    expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
+  });
+
+  it('installs the reviewer PAT for review-board sessions', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      { GH_TOKEN: 'ghp_reviewer' },
+      undefined,
+      expect.any(Object),
+    );
+  });
+
+  it('falls back to the worker PAT for review sessions without a reviewer token', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      { GH_TOKEN: 'ghp_worker' },
+      undefined,
+      expect.any(Object),
+    );
+  });
+
+  it('keeps the worker PAT for non-review sessions even when a reviewer token exists', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'triage';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      { GH_TOKEN: 'ghp_worker' },
+      undefined,
+      expect.any(Object),
+    );
   });
 
   it('registers a runtime injector for refreshing GH_TOKEN in the active sandbox', async () => {

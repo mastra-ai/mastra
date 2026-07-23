@@ -301,6 +301,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');
+      const cloneUrl = `https://github.com/${repository.slug}.git`;
       const installation = await this.storage.installations.get({ orgId, id: repository.installationId });
       if (!installation) throw new Error('Version-control installation not found.');
       const installationId = parsePositiveInteger(installation.externalId);
@@ -312,7 +313,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
       );
       return {
-        cloneUrl: `https://github.com/${repository.slug}.git`,
+        cloneUrl,
         authorization: { scheme: 'bearer', token: token.token },
       };
     },
