@@ -136,7 +136,7 @@ console.log(`Status: ${summary2.status}`)
 
 For each item, `timeout` takes precedence over `itemTimeout`. An item without `timeout` inherits `itemTimeout`. If neither value is set, the item has no execution deadline.
 
-The effective timeout is one budget for the initial attempt, retry backoff, and all retry attempts. The budget doesn't restart for each attempt. Cancelling the experiment through `signal` takes precedence over item deadlines and isn't retried.
+The effective timeout is one budget that covers execution attempts and retry backoff rather than restarting for each attempt. Cancelling the experiment through `signal` takes precedence over item deadlines and isn't retried.
 
 ## Returns
 
