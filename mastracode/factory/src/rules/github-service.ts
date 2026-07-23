@@ -179,6 +179,7 @@ export class FactoryGithubEventService {
       repositoryId,
       issueNumber,
       pullRequestNumber,
+      string(object(pullRequest?.head)?.ref),
       provenance,
     );
     const actor = await githubActor(this.options.github, {
@@ -294,6 +295,7 @@ export class FactoryGithubEventService {
     repositoryId: number,
     issueNumber: number | undefined,
     pullRequestNumber: number | undefined,
+    pullRequestHeadBranch: string | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
   ): Promise<WorkItemRow | undefined> {
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
@@ -309,7 +311,19 @@ export class FactoryGithubEventService {
         items.find(item => item.externalSource?.externalId === canonicalSourceKey('pull-request', pullRequestNumber)) ??
         items.find(
           item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'pull-request', pullRequestNumber),
-        )
+        ) ??
+        // Provenance fallback: a PR pushed from a work item's session branch
+        // belongs to that item even when no gh-pr-create provenance was
+        // recorded (session predating state seeding, or the PR was opened
+        // outside the tracked tool call). Session branches are per-item
+        // (`factory/issue-N`), so a head-branch match is unambiguous.
+        (pullRequestHeadBranch
+          ? items.find(
+              item =>
+                item.externalSource?.type !== 'pull-request' &&
+                Object.values(item.sessions).some(session => session.branch === pullRequestHeadBranch),
+            )
+          : undefined)
       );
     }
     return undefined;

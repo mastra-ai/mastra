@@ -53,8 +53,12 @@ export function ChatSessionConfigProvider({
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
   // UserSessionsSection), so the chat surface must address the same
   // (resourceId, no scope) session to read threads and share the live run.
-  // On user routes the :threadId param IS the sessionId.
-  const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId);
+  // On user routes the :threadId param IS the sessionId. Factory routes with
+  // no workspace session (e.g. /settings/*) fall back to the factory-level
+  // session address returned by the /ensure route so resource-scoped surfaces
+  // (behavior settings, tool permissions) stay functional.
+  const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId ?? ensureQuery.data?.resourceId);
+  const projectPath = undefined;
 
   // A `?resourceId=` query param overrides the resolved factory resource so the
   // whole chat session (transcript, messages, connection, thread switch) binds
@@ -78,6 +82,7 @@ export function ChatSessionConfigProvider({
     resourceId: resourceOverride ?? resourceId ?? '',
     sessionEnabled,
     resourceEnabled: userScoped ? Boolean(resourceId) : resourceOverride ? true : ensureQuery.isSuccess,
+    projectPath,
     factorySessionState:
       factory && repository
         ? {
@@ -108,10 +113,11 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     threadId,
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),

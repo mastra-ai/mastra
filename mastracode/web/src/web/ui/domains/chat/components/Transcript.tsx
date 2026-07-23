@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
@@ -17,17 +18,14 @@ import {
   CircleDot,
   CircleX,
   ExternalLink,
-  Eye,
   GitMerge,
-  Globe,
-  ListChecks,
-  Pencil,
-  Search,
-  Terminal,
+  Info,
+  Layers,
   Wrench,
+  X,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../ui/highlight';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -39,22 +37,6 @@ import {
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
-
-function ToolIcon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {
-  const n = name.toLowerCase();
-  const props = { size, className };
-  if (n.includes('view') || n.includes('read') || n.includes('cat')) return <Eye {...props} />;
-  if (n.includes('write') || n.includes('edit') || n.includes('replace') || n.includes('str_replace'))
-    return <Pencil {...props} />;
-  if (n.includes('exec') || n.includes('command') || n.includes('shell') || n.includes('bash') || n.includes('run'))
-    return <Terminal {...props} />;
-  if (n.includes('search') || n.includes('grep') || n.includes('find') || n.includes('glob'))
-    return <Search {...props} />;
-  if (n.includes('task') || n.includes('todo')) return <ListChecks {...props} />;
-  if (n.includes('browser') || n.includes('web') || n.includes('fetch') || n.includes('http'))
-    return <Globe {...props} />;
-  return <Wrench {...props} />;
-}
 import { Markdown } from '../../../ui/Markdown';
 
 import type {
@@ -78,7 +60,7 @@ const resultBlock =
   'm-0 mt-1 max-h-72 max-w-full overflow-auto whitespace-pre rounded-sm bg-surface1 p-2 font-mono text-xs leading-normal text-icon5';
 
 // Prompt cards (approval / suspension) — an elevated card with a colored left rail.
-const promptCardBase = 'rounded-lg border border-border1 bg-surface3 px-4 py-3 shadow-md';
+const promptCardBase = 'my-2 rounded-lg border border-border1 bg-surface3 px-4 py-3 shadow-md';
 const promptCardApproval = `${promptCardBase} border-l-4 border-l-warning1`;
 const promptCardSuspension = `${promptCardBase} border-l-4 border-l-accent2`;
 const promptTitle = 'mb-1.5 text-sm font-semibold text-icon6';
@@ -166,17 +148,12 @@ function SkillActivationCard({ activation }: { activation: SkillActivation }) {
 // Tool card (collapsible)
 // ---------------------------------------------------------------------------
 
-const STATUS_LABEL: Record<ToolCall['status'], string> = {
-  running: 'Running',
-  done: 'Done',
-  error: 'Failed',
-};
-
-const STATUS_VARIANT: Record<ToolCall['status'], 'info' | 'success' | 'error'> = {
-  running: 'info',
-  done: 'success',
-  error: 'error',
-};
+/** Quiet status indicator: muted spinner while running, red cross on failure, nothing on success. */
+function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
+  if (status === 'running') return <Spinner size="sm" aria-label="Running" className="size-3.5 text-icon3" />;
+  if (status === 'error') return <X size={14} role="img" aria-label="Failed" className="text-error" />;
+  return null;
+}
 
 /** Label + copy header for a section inside a tool card body. */
 function ToolSection({ label, copyText, children }: { label: string; copyText: string; children: ReactNode }) {
@@ -255,43 +232,8 @@ function editArgs(toolName: string, args: unknown): EditArgs | undefined {
   return isReplace || isWrite ? edit : undefined;
 }
 
-/**
- * Position of a tool card within a run of consecutive tool cards.
- * Consecutive cards compose into a single bordered, rounded container: the
- * container border/rounding lives on the outer edges and inner boundaries
- * become dividers. `single` is a lone card (fully rounded + bordered).
- */
-type ToolGroupPosition = 'single' | 'first' | 'middle' | 'last';
-
-function toolGroupClasses(position: ToolGroupPosition): string {
-  const base = 'border-x border-border1';
-  switch (position) {
-    case 'single':
-      return `${base} border-y rounded-xl`;
-    case 'first':
-      return `${base} border-t rounded-t-xl`;
-    case 'middle':
-      // Divider between rows is the top border; no rounding.
-      return `${base} border-t`;
-    case 'last':
-      return `${base} border-y rounded-b-xl`;
-  }
-}
-
-function ToolCard({
-  tool,
-  forceExpanded,
-  groupPosition = 'single',
-}: {
-  tool: ToolCall;
-  forceExpanded?: boolean;
-  groupPosition?: ToolGroupPosition;
-}) {
+function ToolCard({ tool }: { tool: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
-  // When the parent toggles "expand/collapse all", follow that signal.
-  useEffect(() => {
-    if (forceExpanded !== undefined) setExpanded(forceExpanded);
-  }, [forceExpanded]);
   const argsPreview = tool.args !== undefined ? JSON.stringify(tool.args) : tool.argsText;
   const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
   const resultText =
@@ -302,17 +244,17 @@ function ToolCard({
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className={cn('min-w-0 max-w-full overflow-hidden bg-surface3', toolGroupClasses(groupPosition))}
+      className="min-w-0 max-w-full"
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
     >
       {/*
-        Wrap the trigger content in a span so no icon is a *direct* child of
-        CollapsibleTrigger. The DS trigger rotates every direct-child <svg> via
-        `[&>svg]:rotate-90` on open — which would spin the tool icon (e.g. the
-        eye). Nesting keeps only the chevron animating, controlled here.
+        Wrap the trigger content in a span so the chevron is not a *direct*
+        child of CollapsibleTrigger — the DS trigger rotates direct-child <svg>
+        via `[&>svg]:rotate-90` on open. Nesting keeps the chevron controlled
+        here.
       */}
-      <CollapsibleTrigger className="w-full text-left">
+      <CollapsibleTrigger className="w-full rounded-lg text-left transition-colors hover:bg-surface2 active:bg-surface4">
         <span className="flex w-full items-center gap-2 px-2 py-1.5">
           <ChevronDown
             size={13}
@@ -321,56 +263,55 @@ function ToolCard({
               expanded ? 'rotate-0' : '-rotate-90',
             )}
           />
-          <ToolIcon name={tool.toolName} className="shrink-0 text-icon3" />
-          <Txt as="span" variant="ui-sm" font="mono" className="text-icon5">
+          <span className="flex shrink-0 items-center">
+            <Wrench size={13} className="text-icon3" />
+          </span>
+          <Txt as="span" variant="ui-smd" className="text-icon5">
             {tool.toolName}
           </Txt>
-          {edit?.path && !expanded && (
+          {edit?.path && (
             <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
               {edit.path}
             </Txt>
           )}
-          {!edit && argsPreview && !expanded && (
+          {!edit && argsPreview && (
             <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
               {truncate(argsPreview, 72)}
             </Txt>
           )}
-          <Badge variant={STATUS_VARIANT[tool.status]} size="xs" className="ml-auto">
-            {STATUS_LABEL[tool.status]}
-          </Badge>
+          <span className="ml-auto flex shrink-0 items-center">
+            <ToolStatusIcon status={tool.status} />
+          </span>
         </span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="flex min-w-0 max-w-full flex-col gap-2 px-2 pb-2">
-        {edit ? (
-          edit.new_string !== undefined ? (
-            <ToolSection label={edit.path ?? 'Change'} copyText={edit.new_string}>
-              <DiffView oldText={edit.old_string ?? ''} newText={edit.new_string} path={edit.path} />
+      <CollapsibleContent className="min-w-0 max-w-full">
+        <div className="mt-1 flex min-w-0 max-w-full flex-col gap-2 rounded-2xl border border-border1 bg-surface2 p-2">
+          {edit ? (
+            edit.new_string !== undefined ? (
+              <ToolSection label={edit.path ?? 'Change'} copyText={edit.new_string}>
+                <DiffView oldText={edit.old_string ?? ''} newText={edit.new_string} path={edit.path} />
+              </ToolSection>
+            ) : (
+              <DsCodeBlock
+                code={truncate(edit.content ?? '', 2000)}
+                lang={languageForPath(edit.path)}
+                fileName={edit.path ?? 'Change'}
+                overflow="scroll"
+              />
+            )
+          ) : argsPretty ? (
+            <DsCodeBlock code={argsPretty} lang="json" fileName="Arguments" />
+          ) : null}
+          {tool.output && (
+            <ToolSection label="Output" copyText={tool.output}>
+              <pre className="m-0 max-h-72 max-w-full overflow-auto whitespace-pre rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3">
+                {tool.output}
+              </pre>
             </ToolSection>
-          ) : (
-            <DsCodeBlock
-              code={truncate(edit.content ?? '', 2000)}
-              lang={languageForPath(edit.path)}
-              fileName={edit.path ?? 'Change'}
-              overflow="scroll"
-            />
-          )
-        ) : argsPretty ? (
-          <DsCodeBlock code={argsPretty} lang="json" fileName="Arguments" />
-        ) : null}
-        {tool.output && (
-          <ToolSection label="Output" copyText={tool.output}>
-            <pre className="m-0 max-h-72 max-w-full overflow-auto whitespace-pre rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3">
-              {tool.output}
-            </pre>
-          </ToolSection>
-        )}
-        {resultText !== undefined && <DsCodeBlock code={truncate(resultText, 800)} lang="json" fileName="Result" />}
+          )}
+          {resultText !== undefined && <DsCodeBlock code={truncate(resultText, 800)} lang="json" fileName="Result" />}
+        </div>
       </CollapsibleContent>
-      {!expanded && tool.output && (
-        <pre className="mx-2 mb-2 max-h-72 max-w-full overflow-auto whitespace-pre rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3 opacity-75">
-          {truncate(tool.output, 180)}
-        </pre>
-      )}
     </Collapsible>
   );
 }
@@ -602,7 +543,7 @@ function AskUserCard({
 
 function SubagentCard({ entry }: { entry: SubagentEntry }) {
   return (
-    <div className="rounded-lg border border-l-4 border-border1 border-l-accent5 bg-surface2 px-3 py-2 shadow-sm">
+    <div className="my-2 rounded-lg border border-l-4 border-border1 border-l-accent5 bg-surface2 px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
         <Badge variant={entry.done ? 'success' : 'info'}>subagent: {entry.agentType}</Badge>
         <Txt variant="ui-xs" className="text-icon3">
@@ -636,59 +577,150 @@ function notificationUrl(entry: NotificationEntry): string | undefined {
 function notificationPresentation(entry: NotificationEntry) {
   const action = entry.metadata?.action;
   if (entry.notifKind === 'pull-request-merged') {
-    return { state: 'merged', icon: <GitMerge size={13} />, className: 'border-accent3/30 text-accent3' };
+    return { state: 'merged', icon: <GitMerge size={13} />, className: 'text-accent3' };
   }
   if (entry.notifKind === 'pull-request-closed') {
-    return { state: 'closed', icon: <CircleX size={13} />, className: 'border-error/30 text-error' };
+    return { state: 'closed', icon: <CircleX size={13} />, className: 'text-error' };
   }
   if (action === 'opened' || action === 'reopened') {
-    return { state: 'open', icon: <CircleDot size={13} />, className: 'border-accent1/30 text-accent1' };
+    return { state: 'open', icon: <CircleDot size={13} />, className: 'text-accent1' };
   }
-  return { state: 'notification', icon: <Bell size={13} />, className: 'border-accent3/30 text-icon3' };
+  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning1' };
+}
+
+/** Collapsible row mirroring the ToolCard shape: chevron + label + preview + state icon. */
+function NotificationRow({
+  state,
+  label,
+  message,
+  icon,
+  url,
+}: {
+  state: string;
+  label: string;
+  message: string;
+  icon: ReactNode;
+  url?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="min-w-0 max-w-full"
+      data-notification-state={state}
+      role="group"
+      aria-label={`Notification: ${label}`}
+    >
+      <CollapsibleTrigger className="w-full rounded-lg text-left transition-colors hover:bg-surface2 active:bg-surface4">
+        <span className="flex w-full items-center gap-2 px-2 py-1.5">
+          <ChevronDown
+            size={13}
+            className={cn(
+              'shrink-0 text-icon3 transition-transform duration-150',
+              expanded ? 'rotate-0' : '-rotate-90',
+            )}
+          />
+          <span className="flex shrink-0 items-center">{icon}</span>
+          <Txt as="span" variant="ui-smd" className="shrink-0 text-icon5">
+            {label}
+          </Txt>
+          <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
+            {truncate(message, 72)}
+          </Txt>
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="min-w-0 max-w-full">
+        <div className="mt-1 flex min-w-0 max-w-full flex-col gap-2 rounded-2xl border border-border1 bg-surface2 p-2">
+          <Txt variant="ui-sm">{message}</Txt>
+          {url && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Open notification target: ${message}`}
+              className="flex w-fit items-center gap-1 text-ui-xs text-icon3 hover:text-icon5"
+            >
+              Open on GitHub
+              <ExternalLink size={12} aria-hidden />
+            </a>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 function NotificationCard({ entry }: { entry: NotificationEntry }) {
-  const url = notificationUrl(entry);
   const presentation = notificationPresentation(entry);
-  const content = (
-    <div
-      data-notification-state={presentation.state}
-      className={`rounded-lg border bg-surface2 px-3 py-2 shadow-sm ${presentation.className}`}
-    >
-      <div className="flex items-center gap-2">
-        {presentation.icon}
-        <Txt variant="ui-sm" font="mono">
-          {entry.source ?? 'notification'}
-        </Txt>
-        {url && <ExternalLink size={12} className="ml-auto" aria-hidden />}
-      </div>
-      <Txt variant="ui-sm" className="py-1">
-        {entry.message}
-      </Txt>
-    </div>
-  );
-
-  if (!url) return content;
   return (
-    <a href={url} target="_blank" rel="noreferrer" aria-label={`Open notification target: ${entry.message}`}>
-      {content}
-    </a>
+    <NotificationRow
+      state={presentation.state}
+      label={entry.source ?? 'notification'}
+      message={entry.message}
+      icon={<span className={cn('flex items-center', presentation.className)}>{presentation.icon}</span>}
+      url={notificationUrl(entry)}
+    />
   );
 }
 
 function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
   return (
-    <div className="rounded-lg border border-accent3/30 bg-surface2 px-3 py-2 shadow-sm">
-      <div className="flex items-center gap-2">
-        <Bell size={13} />
-        <Txt variant="ui-sm" font="mono">
-          Notification summary
-        </Txt>
-      </div>
-      <Txt variant="ui-sm" className="py-1">
-        {entry.message}
-      </Txt>
-    </div>
+    <NotificationRow
+      state="summary"
+      label="Notification summary"
+      message={entry.message}
+      icon={<Bell size={13} className="text-warning1" />}
+    />
+  );
+}
+
+/** Collapsible row for state/reminder/reactive signals, mirroring NotificationRow. */
+function SignalRow({ kind, label, message }: { kind: string; label: string; message: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="min-w-0 max-w-full"
+      data-signal-kind={kind}
+      role="group"
+      aria-label={`Signal: ${label}`}
+    >
+      <CollapsibleTrigger className="w-full rounded-lg text-left transition-colors hover:bg-surface2 active:bg-surface4">
+        <span className="flex w-full items-center gap-2 px-2 py-1.5">
+          <ChevronDown
+            size={13}
+            className={cn(
+              'shrink-0 text-icon3 transition-transform duration-150',
+              expanded ? 'rotate-0' : '-rotate-90',
+            )}
+          />
+          <span className="flex shrink-0 items-center">
+            {kind === 'state' ? (
+              <Layers size={13} className="text-purple-400" />
+            ) : kind === 'reminder' ? (
+              <Info size={13} className="text-accent3" />
+            ) : (
+              <Info size={13} className="text-icon3" />
+            )}
+          </span>
+          <Txt as="span" variant="ui-smd" className="shrink-0 text-icon5">
+            {label}
+          </Txt>
+          <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
+            {truncate(message, 72)}
+          </Txt>
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="min-w-0 max-w-full">
+        <div className="mt-1 min-w-0 max-w-full rounded-2xl border border-border1 bg-surface2 p-2">
+          <Txt variant="ui-sm" className="whitespace-pre-wrap break-words">
+            {message}
+          </Txt>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -697,11 +729,12 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
 // ---------------------------------------------------------------------------
 
 export function Transcript() {
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -725,24 +758,6 @@ export function Transcript() {
       onRespond={onRespond}
     />
   );
-}
-
-function followsToolEntry(entries: TimelineEntry[], index: number): boolean {
-  const current = entries[index];
-  if (current?.kind !== 'message' || current.message.role !== 'assistant') return false;
-
-  for (let previousIndex = index - 1; previousIndex >= 0; previousIndex--) {
-    const previous = entries[previousIndex];
-    if (previous.kind !== 'message') return false;
-    if (previous.message.role === 'user') return false;
-    if (previous.message.role === 'signal') continue;
-
-    const parts = previous.message.content.parts;
-    if (parts.some(part => part.type === 'text' && part.text.trim().length > 0)) return false;
-    if (parts.some(part => part.type === 'tool-invocation')) return true;
-  }
-
-  return false;
 }
 
 export function TranscriptEntries({
@@ -771,14 +786,13 @@ export function TranscriptEntries({
 
   return (
     <>
-      {entries.map((entry, index) => {
+      {entries.map(entry => {
         switch (entry.kind) {
           case 'message':
             return (
               <MessageBubble
                 key={entry.id}
                 entry={entry}
-                followsToolEntry={followsToolEntry(entries, index)}
                 suspensions={suspensions}
                 isSubmitting={isSubmitting}
                 onRespond={onRespond}
@@ -808,19 +822,15 @@ export function TranscriptEntries({
 
 function MessageBubble({
   entry,
-  followsToolEntry,
   suspensions,
   isSubmitting,
   onRespond,
 }: {
   entry: MessageEntry;
-  followsToolEntry: boolean;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
-  // null = no group override; true/false = expand/collapse all in this bubble.
-  const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
   const messageParts = entry.message.content.parts ?? [];
   const parts = messageParts.filter(
     part => part.type !== 'tool-invocation' || isTranscriptToolVisible(part.toolInvocation.toolName),
@@ -829,7 +839,6 @@ function MessageBubble({
     parts.length === messageParts.length
       ? entry.message
       : { ...entry.message, content: { ...entry.message.content, parts } };
-  const toolCount = parts.reduce((n, part) => (part.type === 'tool-invocation' ? n + 1 : n), 0);
   const hasRenderablePart = parts.some(
     part =>
       (part.type === 'text' && part.text.trim().length > 0) ||
@@ -845,21 +854,9 @@ function MessageBubble({
     return undefined;
   })();
 
-  // Map each tool-invocation to its position within a run of consecutive tool
-  // parts, so consecutive cards compose into one bordered container.
-  const toolGroupPositions = new Map<string, ToolGroupPosition>();
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    if (part.type !== 'tool-invocation') continue;
-    const prevIsTool = i > 0 && parts[i - 1].type === 'tool-invocation';
-    const nextIsTool = i + 1 < parts.length && parts[i + 1].type === 'tool-invocation';
-    const position: ToolGroupPosition = prevIsTool ? (nextIsTool ? 'middle' : 'last') : nextIsTool ? 'first' : 'single';
-    toolGroupPositions.set(part.toolInvocation.toolCallId, position);
-  }
-
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
-      <div className="flex w-full flex-col items-end">
+      <div className="my-3 flex w-full flex-col items-end">
         <div
           className={`max-w-[70%] break-words rounded-xl px-4 py-2 text-text1 ${
             entry.steer ? 'bg-warning1/10' : 'bg-surface3'
@@ -869,33 +866,13 @@ function MessageBubble({
         </div>
       </div>
     ),
-    Assistant: ({ children }) => (
-      <div className="max-w-full">
-        {toolCount > 1 && (
-          <div className="flex justify-end">
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => setAllExpanded(v => (v === true ? false : true))}
-              aria-pressed={allExpanded === true}
-            >
-              {allExpanded ? 'Collapse all' : `Expand all (${toolCount})`}
-            </Button>
-          </div>
-        )}
-        <div>{children}</div>
-      </div>
-    ),
+    Assistant: ({ children }) => <div className="max-w-full">{children}</div>,
     System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
     Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
   };
 
   const renderers = {
     Text: (part: TextPart) => {
-      const renderedPart: unknown = part;
-      const partIndex = parts.findIndex(candidate => candidate === renderedPart);
-      const followsTool = partIndex > 0 && parts[partIndex - 1]?.type === 'tool-invocation';
-
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
         return activation ? (
@@ -908,7 +885,7 @@ function MessageBubble({
       }
 
       return (
-        <div className={cn('prose', followsToolEntry ? 'mt-4' : followsTool ? 'mt-3' : undefined)}>
+        <div className="prose my-3">
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
@@ -926,7 +903,6 @@ function MessageBubble({
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
       if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
-      const groupPosition = toolGroupPositions.get(tool.toolCallId);
       return (
         <ToolFactory
           toolName={tool.toolName}
@@ -936,7 +912,7 @@ function MessageBubble({
           status={suspension ? 'running' : tool.status}
           isSubmitting={isSubmitting}
           onRespond={suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined}
-          fallback={() => <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />}
+          fallback={() => <ToolCard tool={tool} />}
         />
       );
     },
@@ -946,7 +922,7 @@ function MessageBubble({
   const notifications = notificationMetadata(entry);
   if (notifications.length > 0) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col">
         {notifications.map(notification =>
           notification.kind === 'notification' ? (
             <NotificationCard key={notification.id} entry={notification} />
@@ -959,6 +935,21 @@ function MessageBubble({
         )}
       </div>
     );
+  }
+
+  const signalRow = signalRowView(entry);
+  if (signalRow) {
+    if (signalRow.kind === 'state') {
+      if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
+      return (
+        <SignalRow kind="state" label={`State ${signalRow.mode}: ${signalRow.stateId}`} message={signalRow.text} />
+      );
+    }
+    if (signalRow.kind === 'reminder') {
+      return <SignalRow kind="reminder" label="System reminder" message={signalRow.text} />;
+    }
+    if (!signalRow.tagName || HIDDEN_REACTIVE_SIGNAL_TAGS.has(signalRow.tagName)) return null;
+    return <SignalRow kind="reactive" label={signalRow.tagName} message={signalRow.text} />;
   }
 
   const status = statusMetadata(entry);
@@ -1052,11 +1043,7 @@ function signalNotifications(entry: MessageEntry): Array<NotificationEntry | Not
   const signal = entry.message.content.metadata?.signal;
   if (!isRecord(signal) || signal.type !== 'notification') return [];
 
-  const text = (entry.message.content.parts ?? [])
-    .map(part => (part.type === 'text' ? part.text : ''))
-    .filter(Boolean)
-    .join('\n')
-    .trim();
+  const text = signalPartsText(entry);
   const attributes = isRecord(signal.attributes) ? signal.attributes : {};
   const metadata = isRecord(signal.metadata) ? signal.metadata : {};
 
@@ -1089,6 +1076,57 @@ function signalNotifications(entry: MessageEntry): Array<NotificationEntry | Not
       metadata,
     },
   ];
+}
+
+function signalPartsText(entry: MessageEntry): string {
+  return (entry.message.content.parts ?? [])
+    .map(part => (part.type === 'text' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+// Internal control-plane signals handled by GithubSignals; the user-visible
+// result is rendered elsewhere, so showing these would duplicate the UI.
+const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+// State snapshots already surfaced by the pinned task list and GoalPanel.
+const SUPPRESSED_STATE_SIGNAL_IDS = new Set(['tasks', 'goal']);
+
+type SignalRowView =
+  | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
+  | { kind: 'reminder'; text: string }
+  | { kind: 'reactive'; tagName?: string; text: string };
+
+/**
+ * Classify non-notification `role: 'signal'` messages into the row they drive,
+ * mirroring the TUI's `getSignalKind` dispatch (state -> reminder -> reactive).
+ * Notification signals are rebuilt by `signalNotifications`, and user signals
+ * are reclassified to `role: 'user'` in the reducer, so both return undefined.
+ */
+function signalRowView(entry: MessageEntry): SignalRowView | undefined {
+  if (entry.message.role !== 'signal') return undefined;
+  const signal = entry.message.content.metadata?.signal;
+  if (!isRecord(signal)) return undefined;
+
+  const tagName = typeof signal.tagName === 'string' ? signal.tagName : undefined;
+  const text = signalPartsText(entry);
+
+  if (signal.type === 'state') {
+    const metadata = isRecord(signal.metadata) ? signal.metadata : {};
+    const stateMeta = isRecord(metadata.state) ? metadata.state : {};
+    return {
+      kind: 'state',
+      stateId: (typeof stateMeta.id === 'string' ? stateMeta.id : undefined) ?? tagName ?? 'state',
+      mode: stateMeta.mode === 'delta' ? 'delta' : 'snapshot',
+      text,
+    };
+  }
+  // `normalizeSignal` maps `system-reminder` to `reactive` + `system-reminder`
+  // tag before persistence, but live pre-normalized signals may carry the raw type.
+  if (signal.type === 'system-reminder') return { kind: 'reminder', text };
+  if (signal.type === 'reactive' && tagName === 'system-reminder') return { kind: 'reminder', text };
+  if (signal.type === 'reactive') return { kind: 'reactive', tagName, text };
+  return undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1137,12 +1175,16 @@ function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {
-  return <Notice variant={status.level === 'error' ? 'destructive' : 'info'}>{status.text}</Notice>;
+  return (
+    <Notice className="my-2" variant={status.level === 'error' ? 'destructive' : 'info'}>
+      {status.text}
+    </Notice>
+  );
 }
 
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
   return (
-    <Notice variant={entry.level === 'error' ? 'destructive' : 'info'}>
+    <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
       <div className="prose">
         <Markdown>{entry.text}</Markdown>
       </div>
