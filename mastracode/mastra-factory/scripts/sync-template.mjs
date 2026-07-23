@@ -3,16 +3,17 @@
  * Produces the Mastra Factory template tree from `mastracode/web`.
  *
  * The template is the web project minus monorepo coupling:
- *   - `link:` deps           -> exact versions resolved from npm's `latest` tag
+ *   - `link:` deps           -> exact versions resolved from npm
  *   - monorepo tsconfig      -> standalone tsconfig
  *   - contributor README     -> checked-in template/README.md
  *   - e2e/tests/test deps    -> stripped
  *   - monorepo-only scripts  -> user-facing scripts (dev/build/start/deploy)
  *   - .env.schema            -> also emitted as .env.example (decorators stripped)
  *
- * Versions: every `link:` dep is resolved from npm's `latest` dist-tag and
- * written as an exact version. This prevents a later install from resolving
- * different package versions than the set used when the template was synced.
+ * Versions: every `link:` dep is resolved from npm and written as an exact
+ * version. The sync selects `latest` or `alpha`, whichever has the same base
+ * version as the local source package, so release transitions cannot pair new
+ * source with an older stable package.
  *
  * Usage:
  *   node scripts/sync-template.mjs [--out <dir>]
@@ -140,28 +141,56 @@ function copyTree(srcDir, destDir, relBase = '') {
   }
 }
 
-/** Verify the linked package exists and its manifest name matches the dependency key. */
-function assertLinkedPackage(name, relPath) {
+/** Verify the linked package exists and return its local version. */
+function linkedPackageVersion(name, relPath) {
   const pkgJsonPath = path.join(monorepoRoot, relPath, 'package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
   if (pkg.name !== name) {
     throw new Error(`sync-template: ${pkgJsonPath} is named ${pkg.name}, expected ${name}`);
   }
+  return pkg.version;
 }
 
-const latestVersions = new Map();
-function resolveLatestVersion(name) {
-  const cached = latestVersions.get(name);
+const resolvedVersions = new Map();
+let usesPrereleaseVersions = false;
+function resolveTaggedVersion(name, tag) {
+  const key = `${name}@${tag}`;
+  const cached = resolvedVersions.get(key);
   if (cached) return cached;
 
   try {
-    const version = execFileSync('npm', ['view', name, 'dist-tags.latest'], { stdio: 'pipe' }).toString().trim();
+    const version = execFileSync('npm', ['view', name, `dist-tags.${tag}`], { stdio: 'pipe' })
+      .toString()
+      .trim();
     if (!version) throw new Error('empty version');
-    latestVersions.set(name, version);
+    if (version.includes('-')) usesPrereleaseVersions = true;
+    resolvedVersions.set(key, version);
     return version;
   } catch {
-    throw new Error(`sync-template: could not resolve ${name}@latest on npm.`);
+    throw new Error(`sync-template: could not resolve ${name}@${tag} on npm.`);
   }
+}
+
+function baseVersion(version) {
+  return version.split('-')[0];
+}
+
+function resolveLinkedVersion(name, localVersion) {
+  const localBase = baseVersion(localVersion);
+
+  if (!localVersion.includes('-alpha.')) {
+    const latestVersion = resolveTaggedVersion(name, 'latest');
+    if (baseVersion(latestVersion) === localBase) {
+      return { version: latestVersion, tag: 'latest' };
+    }
+  }
+
+  const alphaVersion = resolveTaggedVersion(name, 'alpha');
+  if (baseVersion(alphaVersion) === localBase) {
+    return { version: alphaVersion, tag: 'alpha' };
+  }
+
+  throw new Error(`sync-template: no published ${name} version matches local release ${localBase}.`);
 }
 
 function transformPackageJson() {
@@ -186,19 +215,20 @@ function transformPackageJson() {
     deploy: 'mastra deploy',
   };
 
-  // Resolve every `link:` dep's `latest` dist-tag now so the generated
-  // template installs the exact package set selected at sync time. We still
-  // resolve the link target so an invalid `link:` spec fails loudly.
-  console.log('sync-template: resolving latest versions for link: deps...');
+  // Resolve each linked package from a published release with the same base
+  // version as its local source. Immediately after exiting prerelease mode,
+  // `latest` can still point at the previous stable release while `alpha`
+  // contains the package matching the newly-stable local source version.
+  console.log('sync-template: resolving published versions for link: deps...');
   for (const section of ['dependencies', 'devDependencies']) {
     const deps = manifest[section];
     if (!deps) continue;
     for (const [name, spec] of Object.entries(deps)) {
       if (!spec.startsWith('link:')) continue;
-      assertLinkedPackage(name, linkSpecToRelPath(spec));
-      const version = resolveLatestVersion(name);
+      const localVersion = linkedPackageVersion(name, linkSpecToRelPath(spec));
+      const { version, tag } = resolveLinkedVersion(name, localVersion);
       deps[name] = version;
-      console.log(`  ✓ ${name}@${version}`);
+      console.log(`  ✓ ${name}@${version} (${tag})`);
     }
   }
 
@@ -218,7 +248,7 @@ function transformPackageJson() {
   // Transitive runtime peers that must be declared as direct deps so npm
   // resolves them without needing pnpm's auto-install-peers behavior.
   // (In the monorepo dev setup pnpm provides them automatically.)
-  manifest.dependencies['@mastra/memory'] = resolveLatestVersion('@mastra/memory'); // peer of @mastra/playground-ui
+  manifest.dependencies['@mastra/memory'] = resolveTaggedVersion('@mastra/memory', 'latest'); // peer of @mastra/playground-ui
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
 
   // Downgrade `typescript` from tsgo (v7) to classic (v5). The Mastra Factory
@@ -335,7 +365,17 @@ src/mastra/public/factory/
 }
 
 /**
- * Emit `pnpm-workspace.yaml` with pnpm-specific install policy.
+ * Relax npm's peer resolver when the generated package set includes
+ * prereleases. npm does not match prerelease versions against otherwise
+ * compatible peer ranges unless the range names that prerelease explicitly.
+ */
+function writeNpmrc() {
+  if (!usesPrereleaseVersions) return;
+  fs.writeFileSync(path.join(outDir, '.npmrc'), 'legacy-peer-deps=true\n');
+}
+
+/**
+ * Emit `pnpm-workspace.yaml` with `allowBuilds`.
  *
  * pnpm v10+ blocks install scripts by default and exits with
  * ERR_PNPM_IGNORED_BUILDS if any dependency has a build script that isn't
@@ -401,6 +441,7 @@ writeTsconfig();
 stripTestingTypesFromUiTsconfig();
 writeEnvExample();
 writeGitignore();
+writeNpmrc();
 writePnpmWorkspace();
 writeReadme();
 

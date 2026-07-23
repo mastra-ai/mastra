@@ -31,6 +31,13 @@ describe('PlatformSandbox', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
     expect(await (fetchMock.mock.calls[0]![1].body as string)).toContain('env_123');
     expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
+    const execBody = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
+    expect(execBody).toMatchObject({
+      command: 'echo ok',
+      cwd: '/workspace',
+      env: { A: '1' },
+    });
+    expect(execBody.environmentId).toBeUndefined();
   });
 
   it('does not send a template field on the create wire body', async () => {
@@ -69,7 +76,11 @@ describe('PlatformSandbox', () => {
   });
 
   it('reattaches when constructed with a sandbox id', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_existing', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
@@ -80,8 +91,40 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
     await sandbox.executeCommand('pwd');
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]![0])).toContain('/sandbox/sbx_existing/exec');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing/exec',
+    );
+  });
+
+  it('creates a fresh sandbox when the reattached sandbox no longer exists', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'env_from_process');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ error: { message: 'Sandbox not found', type: 'not_found' } }, { status: 404 }))
+      .mockResolvedValueOnce(json({ id: 'sbx_recreated', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxId: 'sbx_stale',
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+    await sandbox.executeCommand('pwd');
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_stale');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toMatchObject({
+      id: sandbox.id,
+      environmentId: 'env_from_process',
+    });
+    expect(String(fetchMock.mock.calls[2]![0])).toBe(
+      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_recreated/exec',
+    );
   });
 
   it('clears sandbox state on destroy so stale IDs cannot leak to later calls', async () => {
@@ -212,7 +255,11 @@ describe('PlatformSandbox', () => {
     });
 
     it('reattaches to a provider sandbox when sandboxId is passed', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_existing', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
       const template = new PlatformSandbox({
         accessToken: 'sk_test',
         projectId: 'proj_123',
@@ -224,8 +271,10 @@ describe('PlatformSandbox', () => {
       await child._start();
       await child.executeCommand!('echo hello');
 
-      // First (and only) fetch call should be exec — no create POST.
-      expect(String(fetchMock.mock.calls[0]![0])).toContain('/sandbox/sbx_existing/exec');
+      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing/exec',
+      );
       const createCalls = fetchMock.mock.calls.filter(call => {
         const url = String(call[0]);
         return url.endsWith('/sandbox') && (call[1] as RequestInit | undefined)?.method === 'POST';
