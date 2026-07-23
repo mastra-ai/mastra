@@ -19,7 +19,7 @@ import type { FactorySupervisorApproval, FactorySupervisorState } from '../servi
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const FACTORY_PROJECT_ID = '9f5345e2-c44d-4e4e-a063-c5590f27d344';
 const SUPERVISOR_THREAD_ID = `${FACTORY_PROJECT_ID}-supervisor`;
-const SUPERVISOR_RESOURCE_ID = FACTORY_PROJECT_ID;
+const SUPERVISOR_RESOURCE_ID = `${FACTORY_PROJECT_ID}-supervisor`;
 
 const pendingApproval: FactorySupervisorApproval = {
   id: '1ed5b84f-f21e-47c6-a859-1bfbd4f44fe6',

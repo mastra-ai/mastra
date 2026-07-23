@@ -44,7 +44,7 @@ describe('Factory supervisor routes', () => {
   it('ensures and returns the canonical session using authenticated identity', async () => {
     const ensureSession = vi.fn(async (input: Record<string, unknown>) => ({
       factoryProjectId: input.factoryProjectId,
-      resourceId: input.factoryProjectId,
+      resourceId: `${input.factoryProjectId}-supervisor`,
       sessionId: `${input.factoryProjectId}-supervisor`,
       threadId: `${input.factoryProjectId}-supervisor`,
     }));
@@ -56,7 +56,7 @@ describe('Factory supervisor routes', () => {
     await expect(response.json()).resolves.toEqual({
       session: {
         factoryProjectId: projectId,
-        resourceId: projectId,
+        resourceId: `${projectId}-supervisor`,
         sessionId: `${projectId}-supervisor`,
         threadId: `${projectId}-supervisor`,
       },

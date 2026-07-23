@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { factorySupervisorThreadId } from './service.js';
+import { factorySupervisorResourceId, factorySupervisorThreadId } from './service.js';
 import { createFactorySupervisorTools } from './tools.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -17,7 +17,7 @@ function supervisorContext(overrides: Partial<{ orgId: string; projectId: string
   const context = new RequestContext();
   context.set('user', { workosId: 'user-1', organizationId: orgId, name: 'Ada Lovelace' });
   context.set('controller', {
-    resourceId: factoryProjectId,
+    resourceId: factorySupervisorResourceId(factoryProjectId),
     threadId: overrides.threadId ?? factorySupervisorThreadId(factoryProjectId),
     getState: () => ({
       factoryProjectId,
