@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.20.0-alpha.11",
+  "version": "1.20.0",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": "./dist/index.js",
+    "./internal/auth": "./dist/internal/auth.js",
     "./package.json": "./package.json",
     "./dist/*": [
       "./dist/*",

@@ -416,3 +416,67 @@ describe('npm alias dependencies', () => {
     });
   }, 15000);
 });
+
+describe('Software Factory project type detection', () => {
+  it('classifies a MastraFactory entry as factory', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'factory-analyze-'));
+    tempDirs.push(tempDir);
+
+    const mastraDir = join(tempDir, 'src', 'mastra');
+    const entryFile = join(mastraDir, 'index.ts');
+    const outputDir = join(tempDir, '.mastra', '.build');
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(mastraDir, { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test', version: '1.0.0', type: 'module' }));
+    await writeFile(join(mastraDir, 'factory.ts'), `export class MastraFactory { prepare() { return {}; } }\n`);
+    await writeFile(
+      entryFile,
+      `import { MastraFactory } from './factory';\n` +
+        `const factory = new MastraFactory();\n` +
+        `export const mastra = factory.prepare();\n`,
+    );
+
+    const result = await analyzeBundle(
+      [entryFile],
+      entryFile,
+      {
+        outputDir,
+        projectRoot: tempDir,
+        platform: 'node',
+        bundlerOptions: { externals: [], enableSourcemap: false },
+      },
+      noopLogger,
+    );
+
+    expect(result.projectType).toBe('factory');
+  });
+
+  it('classifies an ordinary Mastra entry as undefined projectType', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'factory-analyze-'));
+    tempDirs.push(tempDir);
+
+    const mastraDir = join(tempDir, 'src', 'mastra');
+    const entryFile = join(mastraDir, 'index.ts');
+    const outputDir = join(tempDir, '.mastra', '.build');
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(mastraDir, { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test', version: '1.0.0', type: 'module' }));
+    await writeFile(entryFile, `export const mastra = new Mastra({});\n`);
+
+    const result = await analyzeBundle(
+      [entryFile],
+      entryFile,
+      {
+        outputDir,
+        projectRoot: tempDir,
+        platform: 'node',
+        bundlerOptions: { externals: [], enableSourcemap: false },
+      },
+      noopLogger,
+    );
+
+    expect(result.projectType).toBeUndefined();
+  });
+});

@@ -7,8 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
  * Validates the output of scripts/sync-template.mjs — the artifact users
- * actually receive. Runs the real script offline: a fake `npm` on PATH
- * answers the version-verification calls so no network is needed.
+ * actually receive. Runs the real script with no network dependency: the
+ * script no longer shells out to npm, so the emitted template is entirely
+ * derived from local monorepo state.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -18,15 +19,11 @@ const script = path.join(pkgRoot, 'scripts', 'sync-template.mjs');
 
 let workDir: string;
 let outDir: string;
-let fakeBinDir: string;
 let sentinel: string;
 
 function runSync(args: string[]): { status: number; stderr: string } {
   try {
-    execFileSync(process.execPath, [script, ...args], {
-      stdio: 'pipe',
-      env: { ...process.env, PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}` },
-    });
+    execFileSync(process.execPath, [script, ...args], { stdio: 'pipe' });
     return { status: 0, stderr: '' };
   } catch (err) {
     const e = err as { status?: number; stderr?: Buffer };
@@ -37,11 +34,6 @@ function runSync(args: string[]): { status: number; stderr: string } {
 beforeAll(() => {
   workDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sf-sync-test-')));
   outDir = path.join(workDir, 'out');
-
-  // Fake npm: satisfies `npm view <pkg>@<version> version` offline.
-  fakeBinDir = path.join(workDir, 'bin');
-  fs.mkdirSync(fakeBinDir);
-  fs.writeFileSync(path.join(fakeBinDir, 'npm'), '#!/bin/sh\necho "9.9.9"\n', { mode: 0o755 });
 
   // Sentinel env file in the source tree — must never reach the template.
   sentinel = path.join(webRoot, '.env.test-sentinel');
@@ -80,13 +72,11 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(fs.existsSync(path.join(outDir, 'README.md'))).toBe(true);
     expect(fs.existsSync(path.join(outDir, 'tsconfig.json'))).toBe(true);
 
-    // README is the checked-in template with version tokens filled (no bare {{tokens}} left).
+    // README is the checked-in template copied verbatim (no build-time tokens).
     const readme = fs.readFileSync(path.join(outDir, 'README.md'), 'utf8');
-    expect(readme).toContain('# Mastra Software Factory');
+    expect(readme).toContain('# Mastra Factory');
     expect(readme).toContain('npm create factory');
     expect(readme).not.toMatch(/\{\{[^}]+\}\}/);
-    expect(readme).toMatch(/@mastra\/core@\d/);
-    expect(readme).toMatch(/@mastra\/code-sdk@\d/);
 
     // The dev script is a direct mapping of the web project's own dev flow —
     // no generated wrapper script.
@@ -96,16 +86,36 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     const envExample = fs.readFileSync(path.join(outDir, '.env.example'), 'utf8');
     expect(envExample).not.toMatch(/^[A-Z][A-Z0-9_]*=\s*$/m);
 
-    // package.json: monorepo coupling removed, mastra deps float via caret.
+    // package.json: monorepo coupling removed; every Mastra dep pins `latest`,
+    // matching every other create-mastra template.
     const pkg = JSON.parse(fs.readFileSync(path.join(outDir, 'package.json'), 'utf8'));
     const allDeps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies };
     for (const [name, spec] of Object.entries(allDeps)) {
-      expect(spec, `${name} must not use a link:/workspace: spec`).not.toMatch(/^(link|workspace|catalog):/);
+      expect(spec, `${name} must not use a link:/workspace: spec`).not.toMatch(/^(link|workspace|catalog|file):/);
       if (name === 'mastra' || name.startsWith('@mastra/')) {
-        expect(spec, `${name} must use a caret range`).toMatch(/^\^/);
+        expect(spec, `${name} must be pinned to "latest"`).toBe('latest');
       }
     }
-    expect(pkg.dependencies['@mastra/memory']).toMatch(/^\^/);
+    expect(pkg.dependencies['@mastra/memory']).toBe('latest');
+    // No `.npmrc` ships — the template installs cleanly on npm with the
+    // published `latest` set, same as every other create-mastra template.
+    expect(fs.existsSync(path.join(outDir, '.npmrc'))).toBe(false);
+
+    // `typescript` is downgraded from tsgo (v7) to the classic compiler (v5)
+    // because `mastra build` transitively loads TypeScript via
+    // `typescript-paths`, which needs the classic `ts.sys` API tsgo does not
+    // expose. Remove once the deployer supports tsgo.
+    expect(pkg.devDependencies.typescript).toMatch(/^\^5\./);
+
+    // Package-manager coupling never ships: the web project's pnpm lockfiles
+    // stay behind (a stale npm lock would pin the floating `latest` dist-tag
+    // at sync time). A template-specific `pnpm-workspace.yaml` with only
+    // `allowBuilds` is emitted so pnpm v10+ installs don't error on
+    // ERR_PNPM_IGNORED_BUILDS.
+    expect(fs.existsSync(path.join(outDir, 'pnpm-lock.yaml'))).toBe(false);
+    expect(fs.existsSync(path.join(outDir, 'package-lock.json'))).toBe(false);
+    const pnpmWorkspace = fs.readFileSync(path.join(outDir, 'pnpm-workspace.yaml'), 'utf8');
+    expect(pnpmWorkspace).toMatch(/^allowBuilds:/m);
 
     // Tests and their dependencies are stripped.
     expect(allDeps.vitest).toBeUndefined();
@@ -115,11 +125,20 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(fs.existsSync(path.join(outDir, 'src/web/test-utils.ts'))).toBe(false);
     expect(fs.existsSync(path.join(outDir, 'src/web/storage/test-utils.ts'))).toBe(false);
 
-    // Scripts map the web project's own flow, minus monorepo-only bits.
-    expect(pkg.scripts.dev).toContain('concurrently');
-    expect(pkg.scripts.dev).toContain('mastra dev');
-    expect(pkg.scripts.dev).toContain('vite');
+    // The Factory server serves the UI and API through one process.
+    expect(pkg.scripts.dev).toBe('mastra factory dev --dir src/mastra');
+    expect(pkg.scripts['dev:prod']).toBeUndefined();
     expect(pkg.scripts.prebuild).toBeUndefined();
     expect(JSON.stringify(pkg.scripts)).not.toContain('monorepo-deps');
+    expect(pkg.scripts.check).toBe('tsc --noEmit && tsc --noEmit -p src/web/ui/tsconfig.json');
+    expect(pkg.scripts.build).toBe('mastra build --dir src/mastra');
+    expect(pkg.scripts['build:ui']).toBeUndefined();
+    expect(pkg.scripts['build:server']).toBeUndefined();
+    expect(pkg.scripts.deploy).toBe('mastra deploy');
+    expect(pkg.devDependencies.concurrently).toBeUndefined();
+    // The generated .gitignore ignores the Vite output directory.
+    const gitignore = fs.readFileSync(path.join(outDir, '.gitignore'), 'utf8');
+    expect(gitignore).toContain('src/mastra/public/factory/');
+    expect(gitignore).not.toContain('src/mastra/public/ui/');
   });
 });

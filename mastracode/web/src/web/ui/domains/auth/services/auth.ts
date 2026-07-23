@@ -26,18 +26,11 @@ export interface FactoryAuthState {
   signUpDisabled?: boolean;
 }
 
-/**
- * The user-session resourceId used when auth is disabled (local dev): there is
- * only one operator, so a fixed id keeps their sessions stable across reloads.
- */
-export const LOCAL_USER_RESOURCE_ID = 'local-user';
-
-/**
- * The resourceId under which a user's personal (non-factory) sessions live:
- * the stable WorkOS user id, or a fixed local id when auth is disabled.
- */
+/** The resourceId under which a user's personal (non-factory) sessions live. */
 export function userSessionResourceId(state: FactoryAuthState | undefined): string {
-  return state?.user?.userId ?? LOCAL_USER_RESOURCE_ID;
+  const userId = state?.user?.userId;
+  if (!userId) throw new Error('Authenticated user is missing a user id');
+  return userId;
 }
 
 /**
@@ -123,30 +116,27 @@ export function signUpWithPassword(
  * disabled), reports `authEnabled: false` so the UI hides all auth affordances.
  */
 export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState> {
-  try {
-    const res = await fetch(`${baseUrl}/auth/me`, { headers: { Accept: 'application/json' }, credentials: 'include' });
-    if (res.status === 404) {
-      return { authEnabled: false, authenticated: false };
-    }
-    if (!res.ok) {
-      return { authEnabled: true, authenticated: false };
-    }
-    const data = (await res.json()) as {
-      authenticated?: boolean;
-      user?: { userId?: string; email?: string; name?: string } | null;
-      provider?: string;
-      signUpDisabled?: boolean;
-    };
-    return {
-      authEnabled: true,
-      authenticated: Boolean(data.authenticated),
-      user: data.user ?? undefined,
-      provider: data.provider,
-      signUpDisabled: data.signUpDisabled,
-    };
-  } catch {
-    // Network error or non-JSON response → treat as auth not configured so the
-    // app stays usable rather than blocking on a missing endpoint.
+  const res = await fetch(`${baseUrl}/auth/me`, { headers: { Accept: 'application/json' }, credentials: 'include' });
+  if (res.status === 404) {
     return { authEnabled: false, authenticated: false };
   }
+  if (res.status === 401 || res.status === 403) {
+    return { authEnabled: true, authenticated: false };
+  }
+  if (!res.ok) {
+    throw new Error(`Auth check failed (${res.status})`);
+  }
+  const data = (await res.json()) as {
+    authenticated?: boolean;
+    user?: { userId?: string; email?: string; name?: string } | null;
+    provider?: string;
+    signUpDisabled?: boolean;
+  };
+  return {
+    authEnabled: true,
+    authenticated: Boolean(data.authenticated),
+    user: data.user ?? undefined,
+    provider: data.provider,
+    signUpDisabled: data.signUpDisabled,
+  };
 }

@@ -201,13 +201,19 @@ describe('S7 — sandbox fleet budget', () => {
       fleet,
       row: rowA,
       storage: sourceControlStorage.sandboxes,
+      token: 'install-token',
     })) as FakeSandbox;
     expect(sandboxA.startCount).toBe(1);
     expect(fleet.liveCount).toBe(1);
     expect(rowA.sandboxId).toBe('vm-fresh-1');
 
     // Second fresh provision is over budget → rejected before spending quota.
-    const err = await ensureProjectSandbox({ fleet, row: rowB, storage: sourceControlStorage.sandboxes }).catch(e => e);
+    const err = await ensureProjectSandbox({
+      fleet,
+      row: rowB,
+      storage: sourceControlStorage.sandboxes,
+      token: 'install-token',
+    }).catch(e => e);
     expect(err).toBeInstanceOf(SandboxBudgetError);
     expect(err.max).toBe(1);
     expect(fleet.liveCount).toBe(1);
@@ -224,6 +230,7 @@ describe('S7 — sandbox fleet budget', () => {
       fleet,
       row: rowB,
       storage: sourceControlStorage.sandboxes,
+      token: 'install-token',
     })) as FakeSandbox;
     expect(sandboxB.startCount).toBe(1);
     expect(fleet.liveCount).toBe(1);
@@ -240,6 +247,7 @@ describe('S7 — sandbox fleet budget', () => {
       fleet,
       row: row,
       storage: sourceControlStorage.sandboxes,
+      token: 'install-token',
     })) as FakeSandbox;
     expect(fleet.liveCount).toBe(1);
     expect(row.sandboxId).toBe('vm-fresh-1');
@@ -258,6 +266,7 @@ describe('S7 — sandbox fleet budget', () => {
       fleet,
       row: row,
       storage: sourceControlStorage.sandboxes,
+      token: 'install-token',
     })) as FakeSandbox;
     expect(second).not.toBe(first);
     expect(second.startCount).toBe(1);

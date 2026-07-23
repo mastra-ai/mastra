@@ -58,7 +58,7 @@ async function setup(permission: string | undefined) {
   };
 }
 
-function issueOpened(deliveryId = 'delivery-1') {
+function issueOpened(deliveryId = 'delivery-1', createdAt = '2030-01-01T00:00:00Z') {
   return {
     event: 'issues',
     deliveryId,
@@ -67,12 +67,22 @@ function issueOpened(deliveryId = 'delivery-1') {
       installation: { id: 7 },
       repository: { id: 10, full_name: 'acme/repo' },
       sender: { login: 'maintainer' },
-      issue: { number: 42, title: 'Issue 42', html_url: 'https://github.com/acme/repo/issues/42' },
+      issue: {
+        number: 42,
+        title: 'Issue 42',
+        html_url: 'https://github.com/acme/repo/issues/42',
+        created_at: createdAt,
+      },
     },
   };
 }
 
-function pullRequest(event: 'opened' | 'closed', deliveryId: string, merged = false) {
+function pullRequest(
+  event: 'opened' | 'closed',
+  deliveryId: string,
+  merged = false,
+  createdAt = '2030-01-01T00:00:00Z',
+) {
   return {
     event: 'pull_request',
     deliveryId,
@@ -85,6 +95,7 @@ function pullRequest(event: 'opened' | 'closed', deliveryId: string, merged = fa
         number: 17,
         title: 'PR 17',
         html_url: 'https://github.com/acme/repo/pull/17',
+        created_at: createdAt,
         state: merged ? 'closed' : 'open',
         merged,
         head: { ref: 'feature' },
@@ -96,11 +107,12 @@ function pullRequest(event: 'opened' | 'closed', deliveryId: string, merged = fa
 
 describe('FactoryGithubEventService', () => {
   it('commits one trusted issue intake decision and replays immutable delivery ingress', async () => {
-    const { github, sourceControl, integrationStorage, workItems, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const service = new FactoryGithubEventService({
       github,
       sourceControl,
       integrationStorage,
+      projects,
       storage: workItems,
       rules: builtInFactoryRules(),
     });
@@ -113,14 +125,33 @@ describe('FactoryGithubEventService', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
   });
 
+  it('keeps trusted issues created before the Factory in Intake', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const service = new FactoryGithubEventService({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(issueOpened('delivery-before-factory', '2000-01-01T00:00:00Z'));
+
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', stage: 'intake' });
+  });
+
   it('moves a trusted issue to Triage and rematerializes it after deletion', async () => {
-    const { github, sourceControl, integrationStorage, workItems, project, projectRepository } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
+      await setup('write');
     const rules = builtInFactoryRules();
     const transitionService = new FactoryTransitionService({ storage: workItems, rules });
     const service = new FactoryGithubEventService({
       github,
       sourceControl,
       integrationStorage,
+      projects,
       storage: workItems,
       rules,
     });
@@ -160,6 +191,7 @@ describe('FactoryGithubEventService', () => {
             return { accepted: Promise.resolve({ accepted: true }) };
           },
         ),
+        state: { set: vi.fn(async () => {}) },
         sendMessage: vi.fn(async () => {}),
         sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
       };
@@ -221,7 +253,7 @@ describe('FactoryGithubEventService', () => {
     expect(deliveredSignals).toEqual([
       expect.objectContaining({
         threadId: 'session-issue-42',
-        contents: expect.stringContaining('<skill name="understand-issue">'),
+        contents: expect.stringContaining('<skill name="factory-triage">'),
         user: { workosId: 'user-1', organizationId: 'org-1' },
       }),
     ]);
@@ -250,7 +282,7 @@ describe('FactoryGithubEventService', () => {
   });
 
   it('prefers canonical board identities over legacy GitHub rows during ingress', async () => {
-    const { github, sourceControl, integrationStorage, workItems, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const issue = await workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
@@ -323,6 +355,7 @@ describe('FactoryGithubEventService', () => {
       github,
       sourceControl,
       integrationStorage,
+      projects,
       storage: workItems,
       rules: builtInFactoryRules(),
     });
@@ -346,13 +379,14 @@ describe('FactoryGithubEventService', () => {
   });
 
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {
-    const { github, sourceControl, integrationStorage, workItems, project } = await setup(permission);
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission);
     const seen = vi.fn(() => undefined);
     const rules = defaultFactoryRules({ version: 'test-1', overrides: { github: { issueOpened: { onEvent: seen } } } });
     const service = new FactoryGithubEventService({
       github,
       sourceControl,
       integrationStorage,
+      projects,
       storage: workItems,
       rules,
     });
@@ -363,7 +397,7 @@ describe('FactoryGithubEventService', () => {
   });
 
   it('uses verified Factory provenance to link an opened Review card and remind Work on merge', async () => {
-    const { github, sourceControl, integrationStorage, workItems, project } = await setup('read');
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
@@ -392,6 +426,7 @@ describe('FactoryGithubEventService', () => {
       github,
       sourceControl,
       integrationStorage,
+      projects,
       storage: workItems,
       rules: builtInFactoryRules(),
     });
@@ -450,6 +485,7 @@ describe('FactoryGithubEventService', () => {
       github,
       sourceControl,
       integrationStorage,
+      projects,
       storage: workItems,
       rules: builtInFactoryRules(),
     });

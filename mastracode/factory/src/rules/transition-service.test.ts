@@ -60,6 +60,60 @@ function request(
 }
 
 describe('FactoryTransitionService', () => {
+  it('queues an urgent wake-up when a board drag has no skill follow-up', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'execute' }),
+      cause: 'board_drag',
+    });
+
+    expect(result).toMatchObject({
+      status: 'accepted',
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'This work was moved from the triage stage to the execute stage.',
+          priority: 'urgent',
+          idleBehavior: 'wake',
+          prepareBinding: true,
+        },
+      ],
+    });
+  });
+
+  it('attaches a persisted notice to a skill triggered by a board drag', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'triage' }),
+      cause: 'board_drag',
+    });
+
+    expect(result).toMatchObject({
+      status: 'accepted',
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'triage',
+          skillName: 'factory-triage',
+          precedingMessage: 'This work was moved from the intake stage to the triage stage.',
+        },
+      ],
+    });
+  });
+
   it('runs onExit before onEnter and atomically persists accepted decisions', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
@@ -263,6 +317,24 @@ describe('FactoryTransitionService', () => {
       status: 'rejected',
       code: 'invalid_transition',
     });
+  });
+
+  it('accepts a human cancel and can revive the item out of canceled', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['review'] });
+    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+
+    const discard = await service.transition(request(item, { stage: 'canceled', identity: 'discard-1' }));
+    expect(discard).toMatchObject({ status: 'accepted', stage: 'canceled' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['canceled']);
+
+    // An item sitting in canceled still has a canonical stage, so it can be
+    // pulled back onto the board.
+    const revive = await service.transition(
+      request({ id: item.id, revision: 2 }, { stage: 'triage', identity: 'revive-1' }),
+    );
+    expect(revive).toMatchObject({ status: 'accepted', stage: 'triage' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['triage']);
   });
 
   it('scopes ingress replay and deferred idempotency to the tenant', async () => {
