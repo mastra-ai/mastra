@@ -4,17 +4,16 @@ import { __resetProjectLocksForTests, hashKey, withDbAdvisoryLock, withProjectLo
 
 // ── Phase 5 distributed project-lock scenario tests ──────────────────────
 // These prove cross-replica serialization on the same key using a fake pg
-// client that faithfully models transaction-scoped advisory-lock semantics:
-//   - pg_advisory_xact_lock(k1, k2) blocks while another transaction holds the
-//     same key,
-//   - the lock auto-releases when the holding transaction COMMITs or ROLLBACKs.
+// client that faithfully models session-scoped advisory-lock semantics:
+//   - pg_advisory_lock(k1, k2) blocks while another session holds the same key,
+//   - pg_advisory_unlock(k1, k2) releases the key after the critical section.
 // Two `withProjectLock` callers sharing one fake pool model two replicas
 // pointed at one Postgres.
 
 /**
  * A fake Postgres modeling per-key advisory-lock queues. A key is "held" by at
- * most one transaction at a time; `pg_advisory_xact_lock` waits for the holder
- * to COMMIT/ROLLBACK before resolving.
+ * most one session at a time; `pg_advisory_lock` waits for the holder to call
+ * `pg_advisory_unlock` before resolving.
  */
 class FakePg implements LockPool {
   /** key -> currently-holding client (or undefined when free). */
@@ -59,15 +58,14 @@ class FakeClient implements LockClient {
   constructor(private readonly pg: FakePg) {}
 
   async query(sql: string, params?: unknown[]): Promise<unknown> {
-    if (sql === 'BEGIN') return undefined;
-    if (sql === 'COMMIT' || sql === 'ROLLBACK') {
+    const [k1, k2] = params as [number, number];
+    const key = `${k1}:${k2}`;
+    if (sql.includes('pg_advisory_unlock')) {
       this.pg.releaseAll(this);
       this.heldKeys = [];
       return undefined;
     }
-    if (sql.includes('pg_advisory_xact_lock')) {
-      const [k1, k2] = params as [number, number];
-      const key = `${k1}:${k2}`;
+    if (sql.includes('pg_advisory_lock')) {
       this.heldKeys.push(key);
       await this.pg.acquire(key, this);
       return undefined;
@@ -76,8 +74,7 @@ class FakeClient implements LockClient {
   }
 
   release(): void {
-    // Connection back to the pool; any held advisory locks would have been
-    // released by COMMIT/ROLLBACK already. Defensive cleanup mirrors pg.
+    // Destroyed or closed sessions release any advisory locks defensively.
     this.pg.releaseAll(this);
   }
 }
@@ -120,7 +117,7 @@ describe('cross-replica serialization via advisory locks', () => {
       },
       pool: pg,
     });
-    // Let A's BEGIN + advisory-lock acquisition settle.
+    // Let A's advisory-lock acquisition settle.
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -191,7 +188,7 @@ describe('cross-replica serialization via advisory locks', () => {
 });
 
 describe('lock released on failure', () => {
-  it('rolls back and frees the key so the next caller acquires (no deadlock)', async () => {
+  it('unlocks and frees the key so the next caller acquires (no deadlock)', async () => {
     const pg = new FakePg();
     __resetProjectLocksForTests();
     const [k1, k2] = hashKey('proj1:user1');
@@ -207,7 +204,7 @@ describe('lock released on failure', () => {
       }),
     ).rejects.toThrow('boom');
 
-    // Lock must be free after the failed (rolled-back) transaction.
+    // Lock must be free after the failed critical section.
     expect(pg.isHeld(key)).toBe(false);
 
     let ran = false;

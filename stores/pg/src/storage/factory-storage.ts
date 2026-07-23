@@ -437,7 +437,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
  * (via a wrapped {@link PostgresStore}) and app-owned collections (via
  * {@link FactoryStorageOps}), sharing a single pool.
  *
- * Provides `withDistributedLock` (transaction-scoped advisory locks) for
+ * Provides `withDistributedLock` (session-scoped advisory locks) for
  * cross-replica serialization and `authDatabase()` exposing the shared pool.
  */
 export class PgFactoryStorage extends FactoryStorage {
@@ -516,27 +516,35 @@ export class PgFactoryStorage extends FactoryStorage {
   }
 
   /**
-   * Run `fn` while holding a Postgres transaction-scoped advisory lock for
-   * `key`, serializing callers across replicas. The lock releases when the
-   * transaction ends (commit, rollback, or connection loss), so a crashed
-   * replica can never hold it forever.
+   * Run `fn` while holding a Postgres session-scoped advisory lock for `key`,
+   * serializing callers across replicas without keeping a database transaction
+   * open while the critical section performs external I/O. The dedicated pool
+   * client keeps the lock bound to one session and releases it on completion or
+   * connection loss.
    */
   async withDistributedLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const [k1, k2] = hashAdvisoryLockKey(key);
     const client = await this.#pool.connect();
+    let locked = false;
     try {
-      await client.query('BEGIN');
-      // Blocks until no other transaction holds this advisory key.
-      await client.query('SELECT pg_advisory_xact_lock($1, $2)', [k1, k2]);
-      try {
-        const result = await fn();
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
+      await client.query('SELECT pg_advisory_lock($1, $2)', [k1, k2]);
+      locked = true;
+      return await fn();
     } finally {
+      if (locked) {
+        try {
+          const result = await client.query<{ unlocked: boolean }>('SELECT pg_advisory_unlock($1, $2) AS unlocked', [
+            k1,
+            k2,
+          ]);
+          if (!result.rows[0]?.unlocked) {
+            throw new Error(`PgFactoryStorage: failed to release distributed lock '${key}'`);
+          }
+        } catch (error) {
+          client.release(error instanceof Error ? error : new Error(String(error)));
+          throw error;
+        }
+      }
       client.release();
     }
   }

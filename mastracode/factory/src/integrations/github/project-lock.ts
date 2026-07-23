@@ -10,7 +10,7 @@
  *  1. An **in-process** promise-chain mutex keyed by the lock key, so repeated
  *     same-replica callers stay cheap and never touch the database for ordering.
  *  2. The factory storage backend's **`withDistributedLock` capability** (pg:
- *     transaction-scoped advisory locks) so that *different replicas*
+ *     session-scoped advisory locks) so that *different replicas*
  *     operating on the same key also serialize. Backends without the
  *     capability (libsql: local single-writer) fall back to the in-process
  *     mutex alone — correct for single-replica deployments.
@@ -29,7 +29,7 @@ export interface LockPool {
 }
 export interface LockClient {
   query(sql: string, params?: unknown[]): Promise<unknown>;
-  release(): void;
+  release(error?: Error): void;
 }
 
 const inProcessLocks = new Map<string, Promise<unknown>>();
@@ -46,7 +46,7 @@ export function isDistributedLockEnabled(storage: FactoryStorage | undefined): b
 
 /**
  * Hash a lock key into the two signed 32-bit integers that the two-arg form of
- * `pg_advisory_xact_lock(int4, int4)` expects. Using two int4 args (rather than
+ * `pg_advisory_lock(int4, int4)` expects. Using two int4 args (rather than
  * one int8) keeps the key inside the GitHub-feature advisory-lock namespace and
  * avoids collisions with other single-int8 advisory locks.
  */
@@ -61,7 +61,7 @@ export function hashKey(key: string): [number, number] {
 /**
  * Run `fn` while holding the lock for `key`. Same-replica callers serialize via
  * the in-process mutex; cross-replica callers additionally serialize via a
- * Postgres transaction-scoped advisory lock (unless disabled).
+ * Postgres session-scoped advisory lock (unless disabled).
  *
  * The in-process chain swallows rejections so one failed operation does not
  * poison the lock for subsequent callers.
@@ -128,20 +128,20 @@ export async function withDbAdvisoryLock<T>(options: {
 async function advisoryLockOver<T>(pool: LockPool, key: string, fn: () => Promise<T>): Promise<T> {
   const [k1, k2] = hashKey(key);
   const client = await pool.connect();
+  let locked = false;
   try {
-    await client.query('BEGIN');
-    // Blocks until no other transaction holds this advisory key. Auto-released
-    // when the transaction ends below.
-    await client.query('SELECT pg_advisory_xact_lock($1, $2)', [k1, k2]);
-    try {
-      const result = await fn();
-      await client.query('COMMIT');
-      return result;
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    }
+    await client.query('SELECT pg_advisory_lock($1, $2)', [k1, k2]);
+    locked = true;
+    return await fn();
   } finally {
+    if (locked) {
+      try {
+        await client.query('SELECT pg_advisory_unlock($1, $2)', [k1, k2]);
+      } catch (error) {
+        client.release(error instanceof Error ? error : new Error(String(error)));
+        throw error;
+      }
+    }
     client.release();
   }
 }
