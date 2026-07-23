@@ -72,8 +72,17 @@ export interface FactoryMetrics {
      * `canceled`, then `inFlight`.
      */
     outcomes: { done: number; canceled: number; reworked: number; inFlight: number };
+    /**
+     * The automated passes' items (one per automated pass, in pass order),
+     * each tagged with its `outcomes` bucket — feeds the UI drill-down so a
+     * stage's automation rate can be traced to the concrete items behind it.
+     */
+    automatedItems: { id: string; title: string; url: string | null; outcome: AutomationOutcome }[];
   }[];
 }
+
+/** One automated pass's `outcomes` bucket (see `stageAutomation.outcomes`). */
+export type AutomationOutcome = 'done' | 'canceled' | 'reworked' | 'inFlight';
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** Datetime carrying an explicit `Z` or `±HH:MM` offset. */
@@ -265,6 +274,7 @@ export function computeFactoryMetrics(
           exits: 0,
           automated: 0,
           outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 },
+          automatedItems: [],
         };
         automationByStage.set(entry.stage, row);
       }
@@ -276,10 +286,20 @@ export function computeFactoryMetrics(
       if (firstVisitIndex !== i || !isAutomationActor(entry.by) || !isAutomationActor(entry.exitedBy)) continue;
       row.automated += 1;
       const reworked = item.stageHistory.some((e, j) => j > i && e.stage === entry.stage);
-      if (reworked) row.outcomes.reworked += 1;
-      else if (itemDone) row.outcomes.done += 1;
-      else if (itemCanceled) row.outcomes.canceled += 1;
-      else row.outcomes.inFlight += 1;
+      const outcome: AutomationOutcome = reworked
+        ? 'reworked'
+        : itemDone
+          ? 'done'
+          : itemCanceled
+            ? 'canceled'
+            : 'inFlight';
+      row.outcomes[outcome] += 1;
+      row.automatedItems.push({
+        id: item.id,
+        title: item.title,
+        url: item.externalSource?.url ?? null,
+        outcome,
+      });
     }
   }
 
