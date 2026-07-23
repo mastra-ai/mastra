@@ -265,7 +265,7 @@ describe('create (platform provisioning)', () => {
     expect(note).toContain('my-factory');
     expect(note).toContain('Acme');
     expect(note).toContain('Postgres database');
-    expect(note).toContain('code agent sessions run inside Mastra platform sandboxes');
+    expect(note).toContain('Sandboxes (code agent sessions run here)');
     expect(note).toContain('Manage your project at');
     expect(note).toContain('https://projects.mastra.ai');
   });
