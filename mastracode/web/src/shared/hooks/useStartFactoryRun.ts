@@ -1,4 +1,5 @@
 import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
@@ -29,10 +30,20 @@ export type FactoryRunInvocation =
 const factoryRunMutationKey = (resourceId: string, projectId: string | undefined) =>
   ['factory', 'start-run', resourceId, projectId] as const;
 
+/** Kickoff step the run is currently in, so cards can narrate the wait. */
+export type FactoryRunPhase = 'workspace' | 'kickoff' | 'opening';
+
 export interface PendingFactoryRun {
   id?: string;
   sourceKey: string | null;
   role: string;
+  /** Missing when the run was started by another hook instance. */
+  phase?: FactoryRunPhase;
+}
+
+/** Stable key identifying one card's run across the kickoff phases. */
+function runPhaseKey(run: { id?: string; sourceKey: string | null; role: string }): string {
+  return `${run.sourceKey ?? run.id ?? ''}:${run.role}`;
 }
 
 function toPendingFactoryRun(value: unknown): PendingFactoryRun | undefined {
@@ -68,18 +79,23 @@ export function useStartFactoryRun() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const repository = factoryQuery.data?.repositories[0];
+  const [phases, setPhases] = useState<Record<string, FactoryRunPhase>>({});
 
   const mutation = useMutation({
     mutationKey: factoryRunMutationKey(repository?.projectRepositoryId ?? '', factoryId),
     mutationFn: async ({ branch, threadTitle, threadTags, invocation, workItem }: StartFactoryRunInput) => {
       if (!factoryId || !workItem) throw new Error('Factory run requires a board work item');
       if (!repository) throw new Error('Select a repository before starting a Factory run');
+      const phaseKey = runPhaseKey({ id: workItem.id, sourceKey: workItem.sourceKey, role: workItem.role });
+      const setPhase = (phase: FactoryRunPhase) => setPhases(current => ({ ...current, [phaseKey]: phase }));
 
+      setPhase('workspace');
       const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, branch);
       const sessionId = userSession.sessionId;
       const desiredStage = workItem.stages.length === 1 ? workItem.stages[0] : undefined;
       if (!desiredStage) throw new Error('Factory runs require one exclusive destination stage');
 
+      setPhase('kickoff');
       const prepared = await startFactoryRun(baseUrl, factoryId, {
         sessionId,
         threadTitle,
@@ -108,6 +124,7 @@ export function useStartFactoryRun() {
         },
       });
 
+      setPhase('opening');
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId, undefined),
@@ -115,6 +132,15 @@ export function useStartFactoryRun() {
         queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
       ]);
       void navigate(`/factories/${factoryId}/workspaces/${sessionId}/threads/${prepared.threadId}`);
+    },
+    onSettled: (_result, _error, { workItem }) => {
+      if (!workItem) return;
+      const phaseKey = runPhaseKey({ id: workItem.id, sourceKey: workItem.sourceKey, role: workItem.role });
+      setPhases(current => {
+        if (!(phaseKey in current)) return current;
+        const { [phaseKey]: _cleared, ...rest } = current;
+        return rest;
+      });
     },
   });
 
@@ -124,7 +150,9 @@ export function useStartFactoryRun() {
       status: 'pending',
     },
     select: pending => toPendingFactoryRun(pending.state.variables),
-  }).filter(run => run !== undefined);
+  })
+    .filter(run => run !== undefined)
+    .map(run => ({ ...run, phase: phases[runPhaseKey(run)] }));
 
   return { start: mutation, pendingRuns, enabled: Boolean(factoryId && repository) };
 }
