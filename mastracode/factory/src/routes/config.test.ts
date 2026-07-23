@@ -649,6 +649,7 @@ describe('OM routes with a tenant', () => {
       new ConfigRoutes({
         auth: fakeRouteAuth({ enabled: opts.authEnabled !== false }),
         controller,
+        modelCredentials: seed.credentials,
         ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings }),
       }).routes(),
     );
@@ -662,8 +663,55 @@ describe('OM routes with a tenant', () => {
       body: JSON.stringify(body),
     });
 
+  const postJson = (app: Hono, path: string, body: unknown) =>
+    app.request(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
   beforeEach(async () => {
     seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'api_key',
+      key: 'sk-anthropic',
+    });
+  });
+
+  it('seeds provider-specific OM defaults without an active session', async () => {
+    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
+      providerId: 'anthropic',
+      factoryModelId: 'anthropic/claude-fable-5',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('does not overwrite OM models that the user already selected', async () => {
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observerModelId: 'anthropic/claude-fable-5' },
+    });
+
+    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
+      providerId: 'anthropic',
+      factoryModelId: 'anthropic/claude-fable-5',
+    });
+
+    expect(res.status).toBe(200);
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-fable-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
   });
 
   it('persists a role model switch to the memory-settings domain, snapshotting the other role', async () => {

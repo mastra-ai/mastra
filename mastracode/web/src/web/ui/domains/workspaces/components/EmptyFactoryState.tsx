@@ -23,6 +23,7 @@ import {
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
 import { InitialFactoryStep } from './InitialFactoryStep';
+import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { useNavigate } from 'react-router';
@@ -40,6 +41,10 @@ const STEP_META: Record<Step, { title: string; description?: string }> = {
   },
   'project-management': {
     title: 'Connect the work behind the code.',
+  },
+  'model-provider': {
+    title: 'Choose your Factory model.',
+    description: 'Connect a provider and select the default model for Factory runs.',
   },
 };
 
@@ -59,14 +64,13 @@ export function EmptyFactoryState() {
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | null>(null);
   const [githubRedirecting, setGithubRedirecting] = useState(false);
-  const [finishing, setFinishing] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (persistedFactories.isPending || pendingFactory) return;
     const pendingId = sessionStorage.getItem(FACTORY_KEY);
     if (!pendingId) {
-      if (step === 'project-management') setStep('vcs');
+      if (step !== 'initial' && step !== 'vcs') setStep('vcs');
       return;
     }
     const restored = persistedFactories.data?.find(factory => factory.id === pendingId);
@@ -121,18 +125,17 @@ export function EmptyFactoryState() {
       return;
     }
     setCompletionError(null);
-    setFinishing(true);
     try {
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       clearOnboardingFlow();
       void navigate(`/factories/${pendingFactory.id}`);
     } catch (error) {
       setCompletionError(errorMessage(error));
-      setFinishing(false);
     }
   };
 
-  const stepIndex = ['initial', 'vcs', 'project-management'].indexOf(step);
+  const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider'];
+  const stepIndex = steps.indexOf(step);
 
   return (
     <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
@@ -140,7 +143,7 @@ export function EmptyFactoryState() {
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">
             <ol className="mb-9 flex gap-2" aria-label="Factory setup progress">
-              {(['initial', 'vcs', 'project-management'] as const).map((item, index) => (
+              {steps.map((item, index) => (
                 <li
                   key={item}
                   aria-current={step === item ? 'step' : undefined}
@@ -189,13 +192,18 @@ export function EmptyFactoryState() {
               )}
               {step === 'project-management' && (
                 <ProjectManagementFactoryStep
-                  completionError={completionError}
-                  finishing={finishing}
                   onConnect={() => {
                     persistBeforeRedirect('project-management');
                     connectLinear(baseUrl);
                   }}
-                  onFinish={() => void finish()}
+                  onContinue={() => goTo('model-provider')}
+                />
+              )}
+              {step === 'model-provider' && pendingFactory && (
+                <ModelProviderFactoryStep
+                  factoryId={pendingFactory.id}
+                  completionError={completionError ?? undefined}
+                  onComplete={() => void finish()}
                 />
               )}
             </div>
