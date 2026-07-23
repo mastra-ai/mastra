@@ -12,7 +12,7 @@ import type {
 } from '@mastra/core/workspace';
 import { MastraSandbox, ProcessHandle, SandboxNotReadyError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { PlatformClientOptions } from './client.js';
-import { PlatformClient } from './client.js';
+import { PlatformApiError, PlatformClient } from './client.js';
 
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
@@ -196,9 +196,18 @@ export class PlatformSandbox extends MastraSandbox {
 
   async start(): Promise<void> {
     if (this._sandboxId) {
-      this._createdAt = new Date();
-      return;
+      try {
+        const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+        const json = (await response.json()) as CreateSandboxResponse;
+        this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
+        return;
+      } catch (error) {
+        if (!(error instanceof PlatformApiError) || error.status !== 404) throw error;
+        this._sandboxId = undefined;
+      }
     }
+
+    if (!this._environmentId) throw new Error('environmentId is required');
 
     const response = await this._client.request('/sandbox', {
       method: 'POST',
@@ -270,9 +279,6 @@ export class PlatformSandbox extends MastraSandbox {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         command: fullCommand,
-        environmentId: this._environmentId,
-        idleTimeoutMinutes: this._idleTimeoutMinutes,
-        networkIsolation: this._networkIsolation,
         timeoutSec,
         cwd: options?.cwd,
         env: options?.env,
