@@ -168,7 +168,7 @@ export {
 } from './utils/resolve-runtime';
 
 // Workflow creation
-export { createDurableAgenticWorkflow, type DurableAgenticWorkflowOptions } from './workflows';
+export { createDurableAgenticWorkflow, runDurableScorers, type DurableAgenticWorkflowOptions } from './workflows';
 
 // Workflow steps (for advanced customization)
 export {
