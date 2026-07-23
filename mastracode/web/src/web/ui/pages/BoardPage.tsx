@@ -490,18 +490,7 @@ export function BoardPage() {
 
 function FactoryBoardPage({ kind }: { kind: BoardKind }) {
   const review = kind === 'review';
-  return (
-    <FactoryPageShell
-      title={review ? 'Review' : 'Work'}
-      description={
-        review
-          ? 'Pull requests moving through review intake, active review, and completion.'
-          : 'Issues moving through intake, planning, building, receiving review, and completion.'
-      }
-    >
-      {factory => <Board factory={factory} kind={kind} />}
-    </FactoryPageShell>
-  );
+  return <FactoryPageShell>{factory => <Board factory={factory} kind={kind} />}</FactoryPageShell>;
 }
 
 function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) {

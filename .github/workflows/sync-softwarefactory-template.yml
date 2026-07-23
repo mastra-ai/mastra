@@ -58,12 +58,17 @@ jobs:
       # (workflow_dispatch) after the next release train catches up.
       # PR-time validation against the LOCAL package set lives in the
       # e2e-softwarefactory job of e2e-tests.yml.
+      # Runs in a throwaway copy: `npm install`/`npm run build` write
+      # package-lock.json, node_modules and .mastra into the working tree, and
+      # the sync step below copies template-out verbatim — validating in-place
+      # previously leaked package-lock.json into the template repo.
       - name: Validate template against published packages
-        working-directory: ${{ runner.temp }}/template-out
         env:
           MASTRA_TELEMETRY_DISABLED: '1'
         run: |
           set -euo pipefail
+          cp -R "$RUNNER_TEMP/template-out" "$RUNNER_TEMP/template-validate"
+          cd "$RUNNER_TEMP/template-validate"
           npm install --no-audit --no-fund
           npm run check
           npm run build

@@ -97,7 +97,12 @@ const EXCLUDE_TOP_LEVEL = new Set([
   'node_modules',
   '.mastra',
   'e2e',
+  // The web project is its own pnpm workspace root wired to the monorepo via
+  // `link:` deps — none of that applies to the standalone template, and npm
+  // scaffolds must not ship pnpm workspace/lock files (or a stale npm lock).
   'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'package-lock.json',
   'vitest.config.ts',
   // Replaced with template-specific versions:
   'README.md',
