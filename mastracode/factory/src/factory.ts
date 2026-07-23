@@ -65,6 +65,7 @@ import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
+import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
@@ -354,6 +355,9 @@ export class MastraFactory {
     const integrationStorage = storage.registerDomain(new IntegrationStorage());
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
+    // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
+    // tenant, so inbound channel events can resolve the sender's model creds.
+    const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -365,6 +369,7 @@ export class MastraFactory {
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
+      channelIdentity: channelIdentityStorage,
     };
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
