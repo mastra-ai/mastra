@@ -25,15 +25,16 @@ const createMockAgent = (response: string, shouldFail = false) => ({
 });
 
 // Mock scorer that returns score based on output
-const createMockScorer = (scorerId: string, scorerName: string): MastraScorer<any, any, any, any> => ({
-  id: scorerId,
-  name: scorerName,
-  description: 'Mock scorer',
-  run: vi.fn().mockImplementation(async ({ output }) => ({
-    score: output ? 1.0 : 0.0,
-    reason: output ? 'Has output' : 'No output',
-  })),
-});
+const createMockScorer = (scorerId: string, scorerName: string): MastraScorer<any, any, any, any> =>
+  ({
+    id: scorerId,
+    name: scorerName,
+    description: 'Mock scorer',
+    run: vi.fn().mockImplementation(async ({ output }) => ({
+      score: output ? 1.0 : 0.0,
+      reason: output ? 'Has output' : 'No output',
+    })),
+  }) as unknown as MastraScorer<any, any, any, any>;
 
 describe('runExperiment', () => {
   let db: InMemoryDB;
@@ -104,9 +105,13 @@ describe('runExperiment', () => {
       expect(result.experimentId).toBeDefined();
       expect(result.status).toBe('completed');
       expect(result.totalItems).toBe(2);
+      expect(result.executionStatusCounts).toEqual({ completed: 2, skipped: 0, error: 0, cancelled: 0 });
+      expect(result.scorerStatusCounts).toEqual({ completed: 0, error: 0 });
+      expect(result.thresholds).toEqual([]);
       expect(result.succeededCount).toBe(2);
       expect(result.failedCount).toBe(0);
       expect(result.results).toHaveLength(2);
+      expect(result.results.every(item => item.executionStatus === 'completed')).toBe(true);
     });
 
     it('includes item details in results', async () => {
@@ -188,6 +193,8 @@ describe('runExperiment', () => {
       // Verify run was persisted
       const storedRun = await experimentsStorage.getExperimentById({ id: result.experimentId });
       expect(storedRun?.status).toBe('completed');
+      expect(storedRun?.executionStatusCounts).toEqual({ completed: 2, skipped: 0, error: 0, cancelled: 0 });
+      expect(storedRun?.scorerStatusCounts).toEqual({ completed: 0, error: 0 });
       expect(storedRun?.succeededCount).toBe(2);
       expect(storedRun?.failedCount).toBe(0);
     });
@@ -222,6 +229,7 @@ describe('runExperiment', () => {
 
       // Run should complete (not fail) with partial success
       expect(result.status).toBe('completed');
+      expect(result.executionStatusCounts).toEqual({ completed: 1, skipped: 0, error: 1, cancelled: 0 });
       expect(result.succeededCount).toBe(1);
       expect(result.failedCount).toBe(1);
 
@@ -245,8 +253,28 @@ describe('runExperiment', () => {
       });
 
       expect(result.status).toBe('failed');
+      expect(result.executionStatusCounts).toEqual({ completed: 0, skipped: 0, error: 2, cancelled: 0 });
       expect(result.succeededCount).toBe(0);
       expect(result.failedCount).toBe(2);
+      expect(result.results.every(item => item.executionStatus === 'error')).toBe(true);
+    });
+
+    it('does not run scorers for target execution errors', async () => {
+      const failingAgent = createMockAgent('', true);
+      const scorer = createMockScorer('quality', 'Quality');
+      (mastra.getAgent as ReturnType<typeof vi.fn>).mockReturnValue(failingAgent);
+      (mastra.getAgentById as ReturnType<typeof vi.fn>).mockReturnValue(failingAgent);
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'failing-agent',
+        scorers: [scorer],
+      });
+
+      expect(scorer.run).not.toHaveBeenCalled();
+      expect(result.scorerStatusCounts).toEqual({ completed: 0, error: 0 });
+      expect(result.results.every(item => item.scores.length === 0)).toBe(true);
     });
 
     it('throws for non-existent dataset', async () => {
@@ -288,6 +316,25 @@ describe('runExperiment', () => {
       expect(result.results[0].scores).toHaveLength(1);
       expect(result.results[0].scores[0].scorerId).toBe('accuracy');
       expect(result.results[0].scores[0].score).toBe(1.0); // Has output
+      expect(result.scorerStatusCounts).toEqual({ completed: 2, error: 0 });
+    });
+
+    it('snapshots thresholds without treating threshold misses as execution failures', async () => {
+      const mockScorer = createMockScorer('quality', 'Quality');
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [{ scorer: mockScorer, threshold: { max: 0.9 } }],
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.executionStatusCounts.completed).toBe(2);
+      expect(result.scorerStatusCounts).toEqual({ completed: 2, error: 0 });
+      expect(result.thresholds).toEqual([{ scorerId: 'quality', threshold: { max: 0.9 }, targetScope: 'span' }]);
+      const storedRun = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(storedRun?.thresholds).toEqual(result.thresholds);
     });
 
     it('handles scorer errors gracefully (error isolation)', async () => {
@@ -311,6 +358,7 @@ describe('runExperiment', () => {
       // Scorer error should be captured in score result
       expect(result.results[0].scores[0].error).toBe('Scorer crashed');
       expect(result.results[0].scores[0].score).toBeNull();
+      expect(result.scorerStatusCounts).toEqual({ completed: 0, error: 2 });
     });
 
     it('failing scorer does not affect other scorers', async () => {
@@ -344,6 +392,7 @@ describe('runExperiment', () => {
       const workingScore = result.results[0].scores.find(s => s.scorerId === 'working');
       expect(workingScore?.score).toBe(1.0);
       expect(workingScore?.error).toBeNull();
+      expect(result.scorerStatusCounts).toEqual({ completed: 2, error: 2 });
     });
   });
 
@@ -365,6 +414,7 @@ describe('runExperiment', () => {
       expect(result.status).toBe('failed');
       expect(result.results).toHaveLength(0);
       expect(result.totalItems).toBe(2);
+      expect(result.executionStatusCounts).toEqual({ completed: 0, skipped: 2, error: 0, cancelled: 0 });
     });
   });
 

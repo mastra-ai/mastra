@@ -1,6 +1,7 @@
 import type { z } from 'zod/v4';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
+import type { ThresholdConfig } from '../evals/thresholds';
 import type { ScoringSamplingConfig, ScoringSource } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
 import type { ProcessorPhase } from '../processor-provider';
@@ -2733,6 +2734,21 @@ export interface BatchDeleteItemsInput {
 
 export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed';
 
+export type TargetExecutionStatus = 'completed' | 'skipped' | 'error' | 'cancelled';
+
+export type TargetExecutionStatusCounts = Record<TargetExecutionStatus, number>;
+
+export type ScorerExecutionStatus = 'completed' | 'error';
+
+export type ScorerExecutionStatusCounts = Record<ScorerExecutionStatus, number>;
+
+export interface ExperimentThreshold {
+  scorerId: string;
+  threshold: ThresholdConfig;
+  targetScope?: 'span' | 'trajectory';
+  stepId?: string;
+}
+
 export interface Experiment {
   id: string;
   name?: string;
@@ -2752,8 +2768,17 @@ export interface Experiment {
   targetId: string;
   status: ExperimentStatus;
   totalItems: number;
+  /** Explicit target execution counts. Derived from legacy counters when reading historical rows. */
+  executionStatusCounts?: TargetExecutionStatusCounts | null;
+  /** Explicit scorer invocation counts. Null when historical rows cannot be reconstructed. */
+  scorerStatusCounts?: ScorerExecutionStatusCounts | null;
+  /** Immutable effective threshold bindings for this run. Null when unavailable on historical rows. */
+  thresholds?: ExperimentThreshold[] | null;
+  /** @deprecated Use `executionStatusCounts.completed`. */
   succeededCount: number;
+  /** @deprecated Use `executionStatusCounts.error + executionStatusCounts.cancelled`. */
   failedCount: number;
+  /** @deprecated Use `executionStatusCounts.skipped`. */
   skippedCount: number;
   agentVersion?: string | null;
   /** Multi-tenant organization/account scope. Hydrated from the parent dataset on create. */
@@ -2777,6 +2802,8 @@ export interface ExperimentResult {
   output: unknown | null;
   groundTruth: unknown | null;
   error: { message: string; stack?: string; code?: string } | null;
+  /** Target execution outcome. Null or absent on historical rows. */
+  executionStatus?: TargetExecutionStatus | null;
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
@@ -2816,6 +2843,8 @@ export interface CreateExperimentInput {
   targetType: TargetType;
   targetId: string;
   totalItems: number;
+  /** Immutable effective threshold bindings for this run. */
+  thresholds?: ExperimentThreshold[] | null;
   /**
    * Multi-tenant organization/account scope. Should be hydrated from the parent
    * dataset on create so experiments inherit their dataset's tenancy bucket.
@@ -2836,6 +2865,8 @@ export interface UpdateExperimentInput {
   metadata?: Record<string, unknown>;
   status?: ExperimentStatus;
   totalItems?: number;
+  executionStatusCounts?: TargetExecutionStatusCounts | null;
+  scorerStatusCounts?: ScorerExecutionStatusCounts | null;
   succeededCount?: number;
   failedCount?: number;
   skippedCount?: number;
@@ -2852,6 +2883,8 @@ export interface AddExperimentResultInput {
   output: unknown | null;
   groundTruth: unknown | null;
   error: { message: string; stack?: string; code?: string } | null;
+  /** Target execution outcome. Optional for compatibility with historical/custom callers. */
+  executionStatus?: TargetExecutionStatus | null;
   startedAt: Date;
   completedAt: Date;
   retryCount: number;

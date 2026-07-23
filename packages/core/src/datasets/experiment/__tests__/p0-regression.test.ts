@@ -120,6 +120,14 @@ describe('P0 Regression', () => {
       expect(result.status).toBe('failed');
       expect(result.results.length).toBeGreaterThan(0);
       expect(result.results.length).toBeLessThan(10);
+      expect(result.executionStatusCounts.cancelled).toBeGreaterThan(0);
+      expect(
+        result.executionStatusCounts.completed +
+          result.executionStatusCounts.skipped +
+          result.executionStatusCounts.error +
+          result.executionStatusCounts.cancelled,
+      ).toBe(result.totalItems);
+      expect(result.failedCount).toBe(result.executionStatusCounts.error + result.executionStatusCounts.cancelled);
       expect(result.succeededCount + result.failedCount).toBe(result.results.length);
     });
   });
@@ -179,10 +187,12 @@ describe('P0 Regression', () => {
       });
 
       expect(result).toBeDefined();
+      expect(result.executionStatusCounts).toEqual({ completed: 0, skipped: 0, error: 2, cancelled: 0 });
       expect(result.failedCount).toBe(2);
       expect(result.succeededCount).toBe(0);
       // Each item should have a timeout-related error
       for (const item of result.results) {
+        expect(item.executionStatus).toBe('error');
         expect(item.error).toBeTruthy();
         expect(item.error!.message.toLowerCase()).toContain('timeout');
       }
@@ -299,7 +309,7 @@ describe('P0 Regression', () => {
       setupMastra(agent);
 
       // Fail every persist so any completed item will increment the counter,
-      // then abort mid-run so we exit via the catch/return-partial branch.
+      // then abort mid-run so the final summary is partial.
       experimentsStorage.addExperimentResult = vi.fn().mockRejectedValue(new Error('DB down'));
 
       const controller = new AbortController();
@@ -313,7 +323,7 @@ describe('P0 Regression', () => {
         signal: controller.signal,
       });
 
-      // Aborted, so we hit the partial-summary return path.
+      // Aborted runs retain completed and cancelled item rows in a partial summary.
       expect(result.status).toBe('failed');
       // Whatever landed as an item before the abort should also be counted as
       // a persistence failure — the field must exist on the abort path too.

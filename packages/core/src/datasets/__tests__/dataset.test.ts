@@ -340,6 +340,28 @@ describe('Dataset', () => {
     await new Promise(r => setTimeout(r, 500));
   });
 
+  it('startExperimentAsync persists the threshold snapshot before returning', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+    const scorer = createMockScorer('quality', 'Quality');
+
+    const { experimentId } = await ds.startExperimentAsync({
+      task: async () => 'ok',
+      scorers: [{ scorer, threshold: { min: 0.7, max: 0.9 } }],
+    });
+
+    const run = await experimentsStorage.getExperimentById({ id: experimentId });
+    expect(run?.thresholds).toEqual([
+      {
+        scorerId: 'quality',
+        threshold: { min: 0.7, max: 0.9 },
+        targetScope: 'span',
+      },
+    ]);
+
+    // Wait for fire-and-forget to complete
+    await new Promise(r => setTimeout(r, 500));
+  });
+
   it('startExperimentAsync throws EXPERIMENT_NO_ITEMS on empty dataset', async () => {
     await expect(
       ds.startExperimentAsync({

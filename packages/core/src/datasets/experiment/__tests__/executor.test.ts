@@ -165,6 +165,25 @@ describe('executeTarget', () => {
       expect(result.error).toEqual(expect.objectContaining({ message: 'Agent error' }));
     });
 
+    it('preserves structured abort identity without parsing the message', async () => {
+      const mockAgent = {
+        ...createMockAgent(''),
+        generate: vi.fn().mockRejectedValue(new DOMException('Stopped by caller', 'AbortError')),
+      };
+
+      const result = await executeTarget(mockAgent as unknown as Agent, 'agent', {
+        id: 'item-abort',
+        datasetId: 'ds-1',
+        input: 'Test',
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Stopped by caller', code: 'AbortError' }));
+    });
+
     it('uses generateLegacy when model is not supported', async () => {
       // Override mock for this test
       vi.mocked(isSupportedLanguageModel).mockReturnValue(false);

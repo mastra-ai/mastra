@@ -16,6 +16,26 @@ import type {
 import type { InMemoryDB } from '../inmemory-db';
 import { ExperimentsStorage } from './base';
 
+function deriveExecutionStatusCounts(experiment: Experiment): NonNullable<Experiment['executionStatusCounts']> {
+  return (
+    experiment.executionStatusCounts ?? {
+      completed: experiment.succeededCount,
+      skipped: experiment.skippedCount,
+      error: experiment.failedCount,
+      cancelled: 0,
+    }
+  );
+}
+
+function normalizeExperiment(experiment: Experiment): Experiment {
+  return {
+    ...experiment,
+    executionStatusCounts: deriveExecutionStatusCounts(experiment),
+    scorerStatusCounts: experiment.scorerStatusCounts ?? null,
+    thresholds: experiment.thresholds ?? null,
+  };
+}
+
 export class ExperimentsInMemory extends ExperimentsStorage {
   private db: InMemoryDB;
 
@@ -44,6 +64,14 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       metadata: input.metadata,
       status: 'pending',
       totalItems: input.totalItems,
+      executionStatusCounts: { completed: 0, skipped: 0, error: 0, cancelled: 0 },
+      scorerStatusCounts: { completed: 0, error: 0 },
+      thresholds: input.thresholds
+        ? input.thresholds.map(binding => ({
+            ...binding,
+            threshold: typeof binding.threshold === 'number' ? binding.threshold : { ...binding.threshold },
+          }))
+        : [],
       succeededCount: 0,
       failedCount: 0,
       skippedCount: 0,
@@ -63,13 +91,28 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (!existing) {
       throw new Error(`Experiment not found: ${input.id}`);
     }
+    const succeededCount = input.succeededCount ?? existing.succeededCount;
+    const failedCount = input.failedCount ?? existing.failedCount;
+    const skippedCount = input.skippedCount ?? existing.skippedCount;
+    const hasLegacyCountUpdate =
+      input.succeededCount !== undefined || input.failedCount !== undefined || input.skippedCount !== undefined;
+    const executionStatusCounts =
+      input.executionStatusCounts !== undefined
+        ? input.executionStatusCounts
+        : hasLegacyCountUpdate
+          ? { completed: succeededCount, skipped: skippedCount, error: failedCount, cancelled: 0 }
+          : existing.executionStatusCounts;
+
     const updated: Experiment = {
       ...existing,
       status: input.status ?? existing.status,
       totalItems: input.totalItems ?? existing.totalItems,
-      succeededCount: input.succeededCount ?? existing.succeededCount,
-      failedCount: input.failedCount ?? existing.failedCount,
-      skippedCount: input.skippedCount ?? existing.skippedCount,
+      executionStatusCounts,
+      scorerStatusCounts:
+        input.scorerStatusCounts !== undefined ? input.scorerStatusCounts : existing.scorerStatusCounts,
+      succeededCount,
+      failedCount,
+      skippedCount,
       startedAt: input.startedAt ?? existing.startedAt,
       completedAt: input.completedAt ?? existing.completedAt,
       name: input.name ?? existing.name,
@@ -78,7 +121,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       updatedAt: new Date(),
     };
     this.db.experiments.set(input.id, updated);
-    return updated;
+    return normalizeExperiment(updated);
   }
 
   async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
@@ -90,7 +133,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
       return null;
     }
-    return row;
+    return normalizeExperiment(row);
   }
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
@@ -128,7 +171,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     const end = perPageInput === false ? experiments.length : start + perPage;
 
     return {
-      experiments: experiments.slice(start, end),
+      experiments: experiments.slice(start, end).map(normalizeExperiment),
       pagination: {
         total: experiments.length,
         page,
@@ -171,6 +214,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       output: input.output,
       groundTruth: input.groundTruth,
       error: input.error,
+      executionStatus: input.executionStatus ?? null,
       startedAt: input.startedAt,
       completedAt: input.completedAt,
       retryCount: input.retryCount,

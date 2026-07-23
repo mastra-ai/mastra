@@ -61,6 +61,19 @@ export interface ExecutionResult {
   toolMockReport?: ToolMockReport;
 }
 
+function serializeExecutionError(error: unknown): NonNullable<ExecutionResult['error']> {
+  const explicitCode =
+    typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+      ? error.code
+      : undefined;
+  const errorName = error instanceof Error && error.name !== 'Error' ? error.name : undefined;
+  return {
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+    code: explicitCode ?? errorName,
+  };
+}
+
 /**
  * Execute a dataset item against a scorer (LLM-as-judge calibration).
  * item.input should contain exactly what the scorer expects - direct passthrough.
@@ -93,10 +106,7 @@ async function executeScorer(
   } catch (error) {
     return {
       output: null,
-      error: {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      },
+      error: serializeExecutionError(error),
       traceId: null,
     };
   }
@@ -171,10 +181,7 @@ export async function executeTarget(
   } catch (error) {
     return {
       output: null,
-      error: {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      },
+      error: serializeExecutionError(error),
       traceId: null,
     };
   }

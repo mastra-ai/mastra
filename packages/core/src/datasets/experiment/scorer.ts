@@ -1,4 +1,6 @@
+import { MastraError } from '../../error';
 import type { MastraScorer } from '../../evals/base';
+import { isScorerWithThreshold, validateThresholdConfig } from '../../evals/thresholds';
 import { extractTrajectory, extractTrajectoryFromTrace } from '../../evals/types';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '../../evals/types';
 import type { Mastra } from '../../mastra';
@@ -6,9 +8,15 @@ import { validateAndSaveScore } from '../../mastra/hooks';
 import { EntityType } from '../../observability';
 import type { CorrelationContext } from '../../observability';
 import type { MastraCompositeStore } from '../../storage/base';
-import type { TargetType } from '../../storage/types';
+import type { ExperimentThreshold, TargetType } from '../../storage/types';
 import type { StepResult } from '../../workflows';
-import type { ScorerResult } from './types';
+import type {
+  ExperimentAgentScorerConfig,
+  ExperimentScorerEntry,
+  ExperimentScorerReference,
+  ExperimentWorkflowScorerConfig,
+  ScorerResult,
+} from './types';
 
 function toScorerTargetEntityType(targetType?: TargetType): EntityType | undefined {
   switch (targetType) {
@@ -46,6 +54,123 @@ export function resolveScorers(
       return scorer;
     })
     .filter((s): s is MastraScorer<any, any, any, any> => s !== null);
+}
+
+export interface NormalizedExperimentScorers {
+  scorers: MastraScorer<any, any, any, any>[];
+  stepScorers: Record<string, MastraScorer<any, any, any, any>[]>;
+  thresholds: ExperimentThreshold[];
+}
+
+function getScorerReferenceId(scorer: ExperimentScorerReference): string {
+  return typeof scorer === 'string' ? scorer : scorer.id;
+}
+
+function getScorerTargetScope(
+  mastra: Mastra,
+  scorer: ExperimentScorerReference,
+): NonNullable<ExperimentThreshold['targetScope']> {
+  const resolved = typeof scorer === 'string' ? mastra.getScorerById(scorer) : scorer;
+  return resolved?.type === 'trajectory' ? 'trajectory' : 'span';
+}
+
+function thresholdsEqual(a: ExperimentThreshold['threshold'], b: ExperimentThreshold['threshold']): boolean {
+  if (typeof a === 'number' || typeof b === 'number') return a === b;
+  return a.min === b.min && a.max === b.max;
+}
+
+function dedupeRegisteredScorers(scorers: ExperimentScorerReference[]): ExperimentScorerReference[] {
+  const seen = new Set<string>();
+  return scorers.filter(scorer => {
+    if (typeof scorer !== 'string') return true;
+    if (seen.has(scorer)) return false;
+    seen.add(scorer);
+    return true;
+  });
+}
+
+/**
+ * Normalize experiment scorer selection and threshold bindings once for both
+ * synchronous and asynchronous starts.
+ */
+export function normalizeExperimentScorers(
+  mastra: Mastra,
+  scorerInput?: ExperimentScorerEntry[] | ExperimentAgentScorerConfig | ExperimentWorkflowScorerConfig,
+  datasetScorerIds: string[] = [],
+): NormalizedExperimentScorers {
+  const flatScorerReferences: ExperimentScorerReference[] = [];
+  const stepScorerReferences: Record<string, ExperimentScorerReference[]> = {};
+  const thresholds = new Map<string, ExperimentThreshold>();
+
+  const addEntries = (
+    entries: ExperimentScorerEntry[] | undefined,
+    configuredScope?: NonNullable<ExperimentThreshold['targetScope']>,
+    stepId?: string,
+  ) => {
+    for (const entry of entries ?? []) {
+      const scorer = isScorerWithThreshold(entry) ? entry.scorer : entry;
+      const targetScope = configuredScope ?? getScorerTargetScope(mastra, scorer);
+
+      if (isScorerWithThreshold(entry)) {
+        const scorerId = getScorerReferenceId(scorer);
+        validateThresholdConfig(entry.threshold, scorerId);
+        const identity = JSON.stringify([scorerId, targetScope, stepId ?? null]);
+        const existing = thresholds.get(identity);
+        if (existing && !thresholdsEqual(existing.threshold, entry.threshold)) {
+          throw new MastraError({
+            domain: 'SCORER',
+            id: 'AMBIGUOUS_SCORER_THRESHOLD',
+            category: 'USER',
+            text: `Multiple thresholds were configured for scorer "${scorerId}" with the same target scope`,
+          });
+        }
+        if (!existing) {
+          thresholds.set(identity, {
+            scorerId,
+            threshold: typeof entry.threshold === 'number' ? entry.threshold : { ...entry.threshold },
+            targetScope,
+            ...(stepId ? { stepId } : {}),
+          });
+        }
+      }
+
+      if (stepId) {
+        (stepScorerReferences[stepId] ??= []).push(scorer);
+      } else {
+        flatScorerReferences.push(scorer);
+      }
+    }
+  };
+
+  if (Array.isArray(scorerInput)) {
+    addEntries(scorerInput);
+  } else if (scorerInput) {
+    const categorized = scorerInput as ExperimentAgentScorerConfig & ExperimentWorkflowScorerConfig;
+    addEntries(categorized.agent, 'span');
+    addEntries(categorized.workflow, 'span');
+    addEntries(categorized.trajectory, 'trajectory');
+    for (const [stepId, entries] of Object.entries(categorized.steps ?? {})) {
+      addEntries(entries, 'span', stepId);
+    }
+  }
+
+  const explicitScorerIds = new Set(flatScorerReferences.map(getScorerReferenceId));
+  for (const scorerId of datasetScorerIds) {
+    if (!explicitScorerIds.has(scorerId)) {
+      flatScorerReferences.push(scorerId);
+      explicitScorerIds.add(scorerId);
+    }
+  }
+
+  const dedupedStepScorers = Object.fromEntries(
+    Object.entries(stepScorerReferences).map(([stepId, scorers]) => [stepId, dedupeRegisteredScorers(scorers)]),
+  );
+
+  return {
+    scorers: resolveScorers(mastra, dedupeRegisteredScorers(flatScorerReferences)),
+    stepScorers: resolveStepScorers(mastra, dedupedStepScorers),
+    thresholds: Array.from(thresholds.values()),
+  };
 }
 
 /**

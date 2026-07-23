@@ -23,10 +23,35 @@ describe('ExperimentsInMemory', () => {
 
       expect(experiment.id).toBeDefined();
       expect(experiment.status).toBe('pending');
+      expect(experiment.executionStatusCounts).toEqual({ completed: 0, skipped: 0, error: 0, cancelled: 0 });
+      expect(experiment.scorerStatusCounts).toEqual({ completed: 0, error: 0 });
+      expect(experiment.thresholds).toEqual([]);
       expect(experiment.succeededCount).toBe(0);
       expect(experiment.failedCount).toBe(0);
       expect(experiment.startedAt).toBeNull();
       expect(experiment.completedAt).toBeNull();
+    });
+
+    it('snapshots threshold bindings on creation', async () => {
+      const thresholds = [
+        { scorerId: 'quality', threshold: { min: 0.7, max: 0.9 }, targetScope: 'span' as const },
+        { scorerId: 'style', threshold: 0.6, targetScope: 'span' as const, stepId: 'draft' },
+      ];
+      const experiment = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'workflow',
+        targetId: 'workflow-1',
+        totalItems: 1,
+        thresholds,
+      });
+
+      (thresholds[0]!.threshold as { min: number }).min = 0;
+      expect(experiment.thresholds).toEqual([
+        { scorerId: 'quality', threshold: { min: 0.7, max: 0.9 }, targetScope: 'span' },
+        { scorerId: 'style', threshold: 0.6, targetScope: 'span', stepId: 'draft' },
+      ]);
+      expect((await storage.getExperimentById({ id: experiment.id }))?.thresholds).toEqual(experiment.thresholds);
     });
 
     it('uses provided id if given', async () => {
@@ -103,15 +128,38 @@ describe('ExperimentsInMemory', () => {
       const updated = await storage.updateExperiment({
         id: experiment.id,
         status: 'completed',
+        executionStatusCounts: { completed: 8, skipped: 0, error: 1, cancelled: 1 },
+        scorerStatusCounts: { completed: 16, error: 2 },
         succeededCount: 8,
         failedCount: 2,
         completedAt: new Date(),
       });
 
       expect(updated.status).toBe('completed');
+      expect(updated.executionStatusCounts).toEqual({ completed: 8, skipped: 0, error: 1, cancelled: 1 });
+      expect(updated.scorerStatusCounts).toEqual({ completed: 16, error: 2 });
       expect(updated.succeededCount).toBe(8);
       expect(updated.failedCount).toBe(2);
       expect(updated.completedAt).toBeInstanceOf(Date);
+    });
+
+    it('derives target status counts from legacy-only updates', async () => {
+      const experiment = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 4,
+      });
+
+      const updated = await storage.updateExperiment({
+        id: experiment.id,
+        succeededCount: 1,
+        failedCount: 2,
+        skippedCount: 1,
+      });
+
+      expect(updated.executionStatusCounts).toEqual({ completed: 1, skipped: 1, error: 2, cancelled: 0 });
     });
 
     it('returns complete object with name, description, metadata, skippedCount', async () => {
@@ -158,6 +206,30 @@ describe('ExperimentsInMemory', () => {
       const fetched = await storage.getExperimentById({ id: created.id });
       expect(fetched).not.toBeNull();
       expect(fetched?.id).toBe(created.id);
+    });
+
+    it('normalizes historical rows without inventing scorer counts or thresholds', async () => {
+      const created = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 4,
+      });
+      db.experiments.set(created.id, {
+        ...created,
+        succeededCount: 1,
+        failedCount: 2,
+        skippedCount: 1,
+        executionStatusCounts: null,
+        scorerStatusCounts: null,
+        thresholds: null,
+      });
+
+      const fetched = await storage.getExperimentById({ id: created.id });
+      expect(fetched?.executionStatusCounts).toEqual({ completed: 1, skipped: 1, error: 2, cancelled: 0 });
+      expect(fetched?.scorerStatusCounts).toBeNull();
+      expect(fetched?.thresholds).toBeNull();
     });
 
     it('returns null for non-existent id', async () => {
@@ -307,6 +379,7 @@ describe('ExperimentsInMemory', () => {
         output: { text: 'Hi there' },
         groundTruth: { text: 'Hello!' },
         error: null,
+        executionStatus: 'completed',
         startedAt: new Date(),
         completedAt: new Date(),
         retryCount: 0,
@@ -317,6 +390,7 @@ describe('ExperimentsInMemory', () => {
       expect(result.itemDatasetVersion).toBe(3);
       expect(result.input).toEqual({ prompt: 'Hello' });
       expect(result.output).toEqual({ text: 'Hi there' });
+      expect(result.executionStatus).toBe('completed');
     });
 
     it('stores itemDatasetVersion as integer', async () => {
@@ -343,6 +417,7 @@ describe('ExperimentsInMemory', () => {
 
       expect(result.itemDatasetVersion).toBe(3);
       expect(typeof result.itemDatasetVersion).toBe('number');
+      expect(result.executionStatus).toBeNull();
     });
 
     it('stores null itemDatasetVersion', async () => {

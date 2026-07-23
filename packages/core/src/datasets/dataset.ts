@@ -21,7 +21,7 @@ import type {
   UpdateDatasetInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
-import { runExperiment } from './experiment/index.js';
+import { normalizeExperimentScorers, runExperiment } from './experiment/index.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 
 /**
@@ -390,12 +390,15 @@ export class Dataset {
       });
     }
 
+    const { thresholds } = normalizeExperimentScorers(this.#mastra, config.scorers, dataset.scorerIds ?? []);
+
     const run = await experimentsStore.createExperiment({
       datasetId: this.id,
       datasetVersion: targetVersion,
       targetType: config.targetType ?? 'agent',
       targetId: config.targetId ?? 'inline',
       totalItems: items.length,
+      thresholds,
       name: config.name,
       description: config.description,
       metadata: config.metadata,
