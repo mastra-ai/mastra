@@ -1,5 +1,11 @@
 # @mastra/factory
 
+## 0.1.0-alpha.10
+
+### Patch Changes
+
+- Factory board now picks up new GitHub/Linear intake automatically (gentle 30s poll) and refreshes work-item positions immediately when the tab regains focus, instead of requiring a manual page reload ([#20071](https://github.com/mastra-ai/mastra/pull/20071))
+
 ## 0.1.0-alpha.9
 
 ### Patch Changes

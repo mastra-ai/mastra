@@ -256,6 +256,7 @@
     "eval-per-turn-score-fidelity",
     "evaluation-date-filter",
     "every-snails-bathe",
+    "factory-board-intake-refresh",
     "factory-detection-deployer",
     "factory-dev-serves-ui",
     "factory-env-permissions",
