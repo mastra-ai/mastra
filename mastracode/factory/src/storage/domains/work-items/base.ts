@@ -750,11 +750,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.ops;
   }
 
-  async #withProjectRelationLock<T>(orgId: string, factoryProjectId: string, fn: () => Promise<T>): Promise<T> {
+  async #withProjectRelationTransaction<T>(
+    orgId: string,
+    factoryProjectId: string,
+    fn: (ops: FactoryStorageOps) => Promise<T>,
+  ): Promise<T> {
     const key = `work-items:${orgId}:${factoryProjectId}`;
-    return withInProcessProjectLock(key, () =>
-      this.storage.withDistributedLock ? this.storage.withDistributedLock(key, fn) : fn(),
-    );
+    return withInProcessProjectLock(key, () => this.storage.withTransaction(fn, { isolationLevel: 'serializable' }));
   }
 
   async #claimLeases<T>(
@@ -869,14 +871,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return failed ? row : null;
   }
 
-  /** List the org's work items for a project, newest first. */
-  async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
-    const rows = await this.#db.findMany<WorkItemDbRow>(
+  async #listWithOps(ops: FactoryStorageOps, orgId: string, factoryProjectId: string): Promise<WorkItemRow[]> {
+    const rows = await ops.findMany<WorkItemDbRow>(
       'work_items',
       { org_id: orgId, factory_project_id: factoryProjectId },
       { orderBy: [['updated_at', 'desc']] },
     );
     return rows.map(toWorkItem);
+  }
+
+  /** List the org's work items for a project, newest first. */
+  async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
+    return this.#listWithOps(this.#db, orgId, factoryProjectId);
   }
 
   async get({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
@@ -1541,29 +1547,39 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     input: CreateWorkItemInput;
     reuseMode?: 'update' | 'preserve' | 'non-stage';
   }): Promise<UpsertWorkItemResult> {
-    const run = () => this.#upsert(params);
-    return params.input.parentWorkItemId
-      ? this.#withProjectRelationLock(params.orgId, params.factoryProjectId, run)
-      : run();
+    const run = (ops: FactoryStorageOps) => this.#upsert(params, ops);
+    const execute = () =>
+      params.input.parentWorkItemId
+        ? this.#withProjectRelationTransaction(params.orgId, params.factoryProjectId, run)
+        : run(this.#db);
+    try {
+      return await execute();
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      return execute();
+    }
   }
 
-  async #upsert({
-    orgId,
-    userId,
-    factoryProjectId,
-    input,
-    reuseMode = 'update',
-  }: {
-    orgId: string;
-    userId: string;
-    factoryProjectId: string;
-    input: CreateWorkItemInput;
-    reuseMode?: 'update' | 'preserve' | 'non-stage';
-  }): Promise<UpsertWorkItemResult> {
+  async #upsert(
+    {
+      orgId,
+      userId,
+      factoryProjectId,
+      input,
+      reuseMode = 'update',
+    }: {
+      orgId: string;
+      userId: string;
+      factoryProjectId: string;
+      input: CreateWorkItemInput;
+      reuseMode?: 'update' | 'preserve' | 'non-stage';
+    },
+    ops: FactoryStorageOps,
+  ): Promise<UpsertWorkItemResult> {
     const key = sourceKey(input.externalSource);
     const reuse = async (): Promise<UpsertWorkItemResult | null> => {
       if (!key) return null;
-      const existing = await this.#db.findOne<WorkItemDbRow>('work_items', {
+      const existing = await ops.findOne<WorkItemDbRow>('work_items', {
         org_id: orgId,
         factory_project_id: factoryProjectId,
         source_key: key,
@@ -1575,7 +1591,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
 
       let previous = emptyPrior();
-      const updated = await this.#db.updateAtomic<WorkItemDbRow>(
+      const updated = await ops.updateAtomic<WorkItemDbRow>(
         'work_items',
         { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
         async current => {
@@ -1590,7 +1606,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 }
               : fullPatch;
           if (patch.parentWorkItemId !== undefined) {
-            validateParentRelation(await this.list({ orgId, factoryProjectId }), current.id, patch.parentWorkItemId);
+            validateParentRelation(
+              await this.#listWithOps(ops, orgId, factoryProjectId),
+              current.id,
+              patch.parentWorkItemId,
+            );
           }
           return {
             external_source: input.externalSource ?? null,
@@ -1606,31 +1626,28 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
     const now = new Date();
     const stages = input.stages ?? ['intake'];
-    try {
-      validateParentRelation(await this.list({ orgId, factoryProjectId }), undefined, input.parentWorkItemId ?? null);
-      const row = await this.#db.insertOne<WorkItemDbRow>('work_items', {
-        org_id: orgId,
-        factory_project_id: factoryProjectId,
-        external_source: input.externalSource ?? null,
-        source_key: key,
-        parent_work_item_id: input.parentWorkItemId ?? null,
-        title: input.title,
-        stages,
-        stage_history: stages.map(stage => ({ stage, enteredAt: now.toISOString(), by: userId })),
-        sessions: stampSessions(input.sessions ?? {}, userId),
-        metadata: input.metadata ?? null,
-        revision: 1,
-        created_by: userId,
-        created_at: now,
-        updated_at: now,
-      });
-      return { item: toWorkItem(row), created: true, previous: emptyPrior() };
-    } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-      const winner = await reuse();
-      if (winner) return winner;
-      throw error;
-    }
+    validateParentRelation(
+      await this.#listWithOps(ops, orgId, factoryProjectId),
+      undefined,
+      input.parentWorkItemId ?? null,
+    );
+    const row = await ops.insertOne<WorkItemDbRow>('work_items', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      external_source: input.externalSource ?? null,
+      source_key: key,
+      parent_work_item_id: input.parentWorkItemId ?? null,
+      title: input.title,
+      stages,
+      stage_history: stages.map(stage => ({ stage, enteredAt: now.toISOString(), by: userId })),
+      sessions: stampSessions(input.sessions ?? {}, userId),
+      metadata: input.metadata ?? null,
+      revision: 1,
+      created_by: userId,
+      created_at: now,
+      updated_at: now,
+    });
+    return { item: toWorkItem(row), created: true, previous: emptyPrior() };
   }
 
   async update({
@@ -1644,13 +1661,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     userId: string;
     patch: UpdateWorkItemInput;
   }): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
-    const run = async () => {
+    const run = async (ops: FactoryStorageOps) => {
       let previous = emptyPrior();
-      const row = await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
+      const row = await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
         previous = priorState(current);
         if (patch.parentWorkItemId !== undefined) {
           validateParentRelation(
-            await this.list({ orgId, factoryProjectId: current.factory_project_id }),
+            await this.#listWithOps(ops, orgId, current.factory_project_id),
             current.id,
             patch.parentWorkItemId,
           );
@@ -1660,22 +1677,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       return row ? { item: toWorkItem(row), previous } : null;
     };
 
-    if (patch.parentWorkItemId === undefined) return run();
+    if (patch.parentWorkItemId === undefined) return run(this.#db);
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
-    return this.#withProjectRelationLock(orgId, candidate.factory_project_id, run);
+    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, run);
   }
 
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
 
-    return this.#withProjectRelationLock(orgId, candidate.factory_project_id, async () => {
-      const existing = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+      const existing = await ops.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
       if (!existing) return null;
-      const deleted = await this.#db.deleteMany('work_items', { org_id: orgId, id });
+      const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
       if (deleted === 0) return null;
-      await this.#db.updateMany(
+      await ops.updateMany(
         'work_items',
         { org_id: orgId, parent_work_item_id: id },
         { parent_work_item_id: null, updated_at: new Date() },

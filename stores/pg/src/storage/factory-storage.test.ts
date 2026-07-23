@@ -10,23 +10,50 @@ describeFactoryStorageContract('pg', async () => {
 });
 
 describe('PgFactoryStorage capabilities', () => {
-  it('withDistributedLock serializes concurrent critical sections', async () => {
+  it('starts serializable transactions without advisory locks', async () => {
     const storage = new PgFactoryStorage({ connectionString });
+    const release = vi.fn();
+    const query = vi.fn().mockResolvedValue(undefined);
+    const pool = storage.authDatabase().pool;
+    const connect = vi.spyOn(pool, 'connect').mockResolvedValue({ query, release } as never);
+
     try {
-      let active = 0;
-      let maxActive = 0;
-      await Promise.all(
-        Array.from({ length: 5 }, () =>
-          storage.withDistributedLock('contract-lock-key', async () => {
-            active++;
-            maxActive = Math.max(maxActive, active);
-            await new Promise(resolve => setTimeout(resolve, 5));
-            active--;
-          }),
-        ),
-      );
-      expect(maxActive).toBe(1);
+      await storage.withTransaction(async () => 'result', { isolationLevel: 'serializable' });
+      expect(query).toHaveBeenNthCalledWith(1, 'BEGIN ISOLATION LEVEL SERIALIZABLE');
+      expect(query).toHaveBeenNthCalledWith(2, 'COMMIT');
+      expect(query.mock.calls.flat().join(' ')).not.toContain('pg_advisory');
     } finally {
+      connect.mockRestore();
+      await storage.close();
+    }
+  });
+
+  it('retries serializable transactions after serialization failures', async () => {
+    const storage = new PgFactoryStorage({ connectionString });
+    const serializationFailure = Object.assign(new Error('serialization failure'), { code: '40001' });
+    const firstRelease = vi.fn();
+    const secondRelease = vi.fn();
+    const firstQuery = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(serializationFailure)
+      .mockResolvedValueOnce(undefined);
+    const secondQuery = vi.fn().mockResolvedValue(undefined);
+    const pool = storage.authDatabase().pool;
+    const connect = vi
+      .spyOn(pool, 'connect')
+      .mockResolvedValueOnce({ query: firstQuery, release: firstRelease } as never)
+      .mockResolvedValueOnce({ query: secondQuery, release: secondRelease } as never);
+    const fn = vi.fn().mockResolvedValue('result');
+
+    try {
+      await expect(storage.withTransaction(fn, { isolationLevel: 'serializable' })).resolves.toBe('result');
+      expect(fn).toHaveBeenCalledTimes(2);
+      expect(firstQuery).toHaveBeenNthCalledWith(3, 'ROLLBACK');
+      expect(secondQuery).toHaveBeenNthCalledWith(1, 'BEGIN ISOLATION LEVEL SERIALIZABLE');
+      expect(secondQuery).toHaveBeenNthCalledWith(2, 'COMMIT');
+    } finally {
+      connect.mockRestore();
       await storage.close();
     }
   });
@@ -38,15 +65,14 @@ describe('PgFactoryStorage capabilities', () => {
     const query = vi
       .fn()
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('commit failed'))
       .mockRejectedValueOnce(rollbackError);
     const pool = storage.authDatabase().pool;
     const connect = vi.spyOn(pool, 'connect').mockResolvedValue({ query, release } as never);
 
     try {
-      await expect(storage.withDistributedLock('rollback-failure', async () => 'result')).rejects.toThrow(
-        'Distributed lock operation and rollback both failed',
+      await expect(storage.withTransaction(async () => 'result')).rejects.toThrow(
+        'Factory transaction and rollback both failed',
       );
       expect(release).toHaveBeenCalledWith(rollbackError);
     } finally {

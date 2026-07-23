@@ -235,13 +235,9 @@ describe('WorkItemsStorage', () => {
     expect((await storage.get({ orgId: 'org1', id: child.item.id }))?.parentWorkItemId).toBeNull();
   });
 
-  it('serializes relationship writes and deletion on the project lock', async () => {
-    const backend = new LibSQLFactoryStorage({ id: 'work-items-lock-test', url: ':memory:' });
-    const locks: string[] = [];
-    backend.withDistributedLock = vi.fn(async (key, fn) => {
-      locks.push(key);
-      return fn();
-    });
+  it('uses serializable transactions for relationship writes and deletion', async () => {
+    const backend = new LibSQLFactoryStorage({ id: 'work-items-relation-test', url: ':memory:' });
+    const withTransaction = vi.spyOn(backend, 'withTransaction');
     const storage = backend.registerDomain(new WorkItemsStorage());
     await backend.init();
 
@@ -259,7 +255,11 @@ describe('WorkItemsStorage', () => {
     await storage.update({ orgId: 'org1', id: child.item.id, userId: 'u', patch: { parentWorkItemId: null } });
     await storage.delete({ orgId: 'org1', id: parent.item.id });
 
-    expect(locks).toEqual(['work-items:org1:p1', 'work-items:org1:p1', 'work-items:org1:p1']);
+    expect(withTransaction.mock.calls.map(([, options]) => options)).toEqual([
+      { isolationLevel: 'serializable' },
+      { isolationLevel: 'serializable' },
+      { isolationLevel: 'serializable' },
+    ]);
   });
 
   it('stamps the actor in both `by` and `exitedBy` when a stage move closes an entry', async () => {

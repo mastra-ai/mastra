@@ -385,16 +385,6 @@ export class MastraFactory {
       },
     });
 
-    // Parent/child work-item mutations still require cross-replica
-    // serialization until their relationship invariants move into the database.
-    if (pubsub && typeof storage.withDistributedLock !== 'function') {
-      process.stderr.write(
-        'MastraCode Web: pubsub is configured (multi-replica?) but the storage backend has no ' +
-          'withDistributedLock capability — parent/child work-item mutations serialize per replica only. ' +
-          'Use PgFactoryStorage for multi-replica deployments.\n',
-      );
-    }
-
     // Repository execution needs one sandbox per project-repository link,
     // cloned from the configured machine. A machine without `clone()` would
     // only fail on first use, so fail fast at boot instead.
