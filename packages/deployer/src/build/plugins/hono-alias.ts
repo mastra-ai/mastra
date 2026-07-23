@@ -10,14 +10,8 @@ export function aliasHono(): Plugin {
         return;
       }
 
-      try {
-        const path = import.meta.resolve(id);
-        return fileURLToPath(path);
-      } catch {
-        // Not resolvable from deployer (e.g. undeclared transitive dep under
-        // pnpm's strict isolation) — fall back to default resolution.
-        return;
-      }
+      const path = import.meta.resolve(id);
+      return fileURLToPath(path);
     },
   } satisfies Plugin;
 }
