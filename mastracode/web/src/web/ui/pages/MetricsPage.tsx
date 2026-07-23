@@ -228,7 +228,7 @@ function FlowOverview({
         />
       </div>
 
-      <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-border1 pt-4 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-border1">
+      <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-4 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-border1">
         <OverviewReadout
           icon={<Clock3 aria-hidden="true" />}
           label="Median cycle time"
