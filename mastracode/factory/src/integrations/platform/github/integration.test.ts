@@ -950,22 +950,7 @@ describe('PlatformGithubIntegration', () => {
       });
     });
 
-    it('prefers metadata repository and issue number over externalId parsing', async () => {
-      const integration = createIntegration();
-      await expect(
-        integration.intake.resolveIntakeDispatch!({
-          orgId: 'org-1',
-          externalSource: { type: 'issue', externalId: 'github-issue:7' },
-          metadata: { repository: 'acme/app', githubIssueNumber: 7 },
-        }),
-      ).resolves.toEqual({
-        connection: { type: 'app-installation', installationId: 1 },
-        sourceId: 'acme/app',
-        issueId: '7',
-      });
-    });
-
-    it('falls back to stored repositories for numeric repository ids', async () => {
+    it('resolves numeric repository locators with one direct storage lookup', async () => {
       const { sourceControl } = await createPlatformStorageForTests();
       const integration = createIntegration();
       const storage = sourceControl.forIntegration('github');

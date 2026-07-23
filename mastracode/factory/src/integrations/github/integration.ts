@@ -352,44 +352,30 @@ export class GithubIntegration implements FactoryIntegration {
     return this.#storage.generic as unknown as GithubSubscriptionStorage;
   }
 
-  /**
-   * Background-dispatch context for a work item's external source: derive the
-   * repository slug + issue/PR number from the item's metadata/externalId and
-   * resolve the installation connection that reaches the repository.
-   */
+  /** Resolve a stored GitHub locator without scanning installations or repositories. */
   async #resolveIntakeDispatch({
     orgId,
     externalSource,
-    metadata = {},
   }: {
     orgId: string;
     externalSource: { type: string; externalId: string };
-    metadata?: Record<string, unknown>;
   }): Promise<{ connection: IntegrationConnection; sourceId: string; issueId: string } | null> {
-    const issueNumber = deriveGithubIssueNumber(externalSource.externalId, metadata);
-    if (issueNumber === null) return null;
-    const repositoryId = deriveGithubRepositoryId(externalSource.externalId, metadata);
-    const metadataSlug = typeof metadata.repository === 'string' ? metadata.repository : null;
-    if (!metadataSlug && repositoryId === null) return null;
-    const installations = await this.sourceControlStorage.installations.list({ orgId });
-    for (const installation of installations) {
-      const repositories = await this.sourceControlStorage.repositories.list({
-        orgId,
-        installationId: installation.id,
-      });
-      const repository = repositories.find(candidate =>
-        metadataSlug ? candidate.slug === metadataSlug : candidate.externalId === String(repositoryId),
-      );
-      if (!repository) continue;
-      const installationId = Number.parseInt(installation.externalId, 10);
-      if (!Number.isSafeInteger(installationId)) continue;
-      return {
-        connection: { type: 'app-installation', installationId },
-        sourceId: repository.slug,
-        issueId: String(issueNumber),
-      };
-    }
-    return null;
+    const target = parseGithubExternalTarget(externalSource.externalId);
+    if (!target) return null;
+    const repository = await this.sourceControlStorage.repositories.findByExternalId({
+      orgId,
+      externalId: target.repositoryId,
+    });
+    if (!repository) return null;
+    const installation = await this.sourceControlStorage.installations.get({ orgId, id: repository.installationId });
+    if (!installation) return null;
+    const installationId = Number.parseInt(installation.externalId, 10);
+    if (!Number.isSafeInteger(installationId)) return null;
+    return {
+      connection: { type: 'app-installation', installationId },
+      sourceId: repository.slug,
+      issueId: target.issueId,
+    };
   }
 
   /** Secret GitHub uses to sign webhook deliveries, when configured. */
@@ -1313,28 +1299,10 @@ function splitRepoFullName(repoFullName: string): { owner: string; repo: string 
   return { owner: repoFullName.slice(0, slash), repo: repoFullName.slice(slash + 1) };
 }
 
-/**
- * Derive a GitHub issue/PR number from work-item metadata or the stored
- * `externalId`. Supports every key format Factory has written: canonical
- * (`github-issue:42` / `github-pr:42`), legacy (`github:<repoId>:issue:42`),
- * and intake (`<repoExternalId>:42`).
- */
-function deriveGithubIssueNumber(externalId: string, metadata: Record<string, unknown>): number | null {
-  for (const key of ['githubIssueNumber', 'githubPullRequestNumber', 'number'] as const) {
-    const value = metadata[key];
-    if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return value;
-  }
-  const match =
-    externalId.match(/^github-(?:issue|pr):(\d+)$/) ??
-    externalId.match(/^github:\d+:(?:issue|pull-request):(\d+)$/) ??
-    externalId.match(/^\d+:(\d+)$/);
-  return match?.[1] ? parsePositiveInteger(match[1]) : null;
-}
-
-/** Derive the GitHub repository id from work-item metadata or the stored `externalId`. */
-function deriveGithubRepositoryId(externalId: string, metadata: Record<string, unknown>): number | null {
-  const value = metadata.githubRepositoryId;
-  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return value;
-  const match = externalId.match(/^github:(\d+):/) ?? externalId.match(/^(\d+):\d+$/);
-  return match?.[1] ? parsePositiveInteger(match[1]) : null;
+function parseGithubExternalTarget(externalId: string): { repositoryId: string; issueId: string } | null {
+  const match = externalId.match(/^github:(\d+):(?:issue|pull-request):(\d+)$/) ?? externalId.match(/^(\d+):(\d+)$/);
+  if (!match?.[1] || !match[2]) return null;
+  const repositoryId = parsePositiveInteger(match[1]);
+  const issueId = parsePositiveInteger(match[2]);
+  return repositoryId && issueId ? { repositoryId: String(repositoryId), issueId: String(issueId) } : null;
 }

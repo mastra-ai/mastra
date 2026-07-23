@@ -375,73 +375,24 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return this.#integrationStorage;
   }
 
-  /**
-   * Background-dispatch context for a work item's external source: derive the
-   * repository full name + issue/PR number from the item's metadata or stored
-   * `externalId`. The platform client authenticates via the platform API, so
-   * the connection carries a nominal installation id (mirrors `listItems`).
-   */
+  /** Resolve a stored GitHub locator without scanning installations or repositories. */
   async #resolveIntakeDispatch({
     orgId,
     externalSource,
-    metadata = {},
   }: {
     orgId: string;
     externalSource: { type: string; externalId: string };
-    metadata?: Record<string, unknown>;
   }): Promise<{ connection: IntegrationConnection; sourceId: string; issueId: string } | null> {
-    const externalId = externalSource.externalId;
-    let issueNumber: number | null = null;
-    for (const key of ['githubIssueNumber', 'githubPullRequestNumber', 'number'] as const) {
-      const value = metadata[key];
-      if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) {
-        issueNumber = value;
-        break;
-      }
-    }
-    let repository =
-      typeof metadata.repository === 'string' && metadata.repository.length > 0 ? metadata.repository : null;
-    // Intake-format key: `<owner/name>:<number>` — split on the last colon.
-    const intakeMatch = externalId.match(/^(.+):(\d+)$/);
-    if (intakeMatch?.[1]?.includes('/')) {
-      repository ??= intakeMatch[1];
-      issueNumber ??= Number.parseInt(intakeMatch[2]!, 10);
-    }
-    if (issueNumber === null) {
-      const match =
-        externalId.match(/^github-(?:issue|pr):(\d+)$/) ??
-        externalId.match(/^github:\d+:(?:issue|pull-request):(\d+)$/);
-      issueNumber = match?.[1] ? Number.parseInt(match[1], 10) : null;
-    }
-    if (repository === null) {
-      // Fall back to the numeric repository id recorded by webhook rules.
-      const repositoryIdValue = metadata.githubRepositoryId;
-      const repositoryId =
-        typeof repositoryIdValue === 'number' && Number.isSafeInteger(repositoryIdValue)
-          ? repositoryIdValue
-          : (() => {
-              const match = externalId.match(/^github:(\d+):/);
-              return match?.[1] ? Number.parseInt(match[1], 10) : null;
-            })();
-      if (repositoryId !== null) {
-        const installations = await this.storage.installations.list({ orgId });
-        for (const installation of installations) {
-          const repositories = await this.storage.repositories.list({ orgId, installationId: installation.id });
-          const row = repositories.find(candidate => candidate.externalId === String(repositoryId));
-          if (row) {
-            repository = row.slug;
-            break;
-          }
-        }
-      }
-    }
-    if (repository === null || issueNumber === null || !Number.isSafeInteger(issueNumber) || issueNumber <= 0) {
-      return null;
-    }
+    const target = parseGithubExternalTarget(externalSource.externalId);
+    if (!target) return null;
+    const repository = target.repository.includes('/')
+      ? target.repository
+      : (await this.storage.repositories.findByExternalId({ orgId, externalId: target.repository }))?.slug;
+    if (!repository) return null;
     return {
       connection: { type: 'app-installation', installationId: 1 },
       sourceId: repository,
-      issueId: String(issueNumber),
+      issueId: target.issueId,
     };
   }
 
@@ -1250,6 +1201,15 @@ function parsePositiveInteger(value: string): number | null {
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseGithubExternalTarget(externalId: string): { repository: string; issueId: string } | null {
+  const match =
+    externalId.match(/^(.+\/.+):(\d+)$/) ??
+    externalId.match(/^github:(\d+):(?:issue|pull-request):(\d+)$/) ??
+    externalId.match(/^(\d+):(\d+)$/);
+  if (!match?.[1] || !match[2] || parsePositiveInteger(match[2]) === null) return null;
+  return { repository: match[1], issueId: match[2] };
 }
 
 function optionalPositiveIntegerEnv(name: 'MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS'): number | undefined {

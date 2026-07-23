@@ -118,7 +118,6 @@ export interface UpdateIntakeIssueInput extends GetIntakeIssueInput {
 export interface ResolveIntakeDispatchInput {
   orgId: string;
   externalSource: { type: string; externalId: string };
-  metadata?: Record<string, unknown>;
 }
 
 export interface ResolvedIntakeDispatch {
