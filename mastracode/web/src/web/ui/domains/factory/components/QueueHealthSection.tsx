@@ -1,7 +1,6 @@
 /**
- * The Metrics page's queue-health section: one bar per stage segmented by
- * work-item age, with a stripe overlay where agents are actively running, and
- * a click-to-filter drill-down list of the matching tasks below the chart.
+ * The Metrics page's live queue-health section: a compact age distribution,
+ * stage totals, and click-to-filter task drill-down.
  *
  * Unlike the rest of the Metrics dashboard this is a live snapshot — it is
  * not scoped by the page's date-range control. Aggregation is client-side
@@ -9,6 +8,8 @@
  * (`useWorkspaceActivity`); the section merges that polled activity map with
  * the work items + age thresholds it fetches via React Query.
  */
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMemo, useState } from 'react';
@@ -21,9 +22,10 @@ import { useQueueHealthThresholds } from '../../../../../shared/hooks/useQueueHe
 import { useWorkItemsQuery } from '../../../../../shared/hooks/useWorkItems';
 import { useWorkspaceActivity } from '../../../../../shared/hooks/useWorkspaceActivity';
 import { useWorkspacesQuery } from '../../../../../shared/hooks/useWorkspaces';
+import { relativeTime } from '../../../../../shared/lib/date/relativeTime';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import type { QueueHealthSelection } from './QueueHealthChart';
-import { QueueHealthChart, formatAgeSeconds } from './QueueHealthChart';
+import { QueueHealthChart } from './QueueHealthChart';
 import type { AgeBucket, QueueHealthEntry } from '../queue-health';
 import { computeQueueHealth } from '../queue-health';
 import { stageLabel } from '../stages';
@@ -34,6 +36,18 @@ const BUCKET_LABEL: Record<AgeBucket, string> = {
   orange: 'Stale',
   red: 'Critical',
 };
+
+function entriesForBucket(entries: QueueHealthEntry[], bucket: AgeBucket): QueueHealthEntry[] {
+  const entriesByItem = new Map<string, QueueHealthEntry>();
+  for (const entry of entries) {
+    if (entry.bucket === bucket && !entriesByItem.has(entry.itemId)) entriesByItem.set(entry.itemId, entry);
+  }
+  return [...entriesByItem.values()];
+}
+
+function formatAgeSeconds(ageSeconds: number): string {
+  return relativeTime(new Date(Date.now() - ageSeconds * 1000).toISOString()) || 'just now';
+}
 
 export function QueueHealthSection({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const workItemsQuery = useWorkItemsQuery(factoryProjectId);
@@ -48,32 +62,83 @@ export function QueueHealthSection({ factoryProjectId }: { factoryProjectId: str
   }, [workItemsQuery.data, activePaths, thresholdsQuery.data]);
 
   if (workItemsQuery.isError) {
-    return <Notice variant="destructive">{(workItemsQuery.error as Error).message}</Notice>;
+    return (
+      <Notice variant="destructive">
+        {workItemsQuery.error instanceof Error ? workItemsQuery.error.message : 'Failed to load queue health'}
+      </Notice>
+    );
   }
   if (thresholdsQuery.isError) {
-    return <Notice variant="destructive">{(thresholdsQuery.error as Error).message}</Notice>;
+    return (
+      <Notice variant="destructive">
+        {thresholdsQuery.error instanceof Error ? thresholdsQuery.error.message : 'Failed to load queue thresholds'}
+      </Notice>
+    );
   }
 
-  const thresholds = health ? (thresholdsQuery.data?.thresholdsSeconds ?? [14400, 86400, 259200]) : [];
-  const drillDown = selected
-    ? health.entries.filter(entry => entry.stage === selected.stage && entry.bucket === selected.bucket)
-    : null;
+  const thresholds = thresholdsQuery.data?.thresholdsSeconds ?? [14400, 86400, 259200];
+  const drillDown = selected ? entriesForBucket(health.entries, selected.bucket) : null;
+
+  const currentItemIds = new Set<string>();
+  const activeItemIds = new Set<string>();
+  for (const entry of health.entries) {
+    currentItemIds.add(entry.itemId);
+    if (entry.active) activeItemIds.add(entry.itemId);
+  }
 
   return (
-    <section className="flex flex-col gap-3 rounded-lg border border-border1 bg-surface2 p-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="m-0 text-ui-md font-medium text-icon5">Queue health</h2>
-        <Txt as="span" variant="ui-xs" className="text-icon3">
-          Live — not scoped to the date range
-        </Txt>
+    <section className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex max-w-2xl flex-col gap-1">
+          <Txt as="h2" variant="ui-md" className="m-0 font-medium text-icon6">
+            Queue health
+          </Txt>
+          <Txt as="p" variant="ui-sm" className="m-0 text-pretty text-icon3">
+            Current work by age and stage. Hover for details; select an age segment to inspect its tasks.
+          </Txt>
+        </div>
+        <Badge size="sm" variant="success">
+          Live
+        </Badge>
       </div>
       {!workItemsQuery.data ? (
-        <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
-          Loading queue health…
-        </Txt>
+        <Card>
+          <CardContent>
+            <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+              Loading queue health…
+            </Txt>
+          </CardContent>
+        </Card>
       ) : (
         <>
-          <QueueHealthChart health={health} thresholdsSeconds={thresholds} selected={selected} onSelect={setSelected} />
+          <Card>
+            <CardContent className="flex flex-col gap-5">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <Txt as="span" variant="ui-sm" className="text-icon3">
+                    Current total
+                  </Txt>
+                  <div className="mt-0.5 flex items-baseline gap-2">
+                    <span className="text-header-lg font-medium tabular-nums text-icon6">{currentItemIds.size}</span>
+                    <Txt as="span" variant="ui-sm" className="text-icon4">
+                      {currentItemIds.size === 1 ? 'task' : 'tasks'}
+                    </Txt>
+                  </div>
+                </div>
+                {activeItemIds.size > 0 ? (
+                  <Badge size="xs" variant="success">
+                    {activeItemIds.size} active
+                  </Badge>
+                ) : null}
+              </div>
+              <QueueHealthChart
+                health={health}
+                thresholdsSeconds={thresholds}
+                selected={selected}
+                onSelect={setSelected}
+              />
+            </CardContent>
+          </Card>
           <DrillDownList selected={selected} entries={drillDown} />
         </>
       )}
@@ -109,15 +174,9 @@ function DrillDownList({
   selected: QueueHealthSelection | null;
   entries: QueueHealthEntry[] | null;
 }) {
-  if (!selected || !entries || selected.bucket === null) {
-    return (
-      <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
-        Select a segment above to see its tasks.
-      </Txt>
-    );
-  }
+  if (!selected || !entries) return null;
   const bucket = selected.bucket;
-  const heading = `${stageLabel(selected.stage)} · ${BUCKET_LABEL[bucket]}`;
+  const heading = `${BUCKET_LABEL[bucket]} work`;
   if (entries.length === 0) {
     return (
       <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
@@ -134,31 +193,33 @@ function DrillDownList({
         {entries.map(entry => (
           <li
             key={`${entry.itemId}:${entry.stage}`}
-            className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 border-b border-border1 py-1.5 last:border-b-0"
+            className="flex min-w-0 flex-col gap-2 border-b border-border1 py-2.5 last:border-b-0 sm:flex-row sm:items-center"
           >
-            {entry.url ? (
-              <a
-                href={entry.url}
-                target="_blank"
-                rel="noreferrer"
-                className="truncate text-ui-sm text-icon5 no-underline hover:text-icon6 hover:underline"
-              >
-                {entry.title}
-              </a>
-            ) : (
-              <span className="truncate text-ui-sm text-icon5">{entry.title}</span>
-            )}
-            <span className="rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-icon4">
-              {stageLabel(entry.stage)}
-            </span>
-            <Txt as="span" variant="ui-xs" className="text-icon3">
-              in stage {formatAgeSeconds(entry.ageSeconds)}
-            </Txt>
-            {entry.active ? (
-              <span className="rounded-full bg-green-500/15 px-1.5 py-0.5 text-ui-xs text-green-500">active</span>
-            ) : (
-              <span />
-            )}
+            <div className="min-w-0 flex-1">
+              {entry.url ? (
+                <a
+                  href={entry.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block truncate text-ui-sm font-medium text-icon5 no-underline hover:text-icon6 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent1"
+                >
+                  {entry.title}
+                </a>
+              ) : (
+                <span className="block truncate text-ui-sm font-medium text-icon5">{entry.title}</span>
+              )}
+              <Txt as="span" variant="ui-xs" className="mt-0.5 block text-icon3">
+                In this stage {formatAgeSeconds(entry.ageSeconds)}
+              </Txt>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge size="xs">{stageLabel(entry.stage)}</Badge>
+              {entry.active ? (
+                <Badge size="xs" variant="success">
+                  Active
+                </Badge>
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>

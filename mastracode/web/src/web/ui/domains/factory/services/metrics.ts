@@ -40,8 +40,13 @@ export interface FactoryMetrics {
      * items land (e.g. an `inFlight` pass becomes `done` on a later query).
      */
     outcomes: { done: number; canceled: number; reworked: number; inFlight: number };
+    /** The automated passes' items (one per pass), tagged with their `outcomes` bucket. */
+    automatedItems: { id: string; title: string; url: string | null; outcome: AutomationOutcome }[];
   }[];
 }
+
+/** One automated pass's `outcomes` bucket (see `stageAutomation.outcomes`). */
+export type AutomationOutcome = 'done' | 'canceled' | 'reworked' | 'inFlight';
 
 /** Inclusive UTC calendar-date bounds (`yyyy-MM-dd`) for a metrics request. */
 export interface FactoryMetricsRange {

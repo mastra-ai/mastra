@@ -397,8 +397,20 @@ describe('computeFactoryMetrics', () => {
 
     expect(metrics.transitions).toEqual({ human: 1, total: 3 });
     expect(metrics.stageAutomation).toEqual([
-      { stage: 'intake', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
-      { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 } },
+      {
+        stage: 'intake',
+        exits: 1,
+        automated: 0,
+        outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 },
+        automatedItems: [],
+      },
+      {
+        stage: 'triage',
+        exits: 1,
+        automated: 1,
+        outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 },
+        automatedItems: [{ id: '00000000-0000-4000-8000-000000000001', title: 'Item', url: null, outcome: 'inFlight' }],
+      },
     ]);
   });
 
@@ -418,8 +430,22 @@ describe('computeFactoryMetrics', () => {
       const metrics = computeFactoryMetrics([item], lastDays(7));
 
       expect(metrics.stageAutomation).toEqual([
-        { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 } },
-        { stage: 'planning', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+        {
+          stage: 'triage',
+          exits: 1,
+          automated: 1,
+          outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 },
+          automatedItems: [
+            { id: '00000000-0000-4000-8000-000000000001', title: 'Item', url: null, outcome: 'inFlight' },
+          ],
+        },
+        {
+          stage: 'planning',
+          exits: 1,
+          automated: 0,
+          outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 },
+          automatedItems: [],
+        },
       ]);
     });
 
@@ -439,7 +465,15 @@ describe('computeFactoryMetrics', () => {
 
       // Second visit is never automated even with automation actors on both ends.
       expect(metrics.stageAutomation).toEqual([
-        { stage: 'triage', exits: 2, automated: 1, outcomes: { done: 0, canceled: 0, reworked: 1, inFlight: 0 } },
+        {
+          stage: 'triage',
+          exits: 2,
+          automated: 1,
+          outcomes: { done: 0, canceled: 0, reworked: 1, inFlight: 0 },
+          automatedItems: [
+            { id: '00000000-0000-4000-8000-000000000001', title: 'Item', url: null, outcome: 'reworked' },
+          ],
+        },
       ]);
     });
 
@@ -468,7 +502,13 @@ describe('computeFactoryMetrics', () => {
       const metrics = computeFactoryMetrics(items, lastDays(7));
 
       expect(metrics.stageAutomation).toEqual([
-        { stage: 'triage', exits: 2, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+        {
+          stage: 'triage',
+          exits: 2,
+          automated: 0,
+          outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 },
+          automatedItems: [],
+        },
       ]);
     });
 
@@ -503,7 +543,17 @@ describe('computeFactoryMetrics', () => {
       const metrics = computeFactoryMetrics(items, lastDays(7));
 
       expect(metrics.stageAutomation).toEqual([
-        { stage: 'triage', exits: 3, automated: 3, outcomes: { done: 1, canceled: 1, reworked: 0, inFlight: 1 } },
+        {
+          stage: 'triage',
+          exits: 3,
+          automated: 3,
+          outcomes: { done: 1, canceled: 1, reworked: 0, inFlight: 1 },
+          automatedItems: [
+            { id: '00000000-0000-4000-8000-000000000001', title: 'Item', url: null, outcome: 'done' },
+            { id: '00000000-0000-4000-8000-000000000002', title: 'Item', url: null, outcome: 'canceled' },
+            { id: '00000000-0000-4000-8000-000000000003', title: 'Item', url: null, outcome: 'inFlight' },
+          ],
+        },
       ]);
     });
 

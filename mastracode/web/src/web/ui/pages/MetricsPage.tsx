@@ -1,11 +1,11 @@
 import { DateRangeTimeline, getDateRangeBounds } from '@mastra/playground-ui/components/DateRangeTimeline';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { DateRangeValue } from '@mastra/playground-ui/components/DateRangeTimeline';
-import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
+import { MetricsBarChart, type MetricsBarChartSeries } from '@mastra/playground-ui/components/MetricsBarChart';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Bot, CircleCheck, Clock3, Layers3, Workflow } from 'lucide-react';
+import { Bot, Clock3, Layers3, Workflow } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 
@@ -19,8 +19,9 @@ import { formatDuration, relativeTime } from '../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { QueueHealthSection } from '../domains/factory/components/QueueHealthSection';
+import { StageAutomation } from '../domains/factory/components/StageAutomation';
 import type { FactoryMetrics } from '../domains/factory/services/metrics';
-import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
+import { stageLabel } from '../domains/factory/stages';
 
 const DAY_MS = 86_400_000;
 const EMPTY_BOARD_LOOKBACK_DAYS = 90;
@@ -44,7 +45,30 @@ function defaultRange(today: string): DateRangeValue {
   return { from: shiftUtcDay(today, -29), to: today };
 }
 
-const THROUGHPUT_SERIES = [{ dataKey: 'done', label: 'Completed work', color: 'var(--chart-2)' }];
+const THROUGHPUT_COLOR = 'oklch(from var(--accent1) l calc(c * 0.72) h)';
+const THROUGHPUT_LEGEND_STYLE = { backgroundColor: THROUGHPUT_COLOR };
+const THROUGHPUT_SERIES: Array<MetricsBarChartSeries> = [
+  { dataKey: 'done', label: 'Completed work', color: THROUGHPUT_COLOR, appearance: 'dotted' },
+];
+const METRICS_PALETTE = ['var(--chart-1)', 'var(--chart-4)', 'var(--chart-3)', 'var(--chart-2)'] as const;
+const THROUGHPUT_AXIS_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
+});
+const THROUGHPUT_TOOLTIP_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+function formatThroughputDate(value: unknown, formatter: Intl.DateTimeFormat): string {
+  if (typeof value !== 'string') return String(value ?? '');
+
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isNaN(timestamp) ? value : formatter.format(timestamp);
+}
 
 const SOURCE_LABELS: Record<string, string> = {
   'github:issue': 'GitHub issues',
@@ -52,9 +76,6 @@ const SOURCE_LABELS: Record<string, string> = {
   'linear:issue': 'Linear issues',
   manual: 'Manual',
 };
-
-/** Terminal stages have no "pass through", so they never get automation rows. */
-const TERMINAL_STAGE_IDS = new Set(['done', 'canceled']);
 
 const EM_DASH = '—';
 
@@ -93,16 +114,7 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
   const bounds = getDateRangeBounds(earliestDay < range.from ? earliestDay : range.from, today);
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-8">
-      <header className="flex flex-col gap-1 pt-1">
-        <Txt as="h1" variant="header-sm" className="m-0 text-icon6">
-          Metrics
-        </Txt>
-        <Txt as="p" variant="ui-sm" className="m-0 max-w-2xl text-icon3">
-          See how work moves through the Factory and where it needs attention.
-        </Txt>
-      </header>
-
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 pb-8">
       <MetricsSection
         title="Reporting period"
         description="Drag the range or use the date controls to compare a different window."
@@ -128,7 +140,7 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
           <div className="grid items-start gap-8 xl:grid-cols-2">
             <MetricsSection
               title="Automation coverage"
-              description="Completed stage passes handled end to end by automation."
+              description="Completed stage passes handled end to end by automation. Select a stage bar to inspect its automated items."
             >
               <StageAutomation metrics={metrics} />
             </MetricsSection>
@@ -172,11 +184,7 @@ function useAgentsRunningCount(): number {
 
 function MetricsLoading() {
   return (
-    <div className="grid gap-5 border-t border-border1 pt-7" aria-label="Loading Factory metrics">
-      <div className="flex items-center justify-between gap-4">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-6 w-16 rounded-full" />
-      </div>
+    <div className="grid gap-5" aria-label="Loading Factory metrics">
       <Skeleton className="h-64 w-full" />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Skeleton className="h-16 w-full" />
@@ -204,18 +212,51 @@ function FlowOverview({
     metrics.transitions.total === 0 ? EM_DASH : `${Math.round((automatedMoves / metrics.transitions.total) * 100)}%`;
 
   return (
-    <section className="flex flex-col gap-5 border-t border-border1 pt-7">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <Txt as="h2" variant="ui-md" className="m-0 font-medium text-icon6">
-            Delivery flow
-          </Txt>
-          <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
-            Completed work over time, with the Factory's current operating state.
-          </Txt>
-        </div>
-        <Badge size="sm">{windowDays}-day view</Badge>
-      </div>
+    <section className="flex flex-col gap-5">
+      <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-4 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-border1">
+        <OverviewReadout
+          icon={<Clock3 aria-hidden="true" />}
+          label="Median cycle time"
+          tone={METRICS_PALETTE[0]}
+          value={formatDuration(metrics.cycleTime.medianMs)}
+          detail={
+            metrics.cycleTime.p90Ms === null
+              ? `${metrics.cycleTime.samples} completed samples`
+              : `p90 ${formatDuration(metrics.cycleTime.p90Ms)} · ${metrics.cycleTime.samples} samples`
+          }
+        />
+        <OverviewReadout
+          icon={<Layers3 aria-hidden="true" />}
+          label="In flight"
+          tone={METRICS_PALETTE[1]}
+          value={String(metrics.wipTotal)}
+          detail="Items in non-terminal stages"
+        />
+        <OverviewReadout
+          icon={<Bot aria-hidden="true" />}
+          label="Agents running"
+          tone={METRICS_PALETTE[2]}
+          value={String(agentsRunning)}
+          detail="Live across active worktrees"
+        />
+        <OverviewReadout
+          icon={<Workflow aria-hidden="true" />}
+          label="Automated moves"
+          tone={METRICS_PALETTE[3]}
+          value={automationRate}
+          detail={
+            metrics.transitions.total === 0 ? (
+              'No stage moves in this window'
+            ) : (
+              <OverviewProgressBadge
+                count={automatedMoves}
+                total={metrics.transitions.total}
+                label="stage moves automated"
+              />
+            )
+          }
+        />
+      </dl>
 
       <div className="min-w-0">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
@@ -231,53 +272,21 @@ function FlowOverview({
             </div>
           </div>
           <div className="flex items-center gap-1.5 text-ui-xs text-icon3">
-            <CircleCheck aria-hidden="true" className="size-3.5 text-positive1" />
+            <span aria-hidden="true" className="size-2 rounded-sm" style={THROUGHPUT_LEGEND_STYLE} />
             Daily completions
           </div>
         </div>
-        <MetricsLineChart
+        <MetricsBarChart
           data={metrics.throughput.map(point => ({ time: point.date, done: point.count }))}
           series={THROUGHPUT_SERIES}
+          description="Daily completed work for the selected reporting period."
           height={220}
           xAxisInterval="preserveStartEnd"
           xAxisMinTickGap={40}
+          xAxisTickFormatter={value => formatThroughputDate(value, THROUGHPUT_AXIS_DATE_FORMATTER)}
+          tooltipLabelFormatter={value => formatThroughputDate(value, THROUGHPUT_TOOLTIP_DATE_FORMATTER)}
         />
       </div>
-
-      <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-border1 pt-4 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-border1">
-        <OverviewReadout
-          icon={<Clock3 aria-hidden="true" />}
-          label="Median cycle time"
-          value={formatDuration(metrics.cycleTime.medianMs)}
-          detail={
-            metrics.cycleTime.p90Ms === null
-              ? `${metrics.cycleTime.samples} completed samples`
-              : `p90 ${formatDuration(metrics.cycleTime.p90Ms)} · ${metrics.cycleTime.samples} samples`
-          }
-        />
-        <OverviewReadout
-          icon={<Layers3 aria-hidden="true" />}
-          label="In flight"
-          value={String(metrics.wipTotal)}
-          detail="Items in non-terminal stages"
-        />
-        <OverviewReadout
-          icon={<Bot aria-hidden="true" />}
-          label="Agents running"
-          value={String(agentsRunning)}
-          detail="Live across active worktrees"
-        />
-        <OverviewReadout
-          icon={<Workflow aria-hidden="true" />}
-          label="Automated moves"
-          value={automationRate}
-          detail={
-            metrics.transitions.total === 0
-              ? 'No stage moves in this window'
-              : `${automatedMoves} of ${metrics.transitions.total} stage moves`
-          }
-        />
-      </dl>
     </section>
   );
 }
@@ -287,23 +296,68 @@ function OverviewReadout({
   label,
   value,
   detail,
+  tone,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
-  detail: string;
+  detail: ReactNode;
+  tone: string;
 }) {
   return (
     <div className="flex min-w-0 flex-col lg:px-4 lg:first:pl-0 lg:last:pr-0">
-      <dt className="flex items-center gap-1.5 text-ui-xs text-icon3 [&>svg]:size-3.5">
-        {icon}
+      <dt className="flex items-center gap-1.5 text-ui-xs text-icon3">
+        <span
+          className="grid size-5 shrink-0 place-items-center rounded-md bg-surface3 [&>svg]:size-3.5"
+          style={{ color: tone }}
+        >
+          {icon}
+        </span>
         {label}
       </dt>
       <dd className="m-0 mt-1 text-header-sm font-medium tabular-nums text-icon6">{value}</dd>
-      <Txt as="span" variant="ui-xs" className="mt-0.5 text-icon3">
-        {detail}
-      </Txt>
+      <div className="mt-1 flex min-h-6 items-center">
+        {typeof detail === 'string' ? (
+          <Txt as="span" variant="ui-xs" className="text-icon3">
+            {detail}
+          </Txt>
+        ) : (
+          detail
+        )}
+      </div>
     </div>
+  );
+}
+
+function OverviewProgressBadge({ count, total, label }: { count: number; total: number; label: string }) {
+  const circumference = 2 * Math.PI * 5;
+  const ratio = total === 0 ? 0 : Math.min(count / total, 1);
+  const dashOffset = circumference * (1 - ratio);
+
+  return (
+    <span
+      aria-label={`${count} of ${total} ${label}`}
+      title={`${count} of ${total} ${label}`}
+      className="flex h-6 w-fit shrink-0 items-center justify-center gap-1.5 rounded-full border border-border1 bg-surface2 px-2 text-ui-xs font-medium tabular-nums text-icon4"
+    >
+      <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90" aria-hidden="true">
+        <circle cx="7" cy="7" r="5" fill="none" strokeWidth="2" className="stroke-border1" />
+        <circle
+          cx="7"
+          cy="7"
+          r="5"
+          fill="none"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          className="stroke-icon5 transition-[stroke-dashoffset] motion-reduce:transition-none"
+        />
+      </svg>
+      <span aria-hidden="true">
+        {count}/{total}
+      </span>
+    </span>
   );
 }
 
@@ -319,13 +373,13 @@ function MetricsSection({
   children: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-4 border-t border-border1 pt-7">
+    <section className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
+        <div className="flex max-w-2xl flex-col gap-1">
           <Txt as="h2" variant="ui-md" className="m-0 font-medium text-icon6">
             {title}
           </Txt>
-          <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+          <Txt as="p" variant="ui-sm" className="m-0 text-pretty text-icon3">
             {description}
           </Txt>
         </div>
@@ -334,79 +388,6 @@ function MetricsSection({
       {children}
     </section>
   );
-}
-
-/**
- * Per-stage automation: what share of completed passes through each stage was
- * fully automated (entered and exited by automation, first visit), and how
- * the automated passes' items ended up.
- */
-function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
-  // Rows only exist for stages with ≥1 exit, so an empty list means no stage
-  // had a completed pass in the window.
-  if (metrics.stageAutomation.length === 0) {
-    return (
-      <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
-        No completed stage passes in this window yet.
-      </Txt>
-    );
-  }
-
-  const rowsByStage = new Map(metrics.stageAutomation.map(row => [row.stage, row]));
-  // Non-terminal board stages in column order, plus any stages present in the
-  // data but unknown to the board (raw id, sorted last — same rule as
-  // stageLabel/stageOrder).
-  const stageIds = new Set<string>();
-  for (const stage of BOARD_STAGES) {
-    if (!TERMINAL_STAGE_IDS.has(stage.id)) stageIds.add(stage.id);
-  }
-  for (const row of metrics.stageAutomation) {
-    stageIds.add(row.stage);
-  }
-  const stages = [...stageIds].sort((a, b) => stageOrder(a) - stageOrder(b));
-
-  return (
-    <ul className="m-0 flex list-none flex-col p-0">
-      {stages.map(stage => {
-        const row = rowsByStage.get(stage);
-        const exits = row?.exits ?? 0;
-        const automated = row?.automated ?? 0;
-        const pct = exits === 0 ? null : Math.round((automated / exits) * 100);
-        return (
-          <li key={stage} className="grid gap-1.5 border-b border-border1 py-3 first:pt-0 last:border-b-0 last:pb-0">
-            <div className="flex items-baseline justify-between gap-3">
-              <Txt as="span" variant="ui-sm" className="font-medium text-icon5">
-                {stageLabel(stage)}
-              </Txt>
-              <Txt as="span" variant="ui-xs" className="text-right tabular-nums text-icon3">
-                {pct === null ? 'No completed passes' : `${pct}% automated · ${automated}/${exits}`}
-              </Txt>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-surface4" aria-hidden="true">
-              {pct !== null && automated > 0 ? (
-                <div className="h-full rounded-full bg-accent1" style={{ width: `${Math.max(2, pct)}%` }} />
-              ) : null}
-            </div>
-            {row && automated > 0 ? (
-              <Txt as="span" variant="ui-xs" className="text-icon3">
-                Current outcomes: {outcomeSummary(row.outcomes)}
-              </Txt>
-            ) : null}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-/** Compact split of automated-pass outcomes, omitting zero buckets. */
-function outcomeSummary(outcomes: FactoryMetrics['stageAutomation'][number]['outcomes']): string {
-  const parts: string[] = [];
-  if (outcomes.done > 0) parts.push(`${outcomes.done} done`);
-  if (outcomes.canceled > 0) parts.push(`${outcomes.canceled} canceled`);
-  if (outcomes.reworked > 0) parts.push(`${outcomes.reworked} reworked`);
-  if (outcomes.inFlight > 0) parts.push(`${outcomes.inFlight} in flight`);
-  return parts.join(', ');
 }
 
 function AgingWipTable({ metrics }: { metrics: FactoryMetrics }) {
@@ -457,26 +438,43 @@ function SourceMix({ metrics }: { metrics: FactoryMetrics }) {
       </Txt>
     );
   }
+
+  const sources = metrics.sourceMix.map((entry, index) => ({
+    ...entry,
+    percentage: Math.round((entry.count / total) * 100),
+    color: METRICS_PALETTE[index % METRICS_PALETTE.length] ?? METRICS_PALETTE[0],
+  }));
+
   return (
-    <ul className="m-0 flex list-none flex-col gap-3 p-0">
-      {metrics.sourceMix.map(entry => {
-        const percentage = Math.round((entry.count / total) * 100);
-        return (
-          <li key={entry.source} className="grid gap-1.5">
-            <div className="flex items-baseline justify-between gap-3">
-              <Txt as="span" variant="ui-sm" className="font-medium text-icon5">
-                {SOURCE_LABELS[entry.source] ?? entry.source}
+    <div className="flex flex-col gap-4">
+      <div className="flex h-2.5 w-full gap-1" aria-hidden="true">
+        {sources.map(source => (
+          <span
+            key={source.source}
+            className="h-full min-w-1 basis-0 rounded-full"
+            style={{ flexGrow: source.count, backgroundColor: source.color }}
+          />
+        ))}
+      </div>
+      <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+        {sources.map(source => (
+          <li key={source.source} className="flex items-baseline justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: source.color }}
+                aria-hidden="true"
+              />
+              <Txt as="span" variant="ui-sm" className="truncate font-medium text-icon5">
+                {SOURCE_LABELS[source.source] ?? source.source}
               </Txt>
-              <Txt as="span" variant="ui-xs" className="tabular-nums text-icon3">
-                {entry.count} · {percentage}%
-              </Txt>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-surface4" aria-hidden="true">
-              <div className="h-full rounded-full bg-accent3" style={{ width: `${Math.max(2, percentage)}%` }} />
-            </div>
+            </span>
+            <Txt as="span" variant="ui-xs" className="shrink-0 tabular-nums text-icon3">
+              {source.count} · {source.percentage}%
+            </Txt>
           </li>
-        );
-      })}
-    </ul>
+        ))}
+      </ul>
+    </div>
   );
 }

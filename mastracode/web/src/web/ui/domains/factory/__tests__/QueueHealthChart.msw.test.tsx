@@ -3,17 +3,16 @@
  *
  * Drives the real component through the shared provider stack; no network is
  * involved (the chart is fed a `QueueHealth` aggregate directly), so these
- * specs focus on proportional rendering, empty/active states, selection, and
- * reduced-motion. The `.msw` suffix routes this file into the component-test
- * harness (the default vitest config only collects `.test.ts`).
+ * specs focus on proportional rendering, progressive hover/focus details,
+ * empty and active states, stage summaries, and cohort selection.
  */
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/web-ui/render';
-import type { QueueHealth, QueueHealthStage } from '../queue-health';
+import type { QueueHealth, QueueHealthEntry, QueueHealthStage } from '../queue-health';
 import type { QueueHealthSelection } from '../components/QueueHealthChart';
 import { QueueHealthChart } from '../components/QueueHealthChart';
 
@@ -28,8 +27,21 @@ function stageAgg(overrides: Partial<QueueHealthStage> & { stage: string }): Que
   };
 }
 
-function makeHealth(stages: QueueHealthStage[]): QueueHealth {
-  return { stages, entries: [] };
+function makeHealth(stages: QueueHealthStage[], entries: QueueHealthEntry[] = []): QueueHealth {
+  return { stages, entries };
+}
+
+function healthEntry(overrides: Partial<QueueHealthEntry> = {}): QueueHealthEntry {
+  return {
+    itemId: 'item-1',
+    title: 'Example task',
+    url: null,
+    stage: 'execute',
+    ageSeconds: 3600,
+    bucket: 'green',
+    active: false,
+    ...overrides,
+  };
 }
 
 /** The five non-done board stages, overridable per stage. */
@@ -44,137 +56,149 @@ function Harness({ health }: { health: QueueHealth }) {
   return (
     <div>
       <QueueHealthChart health={health} thresholdsSeconds={THRESHOLDS} selected={selected} onSelect={setSelected} />
-      <output data-testid="selection">{selected ? `${selected.stage}:${selected.bucket ?? 'none'}` : 'cleared'}</output>
+      <output data-testid="selection">{selected?.bucket ?? 'cleared'}</output>
     </div>
   );
 }
 
+const INTAKE_ENTRIES = [
+  healthEntry({ itemId: 'fresh-1', stage: 'intake' }),
+  healthEntry({ itemId: 'fresh-2', stage: 'intake' }),
+  healthEntry({ itemId: 'aging-1', stage: 'intake', bucket: 'amber' }),
+  healthEntry({ itemId: 'critical-1', stage: 'intake', bucket: 'red' }),
+  healthEntry({ itemId: 'critical-2', stage: 'intake', bucket: 'red' }),
+  healthEntry({ itemId: 'critical-3', stage: 'intake', bucket: 'red' }),
+];
+
 describe('QueueHealthChart', () => {
-  it('renders one bar per non-done stage with segment labels carrying bucket + count', () => {
+  it('summarizes unique tasks by age and reveals range and counts on hover', async () => {
+    const user = userEvent.setup();
     const health = makeHealth(
       defaultStages({
         intake: { buckets: { green: 2, amber: 1, orange: 0, red: 3 }, total: 6 },
       }),
+      INTAKE_ENTRIES,
     );
     renderWithProviders(<Harness health={health} />);
 
-    // One labeled segment per non-zero bucket, not color-alone.
-    expect(screen.getByRole('button', { name: 'Intake Fresh: 2' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Intake Aging: 1' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Intake Critical: 3' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Intake Stale/ })).not.toBeInTheDocument();
-    // Legend pairs every bucket label with its threshold window.
-    const legend = screen.getByTestId('queue-health-legend');
-    expect(within(legend).getByText(/Fresh/)).toBeInTheDocument();
-    expect(within(legend).getByText(/\(< 4h\)/)).toBeInTheDocument();
-    expect(within(legend).getByText(/Critical/)).toBeInTheDocument();
-    expect(within(legend).getByText(/\(≥ 3d\)/)).toBeInTheDocument();
+    const fresh = screen.getByRole('button', { name: 'Fresh: 2 tasks, under 4h, 0 active' });
+    expect(screen.getByRole('button', { name: 'Aging: 1 task, 4h–1d, 0 active' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Critical: 3 tasks, 3d or more, 0 active' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Stale/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('queue-health-legend')).not.toBeInTheDocument();
+
+    await user.hover(fresh);
+    const range = await screen.findByText('Under 4h');
+    const hoverCard = range.parentElement;
+    expect(hoverCard).not.toBeNull();
+    expect(within(hoverCard!).getByText('Tasks')).toBeInTheDocument();
+    expect(within(hoverCard!).getByText('2')).toBeInTheDocument();
   });
 
-  it('sizes segments proportionally to their counts via flex-grow', () => {
+  it('sizes aggregate segments proportionally to unique task counts', () => {
     const health = makeHealth(
       defaultStages({
-        execute: { buckets: { green: 1, amber: 0, orange: 0, red: 4 }, total: 5 },
+        intake: { buckets: { green: 2, amber: 0, orange: 0, red: 3 }, total: 5 },
       }),
+      INTAKE_ENTRIES.filter(entry => entry.bucket === 'green' || entry.bucket === 'red'),
     );
     renderWithProviders(<Harness health={health} />);
 
-    const green = screen.getByRole('button', { name: 'Building Fresh: 1' });
-    const red = screen.getByRole('button', { name: 'Building Critical: 4' });
-    expect(green).toHaveStyle({ flexGrow: '1' });
-    expect(red).toHaveStyle({ flexGrow: '4' });
+    expect(screen.getByRole('button', { name: 'Fresh: 2 tasks, under 4h, 0 active' })).toHaveStyle({ flexGrow: '2' });
+    expect(screen.getByRole('button', { name: 'Critical: 3 tasks, 3d or more, 0 active' })).toHaveStyle({
+      flexGrow: '3',
+    });
   });
 
-  it('renders an empty-state bar for a stage with zero items and no NaN widths', () => {
-    const health = makeHealth(defaultStages()); // all zero
-    renderWithProviders(<Harness health={health} />);
+  it('renders a clean empty distribution while retaining stage totals', () => {
+    renderWithProviders(<Harness health={makeHealth(defaultStages())} />);
 
+    expect(screen.getByText('No work in queue')).toBeInTheDocument();
     for (const label of ['Intake', 'Triage', 'Planning', 'Building', 'Review']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    // Empty stages show the "0" empty-state, never a NaN-proportioned segment.
-    expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(5);
+    expect(screen.getAllByText('0 tasks')).toHaveLength(5);
     expect(screen.queryByRole('button', { name: /Fresh|Aging|Stale|Critical/ })).not.toBeInTheDocument();
   });
 
-  it('shows the active-stripe overlay only when the stage has active work', () => {
+  it('reveals active work in the corresponding age segment', async () => {
+    const user = userEvent.setup();
+    const entries = [
+      healthEntry({ itemId: 'item-1', active: true }),
+      healthEntry({ itemId: 'item-2', active: true }),
+      healthEntry({ itemId: 'item-3' }),
+      healthEntry({ itemId: 'item-4' }),
+    ];
     const health = makeHealth(
       defaultStages({
-        intake: { buckets: { green: 2, amber: 0, orange: 0, red: 0 }, total: 2, activeCount: 0 },
         execute: { buckets: { green: 4, amber: 0, orange: 0, red: 0 }, total: 4, activeCount: 2 },
       }),
+      entries,
     );
     renderWithProviders(<Harness health={health} />);
 
-    expect(screen.getByRole('img', { name: 'Building: 2 active' })).toBeInTheDocument();
-    expect(screen.queryByRole('img', { name: /Intake: .* active/ })).not.toBeInTheDocument();
-    // The summary text carries the active count too (not pattern-alone).
-    expect(screen.getByText(/2 active/)).toBeInTheDocument();
+    await user.hover(screen.getByRole('button', { name: 'Fresh: 4 tasks, under 4h, 2 active' }));
+    const range = await screen.findByText('Under 4h');
+    const hoverCard = range.parentElement;
+    expect(hoverCard).not.toBeNull();
+    expect(within(hoverCard!).getByText('Active')).toBeInTheDocument();
+    expect(within(hoverCard!).getByText('2')).toBeInTheDocument();
   });
 
-  it('selects a cohort on click and clears it on clicking the selected segment again', async () => {
+  it('selects an age cohort and clears it when selected again', async () => {
     const user = userEvent.setup();
     const health = makeHealth(
       defaultStages({
         review: { buckets: { green: 0, amber: 3, orange: 0, red: 0 }, total: 3 },
       }),
+      [
+        healthEntry({ itemId: 'item-1', stage: 'review', bucket: 'amber' }),
+        healthEntry({ itemId: 'item-2', stage: 'review', bucket: 'amber' }),
+        healthEntry({ itemId: 'item-3', stage: 'review', bucket: 'amber' }),
+      ],
     );
     renderWithProviders(<Harness health={health} />);
 
-    const segment = screen.getByRole('button', { name: 'Review Aging: 3' });
+    const segment = screen.getByRole('button', { name: 'Aging: 3 tasks, 4h–1d, 0 active' });
     await user.click(segment);
-    expect(screen.getByTestId('selection')).toHaveTextContent('review:amber');
+    expect(screen.getByTestId('selection')).toHaveTextContent('amber');
     expect(segment).toHaveAttribute('aria-pressed', 'true');
 
     await user.click(segment);
     expect(screen.getByTestId('selection')).toHaveTextContent('cleared');
   });
 
-  it('clears the selection when the bar background is clicked', async () => {
+  it('reveals each stage age breakdown on hover', async () => {
     const user = userEvent.setup();
     const health = makeHealth(
       defaultStages({
-        triage: { buckets: { green: 1, amber: 0, orange: 0, red: 0 }, total: 1 },
+        execute: { buckets: { green: 2, amber: 0, orange: 0, red: 1 }, total: 3, activeCount: 1 },
       }),
     );
-    const { container } = renderWithProviders(<Harness health={health} />);
+    renderWithProviders(<Harness health={health} />);
 
-    await user.click(screen.getByRole('button', { name: 'Triage Fresh: 1' }));
-    expect(screen.getByTestId('selection')).toHaveTextContent('triage:green');
-
-    // The bar background is the segment's parent container.
-    const background = screen.getByRole('button', { name: 'Triage Fresh: 1' }).parentElement!;
-    await user.click(background);
-    expect(screen.getByTestId('selection')).toHaveTextContent('cleared');
-    expect(container.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+    await user.hover(
+      screen.getByRole('group', { name: 'Building: 3 tasks. Oldest work: Critical, 3d or more' }),
+    );
+    const active = await screen.findByText('Active');
+    const hoverCard = active.closest('dl');
+    expect(hoverCard).not.toBeNull();
+    expect(within(hoverCard!).getByText('Fresh')).toBeInTheDocument();
+    expect(within(hoverCard!).getByText('Critical')).toBeInTheDocument();
   });
 
-  it('omits the stripe animation class under prefers-reduced-motion', () => {
-    const matchMediaSpy = vi.spyOn(window, 'matchMedia').mockImplementation(
-      (query: string) =>
-        ({
-          matches: query.includes('prefers-reduced-motion'),
-          media: query,
-          addEventListener: () => {},
-          removeEventListener: () => {},
-          addListener: () => {},
-          removeListener: () => {},
-          onchange: null,
-          dispatchEvent: () => false,
-        }) as MediaQueryList,
+  it('opens aggregate details from keyboard focus', async () => {
+    const user = userEvent.setup();
+    const health = makeHealth(
+      defaultStages({
+        execute: { buckets: { green: 2, amber: 0, orange: 0, red: 0 }, total: 2 },
+      }),
+      [healthEntry({ itemId: 'item-1' }), healthEntry({ itemId: 'item-2' })],
     );
-    try {
-      const health = makeHealth(
-        defaultStages({
-          execute: { buckets: { green: 2, amber: 0, orange: 0, red: 0 }, total: 2, activeCount: 1 },
-        }),
-      );
-      renderWithProviders(<Harness health={health} />);
-      const overlay = screen.getByRole('img', { name: 'Building: 1 active' });
-      // With `prefers-reduced-motion` matched, the animation class is omitted.
-      expect(overlay.className).not.toContain('animate-queue-health-stripes');
-    } finally {
-      matchMediaSpy.mockRestore();
-    }
+    renderWithProviders(<Harness health={health} />);
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Fresh: 2 tasks, under 4h, 0 active' })).toHaveFocus();
+    expect(await screen.findByText('Under 4h')).toBeInTheDocument();
   });
 });

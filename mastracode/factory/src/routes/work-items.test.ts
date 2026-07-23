@@ -715,11 +715,36 @@ describe('GET /web/factory/projects/:id/metrics', () => {
 
     expect(metrics.stageAutomation).toEqual([
       // Human-entered (creation), automation-exited → not automated.
-      { stage: 'intake', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+      {
+        stage: 'intake',
+        exits: 1,
+        automated: 0,
+        outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 },
+        automatedItems: [],
+      },
       // Automation-entered and -exited, first visit → clean automated pass, item is done.
-      { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 1, canceled: 0, reworked: 0, inFlight: 0 } },
+      {
+        stage: 'triage',
+        exits: 1,
+        automated: 1,
+        outcomes: { done: 1, canceled: 0, reworked: 0, inFlight: 0 },
+        automatedItems: [
+          {
+            id: workItem.id,
+            title: 'Fix the login flow',
+            url: 'https://github.com/acme/app/issues/42',
+            outcome: 'done',
+          },
+        ],
+      },
       // Automation-entered, human-exited → not automated.
-      { stage: 'planning', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+      {
+        stage: 'planning',
+        exits: 1,
+        automated: 0,
+        outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 },
+        automatedItems: [],
+      },
     ]);
     // Global split matches: 4 entered stages, 2 by automation.
     expect(metrics.transitions).toEqual({ human: 2, total: 4 });
