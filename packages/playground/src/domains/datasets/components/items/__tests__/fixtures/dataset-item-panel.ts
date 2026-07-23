@@ -13,3 +13,13 @@ export const itemWithMocks: DatasetItem = {
   ...baseItem,
   toolMocks: [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }],
 };
+
+export const itemWithScorers: DatasetItem = {
+  ...baseItem,
+  scorerIds: ['quality'],
+};
+
+export const itemWithEmptyScorers: DatasetItem = {
+  ...baseItem,
+  scorerIds: [],
+};

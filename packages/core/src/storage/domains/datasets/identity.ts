@@ -13,6 +13,7 @@ const payloadFields = [
   'groundTruth',
   'expectedTrajectory',
   'toolMocks',
+  'scorerIds',
   'requestContext',
   'metadata',
   'source',

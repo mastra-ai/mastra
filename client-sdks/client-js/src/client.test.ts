@@ -994,5 +994,54 @@ describe('MastraClient', () => {
       expect(init.method).toBe('PATCH');
       expect(JSON.parse(init.body)).toMatchObject({ toolMocks });
     });
+
+    it('addDatasetItem posts scorerIds and returns them', async () => {
+      const scorerIds = ['quality', 'safety'];
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'item-1', scorerIds }),
+      });
+
+      const result = await client.addDatasetItem({ datasetId: 'ds-1', input: { q: 'x' }, scorerIds });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({ input: { q: 'x' }, scorerIds });
+      expect(result.scorerIds).toEqual(scorerIds);
+    });
+
+    it('batchInsertDatasetItems preserves an explicit empty scorerIds override', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ items: [{ id: 'item-1', scorerIds: [] }], count: 1 }),
+      });
+
+      const result = await client.batchInsertDatasetItems({
+        datasetId: 'ds-1',
+        items: [{ input: { q: 'x' }, scorerIds: [] }],
+      });
+
+      const [, init] = (global.fetch as any).mock.calls[0];
+      expect(JSON.parse(init.body)).toMatchObject({ items: [{ input: { q: 'x' }, scorerIds: [] }] });
+      expect(result.items[0]?.scorerIds).toEqual([]);
+    });
+
+    it('updateDatasetItem posts null to clear a scorerIds override', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'item-1' }),
+      });
+
+      await client.updateDatasetItem({ datasetId: 'ds-1', itemId: 'item-1', scorerIds: null });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items/item-1');
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toEqual({ scorerIds: null });
+    });
   });
 });

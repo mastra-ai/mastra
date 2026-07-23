@@ -23,6 +23,7 @@ const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 const item = await dataset.addItem({
   input: { question: 'What is TypeScript?' },
   groundTruth: { answer: 'A typed superset of JavaScript' },
+  scorerIds: ['accuracy', 'relevancy'],
   metadata: { source: 'manual' },
 })
 
@@ -43,6 +44,13 @@ console.log(item.id)
     type: 'unknown',
     isOptional: true,
     description: 'Expected output or ground truth for scoring.',
+  },
+  {
+    name: 'scorerIds',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Scorer IDs that override dataset-attached scorers for this item. An empty array runs no scorers for the item. Omit this field to inherit the dataset scorer IDs.',
   },
   {
     name: 'metadata',
@@ -90,6 +98,13 @@ console.log(item.id)
             type: 'unknown',
             isOptional: true,
             description: 'Ground truth data.',
+          },
+          {
+            name: 'scorerIds',
+            type: 'string[]',
+            isOptional: true,
+            description:
+              'Scorer IDs selected for this item. An empty array is an explicit override that runs no scorers.',
           },
           {
             name: 'metadata',
