@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { builtInFactoryRules } from './defaults.js';
+import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
 import { FactoryLinearIssueService } from './linear-service.js';
 
 const issue = {
@@ -18,7 +18,7 @@ const issue = {
   updatedAt: '2026-07-02T00:00:00Z',
 };
 
-async function setup() {
+async function setup(rules = builtInFactoryRules()) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({
     orgId: 'org-1',
@@ -28,7 +28,7 @@ async function setup() {
   const service = new FactoryLinearIssueService({
     projects: seeded.projects,
     storage: seeded.workItems,
-    rules: builtInFactoryRules(),
+    rules,
   });
   return { project, service, workItems: seeded.workItems };
 }
@@ -48,10 +48,103 @@ describe('FactoryLinearIssueService', () => {
       decision: {
         type: 'upsertLinkedWorkItem',
         source: 'linear-issue',
-        sourceKey: 'linear:ENG-42',
+        sourceKey: 'linear:issue-1',
         stage: 'triage',
       },
     });
+  });
+
+  it('keeps distinct Linear issues with the same identifier separate', async () => {
+    const { project, service, workItems } = await setup();
+
+    await service.ingest({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      userId: 'user-1',
+      issues: [
+        issue,
+        {
+          ...issue,
+          id: 'issue-2',
+          url: 'https://linear.app/other/issue/ENG-42',
+        },
+      ],
+    });
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(record => record.decision)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourceKey: 'linear:issue-1' }),
+        expect.objectContaining({ sourceKey: 'linear:issue-2' }),
+      ]),
+    );
+  });
+
+  it('recognizes legacy identifier-based source keys only for the same Linear issue', async () => {
+    const seen = vi.fn(() => undefined);
+    const rules = defaultFactoryRules({
+      version: 'test-legacy-linear-source-key',
+      overrides: { linear: { issueObserved: { onEvent: seen } } },
+    });
+    const { project, service, workItems } = await setup(rules);
+    const legacy = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: 'linear:ENG-42',
+          url: issue.url,
+        },
+        title: 'ENG-42: Fix intake sync',
+        stages: ['triage'],
+        sessions: {},
+        metadata: { linearIssueId: issue.id, linearIssueIdentifier: issue.identifier },
+      },
+    });
+
+    await service.ingest({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      userId: 'user-1',
+      issues: [{ ...issue, identifier: 'OPS-42', url: 'https://linear.app/acme/issue/OPS-42' }],
+    });
+
+    expect(seen).toHaveBeenCalledWith(
+      expect.objectContaining({ item: expect.objectContaining({ id: legacy.item.id }) }),
+    );
+  });
+
+  it('does not match a legacy identifier key that belongs to another Linear issue', async () => {
+    const seen = vi.fn(() => undefined);
+    const rules = defaultFactoryRules({
+      version: 'test-ambiguous-linear-source-key',
+      overrides: { linear: { issueObserved: { onEvent: seen } } },
+    });
+    const { project, service, workItems } = await setup(rules);
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: 'linear:ENG-42',
+          url: 'https://linear.app/other/issue/ENG-42',
+        },
+        title: 'ENG-42: Another issue',
+        stages: ['triage'],
+        sessions: {},
+        metadata: { linearIssueId: 'issue-other', linearIssueIdentifier: issue.identifier },
+      },
+    });
+
+    await service.ingest({ orgId: 'org-1', factoryProjectId: project.id, userId: 'user-1', issues: [issue] });
+
+    expect(seen).toHaveBeenCalledWith(expect.not.objectContaining({ item: expect.anything() }));
   });
 
   it('fails closed when the active Factory project belongs to another organization', async () => {
@@ -82,5 +175,9 @@ describe('FactoryLinearIssueService', () => {
 
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toHaveLength(2);
+    expect(decisions.map(record => record.decision)).toEqual([
+      expect.objectContaining({ sourceKey: 'linear:issue-1' }),
+      expect.objectContaining({ sourceKey: 'linear:issue-1' }),
+    ]);
   });
 });

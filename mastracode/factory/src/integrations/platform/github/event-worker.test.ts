@@ -120,6 +120,7 @@ describe('PlatformGithubEventWorker', () => {
                 id: '1001-0',
                 deliveryId: 'delivery-1',
                 event: 'pull_request',
+                timestamp: Date.now() - 2_500,
                 payload: { action: 'closed' },
               },
             ],
@@ -138,7 +139,8 @@ describe('PlatformGithubEventWorker', () => {
       ingestFactoryEvent,
     });
 
-    await worker.init(createDeps());
+    const deps = createDeps();
+    await worker.init(deps);
     await worker.start();
     await vi.advanceTimersByTimeAsync(0);
 
@@ -155,6 +157,17 @@ describe('PlatformGithubEventWorker', () => {
     });
     expect(ingestFactoryEvent).toHaveBeenCalledOnce();
     expect(ingestFactoryEvent).toHaveBeenCalledWith(parsedEvent);
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      'Platform GitHub event received from the Platform event log',
+      expect.objectContaining({
+        event: 'platform_github_event_received',
+        repositoryId: 101,
+        eventId: '1001-0',
+        deliveryId: 'delivery-1',
+        githubEvent: 'pull_request',
+        eventAgeMs: 2_500,
+      }),
+    );
     expect(dispatch).toHaveBeenCalledTimes(2);
     expect(dispatch).toHaveBeenNthCalledWith(
       1,
@@ -185,7 +198,7 @@ describe('PlatformGithubEventWorker', () => {
     await resumed.stop();
   });
 
-  it('does not advance the cursor when delivery fails and replays the page on the next cycle', async () => {
+  it('advances the cursor when delivery fails so one subscription cannot block newer events', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi
       .fn<typeof dispatchGithubWebhook>()
@@ -207,10 +220,16 @@ describe('PlatformGithubEventWorker', () => {
               id: '1001-0',
               deliveryId: 'delivery-1',
               event: 'pull_request',
+              payload: { action: 'synchronize' },
+            },
+            {
+              id: '1002-0',
+              deliveryId: 'delivery-2',
+              event: 'pull_request',
               payload: { action: 'closed' },
             },
           ],
-          nextCursor: '1001-0',
+          nextCursor: '1002-0',
         });
       }
       throw new Error(`Unexpected request: ${url}`);
@@ -221,19 +240,17 @@ describe('PlatformGithubEventWorker', () => {
     await worker.start();
     await vi.advanceTimersByTimeAsync(0);
 
+    expect(dispatch).toHaveBeenCalledTimes(2);
+    expect(eventCursors[0]).toContain('afterTimestamp=');
     expect(settings.read()).toEqual({
       version: 1,
-      repositories: { '101': expect.objectContaining({ afterTimestamp: expect.any(Number) }) },
+      repositories: { '101': { afterEventId: '1002-0' } },
     });
+
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(dispatch).toHaveBeenCalledTimes(2);
-    expect(eventCursors[0]).toContain('afterTimestamp=');
-    expect(eventCursors[1]).toContain('afterTimestamp=');
-    expect(settings.read()).toEqual({
-      version: 1,
-      repositories: { '101': { afterEventId: '1001-0' } },
-    });
+    expect(eventCursors[1]).toContain('afterEventId=1002-0');
     await worker.stop();
   });
 
@@ -303,7 +320,85 @@ describe('PlatformGithubEventWorker', () => {
     await worker.stop();
   });
 
-  it('honors retry-after backoff and never overlaps polling cycles', async () => {
+  it('bounds concurrent installation repository discovery', async () => {
+    const settings = createSettingsStorage();
+    const discoveryRequests: number[] = [];
+    const releases = new Map<number, (response: Response) => void>();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({
+          installations: Array.from({ length: 12 }, (_, index) => ({
+            installationId: index + 1,
+            usable: true,
+            suspendedAt: null,
+          })),
+        });
+      }
+      const installationMatch = url.pathname.match(/\/installations\/(\d+)\/repositories$/);
+      if (installationMatch?.[1]) {
+        const installationId = Number(installationMatch[1]);
+        discoveryRequests.push(installationId);
+        return new Promise<Response>(resolve => releases.set(installationId, resolve));
+      }
+      if (url.pathname.match(/\/repositories\/(\d+)\/events$/)) {
+        return json({ events: [], nextCursor: null });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const worker = createWorker({ fetchImpl, storage: settings.storage, intervalMs: 1_000 });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(discoveryRequests).toEqual(Array.from({ length: 10 }, (_, index) => index + 1));
+    for (const release of releases.values()) release(json({ repositories: [] }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(discoveryRequests).toEqual(Array.from({ length: 12 }, (_, index) => index + 1));
+    releases.get(11)?.(json({ repositories: [] }));
+    releases.get(12)?.(json({ repositories: [] }));
+    await vi.advanceTimersByTimeAsync(0);
+    await worker.stop();
+  });
+
+  it('polls repositories concurrently instead of serializing event-log requests', async () => {
+    const settings = createSettingsStorage();
+    const eventRequests: number[] = [];
+    const releases = new Map<number, (response: Response) => void>();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) {
+        return json({ repositories: Array.from({ length: 12 }, (_, index) => ({ id: 101 + index })) });
+      }
+      const match = url.pathname.match(/\/repositories\/(\d+)\/events$/);
+      if (match?.[1]) {
+        const repositoryId = Number(match[1]);
+        eventRequests.push(repositoryId);
+        return new Promise<Response>(resolve => releases.set(repositoryId, resolve));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const worker = createWorker({ fetchImpl, storage: settings.storage, intervalMs: 1_000 });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(eventRequests).toEqual(Array.from({ length: 10 }, (_, index) => 101 + index));
+    for (const release of releases.values()) release(json({ events: [], nextCursor: null }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(eventRequests).toEqual(Array.from({ length: 12 }, (_, index) => 101 + index));
+    releases.get(111)?.(json({ events: [], nextCursor: null }));
+    releases.get(112)?.(json({ events: [], nextCursor: null }));
+    await vi.advanceTimersByTimeAsync(0);
+    await worker.stop();
+  });
+
+  it('honors retry-after backoff, keeps a start-to-start cadence, and never overlaps polling cycles', async () => {
     const settings = createSettingsStorage();
     let releaseEvents!: (response: Response) => void;
     const stalledEvents = new Promise<Response>(resolve => {
@@ -334,7 +429,6 @@ describe('PlatformGithubEventWorker', () => {
 
     releaseEvents(json({ events: [], nextCursor: null }));
     await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(1_000);
     expect(eventCalls).toBe(2);
     await vi.advanceTimersByTimeAsync(8_999);
     expect(eventCalls).toBe(2);

@@ -18,6 +18,7 @@ import { PlatformApiError } from '../api-client.js';
 const API_PREFIX = '/v1/server/github-app';
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const EVENT_PAGE_SIZE = 500;
+const REPOSITORY_POLL_CONCURRENCY = 10;
 const MIN_LEASE_TTL_MS = 30_000;
 const CURSOR_ORG_ID = '__platform_github_event_worker__';
 const CURSOR_USER_ID = 'worker';
@@ -54,6 +55,7 @@ type EventLogEntry = {
   id: string;
   deliveryId: string;
   event: string;
+  timestamp?: number;
   payload: unknown;
 };
 
@@ -102,6 +104,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   #hasLease = false;
   #startedAt = 0;
   #settings: PlatformGithubEventWorkerSettings = { version: 1, repositories: {} };
+  #settingsSaveQueue: Promise<void> = Promise.resolve();
 
   constructor(config: PlatformGithubEventWorkerConfig) {
     super();
@@ -169,18 +172,31 @@ export class PlatformGithubEventWorker extends MastraWorker {
   }
 
   async #tick(): Promise<void> {
+    const cycleStartedAt = Date.now();
     let nextDelay = this.#intervalMs;
+    let fixedCadence = true;
     try {
       if (!(await this.#ensureLease())) return;
-      nextDelay = await this.#poll();
+      const result = await this.#poll();
+      nextDelay = result.retryInMs;
+      fixedCadence = !result.backoff;
     } catch (error) {
       nextDelay = retryDelay(error, this.#intervalMs);
+      fixedCadence = false;
       this.deps?.logger.error('Platform GitHub event polling cycle failed', {
         error: error instanceof Error ? error.message : String(error),
         retryInMs: nextDelay,
       });
     } finally {
-      this.#schedule(nextDelay);
+      const durationMs = Math.max(0, Date.now() - cycleStartedAt);
+      if (durationMs >= this.#intervalMs) {
+        this.deps?.logger.warn('Platform GitHub event polling cycle exceeded its interval', {
+          event: 'platform_github_event_poll_cycle_slow',
+          durationMs,
+          intervalMs: this.#intervalMs,
+        });
+      }
+      this.#schedule(fixedCadence ? Math.max(0, nextDelay - durationMs) : nextDelay);
     }
   }
 
@@ -222,27 +238,39 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#leaseRenewalTimer = undefined;
   }
 
-  async #poll(): Promise<number> {
+  async #poll(): Promise<{ retryInMs: number; backoff: boolean }> {
     const repositories = await this.#discoverRepositories();
     let retryInMs = this.#intervalMs;
+    let backoff = false;
+    let rateLimited = false;
+    let settingsChanged = false;
 
     for (const repository of repositories) {
-      if (!this.#running || !this.#hasLease) break;
+      const key = String(repository.id);
+      if (this.#settings.repositories[key]) continue;
+      this.#settings.repositories[key] = { afterTimestamp: this.#startedAt };
+      settingsChanged = true;
+    }
+    if (settingsChanged) await this.#saveSettings();
+
+    await forEachConcurrent(repositories, REPOSITORY_POLL_CONCURRENCY, async repository => {
+      if (!this.#running || !this.#hasLease || rateLimited) return;
       try {
         await this.#pollRepository(repository.id);
       } catch (error) {
         const delay = retryDelay(error, this.#intervalMs);
         retryInMs = Math.max(retryInMs, delay);
+        backoff = true;
         this.deps?.logger.error('Platform GitHub repository event polling failed', {
           repositoryId: repository.id,
           error: error instanceof Error ? error.message : String(error),
           retryInMs: delay,
         });
-        if (error instanceof PlatformApiError && error.status === 429) break;
+        if (error instanceof PlatformApiError && error.status === 429) rateLimited = true;
       }
-    }
+    });
 
-    return retryInMs;
+    return { retryInMs, backoff };
   }
 
   async #discoverRepositories(): Promise<Repository[]> {
@@ -253,26 +281,20 @@ export class PlatformGithubEventWorker extends MastraWorker {
         suspendedAt: string | null;
       }>;
     }>('GET', `${API_PREFIX}/installations`);
+    const installations = result.installations.filter(installation => installation.usable && !installation.suspendedAt);
     const repositories = new Map<number, Repository>();
-
-    for (const installation of result.installations) {
-      if (!installation.usable || installation.suspendedAt) continue;
+    await forEachConcurrent(installations, REPOSITORY_POLL_CONCURRENCY, async installation => {
       const page = await this.#client.request<{ repositories: Repository[] }>(
         'GET',
         `${API_PREFIX}/installations/${installation.installationId}/repositories`,
       );
       for (const repository of page.repositories) repositories.set(repository.id, repository);
-    }
-
+    });
     return [...repositories.values()];
   }
 
   async #pollRepository(repositoryId: number): Promise<void> {
     const key = String(repositoryId);
-    if (!this.#settings.repositories[key]) {
-      this.#settings.repositories[key] = { afterTimestamp: this.#startedAt };
-      await this.#saveSettings();
-    }
 
     while (this.#running && this.#hasLease) {
       const cursor: EventCursor = this.#settings.repositories[key]!;
@@ -296,10 +318,20 @@ export class PlatformGithubEventWorker extends MastraWorker {
           });
           continue;
         }
+        this.deps?.logger.info('Platform GitHub event received from the Platform event log', {
+          event: 'platform_github_event_received',
+          repositoryId,
+          eventId: event.id,
+          deliveryId: event.deliveryId,
+          githubEvent: event.event,
+          ...(typeof event.timestamp === 'number' && Number.isFinite(event.timestamp)
+            ? { eventAgeMs: Math.max(0, Date.now() - event.timestamp) }
+            : {}),
+        });
         if (isFactoryClosureEvent(parsed)) {
           await this.#ingestFactoryEvent?.(parsed);
         }
-        const result = await this.#dispatch(parsed, {
+        await this.#dispatch(parsed, {
           controller: this.#controller,
           listSubscriptions: (target, options) =>
             listPullRequestSubscriptionsForWebhook(target, options, this.#github.integrationStorage),
@@ -315,11 +347,6 @@ export class PlatformGithubEventWorker extends MastraWorker {
             });
           },
         });
-        if (result.failed > 0) {
-          throw new Error(
-            `Platform GitHub event ${event.deliveryId} failed for ${result.failed} subscribed target(s).`,
-          );
-        }
       }
 
       if (page.nextCursor === ('afterEventId' in cursor ? cursor.afterEventId : undefined)) return;
@@ -353,12 +380,29 @@ export class PlatformGithubEventWorker extends MastraWorker {
   }
 
   async #saveSettings(): Promise<void> {
-    await this.#storage.settings.save(CURSOR_ORG_ID, CURSOR_USER_ID, this.#settings);
+    const snapshot = structuredClone(this.#settings);
+    const save = this.#settingsSaveQueue.then(() =>
+      this.#storage.settings.save(CURSOR_ORG_ID, CURSOR_USER_ID, snapshot),
+    );
+    this.#settingsSaveQueue = save.catch(() => undefined);
+    await save;
   }
 
   #leaseKey(): string {
     return `${this.name}:${this.#storage.integrationId}`;
   }
+}
+
+async function forEachConcurrent<T>(items: T[], concurrency: number, run: (item: T) => Promise<void>): Promise<void> {
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (nextIndex < items.length) {
+        const item = items[nextIndex++];
+        if (item !== undefined) await run(item);
+      }
+    }),
+  );
 }
 
 function getLeaseProvider(pubsub: PubSub): LeaseProvider {

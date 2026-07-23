@@ -1,3 +1,4 @@
+import { githubIssueSourceKey, githubPullRequestSourceKey, linearIssueSourceKey } from './source-keys.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryBoardRules,
@@ -38,9 +39,7 @@ function investigateTriagedIssue(context: FactoryStageRuleContext) {
 }
 
 function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
-  const identifier = context.item.sourceKey?.startsWith('linear:')
-    ? context.item.sourceKey.slice('linear:'.length)
-    : context.item.title;
+  const identifier = context.item.title.split(': ', 1)[0] || context.item.title;
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:factory-triage-linear`,
@@ -113,7 +112,10 @@ function issueOpened(context: FactoryGithubRuleContext) {
     idempotencyKey: `${context.ingress.id}:issue-intake`,
     board: 'work',
     source: 'github-issue',
-    sourceKey: `github-issue:${context.issue.number}`,
+    sourceKey:
+      context.item?.source === 'github-issue' && context.item.sourceKey
+        ? context.item.sourceKey
+        : githubIssueSourceKey(context.repository.id, context.issue.number),
     title: context.issue.title,
     url: context.issue.url,
     stage:
@@ -134,7 +136,10 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     idempotencyKey: `${context.ingress.id}:pull-request-intake`,
     board: 'review',
     source: 'github-pr',
-    sourceKey: `github-pr:${context.pullRequest.number}`,
+    sourceKey:
+      context.item?.source === 'github-pr' && context.item.sourceKey
+        ? context.item.sourceKey
+        : githubPullRequestSourceKey(context.repository.id, context.pullRequest.number),
     title: context.pullRequest.title,
     url: context.pullRequest.url,
     stage:
@@ -170,7 +175,7 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     idempotencyKey: `${context.ingress.id}:issue-triage`,
     board: 'work',
     source: 'linear-issue',
-    sourceKey: `linear:${context.issue.identifier}`,
+    sourceKey: linearIssueSourceKey(context.issue.id),
     title: `${context.issue.identifier}: ${context.issue.title}`,
     url: context.issue.url,
     stage: 'triage',

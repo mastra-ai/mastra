@@ -38,6 +38,36 @@ describe('IntakeStorage', () => {
     expect(await storage.getConfig({ orgId: 'org1', userId: 'user1' })).toEqual(updated);
   });
 
+  it('lists enabled source selections across tenants for background workers', async () => {
+    const storage = await makeStorage();
+    await Promise.all([
+      storage.saveConfig({
+        orgId: 'org1',
+        userId: 'user1',
+        config: { linear: { enabled: true, sourceIds: ['linear-project:a'] } },
+      }),
+      storage.saveConfig({
+        orgId: 'org1',
+        userId: 'user2',
+        config: { linear: { enabled: false, sourceIds: ['linear-project:b'] } },
+      }),
+      storage.saveConfig({
+        orgId: 'org2',
+        userId: 'user3',
+        config: { linear: { enabled: true, sourceIds: null } },
+      }),
+      storage.saveConfig({
+        orgId: 'org3',
+        userId: 'user4',
+        config: { github: { enabled: true, sourceIds: ['repo-1'] } },
+      }),
+    ]);
+
+    await expect(storage.listEnabledSourceSelections('linear')).resolves.toEqual([
+      { orgId: 'org1', userId: 'user1', sourceIds: ['linear-project:a'] },
+    ]);
+  });
+
   it('converges concurrent first saves onto one row', async () => {
     const storage = await makeStorage();
     const a = { github: { enabled: true, sourceIds: ['a'] } };

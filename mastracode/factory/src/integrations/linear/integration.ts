@@ -32,6 +32,7 @@ import type {
   ListIntakeIssuesInput,
 } from '../../capabilities/intake.js';
 import type { RouteAuth } from '../../routes/route.js';
+import { FactoryLinearIssueService } from '../../rules/linear-service.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
@@ -895,13 +896,20 @@ export class LinearIntegration implements FactoryIntegration {
    * Intake). Handlers operate on this instance.
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
+    const factoryIssues = ctx.factory
+      ? new FactoryLinearIssueService({
+          projects: ctx.storage.projects,
+          storage: ctx.factory.workItems,
+          rules: ctx.factory.rules,
+        })
+      : undefined;
     return buildLinearRoutes({
       linear: this,
       auth: ctx.auth,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
-      hooks: ctx.hooks,
+      ingestLinearIssues: factoryIssues?.ingest.bind(factoryIssues),
     });
   }
 

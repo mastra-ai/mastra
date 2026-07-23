@@ -145,7 +145,7 @@ describe('defaultFactoryRules', () => {
     expect(await rule?.(linearContext())).toMatchObject({
       type: 'upsertLinkedWorkItem',
       source: 'linear-issue',
-      sourceKey: 'linear:ENG-42',
+      sourceKey: 'linear:issue-1',
       title: 'ENG-42: Fix intake sync',
       stage: 'triage',
       metadata: { linearIssueId: 'issue-1', linearIssueIdentifier: 'ENG-42' },
@@ -161,7 +161,7 @@ describe('defaultFactoryRules', () => {
         item: {
           ...item,
           source: 'linear-issue',
-          sourceKey: 'linear:ENG-42',
+          sourceKey: 'linear:issue-1',
           stages: ['execute'],
         },
         board: 'work',
@@ -177,7 +177,7 @@ describe('defaultFactoryRules', () => {
       item: {
         ...item,
         source: 'linear-issue',
-        sourceKey: 'linear:ENG-42',
+        sourceKey: 'linear:issue-1',
         title: 'ENG-42: Fix intake sync',
         url: 'https://linear.app/acme/issue/ENG-42',
       },
@@ -338,11 +338,11 @@ describe('defaultFactoryRules', () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(await rules.github.issueOpened?.onEvent?.(githubContext('issueOpened'))).toMatchObject({
       source: 'github-issue',
-      sourceKey: 'github-issue:42',
+      sourceKey: 'github-issue:10:42',
     });
     expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
       source: 'github-pr',
-      sourceKey: 'github-pr:17',
+      sourceKey: 'github-pr:10:17',
     });
   });
 

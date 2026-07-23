@@ -44,6 +44,8 @@ import type {
   ReviewComment,
   VersionControl,
 } from '../../capabilities/version-control.js';
+import { FactoryGithubEventService } from '../../rules/github-service.js';
+import type { FactoryGithubEventServiceOptions } from '../../rules/github-service.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { runGithubIssueTriage } from './issue-triage.js';
 import { buildGithubRoutes } from './routes.js';
@@ -986,6 +988,16 @@ export class GithubIntegration implements FactoryIntegration {
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
+    const factoryEvents = ctx.factory
+      ? new FactoryGithubEventService({
+          github: this,
+          sourceControl: ctx.storage.sourceControl,
+          integrationStorage: ctx.storage.generic as unknown as FactoryGithubEventServiceOptions['integrationStorage'],
+          projects: ctx.storage.projects,
+          storage: ctx.factory.workItems,
+          rules: ctx.factory.rules,
+        })
+      : undefined;
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
@@ -999,7 +1011,7 @@ export class GithubIntegration implements FactoryIntegration {
         : undefined,
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
-      ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
+      ingestFactoryEvent: factoryEvents?.ingest.bind(factoryEvents),
     });
   }
 

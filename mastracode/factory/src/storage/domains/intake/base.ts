@@ -17,6 +17,12 @@ export interface IntakeSelection {
 
 export type IntakeConfig = Record<string, IntakeSelection>;
 
+export interface EnabledIntakeSourceSelection {
+  orgId: string;
+  userId: string;
+  sourceIds: string[];
+}
+
 export const DEFAULT_INTAKE_CONFIG: IntakeConfig = {};
 
 export const INTAKE_SETTINGS_SCHEMA: CollectionSchema = {
@@ -71,6 +77,24 @@ export class IntakeStorage extends FactoryStorageDomain {
     return Object.fromEntries(
       integrationIds.map(integrationId => [integrationId, saved[integrationId] ?? { enabled: true, sourceIds: null }]),
     );
+  }
+
+  async listEnabledSourceSelections(integrationId: string): Promise<EnabledIntakeSourceSelection[]> {
+    const rows = await this.#db.findMany<{ org_id: string; user_id: string; config: IntakeConfig }>(
+      'intake_settings',
+      {},
+      {
+        orderBy: [
+          ['org_id', 'asc'],
+          ['user_id', 'asc'],
+        ],
+      },
+    );
+    return rows.flatMap(row => {
+      const selection = row.config[integrationId];
+      if (!selection?.enabled || !selection.sourceIds?.length) return [];
+      return [{ orgId: row.org_id, userId: row.user_id, sourceIds: [...selection.sourceIds] }];
+    });
   }
 
   async saveConfig({ orgId, userId, config }: { orgId: string; userId: string; config: IntakeConfig }): Promise<void> {

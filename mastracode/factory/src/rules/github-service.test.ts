@@ -53,24 +53,29 @@ async function setup(permission: string | undefined) {
     workItems,
     projects: seeded.projects,
     project,
+    installation,
     projectRepository,
     github,
   };
 }
 
-function issueOpened(deliveryId = 'delivery-1', createdAt = '2030-01-01T00:00:00Z') {
+function issueOpened(
+  deliveryId = 'delivery-1',
+  createdAt = '2030-01-01T00:00:00Z',
+  repository = { id: 10, fullName: 'acme/repo' },
+) {
   return {
     event: 'issues',
     deliveryId,
     payload: {
       action: 'opened',
       installation: { id: 7 },
-      repository: { id: 10, full_name: 'acme/repo' },
+      repository: { id: repository.id, full_name: repository.fullName },
       sender: { login: 'maintainer' },
       issue: {
         number: 42,
         title: 'Issue 42',
-        html_url: 'https://github.com/acme/repo/issues/42',
+        html_url: `https://github.com/${repository.fullName}/issues/42`,
         created_at: createdAt,
       },
     },
@@ -82,6 +87,7 @@ function pullRequest(
   deliveryId: string,
   merged = false,
   createdAt = '2030-01-01T00:00:00Z',
+  repository = { id: 10, fullName: 'acme/repo' },
 ) {
   return {
     event: 'pull_request',
@@ -89,12 +95,12 @@ function pullRequest(
     payload: {
       action: event,
       installation: { id: 7 },
-      repository: { id: 10, full_name: 'acme/repo' },
+      repository: { id: repository.id, full_name: repository.fullName },
       sender: { login: 'contributor' },
       pull_request: {
         number: 17,
         title: 'PR 17',
-        html_url: 'https://github.com/acme/repo/pull/17',
+        html_url: `https://github.com/${repository.fullName}/pull/17`,
         created_at: createdAt,
         state: merged ? 'closed' : 'open',
         merged,
@@ -123,6 +129,58 @@ describe('FactoryGithubEventService', () => {
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.actor).toMatchObject({ type: 'github', login: 'maintainer', trusted: true });
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
+  });
+
+  it('scopes issue and pull request source keys to their GitHub repository', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project, installation, projectRepository } =
+      await setup('write');
+    const secondRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: '20',
+        slug: 'acme/other-repo',
+        defaultBranch: 'main',
+      },
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: secondRepository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace',
+    });
+    const service = new FactoryGithubEventService({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(issueOpened('delivery-repo-10'));
+    await service.ingest(
+      issueOpened('delivery-repo-20', '2030-01-01T00:00:00Z', { id: 20, fullName: 'acme/other-repo' }),
+    );
+    await service.ingest(pullRequest('opened', 'delivery-pr-repo-10'));
+    await service.ingest(
+      pullRequest('opened', 'delivery-pr-repo-20', false, '2030-01-01T00:00:00Z', {
+        id: 20,
+        fullName: 'acme/other-repo',
+      }),
+    );
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(record => record.decision)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourceKey: 'github-issue:10:42' }),
+        expect.objectContaining({ sourceKey: 'github-issue:20:42' }),
+        expect.objectContaining({ sourceKey: 'github-pr:10:17' }),
+        expect.objectContaining({ sourceKey: 'github-pr:20:17' }),
+      ]),
+    );
   });
 
   it('keeps trusted issues created before the Factory in Intake', async () => {
@@ -239,7 +297,7 @@ describe('FactoryGithubEventService', () => {
 
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(item).toMatchObject({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:10:42' },
       stages: ['triage'],
       sessions: {
         triage: {
@@ -274,7 +332,7 @@ describe('FactoryGithubEventService', () => {
 
     const [rematerialized] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(rematerialized).toMatchObject({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:10:42' },
       stages: ['triage'],
     });
     expect(rematerialized?.id).not.toBe(item?.id);
@@ -368,14 +426,74 @@ describe('FactoryGithubEventService', () => {
       expect.arrayContaining([
         expect.objectContaining({
           workItemId: issue.item.id,
-          decision: expect.objectContaining({ source: 'github-issue' }),
+          decision: expect.objectContaining({ source: 'github-issue', sourceKey: 'github-issue:42' }),
         }),
         expect.objectContaining({
           workItemId: review.item.id,
-          decision: expect.objectContaining({ source: 'github-pr' }),
+          decision: expect.objectContaining({ source: 'github-pr', sourceKey: 'github-pr:17' }),
         }),
       ]),
     );
+  });
+
+  it('does not match an unscoped legacy source key from another repository', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project, installation, projectRepository } =
+      await setup('write');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { githubRepositoryId: 10, number: 42 },
+      },
+    });
+    const secondRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: '20',
+        slug: 'acme/other-repo',
+        defaultBranch: 'main',
+      },
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: secondRepository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace',
+    });
+    const service = new FactoryGithubEventService({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(
+      issueOpened('delivery-other-repository', '2030-01-01T00:00:00Z', {
+        id: 20,
+        fullName: 'acme/other-repo',
+      }),
+    );
+
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision).toMatchObject({
+      workItemId: null,
+      decision: { sourceKey: 'github-issue:20:42' },
+    });
   });
 
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {
