@@ -24,10 +24,10 @@ function PullRequestIcon({ status }: { status: PullRequestSubscription['status']
   return <CircleDot size={13} aria-hidden />;
 }
 
-function statusHoverColor(status: PullRequestSubscription['status']): string {
-  if (status === 'merged') return 'group-hover:text-accent3';
-  if (status === 'closed') return 'group-hover:text-error';
-  return 'group-hover:text-accent1';
+function statusColor(status: PullRequestSubscription['status']): string {
+  if (status === 'merged') return 'text-accent3';
+  if (status === 'closed') return 'text-error';
+  return 'text-accent1';
 }
 
 interface PullRequestLinksProps {
@@ -140,11 +140,10 @@ export function PullRequestLinks({
           href={subscription.url}
           target="_blank"
           rel="noreferrer"
-          className="group"
           aria-label={`Open ${subscription.status} ${subscription.repoFullName} pull request ${subscription.pullRequestNumber}`}
         >
           <PullRequestIcon status={subscription.status} />
-          <span className={statusHoverColor(subscription.status)}>PR #{subscription.pullRequestNumber}</span>
+          <span className={statusColor(subscription.status)}>PR #{subscription.pullRequestNumber}</span>
         </Button>
       ))}
     </div>
