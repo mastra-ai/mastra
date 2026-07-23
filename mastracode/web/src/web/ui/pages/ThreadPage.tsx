@@ -77,7 +77,7 @@ function ThreadPageMain() {
   useGlobalShortcuts();
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden">
+    <div className="grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden">
       <ChatMessageBoundary>
         <ThreadPageContent />
       </ChatMessageBoundary>
@@ -102,9 +102,9 @@ function ThreadPageContent() {
   useThreadPageKickoffs();
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-col">
       <FactorySessionHeader />
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
         <ChatMessageList />
       </div>
     </div>
