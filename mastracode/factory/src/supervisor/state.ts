@@ -5,11 +5,12 @@ const MAX_WORKERS = 100;
 
 /**
  * Live activity of one active run binding: `running` means the bound session
- * has a run in flight right now, `idle` means the session is live but between
- * runs, and `offline` means no in-process session currently owns the binding
- * (e.g. after a server restart, before reconciliation).
+ * has a run in flight right now; `idle` means it does not — whether the
+ * session is loaded between runs or has to be rehydrated on the next signal
+ * is a server implementation detail the supervisor never needs to reason
+ * about, so both report as `idle`.
  */
-export type FactorySupervisorWorkerActivity = 'running' | 'idle' | 'offline';
+export type FactorySupervisorWorkerActivity = 'running' | 'idle';
 
 export interface FactorySupervisorWorkerBinding {
   workItemId: string;
@@ -49,7 +50,6 @@ export interface FactorySupervisorState {
   workers: {
     running: number;
     idle: number;
-    offline: number;
     bindings: FactorySupervisorWorkerSummary[];
   };
   snapshotAt: string;
@@ -96,7 +96,6 @@ export function buildFactorySupervisorState(
   const workers = {
     running: workerBindings.filter(worker => worker.activity === 'running').length,
     idle: workerBindings.filter(worker => worker.activity === 'idle').length,
-    offline: workerBindings.filter(worker => worker.activity === 'offline').length,
     bindings: workerBindings.slice(0, MAX_WORKERS).map(worker => ({
       ...worker,
       workItemTitle: itemsById.get(worker.workItemId)?.title ?? null,

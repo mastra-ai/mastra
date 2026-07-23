@@ -200,9 +200,9 @@ export class FactorySupervisorService {
 
   /**
    * Live activity for each active run binding. A binding whose bound session
-   * has a run in flight is `running`; a live session between runs is `idle`;
-   * a binding with no in-process session (e.g. right after a server restart)
-   * is `offline`. Pure in-memory registry lookups — never creates sessions.
+   * has a run in flight is `running`; everything else is `idle` — whether an
+   * in-process session exists is a server detail the supervisor doesn't need.
+   * Pure in-memory registry lookups — never creates sessions.
    */
   async describeWorkerBindings(input: {
     orgId: string;
@@ -215,7 +215,7 @@ export class FactorySupervisorService {
         .filter(binding => binding.status === 'active')
         .map(async binding => {
           const session = await this.#controller.getSessionByResource(binding.resourceId);
-          const activity = !session ? 'offline' : session.run.isRunning() ? 'running' : 'idle';
+          const activity = session?.run.isRunning() ? 'running' : 'idle';
           return { workItemId: binding.workItemId, role: binding.role, bindingId: binding.id, activity } as const;
         }),
     );

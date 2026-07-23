@@ -43,7 +43,7 @@ describe('Factory supervisor contract', () => {
       [
         { workItemId: 'item-0', role: 'work', bindingId: 'binding-a', activity: 'running' },
         { workItemId: 'two', role: 'work', bindingId: 'binding-b', activity: 'idle' },
-        { workItemId: 'missing', role: 'review', bindingId: 'binding-c', activity: 'offline' },
+        { workItemId: 'missing', role: 'review', bindingId: 'binding-c', activity: 'idle' },
       ],
       new Date('2026-07-22T00:01:00.000Z'),
     );
@@ -62,7 +62,7 @@ describe('Factory supervisor contract', () => {
       workItemTitle: 'Title item-0',
       ageSeconds: 60,
     });
-    expect(state.workers).toMatchObject({ running: 1, idle: 1, offline: 1 });
+    expect(state.workers).toMatchObject({ running: 1, idle: 2 });
     expect(state.workers.bindings).toEqual([
       {
         workItemId: 'item-0',
@@ -84,7 +84,7 @@ describe('Factory supervisor contract', () => {
         workItemId: 'missing',
         role: 'review',
         bindingId: 'binding-c',
-        activity: 'offline',
+        activity: 'idle',
         workItemTitle: null,
         stage: null,
       },

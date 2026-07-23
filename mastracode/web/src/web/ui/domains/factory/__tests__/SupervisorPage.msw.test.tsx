@@ -65,7 +65,6 @@ const initialState: FactorySupervisorState = {
   workers: {
     running: 1,
     idle: 1,
-    offline: 0,
     bindings: [
       {
         workItemId: 'work-item-1',
