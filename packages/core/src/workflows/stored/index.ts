@@ -6,12 +6,14 @@
  * Split by concern:
  *  - `serialize`          — live → storable (`toStorableGraph`)
  *  - `rehydrate`          — storable → runnable (`rehydrateWorkflow`)
- *  - `validate`           — pure save-time validation of stored definitions
- *  - `graph`              — shared typed walker over serialized graph entries
+ *  - `validate/`          — the one issue-collecting validation core
+ *  - `mapping-config`     — the one mapConfig parser + analyzer
+ *  - `graph`              — shared typed walkers over serialized graph entries
  *  - `json-schema-to-zod` — JSON Schema ↔ Zod bridge + write-time validation
  */
 export * from './json-schema-to-zod';
 export * from './serialize';
 export * from './rehydrate';
-export * from './validate';
+export * from './validate/index';
+export * from './mapping-config';
 export * from './graph';

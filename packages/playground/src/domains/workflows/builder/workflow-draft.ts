@@ -1,6 +1,10 @@
 import type { UpsertStoredWorkflowParams } from '@mastra/client-js';
 import { normalizeWorkflowBuilderDefinition, preflightWorkflowDefinition } from '@mastra/core/workflows/builder';
-import type { WorkflowDefinitionPreflightContext } from '@mastra/core/workflows/builder';
+import type {
+  WorkflowDefinitionPreflightContext,
+  WorkflowDefinitionPreflightIssue,
+  WorkflowDefinitionPreflightIssueCode,
+} from '@mastra/core/workflows/builder';
 
 export type WorkflowDraft = UpsertStoredWorkflowParams;
 export type WorkflowDraftStep = WorkflowDraft['graph'][number];
@@ -49,25 +53,19 @@ export type WorkflowDraftMutation =
   | { type: 'update-step'; stepId: string; step: WorkflowDraftStep }
   | { type: 'remove-step'; stepId: string };
 
+/**
+ * Draft issues are the Core validation codes plus a few draft-only concerns
+ * (identity, schema shape, sleep literals, catalog availability, mutations).
+ * Deriving from the Core union means new Core checks surface here without a
+ * hand-maintained copy.
+ */
 export type WorkflowDraftValidationIssueCode =
+  | WorkflowDefinitionPreflightIssueCode
   | 'invalid-workflow-id'
   | 'invalid-schema'
-  | 'empty-graph'
-  | 'missing-step-id'
-  | 'duplicate-step-id'
-  | 'missing-reference'
-  | 'invalid-nested-workflow-id'
-  | 'invalid-map-config'
-  | 'invalid-map-reference'
-  | 'invalid-map-placement'
-  | 'invalid-parallel'
-  | 'invalid-foreach'
   | 'invalid-duration'
   | 'invalid-date'
-  | 'invalid-conditional'
-  | 'invalid-loop'
   | 'workflow-catalog-unavailable'
-  | 'incompatible-schema'
   | 'invalid-mutation';
 
 export interface WorkflowDraftValidationIssue {
@@ -85,12 +83,6 @@ const emptyObjectSchema = {
   type: 'object',
   properties: {},
   additionalProperties: false,
-} as const;
-
-const agentInputSchema = {
-  type: 'object',
-  properties: { prompt: { type: 'string' } },
-  required: ['prompt'],
 } as const;
 
 export function createWorkflowDraft(id: string): WorkflowDraft {
@@ -118,373 +110,150 @@ function validateJsonSchema(schema: unknown, path: string, issues: WorkflowDraft
   }
 }
 
-type SchemaCompatibility = 'compatible' | 'incompatible' | 'unknown';
-
-function schemaCompatibility(source: unknown, destination: unknown): SchemaCompatibility {
-  if (!isRecord(source) || !isRecord(destination)) return 'unknown';
-  const sourceType = typeof source.type === 'string' ? source.type : undefined;
-  const destinationType = typeof destination.type === 'string' ? destination.type : undefined;
-  if (!sourceType || !destinationType) return 'unknown';
-  if (sourceType !== destinationType) return 'incompatible';
-
-  if (destinationType === 'array') return schemaCompatibility(source.items, destination.items);
-  if (destinationType !== 'object') return 'compatible';
-
-  const sourceProperties = isRecord(source.properties) ? source.properties : {};
-  const destinationProperties = isRecord(destination.properties) ? destination.properties : {};
-  const required = Array.isArray(destination.required)
-    ? destination.required.filter((key): key is string => typeof key === 'string')
-    : [];
-
-  for (const key of required) {
-    if (!(key in sourceProperties)) return 'incompatible';
-  }
-  for (const [key, destinationProperty] of Object.entries(destinationProperties)) {
-    if (!(key in sourceProperties)) continue;
-    if (schemaCompatibility(sourceProperties[key], destinationProperty) === 'incompatible') return 'incompatible';
-  }
-  return 'compatible';
-}
-
-function isValidMappingTemplate(template: string): boolean {
-  for (const match of template.matchAll(/\$\{([^}]*)\}/g)) {
-    const expression = match[1] ?? '';
-    if (!expression || expression !== expression.trim()) return false;
-    const [scope, ...path] = expression.split('.');
-    if (scope === 'stepResults') {
-      if (!path[0]) return false;
-      continue;
+/** Visits every entry (top-level and container children) with its issue path. */
+function forEachDraftStep(
+  graph: WorkflowDraft['graph'],
+  visit: (
+    step: WorkflowDraftStep | Extract<WorkflowDraftStep, { type: 'parallel' }>['steps'][number],
+    path: string,
+  ) => void,
+): void {
+  graph.forEach((step, index) => {
+    const path = `graph.${index}`;
+    visit(step, path);
+    if (step.type === 'parallel' || step.type === 'conditional') {
+      step.steps.forEach((child, childIndex) => visit(child, `${path}.steps.${childIndex}`));
+    } else if (step.type === 'foreach' || step.type === 'loop') {
+      visit(step.step, `${path}.step`);
     }
-    if (scope === 'requestContext') {
-      if (path.length === 0) return false;
-      continue;
-    }
-    if (!['inputData', 'initData', 'state'].includes(scope)) return false;
-  }
-  return true;
+  });
 }
 
-function isValidMappingSource(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  if ('value' in value) return true;
-  if (typeof value.template === 'string') return isValidMappingTemplate(value.template);
-  if (typeof value.requestContextPath === 'string' && value.requestContextPath.length > 0) return true;
-  if (typeof value.path !== 'string') return false;
-  if (value.initData === true) return true;
-  if (typeof value.step === 'string' && value.step.length > 0) return true;
-  return Array.isArray(value.step) && value.step.length > 0 && value.step.every(step => typeof step === 'string');
-}
-
-function mappingOutputSchema(
-  step: Extract<WorkflowDraftStep, { type: 'mapping' }>,
-  path?: string,
-  issues?: WorkflowDraftValidationIssue[],
-): JsonSchema | undefined {
-  try {
-    const config: unknown = JSON.parse(step.mapConfig);
-    if (!isRecord(config)) return undefined;
-    for (const [key, source] of Object.entries(config)) {
-      if (isValidMappingSource(source)) continue;
-      issues?.push({
-        code: 'invalid-map-config',
-        path: `${path}.${key}`,
-        message:
-          'Mapping entries must use value, template, requestContextPath, or a step/initData source with a path. Expressions are not supported.',
-      });
-    }
-    return {
-      type: 'object',
-      properties: Object.fromEntries(Object.keys(config).map(key => [key, {}])),
-      required: Object.keys(config),
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function getStepInputSchema(step: WorkflowDraftStep, context?: WorkflowDraftValidationContext): JsonSchema | undefined {
-  switch (step.type) {
-    case 'agent':
-      return context?.agents ? (context.agents[step.agentId]?.inputSchema ?? agentInputSchema) : undefined;
-    case 'tool':
-      return context?.tools?.[step.toolId]?.inputSchema;
-    case 'workflow':
-      return context?.workflows?.[step.workflowId]?.inputSchema;
-    case 'foreach':
-      return { type: 'array', items: getStepInputSchema(step.step, context) ?? {} };
-    case 'loop':
-      return getStepInputSchema(step.step, context);
-    default:
-      return undefined;
-  }
-}
-
-function getStepOutputSchema(
-  step: WorkflowDraftStep,
-  context?: WorkflowDraftValidationContext,
-): JsonSchema | undefined {
-  switch (step.type) {
-    case 'agent':
-      return step.outputSchema ?? context?.agents?.[step.agentId]?.outputSchema;
-    case 'tool':
-      return context?.tools?.[step.toolId]?.outputSchema;
-    case 'workflow':
-      return context?.workflows?.[step.workflowId]?.outputSchema;
-    case 'mapping':
-      return mappingOutputSchema(step);
-    case 'foreach': {
-      const itemSchema = getStepOutputSchema(step.step, context);
-      return itemSchema ? { type: 'array', items: itemSchema } : undefined;
-    }
-    case 'loop':
-      return getStepOutputSchema(step.step, context);
-    default:
-      return undefined;
-  }
-}
-
-function validateStep(
-  step: WorkflowDraftStep,
-  path: string,
-  seenIds: Set<string>,
+/**
+ * Draft-only checks the Core validator intentionally does not own: sleep
+ * literals, catalog availability, and empty reference ids (flagged even when
+ * no catalog was loaded, so an obviously incomplete step never looks fine).
+ */
+function validateDraftSpecifics(
+  draft: WorkflowDraft,
   issues: WorkflowDraftValidationIssue[],
   context?: WorkflowDraftValidationContext,
 ): void {
-  if ('id' in step) {
-    if (step.id.trim().length === 0) {
-      issues.push({ code: 'missing-step-id', path: `${path}.id`, message: 'Step id is required.' });
-    } else if (seenIds.has(step.id)) {
-      issues.push({ code: 'duplicate-step-id', path: `${path}.id`, message: `Step id "${step.id}" is duplicated.` });
-    } else {
-      seenIds.add(step.id);
-    }
-  }
-
-  switch (step.type) {
-    case 'agent':
-      if (step.agentId.trim().length === 0 || (context?.agents && !context.agents[step.agentId])) {
-        issues.push({
-          code: 'missing-reference',
-          path: `${path}.agentId`,
-          message: `Agent "${step.agentId}" is unavailable.`,
-        });
-      }
-      return;
-    case 'tool':
-      if (step.toolId.trim().length === 0 || (context?.tools && !context.tools[step.toolId])) {
-        issues.push({
-          code: 'missing-reference',
-          path: `${path}.toolId`,
-          message: `Tool "${step.toolId}" is unavailable.`,
-        });
-      }
-      return;
-    case 'workflow':
-      if (step.id !== step.workflowId) {
-        issues.push({
-          code: 'invalid-nested-workflow-id',
-          path: `${path}.id`,
-          message: `Nested workflow step id "${step.id}" must match workflowId "${step.workflowId}". Use "${step.workflowId}" for both fields.`,
-        });
-      }
-      if (context?.workflowCatalog === 'unavailable') {
-        issues.push({
-          code: 'workflow-catalog-unavailable',
-          path: `${path}.workflowId`,
-          message: 'Workflow catalog is unavailable, so nested workflow references cannot be finalized.',
-        });
-      } else if (step.workflowId.trim().length === 0 || (context?.workflows && !context.workflows[step.workflowId])) {
-        issues.push({
-          code: 'missing-reference',
-          path: `${path}.workflowId`,
-          message: `Workflow "${step.workflowId}" is unavailable.`,
-        });
-      }
-      return;
-    case 'mapping':
-      if (!mappingOutputSchema(step, `${path}.mapConfig`, issues)) {
-        issues.push({
-          code: 'invalid-map-config',
-          path: `${path}.mapConfig`,
-          message: 'Mapping config must be a JSON object.',
-        });
-      }
-      return;
-    case 'parallel':
-      if (step.steps.length === 0) {
-        issues.push({ code: 'invalid-parallel', path: `${path}.steps`, message: 'Parallel steps cannot be empty.' });
-      }
-      step.steps.forEach((child, index) => {
-        if (child.type === 'mapping') {
+  forEachDraftStep(draft.graph, (step, path) => {
+    switch (step.type) {
+      case 'agent':
+        if (step.agentId.trim().length === 0) {
           issues.push({
-            code: 'invalid-map-config',
-            path: `${path}.steps.${index}`,
-            message: 'Persisted mapping steps must be top-level workflow entries.',
+            code: 'missing-reference',
+            path: `${path}.agentId`,
+            message: `Agent "${step.agentId}" is unavailable.`,
           });
         }
-        validateStep(child, `${path}.steps.${index}`, seenIds, issues, context);
-      });
-      return;
-    case 'foreach':
-      if (step.opts?.concurrency !== undefined && step.opts.concurrency < 1) {
-        issues.push({
-          code: 'invalid-foreach',
-          path: `${path}.opts.concurrency`,
-          message: 'Concurrency must be positive.',
-        });
-      }
-      validateStep(step.step, `${path}.step`, seenIds, issues, context);
-      return;
-    case 'conditional':
-      if (step.steps.length === 0 || step.steps.length !== step.predicates.length) {
-        issues.push({
-          code: 'invalid-conditional',
-          path,
-          message: 'Conditional steps and predicates must be non-empty and aligned.',
-        });
-      }
-      step.steps.forEach((child, index) => {
-        if (child.type === 'mapping') {
+        return;
+      case 'tool':
+        if (step.toolId.trim().length === 0) {
           issues.push({
-            code: 'invalid-map-config',
-            path: `${path}.steps.${index}`,
-            message: 'Persisted mapping steps must be top-level workflow entries.',
+            code: 'missing-reference',
+            path: `${path}.toolId`,
+            message: `Tool "${step.toolId}" is unavailable.`,
           });
         }
-        validateStep(child, `${path}.steps.${index}`, seenIds, issues, context);
-      });
-      return;
-    case 'loop':
-      if (step.loopType !== 'dowhile' && step.loopType !== 'dountil') {
-        issues.push({ code: 'invalid-loop', path: `${path}.loopType`, message: 'Loop type is invalid.' });
-      }
-      if (step.step.type === 'mapping') {
-        issues.push({
-          code: 'invalid-map-config',
-          path: `${path}.step`,
-          message: 'Persisted mapping steps must be top-level workflow entries.',
-        });
-      }
-      validateStep(step.step, `${path}.step`, seenIds, issues, context);
-      return;
-    case 'sleep':
-      if (!Number.isFinite(step.duration) || step.duration < 0) {
-        issues.push({
-          code: 'invalid-duration',
-          path: `${path}.duration`,
-          message: 'Sleep duration must be non-negative.',
-        });
-      }
-      return;
-    case 'sleepUntil':
-      if (Number.isNaN(Date.parse(step.date))) {
-        issues.push({
-          code: 'invalid-date',
-          path: `${path}.date`,
-          message: 'Sleep-until date must be ISO-compatible.',
-        });
-      }
-      return;
-  }
+        return;
+      case 'workflow':
+        if (context?.workflowCatalog === 'unavailable') {
+          issues.push({
+            code: 'workflow-catalog-unavailable',
+            path: `${path}.workflowId`,
+            message: 'Workflow catalog is unavailable, so nested workflow references cannot be finalized.',
+          });
+        } else if (step.workflowId.trim().length === 0) {
+          issues.push({
+            code: 'missing-reference',
+            path: `${path}.workflowId`,
+            message: `Workflow "${step.workflowId}" is unavailable.`,
+          });
+        }
+        return;
+      case 'loop':
+        if (step.loopType !== 'dowhile' && step.loopType !== 'dountil') {
+          issues.push({ code: 'invalid-loop', path: `${path}.loopType`, message: 'Loop type is invalid.' });
+        }
+        return;
+      case 'sleep':
+        if (!Number.isFinite(step.duration) || step.duration < 0) {
+          issues.push({
+            code: 'invalid-duration',
+            path: `${path}.duration`,
+            message: 'Sleep duration must be non-negative.',
+          });
+        }
+        return;
+      case 'sleepUntil':
+        if (Number.isNaN(Date.parse(step.date))) {
+          issues.push({
+            code: 'invalid-date',
+            path: `${path}.date`,
+            message: 'Sleep-until date must be ISO-compatible.',
+          });
+        }
+        return;
+      default:
+        return;
+    }
+  });
 }
 
-function incompatibleSchemaIssue(issues: WorkflowDraftValidationIssue[], path: string, message: string): void {
-  issues.push({ code: 'incompatible-schema', path, message });
+const TOP_LEVEL_ENTRY_PATH = /^graph\.\d+$/;
+
+/** Rewrites Core issue copy into the Studio UI's actionable phrasing. */
+function toDraftIssue(issue: WorkflowDefinitionPreflightIssue): WorkflowDraftValidationIssue {
+  if (issue.code === 'incompatible-schema') {
+    if (issue.message === 'Foreach input must be an array.') {
+      return { ...issue, message: 'Foreach input must be an array. Insert or update a mapping step.' };
+    }
+    if (issue.path === 'outputSchema') {
+      return {
+        ...issue,
+        message:
+          'Workflow output schema is incompatible with the final step output. Add a top-level mapping step or update the output schema.',
+      };
+    }
+    if (issue.message === 'Step input is incompatible with the preceding workflow output.') {
+      return TOP_LEVEL_ENTRY_PATH.test(issue.path)
+        ? {
+            ...issue,
+            message: `Step ${issue.path.slice('graph.'.length)} input is incompatible with ${issue.path === 'graph.0' ? 'the workflow input' : 'the previous step output'}. Insert or update a mapping step.`,
+          }
+        : {
+            ...issue,
+            message:
+              'Step input is incompatible with the containing flow input. Insert a top-level mapping step or use a nested workflow to shape the input.',
+          };
+    }
+    return issue;
+  }
+  if (
+    issue.code === 'invalid-map-config' &&
+    (issue.message === 'Mapping descriptor must be an object.' ||
+      issue.message === 'Mapping descriptor must define exactly one source.')
+  ) {
+    return {
+      ...issue,
+      message:
+        'Mapping entries must use value, template, requestContextPath, or a step/initData source with a path. Expressions are not supported.',
+    };
+  }
+  return issue;
 }
 
-function childOutputProperties(
-  steps: Extract<WorkflowDraftStep, { type: 'parallel' | 'conditional' }>['steps'],
-  context?: WorkflowDraftValidationContext,
-): Record<string, JsonSchema> | undefined {
-  const properties: Record<string, JsonSchema> = {};
-  for (const child of steps) {
-    const output = getStepOutputSchema(child, context);
-    if (!output) return undefined;
-    properties[child.id] = output;
-  }
-  return properties;
-}
-
-function validateStepSchemaFlow(
-  step: WorkflowDraftStep,
-  inputSchema: JsonSchema | undefined,
-  path: string,
-  issues: WorkflowDraftValidationIssue[],
-  context?: WorkflowDraftValidationContext,
-): JsonSchema | undefined {
-  switch (step.type) {
-    case 'mapping':
-      return getStepOutputSchema(step, context);
-    case 'sleep':
-    case 'sleepUntil':
-      return inputSchema;
-    case 'parallel': {
-      step.steps.forEach((child, index) => {
-        validateStepSchemaFlow(child, inputSchema, `${path}.steps.${index}`, issues, context);
-      });
-      const properties = childOutputProperties(step.steps, context);
-      return properties ? { type: 'object', properties, required: Object.keys(properties) } : undefined;
-    }
-    case 'conditional': {
-      step.steps.forEach((child, index) => {
-        validateStepSchemaFlow(child, inputSchema, `${path}.steps.${index}`, issues, context);
-      });
-      const properties = childOutputProperties(step.steps, context);
-      return properties ? { type: 'object', properties } : undefined;
-    }
-    case 'foreach': {
-      const itemSchema =
-        isRecord(inputSchema) && inputSchema.type === 'array' && isRecord(inputSchema.items)
-          ? inputSchema.items
-          : undefined;
-      if (isRecord(inputSchema) && typeof inputSchema.type === 'string' && inputSchema.type !== 'array') {
-        incompatibleSchemaIssue(issues, path, 'Foreach input must be an array. Insert or update a mapping step.');
-      }
-      const itemOutput = validateStepSchemaFlow(step.step, itemSchema, `${path}.step`, issues, context);
-      return itemOutput ? { type: 'array', items: itemOutput } : undefined;
-    }
-    case 'loop': {
-      const output = validateStepSchemaFlow(step.step, inputSchema, `${path}.step`, issues, context);
-      const destination = getStepInputSchema(step.step, context);
-      if (schemaCompatibility(output, destination) === 'incompatible') {
-        incompatibleSchemaIssue(
-          issues,
-          `${path}.step`,
-          'Loop step output is incompatible with its input for a subsequent iteration.',
-        );
-      }
-      return output;
-    }
-    default: {
-      const destination = getStepInputSchema(step, context);
-      if (schemaCompatibility(inputSchema, destination) === 'incompatible') {
-        const label =
-          path.startsWith('graph.') && !path.includes('.steps.') && !path.endsWith('.step')
-            ? `Step ${path.slice('graph.'.length)} input is incompatible with ${path === 'graph.0' ? 'the workflow input' : 'the previous step output'}. Insert or update a mapping step.`
-            : 'Step input is incompatible with the containing flow input. Insert a top-level mapping step or use a nested workflow to shape the input.';
-        incompatibleSchemaIssue(issues, path, label);
-      }
-      return getStepOutputSchema(step, context);
-    }
-  }
-}
+const issueKey = (issue: WorkflowDraftValidationIssue): string => `${issue.code}:${issue.path}`;
 
 export function validateWorkflowDraft(
   draft: WorkflowDraft,
   context?: WorkflowDraftValidationContext,
 ): WorkflowDraftValidationResult {
   const issues: WorkflowDraftValidationIssue[] = [];
-  const preflightContext: WorkflowDefinitionPreflightContext = {
-    agents: context?.agents,
-    tools: context?.tools,
-    workflows: context?.workflowCatalog === 'unavailable' ? undefined : context?.workflows,
-  };
-  let preflight: ReturnType<typeof preflightWorkflowDefinition> | undefined;
-  try {
-    preflight = preflightWorkflowDefinition(normalizeWorkflowBuilderDefinition(draft), preflightContext);
-  } catch {
-    preflight = undefined;
-  }
+
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(draft.id)) {
     issues.push({ code: 'invalid-workflow-id', path: 'id', message: 'Workflow id must be descriptive kebab-case.' });
   }
@@ -494,34 +263,28 @@ export function validateWorkflowDraft(
   if (draft.requestContextSchema !== undefined) {
     validateJsonSchema(draft.requestContextSchema, 'requestContextSchema', issues);
   }
-  if (draft.graph.length === 0) {
-    issues.push({ code: 'empty-graph', path: 'graph', message: 'Workflow graph must contain at least one step.' });
-  }
+  validateDraftSpecifics(draft, issues, context);
 
-  const seenIds = new Set<string>();
-  draft.graph.forEach((step, index) => validateStep(step, `graph.${index}`, seenIds, issues, context));
-
-  let currentSchema: JsonSchema | undefined = draft.inputSchema;
-  draft.graph.forEach((step, index) => {
-    currentSchema = validateStepSchemaFlow(step, currentSchema, `graph.${index}`, issues, context);
-  });
-  if (schemaCompatibility(currentSchema, draft.outputSchema) === 'incompatible') {
-    incompatibleSchemaIssue(
-      issues,
-      'outputSchema',
-      'Workflow output schema is incompatible with the final step output. Add a top-level mapping step or update the output schema.',
-    );
-  }
-
-  if (preflight && !preflight.ok) {
-    const existingPaths = issues.map(issue => issue.path);
-    issues.push(
-      ...preflight.issues.filter(
-        issue =>
-          (issue.code !== 'incompatible-schema' || context !== undefined) &&
-          !existingPaths.some(path => issue.path === path || issue.path.startsWith(`${path}.`)),
-      ),
-    );
+  // Structure, references, JSON-Schema keywords, and schema-flow all come
+  // from the single Core validation domain — the same checks the server runs
+  // at save time, so a finalized draft cannot be rejected on save.
+  const coreContext: WorkflowDefinitionPreflightContext = {
+    agents: context?.agents,
+    tools: context?.tools,
+    workflows: context?.workflowCatalog === 'unavailable' ? undefined : context?.workflows,
+  };
+  try {
+    const preflight = preflightWorkflowDefinition(normalizeWorkflowBuilderDefinition(draft), coreContext);
+    if (!preflight.ok) {
+      const seen = new Set(issues.map(issueKey));
+      issues.push(...preflight.issues.map(toDraftIssue).filter(issue => !seen.has(issueKey(issue))));
+    }
+  } catch (error) {
+    issues.push({
+      code: 'invalid-schema',
+      path: 'graph',
+      message: error instanceof Error ? error.message : 'Workflow definition could not be normalized.',
+    });
   }
 
   return issues.length === 0 ? { ok: true } : { ok: false, issues };
@@ -570,8 +333,6 @@ function mutateWorkflowDraft(
   }
 }
 
-const issueKey = (issue: WorkflowDraftValidationIssue): string => `${issue.code}:${issue.path}`;
-
 export function applyWorkflowDraftMutation(
   draft: WorkflowDraft,
   mutation: WorkflowDraftMutation,
@@ -597,6 +358,7 @@ const checkpointBlockingCodes = new Set<WorkflowDraftValidationIssueCode>([
   'missing-step-id',
   'duplicate-step-id',
   'invalid-map-config',
+  'invalid-map-placement',
   'invalid-parallel',
   'invalid-foreach',
   'invalid-duration',

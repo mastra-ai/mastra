@@ -1,48 +1,37 @@
 import type { Predicate } from '../predicate';
+import type { ValidatableStepFlowEntry, WorkflowValidationInput } from '../stored/validate/types';
+import type { SerializedSingleStepEntry, SerializedStepOptions } from '../types';
 
 export type WorkflowBuilderJsonValue =
   string | number | boolean | null | WorkflowBuilderJsonValue[] | { [key: string]: WorkflowBuilderJsonValue };
 
 export type WorkflowBuilderJsonObject = { [key: string]: WorkflowBuilderJsonValue };
 
-export interface WorkflowBuilderStepOptions {
-  retries?: number;
-  metadata?: WorkflowBuilderJsonObject;
-}
+export type WorkflowBuilderStepOptions = SerializedStepOptions;
 
-export interface WorkflowBuilderAgentEntry {
-  type: 'agent';
-  id: string;
-  agentId: string;
-  outputSchema?: WorkflowBuilderJsonObject;
-  options?: WorkflowBuilderStepOptions;
-}
+/**
+ * Authoring leaf entries are the canonical serialized leaf union minus
+ * code-only `step` descriptors (a persisted definition cannot reference a
+ * live Step object). Derived, not duplicated: when the serialized union
+ * changes, these change with it.
+ */
+export type WorkflowBuilderSingleStepEntry = Exclude<SerializedSingleStepEntry, { type: 'step' }>;
 
-export interface WorkflowBuilderToolEntry {
-  type: 'tool';
-  id: string;
-  toolId: string;
-  options?: WorkflowBuilderStepOptions;
-}
+export type WorkflowBuilderAgentEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'agent' }>;
+export type WorkflowBuilderToolEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'tool' }>;
+export type WorkflowBuilderMappingEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'mapping' }>;
+export type WorkflowBuilderWorkflowEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'workflow' }>;
 
-export interface WorkflowBuilderMappingEntry {
-  type: 'mapping';
-  id: string;
-  mapConfig: string;
-}
+export type WorkflowBuilderExecutableInnerEntry = Exclude<WorkflowBuilderSingleStepEntry, { type: 'mapping' }>;
 
-export interface WorkflowBuilderWorkflowEntry {
-  type: 'workflow';
-  id: string;
-  workflowId: string;
-  options?: WorkflowBuilderStepOptions;
-}
-
-export type WorkflowBuilderSingleStepEntry =
-  WorkflowBuilderAgentEntry | WorkflowBuilderToolEntry | WorkflowBuilderMappingEntry | WorkflowBuilderWorkflowEntry;
-
-export type WorkflowBuilderExecutableInnerEntry = Exclude<WorkflowBuilderSingleStepEntry, WorkflowBuilderMappingEntry>;
-
+/**
+ * Container entries are hand-written *narrowings* of the serialized union:
+ * declarative predicates are required (closure conditions can't be authored),
+ * fluent-only debug labels (`serializedConditions`/`serializedCondition`) are
+ * absent, and `sleepUntil.date` is the wire's ISO string rather than a Date.
+ * The static assertions at the bottom of this file prove each narrowing stays
+ * inside the canonical union — drift is a compile error.
+ */
 export interface WorkflowBuilderParallelEntry {
   type: 'parallel';
   steps: WorkflowBuilderExecutableInnerEntry[];
@@ -97,6 +86,20 @@ export interface WorkflowBuilderDefinition {
   requestContextSchema?: WorkflowBuilderJsonObject;
   graph: WorkflowBuilderGraphEntry[];
 }
+
+type Extends<A, B> = [A] extends [B] ? true : false;
+type Expect<T extends true> = T;
+
+/**
+ * Compile-time drift guards: the authoring universe must remain a subset of
+ * the canonical serialized/wire union the validation core operates on. If a
+ * serialized variant gains a required field (or an authoring type drifts),
+ * these tuple members stop typechecking and the build fails.
+ */
+export type WorkflowBuilderTypeAssertions = [
+  Expect<Extends<WorkflowBuilderGraphEntry, ValidatableStepFlowEntry>>,
+  Expect<Extends<WorkflowBuilderDefinition, WorkflowValidationInput>>,
+];
 
 export const WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES = [
   'agent',
@@ -158,16 +161,6 @@ function normalizeEntry(entry: Record<string, unknown>): WorkflowBuilderGraphEnt
       normalized.mapConfig ?? (normalized.output === undefined ? undefined : { output: normalized.output });
     if (mapConfig !== undefined) normalized.mapConfig = JSON.stringify(mapConfig);
     delete normalized.output;
-  }
-  if (
-    normalized.type === 'workflow' &&
-    typeof normalized.id === 'string' &&
-    typeof normalized.workflowId === 'string' &&
-    normalized.id !== normalized.workflowId
-  ) {
-    throw new TypeError(
-      `Nested workflow step id "${normalized.id}" must match workflowId "${normalized.workflowId}". Use "${normalized.workflowId}" for both fields.`,
-    );
   }
   if ((normalized.type === 'parallel' || normalized.type === 'conditional') && Array.isArray(normalized.steps)) {
     normalized.steps = normalized.steps.map(step =>

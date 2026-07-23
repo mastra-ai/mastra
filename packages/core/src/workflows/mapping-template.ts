@@ -88,6 +88,25 @@ export function validateTemplate(template: string): void {
 }
 
 /**
+ * Collects the step ids referenced by `${stepResults.<stepId>}` /
+ * `${stepResults.<stepId>.<path>}` placeholders in a template. Assumes the
+ * template already passed {@link validateTemplate}; malformed placeholders are
+ * skipped. Used by validation to scope-check template references against the
+ * preceding workflow-local steps.
+ */
+export function collectTemplateStepIds(template: string): string[] {
+  const ids: string[] = [];
+  for (const match of template.matchAll(TEMPLATE_PLACEHOLDER)) {
+    const { scope, rest } = parseTemplatePlaceholder(match[1] ?? '');
+    if (scope !== 'stepResults') continue;
+    const innerDot = rest.indexOf('.');
+    const stepId = innerDot === -1 ? rest : rest.slice(0, innerDot);
+    if (stepId) ids.push(stepId);
+  }
+  return ids;
+}
+
+/**
  * Coerces a resolved placeholder value to a string. Primitives are stringified
  * the normal way; objects and arrays are JSON-encoded so downstream agents can
  * consume complex step outputs (e.g. `foreach(agent)` returns `{ text }[]`)
