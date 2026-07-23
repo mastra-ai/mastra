@@ -48,6 +48,21 @@ describe('resolveUiDistDir', () => {
     expect(resolveUiDistDir()).toBe('/custom/factory-ui');
   });
 
+  it('resolves factory assets next to the entry script when cwd differs (deployed layout)', () => {
+    // Railway runtime: WORKDIR /app, CMD ["node", "output/index.mjs"] — cwd is
+    // /app but the artifact (and its factory/ dir) lives under /app/output.
+    const originalArgv1 = process.argv[1];
+    vi.spyOn(process, 'cwd').mockReturnValue('/app');
+    process.argv[1] = 'output/index.mjs';
+    vi.mocked(existsSync).mockImplementation(path => path === '/app/output/factory/index.html');
+
+    try {
+      expect(resolveUiDistDir()).toBe('/app/output/factory');
+    } finally {
+      process.argv[1] = originalArgv1;
+    }
+  });
+
   it('falls back to the source layout under MASTRA_PROJECT_ROOT', () => {
     process.env.MASTRA_PROJECT_ROOT = '/project';
     vi.spyOn(process, 'cwd').mockReturnValue('/runtime');

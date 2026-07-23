@@ -47,16 +47,24 @@ const SERVER_PREFIXES = ['/api', '/web', '/auth'];
  *   1. `MASTRACODE_UI_DIST` — explicit override for custom layouts.
  *   2. `factory/` under cwd — both `mastra dev` (cwd is the Mastra public dir)
  *      and `mastra start` (cwd is `.mastra/output`) expose assets this way.
- *   3. `factory/` next to the bundled server module.
- *   4. Source-layout fallbacks under `MASTRA_PROJECT_ROOT` or cwd.
+ *   3. `factory/` next to the entry script (`process.argv[1]`) — deployed
+ *      runtimes start the artifact from outside the output dir (e.g. Railway:
+ *      `WORKDIR /app`, `CMD ["node", "output/index.mjs"]`), so cwd misses but
+ *      the entry's dir is the output dir.
+ *   4. `factory/` next to this module — only effective when the server is
+ *      bundled into a single file; misses when `@mastra/factory` is
+ *      externalized to `node_modules`.
+ *   5. Source-layout fallbacks under `MASTRA_PROJECT_ROOT` or cwd.
  * Returns `undefined` when no build is found (e.g. plain `mastra dev` without
  * a prior vite build), in which case the middleware is simply not mounted.
  */
 export function resolveUiDistDir(): string | undefined {
   const projectRoot = process.env.MASTRA_PROJECT_ROOT?.trim();
+  const entryScript = process.argv[1];
   const candidates = [
     process.env.MASTRACODE_UI_DIST,
     resolve(process.cwd(), 'factory'),
+    entryScript && join(dirname(resolve(entryScript)), 'factory'),
     join(dirname(fileURLToPath(import.meta.url)), 'factory'),
     projectRoot && resolve(projectRoot, 'src/mastra/public/factory'),
     resolve(process.cwd(), 'src/mastra/public/factory'),
