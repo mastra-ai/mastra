@@ -20,6 +20,7 @@ import {
   waitForDatabaseReady,
 } from './platform.js';
 import { cloneTemplate, renameProject } from './utils/clone.js';
+import { pinMastraDependencies } from './utils/pin-versions.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
 export interface CreateArgs {
@@ -115,6 +116,25 @@ export async function create(args: CreateArgs): Promise<void> {
   } catch (err) {
     spinner.stop('Template download failed.');
     throw err;
+  }
+
+  // ── Pin Mastra package versions ──────────────────────────────────────────
+  // Resolve the template's `"latest"` Mastra deps to one consistent exact
+  // set before install. Installing with floating tags + `--prefer-offline`
+  // can resolve tags from stale cached metadata, splitting the graph into
+  // two Mastra stacks (duplicate @mastra/core copies break instanceof
+  // checks). Best-effort: on registry failure we install with tags as before.
+  const pinSpinner = p.spinner();
+  pinSpinner.start('Resolving Mastra package versions...');
+  try {
+    const { pins } = await pinMastraDependencies(projectPath);
+    const count = Object.keys(pins).length;
+    pinSpinner.stop(count > 0 ? `Pinned ${count} Mastra packages.` : 'No Mastra packages to pin.');
+  } catch (err) {
+    pinSpinner.stop('Could not resolve Mastra package versions.');
+    p.log.warn(
+      `Falling back to dist-tag installs (${err instanceof Error ? err.message : String(err)}). If the install produces duplicate @mastra packages, re-run with a working network connection.`,
+    );
   }
 
   // ── Install dependencies ─────────────────────────────────────────────────

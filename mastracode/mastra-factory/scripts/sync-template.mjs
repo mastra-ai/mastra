@@ -14,6 +14,9 @@
  * create-mastra template ships. The Mastra packages ship as a coordinated set
  * on the `latest` dist-tag; pinning here to the same tag keeps the standalone
  * template's install path identical to the rest of the template ecosystem.
+ * At scaffold time `create-factory` resolves these tags to one consistent
+ * exact version set (see src/utils/pin-versions.ts) so installs never mix
+ * releases.
  *
  * Usage:
  *   node scripts/sync-template.mjs [--out <dir>]
