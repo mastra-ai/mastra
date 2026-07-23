@@ -176,8 +176,8 @@ describe('WorkflowChatProvider', () => {
         checkpoint: (expectedRevision, draft) =>
           apply(checkpointWorkflowDraft(authoringState, expectedRevision, draft)),
         finalize: expectedRevision => apply(finalizeWorkflowDraft(authoringState, expectedRevision)),
-        mutate: (expectedRevision, mutation) =>
-          apply(mutateWorkflowDraftAuthoringState(authoringState, expectedRevision, mutation)),
+        mutateCandidate: (candidateState, expectedRevision, mutation) =>
+          mutateWorkflowDraftAuthoringState(candidateState, expectedRevision, mutation),
       });
 
       await act(async () => {

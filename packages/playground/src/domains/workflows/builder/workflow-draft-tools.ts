@@ -10,6 +10,7 @@ import type {
   WorkflowDraftAuthoringState,
   WorkflowDraftMutation,
   WorkflowDraftStep,
+  WorkflowDraftValidationIssue,
 } from './workflow-draft';
 
 type WorkflowPredicate = Extract<WorkflowDraftStep, { type: 'conditional' }>['predicates'][number];
@@ -30,6 +31,8 @@ const resultSchema = z.object({
   lifecycle: z.enum(['untouched', 'constructing', 'ready']).optional(),
   revision: z.number().int().nonnegative().optional(),
   finalizedRevision: z.number().int().nonnegative().optional(),
+  candidateRevision: z.number().int().nonnegative().optional(),
+  baseAcceptedRevision: z.number().int().nonnegative().optional(),
 });
 
 const stepOptionsSchema = z
@@ -178,6 +181,10 @@ export const workflowDefinitionInputSchema = z.object({
   requestContextSchema: jsonSchema.nullish(),
   graph: z.array(workflowStepInputSchema),
 });
+export const workflowCandidateCheckpointInputSchema = z.object({
+  candidateRevision: z.number().int().nonnegative(),
+});
+export const workflowCheckpointInputSchema = workflowDefinitionInputSchema;
 
 export function parseWorkflowDefinitionInput(input: unknown): WorkflowBuilderDefinition {
   const normalized = normalizeWorkflowBuilderDefinition(input);
@@ -239,13 +246,37 @@ export interface WorkflowDraftToolResult {
   result: ReturnType<typeof toToolResult>;
 }
 
+export interface WorkflowDraftCandidate {
+  draft: WorkflowDraft;
+  revision: number;
+  baseAcceptedRevision: number;
+  issues: WorkflowDraftValidationIssue[];
+  hasUncheckpointedChanges: boolean;
+}
+
+export function createWorkflowDraftCandidate(state: WorkflowDraftAuthoringState): WorkflowDraftCandidate {
+  return {
+    draft: structuredClone(state.draft),
+    revision: 0,
+    baseAcceptedRevision: state.revision,
+    issues: [],
+    hasUncheckpointedChanges: false,
+  };
+}
+
 export interface WorkflowDraftToolStore {
   getState: () => WorkflowDraftAuthoringState;
   checkpoint: (expectedRevision: number, draft: WorkflowDraft) => WorkflowDraftAuthoringResult;
   finalize: (expectedRevision: number) => WorkflowDraftAuthoringResult;
-  mutate: (expectedRevision: number, mutation: WorkflowDraftMutation) => WorkflowDraftAuthoringResult;
+  mutateCandidate: (
+    state: WorkflowDraftAuthoringState,
+    expectedRevision: number,
+    mutation: WorkflowDraftMutation,
+  ) => WorkflowDraftAuthoringResult;
+  candidate?: WorkflowDraftCandidate;
   isCurrentGeneration?: () => boolean;
   onResult?: (event: WorkflowDraftToolResult) => void;
+  onCandidateChange?: (candidate: WorkflowDraftCandidate) => void;
 }
 
 const supersededResult = { success: false as const, error: 'Submission was superseded.' };
@@ -268,41 +299,131 @@ function reportResult(store: WorkflowDraftToolStore, toolId: string, result: Wor
   return toolResult;
 }
 
-function createMutationExecutor(store: WorkflowDraftToolStore) {
-  return async (toolId: string, mutation: WorkflowDraftMutation) => {
-    if (store.isCurrentGeneration?.() === false) return supersededResult;
-    const result = store.mutate(store.getState().revision, mutation);
-    if (store.isCurrentGeneration?.() === false) return supersededResult;
-    return reportResult(store, toolId, result);
+function toCandidateAuthoringState(candidate: WorkflowDraftCandidate): WorkflowDraftAuthoringState {
+  return {
+    lifecycle: 'constructing',
+    revision: candidate.revision,
+    draft: candidate.draft,
+    checkpointIssues: candidate.issues,
+    finalIssues: candidate.issues,
   };
 }
 
 export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientToolsInput {
-  const executeMutation = createMutationExecutor(store);
+  const candidate = store.candidate ?? createWorkflowDraftCandidate(store.getState());
+
+  const publishCandidate = () => {
+    store.onCandidateChange?.({
+      ...candidate,
+      draft: structuredClone(candidate.draft),
+      issues: [...candidate.issues],
+    });
+  };
+
+  const reportCandidateResult = (toolId: string, result: WorkflowDraftAuthoringResult) => {
+    const acceptedState = store.getState();
+    const toolResult = result.ok
+      ? {
+          success: true as const,
+          lifecycle: result.state.lifecycle,
+          revision: acceptedState.revision,
+          finalizedRevision: acceptedState.finalizedRevision,
+          candidateRevision: candidate.revision,
+          baseAcceptedRevision: candidate.baseAcceptedRevision,
+        }
+      : { success: false as const, error: result.error, ...(result.issues ? { issues: result.issues } : {}) };
+    store.onResult?.({ toolId, result: toolResult });
+    return toolResult;
+  };
+
+  const executeMutation = async (toolId: string, mutation: WorkflowDraftMutation) => {
+    if (store.isCurrentGeneration?.() === false) return supersededResult;
+    const result = store.mutateCandidate(toCandidateAuthoringState(candidate), candidate.revision, mutation);
+    if (result.ok) {
+      candidate.draft = result.state.draft;
+      candidate.revision = result.state.revision;
+      candidate.issues = result.state.finalIssues;
+      candidate.hasUncheckpointedChanges = true;
+    } else {
+      candidate.issues = result.issues ?? [];
+    }
+    publishCandidate();
+    if (store.isCurrentGeneration?.() === false) return supersededResult;
+    return reportCandidateResult(toolId, result);
+  };
 
   return {
     'checkpoint-workflow-draft': createTool({
       id: 'checkpoint-workflow-draft',
       description:
-        'Atomically checkpoint one complete canonical workflow definition into the unsaved Studio draft. This renders the graph but does not persist the workflow.',
-      inputSchema: workflowDefinitionInputSchema,
+        'Atomically checkpoint one complete canonical workflow definition into the accepted unsaved Studio draft. Rejected checkpoints preserve both the accepted draft and the repairable generation candidate.',
+      inputSchema: workflowCheckpointInputSchema,
       outputSchema: resultSchema,
       execute: async input => {
         if (store.isCurrentGeneration?.() === false) return supersededResult;
-        const draft = parseWorkflowDraftInput(input);
-        const result = store.checkpoint(store.getState().revision, draft);
+        candidate.draft = parseWorkflowDraftInput(input);
+        candidate.revision += 1;
+        candidate.issues = [];
+        candidate.hasUncheckpointedChanges = true;
+        publishCandidate();
+        const result = store.checkpoint(candidate.baseAcceptedRevision, candidate.draft);
+        if (result.ok) {
+          candidate.draft = structuredClone(result.state.draft);
+          candidate.revision = 0;
+          candidate.baseAcceptedRevision = result.state.revision;
+          candidate.issues = [];
+          candidate.hasUncheckpointedChanges = false;
+        } else {
+          candidate.issues = result.issues ?? [];
+        }
+        publishCandidate();
         if (store.isCurrentGeneration?.() === false) return supersededResult;
         return reportResult(store, 'checkpoint-workflow-draft', result);
+      },
+    }),
+    'checkpoint-workflow-candidate': createTool({
+      id: 'checkpoint-workflow-candidate',
+      description:
+        'Atomically checkpoint the current generation-local candidate into the accepted unsaved Studio draft. Pass the exact candidate revision returned by the latest candidate mutation.',
+      inputSchema: workflowCandidateCheckpointInputSchema,
+      outputSchema: resultSchema,
+      execute: async ({ candidateRevision }) => {
+        if (store.isCurrentGeneration?.() === false) return supersededResult;
+        if (candidateRevision !== candidate.revision) {
+          return reportCandidateResult('checkpoint-workflow-candidate', {
+            ok: false,
+            state: store.getState(),
+            error: 'Generation candidate changed before checkpoint completed.',
+          });
+        }
+        const result = store.checkpoint(candidate.baseAcceptedRevision, candidate.draft);
+        if (result.ok) {
+          candidate.draft = structuredClone(result.state.draft);
+          candidate.revision = 0;
+          candidate.baseAcceptedRevision = result.state.revision;
+          candidate.issues = [];
+          candidate.hasUncheckpointedChanges = false;
+        } else {
+          candidate.issues = result.issues ?? [];
+        }
+        publishCandidate();
+        if (store.isCurrentGeneration?.() === false) return supersededResult;
+        return reportResult(store, 'checkpoint-workflow-candidate', result);
       },
     }),
     'finalize-workflow-draft': createTool({
       id: 'finalize-workflow-draft',
       description:
-        'Strictly finalize the exact current draft revision after a successful checkpoint. Finalization only marks the unsaved draft ready for explicit user Save; it does not persist.',
+        'Strictly finalize the exact accepted draft revision after a successful checkpoint. A changed generation candidate must be checkpointed first. Finalization only marks the unsaved draft ready for explicit user Save; it does not persist.',
       inputSchema: z.object({ expectedRevision: z.number().int().nonnegative() }),
       outputSchema: resultSchema,
       execute: async ({ expectedRevision }: { expectedRevision: number }) => {
         if (store.isCurrentGeneration?.() === false) return supersededResult;
+        if (candidate.hasUncheckpointedChanges) {
+          const error = 'Checkpoint the current generation candidate before finalizing.';
+          const result = { ok: false as const, state: store.getState(), error };
+          return reportResult(store, 'finalize-workflow-draft', result);
+        }
         const result = store.finalize(expectedRevision);
         if (store.isCurrentGeneration?.() === false) return supersededResult;
         return reportResult(store, 'finalize-workflow-draft', result);
@@ -311,7 +432,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
     'add-workflow-step': createTool({
       id: 'add-workflow-step',
       description:
-        'Add one supported step to a checkpointed unsaved draft. This targeted edit demotes a ready draft to constructing until it is finalized again.',
+        'Add one supported step to the generation-local candidate. The accepted Studio draft is unchanged until the candidate passes checkpoint validation.',
       inputSchema: z.object({ step: workflowStepInputSchema, index: z.number().int().nonnegative().optional() }),
       outputSchema: resultSchema,
       execute: async ({ step, index }) => {
@@ -323,7 +444,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
     'update-workflow-step': createTool({
       id: 'update-workflow-step',
       description:
-        'Replace one step in a checkpointed unsaved draft. This targeted edit demotes a ready draft to constructing until it is finalized again.',
+        'Replace one step in the generation-local candidate. The accepted Studio draft is unchanged until the candidate passes checkpoint validation.',
       inputSchema: z.object({ stepId: z.string().min(1), step: workflowStepInputSchema }),
       outputSchema: resultSchema,
       execute: async ({ stepId, step }) => {
@@ -335,7 +456,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
     'remove-workflow-step': createTool({
       id: 'remove-workflow-step',
       description:
-        'Remove one step from a checkpointed unsaved draft. This targeted edit demotes a ready draft to constructing until it is finalized again.',
+        'Remove one step from the generation-local candidate. The accepted Studio draft is unchanged until the candidate passes checkpoint validation.',
       inputSchema: z.object({ stepId: z.string().min(1) }),
       outputSchema: resultSchema,
       execute: async ({ stepId }: { stepId: string }) =>

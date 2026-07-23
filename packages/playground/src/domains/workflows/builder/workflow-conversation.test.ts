@@ -6,6 +6,7 @@ import {
   serializeWorkflowDraftInstructions,
 } from './workflow-conversation';
 import { createWorkflowDraftAuthoringState } from './workflow-draft';
+import { createWorkflowDraftCandidate } from './workflow-draft-tools';
 
 describe('workflow conversation', () => {
   describe('when identifying a persisted workflow conversation', () => {
@@ -28,6 +29,21 @@ describe('workflow conversation', () => {
       expect(instructions).toContain('"workflowCatalog": "unavailable"');
       expect(instructions).toContain('support-agent');
       expect(instructions).toContain('"id": "daily-report"');
+    });
+
+    it('includes the repairable generation candidate separately from accepted state', () => {
+      const state = createWorkflowDraftAuthoringState('daily-report');
+      const candidate = createWorkflowDraftCandidate(state);
+      candidate.revision = 2;
+      candidate.hasUncheckpointedChanges = true;
+      candidate.draft.description = 'Candidate-only description';
+
+      const instructions = serializeWorkflowDraftInstructions(state, {}, candidate);
+
+      expect(instructions).toContain('## Generation-local candidate');
+      expect(instructions).toContain('Candidate revision: 2');
+      expect(instructions).toContain('Candidate-only description');
+      expect(state.draft.description).toBeUndefined();
     });
   });
 

@@ -5,7 +5,8 @@ import type { ReactNode } from 'react';
 
 import { serializeWorkflowDraftInstructions } from './workflow-conversation';
 import type { WorkflowDraftAuthoringState, WorkflowDraftValidationContext } from './workflow-draft';
-import type { WorkflowDraftToolResult } from './workflow-draft-tools';
+import { createWorkflowDraftCandidate } from './workflow-draft-tools';
+import type { WorkflowDraftCandidate, WorkflowDraftToolResult } from './workflow-draft-tools';
 import { StreamChatProvider } from '@/domains/agent-builder/contexts/stream-chat-provider';
 
 export interface WorkflowGenerationFailure {
@@ -22,8 +23,11 @@ export interface WorkflowChatProviderProps {
   createTools: (
     isCurrentGeneration?: () => boolean,
     onResult?: (event: WorkflowDraftToolResult) => void,
+    candidate?: WorkflowDraftCandidate,
+    onCandidateChange?: (candidate: WorkflowDraftCandidate) => void,
   ) => ClientToolsInput;
   onGenerationFailure?: (failure: WorkflowGenerationFailure | null) => void;
+  onCandidateChange?: (candidate: WorkflowDraftCandidate | undefined) => void;
   debounceTime?: number;
   children: ReactNode;
 }
@@ -41,12 +45,26 @@ function WorkflowChatSession({
   initialUserMessage,
   createTools,
   onGenerationFailure,
+  onCandidateChange,
   debounceTime = 300,
   children,
 }: WorkflowChatProviderProps) {
   const [hydrationMessages] = useState(initialMessages);
+  const [candidateSnapshot, setCandidateSnapshot] = useState<WorkflowDraftCandidate>();
+  const candidateRef = useRef<WorkflowDraftCandidate | undefined>(undefined);
+  const authoringStateRef = useRef(authoringState);
+  authoringStateRef.current = authoringState;
   const generationRef = useRef(0);
   const generationStateRef = useRef({ accepted: false, finalized: false, rejected: 0, stopped: false });
+
+  const updateCandidate = useCallback(
+    (candidate: WorkflowDraftCandidate) => {
+      candidateRef.current = candidate;
+      setCandidateSnapshot(candidate);
+      onCandidateChange?.(candidate);
+    },
+    [onCandidateChange],
+  );
 
   const failGeneration = useCallback(
     (failure: WorkflowGenerationFailure) => {
@@ -60,6 +78,13 @@ function WorkflowChatSession({
     const generation = ++generationRef.current;
     generationStateRef.current = { accepted: false, finalized: false, rejected: 0, stopped: false };
     onGenerationFailure?.(null);
+    const acceptedState = authoringStateRef.current;
+    const existingCandidate = candidateRef.current;
+    const candidate =
+      existingCandidate?.baseAcceptedRevision === acceptedState.revision
+        ? existingCandidate
+        : createWorkflowDraftCandidate(acceptedState);
+    updateCandidate(candidate);
 
     const onResult = ({ toolId, result }: WorkflowDraftToolResult) => {
       if (generation !== generationRef.current || generationStateRef.current.stopped) return;
@@ -68,7 +93,12 @@ function WorkflowChatSession({
         if (toolId === 'finalize-workflow-draft') generationStateRef.current.finalized = true;
         return;
       }
-      if (toolId !== 'checkpoint-workflow-draft' && toolId !== 'finalize-workflow-draft') return;
+      if (
+        toolId !== 'checkpoint-workflow-draft' &&
+        toolId !== 'checkpoint-workflow-candidate' &&
+        toolId !== 'finalize-workflow-draft'
+      )
+        return;
       generationStateRef.current.rejected += 1;
       if (generationStateRef.current.rejected >= 3) {
         failGeneration({
@@ -85,8 +115,10 @@ function WorkflowChatSession({
         !generationStateRef.current.stopped &&
         !generationStateRef.current.finalized,
       onResult,
+      candidate,
+      updateCandidate,
     );
-  }, [createTools, failGeneration, onGenerationFailure]);
+  }, [createTools, failGeneration, onGenerationFailure, updateCandidate]);
 
   const handleSendComplete = useCallback(() => {
     const state = generationStateRef.current;
@@ -112,7 +144,7 @@ function WorkflowChatSession({
       initialMessages={hydrationMessages}
       initialUserMessage={initialUserMessage}
       createClientTools={createClientTools}
-      extraInstructions={serializeWorkflowDraftInstructions(authoringState, validationContext)}
+      extraInstructions={serializeWorkflowDraftInstructions(authoringState, validationContext, candidateSnapshot)}
       enableThreadSignals={false}
       debounceTime={debounceTime}
       maxSteps={10}

@@ -22,6 +22,7 @@ import {
   WorkflowDefinitionGraphView,
 } from '@/domains/workflows/builder';
 import type {
+  WorkflowDraftCandidate,
   WorkflowDraftStepSchema,
   WorkflowDraftValidationContext,
   WorkflowGenerationFailure,
@@ -62,6 +63,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   const navigate = useNavigate();
   const access = useWorkflowBuilderAccess();
   const [generationFailure, setGenerationFailure] = useState<WorkflowGenerationFailure | null>(null);
+  const [generationCandidate, setGenerationCandidate] = useState<WorkflowDraftCandidate>();
   const workflowQuery = useStoredWorkflow(create ? undefined : routeWorkflowId);
   const agentsQuery = useAgents();
   const toolsQuery = useTools();
@@ -160,6 +162,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
       initialMessages={initialMessages}
       createTools={workflowDraft.createTools}
       onGenerationFailure={setGenerationFailure}
+      onCandidateChange={setGenerationCandidate}
     >
       <PageLayout className="h-full px-4 md:px-8">
         <PageLayout.TopArea>
@@ -262,6 +265,21 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               </Badge>
               <span className="text-ui-xs text-neutral3">{workflowDraft.draft.graph.length} top-level entries</span>
             </div>
+            {generationCandidate?.hasUncheckpointedChanges ? (
+              <div className="space-y-2 rounded-lg border border-border1 bg-surface2 p-3 text-ui-xs text-neutral3">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Generation candidate has uncheckpointed changes</span>
+                  <span>Candidate revision {generationCandidate.revision}</span>
+                </div>
+                {generationCandidate.issues.length > 0 ? (
+                  <ul className="list-disc space-y-1 pl-5 text-red-400">
+                    {generationCandidate.issues.map(issue => (
+                      <li key={`${issue.path}-${issue.message}`}>{issue.message}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
             {generationFailure ? (
               <ErrorState title="Workflow generation stopped" message={generationFailure.message} />
             ) : null}
